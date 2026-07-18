@@ -220,11 +220,23 @@ export function signMultisigSendRequest(
  * NO cryptographic checking, so a mislabeled, foreign, or corrupted partial
  * would otherwise flow straight into an unspendable scriptSig; verifying here
  * -- exactly where the coordinator collects contributions -- rejects it loudly.
+ *
+ * This minimal path is single-input by design (see `buildMultisigSendDraft`),
+ * and this function only ever computes the sighash for and rebuilds input 0.
+ * `MultisigSendDraft` is an exported type, so a hand-constructed multi-input
+ * draft could otherwise reach here and have inputs 1..n silently dropped from
+ * the finalized tx -- permanently abandoning their coins into the miner fee.
+ * Guard the invariant explicitly instead of ever truncating silently.
  */
 export function finalizeMultisigSend(
   draft: MultisigSendDraft,
   signatures: PartialSignature[],
 ): { rawTx: Uint8Array; txid: string } {
+  if (draft.tx.inputs.length !== 1) {
+    throw new Error(
+      `finalizeMultisigSend: multisig spend supports exactly one input; got ${draft.tx.inputs.length}`,
+    );
+  }
   const sighash = computeMultisigSigHash(draft.tx, 0, draft.redeemScript);
   for (const { pubkey, signature } of signatures) {
     if (!verifyPartialSignature(signature, pubkey, sighash)) {
