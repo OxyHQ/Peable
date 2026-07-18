@@ -180,3 +180,26 @@ describe("finalizeMultisigSend verifies partial signatures at combine time", () 
     );
   });
 });
+
+describe("finalizeMultisigSend rejects a non-single-input draft (audit M1)", () => {
+  test("throws instead of silently dropping inputs 1..n from the finalized tx", () => {
+    const draft = buildMultisigSendDraft(baseParams());
+    const request = exportSigningRequest(draft);
+    const signed1 = signMultisigSendRequest(request, PRIV1, PUB1, [INPUT_VALUE], MAINNET);
+    const signed3 = signMultisigSendRequest(request, PRIV3, PUB3, [INPUT_VALUE], MAINNET);
+
+    // Hand-construct a two-input draft the way an out-of-scope caller could --
+    // `MultisigSendDraft` is exported and `buildMultisigSendDraft`'s guard only
+    // protects its own entry point, not this one.
+    const multiInputDraft = {
+      ...draft,
+      tx: { ...draft.tx, inputs: [...draft.tx.inputs, { ...draft.tx.inputs[0] }] },
+    };
+
+    expect(() => finalizeMultisigSend(multiInputDraft, [signed1.partial, signed3.partial])).toThrow(
+      /exactly one input; got 2/,
+    );
+    // The genuine single-input draft still finalizes.
+    expect(() => finalizeMultisigSend(draft, [signed1.partial, signed3.partial])).not.toThrow();
+  });
+});
