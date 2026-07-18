@@ -317,3 +317,37 @@ describe("KeyManager account index (Pockets)", () => {
     );
   });
 });
+
+describe("KeyManager watch addresses", () => {
+  // Real 2-of-3 mainnet multisig P2SH address (same fixture used across the
+  // @fairco.in/core multisig test suite).
+  const MULTISIG_ADDRESS = "7iKBxUNbBbTa8n1Q32oLucmvmKL7c572P2";
+
+  test("a fresh manager does not own an unregistered watch address", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(false);
+    expect(km.getAllAddresses()).not.toContain(MULTISIG_ADDRESS);
+  });
+
+  test("registerWatchAddress makes ownsAddress true and includes it in getAllAddresses", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(true);
+    expect(km.getAllAddresses()).toContain(MULTISIG_ADDRESS);
+    expect(km.getWatchAddresses()).toEqual([MULTISIG_ADDRESS]);
+  });
+
+  test("wipe() clears registered watch addresses (cross-wallet isolation)", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    km.wipe();
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(false);
+    expect(km.getWatchAddresses()).toEqual([]);
+  });
+
+  test("getPrivateKeyForAddress still throws for a watch address (no key material, by design)", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    expect(() => km.getPrivateKeyForAddress(MULTISIG_ADDRESS)).toThrow();
+  });
+});
