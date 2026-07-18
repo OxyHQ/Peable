@@ -31,6 +31,7 @@ import { planRescan, type RescanProgress } from "../p2p/rescan";
 import { DatabaseHeaderStore } from "../p2p/header-store";
 import { createSocketProvider } from "../p2p/socket-provider";
 import { KeyManager } from "./key-manager";
+import { loadWatchAddressesIntoKeyManager } from "./multisig";
 import { resolveMoveDestinationAddress } from "./move-address";
 import {
   XPUB_MARKER_PREFIX,
@@ -1391,6 +1392,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const nextExternal = await database.getNextUnusedIndex(false);
       const nextChange = await database.getNextUnusedIndex(true);
       keyManager.restoreCursors(nextExternal, nextChange);
+
+      // Restore any multisig watch addresses registered in a previous
+      // session (Layer 1 multisig -- see src/wallet/multisig.ts) so they are
+      // owned and Bloom-filter-watched again immediately, same as the HD
+      // cursor restore just above.
+      await loadWatchAddressesIntoKeyManager(database, keyManager);
 
       // Load persisted addresses from database
       const dbAddresses = await database.getAddresses();

@@ -47,6 +47,15 @@ export class KeyManager {
   private readonly account: number;
   private readonly externalKeys: Map<string, DerivedKeyEntry> = new Map();
   private readonly changeKeys: Map<string, DerivedKeyEntry> = new Map();
+  /**
+   * Addresses this wallet is watching but that are NOT derived from its HD
+   * tree -- e.g. a multisig P2SH address one of this wallet's own keys is a
+   * cosigner for. No private key is derivable for one of these here; a
+   * multisig spend goes through `@fairco.in/core`'s multisig primitives
+   * directly, keyed by whichever leg address's private key the caller
+   * already obtained via `getPrivateKeyForAddress`.
+   */
+  private readonly watchAddresses: Set<string> = new Set();
   private nextExternalIndex = 0;
   private nextChangeIndex = 0;
   /** True when built from an xpub (no private keys; cannot sign/spend). */
@@ -219,6 +228,7 @@ export class KeyManager {
     }
     this.externalKeys.clear();
     this.changeKeys.clear();
+    this.watchAddresses.clear();
     this.nextExternalIndex = 0;
     this.nextChangeIndex = 0;
     // Also zeroize the account-level extended key the children derive from, so
@@ -315,10 +325,30 @@ export class KeyManager {
   }
 
   /**
-   * Whether the given address belongs to this wallet (external or change).
+   * Whether the given address belongs to this wallet (external, change, or
+   * an explicitly registered watch address -- see {@link registerWatchAddress}).
    */
   ownsAddress(address: string): boolean {
-    return this.externalKeys.has(address) || this.changeKeys.has(address);
+    return (
+      this.externalKeys.has(address) ||
+      this.changeKeys.has(address) ||
+      this.watchAddresses.has(address)
+    );
+  }
+
+  /**
+   * Register an explicit watch address that is NOT derived from this
+   * wallet's HD tree -- e.g. a multisig P2SH address one of this wallet's
+   * own keys is a cosigner for. Once registered, `ownsAddress` recognises it
+   * and `getAllAddresses` includes it in the Bloom-filter watch set.
+   */
+  registerWatchAddress(address: string): void {
+    this.watchAddresses.add(address);
+  }
+
+  /** Every explicitly registered watch address (see {@link registerWatchAddress}). */
+  getWatchAddresses(): string[] {
+    return Array.from(this.watchAddresses);
   }
 
   /**
@@ -372,12 +402,14 @@ export class KeyManager {
   }
 
   /**
-   * Get all derived addresses (external + change).
+   * Get all derived addresses (external + change) plus any registered
+   * watch addresses.
    */
   getAllAddresses(): string[] {
     return [
       ...this.getExternalAddresses(),
       ...this.getChangeAddresses(),
+      ...this.getWatchAddresses(),
     ];
   }
 
