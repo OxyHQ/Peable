@@ -2127,7 +2127,7 @@ This is a review gate, not a code task. Nothing in Tasks 1–9 should be treated
 - `/home/nate/FairCoinWorkspace/FAIRWallet/src/wallet/multisig.ts`
 - `/home/nate/FairCoinWorkspace/FAIRWallet/src/wallet/wallet-store.ts` (the two-line wiring change)
 
-- [ ] **Step 1: Confirm the mechanical gates are green before requesting review**
+- [x] **Step 1: Confirm the mechanical gates are green before requesting review**
 
 ```bash
 cd /home/nate/faircoin-core && bun test && bun run typecheck
@@ -2136,7 +2136,7 @@ cd /home/nate/FairCoinWorkspace/FAIRWallet && bun test src && bunx tsc --noEmit
 
 Expected: all PASS in both repos.
 
-- [ ] **Step 2: Spawn the `security-reviewer` agent against the diff above with this explicit checklist**
+- [x] **Step 2: Spawn the `security-reviewer` agent against the diff above with this explicit checklist**
 
 - **No key-leak path**: confirm no function in the reviewed diff returns, logs, or serializes a private key. `signMultisigInput`/`signMultisigSendRequest` in particular — trace the return value.
 - **OP_0 dummy element**: confirm `assembleMultisigScriptSig` always prepends `OP_0` before the signatures — its omission is a well-known Bitcoin `OP_CHECKMULTISIG` implementation bug (an off-by-one stack pop) that would make the script fail on EVERY spend attempt, permanently locking the funds. This is not a "nice to have" — it's the single highest-consequence line in the diff.
@@ -2156,10 +2156,16 @@ This plan's test vectors prove the CRYPTO is byte-correct: the redeem script, si
 2. Build and fully sign a real spend from it using this plan's `buildMultisigSendDraft`/`signMultisigSendRequest`/`finalizeMultisigSend` path (or the equivalent direct `@fairco.in/core` calls).
 3. Broadcast the raw transaction via FAIRWallet's existing SPV client (`SPVClient.broadcastTransaction`, already used by `sendTransaction` in `wallet-store.ts`) and confirm it is relayed, accepted into a block, and correctly recognized as spent by the wallet's own SPV receive path.
 
-- [ ] **Step 4: Record the outcome**
+- [x] **Step 4: Record the outcome**
 
 This feature is BLOCKED for any real-money use until BOTH:
 (a) the `security-reviewer` agent has signed off on the checklist in Step 2 with no unresolved findings, AND
 (b) the live testnet probe in Step 3 has confirmed a real multisig spend broadcasts, confirms, and is recognized by the wallet.
 
 Report both outcomes explicitly (pass/fail, with findings) rather than treating either as implied by the other — a clean code review does not substitute for proof the FairCoin network accepts the script type, and a successful testnet broadcast does not substitute for a security review of the key-handling code path.
+
+#### Outcome record (2026-07-25)
+
+**(a) Security review — PASS / SIGN-OFF GRANTED, no blocking findings.** `security-reviewer` audited the shipped `@fairco.in/core` 0.3.1 dist (core HEAD 561ba26) plus the FAIRWallet consuming path. Mechanical gates green both repos (faircoin-core 237/237 tests + typecheck; FAIRWallet 275/275 tests + typecheck). All 9 checklist items and the 3 defense-in-depth hardening claims (pubkey-length validation, output maxMoney bound, network-derived P2SH version byte) verified OK. The two load-bearing facts were independently reproduced outside the library rather than trusting the pinned vectors: the BIP16 sighash substitutes the redeem script (digest recomputed both ways — redeem-script vs P2SH-scriptPubKey — and only the redeem-script form matches `computeMultisigSigHash`), and `signMultisigInput` produces a low-S signature that verifies against the correct pubkey. Non-blocking notes (no fund-loss path): `parseMultisigRedeemScript` re-checks the 520-byte relay limit only on `create`, not on parse (a >520B cosigner script would fail at relay, not lose funds) — **Low**; `signMultisigSendRequest` takes pubkey+privateKey separately without a consistency check, but a mismatch is caught by `verifyPartialSignature` in `finalizeMultisigSend` before scriptSig assembly — **Informational**.
+
+**(b) Live testnet probe — PENDING (Step 3 still the only remaining gate).** A runnable harness is provided at `scripts/multisig-testnet-probe.ts` (setup → fund → spend → broadcast). Multisig remains BLOCKED for real-money use until a real testnet 2-of-3 spend broadcasts, confirms in a block, and is recognized as spent by the wallet's SPV path.

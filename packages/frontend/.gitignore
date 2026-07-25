@@ -33,3 +33,6 @@ GoogleService-Info.plist
 
 expo-env.d.ts
 # @end expo-cli
+
+# Multisig testnet probe state (TESTNET private keys — never commit)
+.multisig-probe.testnet.json
