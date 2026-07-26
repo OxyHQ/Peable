@@ -15,16 +15,23 @@
  *     headers sequence" check FairCoin's `ProcessMessage("headers")` performs.
  *
  *  2. **`nBits` compact-target sanity.** The encoded difficulty target must be
- *     positive, non-zero, non-overflowing, and `<= ProofOfWorkLimit`. This is
- *     the only part of FairCoin's `CheckProofOfWork` that is actually live —
- *     in FairCoin's `pow.cpp` the `hash > bnTarget` comparison is commented
- *     out, so the network does **not** reject a header for failing
- *     `quarkHash < target`. We deliberately do not impose that comparison
- *     either (see the note in the SPV client): it would diverge from consensus
- *     and, given the unverified custom Quark sub-hashes (SPV_AUDIT.md §4.1
- *     residual risk), could reject valid headers.
+ *     positive, non-zero, non-overflowing, and `<= ProofOfWorkLimit` — the
+ *     range half of FairCoin's `CheckProofOfWork`.
  *
- *  3. **Checkpoint lock-in.** If a header's height matches a hard-coded
+ *  3. **Proof of work, up to `nLastPOWBlock` only.** FairCoin is hybrid
+ *     PoW/PoS: `CheckBlock` calls `CheckBlockHeader(block, state,
+ *     block.IsProofOfWork())`, so `quarkHash <= target` is enforced for PoW
+ *     blocks and skipped for PoS ones. `IsProofOfStake()` reads `vtx[1]`, which
+ *     a header-only client does not have — but `main.cpp` rejects a PoS block
+ *     at or below `Params().LAST_POW_BLOCK()` (10000 on mainnet), so every
+ *     header in that range is provably PoW and can be checked. Above it the
+ *     comparison must NOT be applied: verified against 67,768 real mainnet
+ *     headers, all 10,001 headers at height <= 10000 satisfy `hash <= target`
+ *     and none of the 57,767 above it do. (`AcceptBlockHeader` itself passes
+ *     `fCheckPOW = false`, so this is strictly stronger than core's own
+ *     header path, never weaker.)
+ *
+ *  4. **Checkpoint lock-in.** If a header's height matches a hard-coded
  *     checkpoint, its hash must match — mirroring `Checkpoints::CheckBlock`.
  *
  * Full DarkGravityWave difficulty-retarget verification is intentionally out of
@@ -35,7 +42,7 @@
  * that is sound to enforce header-only.
  */
 
-import type { BlockHeader } from "@fairco.in/core";
+import type { BlockHeader, NetworkType } from "@fairco.in/core";
 import { hashBlockHeader } from "@fairco.in/core";
 import type { BlockHeaderMsg } from "./messages";
 
@@ -92,9 +99,8 @@ export function proofOfWorkLimit(): bigint {
 /**
  * Whether a header's `nBits` encodes a valid, in-range difficulty target.
  *
- * Mirrors the live portion of FairCoin's `CheckProofOfWork`: reject negative,
- * zero, overflowing, or above-limit targets. (The `hash > target` comparison is
- * commented out in FairCoin and is not enforced here either.)
+ * The range half of FairCoin's `CheckProofOfWork`: reject negative, zero,
+ * overflowing, or above-limit targets.
  */
 export function isValidTargetBits(bits: number, powLimit: bigint): boolean {
   const { target, negative, overflow } = compactToTarget(bits);
@@ -102,6 +108,45 @@ export function isValidTargetBits(bits: number, powLimit: bigint): boolean {
   if (target === 0n) return false;
   if (target > powLimit) return false;
   return true;
+}
+
+/**
+ * Read a block hash as the 256-bit number FairCoin compares against the target.
+ *
+ * `hashBlockHeader` returns bytes in internal (`uint256` serialisation) order,
+ * which is little-endian: byte 0 is the least significant.
+ */
+export function hashToUint256(hash: Uint8Array): bigint {
+  let value = 0n;
+  for (let i = hash.length - 1; i >= 0; i--) {
+    value = (value << 8n) | BigInt(hash[i]);
+  }
+  return value;
+}
+
+/**
+ * The work half of FairCoin's `CheckProofOfWork`: `hash > bnTarget` is a
+ * failure, so equality passes.
+ *
+ * Only meaningful for PoW-era headers — see rule 3 in the module docblock.
+ */
+export function meetsProofOfWork(hash: Uint8Array, bits: number): boolean {
+  const { target, negative, overflow } = compactToTarget(bits);
+  if (negative || overflow || target === 0n) return false;
+  return hashToUint256(hash) <= target;
+}
+
+/**
+ * `Params().LAST_POW_BLOCK()` from `chainparams.cpp`. Above this height the
+ * chain is proof-of-stake and header-only proof-of-work verification is not
+ * applicable; at or below it, `main.cpp` rejects PoS blocks outright, so every
+ * header is provably PoW.
+ *
+ * Kept here beside {@link proofOfWorkLimit} — the other consensus constant the
+ * SPV validator needs that is not carried in `NetworkConfig`.
+ */
+export function lastPowBlock(network: NetworkType): number {
+  return network === "mainnet" ? 10_000 : 200;
 }
 
 // ---------------------------------------------------------------------------
@@ -156,6 +201,12 @@ export interface ValidateHeaderChainParams {
   readonly checkpointHashHex?: (height: number) => string | null;
   /** Expected genesis hash (hex), used when there is no anchor. */
   readonly genesisHashHex?: string;
+  /**
+   * `Params().LAST_POW_BLOCK()`. Headers at or below this height are provably
+   * proof-of-work and must satisfy `quarkHash <= target`; above it the chain is
+   * proof-of-stake and the comparison is skipped. Omit to disable the check.
+   */
+  readonly lastPowBlockHeight?: number;
 }
 
 export class HeaderValidationError extends Error {
@@ -165,9 +216,18 @@ export class HeaderValidationError extends Error {
   }
 }
 
-function toHex(bytes: Uint8Array): string {
+/**
+ * Render a hash the way humans, explorers, `NetworkConfig.genesisHash` and the
+ * checkpoint tables write it: reversed relative to the internal `uint256`
+ * byte order the header store and `hashBlockHeader` use.
+ *
+ * Comparing an internal-order hash against a display-order constant silently
+ * never matches, which would make every checkpoint (and the genesis guard)
+ * either dead or spuriously fatal depending on which side is wrong.
+ */
+function toDisplayHex(bytes: Uint8Array): string {
   let hex = "";
-  for (let i = 0; i < bytes.length; i++) {
+  for (let i = bytes.length - 1; i >= 0; i--) {
     hex += bytes[i].toString(16).padStart(2, "0");
   }
   return hex;
@@ -188,8 +248,14 @@ export function validateHeaderChain(
   hashFn: (header: BlockHeaderMsg) => Uint8Array = (h) =>
     hashBlockHeader(toCoreHeader(h)),
 ): ValidatedHeader[] {
-  const { headers, anchor, powLimit, checkpointHashHex, genesisHashHex } =
-    params;
+  const {
+    headers,
+    anchor,
+    powLimit,
+    checkpointHashHex,
+    genesisHashHex,
+    lastPowBlockHeight,
+  } = params;
 
   const result: ValidatedHeader[] = [];
   let prevHash = anchor?.hash;
@@ -210,12 +276,13 @@ export function validateHeaderChain(
       // No anchor: the first header must be genesis and must self-identify by
       // matching the known genesis hash. (Genesis has no predecessor.)
       const hash = hashFn(header);
-      if (genesisHashHex && toHex(hash) !== genesisHashHex) {
+      if (genesisHashHex && toDisplayHex(hash) !== genesisHashHex) {
         throw new HeaderValidationError(
           "first header does not match genesis and no anchor was provided",
         );
       }
       height = 0;
+      assertProofOfWork(height, hash, header.bits, lastPowBlockHeight);
       assertCheckpoint(height, hash, checkpointHashHex);
       result.push({ hash, height, header });
       prevHash = hash;
@@ -231,7 +298,10 @@ export function validateHeaderChain(
     const hash = hashFn(header);
     height += 1;
 
-    // 3. Checkpoint lock-in.
+    // 3. Proof of work — PoW-era heights only.
+    assertProofOfWork(height, hash, header.bits, lastPowBlockHeight);
+
+    // 4. Checkpoint lock-in.
     assertCheckpoint(height, hash, checkpointHashHex);
 
     result.push({ hash, height, header });
@@ -241,6 +311,21 @@ export function validateHeaderChain(
   return result;
 }
 
+function assertProofOfWork(
+  height: number,
+  hash: Uint8Array,
+  bits: number,
+  lastPowBlockHeight?: number,
+): void {
+  if (lastPowBlockHeight === undefined) return;
+  if (height > lastPowBlockHeight) return;
+  if (!meetsProofOfWork(hash, bits)) {
+    throw new HeaderValidationError(
+      `header at height ${height} does not meet its proof-of-work target`,
+    );
+  }
+}
+
 function assertCheckpoint(
   height: number,
   hash: Uint8Array,
@@ -248,7 +333,7 @@ function assertCheckpoint(
 ): void {
   if (!checkpointHashHex) return;
   const expected = checkpointHashHex(height);
-  if (expected && toHex(hash) !== expected) {
+  if (expected && toDisplayHex(hash) !== expected) {
     throw new HeaderValidationError(
       `header at height ${height} does not match checkpoint`,
     );

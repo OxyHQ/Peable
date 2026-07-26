@@ -1,13 +1,12 @@
 /**
  * Bridges the SPV client's HeaderStore interface to our SQLite Database class.
  *
- * Converts between the SPV client's binary representations (Uint8Array hashes)
- * and the Database's hex-string storage format.
+ * Both sides now speak raw bytes — the database stores 32-byte BLOBs — so this
+ * is a straight field rename with no hex encoding on the sync hot path.
  */
 
 import type { HeaderStore, StoredBlockHeader } from "./spv-client";
 import type { Database, BlockHeaderRow } from "../storage/database";
-import { hexToBytes, bytesToHex } from "@fairco.in/core";
 
 // ---------------------------------------------------------------------------
 // DatabaseHeaderStore
@@ -27,8 +26,7 @@ export class DatabaseHeaderStore implements HeaderStore {
   }
 
   async getHeaderByHash(hash: Uint8Array): Promise<StoredBlockHeader | undefined> {
-    const hashHex = bytesToHex(hash);
-    const row = await this.db.getHeaderByHash(hashHex);
+    const row = await this.db.getHeaderByHash(hash);
     if (!row) return undefined;
     return rowToStoredHeader(row);
   }
@@ -48,9 +46,9 @@ export class DatabaseHeaderStore implements HeaderStore {
   async saveHeaders(headers: StoredBlockHeader[]): Promise<void> {
     const rows: BlockHeaderRow[] = headers.map((h) => ({
       height: h.height,
-      hash: bytesToHex(h.hash),
-      prev_hash: bytesToHex(h.prevBlock),
-      merkle_root: bytesToHex(h.merkleRoot),
+      hash: h.hash,
+      prev_hash: h.prevBlock,
+      merkle_root: h.merkleRoot,
       timestamp: h.timestamp,
       bits: h.bits,
       nonce: h.nonce,
@@ -77,9 +75,9 @@ export class DatabaseHeaderStore implements HeaderStore {
 function rowToStoredHeader(row: BlockHeaderRow): StoredBlockHeader {
   return {
     height: row.height,
-    hash: hexToBytes(row.hash),
-    prevBlock: hexToBytes(row.prev_hash),
-    merkleRoot: hexToBytes(row.merkle_root),
+    hash: row.hash,
+    prevBlock: row.prev_hash,
+    merkleRoot: row.merkle_root,
     timestamp: row.timestamp,
     bits: row.bits,
     nonce: row.nonce,
