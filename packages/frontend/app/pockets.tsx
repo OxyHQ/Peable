@@ -1,6 +1,6 @@
 /**
  * Pockets home — Revolut-style cards screen. Header, a total-across-pockets
- * hero, the Pocket card list (colored emoji chip + optional goal bar), and a
+ * hero, the Pocket card list (image avatar + optional goal bar), and a
  * dashed "New pocket" row. Tapping a card opens that Pocket's detail sheet
  * (`PocketDetailSheet`), which owns its own Move/Add/Switch/Manage flows.
  * Presented as a modal from the home pill's "Manage pockets" row.

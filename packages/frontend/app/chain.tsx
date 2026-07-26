@@ -10,13 +10,17 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import Animated from "react-native-reanimated";
+import { View, Text, Pressable } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useBloomTheme } from "@oxyhq/bloom/theme";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
-import { Button, ListItem, ScreenHeader } from "../src/ui/components";
+import { ListItem, ScreenHeader } from "../src/ui/components";
+import { RefreshRainbowBar } from "../src/ui/components/RefreshRainbowBar";
+import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
+import { GestureDetector } from "react-native-gesture-handler";
 import { t } from "../src/i18n";
 
 // ---------------------------------------------------------------------------
@@ -28,9 +32,9 @@ type SyncVariant = "success" | "warning" | "error";
 interface SyncState {
   label: string;
   variant: SyncVariant;
+  /** Tailwind background class for the state dot. */
   dot: string;
-  bg: string;
-  border: string;
+  /** Tailwind text colour class for the state label. */
   text: string;
 }
 
@@ -110,7 +114,7 @@ export default function ChainScreen() {
   // requiring the store to re-emit the status (U-2).
   const networkStatusLabel = t(networkStatusKey, networkStatusData);
 
-  const [refreshing, setRefreshing] = useState(false);
+
 
   const [lastBlockTimestamp, setLastBlockTimestamp] = useState<number | null>(
     null,
@@ -152,8 +156,6 @@ export default function ChainScreen() {
         label: t("chain.sync.offline"),
         variant: "error",
         dot: "bg-red-400",
-        bg: "bg-red-500/10",
-        border: "border-red-500/30",
         text: "text-red-400",
       };
     }
@@ -162,8 +164,6 @@ export default function ChainScreen() {
         label: t("chain.sync.syncing", { progress: Math.round(syncProgress) }),
         variant: "warning",
         dot: "bg-yellow-400",
-        bg: "bg-yellow-500/10",
-        border: "border-yellow-500/30",
         text: "text-yellow-400",
       };
     }
@@ -171,8 +171,6 @@ export default function ChainScreen() {
       label: t("chain.sync.synced"),
       variant: "success",
       dot: "bg-primary",
-      bg: "bg-primary/10",
-      border: "border-primary/30",
       text: "text-primary",
     };
   }, [connectedPeers, isSyncing, syncProgress]);
@@ -197,73 +195,96 @@ export default function ChainScreen() {
     router.push("/peers");
   }, [router]);
 
-  // N-4: the "Refresh" button on the Chain screen now triggers a real
-  // historical rescan via the SPV client, not just an in-memory balance
-  // re-read. A user who reports "I'm missing a tx" needs SOMETHING that
-  // actually re-asks peers for matched merkle blocks; that's `rescanWallet`.
-  // Best-effort: a failed rescan does not crash the screen — the SPV client
-  // logs the cause and the next tip advance retries.
+  // N-4: refreshing this screen triggers a real historical rescan via the SPV
+  // client, not just an in-memory balance re-read. A user who reports "I'm
+  // missing a tx" needs something that actually re-asks peers for matched
+  // merkle blocks; that's `rescanWallet`. Best-effort: a failed rescan does not
+  // crash the screen — the next tip advance retries.
   const handleRefresh = useCallback(async () => {
-    if (refreshing) return;
-    setRefreshing(true);
     try {
       await rescanWallet();
     } catch {
       // best-effort
     } finally {
       refreshBalance();
-      setRefreshing(false);
     }
-  }, [refreshing, rescanWallet, refreshBalance]);
+  }, [rescanWallet, refreshBalance]);
+
+  // Both entry points — the header icon and a pull at the top of the list —
+  // share one implementation with the Home screen.
+  const { gesture, scrollHandler, bandStyle, trigger, refreshing } =
+    usePullToRefreshBand(handleRefresh);
 
   return (
     <SafeAreaView
       className="flex-1 bg-background"
       edges={["top", "bottom", "left", "right"]}
     >
-      <ScreenHeader title={t("chain.title")} onBack={() => router.back()} />
+      <ScreenHeader
+        title={t("chain.title")}
+        onBack={() => router.back()}
+        rightAction={
+          <Pressable
+            onPress={trigger}
+            disabled={refreshing}
+            accessibilityLabel={t("chain.refresh")}
+            accessibilityRole="button"
+            accessibilityState={{ disabled: refreshing }}
+            className="w-11 h-11 items-center justify-center rounded-full active:bg-surface"
+          >
+            <MaterialCommunityIcons
+              name="refresh"
+              size={22}
+              color={refreshing ? themeColors.primary : themeColors.text}
+            />
+          </Pressable>
+        }
+      />
 
-      <ScrollView
-        className="flex-1"
-        contentContainerClassName="pt-3 pb-10"
-        showsVerticalScrollIndicator={false}
-      >
-        {/* ---- Status pill card ---- (non-row block: keeps its own side inset) */}
-        <View
-          className={`rounded-2xl p-5 border mb-6 mx-4 ${syncState.border} ${syncState.bg}`}
+      {/* Refresh rainbow band — clipped to the animated height, exactly as the
+          Home screen reveals it on pull. */}
+      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+        <RefreshRainbowBar />
+      </Animated.View>
+
+      <GestureDetector gesture={gesture}>
+        <Animated.ScrollView
+          className="flex-1"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerClassName="pt-3 pb-10"
+          showsVerticalScrollIndicator={false}
         >
+        {/* ---- Status line ---- A dot + label in the screen's own type scale,
+             not a coloured card: the rest of this screen is flat rows on the
+             background, and a filled, bordered block read as a foreign element
+             pasted on top. Colour is carried by the dot and the label alone. */}
+        <View className="px-4 pb-4">
           <View className="flex-row items-center">
-            <View className={`w-3 h-3 rounded-full ${syncState.dot} mr-3`} />
-            <View className="flex-1">
-              <Text
-                className={`text-base font-semibold ${syncState.text}`}
-                numberOfLines={1}
-              >
-                {syncState.label}
-              </Text>
-              <Text
-                className="text-muted-foreground text-xs mt-1"
-                numberOfLines={2}
-              >
-                {networkStatusLabel}
-              </Text>
-            </View>
+            <View className={`w-2 h-2 rounded-full ${syncState.dot} mr-2.5`} />
+            <Text
+              className={`text-[15px] font-semibold ${syncState.text}`}
+              numberOfLines={1}
+            >
+              {syncState.label}
+            </Text>
           </View>
+          <Text className="text-muted-foreground text-[13px] mt-1" numberOfLines={2}>
+            {networkStatusLabel}
+          </Text>
 
-          {/* Progress bar shown while actively syncing */}
+          {/* Hairline progress, only while actively syncing. */}
           {isSyncing ? (
-            <View className="mt-4">
-              <View className="h-1 bg-border rounded-full overflow-hidden">
-                <View
-                  className="h-full bg-primary rounded-full"
-                  style={{
-                    width: `${Math.min(100, Math.max(0, syncProgress))}%`,
-                  }}
-                />
-              </View>
+            <View className="h-0.5 bg-border rounded-full overflow-hidden mt-3">
+              <View
+                className="h-full bg-primary rounded-full"
+                style={{ width: `${Math.min(100, Math.max(0, syncProgress))}%` }}
+              />
             </View>
           ) : null}
         </View>
+
+        <View className="h-px bg-border mb-5" />
 
         {/* ---- Network info group ---- */}
         <SettingsSection title={t("chain.group.network")}>
@@ -310,22 +331,8 @@ export default function ChainScreen() {
           />
         </SettingsSection>
 
-        {/* ---- Refresh button ---- (non-row block: keeps its own side inset) */}
-        <View className="px-4">
-          <Button
-            title={t("chain.refresh")}
-            onPress={handleRefresh}
-            variant="outline"
-            icon={
-              <MaterialCommunityIcons
-                name="refresh"
-                size={18}
-                color={themeColors.primary}
-              />
-            }
-          />
-        </View>
-      </ScrollView>
+        </Animated.ScrollView>
+      </GestureDetector>
     </SafeAreaView>
   );
 }

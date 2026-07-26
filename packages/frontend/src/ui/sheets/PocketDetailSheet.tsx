@@ -1,5 +1,5 @@
 /**
- * Pocket detail sheet content: a colored hero (emoji + name + balance),
+ * Pocket detail sheet content: a colored hero (avatar + name + balance),
  * the actions that are actually possible for this Pocket, a Manage row
  * (edit / delete), and — for the active Pocket only — its recent activity.
  * Content-only body for a Bloom `<Dialog placement="bottom">`, matching the
@@ -22,7 +22,7 @@ import { useTheme } from "@oxyhq/bloom/theme";
 import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
 import { useWalletStore } from "../../wallet/wallet-store";
 import { MAIN_POCKET_ACCOUNT, canDeletePocket, findPocket } from "../../wallet/pockets";
-import { AmountText, Button, EmptyState } from "../components";
+import { AmountText, Button, EmptyState, PocketAvatar } from "../components";
 import { TransactionItem } from "../components/TransactionItem";
 import { MovePocketSheet } from "./MovePocketSheet";
 import { PocketFormSheet } from "./PocketFormSheet";
@@ -31,6 +31,12 @@ import { t } from "../../i18n";
 const CONTENT_MAX_WIDTH = 500;
 /** Most recent activity rows shown before the caller navigates to the full list. */
 const ACTIVITY_LIMIT = 8;
+/**
+ * Accent handed to the hero's avatar. The hero surface already IS the Pocket's
+ * color, so the initial fallback is drawn in white (matching the hero's other
+ * text) instead of a color that would vanish into its own background.
+ */
+const HERO_AVATAR_ACCENT = "#ffffff";
 
 function DetailAction({
   icon,
@@ -138,7 +144,10 @@ export function PocketDetailSheet({
         className="rounded-3xl p-5 mb-5"
         style={{ backgroundColor: pocket.color }}
       >
-        <Text style={{ fontSize: 28 }}>{pocket.emoji}</Text>
+        <PocketAvatar
+          pocket={{ ...pocket, color: HERO_AVATAR_ACCENT }}
+          size={56}
+        />
         <Text className="text-white/85 text-xs font-semibold uppercase tracking-wide mt-3.5">
           {label}
         </Text>

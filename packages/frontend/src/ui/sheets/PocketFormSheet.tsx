@@ -1,27 +1,89 @@
 /**
- * Pocket create/edit sheet content: name, emoji picker, color swatches, and
- * an optional FAIR goal. Content-only body for a Bloom `<Dialog placement="bottom">`,
- * mirroring `MovePocketSheet`'s conventions.
+ * Pocket create/edit sheet content: a tappable circular image avatar, name,
+ * color swatches, and an optional FAIR goal. Content-only body for a Bloom
+ * `<Dialog placement="bottom">`, mirroring `MovePocketSheet`'s conventions.
  *
  * One component serves both flows: `target === null` creates a new Pocket,
  * `target` set edits an existing one (prefilled, and renames it if the name
  * changed). Callers should remount this with `key={target?.account ?? "create"}`
  * when switching targets — its state is seeded from `target` once, not kept in
  * sync via an effect.
+ *
+ * A picked image is copied out of the picker's temporary location into the
+ * app's document directory, because the Pocket registry persists only the URI
+ * and the picker's cache copy is not guaranteed to survive.
  */
 
 import type React from "react";
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, Pressable } from "react-native";
+import { View, Text, TextInput, Pressable, Platform } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+import * as ImagePicker from "expo-image-picker";
+import { Directory, File, Paths } from "expo-file-system";
 import { useTheme } from "@oxyhq/bloom/theme";
+import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
 import { useWalletStore } from "../../wallet/wallet-store";
-import { POCKET_COLORS, POCKET_EMOJIS, type PocketInfo } from "../../wallet/pockets";
-import { AmountInput, Button } from "../components";
+import { POCKET_COLORS, type PocketInfo } from "../../wallet/pockets";
+import { AmountInput, Button, PocketAvatar } from "../components";
 import { t } from "../../i18n";
 
 const SECTION_LABEL =
   "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+
+/** Diameter of the form's hero avatar. */
+const AVATAR_SIZE = 88;
+
+/** Subdirectory of the document directory holding persisted Pocket images. */
+const IMAGE_DIRECTORY = "pockets";
+
+/** Options shared by both pickers — a square crop, since the avatar is circular. */
+const PICKER_OPTIONS: ImagePicker.ImagePickerOptions = {
+  mediaTypes: ["images"],
+  allowsEditing: true,
+  aspect: [1, 1],
+  quality: 0.8,
+};
+
+/**
+ * Copy a picked image into the document directory and return its stable URI.
+ * The filename is unique per pick so replacing a Pocket's image never collides
+ * with (or has to invalidate a cache of) the previous one.
+ *
+ * Native only: on web `expo-file-system` is a no-op stub and the picker already
+ * returns a browser-owned object URL, so that URL is used as-is (and, like any
+ * object URL, only lives for the session).
+ */
+async function persistPickedImage(
+  uri: string,
+  account: number | undefined,
+): Promise<string> {
+  if (Platform.OS === "web") return uri;
+  const directory = new Directory(Paths.document, IMAGE_DIRECTORY);
+  directory.create({ intermediates: true, idempotent: true });
+  const destination = new File(
+    directory,
+    `${account ?? "new"}-${Date.now()}.jpg`,
+  );
+  await new File(uri).copy(destination);
+  return destination.uri;
+}
+
+/**
+ * Delete an image this app had stored for a Pocket, once the registry no longer
+ * references it. Called only AFTER a successful save, so a failure here can
+ * never cost the user their edit — it just leaves a stale file behind, which is
+ * worth a warning rather than an error the user has to act on. Scoped to
+ * {@link IMAGE_DIRECTORY} so a URI from anywhere else is never touched.
+ */
+function discardStoredImage(uri: string): void {
+  if (Platform.OS === "web" || !uri.includes(`/${IMAGE_DIRECTORY}/`)) return;
+  try {
+    const file = new File(uri);
+    if (file.exists) file.delete();
+  } catch (err: unknown) {
+    console.warn("[pockets] could not delete the replaced Pocket image", err);
+  }
+}
 
 export function PocketFormSheet({
   target,
@@ -36,13 +98,44 @@ export function PocketFormSheet({
   const updatePocketMeta = useWalletStore((s) => s.updatePocketMeta);
 
   const [name, setName] = useState(target?.name ?? "");
-  const [emoji, setEmoji] = useState(target?.emoji ?? POCKET_EMOJIS[0]);
+  const [image, setImage] = useState<string | undefined>(target?.image);
   const [color, setColor] = useState(target?.color ?? POCKET_COLORS[0]);
   const [goal, setGoal] = useState(
     target?.goal !== undefined ? String(target.goal) : "",
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const imageSourceControl = useDialogControl();
+
+  const handlePick = useCallback(
+    async (source: "gallery" | "camera") => {
+      setError(null);
+      try {
+        const permission =
+          source === "gallery"
+            ? await ImagePicker.requestMediaLibraryPermissionsAsync()
+            : await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setError(t("pockets.create.permissionDenied"));
+          return;
+        }
+        const result =
+          source === "gallery"
+            ? await ImagePicker.launchImageLibraryAsync(PICKER_OPTIONS)
+            : await ImagePicker.launchCameraAsync(PICKER_OPTIONS);
+        if (result.canceled) return;
+        const asset = result.assets[0];
+        if (!asset) return;
+        setImage(await persistPickedImage(asset.uri, target?.account));
+      } catch (err: unknown) {
+        setError(
+          err instanceof Error ? err.message : t("pockets.create.error.failed"),
+        );
+      }
+    },
+    [target],
+  );
 
   const handleSubmit = useCallback(async () => {
     const trimmedName = name.trim();
@@ -66,15 +159,19 @@ export function PocketFormSheet({
     try {
       if (target) {
         await updatePocketMeta(target.account, {
-          emoji,
+          // `null` clears the image the user removed; a string sets a new one.
+          image: image ?? null,
           color,
           goal: goalValue ?? null,
         });
         if (trimmedName !== target.name) {
           await renamePocket(target.account, trimmedName);
         }
+        if (target.image && target.image !== image) {
+          discardStoredImage(target.image);
+        }
       } else {
-        await createPocket(trimmedName, emoji, color, goalValue);
+        await createPocket(trimmedName, image, color, goalValue);
       }
       onDone();
     } catch {
@@ -82,7 +179,7 @@ export function PocketFormSheet({
     } finally {
       setBusy(false);
     }
-  }, [name, goal, emoji, color, target, createPocket, renamePocket, updatePocketMeta, onDone]);
+  }, [name, goal, image, color, target, createPocket, renamePocket, updatePocketMeta, onDone]);
 
   return (
     <View className="w-full self-center gap-5" style={{ maxWidth: 500 }}>
@@ -91,6 +188,40 @@ export function PocketFormSheet({
           {t("pockets.create.lead")}
         </Text>
       ) : null}
+
+      {/* Image avatar — the Pocket's identity, tapped to pick a photo. The
+          previewed Pocket is assembled from the live form state so the crop,
+          color, and name-initial fallback all update as they are edited. The
+          camera badge is the affordance; the label it would duplicate is on
+          the Pressable for screen readers. */}
+      <View>
+        <Text className={SECTION_LABEL}>{t("pockets.create.imageLabel")}</Text>
+        <Pressable
+          onPress={() => imageSourceControl.open()}
+          accessibilityRole="button"
+          accessibilityLabel={t(
+            image ? "pockets.create.changeImage" : "pockets.create.addImage",
+          )}
+          className="self-center mt-2 active:opacity-80"
+        >
+          <PocketAvatar
+            pocket={{
+              account: target?.account ?? -1,
+              name,
+              createdAt: target?.createdAt ?? 0,
+              color,
+              image,
+            }}
+            size={AVATAR_SIZE}
+          />
+          <View
+            className="absolute bottom-0 right-0 w-7 h-7 rounded-full items-center justify-center border-2 border-surface"
+            style={{ backgroundColor: color }}
+          >
+            <MaterialCommunityIcons name="camera" size={14} color="#fff" />
+          </View>
+        </Pressable>
+      </View>
 
       <View>
         <Text className={SECTION_LABEL}>{t("pockets.create.nameLabel")}</Text>
@@ -103,28 +234,6 @@ export function PocketFormSheet({
           autoCapitalize="words"
           autoCorrect={false}
         />
-      </View>
-
-      <View>
-        <Text className={SECTION_LABEL}>{t("pockets.create.emojiLabel")}</Text>
-        <View className="flex-row flex-wrap gap-2.5 mt-2">
-          {POCKET_EMOJIS.map((option) => {
-            const selected = option === emoji;
-            return (
-              <Pressable
-                key={option}
-                onPress={() => setEmoji(option)}
-                accessibilityRole="button"
-                accessibilityState={{ selected }}
-                className={`w-11 h-11 rounded-2xl items-center justify-center border ${
-                  selected ? "border-primary bg-primary/10" : "border-border bg-surface"
-                }`}
-              >
-                <Text style={{ fontSize: 21 }}>{option}</Text>
-              </Pressable>
-            );
-          })}
-        </View>
       </View>
 
       <View>
@@ -177,6 +286,35 @@ export function PocketFormSheet({
         variant="primary"
         disabled={busy}
         loading={busy}
+      />
+
+      {/* Image source chooser — the picker launches after this closes
+          (`shouldCloseOnPress` defaults to true), so the system UI never has to
+          compete with the sheet for the foreground. */}
+      <Dialog
+        control={imageSourceControl}
+        placement="bottom"
+        title={t("pockets.create.imageSourceTitle")}
+        actions={[
+          {
+            label: t("pockets.create.gallery"),
+            onPress: () => handlePick("gallery"),
+          },
+          {
+            label: t("pockets.create.camera"),
+            onPress: () => handlePick("camera"),
+          },
+          ...(image
+            ? [
+                {
+                  label: t("pockets.create.removeImage"),
+                  color: "destructive" as const,
+                  onPress: () => setImage(undefined),
+                },
+              ]
+            : []),
+          { label: t("common.cancel"), color: "cancel" as const },
+        ]}
       />
     </View>
   );

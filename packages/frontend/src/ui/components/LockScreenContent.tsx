@@ -48,6 +48,10 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const lockoutTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Derived from the ticking countdown rather than a fresh `Date.now()`: the
+  // lockout timer sets `lockoutRemaining` on start and zeroes it (along with
+  // `lockedUntil`) the second it expires, so this stays exact without an
+  // impure read during render.
   const isLockedOut = lockedUntil !== null && lockoutRemaining > 0;
 
   const handleUnlocked = useCallback(() => {

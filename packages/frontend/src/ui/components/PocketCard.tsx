@@ -1,20 +1,18 @@
 /**
- * PocketCard — one row in the Pockets home list: an emoji chip tinted with
- * the Pocket's own color, its name (+ a "Main" badge for the implicit main
- * Pocket), an optional goal progress bar, and the balance right-aligned.
- * Matches the approved Revolut-style Pockets design (mockup: colored emoji
- * chip + goal bar per card).
+ * PocketCard — one row in the Pockets home list: the Pocket's circular avatar
+ * (its own image, or its initial on its accent color), its name (+ a "Main"
+ * badge for the implicit main Pocket), an optional goal progress bar, and the
+ * balance right-aligned. Matches the approved Revolut-style Pockets design
+ * (mockup: image avatar + goal bar per card).
  */
 
 import { View, Text, Pressable } from "react-native";
 import { UNITS_PER_COIN } from "@fairco.in/core";
 import { AmountText } from "./AmountText";
 import { Badge } from "./Badge";
+import { PocketAvatar } from "./PocketAvatar";
 import { MAIN_POCKET_ACCOUNT, type PocketInfo } from "../../wallet/pockets";
 import { t } from "../../i18n";
-
-/** ~16% alpha, matching the mockup's `color-mix(... 16%, var(--card))` chip tint. */
-const CHIP_TINT_ALPHA = "29";
 
 function formatGoalAmount(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 8 });
@@ -40,11 +38,8 @@ export function PocketCard({ pocket, balance, onPress }: PocketCardProps) {
       onPress={onPress}
       className="flex-row items-center bg-surface rounded-2xl px-4 py-3.5 mb-3 active:opacity-80"
     >
-      <View
-        className="w-12 h-12 rounded-2xl items-center justify-center mr-3.5"
-        style={{ backgroundColor: `${pocket.color}${CHIP_TINT_ALPHA}` }}
-      >
-        <Text style={{ fontSize: 22 }}>{pocket.emoji}</Text>
+      <View className="mr-3.5">
+        <PocketAvatar pocket={pocket} size={48} />
       </View>
 
       <View className="flex-1 min-w-0 mr-3">

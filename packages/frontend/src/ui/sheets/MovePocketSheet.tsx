@@ -22,12 +22,35 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { formatFair, parseFairToUnits } from "@fairco.in/core";
 import { useTheme } from "@oxyhq/bloom/theme";
 import { useWalletStore, FEE_RATES } from "../../wallet/wallet-store";
-import { MAIN_POCKET_ACCOUNT, findPocket } from "../../wallet/pockets";
-import { AmountInput, Button, EmptyState, ListItem } from "../components";
+import { MAIN_POCKET_ACCOUNT, findPocket, type PocketInfo } from "../../wallet/pockets";
+import { AmountInput, Button, EmptyState, ListItem, PocketAvatar } from "../components";
 import { t } from "../../i18n";
 
 /** Quick-amount buttons as a fraction of the max sendable balance. */
 const QUICK_FRACTIONS = [0.25, 0.5] as const;
+
+/** Diameter of the From/To leg avatars. */
+const LEG_AVATAR_SIZE = 36;
+
+/**
+ * A From/To leg's avatar. Either leg can be unresolved — the active Pocket may
+ * not be in the registry yet on first render, and no destination is selected
+ * until one exists — so an absent Pocket holds the same space with an empty
+ * placeholder rather than collapsing the row.
+ */
+function LegAvatar({ pocket }: { pocket: PocketInfo | undefined }): React.JSX.Element {
+  if (pocket) return <PocketAvatar pocket={pocket} size={LEG_AVATAR_SIZE} />;
+  return (
+    <View
+      className="bg-background"
+      style={{
+        width: LEG_AVATAR_SIZE,
+        height: LEG_AVATAR_SIZE,
+        borderRadius: LEG_AVATAR_SIZE / 2,
+      }}
+    />
+  );
+}
 
 export function MovePocketSheet({
   initialToAccount,
@@ -188,12 +211,7 @@ export function MovePocketSheet({
       {/* From → To */}
       <View className="flex-row items-center gap-2.5">
         <View className="flex-1 bg-surface rounded-2xl px-3.5 py-3 flex-row items-center gap-2.5">
-          <View
-            className="w-9 h-9 rounded-xl items-center justify-center"
-            style={{ backgroundColor: `${fromPocket?.color ?? theme.colors.primary}29` }}
-          >
-            <Text style={{ fontSize: 16 }}>{fromPocket?.emoji ?? "💧"}</Text>
-          </View>
+          <LegAvatar pocket={fromPocket} />
           <View className="flex-1 min-w-0">
             <Text className="text-muted-foreground text-[10.5px] font-semibold uppercase tracking-wide">
               {t("pockets.move.fromLabel")}
@@ -214,12 +232,7 @@ export function MovePocketSheet({
           onPress={() => setPickerOpen((open) => !open)}
           className="flex-1 bg-surface rounded-2xl px-3.5 py-3 flex-row items-center gap-2.5 active:opacity-80"
         >
-          <View
-            className="w-9 h-9 rounded-xl items-center justify-center"
-            style={{ backgroundColor: `${toPocket?.color ?? theme.colors.primary}29` }}
-          >
-            <Text style={{ fontSize: 16 }}>{toPocket?.emoji ?? "🌱"}</Text>
-          </View>
+          <LegAvatar pocket={toPocket} />
           <View className="flex-1 min-w-0">
             <Text className="text-muted-foreground text-[10.5px] font-semibold uppercase tracking-wide">
               {t("pockets.move.toLabel")}

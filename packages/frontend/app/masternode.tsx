@@ -11,9 +11,11 @@
  */
 
 import { useCallback } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, Text } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useFocusEffect, useRouter } from "expo-router";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import { useWalletStore } from "../src/wallet/wallet-store";
 import {
   ListItem,
@@ -24,6 +26,8 @@ import {
 } from "../src/ui/components";
 import { useTheme } from "@oxyhq/bloom/theme";
 import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { RefreshRainbowBar } from "../src/ui/components/RefreshRainbowBar";
+import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
 import { t } from "../src/i18n";
 
 /** Uppercase section label — matches the home screen's section headers. */
@@ -53,6 +57,11 @@ export default function MasternodeScreen() {
     }, [refreshMasternodeUTXOs]),
   );
 
+  // Pull down to re-check which UTXOs still meet the collateral requirement.
+  const { gesture, scrollHandler, bandStyle } = usePullToRefreshBand(
+    refreshMasternodeUTXOs,
+  );
+
   const eligibleUtxos = masternodeUTXOs;
 
   const handleStartMasternode = useCallback(() => {
@@ -65,7 +74,17 @@ export default function MasternodeScreen() {
       edges={["top", "bottom", "left", "right"]}
     >
       <ScreenHeader title={t("masternode.title")} onBack={() => router.back()} />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pt-4 pb-10">
+      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+        <RefreshRainbowBar />
+      </Animated.View>
+
+      <GestureDetector gesture={gesture}>
+        <Animated.ScrollView
+          className="flex-1"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerClassName="px-5 pt-4 pb-10"
+        >
         {/* Requirements — card-less: section label above a muted description */}
         <View>
           <Text className={SECTION_LABEL}>
@@ -137,7 +156,8 @@ export default function MasternodeScreen() {
             />
           </View>
         </View>
-      </ScrollView>
+        </Animated.ScrollView>
+      </GestureDetector>
 
       {/* Not-yet-available prompt: honest status instead of a fake success. */}
       <Dialog

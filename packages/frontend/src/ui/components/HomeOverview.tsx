@@ -69,8 +69,14 @@ export function HomeOverview(): React.JSX.Element {
     return ((last.priceUsd - reference.priceUsd) / reference.priceUsd) * 100;
   }, [history]);
 
+  // The 30-day window is anchored once per mount instead of being read inside
+  // the memo: an impure `Date.now()` there is both a purity violation and a lie
+  // — the memo only recomputes when `transactions` changes, so the "window"
+  // silently froze at whatever time the last transaction arrived.
+  const [nowSeconds] = useState(() => Math.floor(Date.now() / 1000));
+
   const rewards = useMemo(() => {
-    const cutoff = Math.floor(mountedAt / 1000) - THIRTY_DAYS_SECONDS;
+    const cutoff = nowSeconds - THIRTY_DAYS_SECONDS;
     let total = 0n;
     let last30 = 0n;
     let count = 0;
@@ -82,7 +88,7 @@ export function HomeOverview(): React.JSX.Element {
       if (tx.timestamp >= cutoff) last30 += abs;
     }
     return { total, last30, count };
-  }, [mountedAt, transactions]);
+  }, [transactions, nowSeconds]);
 
   return (
     <View className="pt-3 pb-2">

@@ -20,11 +20,8 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxyhq/bloom/theme";
 import { useWalletStore } from "../../wallet/wallet-store";
 import { MAIN_POCKET_ACCOUNT } from "../../wallet/pockets";
-import { ListItem, AmountText } from "../components";
+import { ListItem, AmountText, PocketAvatar } from "../components";
 import { t } from "../../i18n";
-
-/** ~16% alpha, matching PocketCard's chip tint. */
-const CHIP_TINT_ALPHA = "29";
 
 const CONTENT_MAX_WIDTH = 500;
 
@@ -79,7 +76,7 @@ export function PocketSwitcherSheet({
       onLayout={() => loadPockets()}
     >
       {/* Pocket list — card-less surface container, one row per Pocket with
-          its own emoji chip in its accent color (matches PocketCard). */}
+          its own image avatar (matches PocketCard). */}
       <View className="bg-surface rounded-2xl overflow-hidden">
         {pockets.map((pocket, idx) => {
           const isActive = pocket.account === activeAccount;
@@ -99,11 +96,8 @@ export function PocketSwitcherSheet({
                   : { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }
               }
             >
-              <View
-                className="w-9 h-9 rounded-full items-center justify-center mr-3"
-                style={{ backgroundColor: `${pocket.color}${CHIP_TINT_ALPHA}` }}
-              >
-                <Text style={{ fontSize: 16 }}>{pocket.emoji}</Text>
+              <View className="mr-3">
+                <PocketAvatar pocket={pocket} size={36} />
               </View>
               <Text className="text-foreground text-base font-medium flex-1" numberOfLines={1}>
                 {label}
