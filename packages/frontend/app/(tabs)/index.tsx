@@ -22,7 +22,6 @@ import {
   ActionButton,
   EmptyState,
   Badge,
-  PocketAvatar,
 } from "../../src/ui/components";
 import { TransactionItem } from "../../src/ui/components/TransactionItem";
 import {
@@ -31,10 +30,8 @@ import {
 } from "../../src/ui/components/SuggestionStack";
 import { HomeOverview } from "../../src/ui/components/HomeOverview";
 import { ArrowCircleDownIcon } from "../../src/ui/components/ArrowCircleDownIcon";
-import { HubIcon } from "../../src/ui/components/HubIcon";
 import { SendIcon } from "../../src/ui/components/SendIcon";
 import { PocketSwitcherSheet } from "../../src/ui/sheets/PocketSwitcherSheet";
-import { findPocket, MAIN_POCKET_ACCOUNT } from "../../src/wallet/pockets";
 import { TransactionDetailSheet } from "../../src/ui/sheets/TransactionDetailSheet";
 import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
@@ -140,9 +137,6 @@ export default function HomeScreen() {
   const receiveAddress = useWalletStore((s) => s.currentReceiveAddress);
   const refreshBalance = useWalletStore((s) => s.refreshBalance);
   const hasBackedUp = useWalletStore((s) => s.hasBackedUp);
-  const pockets = useWalletStore((s) => s.pockets);
-  const activeAccount = useWalletStore((s) => s.activeAccount);
-  const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
   const loadPockets = useWalletStore((s) => s.loadPockets);
 
   const [price, setPrice] = useState<PriceData | null>(getCachedPrice);
@@ -152,16 +146,10 @@ export default function HomeScreen() {
   // just open it on the right side.
   const sheetControl = useDialogControl();
   const [sheetMode, setSheetMode] = useState<"send" | "receive">("send");
-  // Tapping the active-Pocket pill opens a quick Pocket-switcher sheet.
+  // The Pockets action pill opens a quick Pocket-switcher sheet. The
+  // active-Pocket chip that used to name it here is gone (63df893), so the
+  // name is no longer derived on this screen.
   const pocketSwitcherControl = useDialogControl();
-  const activePocket = useMemo(
-    () => findPocket(pockets, activeAccount),
-    [pockets, activeAccount],
-  );
-  const activePocketName =
-    !activePocket || activePocket.account === MAIN_POCKET_ACCOUNT
-      ? t("pockets.mainName")
-      : activePocket.name;
   // Tapping an activity row opens the transaction detail in a bottom sheet.
   const txDetailControl = useDialogControl();
   const [detailTxid, setDetailTxid] = useState<string | null>(null);
@@ -334,33 +322,6 @@ export default function HomeScreen() {
             size="lg"
             align="start"
           />
-          {/* Active-Pocket pill — opens the Pocket switcher. Watch-only
-              wallets have no Pockets, so the pill (and the whole Pockets
-              surface) is hidden for them. */}
-          {!isWatchOnly ? (
-            <Pressable
-              className="self-start flex-row items-center bg-surface rounded-full pl-1.5 pr-3 py-1.5 mt-2 active:opacity-70"
-              onPress={() => pocketSwitcherControl.open()}
-              accessibilityRole="button"
-              accessibilityLabel={t("pockets.switcherTitle")}
-            >
-              {/* Omitted until the registry resolves the active Pocket — the
-                  pill still reads correctly from its name alone. */}
-              {activePocket ? (
-                <View className="mr-1.5">
-                  <PocketAvatar pocket={activePocket} size={20} />
-                </View>
-              ) : null}
-              <Text className="text-foreground text-sm font-medium">
-                {activePocketName}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={16}
-                color={theme.colors.textSecondary}
-              />
-            </Pressable>
-          ) : null}
         </View>
 
         {/* ---- Quick actions ---- */}
@@ -393,12 +354,9 @@ export default function HomeScreen() {
             onPress={handleBuy}
           />
           <ActionButton
-            icon="server-network"
-            label={t("wallet.nodes")}
-            onPress={() => router.push("/masternode")}
-            renderIcon={({ color, size }) => (
-              <HubIcon color={color} size={size} />
-            )}
+            icon="wallet-bifold-outline"
+            label={t("pockets.title")}
+            onPress={() => router.push("/pockets")}
           />
         </View>
 
