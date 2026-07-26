@@ -20,7 +20,7 @@ import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { toast } from "@oxyhq/bloom/toast";
 import { formatUnits, COIN_TICKER, explorerTxUrl } from "@fairco.in/core";
 import {
   useWalletStore,
@@ -137,20 +137,6 @@ export function TransactionDetailSheet({
   const [contact, setContact] = useState<ContactRow | null>(null);
   const [contactChecked, setContactChecked] = useState(false);
 
-  const messageControl = useDialogControl();
-  const [message, setMessage] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-
-  const showMessage = useCallback(
-    (title: string, description: string) => {
-      setMessage({ title, description });
-      messageControl.open();
-    },
-    [messageControl],
-  );
-
   const transaction = useMemo<WalletTransaction | undefined>(
     () => transactions.find((tx) => tx.txid === txid),
     [transactions, txid],
@@ -186,12 +172,9 @@ export function TransactionDetailSheet({
     const db = getDatabase();
     if (db) {
       db.setTxNote(txid, note.trim());
-      showMessage(
-        t("transaction.savedNote.title"),
-        t("transaction.savedNote.description"),
-      );
+      toast.success(t("transaction.savedNote.description"));
     }
-  }, [txid, note, showMessage]);
+  }, [txid, note]);
 
   const handleViewExplorer = useCallback(() => {
     if (!txid) return;
@@ -201,20 +184,14 @@ export function TransactionDetailSheet({
   const handleCopyTxid = useCallback(() => {
     if (!txid) return;
     Clipboard.setStringAsync(txid);
-    showMessage(
-      t("transaction.txidCopied.title"),
-      t("transaction.txidCopied.description"),
-    );
-  }, [txid, showMessage]);
+    toast.success(t("transaction.txidCopied.description"));
+  }, [txid]);
 
   const handleCopyAddress = useCallback(() => {
     if (!transaction) return;
     Clipboard.setStringAsync(transaction.address);
-    showMessage(
-      t("transaction.addressCopied.title"),
-      t("transaction.addressCopied.description"),
-    );
-  }, [transaction, showMessage]);
+    toast.success(t("transaction.addressCopied.description"));
+  }, [transaction]);
 
   const handleAddToContacts = useCallback(() => {
     router.push("/contacts");
@@ -403,14 +380,6 @@ export function TransactionDetailSheet({
           </BloomButton>
         ) : null}
       </View>
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[{ label: t("common.ok"), onPress: () => setMessage(null) }]}
-      />
     </View>
   );
 }

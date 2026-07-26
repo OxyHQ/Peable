@@ -24,7 +24,7 @@ import {
 import { PinDots } from "../src/ui/components/PinDots";
 import { PinPad } from "../src/ui/components/PinPad";
 import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { toast } from "@oxyhq/bloom/toast";
 import { t } from "../src/i18n";
 
 const PIN_LENGTH = 6;
@@ -58,20 +58,6 @@ export default function ExportKeyScreen() {
   const [confirmPassphrase, setConfirmPassphrase] = useState("");
   const [encryptedKey, setEncryptedKey] = useState<string | null>(null);
   const [encrypting, setEncrypting] = useState(false);
-
-  const messageControl = useDialogControl();
-  const [message, setMessage] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-
-  const showMessage = useCallback(
-    (title: string, description: string) => {
-      setMessage({ title, description });
-      messageControl.open();
-    },
-    [messageControl],
-  );
 
   // ---------------------------------------------------------------------------
   // PIN verification step
@@ -160,7 +146,7 @@ export default function ExportKeyScreen() {
       const { getMnemonic } = await import("../src/storage/secure-store");
       const mnemonic = await getMnemonic();
       if (!mnemonic) {
-        showMessage(t("common.error"), t("exportKey.error.noMnemonic"));
+        toast.error(t("exportKey.error.noMnemonic"));
         return;
       }
 
@@ -169,7 +155,7 @@ export default function ExportKeyScreen() {
       // derive a random, unrelated keypair — review finding C2); there is simply
       // nothing to export.
       if (mnemonic.startsWith("xpub:")) {
-        showMessage(t("common.error"), t("exportKey.error.noPrivateKey"));
+        toast.error(t("exportKey.error.noPrivateKey"));
         return;
       }
 
@@ -178,7 +164,7 @@ export default function ExportKeyScreen() {
       try {
         privateKey = km.getPrivateKeyForAddress(selectedAddress);
       } catch {
-        showMessage(t("common.error"), t("exportKey.error.noPrivateKey"));
+        toast.error(t("exportKey.error.noPrivateKey"));
         return;
       }
 
@@ -194,7 +180,7 @@ export default function ExportKeyScreen() {
     } catch (err: unknown) {
       const errorMessage =
         err instanceof Error ? err.message : t("exportKey.error.encryptionFailed");
-      showMessage(t("common.error"), errorMessage);
+      toast.error(errorMessage);
     } finally {
       if (privateKey) {
         try {
@@ -212,7 +198,7 @@ export default function ExportKeyScreen() {
       }
       setEncrypting(false);
     }
-  }, [canEncrypt, selectedAddress, passphrase, network, showMessage]);
+  }, [canEncrypt, selectedAddress, passphrase, network]);
 
   // ---------------------------------------------------------------------------
   // Result step
@@ -221,12 +207,9 @@ export default function ExportKeyScreen() {
   const handleCopyEncrypted = useCallback(async () => {
     if (encryptedKey) {
       await Clipboard.setStringAsync(encryptedKey);
-      showMessage(
-        t("exportKey.result.copied.title"),
-        t("exportKey.result.copied.description"),
-      );
+      toast.success(t("exportKey.result.copied.description"));
     }
-  }, [encryptedKey, showMessage]);
+  }, [encryptedKey]);
 
   // ---------------------------------------------------------------------------
   // Render
@@ -386,14 +369,6 @@ export default function ExportKeyScreen() {
             loading={encrypting}
           />
         </ScrollView>
-
-        <Dialog
-          control={messageControl}
-          placement="bottom"
-          title={message?.title ?? ""}
-          description={message?.description ?? ""}
-          actions={[{ label: t("common.ok"), onPress: () => setMessage(null) }]}
-        />
       </SafeAreaView>
     );
   }
@@ -449,14 +424,6 @@ export default function ExportKeyScreen() {
           </Text>
         </View>
       </ScrollView>
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[{ label: t("common.ok"), onPress: () => setMessage(null) }]}
-      />
     </SafeAreaView>
   );
 }

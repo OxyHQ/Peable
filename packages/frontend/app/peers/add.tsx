@@ -6,8 +6,10 @@ import { useCallback, useState } from "react";
 import { View, Text, ScrollView, TextInput } from "react-native";
 import { useRouter } from "expo-router";
 import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { toast } from "@oxyhq/bloom/toast";
 import { getDatabase } from "../../src/wallet/wallet-store";
+import { ScreenHeader } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Button } from "../../src/ui/components/Button";
 import { COIN_NAME } from "@fairco.in/core";
 import { t } from "../../src/i18n";
@@ -55,21 +57,6 @@ export default function AddPeerScreen() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const [message, setMessage] = useState<{
-    title: string;
-    description: string;
-    onConfirm?: () => void;
-  } | null>(null);
-  const messageControl = useDialogControl();
-
-  const showMessage = useCallback(
-    (title: string, description: string, onConfirm?: () => void) => {
-      setMessage({ title, description, onConfirm });
-      messageControl.open();
-    },
-    [messageControl],
-  );
-
   const handleAdd = useCallback(async () => {
     const trimmedIp = ip.trim();
     const trimmedPort = port.trim() || DEFAULT_PORT;
@@ -96,19 +83,21 @@ export default function AddPeerScreen() {
     }
 
     setLoading(false);
-    showMessage(
-      t("peers.add.success.title"),
-      `${trimmedIp}:${trimmedPort}`,
-      () => router.back(),
-    );
-  }, [ip, port, router, showMessage]);
+    toast.success(t("peers.add.success.title"));
+    router.back();
+  }, [ip, port, router]);
 
   return (
-    <>
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={["top", "bottom", "left", "right"]}
+    >
+      <ScreenHeader title={t("peers.add.title")} onBack={() => router.back()} />
       <ScrollView
-        className="flex-1 bg-background"
+        className="flex-1"
         contentContainerClassName="px-5 pt-6 pb-10"
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <Text className="text-muted-foreground text-sm mb-6 leading-5">
           {t("peers.add.description", { coin: COIN_NAME, port: DEFAULT_PORT })}
@@ -175,23 +164,6 @@ export default function AddPeerScreen() {
           />
         </View>
       </ScrollView>
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[
-          {
-            label: t("common.ok"),
-            onPress: () => {
-              const cb = message?.onConfirm;
-              setMessage(null);
-              cb?.();
-            },
-          },
-        ]}
-      />
-    </>
+    </SafeAreaView>
   );
 }

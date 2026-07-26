@@ -15,7 +15,8 @@
  */
 
 import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView, Switch } from "react-native";
+import { View, Text, TextInput, ScrollView } from "react-native";
+import { Switch } from "@oxyhq/bloom/switch";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter, useFocusEffect } from "expo-router";
@@ -220,8 +221,6 @@ export default function NotificationsSettingsScreen() {
                 <Switch
                   value={enabled}
                   onValueChange={handleToggleEnabled}
-                  trackColor={{ false: colors.border, true: colors.primaryLight }}
-                  thumbColor={colors.text}
                 />
               }
               isLast
@@ -301,11 +300,6 @@ export default function NotificationsSettingsScreen() {
                       <Switch
                         value={events.includes(row.event)}
                         onValueChange={(on) => handleToggleEvent(row.event, on)}
-                        trackColor={{
-                          false: colors.border,
-                          true: colors.primaryLight,
-                        }}
-                        thumbColor={colors.text}
                       />
                     }
                     isLast={idx === EVENT_ROWS.length - 1}

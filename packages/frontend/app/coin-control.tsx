@@ -9,7 +9,7 @@ import { View, Text, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { toast } from "@oxyhq/bloom/toast";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
 import {
   AmountText,
@@ -71,20 +71,6 @@ export default function CoinControlScreen() {
     }
     return map;
   });
-
-  const [message, setMessage] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-  const messageControl = useDialogControl();
-
-  const showMessage = useCallback(
-    (title: string, description: string) => {
-      setMessage({ title, description });
-      messageControl.open();
-    },
-    [messageControl],
-  );
 
   const loadUtxos = useCallback(() => {
     const db = getDatabase();
@@ -152,13 +138,13 @@ export default function CoinControlScreen() {
     }
     setSelectedUTXOs(selectedUtxos);
     const count = selectedUtxos.length;
-    showMessage(
-      t("coinControl.applied.title"),
+    toast.success(
       count === 1
         ? t("coinControl.applied.description.one", { count })
         : t("coinControl.applied.description.other", { count }),
     );
-  }, [utxos, selected, setSelectedUTXOs, showMessage]);
+    router.back();
+  }, [utxos, selected, setSelectedUTXOs, router]);
 
   const handleClear = useCallback(() => {
     setSelected(new Map());
@@ -198,6 +184,7 @@ export default function CoinControlScreen() {
           onScroll={scrollHandler}
           scrollEventThrottle={16}
           contentContainerClassName="px-5 pb-4"
+          showsVerticalScrollIndicator={false}
         >
         {/* Selection actions — borderless pills */}
         <View className="flex-row gap-2 mt-2 mb-5">
@@ -317,22 +304,6 @@ export default function CoinControlScreen() {
           disabled={selectedCount === 0}
         />
       </View>
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[
-          {
-            label: t("common.ok"),
-            onPress: () => {
-              setMessage(null);
-              router.back();
-            },
-          },
-        ]}
-      />
     </SafeAreaView>
   );
 }

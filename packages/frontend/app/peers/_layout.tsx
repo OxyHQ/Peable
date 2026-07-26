@@ -4,7 +4,6 @@
 
 import { Stack } from "expo-router";
 import { useTheme } from "@oxyhq/bloom/theme";
-import { t } from "../../src/i18n";
 
 export default function PeersLayout() {
   const theme = useTheme();
@@ -12,20 +11,15 @@ export default function PeersLayout() {
   return (
     <Stack
       screenOptions={{
-        headerStyle: { backgroundColor: theme.colors.card },
-        headerTintColor: theme.colors.tint,
-        headerTitleStyle: { color: theme.colors.text },
+        // No native header — each screen renders its own SafeAreaView +
+        // ScreenHeader, matching every other stack screen (chain, masternode,
+        // …) so the scroll/inset behavior is identical across the app.
+        headerShown: false,
         contentStyle: { backgroundColor: theme.colors.background },
       }}
     >
-      <Stack.Screen
-        name="index"
-        options={{ title: t("peers.title") }}
-      />
-      <Stack.Screen
-        name="add"
-        options={{ title: t("peers.add.title") }}
-      />
+      <Stack.Screen name="index" />
+      <Stack.Screen name="add" />
     </Stack>
   );
 }

@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
 import { useTheme } from "@oxyhq/bloom/theme";
+import { toast } from "@oxyhq/bloom/toast";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { explorerTxUrl } from "@fairco.in/core";
 import {
@@ -31,6 +32,7 @@ import {
   EmptyState,
   ScreenHeader,
 } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { PaymentInstructions } from "../../src/components/buy/PaymentInstructions";
 import {
   BuyApiError,
@@ -208,16 +210,19 @@ export default function BuyQuoteScreen() {
   }, [router]);
 
   const handleCopiedAddress = useCallback(() => {
-    // Hook for showing a Bloom toast in future; no-op for now to keep the
-    // component self-contained.
+    toast.success(t("buy.instructions.copiedAddress"));
   }, []);
+
   const handleCopiedAmount = useCallback(() => {
-    // Same as above.
+    toast.success(t("buy.instructions.copiedAmount"));
   }, []);
 
   if (!orderId) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader
           title={t("buy.title")}
           onBack={() => router.back()}
@@ -227,47 +232,57 @@ export default function BuyQuoteScreen() {
           title={t("notFound.title")}
           subtitle={t("notFound.description")}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (loading && !status) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
         <View className="flex-1 items-center justify-center px-6">
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!quoteShape || !status) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
         <EmptyState
           icon="alert-circle"
           title={t("notFound.title")}
           subtitle={error ?? t("notFound.description")}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={["top", "left", "right"]}
+    >
       <ScreenHeader
         title={t("buy.instructions.title")}
         onBack={() => router.back()}
       />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-32 gap-4"
+        contentContainerClassName="pb-6 gap-4"
         contentContainerStyle={{
           paddingTop: 4,
           paddingHorizontal: 16,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <View
           className="w-full self-center gap-4"
@@ -314,13 +329,11 @@ export default function BuyQuoteScreen() {
       </ScrollView>
 
       <View
-        className="absolute left-0 right-0 bottom-0 bg-background"
-        style={{ paddingBottom: insets.bottom + 12, paddingTop: 12 }}
+        className="border-t border-border"
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
       >
-        {/* Hairline divider (replaces the old top border) */}
-        <View className="absolute left-0 right-0 top-0 h-px bg-border" />
         <View
-          className="w-full self-center px-4 gap-2"
+          className="w-full self-center px-4 pt-3 gap-2"
           style={{ maxWidth: CONTENT_MAX_WIDTH }}
         >
           {isDelivered ? (
@@ -362,6 +375,6 @@ export default function BuyQuoteScreen() {
           { label: t("common.cancel"), color: "cancel" },
         ]}
       />
-    </View>
+    </SafeAreaView>
   );
 }
