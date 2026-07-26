@@ -20,6 +20,7 @@ import { View, Text } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxyhq/bloom/theme";
 import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { toast } from "@oxyhq/bloom/toast";
 import { useWalletStore } from "../../wallet/wallet-store";
 import { MAIN_POCKET_ACCOUNT, canDeletePocket, findPocket } from "../../wallet/pockets";
 import { AmountText, Button, EmptyState, PocketAvatar } from "../components";
@@ -86,13 +87,11 @@ export function PocketDetailSheet({
   const deletePocket = useWalletStore((s) => s.deletePocket);
 
   const [switching, setSwitching] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
 
   const moveControl = useDialogControl();
   const editControl = useDialogControl();
   const manageControl = useDialogControl();
   const deleteControl = useDialogControl();
-  const messageControl = useDialogControl();
 
   const pocket = findPocket(pockets, account);
   const isActive = account === activeAccount;
@@ -115,17 +114,16 @@ export function PocketDetailSheet({
   }, [account, switchPocket, onDone]);
 
   // `deleteControl` closes before this runs (default `shouldCloseOnPress`),
-  // so a failure surfaces via the separate `messageControl` dialog rather
-  // than needing to keep the confirm dialog open.
+  // so a failure surfaces via a toast rather than needing to keep the confirm
+  // dialog open.
   const handleDeleteConfirm = useCallback(async () => {
     try {
       await deletePocket(account);
       onDone();
     } catch (err: unknown) {
-      setMessage(err instanceof Error ? err.message : t("pockets.delete.notEmpty"));
-      messageControl.open();
+      toast.error(err instanceof Error ? err.message : t("pockets.delete.notEmpty"));
     }
-  }, [account, deletePocket, onDone, messageControl]);
+  }, [account, deletePocket, onDone]);
 
   if (!pocket) {
     return (
@@ -268,14 +266,6 @@ export function PocketDetailSheet({
           { label: t("common.delete"), color: "destructive", onPress: handleDeleteConfirm },
           { label: t("common.cancel"), color: "cancel" },
         ]}
-      />
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={t("common.error")}
-        description={message ?? ""}
-        actions={[{ label: t("common.ok") }]}
       />
     </View>
   );

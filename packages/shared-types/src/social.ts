@@ -93,3 +93,28 @@ export interface SocialPayment {
 export interface SocialPaymentsResponse {
   payments: SocialPayment[];
 }
+
+/**
+ * Body of `PUT /v1/wallet/me/xpub` — a signing device publishing the account
+ * WATCH-ONLY key so the same user's other surfaces can show the wallet.
+ *
+ * The identity wallet's addresses derive from a seed produced by HKDF over the
+ * on-device identity PRIVATE key, so nothing already published about a user
+ * lets another surface compute them. That is on purpose (otherwise a handle
+ * would expose a stranger's whole balance), and it is why this key has to
+ * travel: a browser has no keystore, so it cannot derive the tree itself.
+ *
+ * The gateway refuses an extended key that carries a private key
+ * (`assertWatchOnly`) before storing it. An xpub is a permanent, total VIEW of
+ * an account: it cannot sign, and it cannot be rotated without moving accounts.
+ */
+export interface PublishWalletXpubRequest {
+  network: 'mainnet' | 'testnet';
+  /** Account-level extended PUBLIC key, `m/44'/coinType'/0'`. */
+  xpub: string;
+}
+
+/** Response of `GET /v1/wallet/me/xpub`. `null` until a device publishes one. */
+export interface WalletXpubResponse {
+  xpub: string | null;
+}

@@ -14,4 +14,5 @@ export {
   socialReceiveCursors,
   socialSendAttributions,
 } from './social';
+export { walletXpubs } from './wallets';
 export { webhookDeliveries } from './webhooks';

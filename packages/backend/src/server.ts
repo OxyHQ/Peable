@@ -29,6 +29,7 @@ import { createWebhookDeliveriesRouter } from "./routes/webhookDeliveries";
 import { createPaymentLinksRouter } from "./routes/paymentLinks";
 import { createCheckoutSessionsRouter } from "./routes/checkoutSessions";
 import { createSocialRouter } from "./routes/social";
+import { createWalletRouter } from "./routes/wallet";
 import { createEnrichRouter } from "./routes/enrich";
 import { createDashboardRouter } from "./routes/dashboard";
 import { SettlementWatcher } from "./services/settlementWatcher";
@@ -260,6 +261,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   );
   app.use(createSocialRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
+  app.use(createWalletRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createMerchantsRouter({ requireMerchant }));
   app.use(
     createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }),

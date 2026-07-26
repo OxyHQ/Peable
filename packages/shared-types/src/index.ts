@@ -33,6 +33,8 @@ export {
   type SocialPaymentDirection,
   type SocialPayment,
   type SocialPaymentsResponse,
+  type PublishWalletXpubRequest,
+  type WalletXpubResponse,
   type EnrichmentKind,
   type EnrichmentResult,
   type EnrichRequest,

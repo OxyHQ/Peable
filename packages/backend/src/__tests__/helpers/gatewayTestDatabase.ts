@@ -1,5 +1,6 @@
 import { afterAll, beforeAll } from 'bun:test';
-import { sql } from 'drizzle-orm';
+import { getTableName, is, sql, Table } from 'drizzle-orm';
+import * as schema from '../../db/schema';
 import { deriveKeyFromSeed, getNetwork, mnemonicToSeed } from '@fairco.in/core';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxyhq/core/server';
@@ -135,9 +136,29 @@ export function useGatewayDatabase(): void {
  * the list is explicit and a new table has to be added here on purpose.
  */
 export async function resetGatewayTables(): Promise<void> {
-  await gatewayDb().execute(
-    sql`truncate webhook_deliveries, checkout_sessions, payment_links, payment_intents, social_send_attributions, social_receive_cursors, merchants restart identity`
-  );
+  await gatewayDb().execute(sql.raw(`truncate ${gatewayTableNames()} restart identity`));
+}
+
+/**
+ * Every table in the schema, comma-joined, for the truncate above.
+ *
+ * Derived from `db/schema`'s barrel rather than written out. The list used to
+ * be literal, and a table added without editing it was silently NOT truncated —
+ * state leaked into the next test in the file and the failure surfaced as a
+ * wrong assertion somewhere unrelated. A hand-maintained list that nothing
+ * checks reports the same thing whether or not it is complete, which makes it
+ * no check at all.
+ *
+ * `truncate` takes them in one statement so it does not matter that they
+ * reference each other; `restart identity` is kept for the same reason it was
+ * there before.
+ */
+function gatewayTableNames(): string {
+  const tables = Object.values(schema).filter((value) => is(value, Table));
+  if (tables.length === 0) {
+    throw new Error('resetGatewayTables: no tables found in db/schema');
+  }
+  return tables.map((table) => `"${getTableName(table)}"`).join(', ');
 }
 
 /** Values a seed accepts, matching the `Model.create(...)` object it replaces. */

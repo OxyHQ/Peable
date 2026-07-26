@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { TESTNET, mnemonicToSeed, deriveKeyFromSeed } from "@fairco.in/core";
 import { HDKey } from "@scure/bip32";
-import { deriveIntentAddress } from "../derivation";
+import { assertWatchOnly, deriveIntentAddress } from "../derivation";
 
 // Watch-only account xpub for the canonical all-"abandon" + "art" testnet
 // mnemonic, produced by `scripts/gen-xpub-vector.ts` (m/44'/1'/0' neutered).
@@ -46,4 +46,34 @@ test("rejects a private xprv (non-custody guard)", () => {
   expect(() => deriveIntentAddress(xprv, 0, 0, TESTNET)).toThrow(
     "watch-only violation",
   );
+});
+
+/**
+ * The same firewall, reachable without deriving anything.
+ *
+ * `PUT /v1/wallet/me/xpub` accepts a key to STORE, and stores it before any
+ * address is derived from it — so a guard that only runs inside
+ * `deriveIntentAddress` would let an `xprv` land in the database and be caught
+ * later, or never. The gateway must refuse to hold spend capability at the
+ * boundary, not at first use.
+ */
+test("assertWatchOnly refuses a private xprv on its own", () => {
+  const seed = mnemonicToSeed(MNEMONIC);
+  const root = deriveKeyFromSeed(seed, TESTNET);
+  const xprv = root.derive(`m/44'/${TESTNET.bip44CoinType}'/0'`).hdKey.privateExtendedKey;
+
+  expect(() => assertWatchOnly(xprv, TESTNET)).toThrow("watch-only violation");
+});
+
+test("assertWatchOnly accepts a neutered xpub", () => {
+  expect(() => assertWatchOnly(XPUB, TESTNET)).not.toThrow();
+});
+
+/**
+ * A string that is not an extended key at all must not pass for one. Without
+ * this, a typo'd or truncated key would be stored and only fail much later,
+ * when a surface tried to derive a receive address from it.
+ */
+test("assertWatchOnly rejects a string that is not an extended key", () => {
+  expect(() => assertWatchOnly("not-an-xpub", TESTNET)).toThrow();
 });

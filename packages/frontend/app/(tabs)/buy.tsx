@@ -37,7 +37,9 @@ import {
   requestBuyQuote,
   type PaymentCurrency,
 } from "../../src/api/buy";
-import { useWalletStore } from "../../src/wallet/wallet-store";
+import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
+import { recordBuyOrder } from "../../src/wallet/buy-history";
+import { BuyHistoryList } from "../../src/ui/components/BuyHistoryList";
 import { useLanguageStore } from "../../src/i18n/store";
 import { t } from "../../src/i18n";
 
@@ -149,6 +151,22 @@ export default function BuyScreen() {
         fairDestinationAddress: deliveryAddress,
         userIdentifier: activeWalletId,
       });
+      // Persist BEFORE navigating. If the user backs out of the quote screen —
+      // or the app dies — the order still has to be findable, otherwise a
+      // payment they may already have sent has no trace on the device.
+      const db = getDatabase();
+      if (db) {
+        await recordBuyOrder(db, {
+          id: quote.id,
+          fairAmountSats: BigInt(quote.fairAmountSats),
+          paymentCurrency: quote.paymentCurrency,
+          paymentAmountFormatted: quote.paymentAmountFormatted,
+          paymentSymbol: quote.paymentSymbol,
+          status: "AWAITING_PAYMENT",
+          createdAt: Math.floor(Date.now() / 1000),
+        });
+      }
+
       router.push({
         pathname: "/buy/quote",
         params: { orderId: quote.id },
@@ -287,6 +305,10 @@ export default function BuyScreen() {
               </Text>
             </View>
           ) : null}
+
+          {/* Past orders. Renders nothing until there is one, so a first-time
+              buyer sees the form exactly as before. */}
+          <BuyHistoryList />
         </View>
       </ScrollView>
 

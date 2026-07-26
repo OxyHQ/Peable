@@ -278,6 +278,17 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Card payments are coming soon. Apply for early access at fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Pool quote unavailable right now. Please try again in a moment.",
+    "buy.history.title": "Recent orders",
+    "buy.history.amount": "Buy {amount} FAIR",
+    "buy.history.openOrder": "Open the order for {amount} FAIR",
+    "buy.status.AWAITING_PAYMENT": "Awaiting payment",
+    "buy.status.PAYMENT_DETECTED": "Payment seen",
+    "buy.status.SWAPPING": "Swapping",
+    "buy.status.BURNING": "Burning",
+    "buy.status.DELIVERING": "Delivering",
+    "buy.status.DELIVERED": "Delivered",
+    "buy.status.FAILED": "Failed",
+    "buy.status.EXPIRED": "Expired",
     "buy.error.currencyUnavailable":
       "That payment method isn't supported yet. Pick another one.",
     "buy.error.unavailable":
@@ -334,7 +345,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "receive.new_address": "New Address",
     "receive.subtitle": "Share this address to receive FairCoin",
     "receive.yourAddress": "Your address",
-    "receive.addressCopied.title": "Copied",
     "receive.addressCopied.description": "Address copied to clipboard",
     "receive.hideList": "Hide list",
     "receive.allAddresses": "All ({count})",
@@ -386,17 +396,18 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.recovery.error.retrieve": "Could not retrieve recovery phrase.",
     "settings.recovery.error.load": "Failed to load recovery phrase.",
     "settings.biometrics.unavailable.title": "Biometrics Unavailable",
-    "settings.biometrics.unavailable.description":
-      "Your device does not have biometric authentication set up. Please enable it in your device settings first.",
     "settings.biometrics.verifyPrompt": "Verify biometrics to enable",
     "settings.biometrics.updateError": "Failed to update biometrics setting.",
+<<<<<<< HEAD
     "settings.backup.exportDialogTitle": "Save Peable backup",
     "settings.backup.saved.title": "Backup saved",
+=======
+    "settings.backup.exportDialogTitle": "Save FAIRWallet backup",
+>>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     "settings.backup.saved.description":
       "Saved to {path}. Sharing is not available on this platform.",
     "settings.backup.exportFailed": "Export failed",
     "settings.backup.importEmpty": "The selected file is empty.",
-    "settings.backup.imported.title": "Backup Imported",
     "settings.backup.imported.description":
       "Contacts, labels, and settings have been restored.",
     "settings.backup.importFailed": "Import failed",
@@ -492,6 +503,64 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "index.error.load": "Failed to load wallet",
     "index.error.help": "Try restarting the app or wiping and restoring your wallet.",
 
+<<<<<<< HEAD
+=======
+    // ---------- Wallets manager ----------
+    "wallets.title": "Wallets",
+    "wallets.subtitle.one": "{count} wallet - Tap to switch, long-press to delete",
+    "wallets.subtitle.other": "{count} wallets - Tap to switch, long-press to delete",
+    "wallets.switching": "Switching wallet...",
+    "wallets.loading": "Loading...",
+    "wallets.empty.title": "No wallets found",
+    "wallets.empty.subtitle": "Create or import one below",
+    "wallets.createdOn": "Created {date}",
+    "wallets.active": "Active",
+    "wallets.createCta": "Create New Wallet",
+    "wallets.importCta": "Import Wallet",
+    "wallets.watchOnlyCta": "Watch Only (xpub)",
+    "wallets.create.title": "Create New Wallet",
+    "wallets.create.nameLabel": "Wallet Name",
+    "wallets.create.namePlaceholder": "My Wallet",
+    "wallets.create.error.nameRequired": "Please enter a wallet name.",
+    "wallets.create.cta": "Create",
+    "wallets.create.error.failed": "Failed to create wallet. Please try again.",
+    "wallets.import.title": "Import Wallet",
+    "wallets.import.nameLabel": "Wallet Name",
+    "wallets.import.namePlaceholder": "My Wallet",
+    "wallets.import.phraseLabel": "Recovery Phrase",
+    "wallets.import.phrasePlaceholder": "Enter 12 or 24 word recovery phrase",
+    "wallets.import.error.nameRequired": "Please enter a wallet name.",
+    "wallets.import.error.phraseRequired": "Please enter the recovery phrase.",
+    "wallets.import.error.wordCount": "Recovery phrase must be 12 or 24 words.",
+    "wallets.import.cta": "Import",
+    "wallets.import.failed.description":
+      "Could not import wallet. Check your recovery phrase and try again.",
+    "wallets.watchOnly.title": "Watch-Only Wallet",
+    "wallets.watchOnly.nameLabel": "Wallet Name",
+    "wallets.watchOnly.namePlaceholder": "My Watch Wallet",
+    "wallets.watchOnly.xpubLabel": "Extended Public Key (xpub)",
+    "wallets.watchOnly.xpubPlaceholder": "xpub...",
+    "wallets.watchOnly.error.nameRequired": "Please enter a wallet name.",
+    "wallets.watchOnly.error.xpubRequired":
+      "Please enter the extended public key (xpub).",
+    "wallets.watchOnly.error.xpubFormat":
+      "That doesn't look like a valid extended public key. Paste the account xpub from your wallet's export.",
+    "wallets.watchOnly.cta": "Import Watch-Only",
+    "wallets.watchOnly.imported.description":
+      "Watch-only wallet imported. You can view balances and addresses, but sending is disabled.",
+    "wallets.watchOnly.failed.description":
+      "Could not import watch-only wallet. Check your xpub and try again.",
+    "wallets.mnemonic.title": "Recovery Phrase",
+    "wallets.mnemonic.description":
+      "Write down these words in order. They are the only way to recover this wallet.",
+    "wallets.mnemonic.cta": "I've Written It Down",
+    "wallets.delete.title": "Delete Wallet",
+    "wallets.delete.description":
+      "Are you sure you want to delete \"{name}\"? This action cannot be undone. Make sure you have the recovery phrase backed up.",
+    "wallets.cannotDelete.description":
+      "You must have at least one wallet. Create a new wallet before deleting this one.",
+
+>>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     // ---------- Pockets ----------
     "pockets.title": "Pockets",
     "pockets.subtitle.one": "{count} pocket",
@@ -574,7 +643,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "coinControl.useCta.one": "Use {count} UTXO for Next Transaction",
     "coinControl.useCta.other": "Use {count} UTXOs for Next Transaction",
     "coinControl.selectCta": "Select UTXOs",
-    "coinControl.applied.title": "Coin Control",
     "coinControl.applied.description.one":
       "{count} UTXO selected for next transaction.",
     "coinControl.applied.description.other":
@@ -646,7 +714,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "exportKey.result.title": "Encrypted Key",
     "exportKey.result.subtitle": "Your BIP38 encrypted private key",
     "exportKey.result.copyCta": "Copy Encrypted Key",
-    "exportKey.result.copied.title": "Copied",
     "exportKey.result.copied.description": "Encrypted key copied to clipboard",
     "exportKey.warning.title": "Important",
     "exportKey.warning.description":
@@ -698,12 +765,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "transaction.note": "Note",
     "transaction.notePlaceholder": "Add a note for this transaction...",
     "transaction.saveNote": "Save Note",
-    "transaction.savedNote.title": "Saved",
     "transaction.savedNote.description": "Transaction note saved",
     "transaction.copyTxid": "Copy Transaction ID",
-    "transaction.txidCopied.title": "Copied",
     "transaction.txidCopied.description": "Transaction ID copied to clipboard",
-    "transaction.addressCopied.title": "Copied",
     "transaction.addressCopied.description": "Address copied to clipboard",
     "transaction.viewExplorer": "View on Explorer",
     "transaction.addToContacts": "Add Address to Contacts",
@@ -1101,6 +1165,17 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "El pago con tarjeta llegar\u00e1 pronto. Reg\u00edstrate para acceso anticipado en fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Cotizaci\u00f3n no disponible. Vuelve a intentarlo en un momento.",
+    "buy.history.title": "Pedidos recientes",
+    "buy.history.amount": "Comprar {amount} FAIR",
+    "buy.history.openOrder": "Abrir el pedido de {amount} FAIR",
+    "buy.status.AWAITING_PAYMENT": "Esperando pago",
+    "buy.status.PAYMENT_DETECTED": "Pago detectado",
+    "buy.status.SWAPPING": "Intercambiando",
+    "buy.status.BURNING": "Quemando",
+    "buy.status.DELIVERING": "Entregando",
+    "buy.status.DELIVERED": "Entregado",
+    "buy.status.FAILED": "Fallido",
+    "buy.status.EXPIRED": "Caducado",
     "buy.error.currencyUnavailable":
       "Ese m\u00e9todo de pago a\u00fan no est\u00e1 disponible. Elige otro.",
     "buy.error.unavailable":
@@ -1157,7 +1232,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "receive.new_address": "Nueva Direcci\u00f3n",
     "receive.subtitle": "Comparte esta direcci\u00f3n para recibir FairCoin",
     "receive.yourAddress": "Tu direcci\u00f3n",
-    "receive.addressCopied.title": "Copiado",
     "receive.addressCopied.description": "Direcci\u00f3n copiada al portapapeles",
     "receive.hideList": "Ocultar lista",
     "receive.allAddresses": "Todas ({count})",
@@ -1212,18 +1286,19 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.recovery.error.load":
       "Fall\u00f3 la carga de la frase de recuperaci\u00f3n.",
     "settings.biometrics.unavailable.title": "Biometr\u00eda No Disponible",
-    "settings.biometrics.unavailable.description":
-      "Tu dispositivo no tiene autenticaci\u00f3n biom\u00e9trica configurada. Por favor, actívala en los ajustes del dispositivo primero.",
     "settings.biometrics.verifyPrompt": "Verifica biometr\u00eda para activar",
     "settings.biometrics.updateError":
       "Fall\u00f3 la actualizaci\u00f3n del ajuste biom\u00e9trico.",
+<<<<<<< HEAD
     "settings.backup.exportDialogTitle": "Guardar respaldo de Peable",
     "settings.backup.saved.title": "Respaldo guardado",
+=======
+    "settings.backup.exportDialogTitle": "Guardar respaldo de FAIRWallet",
+>>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     "settings.backup.saved.description":
       "Guardado en {path}. Compartir no est\u00e1 disponible en esta plataforma.",
     "settings.backup.exportFailed": "Fall\u00f3 la exportaci\u00f3n",
     "settings.backup.importEmpty": "El archivo seleccionado est\u00e1 vac\u00edo.",
-    "settings.backup.imported.title": "Respaldo Importado",
     "settings.backup.imported.description":
       "Contactos, etiquetas y ajustes han sido restaurados.",
     "settings.backup.importFailed": "Fall\u00f3 la importaci\u00f3n",
@@ -1328,6 +1403,73 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "index.error.help":
       "Intenta reiniciar la app o borrar y restaurar tu billetera.",
 
+<<<<<<< HEAD
+=======
+    // ---------- Wallets manager ----------
+    "wallets.title": "Billeteras",
+    "wallets.subtitle.one":
+      "{count} billetera - Toca para cambiar, mant\u00e9n presionado para eliminar",
+    "wallets.subtitle.other":
+      "{count} billeteras - Toca para cambiar, mant\u00e9n presionado para eliminar",
+    "wallets.switching": "Cambiando billetera...",
+    "wallets.loading": "Cargando...",
+    "wallets.empty.title": "No se encontraron billeteras",
+    "wallets.empty.subtitle": "Crea o importa una a continuaci\u00f3n",
+    "wallets.createdOn": "Creada {date}",
+    "wallets.active": "Activa",
+    "wallets.createCta": "Crear Nueva Billetera",
+    "wallets.importCta": "Importar Billetera",
+    "wallets.watchOnlyCta": "Solo Lectura (xpub)",
+    "wallets.create.title": "Crear Nueva Billetera",
+    "wallets.create.nameLabel": "Nombre de Billetera",
+    "wallets.create.namePlaceholder": "Mi Billetera",
+    "wallets.create.error.nameRequired":
+      "Por favor, ingresa un nombre de billetera.",
+    "wallets.create.cta": "Crear",
+    "wallets.create.error.failed":
+      "Fall\u00f3 la creaci\u00f3n de la billetera. Int\u00e9ntalo de nuevo.",
+    "wallets.import.title": "Importar Billetera",
+    "wallets.import.nameLabel": "Nombre de Billetera",
+    "wallets.import.namePlaceholder": "Mi Billetera",
+    "wallets.import.phraseLabel": "Frase de Recuperaci\u00f3n",
+    "wallets.import.phrasePlaceholder":
+      "Ingresa la frase de recuperaci\u00f3n de 12 o 24 palabras",
+    "wallets.import.error.nameRequired":
+      "Por favor, ingresa un nombre de billetera.",
+    "wallets.import.error.phraseRequired":
+      "Por favor, ingresa la frase de recuperaci\u00f3n.",
+    "wallets.import.error.wordCount":
+      "La frase de recuperaci\u00f3n debe tener 12 o 24 palabras.",
+    "wallets.import.cta": "Importar",
+    "wallets.import.failed.description":
+      "No se pudo importar la billetera. Revisa tu frase de recuperaci\u00f3n e int\u00e9ntalo de nuevo.",
+    "wallets.watchOnly.title": "Billetera de Solo Lectura",
+    "wallets.watchOnly.nameLabel": "Nombre de Billetera",
+    "wallets.watchOnly.namePlaceholder": "Mi Billetera de Lectura",
+    "wallets.watchOnly.xpubLabel": "Clave P\u00fablica Extendida (xpub)",
+    "wallets.watchOnly.xpubPlaceholder": "xpub...",
+    "wallets.watchOnly.error.nameRequired":
+      "Por favor, ingresa un nombre de billetera.",
+    "wallets.watchOnly.error.xpubRequired":
+      "Por favor, ingresa la clave p\u00fablica extendida (xpub).",
+    "wallets.watchOnly.error.xpubFormat":
+      "Eso no parece una clave p\u00fablica extendida v\u00e1lida. Pega el xpub de cuenta exportado por tu billetera.",
+    "wallets.watchOnly.cta": "Importar Solo Lectura",
+    "wallets.watchOnly.imported.description":
+      "Billetera de solo lectura importada. Puedes ver saldos y direcciones, pero el env\u00edo est\u00e1 deshabilitado.",
+    "wallets.watchOnly.failed.description":
+      "No se pudo importar la billetera de solo lectura. Revisa tu xpub e int\u00e9ntalo de nuevo.",
+    "wallets.mnemonic.title": "Frase de Recuperaci\u00f3n",
+    "wallets.mnemonic.description":
+      "Escribe estas palabras en orden. Son la \u00fanica forma de recuperar esta billetera.",
+    "wallets.mnemonic.cta": "La He Anotado",
+    "wallets.delete.title": "Eliminar Billetera",
+    "wallets.delete.description":
+      "\u00bfEst\u00e1s seguro de eliminar \"{name}\"? Esta acci\u00f3n no se puede deshacer. Aseg\u00farate de tener respaldada la frase de recuperaci\u00f3n.",
+    "wallets.cannotDelete.description":
+      "Debes tener al menos una billetera. Crea una nueva billetera antes de eliminar esta.",
+
+>>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     // ---------- Bolsillos ----------
     "pockets.title": "Bolsillos",
     "pockets.subtitle.one": "{count} bolsillo",
@@ -1414,7 +1556,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "coinControl.useCta.other":
       "Usar {count} UTXOs para la Pr\u00f3xima Transacci\u00f3n",
     "coinControl.selectCta": "Seleccionar UTXOs",
-    "coinControl.applied.title": "Control de Monedas",
     "coinControl.applied.description.one":
       "{count} UTXO seleccionado para la pr\u00f3xima transacci\u00f3n.",
     "coinControl.applied.description.other":
@@ -1490,7 +1631,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "exportKey.result.title": "Clave Cifrada",
     "exportKey.result.subtitle": "Tu clave privada cifrada BIP38",
     "exportKey.result.copyCta": "Copiar Clave Cifrada",
-    "exportKey.result.copied.title": "Copiado",
     "exportKey.result.copied.description":
       "Clave cifrada copiada al portapapeles",
     "exportKey.warning.title": "Importante",
@@ -1543,13 +1683,10 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "transaction.note": "Nota",
     "transaction.notePlaceholder": "Agrega una nota para esta transacci\u00f3n...",
     "transaction.saveNote": "Guardar Nota",
-    "transaction.savedNote.title": "Guardado",
     "transaction.savedNote.description": "Nota de transacci\u00f3n guardada",
     "transaction.copyTxid": "Copiar ID de Transacci\u00f3n",
-    "transaction.txidCopied.title": "Copiado",
     "transaction.txidCopied.description":
       "ID de transacci\u00f3n copiado al portapapeles",
-    "transaction.addressCopied.title": "Copiado",
     "transaction.addressCopied.description":
       "Direcci\u00f3n copiada al portapapeles",
     "transaction.viewExplorer": "Ver en Explorador",

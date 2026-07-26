@@ -17,6 +17,7 @@ import {
   socialReceiveCursors,
   socialSendAttributions,
   webhookDeliveries,
+  walletXpubs,
 } from '../schema';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -42,6 +43,7 @@ const ALL_TABLES = [
   paymentLinks,
   socialReceiveCursors,
   socialSendAttributions,
+  walletXpubs,
   webhookDeliveries,
 ] as const;
 
@@ -97,6 +99,10 @@ describe('id-column classification', () => {
         {
           column: 'payment_links.public_id',
           reason: "this row's own link_… identifier, not a reference",
+        },
+        {
+          column: 'wallet_xpubs.oxy_user_id',
+          reason: "an Oxy user's id — Oxy owns the user registry, not this database",
         },
         {
           column: 'merchants.oxy_app_id',

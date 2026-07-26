@@ -227,6 +227,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'payment_links',
       'social_receive_cursors',
       'social_send_attributions',
+      'wallet_xpubs',
       'webhook_deliveries',
     ]);
   });
