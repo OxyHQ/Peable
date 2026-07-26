@@ -41,6 +41,8 @@ import {
   type BuyQuoteResponse,
   type BuyStatusResponse,
 } from "../../src/api/buy";
+import { getDatabase } from "../../src/wallet/wallet-store";
+import { updateBuyOrderStatus } from "../../src/wallet/buy-history";
 import { t } from "../../src/i18n";
 
 const CONTENT_MAX_WIDTH = 600;
@@ -127,6 +129,17 @@ export default function BuyQuoteScreen() {
       const fresh = await getBuyStatus(orderId);
       setStatus(fresh);
       setError(null);
+      // Keep the local record in step with the bridge, so the Buy screen's
+      // order list is right even if the user never opens this screen again.
+      const db = getDatabase();
+      if (db) {
+        void updateBuyOrderStatus(db, fresh.id, fresh.status, {
+          deliveryTxId: fresh.fairDeliveryTxId,
+          errorMessage: fresh.errorMessage,
+        }).catch(() => {
+          // The cache is an optimisation; the bridge stays the source of truth.
+        });
+      }
       return fresh;
     } catch (err: unknown) {
       if (err instanceof BuyApiError && err.status === 404) {

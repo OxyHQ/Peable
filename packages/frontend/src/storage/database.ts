@@ -122,6 +122,26 @@ export interface AddressLabelRow {
   updated_at: number;
 }
 
+/**
+ * A buy order the bridge accepted, cached locally so the user can see what
+ * happened to it after leaving the quote screen. The bridge remains the source
+ * of truth; `status` is refreshed from its API.
+ */
+export interface BuyOrderRow {
+  id: string;
+  fair_amount_sats: string;
+  payment_currency: string;
+  payment_amount: string;
+  payment_symbol: string;
+  status: string;
+  /** FairCoin txid of the delivery, "" until delivered. */
+  delivery_txid: string;
+  /** Bridge failure reason, "" unless failed. */
+  error_message: string;
+  created_at: number;
+  updated_at: number;
+}
+
 export interface RecentRecipientRow {
   address: string;
   last_used: number;
@@ -240,6 +260,19 @@ const SCHEMA_SQL = `
     use_count INTEGER DEFAULT 1
   );
 
+  CREATE TABLE IF NOT EXISTS buy_orders (
+    id TEXT PRIMARY KEY,
+    fair_amount_sats TEXT NOT NULL,
+    payment_currency TEXT NOT NULL,
+    payment_amount TEXT NOT NULL,
+    payment_symbol TEXT NOT NULL,
+    status TEXT NOT NULL,
+    delivery_txid TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS rescan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     start_height INTEGER NOT NULL,
@@ -262,6 +295,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_social_receive_used ON social_receive_addresses(used);
   CREATE INDEX IF NOT EXISTS idx_contacts_address ON contacts(address);
   CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
+  CREATE INDEX IF NOT EXISTS idx_buy_orders_created ON buy_orders(created_at);
 `;
 
 /**
@@ -1006,6 +1040,59 @@ export class Database {
       now,
       now,
       services,
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Buy orders
+  // -----------------------------------------------------------------------
+
+  /**
+   * Insert or refresh a buy order. Keyed on the bridge's order id, so
+   * re-recording the same order (a retry, a resumed screen) is idempotent.
+   */
+  async upsertBuyOrder(row: BuyOrderRow): Promise<void> {
+    await this.db.runAsync(
+      `INSERT OR REPLACE INTO buy_orders
+        (id, fair_amount_sats, payment_currency, payment_amount, payment_symbol,
+         status, delivery_txid, error_message, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      row.id,
+      row.fair_amount_sats,
+      row.payment_currency,
+      row.payment_amount,
+      row.payment_symbol,
+      row.status,
+      row.delivery_txid,
+      row.error_message,
+      row.created_at,
+      row.updated_at,
+    );
+  }
+
+  async updateBuyOrderStatus(
+    id: string,
+    status: string,
+    deliveryTxid: string,
+    errorMessage: string,
+    updatedAt: number,
+  ): Promise<void> {
+    await this.db.runAsync(
+      `UPDATE buy_orders
+         SET status = ?, delivery_txid = ?, error_message = ?, updated_at = ?
+       WHERE id = ?`,
+      status,
+      deliveryTxid,
+      errorMessage,
+      updatedAt,
+      id,
+    );
+  }
+
+  async getBuyOrders(limit: number): Promise<BuyOrderRow[]> {
+    return this.db.getAllAsync<BuyOrderRow>(
+      "SELECT * FROM buy_orders ORDER BY created_at DESC LIMIT ?",
+      limit,
     );
   }
 

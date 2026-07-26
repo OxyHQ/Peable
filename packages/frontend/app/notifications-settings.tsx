@@ -16,7 +16,7 @@
 
 import { useCallback, useState } from "react";
 import { View, Text, TextInput, ScrollView } from "react-native";
-import { Switch } from "@oxyhq/bloom/switch";
+import { Switch } from "@oxy.so/bloom/switch";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter, useFocusEffect } from "expo-router";
