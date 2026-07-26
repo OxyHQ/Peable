@@ -59,6 +59,12 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "common.back": "Back",
     "common.close": "Close",
     "common.retry": "Retry",
+
+    // ---------- Crash recovery ----------
+    "crash.title": "Something went wrong",
+    "crash.subtitle":
+      "Your coins are safe — they live on the FairCoin network, not in this screen. Try again, and if it keeps happening, restart the app.",
+    "crash.retry": "Try again",
     "common.edit": "Edit",
     "common.import": "Import",
     "common.create": "Create",
@@ -502,7 +508,14 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "A Pocket is a separate balance inside your wallet. It's still yours (self-custody), just organized.",
     "pockets.create.nameLabel": "POCKET NAME",
     "pockets.create.namePlaceholder": "e.g. Savings",
-    "pockets.create.emojiLabel": "EMOJI",
+    "pockets.create.imageLabel": "IMAGE",
+    "pockets.create.addImage": "Add image",
+    "pockets.create.changeImage": "Change image",
+    "pockets.create.removeImage": "Remove",
+    "pockets.create.imageSourceTitle": "Choose image",
+    "pockets.create.gallery": "Gallery",
+    "pockets.create.camera": "Camera",
+    "pockets.create.permissionDenied": "Permission needed to pick an image",
     "pockets.create.colorLabel": "COLOR",
     "pockets.create.goalLabel": "GOAL (OPTIONAL)",
     "pockets.create.goalPlaceholder": "0.00",
@@ -863,6 +876,12 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "common.back": "Atr\u00e1s",
     "common.close": "Cerrar",
     "common.retry": "Reintentar",
+
+    // ---------- Recuperación tras un fallo ----------
+    "crash.title": "Algo ha ido mal",
+    "crash.subtitle":
+      "Tus monedas están a salvo: viven en la red FairCoin, no en esta pantalla. Inténtalo de nuevo y, si sigue ocurriendo, reinicia la app.",
+    "crash.retry": "Reintentar",
     "common.edit": "Editar",
     "common.import": "Importar",
     "common.create": "Crear",
@@ -1321,7 +1340,15 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Una pocket es un saldo aparte dentro de tu wallet. Sigue siendo tuyo (self-custody), solo organizado.",
     "pockets.create.nameLabel": "NOMBRE DEL BOLSILLO",
     "pockets.create.namePlaceholder": "p. ej. Ahorros",
-    "pockets.create.emojiLabel": "EMOJI",
+    "pockets.create.imageLabel": "IMAGEN",
+    "pockets.create.addImage": "Añadir imagen",
+    "pockets.create.changeImage": "Cambiar imagen",
+    "pockets.create.removeImage": "Quitar",
+    "pockets.create.imageSourceTitle": "Elegir imagen",
+    "pockets.create.gallery": "Galería",
+    "pockets.create.camera": "Cámara",
+    "pockets.create.permissionDenied":
+      "Se necesita permiso para elegir una imagen",
     "pockets.create.colorLabel": "COLOR",
     "pockets.create.goalLabel": "OBJETIVO (OPCIONAL)",
     "pockets.create.goalPlaceholder": "0.00",
