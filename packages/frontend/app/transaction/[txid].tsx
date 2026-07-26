@@ -27,7 +27,11 @@ export default function TransactionDetailScreen() {
         title={t("transaction.title")}
         onBack={() => router.back()}
       />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pt-4 pb-8">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="px-5 pt-4 pb-8"
+        showsVerticalScrollIndicator={false}
+      >
         <TransactionDetailSheet txid={txid} />
       </ScrollView>
     </SafeAreaView>

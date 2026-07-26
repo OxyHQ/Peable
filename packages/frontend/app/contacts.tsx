@@ -242,6 +242,7 @@ function ContactForm({
             className="flex-1"
             contentContainerClassName="pb-12"
             keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={false}
           >
             {/* Large initial avatar */}
             <View className="items-center pt-8 pb-6">
@@ -604,6 +605,7 @@ export default function ContactsScreen() {
             keyExtractor={keyExtractor}
             className="flex-1"
             contentContainerClassName="pb-24"
+            showsVerticalScrollIndicator={false}
           />
         )}
       </View>

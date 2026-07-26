@@ -105,7 +105,11 @@ export default function PocketsScreen() {
           </Pressable>
         }
       />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pt-2 pb-8">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="px-5 pt-2 pb-8"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Total across pockets */}
         <View className="mb-6">
           <Text className={SECTION_LABEL}>{t("pockets.total.label")}</Text>

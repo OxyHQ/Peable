@@ -57,6 +57,7 @@ export class ErrorBoundary extends Component<
         <ScrollView
           className="max-h-40 self-stretch mt-5 rounded-2xl bg-surface px-4 py-3"
           contentContainerClassName="grow-0"
+          showsVerticalScrollIndicator={false}
         >
           <Text className="text-muted-foreground text-xs">
             {error.name}: {error.message}

@@ -28,6 +28,7 @@ import { KeyboardProvider as NativeKeyboardProvider } from "react-native-keyboar
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { OxyProvider } from "@oxy.so/services";
 import { BloomThemeProvider, useBloomTheme } from "@oxy.so/bloom/theme";
+import { ToastOutlet } from "@oxy.so/bloom/toast";
 import type { ThemeMode } from "@oxy.so/bloom/theme";
 import { ImageResolverProvider } from "@oxy.so/bloom/image-resolver";
 import { parseFairCoinURI } from "@fairco.in/core";
@@ -351,6 +352,10 @@ export default function RootLayout() {
                     ready={fontsLoaded && themeReady && languageReady}
                   />
                   </ErrorBoundary>
+                  {/* Global toast outlet (Bloom + sonner-native). Sibling of the
+                      app content so toasts survive the language-key remount and
+                      overlay every screen. */}
+                  <ToastOutlet />
                 </BottomSheetModalProvider>
               </ImageResolverProvider>
             </OxyProvider>

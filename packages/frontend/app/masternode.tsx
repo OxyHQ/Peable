@@ -84,6 +84,7 @@ export default function MasternodeScreen() {
           onScroll={scrollHandler}
           scrollEventThrottle={16}
           contentContainerClassName="px-5 pt-4 pb-10"
+          showsVerticalScrollIndicator={false}
         >
         {/* Requirements — card-less: section label above a muted description */}
         <View>

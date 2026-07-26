@@ -15,7 +15,8 @@ import Animated from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
 import type { PeerRow } from "../../src/storage/database";
-import { EmptyState } from "../../src/ui/components";
+import { EmptyState, ScreenHeader } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Button } from "../../src/ui/components/Button";
 import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
@@ -114,20 +115,26 @@ export default function PeersScreen() {
   const isTestnet = network === "testnet";
 
   return (
-    <View className="flex-1 bg-background">
-      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-        <RefreshRainbowBar />
-      </Animated.View>
-
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={["top", "bottom", "left", "right"]}
+    >
+      <ScreenHeader title={t("peers.title")} onBack={() => router.back()} />
       <GestureDetector gesture={gesture}>
         <Animated.ScrollView
           className="flex-1"
           onScroll={scrollHandler}
           scrollEventThrottle={16}
-          contentContainerClassName="pt-4 pb-10"
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
         >
+      {/* Pull-to-refresh rainbow band — same as Home: inside the scroll view,
+          revealed on pull, never pinned. */}
+      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+        <RefreshRainbowBar />
+      </Animated.View>
       {/* ---- Status hero: colored dot + status word + connected count ---- */}
-      <View className="px-5">
+      <View className="px-5 pt-4">
         <View className="flex-row items-center gap-2.5">
           <View className={`w-2.5 h-2.5 rounded-full ${status.dot}`} />
           <Text className="text-foreground text-2xl font-semibold">
@@ -229,6 +236,6 @@ export default function PeersScreen() {
       </View>
         </Animated.ScrollView>
       </GestureDetector>
-    </View>
+    </SafeAreaView>
   );
 }

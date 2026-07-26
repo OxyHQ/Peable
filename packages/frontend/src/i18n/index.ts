@@ -278,6 +278,10 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Card payments are coming soon. Apply for early access at fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Pool quote unavailable right now. Please try again in a moment.",
+    "buy.error.currencyUnavailable":
+      "That payment method isn't supported yet. Pick another one.",
+    "buy.error.unavailable":
+      "Buying is temporarily unavailable. Nothing was charged — please try again later.",
     "buy.error.network":
       "Network error contacting the bridge. Check your connection and retry.",
     "buy.error.generic": "Could not create your buy order: {message}",
@@ -1097,6 +1101,10 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "El pago con tarjeta llegar\u00e1 pronto. Reg\u00edstrate para acceso anticipado en fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Cotizaci\u00f3n no disponible. Vuelve a intentarlo en un momento.",
+    "buy.error.currencyUnavailable":
+      "Ese m\u00e9todo de pago a\u00fan no est\u00e1 disponible. Elige otro.",
+    "buy.error.unavailable":
+      "La compra no est\u00e1 disponible ahora mismo. No se te ha cobrado nada; int\u00e9ntalo m\u00e1s tarde.",
     "buy.error.network":
       "Error de red al contactar al bridge. Comprueba tu conexi\u00f3n y reintenta.",
     "buy.error.generic": "No se pudo crear tu orden: {message}",
