@@ -7,7 +7,6 @@ ios/
 *.tsbuildinfo
 *.log
 .DS_Store
-bun.lock
 
 # Electron build output
 electron/dist/
