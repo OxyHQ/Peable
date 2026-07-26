@@ -87,7 +87,7 @@ export function SendReceiveSheet({
   // the toggle (not by a drag), and settles the pages once width is measured.
   const restingX = mode === "send" ? 0 : -pageWidth;
   useEffect(() => {
-    translateX.value = withTiming(restingX, { duration: PAGE_ANIM_MS });
+    translateX.set(withTiming(restingX, { duration: PAGE_ANIM_MS }));
   }, [restingX, translateX]);
 
   const pageGesture = useMemo(
@@ -99,24 +99,25 @@ export function SendReceiveSheet({
         .failOffsetY([-14, 14])
         .onUpdate((e) => {
           "worklet";
-          const base = mode === "send" ? 0 : -pageW.value;
-          translateX.value = Math.max(
-            -pageW.value,
-            Math.min(0, base + e.translationX),
-          );
+          const width = pageW.get();
+          const base = mode === "send" ? 0 : -width;
+          translateX.set(Math.max(-width, Math.min(0, base + e.translationX)));
         })
         .onEnd((e) => {
           "worklet";
-          if (pageW.value === 0) return;
-          const base = mode === "send" ? 0 : -pageW.value;
+          const width = pageW.get();
+          if (width === 0) return;
+          const base = mode === "send" ? 0 : -width;
           const pos = base + e.translationX;
           let next: Mode;
           if (e.velocityX < -SWIPE_VELOCITY) next = "receive";
           else if (e.velocityX > SWIPE_VELOCITY) next = "send";
-          else next = pos < -pageW.value / 2 ? "receive" : "send";
-          translateX.value = withTiming(next === "send" ? 0 : -pageW.value, {
-            duration: PAGE_ANIM_MS,
-          });
+          else next = pos < -width / 2 ? "receive" : "send";
+          translateX.set(
+            withTiming(next === "send" ? 0 : -width, {
+              duration: PAGE_ANIM_MS,
+            }),
+          );
           if (next !== mode) {
             runOnJS(hapticSelection)();
             runOnJS(onModeChange)(next);
@@ -126,22 +127,21 @@ export function SendReceiveSheet({
   );
 
   const rowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
+    transform: [{ translateX: translateX.get() }],
   }));
 
   // Pager height follows the drag position, interpolating between the two
   // pages' measured heights so the sheet grows/shrinks smoothly as you swipe.
   const heightStyle = useAnimatedStyle(() => {
-    const from = sendH.value;
-    const to = recvH.value;
+    const from = sendH.get();
+    const to = recvH.get();
     if (from === 0 || to === 0) {
       const single = from || to;
       return single > 0 ? { height: single } : {};
     }
+    const width = pageW.get();
     const progress =
-      pageW.value > 0
-        ? Math.min(1, Math.max(0, -translateX.value / pageW.value))
-        : 0;
+      width > 0 ? Math.min(1, Math.max(0, -translateX.get() / width)) : 0;
     return { height: from + (to - from) * progress };
   });
 
@@ -162,8 +162,11 @@ export function SendReceiveSheet({
               accessibilityRole="button"
               accessibilityState={{ selected: isActive }}
               accessibilityLabel={getModeLabel(segment)}
-              className={`flex-1 rounded-full py-2.5 items-center ${
-                isActive ? "bg-primary" : "bg-transparent active:opacity-70"
+              // `active:` must stay on the class list for BOTH states: adding or
+              // removing a pressable variant after the first render makes
+              // react-native-css reset the component and re-mount its children.
+              className={`flex-1 rounded-full py-2.5 items-center active:opacity-70 ${
+                isActive ? "bg-primary" : "bg-transparent"
               }`}
             >
               <Text
@@ -186,7 +189,7 @@ export function SendReceiveSheet({
         onLayout={(e) => {
           const w = e.nativeEvent.layout.width;
           setPageWidth(w);
-          pageW.value = w;
+          pageW.set(w);
         }}
       >
         <GestureDetector gesture={pageGesture}>
@@ -199,7 +202,7 @@ export function SendReceiveSheet({
               className="px-5"
               style={{ width: "50%" }}
               onLayout={(e) => {
-                sendH.value = e.nativeEvent.layout.height;
+                sendH.set(e.nativeEvent.layout.height);
               }}
             >
               <SendSheet address={address} amount={amount} />
@@ -208,7 +211,7 @@ export function SendReceiveSheet({
               className="px-5"
               style={{ width: "50%" }}
               onLayout={(e) => {
-                recvH.value = e.nativeEvent.layout.height;
+                recvH.set(e.nativeEvent.layout.height);
               }}
             >
               <ReceiveSheet heading={false} />

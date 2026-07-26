@@ -9,12 +9,16 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, Text } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
 import type { PeerRow } from "../../src/storage/database";
 import { EmptyState } from "../../src/ui/components";
 import { Button } from "../../src/ui/components/Button";
+import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
+import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { t } from "../../src/i18n";
 
 const DNS_SEEDS = [
@@ -73,14 +77,18 @@ export default function PeersScreen() {
 
   const [peers, setPeers] = useState<PeerRow[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const db = getDatabase();
-      if (db) {
-        db.getKnownPeers(100).then(setPeers);
-      }
-    }, []),
-  );
+  const loadPeers = useCallback(() => {
+    const db = getDatabase();
+    if (!db) return;
+    db.getKnownPeers(100).then(setPeers);
+  }, []);
+
+  useFocusEffect(loadPeers);
+
+  // Pull down to re-read the known-peer cache, which the SPV client writes to
+  // as nodes complete their handshake.
+  const { gesture, scrollHandler, bandStyle } =
+    usePullToRefreshBand(loadPeers);
 
   // Qualitative connection state: a colored dot + big status word carry the
   // signal (no bordered chip). Offline = destructive, syncing = warning,
@@ -106,10 +114,18 @@ export default function PeersScreen() {
   const isTestnet = network === "testnet";
 
   return (
-    <ScrollView
-      className="flex-1 bg-background"
-      contentContainerClassName="pt-4 pb-10"
-    >
+    <View className="flex-1 bg-background">
+      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+        <RefreshRainbowBar />
+      </Animated.View>
+
+      <GestureDetector gesture={gesture}>
+        <Animated.ScrollView
+          className="flex-1"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerClassName="pt-4 pb-10"
+        >
       {/* ---- Status hero: colored dot + status word + connected count ---- */}
       <View className="px-5">
         <View className="flex-row items-center gap-2.5">
@@ -211,6 +227,8 @@ export default function PeersScreen() {
           ))}
         </View>
       </View>
-    </ScrollView>
+        </Animated.ScrollView>
+      </GestureDetector>
+    </View>
   );
 }

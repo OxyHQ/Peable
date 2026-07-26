@@ -8,16 +8,10 @@
  * Overview shows the FairCoin holding, Activity shows the day-grouped feed.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { View, Text, Pressable } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as WebBrowser from "expo-web-browser";
@@ -28,6 +22,7 @@ import {
   ActionButton,
   EmptyState,
   Badge,
+  PocketAvatar,
 } from "../../src/ui/components";
 import { TransactionItem } from "../../src/ui/components/TransactionItem";
 import {
@@ -41,12 +36,9 @@ import { SendIcon } from "../../src/ui/components/SendIcon";
 import { PocketSwitcherSheet } from "../../src/ui/sheets/PocketSwitcherSheet";
 import { findPocket, MAIN_POCKET_ACCOUNT } from "../../src/wallet/pockets";
 import { TransactionDetailSheet } from "../../src/ui/sheets/TransactionDetailSheet";
-import {
-  RefreshRainbowBar,
-  RAINBOW_BAND_HEIGHT,
-} from "../../src/ui/components/RefreshRainbowBar";
+import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
+import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { SendReceiveSheet } from "../../src/ui/sheets/SendReceiveSheet";
-import { hapticSelection, hapticSuccess } from "../../src/utils/haptics";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import {
@@ -82,10 +74,6 @@ interface ActivityGroup {
 
 const DAY_MS = 86_400_000;
 const SYNCING_COLOR = "#fbbf24";
-/** Reveal (px) the pull must reach on release to trigger a refresh. */
-const REFRESH_TRIGGER = 42;
-/** Damping applied to the finger travel so the band trails the drag. */
-const PULL_DAMPING = 0.6;
 
 /** Human day label for a unix-seconds timestamp: Today / Yesterday / a date. */
 function dayLabel(timestampSec: number): string {
@@ -241,24 +229,9 @@ export default function HomeScreen() {
     await WebBrowser.openBrowserAsync(`${BUY_BASE_URL}/?${params.toString()}`);
   }, [receiveAddress]);
 
-  // Pull-to-refresh: the rainbow band IS the indicator. A Pan gesture (running
-  // alongside the scroll) reveals the band by `pull` px as the user drags down
-  // while at the top; releasing past REFRESH_TRIGGER runs the refresh and holds
-  // the band briefly before it collapses. No native RefreshControl.
-  // The scroll's own gesture, composed simultaneously with the pull so dragging
-  // at the top reveals the band while normal scrolling still works.
-  const nativeGesture = useMemo(() => Gesture.Native(), []);
-  const scrollY = useSharedValue(0);
-  const pull = useSharedValue(0);
-  const refreshingSV = useSharedValue(false);
-  /** True once this drag has passed the trigger threshold (for a one-shot haptic). */
-  const passedTrigger = useSharedValue(false);
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scrollHandler = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
-  });
-
+  // Pull-to-refresh: the rainbow band IS the indicator. Gesture, threshold,
+  // haptics and hold live in one shared hook so every refreshable screen
+  // behaves identically.
   const startRefresh = useCallback(() => {
     refreshBalance();
     // A pull should re-pull remote data, not only recompute the local balance:
@@ -268,66 +241,13 @@ export default function HomeScreen() {
       if (updated) setPrice(updated);
     });
     void queryClient.invalidateQueries();
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      refreshingSV.value = false;
-      pull.value = withTiming(0, { duration: 220 });
-      // A distinct "done" haptic as the band collapses.
-      hapticSuccess();
-    }, 1500);
-  }, [refreshBalance, pull, refreshingSV]);
+  }, [refreshBalance]);
 
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    },
-    [],
-  );
-
-  const pullGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .onBegin(() => {
-          "worklet";
-          passedTrigger.value = false;
-        })
-        .onUpdate((event) => {
-          "worklet";
-          if (refreshingSV.value) return;
-          const next =
-            scrollY.value <= 0 && event.translationY > 0
-              ? Math.min(event.translationY * PULL_DAMPING, RAINBOW_BAND_HEIGHT)
-              : 0;
-          // Light haptic tick the first time the pull passes the trigger; re-arm
-          // if the user drags back below it so a second pull ticks again.
-          if (!passedTrigger.value && next >= REFRESH_TRIGGER) {
-            passedTrigger.value = true;
-            runOnJS(hapticSelection)();
-          } else if (passedTrigger.value && next < REFRESH_TRIGGER) {
-            passedTrigger.value = false;
-          }
-          pull.value = next;
-        })
-        .onEnd(() => {
-          "worklet";
-          if (refreshingSV.value) return;
-          if (pull.value >= REFRESH_TRIGGER) {
-            refreshingSV.value = true;
-            pull.value = withTiming(RAINBOW_BAND_HEIGHT, { duration: 140 });
-            runOnJS(startRefresh)();
-          } else {
-            pull.value = withTiming(0, { duration: 140 });
-          }
-        }),
-    [scrollY, pull, refreshingSV, passedTrigger, startRefresh],
-  );
-
-  const composedGesture = useMemo(
-    () => Gesture.Simultaneous(pullGesture, nativeGesture),
-    [pullGesture, nativeGesture],
-  );
-
-  const bandStyle = useAnimatedStyle(() => ({ height: pull.value }));
+  const {
+    gesture: composedGesture,
+    scrollHandler,
+    bandStyle,
+  } = usePullToRefreshBand(startRefresh);
 
   const activityGroups = useMemo(
     () => groupByDay(transactions.slice(0, 10)),
@@ -424,12 +344,13 @@ export default function HomeScreen() {
               accessibilityRole="button"
               accessibilityLabel={t("pockets.switcherTitle")}
             >
-              <View
-                className="w-5 h-5 rounded-full items-center justify-center mr-1.5"
-                style={{ backgroundColor: `${activePocket?.color ?? theme.colors.primary}29` }}
-              >
-                <Text style={{ fontSize: 11 }}>{activePocket?.emoji ?? "💧"}</Text>
-              </View>
+              {/* Omitted until the registry resolves the active Pocket — the
+                  pill still reads correctly from its name alone. */}
+              {activePocket ? (
+                <View className="mr-1.5">
+                  <PocketAvatar pocket={activePocket} size={20} />
+                </View>
+              ) : null}
               <Text className="text-foreground text-sm font-medium">
                 {activePocketName}
               </Text>

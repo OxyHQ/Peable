@@ -30,33 +30,9 @@ export const POCKET_COLORS = [
   "#f9897b", // coral
 ] as const;
 
-/**
- * Fixed emoji set offered when creating or editing a Pocket. `defaultEmojiFor`
- * cycles through this list the same way `defaultColorFor` cycles the palette.
- */
-export const POCKET_EMOJIS = [
-  "💧",
-  "🌱",
-  "🏠",
-  "🚗",
-  "🎁",
-  "💊",
-  "📚",
-  "🍔",
-  "✈️",
-  "⚽",
-  "🏖️",
-  "🎯",
-] as const;
-
 /** Deterministic default color for a Pocket missing one (backward compat). */
 function defaultColorFor(account: number): string {
   return POCKET_COLORS[account % POCKET_COLORS.length];
-}
-
-/** Deterministic default emoji for a Pocket missing one (backward compat). */
-function defaultEmojiFor(account: number): string {
-  return POCKET_EMOJIS[account % POCKET_EMOJIS.length];
 }
 
 /** A Pocket's registry entry: name + presentation + creation metadata for a BIP44 account. */
@@ -65,8 +41,11 @@ export interface PocketInfo {
   account: number;
   name: string;
   createdAt: number;
-  /** Emoji shown in the Pocket's colored icon chip. */
-  emoji: string;
+  /**
+   * Optional image URI (photo library / camera) shown as the Pocket's circular
+   * avatar. Omitted = fall back to the name's initial on the accent color.
+   */
+  image?: string;
   /** Hex accent color, normally one of {@link POCKET_COLORS}. */
   color: string;
   /** Optional target FAIR amount for a savings goal; omitted = no goal. */
@@ -76,18 +55,24 @@ export interface PocketInfo {
 /**
  * Normalize a Pocket registry: always includes the main Pocket (account 0,
  * synthesized if missing), drops duplicate account indices (first occurrence
- * wins), defaults `emoji`/`color` for any entry missing them (pre-Pockets-UI
- * stored data), and sorts by account ascending so callers get a stable order.
+ * wins), defaults `color` for any entry missing one and drops the legacy
+ * `emoji` field (pre-image stored data), and sorts by account ascending so
+ * callers get a stable order.
  */
 export function normalizePockets(pockets: PocketInfo[]): PocketInfo[] {
   const byAccount = new Map<number, PocketInfo>();
   for (const pocket of pockets) {
     if (!Number.isInteger(pocket.account) || pocket.account < 0) continue;
     if (!byAccount.has(pocket.account)) {
+      // Rebuilt field by field rather than spread so persisted entries written
+      // before Pocket images existed shed their now-unknown `emoji` key.
       byAccount.set(pocket.account, {
-        ...pocket,
-        emoji: pocket.emoji ?? defaultEmojiFor(pocket.account),
+        account: pocket.account,
+        name: pocket.name,
+        createdAt: pocket.createdAt,
         color: pocket.color ?? defaultColorFor(pocket.account),
+        ...(pocket.image !== undefined ? { image: pocket.image } : {}),
+        ...(pocket.goal !== undefined ? { goal: pocket.goal } : {}),
       });
     }
   }
@@ -96,7 +81,6 @@ export function normalizePockets(pockets: PocketInfo[]): PocketInfo[] {
       account: MAIN_POCKET_ACCOUNT,
       name: "Main",
       createdAt: 0,
-      emoji: defaultEmojiFor(MAIN_POCKET_ACCOUNT),
       color: defaultColorFor(MAIN_POCKET_ACCOUNT),
     });
   }
@@ -120,7 +104,7 @@ export function findPocket(
 export function addPocket(
   list: PocketInfo[],
   name: string,
-  emoji: string,
+  image: string | undefined,
   color: string,
   goal: number | undefined,
   now: number,
@@ -128,7 +112,7 @@ export function addPocket(
   const account = nextAccountIndex(list);
   return normalizePockets([
     ...list,
-    { account, name, createdAt: now, emoji, color, goal },
+    { account, name, createdAt: now, color, image, goal },
   ]);
 }
 
@@ -144,22 +128,29 @@ export function renamePocket(
 }
 
 /**
- * Update a Pocket's presentation metadata (emoji/color/goal), leaving all
+ * Update a Pocket's presentation metadata (image/color/goal), leaving all
  * other fields — including `name`, updated separately via {@link renamePocket}
  * — untouched. Any field omitted from `updates` is left unchanged; pass
- * `goal: null` to explicitly clear an existing goal (vs. omitting it, which
- * leaves the current goal as-is).
+ * `image: null` to clear a custom image (falling back to the name's initial)
+ * or `goal: null` to explicitly clear an existing goal (vs. omitting either,
+ * which leaves the current value as-is).
  */
 export function updatePocketMeta(
   list: PocketInfo[],
   account: number,
-  updates: { emoji?: string; color?: string; goal?: number | null },
+  updates: { image?: string | null; color?: string; goal?: number | null },
 ): PocketInfo[] {
   return normalizePockets(
     list.map((p) => {
       if (p.account !== account) return p;
       const next: PocketInfo = { ...p };
-      if (updates.emoji !== undefined) next.emoji = updates.emoji;
+      if (updates.image !== undefined) {
+        if (updates.image === null) {
+          delete next.image;
+        } else {
+          next.image = updates.image;
+        }
+      }
       if (updates.color !== undefined) next.color = updates.color;
       if (updates.goal !== undefined) {
         if (updates.goal === null) {

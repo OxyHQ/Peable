@@ -35,6 +35,15 @@ const RAINBOW_STOPS = [
 const BLOCK_WIDTH = 20;
 /** Full band height; the parent reveals 0…this many px as the user pulls. */
 export const RAINBOW_BAND_HEIGHT = 52;
+/**
+ * How long the band stays open once a refresh starts.
+ *
+ * A refresh can finish in a few milliseconds — a rescan with nothing to scan
+ * returns immediately — and collapsing the band the moment it does reads as a
+ * flicker, or as the tap not registering at all. Holding it for a beat makes
+ * the action legible; a refresh that takes longer simply keeps it open longer.
+ */
+export const REFRESH_HOLD_MS = 1500;
 /** One palette width — translating by exactly this makes the loop seamless. */
 const SET_WIDTH = RAINBOW_STOPS.length * BLOCK_WIDTH;
 const FLOW_DURATION_MS = 1400;
@@ -43,19 +52,21 @@ export function RefreshRainbowBar() {
   const flow = useSharedValue(0);
 
   useEffect(() => {
-    flow.value = 0;
-    flow.value = withRepeat(
-      withTiming(-SET_WIDTH, {
-        duration: FLOW_DURATION_MS,
-        easing: Easing.linear,
-      }),
-      -1,
-      false,
+    flow.set(0);
+    flow.set(
+      withRepeat(
+        withTiming(-SET_WIDTH, {
+          duration: FLOW_DURATION_MS,
+          easing: Easing.linear,
+        }),
+        -1,
+        false,
+      ),
     );
   }, [flow]);
 
   const flowStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: flow.value }],
+    transform: [{ translateX: flow.get() }],
   }));
 
   // Animation code: the flowing transform is a shared value and the row/block

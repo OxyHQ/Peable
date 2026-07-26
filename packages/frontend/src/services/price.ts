@@ -19,6 +19,20 @@ export interface PriceData {
 let cachedPrice: PriceData | null = null;
 let pollTimer: ReturnType<typeof setInterval> | null = null;
 
+// Change signal for `useSyncExternalStore`. Without it, a component reading
+// `getCachedPrice()` during render reads module state the renderer knows
+// nothing about — which the React Compiler is free to memoise, freezing the
+// first price forever. Subscribing makes the read reactive and safe.
+const listeners = new Set<() => void>();
+
+/** Subscribe to price updates. Returns an unsubscribe function. */
+export function subscribeToPrice(listener: () => void): () => void {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /**
  * Fetch the latest price from the Explorer API.
  * Returns cached value on network failure.
@@ -43,6 +57,10 @@ export async function fetchPrice(): Promise<PriceData | null> {
       change24h: data.change_24h?.usd ?? null,
       timestamp: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
     };
+
+    // A new object identity, so `getCachedPrice` stays a valid snapshot: it
+    // returns the same reference until the price actually changes.
+    for (const listener of listeners) listener();
 
     return cachedPrice;
   } catch {

@@ -127,18 +127,20 @@ function ScanLine({ color, active }: ScanLineProps) {
 
   useEffect(() => {
     if (active) {
-      progress.value = 0;
-      progress.value = withRepeat(
-        withTiming(1, {
-          duration: SCAN_LINE_DURATION_MS,
-          easing: Easing.inOut(Easing.ease),
-        }),
-        -1,
-        true,
+      progress.set(0);
+      progress.set(
+        withRepeat(
+          withTiming(1, {
+            duration: SCAN_LINE_DURATION_MS,
+            easing: Easing.inOut(Easing.ease),
+          }),
+          -1,
+          true,
+        ),
       );
     } else {
       cancelAnimation(progress);
-      progress.value = 0;
+      progress.set(0);
     }
     return () => {
       cancelAnimation(progress);
@@ -148,7 +150,7 @@ function ScanLine({ color, active }: ScanLineProps) {
   const animatedStyle = useAnimatedStyle(() => {
     const travel = FRAME_SIZE - SCAN_LINE_INSET * 2 - SCAN_LINE_HEIGHT;
     return {
-      transform: [{ translateY: progress.value * travel }],
+      transform: [{ translateY: progress.get() * travel }],
     };
   });
 

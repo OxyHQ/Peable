@@ -452,7 +452,7 @@ export default function MapScreen() {
   // down in lockstep with the sheet clearing the search pill.
   const headerSpacerStyle = useAnimatedStyle(() => ({
     height: interpolate(
-      sheetAnimatedIndex.value,
+      sheetAnimatedIndex.get(),
       [SHEET_INDEX_MID, SHEET_INDEX_TOP],
       [0, sheetTopInset],
       Extrapolation.CLAMP,
