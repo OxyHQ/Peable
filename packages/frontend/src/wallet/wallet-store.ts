@@ -74,6 +74,7 @@ import {
   deleteCachedWalletSeed,
   isWalletBackedUp,
   markWalletBackedUp,
+  isFreshlyCreatedWallet,
 } from "../storage/secure-store";
 import type { WalletInfo } from "../storage/secure-store";
 import { Database } from "../storage/database";
@@ -282,15 +283,18 @@ export interface WalletState {
   switchPocket: (account: number) => Promise<void>;
   createPocket: (
     name: string,
-    emoji: string,
+    image: string | undefined,
     color: string,
     goal?: number,
   ) => Promise<number>;
   renamePocket: (account: number, name: string) => Promise<void>;
-  /** Update a Pocket's emoji/color/goal. Pass `goal: null` to clear an existing goal. */
+  /**
+   * Update a Pocket's image/color/goal. Pass `image: null` to clear a custom
+   * image or `goal: null` to clear an existing goal.
+   */
   updatePocketMeta: (
     account: number,
-    updates: { emoji?: string; color?: string; goal?: number | null },
+    updates: { image?: string | null; color?: string; goal?: number | null },
   ) => Promise<void>;
   deletePocket: (account: number) => Promise<void>;
   moveBetweenPockets: (
@@ -728,7 +732,7 @@ async function resolveConfirmation(
   }
 
   const blockHashHex = bytesToHex(blockHash);
-  const header = await database.getHeaderByHash(blockHashHex);
+  const header = await database.getHeaderByHash(blockHash);
   if (!header) {
     // The containing block header has not been stored yet (the tx arrived
     // ahead of its merkle block during sync). Treat as unconfirmed for now;
@@ -1054,7 +1058,9 @@ async function reconcileConfirmations(
   try {
     const pendingUtxos = await database.getPendingHeightUTXOs();
     for (const pending of pendingUtxos) {
-      const header = await database.getHeaderByHash(pending.block_hash);
+      const header = await database.getHeaderByHash(
+        hexToBytes(pending.block_hash),
+      );
       if (!header) continue;
       await database.updateUTXOBlockHeight(
         pending.txid,
@@ -1075,7 +1081,9 @@ async function reconcileConfirmations(
     // Same pattern for the history rows (Tx list).
     const pendingTxs = await database.getPendingHeightTransactions();
     for (const pending of pendingTxs) {
-      const header = await database.getHeaderByHash(pending.block_hash);
+      const header = await database.getHeaderByHash(
+        hexToBytes(pending.block_hash),
+      );
       if (!header) continue;
       const confirmed = header.height <= tip ? 1 : 0;
       await database.updateTransactionConfirmation(
@@ -1551,11 +1559,24 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           // best-effort; DNS seeds are the fallback.
         }
 
+        // Only a wallet this app generated can safely skip the chain below the
+        // checkpoint anchor — a restored phrase may have received coins at any
+        // height (see `sync-anchor.ts`).
+        let startFromCheckpoint = false;
+        if (activeId) {
+          try {
+            startFromCheckpoint = await isFreshlyCreatedWallet(activeId);
+          } catch {
+            // Unknown provenance: sync from genesis, never risk hiding funds.
+          }
+        }
+
         spvClient = new SPVClient({
           network: networkConfig,
           socketProvider,
           headerStore,
           initialKnownAddresses: initialPeers,
+          startFromCheckpoint,
         });
 
         spvClient.setEvents({
@@ -1581,6 +1602,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
               // here is retried on the next block. Do not surface it as a
               // wallet error or interrupt sync.
             });
+          },
+          onPeerReady: (peer) => {
+            // Cache every node that actually completed a handshake. Without
+            // this the `peers` table only ever held manually-added entries and
+            // each cold start had to re-resolve the DNS seeds before it could
+            // dial anything.
+            void database
+              ?.insertPeer(peer.host, peer.port, Number(peer.services))
+              .catch(() => {
+                // The cache is an optimisation: DNS seeds remain the fallback.
+              });
           },
           onReorg: async (forkHeight) => {
             // A longer chain orphaned the blocks above forkHeight. Roll the
@@ -2369,7 +2401,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   createPocket: async (
     name: string,
-    emoji: string,
+    image: string | undefined,
     color: string,
     goal?: number,
   ): Promise<number> => {
@@ -2378,7 +2410,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       throw new Error("No active wallet");
     }
     const list = await getPockets(walletId);
-    const updated = addPocket(list, name.trim(), emoji, color, goal, Date.now());
+    const updated = addPocket(list, name.trim(), image, color, goal, Date.now());
     await savePockets(walletId, updated);
     await get().loadPockets();
     return updated[updated.length - 1].account;
@@ -2394,7 +2426,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   updatePocketMeta: async (
     account: number,
-    updates: { emoji?: string; color?: string; goal?: number | null },
+    updates: { image?: string | null; color?: string; goal?: number | null },
   ): Promise<void> => {
     const walletId = get().activeWalletId;
     if (!walletId) return;
@@ -2485,9 +2517,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const walletId = generateWalletId();
       const mnemonic = generateMnemonic();
 
-      // Save wallet mnemonic with wallet-specific key
+      // Save wallet mnemonic with wallet-specific key. `createdFresh` records
+      // that WE generated this phrase, which is what lets the header sync start
+      // at the checkpoint anchor instead of genesis.
       await saveWalletMnemonic(walletId, mnemonic);
-      await addWalletToIndex(walletId, name);
+      await addWalletToIndex(walletId, name, { createdFresh: true });
       await setActiveWalletId(walletId);
 
       // Close current database if open

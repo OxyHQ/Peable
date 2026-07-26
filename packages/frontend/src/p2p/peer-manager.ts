@@ -77,6 +77,8 @@ export class PeerManager {
   private readonly onEvent: PeerEventSink;
 
   private readonly peers: Map<string, Peer> = new Map();
+  /** Round-robin cursor for {@link PeerManager.sendToOne}. */
+  private sendCursor = 0;
   private readonly knownAddresses: Set<string> = new Set();
   private readonly failedAddresses: Map<string, number> = new Map(); // address -> fail count
 
@@ -186,14 +188,38 @@ export class PeerManager {
    * Send a message to a single ready peer.
    * Returns true if a peer was available and the message was sent.
    */
-  sendToOne(command: string, payload: Uint8Array): boolean {
-    for (const peer of this.peers.values()) {
-      if (peer.state === "ready") {
-        peer.sendMessage(command, payload);
-        return true;
-      }
-    }
-    return false;
+  /**
+   * Send a message to a single ready peer, rotating through them.
+   *
+   * Two properties matter and neither is optional:
+   *
+   *  - **Rotation.** Always picking the first ready peer meant every `getblocks`
+   *    of a sync round went to the same node for the lifetime of the process.
+   *  - **`minBestHeight`.** A peer that is itself behind cannot answer a
+   *    locator for blocks it does not have. It returns nothing, the sync loop
+   *    sees no progress and concludes it is caught up — so one stale node in
+   *    the peer list silently pinned the wallet thousands of blocks behind the
+   *    network while reporting "Synced". Observed live: 187.33.154.215 serving
+   *    height 25,110 while the rest of the network was at 78,689.
+   *
+   * Falls back to any ready peer when none advertise enough height, so a
+   * non-sync message is still delivered.
+   */
+  sendToOne(
+    command: string,
+    payload: Uint8Array,
+    options: { minBestHeight?: number } = {},
+  ): boolean {
+    const target = selectSendTarget(
+      Array.from(this.peers.values()),
+      this.sendCursor,
+      options.minBestHeight ?? 0,
+    );
+    if (!target) return false;
+
+    this.sendCursor = target.nextCursor;
+    target.peer.sendMessage(command, payload);
+    return true;
   }
 
   /**
@@ -387,4 +413,37 @@ function shuffleArray<T>(arr: T[]): void {
     arr[i] = arr[j];
     arr[j] = tmp;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Send-target selection (pure, exported for testing)
+// ---------------------------------------------------------------------------
+
+/** The minimum a peer must expose for {@link selectSendTarget} to rank it. */
+export interface SendCandidate {
+  readonly state: string;
+  readonly bestHeight: number;
+}
+
+/**
+ * Pick which ready peer receives the next single-peer message, and the cursor
+ * to use next time.
+ *
+ * Peers advertising at least `minBestHeight` are preferred; when none do, any
+ * ready peer is used so non-sync traffic is still delivered. Returns
+ * `undefined` when no peer is ready.
+ */
+export function selectSendTarget<T extends SendCandidate>(
+  peers: readonly T[],
+  cursor: number,
+  minBestHeight: number,
+): { peer: T; nextCursor: number } | undefined {
+  const ready = peers.filter((peer) => peer.state === "ready");
+  if (ready.length === 0) return undefined;
+
+  const eligible = ready.filter((peer) => peer.bestHeight >= minBestHeight);
+  const candidates = eligible.length > 0 ? eligible : ready;
+
+  const index = cursor % candidates.length;
+  return { peer: candidates[index], nextCursor: index + 1 };
 }

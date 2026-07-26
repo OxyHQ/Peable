@@ -18,8 +18,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "lint": "expo lint",
-    "build:android": "eas build --platform android --profile preview",
-    "build:android:local": "npx expo prebuild --platform android && cd android && ./gradlew assembleRelease"
+    "build:android": "bunx expo prebuild --platform android && cd android && ./gradlew assembleRelease"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",

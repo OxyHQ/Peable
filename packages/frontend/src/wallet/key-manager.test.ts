@@ -15,6 +15,12 @@ import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import { KeyManager } from "./key-manager";
 
+// ---------------------------------------------------------------------------
+// BIP44 account index (Pockets). Each account is an isolated subtree; account 0
+// must remain byte-for-byte identical to the pre-Pockets single-account wallet.
+// ---------------------------------------------------------------------------
+
+
 const MAINNET = getNetwork("mainnet");
 
 // Canonical BIP39 trial mnemonic — deterministic derivation.

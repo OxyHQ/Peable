@@ -12,6 +12,10 @@
 
 import * as SQLite from "expo-sqlite";
 import { databaseFileName } from "./db-name";
+import {
+  HEADER_BLOB_MIGRATION_SQL,
+  needsHeaderBlobMigration,
+} from "./header-blob-migration";
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -19,9 +23,16 @@ import { databaseFileName } from "./db-name";
 
 export interface BlockHeaderRow {
   height: number;
-  hash: string;
-  prev_hash: string;
-  merkle_root: string;
+  /**
+   * 32 raw bytes, NOT hex. A block header is 80 bytes on the wire; storing its
+   * three hashes as 64-character hex made each row ~400 bytes — roughly 5x the
+   * data it represents, and ~27 MB for a synced mainnet chain. BLOB columns
+   * hold the bytes the SPV client already works in, so nothing has to be
+   * encoded or decoded on the hot sync path either.
+   */
+  hash: Uint8Array;
+  prev_hash: Uint8Array;
+  merkle_root: Uint8Array;
   timestamp: number;
   bits: number;
   nonce: number;
@@ -141,9 +152,9 @@ const SCHEMA_SQL = `
 
   CREATE TABLE IF NOT EXISTS block_headers (
     height INTEGER PRIMARY KEY,
-    hash TEXT UNIQUE NOT NULL,
-    prev_hash TEXT NOT NULL,
-    merkle_root TEXT NOT NULL,
+    hash BLOB UNIQUE NOT NULL,
+    prev_hash BLOB NOT NULL,
+    merkle_root BLOB NOT NULL,
     timestamp INTEGER NOT NULL,
     bits INTEGER NOT NULL,
     nonce INTEGER NOT NULL,
@@ -238,7 +249,10 @@ const SCHEMA_SQL = `
     updated_at INTEGER NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS idx_block_headers_hash ON block_headers(hash);
+  -- No explicit index on block_headers(hash): the UNIQUE constraint already
+  -- creates one, and a second copy doubled the index cost on the largest
+  -- table in the database for no lookup benefit.
+  DROP INDEX IF EXISTS idx_block_headers_hash;
   CREATE INDEX IF NOT EXISTS idx_utxos_address ON utxos(address);
   CREATE INDEX IF NOT EXISTS idx_utxos_unspent ON utxos(spent, address);
   CREATE INDEX IF NOT EXISTS idx_utxos_block_height ON utxos(block_height);
@@ -296,8 +310,47 @@ export class Database {
    * much faster than 16+ individual calls.
    */
   private async initialize(): Promise<void> {
+    // Header storage must be converted BEFORE the schema batch: on a legacy
+    // wallet the `block_headers` table already exists with TEXT columns, and
+    // `CREATE TABLE IF NOT EXISTS` would leave it that way.
+    await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+  }
+
+  /**
+   * Convert a legacy `block_headers` table from 64-character hex TEXT to raw
+   * 32-byte BLOBs.
+   *
+   * Hex tripled the cost of the only table that grows without bound: ~400 bytes
+   * per row for an 80-byte header, ~27 MB for a synced mainnet chain. The
+   * conversion is a single `unhex()` pass inside one transaction (SQLite 3.41+;
+   * expo-sqlite ships 3.49+), so it is atomic — a failure mid-way rolls back
+   * and leaves the old table intact.
+   *
+   * No-op when the table is absent (fresh wallet) or already BLOB.
+   */
+  private async migrateHeaderHashesToBlob(): Promise<void> {
+    const columns = await this.db.getAllAsync<{ name: string; type: string }>(
+      "SELECT name, type FROM pragma_table_info('block_headers')",
+    );
+    // Absent table → nothing to migrate; already BLOB → nothing to do.
+    const hashColumn = columns.find((c) => c.name === "hash");
+    if (!needsHeaderBlobMigration(hashColumn?.type)) return;
+
+    await this.db.withTransactionAsync(async () => {
+      await this.db.execAsync(HEADER_BLOB_MIGRATION_SQL);
+    });
+
+    // DROP TABLE only frees pages for reuse; without this the file keeps the
+    // old size on disk and the user sees none of the ~15 MB back. VACUUM
+    // cannot run inside a transaction, hence its position here. Best-effort:
+    // the data is already correct, reclaiming space is not worth failing boot.
+    try {
+      await this.db.execAsync("VACUUM");
+    } catch {
+      // Left for the next VACUUM opportunity.
+    }
   }
 
   /**
@@ -407,7 +460,7 @@ export class Database {
     return row ?? null;
   }
 
-  async getHeaderByHash(hash: string): Promise<BlockHeaderRow | null> {
+  async getHeaderByHash(hash: Uint8Array): Promise<BlockHeaderRow | null> {
     const row = await this.db.getFirstAsync<BlockHeaderRow>(
       "SELECT * FROM block_headers WHERE hash = ?",
       hash,
