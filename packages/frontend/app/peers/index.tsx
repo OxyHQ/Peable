@@ -18,7 +18,6 @@ import type { PeerRow } from "../../src/storage/database";
 import { EmptyState, ScreenHeader } from "../../src/ui/components";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Button } from "../../src/ui/components/Button";
-import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { t } from "../../src/i18n";
 
@@ -88,7 +87,7 @@ export default function PeersScreen() {
 
   // Pull down to re-read the known-peer cache, which the SPV client writes to
   // as nodes complete their handshake.
-  const { gesture, scrollHandler, bandStyle } =
+  const { gesture, scrollHandler, band } =
     usePullToRefreshBand(loadPeers);
 
   // Qualitative connection state: a colored dot + big status word carry the
@@ -130,9 +129,7 @@ export default function PeersScreen() {
         >
       {/* Pull-to-refresh rainbow band — same as Home: inside the scroll view,
           revealed on pull, never pinned. */}
-      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-        <RefreshRainbowBar />
-      </Animated.View>
+      {band}
       {/* ---- Status hero: colored dot + status word + connected count ---- */}
       <View className="px-5 pt-4">
         <View className="flex-row items-center gap-2.5">

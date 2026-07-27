@@ -16,7 +16,6 @@ import { View, Text, Pressable } from "react-native";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxy.so/bloom/theme";
-import { UNITS_PER_COIN } from "@fairco.in/core";
 import { getDatabase } from "../../wallet/wallet-store";
 import {
   listBuyOrders,
@@ -26,38 +25,32 @@ import {
 } from "../../wallet/buy-history";
 import { getBuyStatus } from "../../api/buy";
 import type { BuyOrderStatus } from "../../api/buy";
-import { t } from "../../i18n";
+import { formatFairAmount, t } from "../../i18n";
 
 /** How many orders to keep on screen. Older ones stay in the database. */
 const VISIBLE_ORDERS = 5;
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 
-interface StatusStyle {
-  icon: IconName;
-  /** Bloom theme colour key resolved by the caller. */
-  tone: "success" | "danger" | "muted" | "progress";
-}
+type ThemeColors = ReturnType<typeof useTheme>["colors"];
 
-function statusStyle(status: BuyOrderStatus): StatusStyle {
+/** Icon and colour for a status, resolved straight from the theme. */
+function statusStyle(
+  status: BuyOrderStatus,
+  colors: ThemeColors,
+): { icon: IconName; color: string } {
   switch (status) {
     case "DELIVERED":
-      return { icon: "check-circle", tone: "success" };
+      return { icon: "check-circle", color: colors.primary };
     case "FAILED":
-      return { icon: "alert-circle", tone: "danger" };
+      return { icon: "alert-circle", color: colors.error };
     case "EXPIRED":
-      return { icon: "clock-alert-outline", tone: "muted" };
     case "AWAITING_PAYMENT":
-      return { icon: "clock-outline", tone: "muted" };
+      return { icon: "clock-outline", color: colors.textSecondary };
     default:
       // PAYMENT_DETECTED / SWAPPING / BURNING / DELIVERING — money is moving.
-      return { icon: "progress-clock", tone: "progress" };
+      return { icon: "progress-clock", color: colors.tint };
   }
-}
-
-function formatFairAmount(sats: bigint): string {
-  const whole = Number(sats) / Number(UNITS_PER_COIN);
-  return whole.toLocaleString(undefined, { maximumFractionDigits: 8 });
 }
 
 export function BuyHistoryList() {
@@ -77,21 +70,28 @@ export function BuyHistoryList() {
     const pending = stored.filter(needsStatusRefresh);
     if (pending.length === 0) return;
 
-    await Promise.all(
+    const changed = await Promise.all(
       pending.map(async (entry) => {
         try {
           const fresh = await getBuyStatus(entry.id);
-          if (fresh.status === entry.status) return;
+          if (fresh.status === entry.status) return false;
           await updateBuyOrderStatus(db, entry.id, fresh.status, {
             deliveryTxId: fresh.fairDeliveryTxId,
             errorMessage: fresh.errorMessage,
           });
+          return true;
         } catch {
           // Keep the cached row; the next visit retries.
+          return false;
         }
       }),
     );
-    setOrders(await listBuyOrders(db, VISIBLE_ORDERS));
+    // Only re-read when the bridge actually moved something. Otherwise every
+    // focus of the Buy tab costs a second query and a full list re-render for
+    // rows that are byte-identical to the ones already on screen.
+    if (changed.some(Boolean)) {
+      setOrders(await listBuyOrders(db, VISIBLE_ORDERS));
+    }
   }, []);
 
   useFocusEffect(
@@ -102,13 +102,6 @@ export function BuyHistoryList() {
 
   if (orders.length === 0) return null;
 
-  const toneColor = (tone: StatusStyle["tone"]): string => {
-    if (tone === "success") return theme.colors.primary;
-    if (tone === "danger") return theme.colors.error;
-    if (tone === "progress") return theme.colors.tint;
-    return theme.colors.textSecondary;
-  };
-
   return (
     <View className="mt-8">
       <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">
@@ -116,8 +109,7 @@ export function BuyHistoryList() {
       </Text>
 
       {orders.map((order, index) => {
-        const style = statusStyle(order.status);
-        const color = toneColor(style.tone);
+        const { icon, color } = statusStyle(order.status, theme.colors);
         return (
           <Pressable
             key={order.id}
@@ -135,7 +127,7 @@ export function BuyHistoryList() {
               index === orders.length - 1 ? "" : "border-b border-border"
             }`}
           >
-            <MaterialCommunityIcons name={style.icon} size={22} color={color} />
+            <MaterialCommunityIcons name={icon} size={22} color={color} />
 
             <View className="flex-1 ml-3">
               <Text className="text-foreground text-[15px] font-medium">

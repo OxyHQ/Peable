@@ -7,7 +7,7 @@
 
 import { sha256 } from "@noble/hashes/sha256";
 import type { NetworkConfig, BlockHeader } from "@fairco.in/core";
-import { hashBlockHeader as quarkHashBlockHeader, getCheckpointHash, hexToBytes } from "@fairco.in/core";
+import { bytesEqual, hashBlockHeader as quarkHashBlockHeader, getCheckpointHash, hexToBytes } from "@fairco.in/core";
 import { BloomFilter } from "./bloom-filter";
 import { validateMerkleProof } from "./merkle-proof";
 import {
@@ -238,14 +238,6 @@ async function buildLocator(store: HeaderStore): Promise<Uint8Array[]> {
   return locator;
 }
 
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
 // ---------------------------------------------------------------------------
 // SPVClient
 // ---------------------------------------------------------------------------
@@ -316,14 +308,12 @@ export class SPVClient {
     // `prevBlock`; without genesis in the store there is no anchor and header
     // validation rejects block 1, so sync (and therefore receiving) never
     // starts.
-    // Discard a header store built by a broken hash implementation before it
-    // can stall sync forever (see `discardCorruptHeaderStore`).
-    await this.discardCorruptHeaderStore();
-
-    await this.ensureGenesis();
-
-    // Load current chain height from store
-    this.chainHeight = await this.headerStore.getChainHeight();
+    // One read of the tip serves all three startup steps: the corruption check,
+    // the genesis/anchor seed, and the initial height. Each used to issue its
+    // own `SELECT ... ORDER BY height DESC LIMIT 1` on the wallet-start path.
+    const tip = await this.discardCorruptHeaderStore();
+    const seeded = await this.ensureStartHeader(tip);
+    this.chainHeight = seeded?.height ?? 0;
 
     await this.peerManager.start();
   }
@@ -344,11 +334,13 @@ export class SPVClient {
    * (UTXOs, transactions, notes) is untouched: the rescan that follows the
    * re-sync re-derives confirmations from the rebuilt chain.
    */
-  private async discardCorruptHeaderStore(): Promise<void> {
+  private async discardCorruptHeaderStore(): Promise<
+    StoredBlockHeader | undefined
+  > {
     const tip = await this.headerStore.getLatestHeader();
     // Genesis is seeded from network config rather than hashed, so it proves
     // nothing either way.
-    if (!tip || tip.height === 0) return;
+    if (!tip || tip.height === 0) return tip;
 
     const recomputed = hashBlockHeader({
       version: tip.version,
@@ -361,10 +353,11 @@ export class SPVClient {
       // carries it.
       txCount: 0,
     });
-    if (bytesEqual(recomputed, tip.hash)) return;
+    if (bytesEqual(recomputed, tip.hash)) return tip;
 
     await this.headerStore.deleteHeadersAboveHeight(-1);
     this.chainHeight = 0;
+    return undefined;
   }
 
   /**
@@ -373,10 +366,11 @@ export class SPVClient {
    * internal (wire) byte order the header store and `prevBlock` linkage use —
    * i.e. the reverse of the display genesis hash.
    */
-  private async ensureGenesis(): Promise<void> {
-    const existing = await this.headerStore.getLatestHeader();
+  private async ensureStartHeader(
+    existing: StoredBlockHeader | undefined,
+  ): Promise<StoredBlockHeader | undefined> {
     if (existing) {
-      return;
+      return existing;
     }
 
     // A wallet with no possible history starts at the verified checkpoint
@@ -385,7 +379,7 @@ export class SPVClient {
       const anchor = getSyncAnchor(this.network.name);
       if (anchor) {
         await this.headerStore.saveHeaders([anchor]);
-        return;
+        return anchor;
       }
     }
 
@@ -400,6 +394,7 @@ export class SPVClient {
       nonce: this.network.genesisNonce,
     };
     await this.headerStore.saveHeaders([genesis]);
+    return genesis;
   }
 
   /**

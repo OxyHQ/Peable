@@ -50,7 +50,7 @@ export async function fetchPrice(): Promise<PriceData | null> {
 
     if (!data.price) return cachedPrice;
 
-    cachedPrice = {
+    const next: PriceData = {
       usd: data.price.usd,
       eur: data.price.eur,
       btc: data.price.btc,
@@ -58,8 +58,19 @@ export async function fetchPrice(): Promise<PriceData | null> {
       timestamp: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
     };
 
-    // A new object identity, so `getCachedPrice` stays a valid snapshot: it
-    // returns the same reference until the price actually changes.
+    // Keep the previous object when nothing moved. `getCachedPrice` is a
+    // `useSyncExternalStore` snapshot, so a fresh identity every minute would
+    // re-render every subscriber on an unchanged price. `timestamp` is excluded
+    // deliberately: it advances on each poll even when the quote does not.
+    const moved =
+      cachedPrice === null ||
+      cachedPrice.usd !== next.usd ||
+      cachedPrice.eur !== next.eur ||
+      cachedPrice.btc !== next.btc ||
+      cachedPrice.change24h !== next.change24h;
+    if (!moved) return cachedPrice;
+
+    cachedPrice = next;
     for (const listener of listeners) listener();
 
     return cachedPrice;

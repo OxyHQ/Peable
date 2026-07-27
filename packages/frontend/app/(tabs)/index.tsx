@@ -33,7 +33,6 @@ import { ArrowCircleDownIcon } from "../../src/ui/components/ArrowCircleDownIcon
 import { SendIcon } from "../../src/ui/components/SendIcon";
 import { PocketSwitcherSheet } from "../../src/ui/sheets/PocketSwitcherSheet";
 import { TransactionDetailSheet } from "../../src/ui/sheets/TransactionDetailSheet";
-import { RefreshRainbowBar } from "../../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { SendReceiveSheet } from "../../src/ui/sheets/SendReceiveSheet";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
@@ -234,7 +233,7 @@ export default function HomeScreen() {
   const {
     gesture: composedGesture,
     scrollHandler,
-    bandStyle,
+    band,
   } = usePullToRefreshBand(startRefresh);
 
   const activityGroups = useMemo(
@@ -386,9 +385,7 @@ export default function HomeScreen() {
         </View>
 
         {/* ---- Pull-to-refresh rainbow band: below the tabs, grows as you drag ---- */}
-        <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-          <RefreshRainbowBar />
-        </Animated.View>
+        {band}
 
         {/* ---- Tab content ---- */}
         {tab === "overview" ? (

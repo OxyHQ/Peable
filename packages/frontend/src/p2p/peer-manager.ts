@@ -185,10 +185,6 @@ export class PeerManager {
   }
 
   /**
-   * Send a message to a single ready peer.
-   * Returns true if a peer was available and the message was sent.
-   */
-  /**
    * Send a message to a single ready peer, rotating through them.
    *
    * Two properties matter and neither is optional:

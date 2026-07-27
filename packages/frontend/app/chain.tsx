@@ -18,7 +18,6 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useBloomTheme } from "@oxy.so/bloom/theme";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
 import { ListItem, ScreenHeader } from "../src/ui/components";
-import { RefreshRainbowBar } from "../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
 import { GestureDetector } from "react-native-gesture-handler";
 import { t } from "../src/i18n";
@@ -27,11 +26,8 @@ import { t } from "../src/i18n";
 // Types
 // ---------------------------------------------------------------------------
 
-type SyncVariant = "success" | "warning" | "error";
-
 interface SyncState {
   label: string;
-  variant: SyncVariant;
   /** Tailwind background class for the state dot. */
   dot: string;
   /** Tailwind text colour class for the state label. */
@@ -154,7 +150,6 @@ export default function ChainScreen() {
     if (connectedPeers === 0) {
       return {
         label: t("chain.sync.offline"),
-        variant: "error",
         dot: "bg-red-400",
         text: "text-red-400",
       };
@@ -162,14 +157,12 @@ export default function ChainScreen() {
     if (isSyncing) {
       return {
         label: t("chain.sync.syncing", { progress: Math.round(syncProgress) }),
-        variant: "warning",
         dot: "bg-yellow-400",
         text: "text-yellow-400",
       };
     }
     return {
       label: t("chain.sync.synced"),
-      variant: "success",
       dot: "bg-primary",
       text: "text-primary",
     };
@@ -212,7 +205,7 @@ export default function ChainScreen() {
 
   // Both entry points — the header icon and a pull at the top of the list —
   // share one implementation with the Home screen.
-  const { gesture, scrollHandler, bandStyle, trigger, refreshing } =
+  const { gesture, scrollHandler, band, trigger, refreshing } =
     usePullToRefreshBand(handleRefresh);
 
   return (
@@ -241,11 +234,7 @@ export default function ChainScreen() {
         }
       />
 
-      {/* Refresh rainbow band — clipped to the animated height, exactly as the
-          Home screen reveals it on pull. */}
-      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-        <RefreshRainbowBar />
-      </Animated.View>
+      {band}
 
       <GestureDetector gesture={gesture}>
         <Animated.ScrollView

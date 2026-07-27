@@ -63,12 +63,9 @@ describe("isTerminalBuyStatus", () => {
     }
   });
 
-  test("every status in the API union is classified", () => {
-    // Guards against a new status defaulting to non-terminal by omission.
-    const classified = ALL_STATUSES.filter(
-      (s) => isTerminalBuyStatus(s) || !isTerminalBuyStatus(s),
-    );
-    expect(classified).toHaveLength(ALL_STATUSES.length);
+  test("exactly these statuses are terminal, checked against the API union", () => {
+    // Pins the classification against every status the API can return, so a
+    // status added upstream without being classified here fails the suite.
     expect(ALL_STATUSES.filter(isTerminalBuyStatus)).toEqual([
       "DELIVERED",
       "FAILED",

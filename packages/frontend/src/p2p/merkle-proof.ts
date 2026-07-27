@@ -13,19 +13,12 @@
  */
 
 import { sha256 } from "@noble/hashes/sha256";
+import { bytesEqual } from "@fairco.in/core";
 import type { MerkleBlockMsg } from "./messages";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
 
 function hashPair(left: Uint8Array, right: Uint8Array): Uint8Array {
   const combined = new Uint8Array(64);

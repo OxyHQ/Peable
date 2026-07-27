@@ -26,14 +26,16 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Gesture } from "react-native-gesture-handler";
-import {
+import Animated, {
   runOnJS,
+  useAnimatedReaction,
   useAnimatedScrollHandler,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
 } from "react-native-reanimated";
 import {
+  RefreshRainbowBar,
   RAINBOW_BAND_HEIGHT,
   REFRESH_HOLD_MS,
 } from "../ui/components/RefreshRainbowBar";
@@ -141,13 +143,33 @@ export function usePullToRefreshBand(onRefresh: () => void | Promise<void>) {
 
   const bandStyle = useAnimatedStyle(() => ({ height: pull.get() }));
 
+  // The band is only mounted while it is actually revealed. It renders 70
+  // views and drives an infinite `withRepeat` transform, so leaving it mounted
+  // behind a zero-height clip burns UI-thread work every frame, on every
+  // screen that offers a refresh, forever.
+  const [bandVisible, setBandVisible] = useState(false);
+  useAnimatedReaction(
+    () => pull.get() > 0,
+    (revealed, previous) => {
+      if (revealed !== previous) runOnJS(setBandVisible)(revealed);
+    },
+  );
+
+  // Returned as an element rather than as a style, so the clip, the overflow
+  // and the mount condition cannot drift between the screens that use it.
+  const band = (
+    <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+      {bandVisible ? <RefreshRainbowBar /> : null}
+    </Animated.View>
+  );
+
   return {
     /** Attach to the `GestureDetector` wrapping the scroll view. */
     gesture,
     /** Pass to the `Animated.ScrollView`'s `onScroll`. */
     scrollHandler,
-    /** Animated height for the `Animated.View` that clips the band. */
-    bandStyle,
+    /** The rainbow band, ready to render above the scroll view. */
+    band,
     /** Start a refresh from a button instead of a pull. */
     trigger,
     /** True while the band is held open. */

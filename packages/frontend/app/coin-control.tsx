@@ -20,7 +20,6 @@ import {
 import { useTheme } from "@oxy.so/bloom/theme";
 import { GestureDetector } from "react-native-gesture-handler";
 import Animated from "react-native-reanimated";
-import { RefreshRainbowBar } from "../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
 import { t } from "../src/i18n";
 
@@ -56,7 +55,6 @@ const SECTION_LABEL =
 
 export default function CoinControlScreen() {
   const router = useRouter();
-  const chainHeight = useWalletStore((s) => s.chainHeight);
   const existingSelection = useWalletStore((s) => s.selectedUTXOs);
   const setSelectedUTXOs = useWalletStore((s) => s.setSelectedUTXOs);
   const clearSelectedUTXOs = useWalletStore((s) => s.clearSelectedUTXOs);
@@ -75,6 +73,10 @@ export default function CoinControlScreen() {
   const loadUtxos = useCallback(() => {
     const db = getDatabase();
     if (!db) return;
+    // Read the tip at call time instead of depending on it: `chainHeight` is
+    // written once per merkle block, and a new `loadUtxos` identity rebuilds
+    // the whole gesture graph through the refresh hook on every one of them.
+    const tip = useWalletStore.getState().chainHeight;
 
     db.getUnspentUTXOs().then((rows) => {
       const items: UTXOItem[] = rows.map((row) => ({
@@ -84,14 +86,14 @@ export default function CoinControlScreen() {
         value: BigInt(row.value),
         blockHeight: row.block_height,
         confirmations:
-          chainHeight > 0 && row.block_height > 0
-            ? chainHeight - row.block_height + 1
+          tip > 0 && row.block_height > 0
+            ? tip - row.block_height + 1
             : 0,
       }));
       setUtxos(items);
       setLoaded(true);
     });
-  }, [chainHeight]);
+  }, []);
 
   // Load once on layout (no useEffect); a pull re-reads, so confirmations catch
   // up with the chain tip without leaving and re-entering the screen.
@@ -100,7 +102,7 @@ export default function CoinControlScreen() {
     loadUtxos();
   }, [loaded, loadUtxos]);
 
-  const { gesture, scrollHandler, bandStyle } = usePullToRefreshBand(loadUtxos);
+  const { gesture, scrollHandler, band } = usePullToRefreshBand(loadUtxos);
 
   const handleToggle = useCallback((txid: string, vout: number) => {
     const key = `${txid}:${vout}`;
@@ -174,9 +176,7 @@ export default function CoinControlScreen() {
         }
         onBack={() => router.back()}
       />
-      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-        <RefreshRainbowBar />
-      </Animated.View>
+      {band}
 
       <GestureDetector gesture={gesture}>
         <Animated.ScrollView

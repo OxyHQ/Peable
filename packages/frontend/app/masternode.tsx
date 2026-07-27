@@ -26,7 +26,6 @@ import {
 } from "../src/ui/components";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { RefreshRainbowBar } from "../src/ui/components/RefreshRainbowBar";
 import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
 import { t } from "../src/i18n";
 
@@ -58,7 +57,7 @@ export default function MasternodeScreen() {
   );
 
   // Pull down to re-check which UTXOs still meet the collateral requirement.
-  const { gesture, scrollHandler, bandStyle } = usePullToRefreshBand(
+  const { gesture, scrollHandler, band } = usePullToRefreshBand(
     refreshMasternodeUTXOs,
   );
 
@@ -74,9 +73,7 @@ export default function MasternodeScreen() {
       edges={["top", "bottom", "left", "right"]}
     >
       <ScreenHeader title={t("masternode.title")} onBack={() => router.back()} />
-      <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-        <RefreshRainbowBar />
-      </Animated.View>
+      {band}
 
       <GestureDetector gesture={gesture}>
         <Animated.ScrollView

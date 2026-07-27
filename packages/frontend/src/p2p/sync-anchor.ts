@@ -27,16 +27,8 @@
  * asserts that agreement so the two can never drift.
  */
 
-import type { NetworkType } from "@fairco.in/core";
+import { hexToBytes, type NetworkType } from "@fairco.in/core";
 import type { StoredBlockHeader } from "./spv-client";
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
 
 /**
  * Mainnet anchor: block 60000. All hashes are in internal (`uint256`) byte

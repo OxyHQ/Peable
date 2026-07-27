@@ -43,7 +43,7 @@
  */
 
 import type { BlockHeader, NetworkType } from "@fairco.in/core";
-import { hashBlockHeader } from "@fairco.in/core";
+import { bytesEqual, hashBlockHeader } from "@fairco.in/core";
 import type { BlockHeaderMsg } from "./messages";
 
 // ---------------------------------------------------------------------------
@@ -152,14 +152,6 @@ export function lastPowBlock(network: NetworkType): number {
 // ---------------------------------------------------------------------------
 // Header chain validation
 // ---------------------------------------------------------------------------
-
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
 
 function toCoreHeader(header: BlockHeaderMsg): BlockHeader {
   return {

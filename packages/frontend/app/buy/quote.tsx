@@ -37,26 +37,18 @@ import { PaymentInstructions } from "../../src/components/buy/PaymentInstruction
 import {
   BuyApiError,
   getBuyStatus,
-  type BuyOrderStatus,
   type BuyQuoteResponse,
   type BuyStatusResponse,
 } from "../../src/api/buy";
 import { getDatabase } from "../../src/wallet/wallet-store";
-import { updateBuyOrderStatus } from "../../src/wallet/buy-history";
+import {
+  isTerminalBuyStatus,
+  updateBuyOrderStatus,
+} from "../../src/wallet/buy-history";
 import { t } from "../../src/i18n";
 
 const CONTENT_MAX_WIDTH = 600;
 const POLL_INTERVAL_MS = 5000;
-const TERMINAL_STATUSES: readonly BuyOrderStatus[] = [
-  "DELIVERED",
-  "FAILED",
-  "EXPIRED",
-];
-
-function isTerminal(status: BuyOrderStatus | null): boolean {
-  return status !== null && TERMINAL_STATUSES.includes(status);
-}
-
 /**
  * The status endpoint returns enough information to reconstruct the bare
  * minimum the PaymentInstructions component needs, so we synthesise a quote
@@ -166,7 +158,7 @@ export default function BuyQuoteScreen() {
         const fresh = await refreshStatus();
         if (cancelled) return;
         setLoading(false);
-        if (fresh && isTerminal(fresh.status) && timer) {
+        if (fresh && isTerminalBuyStatus(fresh.status) && timer) {
           clearInterval(timer);
           timer = null;
         }
