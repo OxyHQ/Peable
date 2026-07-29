@@ -17,7 +17,7 @@ import { AmountInput } from "../../ui/components/AmountInput";
 import { FairCoinSymbol } from "../../ui/components/FairCoinSymbol";
 import { FONT_PHUDU_BLACK } from "../../utils/fonts";
 import { t } from "../../i18n";
-import { getCachedPrice } from "../../services/price";
+import { usePrice } from "../../hooks/usePrice";
 
 const AMOUNT_FONT_SIZE_MAX = 44;
 const AMOUNT_FONT_SIZE_MIN = 22;
@@ -48,12 +48,12 @@ export function BuyAmountInput({
   const theme = useTheme();
   const amountSats = useMemo(() => parseFairToUnits(value), [value]);
 
+  const price = usePrice();
   const usdEquivalent = useMemo(() => {
-    const price = getCachedPrice();
     if (!price || amountSats === null || amountSats <= 0n) return null;
     const fair = Number(amountSats) / Number(UNITS_PER_COIN);
     return (fair * price.usd).toFixed(2);
-  }, [amountSats]);
+  }, [amountSats, price]);
 
   const lengthForSizing = value.length > 0 ? value.length : 1;
   const amountFontSize = getAmountFontSize(lengthForSizing);

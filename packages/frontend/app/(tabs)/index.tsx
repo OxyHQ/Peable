@@ -37,13 +37,8 @@ import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { SendReceiveSheet } from "../../src/ui/sheets/SendReceiveSheet";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import {
-  startPricePolling,
-  stopPricePolling,
-  getCachedPrice,
-  fetchPrice,
-  type PriceData,
-} from "../../src/services/price";
+import { fetchPrice } from "../../src/services/price";
+import { usePrice } from "../../src/hooks/usePrice";
 import { queryClient } from "../../src/services/query-client";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { Tabs, TabsTrigger } from "@oxy.so/bloom/tabs";
@@ -138,7 +133,7 @@ export default function HomeScreen() {
   const hasBackedUp = useWalletStore((s) => s.hasBackedUp);
   const loadPockets = useWalletStore((s) => s.loadPockets);
 
-  const [price, setPrice] = useState<PriceData | null>(getCachedPrice);
+  const price = usePrice();
   const [tab, setTab] = useState<HomeTab>("activity");
 
   // Send / Receive share ONE bottom-sheet with a Send|Receive toggle; the pills
@@ -162,9 +157,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      startPricePolling((updated) => setPrice(updated));
       loadPockets();
-      return () => stopPricePolling();
     }, [loadPockets]),
   );
 
@@ -224,9 +217,8 @@ export default function HomeScreen() {
     // A pull should re-pull remote data, not only recompute the local balance:
     // refetch the FAIR price for the header and invalidate the Overview's
     // React Query data (price history + network stats) so both refresh too.
-    void fetchPrice().then((updated) => {
-      if (updated) setPrice(updated);
-    });
+    // `fetchPrice` notifies subscribers itself, so there is nothing to store.
+    void fetchPrice();
     void queryClient.invalidateQueries();
   }, [refreshBalance]);
 
