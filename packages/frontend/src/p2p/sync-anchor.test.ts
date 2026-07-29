@@ -14,9 +14,11 @@ import {
   hashBlockHeader,
   getCheckpointHash,
   bytesToHex,
+  getNetwork,
+  meetsProofOfWork,
 } from "@fairco.in/core";
 import { getSyncAnchor } from "./sync-anchor";
-import { lastPowBlock, meetsProofOfWork } from "./header-validation";
+
 
 /** Display order — the convention the checkpoint table uses. */
 function toDisplayHex(bytes: Uint8Array): string {
@@ -55,7 +57,7 @@ describe("mainnet sync anchor", () => {
 
   test("sits above the proof-of-work era, so it is a PoS header", () => {
     if (!anchor) throw new Error("no mainnet anchor");
-    expect(anchor.height).toBeGreaterThan(lastPowBlock("mainnet"));
+    expect(anchor.height).toBeGreaterThan(getNetwork("mainnet").lastPowBlock);
     // PoS headers carry no work and must never be PoW-checked.
     expect(anchor.nonce).toBe(0);
     expect(meetsProofOfWork(anchor.hash, anchor.bits)).toBe(false);

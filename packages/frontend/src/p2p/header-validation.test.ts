@@ -14,11 +14,13 @@
 
 import { describe, test, expect } from "bun:test";
 import {
-  validateHeaderChain,
-  planChainUpdate,
   compactToTarget,
   isValidTargetBits,
-  proofOfWorkLimit,
+  getNetwork,
+} from "@fairco.in/core";
+import {
+  validateHeaderChain,
+  planChainUpdate,
   HeaderValidationError,
   type HeaderChainAnchor,
 } from "./header-validation";
@@ -64,7 +66,7 @@ function buildChain(
   return headers;
 }
 
-const POW_LIMIT = proofOfWorkLimit();
+const POW_LIMIT = getNetwork("mainnet").powLimit;
 
 // ---------------------------------------------------------------------------
 // Compact ("nBits") target decoding

@@ -13,8 +13,6 @@ import { validateMerkleProof } from "./merkle-proof";
 import {
   validateHeaderChain,
   planChainUpdate,
-  proofOfWorkLimit,
-  lastPowBlock,
   HeaderValidationError,
   type HeaderChainAnchor,
   type ValidatedHeader,
@@ -273,7 +271,7 @@ export class SPVClient {
   constructor(config: SPVClientConfig) {
     this.headerStore = config.headerStore;
     this.network = config.network;
-    this.powLimit = proofOfWorkLimit();
+    this.powLimit = config.network.powLimit;
     this.startFromCheckpoint = config.startFromCheckpoint ?? false;
 
     const peerManagerConfig: PeerManagerConfig = {
@@ -308,56 +306,14 @@ export class SPVClient {
     // `prevBlock`; without genesis in the store there is no anchor and header
     // validation rejects block 1, so sync (and therefore receiving) never
     // starts.
-    // One read of the tip serves all three startup steps: the corruption check,
-    // the genesis/anchor seed, and the initial height. Each used to issue its
-    // own `SELECT ... ORDER BY height DESC LIMIT 1` on the wallet-start path.
-    const tip = await this.discardCorruptHeaderStore();
+    // The store is repaired and migrated by the storage layer before it is
+    // handed over, so the client can assume it is coherent. One read of the tip
+    // serves both remaining startup steps.
+    const tip = await this.headerStore.getLatestHeader();
     const seeded = await this.ensureStartHeader(tip);
     this.chainHeight = seeded?.height ?? 0;
 
     await this.peerManager.start();
-  }
-
-  /**
-   * Drop the whole header store if its tip does not re-hash to the id recorded
-   * alongside it.
-   *
-   * `@fairco.in/core` 0.2.0–0.3.1 shipped a regressed Quark implementation that
-   * computed the wrong id for every block. A wallet that synced against one of
-   * those builds holds headers keyed by bogus hashes: once the correct hash is
-   * restored, no incoming header's `prevBlock` can ever match the stored tip,
-   * so `processHeadersResponse` rejects every batch as unconnected and sync
-   * stalls silently and permanently.
-   *
-   * One hash of the tip is enough to detect it, and re-syncing headers is
-   * cheap next to a wallet that never confirms another payment. Wallet data
-   * (UTXOs, transactions, notes) is untouched: the rescan that follows the
-   * re-sync re-derives confirmations from the rebuilt chain.
-   */
-  private async discardCorruptHeaderStore(): Promise<
-    StoredBlockHeader | undefined
-  > {
-    const tip = await this.headerStore.getLatestHeader();
-    // Genesis is seeded from network config rather than hashed, so it proves
-    // nothing either way.
-    if (!tip || tip.height === 0) return tip;
-
-    const recomputed = hashBlockHeader({
-      version: tip.version,
-      prevBlock: tip.prevBlock,
-      merkleRoot: tip.merkleRoot,
-      timestamp: tip.timestamp,
-      bits: tip.bits,
-      nonce: tip.nonce,
-      // Not part of the hashed 80 bytes; only the `headers` wire message
-      // carries it.
-      txCount: 0,
-    });
-    if (bytesEqual(recomputed, tip.hash)) return tip;
-
-    await this.headerStore.deleteHeadersAboveHeight(-1);
-    this.chainHeight = 0;
-    return undefined;
   }
 
   /**
@@ -754,7 +710,7 @@ export class SPVClient {
         checkpointHashHex: (height) =>
           getCheckpointHash(height, this.network.name),
         genesisHashHex: this.network.genesisHash,
-        lastPowBlockHeight: lastPowBlock(this.network.name),
+        lastPowBlockHeight: this.network.lastPowBlock,
       });
     } catch (err) {
       if (err instanceof HeaderValidationError) {

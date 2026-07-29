@@ -20,12 +20,9 @@
  */
 
 import { describe, test, expect } from "bun:test";
-import { hashBlockHeader } from "@fairco.in/core";
+import { getNetwork, hashBlockHeader, meetsProofOfWork } from "@fairco.in/core";
 import {
-  meetsProofOfWork,
-  lastPowBlock,
   validateHeaderChain,
-  proofOfWorkLimit,
   HeaderValidationError,
   type HeaderChainAnchor,
 } from "./header-validation";
@@ -169,13 +166,13 @@ describe("meetsProofOfWork", () => {
 
 describe("lastPowBlock", () => {
   test("mirrors chainparams.cpp nLastPOWBlock", () => {
-    expect(lastPowBlock("mainnet")).toBe(10_000);
-    expect(lastPowBlock("testnet")).toBe(200);
+    expect(getNetwork("mainnet").lastPowBlock).toBe(10_000);
+    expect(getNetwork("testnet").lastPowBlock).toBe(200);
   });
 });
 
 describe("validateHeaderChain enforces PoW only in the PoW range", () => {
-  const powLimit = proofOfWorkLimit();
+  const powLimit = getNetwork("mainnet").powLimit;
 
   test("accepts a real PoW header at height 5000", () => {
     const anchor: HeaderChainAnchor = {
@@ -186,7 +183,7 @@ describe("validateHeaderChain enforces PoW only in the PoW range", () => {
       headers: [POW_5000.header],
       anchor,
       powLimit,
-      lastPowBlockHeight: lastPowBlock("mainnet"),
+      lastPowBlockHeight: getNetwork("mainnet").lastPowBlock,
     });
     expect(result[0].height).toBe(5000);
   });
@@ -205,7 +202,7 @@ describe("validateHeaderChain enforces PoW only in the PoW range", () => {
         headers: [tampered],
         anchor,
         powLimit,
-        lastPowBlockHeight: lastPowBlock("mainnet"),
+        lastPowBlockHeight: getNetwork("mainnet").lastPowBlock,
       }),
     ).toThrow(/proof-of-work/i);
   });
@@ -219,7 +216,7 @@ describe("validateHeaderChain enforces PoW only in the PoW range", () => {
       headers: [POS_10001.header],
       anchor,
       powLimit,
-      lastPowBlockHeight: lastPowBlock("mainnet"),
+      lastPowBlockHeight: getNetwork("mainnet").lastPowBlock,
     });
     expect(result[0].height).toBe(10_001);
   });

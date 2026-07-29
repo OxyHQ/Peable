@@ -42,113 +42,17 @@
  * that is sound to enforce header-only.
  */
 
-import type { BlockHeader, NetworkType } from "@fairco.in/core";
-import { bytesEqual, hashBlockHeader } from "@fairco.in/core";
+import type { BlockHeader } from "@fairco.in/core";
+import {
+  bytesEqual,
+  hashBlockHeader,
+  isValidTargetBits,
+  meetsProofOfWork,
+} from "@fairco.in/core";
 import type { BlockHeaderMsg } from "./messages";
 
 // ---------------------------------------------------------------------------
 // Compact ("nBits") target encoding — Bitcoin/FairCoin `uint256::SetCompact`.
-// ---------------------------------------------------------------------------
-
-export interface CompactTarget {
-  /** The decoded 256-bit target value. */
-  readonly target: bigint;
-  /** True if the compact encoding had its sign bit set (an invalid target). */
-  readonly negative: boolean;
-  /** True if the mantissa/exponent combination overflows 256 bits. */
-  readonly overflow: boolean;
-}
-
-const U256_MASK = (1n << 256n) - 1n;
-
-/**
- * Decode a compact difficulty target ("nBits") into a 256-bit value, faithfully
- * reproducing FairCoin's `uint256::SetCompact` including its sign/overflow flags.
- */
-export function compactToTarget(bits: number): CompactTarget {
-  const nSize = (bits >>> 24) & 0xff;
-  const nWord = bits & 0x007fffff;
-
-  let target: bigint;
-  if (nSize <= 3) {
-    target = BigInt(nWord >>> (8 * (3 - nSize)));
-  } else {
-    target = (BigInt(nWord) << BigInt(8 * (nSize - 3))) & U256_MASK;
-  }
-
-  const negative = nWord !== 0 && (bits & 0x00800000) !== 0;
-  const overflow =
-    nWord !== 0 &&
-    (nSize > 34 ||
-      (nWord > 0xff && nSize > 33) ||
-      (nWord > 0xffff && nSize > 32));
-
-  return { target, negative, overflow };
-}
-
-/**
- * The proof-of-work limit (easiest allowed target) for a network, as a 256-bit
- * value. Both FairCoin mainnet and testnet use `~uint256(0) >> 20`
- * (`CTestNetParams` inherits it from `CMainParams`). Only regtest differs, and
- * this wallet never targets regtest.
- */
-export function proofOfWorkLimit(): bigint {
-  return U256_MASK >> 20n;
-}
-
-/**
- * Whether a header's `nBits` encodes a valid, in-range difficulty target.
- *
- * The range half of FairCoin's `CheckProofOfWork`: reject negative, zero,
- * overflowing, or above-limit targets.
- */
-export function isValidTargetBits(bits: number, powLimit: bigint): boolean {
-  const { target, negative, overflow } = compactToTarget(bits);
-  if (negative || overflow) return false;
-  if (target === 0n) return false;
-  if (target > powLimit) return false;
-  return true;
-}
-
-/**
- * Read a block hash as the 256-bit number FairCoin compares against the target.
- *
- * `hashBlockHeader` returns bytes in internal (`uint256` serialisation) order,
- * which is little-endian: byte 0 is the least significant.
- */
-export function hashToUint256(hash: Uint8Array): bigint {
-  let value = 0n;
-  for (let i = hash.length - 1; i >= 0; i--) {
-    value = (value << 8n) | BigInt(hash[i]);
-  }
-  return value;
-}
-
-/**
- * The work half of FairCoin's `CheckProofOfWork`: `hash > bnTarget` is a
- * failure, so equality passes.
- *
- * Only meaningful for PoW-era headers — see rule 3 in the module docblock.
- */
-export function meetsProofOfWork(hash: Uint8Array, bits: number): boolean {
-  const { target, negative, overflow } = compactToTarget(bits);
-  if (negative || overflow || target === 0n) return false;
-  return hashToUint256(hash) <= target;
-}
-
-/**
- * `Params().LAST_POW_BLOCK()` from `chainparams.cpp`. Above this height the
- * chain is proof-of-stake and header-only proof-of-work verification is not
- * applicable; at or below it, `main.cpp` rejects PoS blocks outright, so every
- * header is provably PoW.
- *
- * Kept here beside {@link proofOfWorkLimit} — the other consensus constant the
- * SPV validator needs that is not carried in `NetworkConfig`.
- */
-export function lastPowBlock(network: NetworkType): number {
-  return network === "mainnet" ? 10_000 : 200;
-}
-
 // ---------------------------------------------------------------------------
 // Header chain validation
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import {
   HEADER_BLOB_MIGRATION_SQL,
   needsHeaderBlobMigration,
 } from "./header-blob-migration";
+import { HEADER_HASH_VERSION, planHeaderRepair } from "./header-integrity";
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -260,6 +261,11 @@ const SCHEMA_SQL = `
     use_count INTEGER DEFAULT 1
   );
 
+  CREATE TABLE IF NOT EXISTS schema_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS buy_orders (
     id TEXT PRIMARY KEY,
     fair_amount_sats TEXT NOT NULL,
@@ -350,6 +356,36 @@ export class Database {
     await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+    await this.repairHeaderStore();
+  }
+
+  /**
+   * Drop a header store written by a broken hash implementation, once.
+   *
+   * Runs only while the persisted hash version is behind the current one, so
+   * an intact store costs a single `schema_meta` read per launch rather than a
+   * Quark hash. See `header-integrity.ts` for why this lives here.
+   */
+  private async repairHeaderStore(): Promise<void> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'header_hash_version'",
+    );
+    const storedVersion = row ? Number(row.value) : 0;
+
+    const tip = await this.getLatestHeader();
+    const plan = planHeaderRepair(storedVersion, tip);
+    if (plan === "up-to-date") return;
+
+    if (plan === "wipe") {
+      await this.db.runAsync("DELETE FROM block_headers");
+      // The rescan is described in heights of a chain that no longer exists.
+      await this.db.runAsync("DELETE FROM rescan_state");
+    }
+
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('header_hash_version', ?)",
+      String(HEADER_HASH_VERSION),
+    );
   }
 
   /**
