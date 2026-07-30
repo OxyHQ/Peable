@@ -3,15 +3,44 @@
  * Polls the Explorer API for current price data and caches it locally.
  */
 
+import { z } from 'zod';
 import { EXPLORER_BASE_URL } from '@fairco.in/core';
 
 const EXPLORER_API = EXPLORER_BASE_URL;
 const PRICE_POLL_INTERVAL = 60_000; // 1 minute
 
+/**
+ * `GET /api/price` on the wire.
+ *
+ * Mirrors `PricePayload` in the Explorer's `server/lib/price-service.ts`: a FLAT
+ * `price` number, not a per-currency object. This parser used to read
+ * `data.price.usd` and `data.change_24h.usd`, a shape the server has never
+ * returned; because a number is truthy the `if (!data.price)` guard passed, and
+ * every conversion downstream evaluated to `NaN` on real devices.
+ *
+ * Extra fields the app does not render (`volume24h`, `liquidityUsd`,
+ * `marketCapUsd`, `source`) are stripped by Zod rather than declared, so the
+ * server can add to the payload without breaking the wallet.
+ *
+ * `price` is nullable by contract — the route documents that it is `null` only
+ * when every upstream source is unavailable — and `change24h` is legitimately
+ * `0`, so neither may be treated as "missing" by truthiness.
+ */
+const priceResponseSchema = z.object({
+  price: z.number().nullable(),
+  change24h: z.number().nullable().default(null),
+  updatedAt: z.string().optional(),
+});
+
+/**
+ * The price as the app uses it.
+ *
+ * USD only: the endpoint quotes FAIR against USD and has no other currency in
+ * it. The `eur` and `btc` fields this type used to carry were never populated
+ * by any server response and were read by nothing.
+ */
 export interface PriceData {
   usd: number;
-  eur: number;
-  btc: number;
   change24h: number | null;
   timestamp: number;
 }
@@ -43,20 +72,28 @@ export async function fetchPrice(): Promise<PriceData | null> {
     const response = await fetch(`${EXPLORER_API}/api/price`);
     if (!response.ok) return cachedPrice;
 
-    const data = (await response.json()) as {
-      price?: { usd: number; eur: number; btc: number } | null;
-      change_24h?: { usd: number } | null;
-      timestamp?: string;
-    };
+    const parsed = priceResponseSchema.safeParse(await response.json());
+    // A body this build cannot read is treated exactly like an unreachable
+    // server: keep the last good quote rather than publishing a broken one.
+    // Unlike `market.ts` this fetcher never throws — it backs a
+    // `useSyncExternalStore` snapshot, not a React Query fetcher.
+    if (!parsed.success) return cachedPrice;
 
-    if (!data.price) return cachedPrice;
+    // Null when every upstream source is down. There is no quote to publish,
+    // and zero is not one.
+    if (parsed.data.price === null) return cachedPrice;
+
+    // `updatedAt` is when the quote was observed, not when it was fetched, so a
+    // cached upstream response keeps its original stamp. An absent or
+    // unparseable one falls back to now.
+    const observedAt = parsed.data.updatedAt
+      ? new Date(parsed.data.updatedAt).getTime()
+      : Number.NaN;
 
     const next: PriceData = {
-      usd: data.price.usd,
-      eur: data.price.eur,
-      btc: data.price.btc,
-      change24h: data.change_24h?.usd ?? null,
-      timestamp: data.timestamp ? new Date(data.timestamp).getTime() : Date.now(),
+      usd: parsed.data.price,
+      change24h: parsed.data.change24h,
+      timestamp: Number.isFinite(observedAt) ? observedAt : Date.now(),
     };
 
     // Keep the previous object when nothing moved. `getCachedPrice` is a
@@ -66,8 +103,6 @@ export async function fetchPrice(): Promise<PriceData | null> {
     const moved =
       cachedPrice === null ||
       cachedPrice.usd !== next.usd ||
-      cachedPrice.eur !== next.eur ||
-      cachedPrice.btc !== next.btc ||
       cachedPrice.change24h !== next.change24h;
     if (!moved) return cachedPrice;
 
