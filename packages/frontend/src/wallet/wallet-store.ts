@@ -1728,7 +1728,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // public-only KeyManager, so the store, the tabs and the home screen are
     // the same code they are on the phone.
     if (Platform.OS === "web") {
-      const xpub = await getWalletXpub(get().network);
+      // A gateway that cannot be reached is NOT a broken wallet, and must not
+      // be reported as one: the entry screen's error branch tells the user to
+      // wipe and restore, which is destructive advice for an outage. Treat it
+      // the same as "no key published yet" — the screen then asks them to open
+      // the phone, which is harmless if wrong and correct most of the time.
+      let xpub: string | null = null;
+      try {
+        xpub = await getWalletXpub(get().network);
+      } catch (error: unknown) {
+        console.debug("[wallet] could not read the published xpub", error);
+      }
       if (!xpub) {
         return "no-published-key";
       }
