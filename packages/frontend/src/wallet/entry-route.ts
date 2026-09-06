@@ -6,17 +6,19 @@
  * Order (spec §4.2): resolve auth → sign in with Oxy → (native) derive wallet
  * or route keyless accounts to create an Oxy ID → PIN gate → home.
  *
- * `read-only` is signed in WITH NO SPEND CAPABILITY — not an unsupported
- * platform. The identity seed derives from a key held in the on-device keystore
- * (`@oxyhq/core` keyManager — "never leave the device"), and a browser has no
- * equivalent, so it can never SIGN. Everything else needs no private key: the
- * balance and history are public chain data, the receive address derives from a
- * public xpub, and the payment history is the caller's own row in the gateway.
+ * There is NO web branch here. A browser with a published account xpub is an
+ * initialized wallet like any other, and goes to the same tabs through the same
+ * PIN gate — same store, same screens, same everything. What a browser cannot
+ * do is SIGN, and that is handled where signing happens, not at the door.
  *
- * The screen renders that surface IN PLACE rather than navigating to it. The
- * predecessor redirected to `/@you`, which put the browser on a screen whose
- * back arrow fell through to `(tabs)` — the wallet this branch exists to say is
- * impossible here.
+ * `link-device` is the one genuinely web-shaped state, and it is about a missing
+ * INPUT rather than a host: the address tree derives from a seed produced by
+ * HKDF over the on-device identity private key, so a browser can only show the
+ * wallet once the phone has published the public half. Two predecessors named
+ * the host instead (`web-unsupported`, then `no-keystore`) and the screen acted
+ * on them by rendering somewhere else — which is how the entry screen came to
+ * redirect to `/@you` and strand the browser on a page whose back arrow fell
+ * through into a wallet UI with no wallet behind it.
  */
 
 import type { IdentityInitResult } from "./wallet-store";
@@ -28,7 +30,7 @@ export type EntryRoute = {
     | "create-identity"
     | "needs-pin"
     | "ready"
-    | "read-only";
+    | "link-device";
 };
 
 export function decideEntryRoute(input: {
@@ -44,7 +46,7 @@ export function decideEntryRoute(input: {
 
   // Signed in: the identity/wallet probe runs asynchronously; wait for it.
   if (identityInit === null) return { kind: "loading" };
-  if (identityInit === "no-keystore") return { kind: "read-only" };
+  if (identityInit === "no-published-key") return { kind: "link-device" };
   if (identityInit === "no-identity") return { kind: "create-identity" };
 
   // Wallet initialized: PIN gate before any authenticated screen (spec §7).

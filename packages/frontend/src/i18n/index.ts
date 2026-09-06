@@ -82,16 +82,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "profile.notFound.description": "That handle isn't registered on Oxy. Check the spelling, or ask them for their link.",
     "profile.error.title": "Couldn't load this profile",
     "profile.error.description": "Something went wrong reaching Oxy. Check your connection and try again.",
-    "readOnly.title": "You're signed in on the web",
-    "readOnly.subtitle": "Spending needs the key on your phone, so this browser can't send. Everything below needs no key at all.",
-    "readOnly.history.title": "Your Peable payments",
-    "readOnly.history.empty": "No payments yet. Share your code above and they'll show up here.",
-    "readOnly.history.sent": "Sent to {name}",
-    "readOnly.history.received": "Received from {name}",
-    "readOnly.history.unknownParty": "someone",
-    "readOnly.history.unclaimed": "{amount} FAIR still on this address",
-    "readOnly.history.error": "Couldn't load your payments. Check your connection and try again.",
-    "readOnly.balanceNote": "This is what Peable minted for you, not your whole wallet balance — that lives on your phone.",
+    "linkDevice.title": "Open Peable on your phone once",
+    "linkDevice.subtitle": "Your wallet's addresses come from a key that never leaves your phone. Open the app there once and this browser will show the same wallet — balance, history and all.",
+    "linkDevice.retry": "I've opened it",
     "profile.self": "This is you. Share this code or your link so people can send you FAIR.",
     "profile.send": "Send FAIR to {name}",
     "profile.reserving": "Preparing address...",
@@ -398,12 +391,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.biometrics.unavailable.title": "Biometrics Unavailable",
     "settings.biometrics.verifyPrompt": "Verify biometrics to enable",
     "settings.biometrics.updateError": "Failed to update biometrics setting.",
-<<<<<<< HEAD
     "settings.backup.exportDialogTitle": "Save Peable backup",
     "settings.backup.saved.title": "Backup saved",
-=======
-    "settings.backup.exportDialogTitle": "Save FAIRWallet backup",
->>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     "settings.backup.saved.description":
       "Saved to {path}. Sharing is not available on this platform.",
     "settings.backup.exportFailed": "Export failed",
@@ -503,64 +492,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "index.error.load": "Failed to load wallet",
     "index.error.help": "Try restarting the app or wiping and restoring your wallet.",
 
-<<<<<<< HEAD
-=======
-    // ---------- Wallets manager ----------
-    "wallets.title": "Wallets",
-    "wallets.subtitle.one": "{count} wallet - Tap to switch, long-press to delete",
-    "wallets.subtitle.other": "{count} wallets - Tap to switch, long-press to delete",
-    "wallets.switching": "Switching wallet...",
-    "wallets.loading": "Loading...",
-    "wallets.empty.title": "No wallets found",
-    "wallets.empty.subtitle": "Create or import one below",
-    "wallets.createdOn": "Created {date}",
-    "wallets.active": "Active",
-    "wallets.createCta": "Create New Wallet",
-    "wallets.importCta": "Import Wallet",
-    "wallets.watchOnlyCta": "Watch Only (xpub)",
-    "wallets.create.title": "Create New Wallet",
-    "wallets.create.nameLabel": "Wallet Name",
-    "wallets.create.namePlaceholder": "My Wallet",
-    "wallets.create.error.nameRequired": "Please enter a wallet name.",
-    "wallets.create.cta": "Create",
-    "wallets.create.error.failed": "Failed to create wallet. Please try again.",
-    "wallets.import.title": "Import Wallet",
-    "wallets.import.nameLabel": "Wallet Name",
-    "wallets.import.namePlaceholder": "My Wallet",
-    "wallets.import.phraseLabel": "Recovery Phrase",
-    "wallets.import.phrasePlaceholder": "Enter 12 or 24 word recovery phrase",
-    "wallets.import.error.nameRequired": "Please enter a wallet name.",
-    "wallets.import.error.phraseRequired": "Please enter the recovery phrase.",
-    "wallets.import.error.wordCount": "Recovery phrase must be 12 or 24 words.",
-    "wallets.import.cta": "Import",
-    "wallets.import.failed.description":
-      "Could not import wallet. Check your recovery phrase and try again.",
-    "wallets.watchOnly.title": "Watch-Only Wallet",
-    "wallets.watchOnly.nameLabel": "Wallet Name",
-    "wallets.watchOnly.namePlaceholder": "My Watch Wallet",
-    "wallets.watchOnly.xpubLabel": "Extended Public Key (xpub)",
-    "wallets.watchOnly.xpubPlaceholder": "xpub...",
-    "wallets.watchOnly.error.nameRequired": "Please enter a wallet name.",
-    "wallets.watchOnly.error.xpubRequired":
-      "Please enter the extended public key (xpub).",
-    "wallets.watchOnly.error.xpubFormat":
-      "That doesn't look like a valid extended public key. Paste the account xpub from your wallet's export.",
-    "wallets.watchOnly.cta": "Import Watch-Only",
-    "wallets.watchOnly.imported.description":
-      "Watch-only wallet imported. You can view balances and addresses, but sending is disabled.",
-    "wallets.watchOnly.failed.description":
-      "Could not import watch-only wallet. Check your xpub and try again.",
-    "wallets.mnemonic.title": "Recovery Phrase",
-    "wallets.mnemonic.description":
-      "Write down these words in order. They are the only way to recover this wallet.",
-    "wallets.mnemonic.cta": "I've Written It Down",
-    "wallets.delete.title": "Delete Wallet",
-    "wallets.delete.description":
-      "Are you sure you want to delete \"{name}\"? This action cannot be undone. Make sure you have the recovery phrase backed up.",
-    "wallets.cannotDelete.description":
-      "You must have at least one wallet. Create a new wallet before deleting this one.",
-
->>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     // ---------- Pockets ----------
     "pockets.title": "Pockets",
     "pockets.subtitle.one": "{count} pocket",
@@ -967,16 +898,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "profile.notFound.description": "Ese usuario no está registrado en Oxy. Revisa cómo se escribe o pídele su enlace.",
     "profile.error.title": "No se pudo cargar el perfil",
     "profile.error.description": "Hubo un problema al contactar con Oxy. Revisa tu conexión e inténtalo de nuevo.",
-    "readOnly.title": "Has iniciado sesión en la web",
-    "readOnly.subtitle": "Gastar necesita la clave de tu móvil, así que este navegador no puede enviar. Todo lo de abajo no necesita ninguna clave.",
-    "readOnly.history.title": "Tus pagos de Peable",
-    "readOnly.history.empty": "Todavía no hay pagos. Comparte tu código de arriba y aparecerán aquí.",
-    "readOnly.history.sent": "Enviado a {name}",
-    "readOnly.history.received": "Recibido de {name}",
-    "readOnly.history.unknownParty": "alguien",
-    "readOnly.history.unclaimed": "{amount} FAIR todavía en esta dirección",
-    "readOnly.history.error": "No se pudieron cargar tus pagos. Revisa la conexión e inténtalo otra vez.",
-    "readOnly.balanceNote": "Esto es lo que Peable acuñó para ti, no el saldo entero de tu monedero — ese vive en tu móvil.",
+    "linkDevice.title": "Abre Peable en tu m\u00f3vil una vez",
+    "linkDevice.subtitle": "Las direcciones de tu monedero salen de una clave que nunca sale de tu m\u00f3vil. Abre la app all\u00ed una vez y este navegador ense\u00f1ar\u00e1 el mismo monedero: saldo, historial y todo.",
+    "linkDevice.retry": "Ya la he abierto",
     "profile.self": "Eres tú. Comparte este código o tu enlace para que te envíen FAIR.",
     "profile.send": "Enviar FAIR a {name}",
     "profile.reserving": "Preparando dirección...",
@@ -1289,12 +1213,8 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.biometrics.verifyPrompt": "Verifica biometr\u00eda para activar",
     "settings.biometrics.updateError":
       "Fall\u00f3 la actualizaci\u00f3n del ajuste biom\u00e9trico.",
-<<<<<<< HEAD
     "settings.backup.exportDialogTitle": "Guardar respaldo de Peable",
     "settings.backup.saved.title": "Respaldo guardado",
-=======
-    "settings.backup.exportDialogTitle": "Guardar respaldo de FAIRWallet",
->>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     "settings.backup.saved.description":
       "Guardado en {path}. Compartir no est\u00e1 disponible en esta plataforma.",
     "settings.backup.exportFailed": "Fall\u00f3 la exportaci\u00f3n",
@@ -1403,73 +1323,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "index.error.help":
       "Intenta reiniciar la app o borrar y restaurar tu billetera.",
 
-<<<<<<< HEAD
-=======
-    // ---------- Wallets manager ----------
-    "wallets.title": "Billeteras",
-    "wallets.subtitle.one":
-      "{count} billetera - Toca para cambiar, mant\u00e9n presionado para eliminar",
-    "wallets.subtitle.other":
-      "{count} billeteras - Toca para cambiar, mant\u00e9n presionado para eliminar",
-    "wallets.switching": "Cambiando billetera...",
-    "wallets.loading": "Cargando...",
-    "wallets.empty.title": "No se encontraron billeteras",
-    "wallets.empty.subtitle": "Crea o importa una a continuaci\u00f3n",
-    "wallets.createdOn": "Creada {date}",
-    "wallets.active": "Activa",
-    "wallets.createCta": "Crear Nueva Billetera",
-    "wallets.importCta": "Importar Billetera",
-    "wallets.watchOnlyCta": "Solo Lectura (xpub)",
-    "wallets.create.title": "Crear Nueva Billetera",
-    "wallets.create.nameLabel": "Nombre de Billetera",
-    "wallets.create.namePlaceholder": "Mi Billetera",
-    "wallets.create.error.nameRequired":
-      "Por favor, ingresa un nombre de billetera.",
-    "wallets.create.cta": "Crear",
-    "wallets.create.error.failed":
-      "Fall\u00f3 la creaci\u00f3n de la billetera. Int\u00e9ntalo de nuevo.",
-    "wallets.import.title": "Importar Billetera",
-    "wallets.import.nameLabel": "Nombre de Billetera",
-    "wallets.import.namePlaceholder": "Mi Billetera",
-    "wallets.import.phraseLabel": "Frase de Recuperaci\u00f3n",
-    "wallets.import.phrasePlaceholder":
-      "Ingresa la frase de recuperaci\u00f3n de 12 o 24 palabras",
-    "wallets.import.error.nameRequired":
-      "Por favor, ingresa un nombre de billetera.",
-    "wallets.import.error.phraseRequired":
-      "Por favor, ingresa la frase de recuperaci\u00f3n.",
-    "wallets.import.error.wordCount":
-      "La frase de recuperaci\u00f3n debe tener 12 o 24 palabras.",
-    "wallets.import.cta": "Importar",
-    "wallets.import.failed.description":
-      "No se pudo importar la billetera. Revisa tu frase de recuperaci\u00f3n e int\u00e9ntalo de nuevo.",
-    "wallets.watchOnly.title": "Billetera de Solo Lectura",
-    "wallets.watchOnly.nameLabel": "Nombre de Billetera",
-    "wallets.watchOnly.namePlaceholder": "Mi Billetera de Lectura",
-    "wallets.watchOnly.xpubLabel": "Clave P\u00fablica Extendida (xpub)",
-    "wallets.watchOnly.xpubPlaceholder": "xpub...",
-    "wallets.watchOnly.error.nameRequired":
-      "Por favor, ingresa un nombre de billetera.",
-    "wallets.watchOnly.error.xpubRequired":
-      "Por favor, ingresa la clave p\u00fablica extendida (xpub).",
-    "wallets.watchOnly.error.xpubFormat":
-      "Eso no parece una clave p\u00fablica extendida v\u00e1lida. Pega el xpub de cuenta exportado por tu billetera.",
-    "wallets.watchOnly.cta": "Importar Solo Lectura",
-    "wallets.watchOnly.imported.description":
-      "Billetera de solo lectura importada. Puedes ver saldos y direcciones, pero el env\u00edo est\u00e1 deshabilitado.",
-    "wallets.watchOnly.failed.description":
-      "No se pudo importar la billetera de solo lectura. Revisa tu xpub e int\u00e9ntalo de nuevo.",
-    "wallets.mnemonic.title": "Frase de Recuperaci\u00f3n",
-    "wallets.mnemonic.description":
-      "Escribe estas palabras en orden. Son la \u00fanica forma de recuperar esta billetera.",
-    "wallets.mnemonic.cta": "La He Anotado",
-    "wallets.delete.title": "Eliminar Billetera",
-    "wallets.delete.description":
-      "\u00bfEst\u00e1s seguro de eliminar \"{name}\"? Esta acci\u00f3n no se puede deshacer. Aseg\u00farate de tener respaldada la frase de recuperaci\u00f3n.",
-    "wallets.cannotDelete.description":
-      "Debes tener al menos una billetera. Crea una nueva billetera antes de eliminar esta.",
-
->>>>>>> 5a5f053 (refactor: finish toast migration + wire wallet delete + drop dead i18n keys)
     // ---------- Bolsillos ----------
     "pockets.title": "Bolsillos",
     "pockets.subtitle.one": "{count} bolsillo",

@@ -17,20 +17,26 @@ describe("decideEntryRoute", () => {
   // An unrecognised `identityInit` falls through to "loading", so a rename that
   // changed the probe result and the route together would go green while the
   // screen hung forever. This asserts the exact pair the store actually emits.
-  test("signed in with no keystore → the read-only surface", () => {
-    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "no-keystore", hasPinConfigured: null }).kind).toBe("read-only");
+  test("signed in, no device has published a key → link this browser", () => {
+    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "no-published-key", hasPinConfigured: null }).kind).toBe("link-device");
   });
 
   /**
-   * The rename this replaces was not cosmetic. `"web-unsupported"` named the
-   * PLATFORM, and the entry screen acted on it by redirecting away — which sent
-   * the browser to a screen whose back arrow fell through to `(tabs)`, the very
-   * wallet the branch exists to say is impossible. What is actually absent is
-   * the on-device keystore the identity seed derives from; everything a browser
-   * CAN do (balance, history, receiving) needs no key at all.
+   * The web build is NOT a separate kind of surface. Once a signing device has
+   * published its account xpub, `initializeFromIdentity` returns "initialized"
+   * on web exactly as it does on the phone, and the browser goes to the same
+   * tabs through the same PIN gate. The names this replaces (`web-unsupported`,
+   * `no-keystore`) both described a host rather than a missing input, and the
+   * screen acted on them by rendering somewhere else.
    */
-  test("the retired platform-shaped name no longer routes anywhere", () => {
-    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "web-unsupported" as never, hasPinConfigured: null }).kind).toBe("loading");
+  test("web with a published key is just an initialized wallet", () => {
+    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "initialized", hasPinConfigured: true }).kind).toBe("ready");
+  });
+
+  test("the retired host-shaped names no longer route anywhere", () => {
+    for (const retired of ["web-unsupported", "no-keystore"]) {
+      expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: retired as never, hasPinConfigured: null }).kind).toBe("loading");
+    }
   });
 
   test("signed in, keyless account → create Oxy ID", () => {

@@ -5,7 +5,7 @@
  *   signed out          -> "Sign in with Oxy"
  *   signed in, keyless  -> "Set up your Oxy ID"
  *   signed in, native   -> derive the identity wallet -> PIN gate -> (tabs)
- *   no keystore         -> read-only: handle, QR to receive, payment history
+ *   no published key    -> ask the phone to publish its watch-only key once
  *
  * This screen is the sole authority for the swap; it renders neutral in-place
  * branches and never navigates a child across the boundary.
@@ -21,11 +21,10 @@ import { hasPin } from "../src/storage/secure-store";
 import { decideEntryRoute } from "../src/wallet/entry-route";
 import { Button } from "../src/ui/components/Button";
 import { CreateOxyIdView } from "../src/ui/components/CreateOxyIdView";
-import { ReadOnlyWalletView } from "../src/ui/components/ReadOnlyWalletView";
 import { t } from "../src/i18n";
 
 export default function IndexScreen() {
-  const { isAuthResolved, isAuthenticated, signIn, user } = useAuth();
+  const { isAuthResolved, isAuthenticated, signIn } = useAuth();
   const initializeFromIdentity = useWalletStore((s) => s.initializeFromIdentity);
   const initialized = useWalletStore((s) => s.initialized);
   const markNoPinUnlocked = useLockStore((s) => s.markNoPinUnlocked);
@@ -40,6 +39,12 @@ export default function IndexScreen() {
       let cancelled = false;
       const boot = async () => {
         if (!isAuthResolved || !isAuthenticated) return;
+        // Probe exactly when there is no result. `identityInit` is therefore a
+        // DEPENDENCY and not just state this writes: the link-device retry
+        // clears it, and that alone re-runs this. A separate attempt counter
+        // would be a dependency the body never reads — which is the shape that
+        // silently stops re-running the day someone tidies the array.
+        if (identityInit !== null) return;
         try {
           const pinSet = await hasPin();
           const result: IdentityInitResult = initialized
@@ -71,6 +76,7 @@ export default function IndexScreen() {
       initializeFromIdentity,
       markNoPinUnlocked,
       resolveInitialLock,
+      identityInit,
     ]),
   );
 
@@ -102,36 +108,39 @@ export default function IndexScreen() {
       );
     case "create-identity":
       return <CreateOxyIdView />;
-    // No keystore here, so no identity seed, so no signing. Everything else a
-    // wallet does needs no private key, and this branch renders it IN PLACE —
-    // the same way `signin` and `create-identity` do, and the way this screen's
-    // own contract says it works.
+    // The one genuinely browser-shaped state, and it is a missing INPUT rather
+    // than a host: the address tree derives from a seed produced by HKDF over
+    // the on-device identity private key, so this surface can only show the
+    // wallet once the phone has published the public half. Once it has,
+    // `initializeFromIdentity` returns "initialized" here exactly as on the
+    // phone and the browser goes to the same tabs — there is no web branch
+    // beyond this one.
     //
-    // It used to `<Redirect>` to `/@you`. That handed the browser a screen with
-    // a back arrow whose fallback is `router.replace("/(tabs)")`, so one tap
-    // opened the wallet UI this branch exists to rule out — and because a route
-    // group adds no URL segment, `(tabs)` and this screen both answer `/`, so
-    // the entry decision re-ran and bounced straight back. The bug was the
-    // navigation, not the destination.
-    //
-    // `username` is always present here: this branch is only reachable once
-    // `isAuthenticated` is true. The fallback exists so a malformed session
-    // cannot render a blank screen.
-    case "read-only":
-      return user?.username ? (
-        <View className="flex-1 bg-background">
-          <ReadOnlyWalletView
-            username={user.username}
-            displayName={user.name?.displayName ?? undefined}
-            avatarFileId={user.avatar ?? undefined}
-          />
-        </View>
-      ) : (
+    // Rendered IN PLACE, like every other branch on this screen. The version
+    // that redirected to `/@you` landed the browser on a page whose back arrow
+    // falls through to `router.replace("/(tabs)")`, and since a route group adds
+    // no URL segment both answer `/` — so the entry decision re-ran and bounced
+    // back, flashing a wallet UI with no wallet behind it.
+    case "link-device":
+      return (
         <View className="flex-1 bg-background items-center justify-center px-8">
-          <Text className="text-foreground text-2xl text-center mb-3">{t("onboarding.webFallbackTitle")}</Text>
-          <Text className="text-muted-foreground text-base text-center">{t("onboarding.webFallbackSubtitle")}</Text>
+          <Text className="text-foreground text-2xl text-center mb-3">
+            {t("linkDevice.title")}
+          </Text>
+          <Text className="text-muted-foreground text-base text-center mb-8 leading-6">
+            {t("linkDevice.subtitle")}
+          </Text>
+          <View className="w-full">
+            <Button
+              title={t("linkDevice.retry")}
+              onPress={() => setIdentityInit(null)}
+              variant="secondary"
+              size="lg"
+            />
+          </View>
         </View>
       );
+
     case "loading":
     default:
       return (

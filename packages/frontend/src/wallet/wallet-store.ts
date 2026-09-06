@@ -31,6 +31,7 @@ import { planRescan, type RescanProgress } from "../p2p/rescan";
 import { DatabaseHeaderStore } from "../p2p/header-store";
 import { createSocketProvider } from "../p2p/socket-provider";
 import { KeyManager } from "./key-manager";
+import { discoverUtxos } from "./explorer-sync";
 import { loadWatchAddressesIntoKeyManager } from "./multisig";
 import { resolveMoveDestinationAddress } from "./move-address";
 import {
@@ -91,7 +92,11 @@ import {
   getSocialReceiveSpendingKey,
   computeWindowExtension,
 } from "./social-receive";
-import { getSocialReceiveCursor } from "../services/gateway-client";
+import {
+  getSocialReceiveCursor,
+  getWalletXpub,
+  publishWalletXpub,
+} from "../services/gateway-client";
 import {
   getPockets,
   savePockets,
@@ -115,7 +120,10 @@ import {
 
 export type FeeLevel = "low" | "medium" | "high";
 
-export type IdentityInitResult = "initialized" | "no-identity" | "no-keystore";
+export type IdentityInitResult =
+  | "initialized"
+  | "no-identity"
+  | "no-published-key";
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -252,6 +260,11 @@ export interface WalletState {
   createWallet: () => Promise<string>;
   restoreWallet: (mnemonic: string) => Promise<void>;
   refreshBalance: () => void;
+  /**
+   * Rebuild the UTXO set from the Explorer, for a surface with no SPV.
+   * No-op wherever the P2P sync is running — that is the source of truth there.
+   */
+  syncFromExplorer: () => Promise<void>;
   getNewAddress: () => string;
   getBuyDeliveryAddress: () => Promise<string>;
   sendTransaction: (
@@ -1705,18 +1718,27 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   initializeFromIdentity: async (onReady?: () => void): Promise<IdentityInitResult> => {
-    // The IDENTITY-derived wallet needs the on-device keystore the identity key
-    // lives in (`@oxyhq/core` keyManager -> expo-secure-store). `Platform.OS`
-    // is the current proxy for "is that keystore here": a browser has none.
+    // No keystore here (`@oxyhq/core` keyManager -> expo-secure-store), so no
+    // seed, so no signing. `Platform.OS` is the current proxy for that one
+    // question — a browser has no keystore.
     //
-    // This is narrower than "the wallet does not work on web". The BIP39 and
-    // watch-only paths below (`createNewWallet`, `importWallet`,
-    // `importWatchOnly`) carry no platform gate and write through
-    // `storage/kv-store.ts`, which has a real web branch — Peable's fork of
-    // FAIRWallet deleted the create/restore SCREENS, not the capability. What a
-    // browser genuinely cannot do is derive THIS seed, and therefore sign.
+    // It can still BE the wallet, read-only. The signing device publishes its
+    // account xpub, and everything downstream — addresses, balance, history —
+    // derives from that public key. `initialize` routes the `xpub:` marker to a
+    // public-only KeyManager, so the store, the tabs and the home screen are
+    // the same code they are on the phone.
     if (Platform.OS === "web") {
-      return "no-keystore";
+      const xpub = await getWalletXpub(get().network);
+      if (!xpub) {
+        return "no-published-key";
+      }
+      await get().initialize(
+        `${XPUB_MARKER_PREFIX}${xpub}`,
+        OXY_IDENTITY_WALLET_ID,
+        onReady,
+      );
+      await get().syncFromExplorer();
+      return "initialized";
     }
     const seed = await deriveIdentitySeed();
     if (!seed) {
@@ -1726,6 +1748,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // `activeId === OXY_IDENTITY_WALLET_ID`, which is always true here) —
     // no separate step needed.
     await get().initialize(buildSeedSecret(seed), OXY_IDENTITY_WALLET_ID, onReady);
+
+    // Publish the account WATCH-ONLY key so this user's browser can show the
+    // same wallet. Best-effort and never fatal: a wallet that works offline
+    // must not fail to open because the gateway was unreachable, and the next
+    // boot republishes. `upsertWalletXpub` is idempotent.
+    const accountXpub = getActiveAccountXpub();
+    if (accountXpub) {
+      try {
+        await publishWalletXpub(get().network, accountXpub);
+      } catch (error: unknown) {
+        console.debug("[wallet] publishing the account xpub failed", error);
+      }
+    }
+
     return "initialized";
   },
 
@@ -1834,6 +1870,39 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       confirmedBalance: utxoSet.getConfirmedBalance(),
       unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
     });
+  },
+
+  /**
+   * Rebuild the UTXO set from the Explorer.
+   *
+   * The web build has no TCP socket, so `p2p/` cannot build the set there. This
+   * fills the SAME `utxoSet` the SPV path fills — which is why the home screen,
+   * the balance and coin selection need no web-specific branch of their own. A
+   * second source of truth for the balance would be a second number to be wrong.
+   *
+   * Replaces the set rather than merging: the Explorer's answer is the whole
+   * current picture, so a merge would keep outputs that have since been spent
+   * and overstate the balance.
+   */
+  syncFromExplorer: async (): Promise<void> => {
+    if (!keyManager) {
+      return;
+    }
+    set({ isSyncing: true });
+    try {
+      const discovered = await discoverUtxos(keyManager, get().network);
+      const fresh = new UTXOSet();
+      for (const utxo of discovered) {
+        fresh.add(utxo);
+      }
+      utxoSet = fresh;
+      publishBalance(set);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Unknown explorer error";
+      setNetworkStatus(set, "wallet.network.error", { message });
+    } finally {
+      set({ isSyncing: false });
+    }
   },
 
   getNewAddress: (): string => {

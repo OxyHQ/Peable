@@ -5,6 +5,7 @@ import type {
   SocialReceiveCursorResponse,
   EnrichmentResult,
   SocialPaymentsResponse,
+  WalletXpubResponse,
 } from '@peable.to/shared-types';
 import { oxyServices } from '@/services/oxy-services';
 import { GATEWAY_API_URL } from '@/config';
@@ -146,4 +147,27 @@ export async function getMyPayments(
   return gateway.client.get<SocialPaymentsResponse>('/v1/social/me/payments', {
     params: { network },
   });
+}
+
+/**
+ * Publish this device's account WATCH-ONLY key so the same user's other
+ * surfaces can show the wallet.
+ *
+ * Called by the device that HOLDS the signing key. A browser has no keystore
+ * and therefore no seed, so it cannot derive the address tree itself — see the
+ * backend route for why nothing already published about a user lets it.
+ *
+ * The key cannot sign. The gateway refuses an extended key that carries a
+ * private key before storing it.
+ */
+export async function publishWalletXpub(network: NetworkType, xpub: string): Promise<void> {
+  await gateway.client.put<void>('/v1/wallet/me/xpub', { network, xpub });
+}
+
+/** This user's published account xpub, or `null` if no device has published one. */
+export async function getWalletXpub(network: NetworkType): Promise<string | null> {
+  const response = await gateway.client.get<WalletXpubResponse>('/v1/wallet/me/xpub', {
+    params: { network },
+  });
+  return response.xpub;
 }
