@@ -1,5 +1,6 @@
 import { afterAll, beforeAll } from 'bun:test';
-import { sql } from 'drizzle-orm';
+import { getTableName, is, sql } from 'drizzle-orm';
+import { PgTable } from 'drizzle-orm/pg-core';
 import { deriveKeyFromSeed, getNetwork, mnemonicToSeed } from '@fairco.in/core';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxyhq/core/server';
@@ -31,6 +32,7 @@ import {
   recordDeliveryAttempt,
 } from '../../db/webhooks/webhookOutboxRepository';
 import { toPaymentIntentDTO } from '../../lib/serialize';
+import * as schema from '../../db/schema';
 import type { Database } from '../../db/postgres';
 import {
   createSuiteDatabase,
@@ -137,16 +139,45 @@ export function useGatewayDatabase(): void {
 }
 
 /**
+ * Every table this application owns, DERIVED from the schema barrel rather than
+ * listed.
+ *
+ * This used to be a hand-written list with a comment saying a new table "has to
+ * be added here on purpose". It did not: `disputes` was added and nothing said
+ * so. Postgres caught that one only because `disputes` carries a foreign key
+ * into `payment_intents`, so truncating the referenced table without it is an
+ * error — a new table with NO foreign key into the list would instead have kept
+ * its rows across every reset, and the first symptom would have been a suite
+ * failing on state a different case left behind.
+ *
+ * The barrel is the right source because it is the SAME module drizzle-kit
+ * generates DDL from, so a table that exists in the database and not here is a
+ * table no migration in this repo created.
+ */
+const OWNED_TABLES: readonly string[] = (Object.values(schema) as unknown[])
+  .filter((value): value is PgTable => is(value, PgTable))
+  .map((table) => getTableName(table));
+
+/**
  * Empty every table, for a suite that used to call `Model.deleteMany({})`
  * between cases.
  *
- * One statement in dependency order rather than seven — `truncate ... cascade`
- * would also reach tables a future migration adds and silently empty them, so
- * the list is explicit and a new table has to be added here on purpose.
+ * ONE statement, not one per table: `truncate a, b, c` satisfies the foreign
+ * key check by emptying referencing and referenced tables together, which is
+ * why no dependency ordering is needed and why `cascade` — which would reach
+ * outside the set — is not used.
  */
 export async function resetGatewayTables(): Promise<void> {
+  if (OWNED_TABLES.length === 0) {
+    throw new Error(
+      'resetGatewayTables: the schema barrel exported no tables, so a reset would silently empty nothing'
+    );
+  }
   await gatewayDb().execute(
-    sql`truncate refunds, transfers, connected_accounts, webhook_deliveries, checkout_sessions, payment_links, payment_intents, provider_events, social_send_attributions, social_receive_cursors, merchants restart identity`
+    sql`truncate ${sql.join(
+      OWNED_TABLES.map((name) => sql.identifier(name)),
+      sql`, `
+    )} restart identity`
   );
 }
 

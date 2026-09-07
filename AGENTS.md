@@ -171,8 +171,8 @@ the key the address derives from is the one the reservation was taken against.
 ## Backend surface
 
 Routes (`src/routes/`): `checkoutSessions`, `connectedAccounts`, `dashboard`,
-`enrich`, `merchants`, `paymentIntents`, `paymentLinks`, `providerWebhooks`,
-`refunds`, `social`, `transfers`, `webhookDeliveries`.
+`disputes`, `enrich`, `merchants`, `paymentIntents`, `paymentLinks`,
+`providerWebhooks`, `refunds`, `social`, `transfers`, `webhookDeliveries`.
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
@@ -181,7 +181,16 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `webhooks/` (`webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
 (`connectedAccountRepository`), `transfers/` (`transferRepository`),
-`refunds/` (`refundRepository`).
+`refunds/` (`refundRepository`), `disputes/` (`disputeRepository`).
+
+**A refund and a dispute run in OPPOSITE directions, and the difference is the
+whole handler.** A refund is merchant-initiated: Peable writes the row, then
+calls the provider, so an event naming a refund row we do not have is
+`unmatched` and retried. A dispute is network-initiated: the first thing that
+exists is the event, so "no row" is the NORMAL first state and
+`handleDisputeEvent` CREATES one. Its idempotency is therefore not a merchant
+`external_ref` but `unique(provider, provider_object_id)` — the only identity a
+redelivered creation carries.
 
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells

@@ -153,6 +153,28 @@ export const TRANSFER_STATUSES = [
  */
 export const REFUND_STATUSES = ['pending', 'succeeded', 'failed'] as const;
 
+/**
+ * Where a dispute stands, in the gateway's own vocabulary.
+ *
+ * Four states, not the provider's seven. Stripe distinguishes
+ * `warning_needs_response` from `needs_response`, and `warning_closed` from
+ * `won`/`lost`, because it is describing its own product; a merchant on this
+ * gateway needs to know only whether evidence is DUE, whether it is being
+ * looked at, and how it ended. ADR 0001 D3 is the reason — the acquirer stays
+ * invisible, so its vocabulary cannot leak onto the wire either.
+ *
+ * `needs_response` is the one with a deadline attached, which is why it is the
+ * default: a dispute nobody has classified is one somebody has to act on, and
+ * that is the safe direction to be wrong in.
+ */
+export const DISPUTE_STATUSES = [
+  'needs_response',
+  'under_review',
+  'won',
+  'lost',
+] as const;
+export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
+
 /** Stripe-parity dotted webhook event types. */
 export const WEBHOOK_EVENT_TYPES = [
   'payment_intent.confirming',
@@ -162,6 +184,8 @@ export const WEBHOOK_EVENT_TYPES = [
   'payment_intent.expired',
   'payment_intent.refunded',
   'payment_intent.partially_refunded',
+  'payment_intent.disputed',
+  'payment_intent.dispute_closed',
 ] as const satisfies readonly WebhookEventType[];
 export type WebhookEventTypesAreComplete = AssertAllListed<
   WebhookEventType,

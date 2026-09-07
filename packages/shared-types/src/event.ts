@@ -21,7 +21,26 @@ export type WebhookEventType =
    * this union keeps compiling and simply never matches them.
    */
   | 'payment_intent.refunded'
-  | 'payment_intent.partially_refunded';
+  | 'payment_intent.partially_refunded'
+  /**
+   * The network is holding this payment's money while a cardholder contests it.
+   *
+   * Two events and not one because the two moments demand different things of a
+   * merchant. `disputed` is a DEADLINE — evidence is due, and a merchant who
+   * learns about it late has already lost. `dispute_closed` carries the outcome,
+   * which is when the money is finally theirs or finally gone.
+   *
+   * Neither is a payment-intent STATUS. A dispute is the network's process, not
+   * a stage of the payment's lifecycle — the payment stayed `settled` throughout
+   * and may end there. The detail lives in the dispute rows
+   * (`GET /v1/payment_intents/:id/disputes`), which is also how Stripe models
+   * it: a charge is `disputed`, a PaymentIntent has no such status.
+   *
+   * Additive to a published contract: an existing consumer that switches on
+   * this union keeps compiling and simply never matches them.
+   */
+  | 'payment_intent.disputed'
+  | 'payment_intent.dispute_closed';
 
 export interface WebhookEvent<T = PaymentIntent> {
   id: string;

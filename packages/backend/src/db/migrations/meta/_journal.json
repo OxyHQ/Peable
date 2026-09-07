@@ -50,6 +50,13 @@
       "when": 1788733679204,
       "tag": "0006_cloudy_pandemic",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788771425541,
+      "tag": "0007_slippery_miek",
+      "breakpoints": true
     }
   ]
 }

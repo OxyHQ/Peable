@@ -58,8 +58,8 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the seven webhook event types', () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(7);
+  it('lists the nine webhook event types', () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(9);
     for (const type of WEBHOOK_EVENT_TYPES) {
       expect(type.startsWith('payment_intent.')).toBe(true);
     }
@@ -126,9 +126,9 @@ describe('the base-unit amount pattern', () => {
         0
       );
     // One per money-carrying COLUMN, which is not one per table:
-    // payment_intents, checkout_sessions, payment_links and refunds carry one
-    // `amount` each; `transfers` carries `amount` AND the cumulative
+    // payment_intents, checkout_sessions, payment_links, refunds and disputes
+    // carry one `amount` each; `transfers` carries `amount` AND the cumulative
     // `amount_reversed`.
-    expect(occurrences).toBe(6);
+    expect(occurrences).toBe(7);
   });
 });

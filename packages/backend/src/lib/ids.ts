@@ -10,8 +10,16 @@ function randomHex(byteLength: number): string {
   return hex;
 }
 
+/**
+ * Mint a public id.
+ *
+ * The prefix union is CLOSED on purpose: a public id is the thing a merchant
+ * quotes back in a support conversation, and a typo'd prefix produces an id
+ * that looks valid, is unique, and belongs to no object type anyone can look
+ * up. A new object type adds itself here deliberately.
+ */
 export function newId(
-  prefix: 'pi' | 'evt' | 'merch' | 'link' | 'cs' | 'ca' | 'tr' | 're'
+  prefix: 'pi' | 'evt' | 'merch' | 'link' | 'cs' | 'ca' | 'tr' | 're' | 'dp'
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }
