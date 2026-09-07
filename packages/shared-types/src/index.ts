@@ -21,7 +21,12 @@ export {
   CHAIN_ONLY_STATUSES,
   CARD_ONLY_STATUSES,
 } from './paymentIntent';
-export { type WebhookEventType, type WebhookEvent } from './event';
+export {
+  type WebhookEventType,
+  type WebhookEvent,
+  type WebhookEventPayload,
+} from './event';
+export { type Dispute, type DisputeStatus } from './dispute';
 export {
   type WebhookDelivery,
   type WebhookDeliveryStatus,

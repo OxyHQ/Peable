@@ -12,6 +12,7 @@
  * state and waiting for a row that will never appear is the bug.
  */
 import { beforeAll, describe, expect, it } from "bun:test";
+import type { Dispute, WebhookEvent } from "@peable.to/shared-types";
 import { eq } from "drizzle-orm";
 import { insertProviderEvent, findProviderEventById } from "../../db/providers/providerEventRepository";
 import { linkProviderObject } from "../../db/payments/paymentIntentRepository";
@@ -87,6 +88,29 @@ async function deliveriesFor(intentId: string): Promise<string[]> {
   return rows.map((row) => row.eventType);
 }
 
+/**
+ * What a dispute delivery actually CARRIES.
+ *
+ * Asserted separately from the event type because the two failed independently:
+ * the type was right from the start while `data.object` was the payment intent,
+ * so a merchant was told "disputed" and handed a settlement — with no amount,
+ * no reason and, most expensively, no evidence deadline.
+ */
+async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
+  const rows = await gatewayDb()
+    .select({ payload: webhookDeliveries.payload })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.paymentIntentId, intentId));
+  return rows
+    .map((row) => row.payload as unknown as WebhookEvent)
+    .filter(
+      (event) =>
+        event.type === "payment_intent.disputed" ||
+        event.type === "payment_intent.dispute_closed",
+    )
+    .map((event) => event.data.object as Dispute);
+}
+
 describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
   useGatewayDatabase();
 
@@ -129,6 +153,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
     expect(rows[0]?.reason).toBe("fraudulent");
     expect(rows[0]?.evidenceDueAt).not.toBeNull();
     expect(await deliveriesFor(intent.id)).toContain("payment_intent.disputed");
+
+    // The payload is the DISPUTE, and it carries the three things a merchant
+    // needs to act: how much, why, and by when.
+    const [delivered] = await disputePayloadsFor(intent.id);
+    expect(delivered?.object).toBe("dispute");
+    expect(delivered?.amount).toBe("2500");
+    expect(delivered?.reason).toBe("fraudulent");
+    expect(delivered?.evidenceDueAt).not.toBeNull();
+    // And back to the payment, by its PUBLIC id — the internal one would name a
+    // row the merchant has never seen.
+    expect(delivered?.paymentIntentId).toBe(intent.publicId);
   });
 
   /**
@@ -183,6 +218,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
     // longer be given.
     expect(rows[0]?.evidenceDueAt).toBeNull();
     expect(await deliveriesFor(intent.id)).toContain("payment_intent.dispute_closed");
+
+    // The closing payload says WHICH way it went and carries no deadline — a
+    // merchant told only that a dispute "closed" has a notification and no
+    // information, and a response deadline on a decided dispute is a response
+    // that can no longer be given.
+    const closing = (await disputePayloadsFor(intent.id)).find(
+      (payload) => payload.status === "lost",
+    );
+    expect(closing).toBeDefined();
+    expect(closing?.evidenceDueAt).toBeNull();
   });
 
   it("reads a win as a win", async () => {

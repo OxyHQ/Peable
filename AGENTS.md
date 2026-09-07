@@ -190,7 +190,10 @@ calls the provider, so an event naming a refund row we do not have is
 exists is the event, so "no row" is the NORMAL first state and
 `handleDisputeEvent` CREATES one. Its idempotency is therefore not a merchant
 `external_ref` but `unique(provider, provider_object_id)` — the only identity a
-redelivered creation carries.
+redelivered creation carries. Its two events carry a **`Dispute`** under
+`data.object`, not the intent: `WebhookEventPayload` in `shared-types/event.ts`
+is the total map of event type to resource, and `buildEvent` is generic over it,
+so a new event type cannot ship the wrong payload.
 
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells
