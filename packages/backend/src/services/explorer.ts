@@ -29,9 +29,14 @@ import { config } from "../config";
  * `scriptPubKey.addresses` (nonstandard) and are skipped. A missing/unknown
  * txid answers with a non-200 or a body without `transaction`.
  *
- * NOTE: the node has `addressindex` OFF, so `/api/address/:a` cannot be used
- * to scan for received funds — settlement is verified from the payer-reported
- * txid via `getTransaction` + `verifyPayment`.
+ * Settlement is verified from the payer-reported txid via `getTransaction` +
+ * `verifyPayment`, which proves a SPECIFIC payment. This client stays that
+ * narrow on purpose: the gateway reads the chain to settle intents, and is not
+ * a chain proxy for wallets. `/api/address/:a` DOES answer (measured
+ * 2026-09-06 — an older note here claimed `addressindex` was off and it could
+ * not be used, which was false and stopped a feature being built), but the
+ * surface that needs address balances is the wallet, and the wallet already
+ * talks to the Explorer itself.
  */
 
 export interface ExplorerOutput {
@@ -137,3 +142,4 @@ export function verifyPayment(
   );
   return { paid, confirmations: tx.confirmations };
 }
+

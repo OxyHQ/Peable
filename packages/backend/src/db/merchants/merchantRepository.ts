@@ -103,6 +103,9 @@ export interface InsertMerchantParams {
   readonly webhookUrl?: string | undefined;
   readonly webhookSecret?: string | undefined;
   readonly requiredConfirmations?: number | undefined;
+  readonly displayName?: string | undefined;
+  readonly avatarFileId?: string | undefined;
+  readonly description?: string | undefined;
 }
 
 /**
@@ -120,9 +123,9 @@ export async function insertMerchant(
   assertWatchOnly(params.xpub, params.network);
 
   try {
-    // Explicit field list, never a spread of caller input. `livemode`,
-    // `next_derivation_index` and the display fields take their column
-    // defaults; `xpub`, `network` and `environment` are immutable afterwards.
+    // Explicit field list, never a spread of caller input. `livemode` and
+    // `next_derivation_index` take their column defaults; `xpub`, `network`
+    // and `environment` are immutable afterwards.
     const [row] = await db
       .insert(merchants)
       .values({
@@ -137,6 +140,9 @@ export async function insertMerchant(
         ...(params.requiredConfirmations === undefined
           ? {}
           : { requiredConfirmations: params.requiredConfirmations }),
+        displayName: params.displayName ?? null,
+        avatarFileId: params.avatarFileId ?? null,
+        description: params.description ?? null,
       })
       .returning(MERCHANT_COLUMNS);
 
@@ -232,6 +238,14 @@ export interface MerchantPatch {
   readonly webhookUrl?: string | null | undefined;
   readonly webhookSecret?: string | null | undefined;
   readonly requiredConfirmations?: number | undefined;
+  /**
+   * Branding is mutable, unlike `xpub`/`network`/`environment`: it names the
+   * merchant to a payer and nothing derives from it. `null` clears the field,
+   * absent leaves it alone — the same contract `webhookUrl` already has.
+   */
+  readonly displayName?: string | null | undefined;
+  readonly avatarFileId?: string | null | undefined;
+  readonly description?: string | null | undefined;
 }
 
 /**
@@ -260,6 +274,9 @@ export async function updateMerchantSettings(
   if (patch.requiredConfirmations !== undefined) {
     values.requiredConfirmations = patch.requiredConfirmations;
   }
+  if (patch.displayName !== undefined) values.displayName = patch.displayName;
+  if (patch.avatarFileId !== undefined) values.avatarFileId = patch.avatarFileId;
+  if (patch.description !== undefined) values.description = patch.description;
   if (Object.keys(values).length === 0) {
     return findMerchantById(db, id);
   }

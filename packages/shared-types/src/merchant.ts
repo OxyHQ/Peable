@@ -16,6 +16,15 @@ export interface Merchant {
   xpub: string;
   webhookUrl?: string;
   requiredConfirmations: number;
+  /**
+   * Payer-facing branding. Absent when unset — `MerchantDisplay` is what a
+   * payer surface renders, and it substitutes a neutral fallback; these are
+   * the raw values the merchant owns.
+   */
+  displayName?: string;
+  /** Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it. */
+  avatarFileId?: string;
+  description?: string;
   createdAt: string;
   updatedAt: string;
 }

@@ -1,4 +1,4 @@
-import { and, eq, inArray, or } from 'drizzle-orm';
+import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
 import { socialSendAttributions } from '../schema';
@@ -8,7 +8,8 @@ import type { DatabaseOrTransaction } from '../postgres';
  * Reads and writes for `social_send_attributions` — which social-receive
  * address was minted for which sender → recipient payment.
  *
- * NOT WIRED TO ANY ROUTE YET; see `db/merchants/merchantRepository.ts`'s header.
+ * Read by `POST /v1/enrich` (via `services/enrichment.ts`) and by
+ * `GET /v1/social/me/payments`.
  */
 
 export interface SocialSendAttributionRow {
@@ -112,5 +113,43 @@ export async function findAttributionsForViewer(
         )
       )
     );
+  return rows.map(toAttributionRow);
+}
+
+/**
+ * Every payment the viewer is party to on one network, newest first.
+ *
+ * The address-free sibling of `findAttributionsForViewer`. That one exists for
+ * a caller that already derived its own addresses and is asking which of THOSE
+ * are attributed; this one exists for a caller that cannot derive anything —
+ * the web build holds no key, so it cannot know which addresses are its, and
+ * the only thing it can prove is who it is signed in as.
+ *
+ * The viewer predicate is the security property, not a filter: an attribution
+ * names two Oxy users, so a missing `or(...)` would hand a stranger the record
+ * of who paid whom. `limit` is a bound, not a page — a viewer with more history
+ * than this sees the newest slice, which is what a balance-and-recent-activity
+ * surface needs; a real pager belongs with a cursor, not an offset.
+ */
+export async function listAttributionsForViewer(
+  db: DatabaseOrTransaction,
+  viewerUserId: string,
+  network: NetworkType,
+  limit = 100
+): Promise<SocialSendAttributionRow[]> {
+  const rows = await db
+    .select(ATTRIBUTION_COLUMNS)
+    .from(socialSendAttributions)
+    .where(
+      and(
+        eq(socialSendAttributions.network, network),
+        or(
+          eq(socialSendAttributions.senderUserId, viewerUserId),
+          eq(socialSendAttributions.recipientUserId, viewerUserId)
+        )
+      )
+    )
+    .orderBy(desc(socialSendAttributions.createdAt))
+    .limit(limit);
   return rows.map(toAttributionRow);
 }

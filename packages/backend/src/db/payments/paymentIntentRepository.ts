@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lt } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { CurrencyCode, PaymentIntentRail, PaymentIntentStatus } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
@@ -9,9 +9,6 @@ import type { DatabaseOrTransaction } from '../postgres';
 
 /**
  * Reads and writes for `payment_intents` — the money record.
- *
- * NOT WIRED TO ANY ROUTE YET; see `db/merchants/merchantRepository.ts`'s header
- * for why the repositories land before the switch. Do not delete as unreferenced.
  */
 
 export interface PaymentIntentRow {
@@ -515,4 +512,82 @@ export async function findIntentByProviderObject(
       )
     );
   return row ? toIntentRow(row) : null;
+}
+
+/**
+ * The statuses an unpaid intent may expire FROM — exactly those whose
+ * transition list in shared-types' `ALLOWED` table contains `expired`.
+ *
+ * What unites them is that the gateway is waiting on a PERSON. `created` and
+ * `awaiting_approval` wait on a payer who has not paid; `requires_action` waits
+ * on one who opened a 3DS challenge and walked away. None of them has money
+ * moving anywhere, so a clock running out is the honest outcome.
+ *
+ * `approved`, `broadcast` and `confirming` are absent because coins are already
+ * on their way and the settlement watcher owns those rows. `processing` is
+ * absent for the same reason on the card side — the charge is at the acquirer,
+ * and the table refuses it an `expired` edge at all.
+ *
+ * `requires_action` was NOT in this list when it arrived from
+ * `feat/web-read-only-wallet`, and could not have been: the status is part of
+ * the card rail, which landed after that branch was cut. The drift was found by
+ * the test rather than by review — `expirySweeper.test.ts` re-derives this list
+ * from `applyEvent` and went red on the merge. Without it, an abandoned 3DS
+ * checkout would sit in `requires_action` forever, never expiring, and the
+ * merchant would never get the `payment_intent.expired` they release an
+ * inventory reservation on.
+ */
+export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
+  'created',
+  'awaiting_approval',
+  'requires_action',
+];
+
+/**
+ * Claim a BOUNDED batch of intents whose expiry has passed, in ONE statement.
+ *
+ * The claim and the read are the same `UPDATE … RETURNING`, for the same reason
+ * the derivation-index reservation is: the gateway runs on more than one ECS
+ * task and every one of them sweeps. Split into a SELECT followed by an UPDATE,
+ * both sweepers would read the same rows and the merchant would get
+ * `payment_intent.expired` twice for one intent.
+ *
+ * The `for update skip locked` subquery is what makes that true WITHOUT either
+ * sweeper waiting: a plain `UPDATE … WHERE status IN (…)` also returns each row
+ * to one caller under READ COMMITTED, but only because the second sweeper
+ * BLOCKS on the row lock until the first commits. `skip locked` steps over the
+ * rows another task holds instead — the same idiom `claimDueDeliveries` uses
+ * one table over.
+ *
+ * `limit` is not decoration either. Unbounded, the FIRST sweep after this ships
+ * expires every historical intent in one transaction, holding every one of
+ * those row locks until it commits and enqueueing the whole backlog of webhooks
+ * in a single burst. A bounded batch drains at a rate the caller chooses.
+ */
+export async function expireDueIntents(
+  db: DatabaseOrTransaction,
+  now: Date,
+  limit: number
+): Promise<PaymentIntentRow[]> {
+  const due = db
+    .select({ id: paymentIntents.id })
+    .from(paymentIntents)
+    .where(
+      and(
+        inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
+        lt(paymentIntents.expiresAt, now)
+      )
+    )
+    // Oldest first: a stream that expired its newest arrivals first would
+    // starve its own head under a backlog.
+    .orderBy(paymentIntents.expiresAt)
+    .limit(limit)
+    .for('update', { skipLocked: true });
+
+  const rows = await db
+    .update(paymentIntents)
+    .set({ status: 'expired' })
+    .where(sql`${paymentIntents.id} in (${due})`)
+    .returning(INTENT_COLUMNS);
+  return rows.map(toIntentRow);
 }

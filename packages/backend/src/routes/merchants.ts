@@ -21,12 +21,27 @@ import {
 import { resolveMerchant } from "./paymentIntents";
 
 /** Exported: `routes/dashboard.ts` parses the SAME registration body for its dashboard-authed register route (F2.5) so the two never drift. */
+// The branding columns are bare `text()` with no CHECK, so these bounds are
+// the ONLY thing between a merchant and an unbounded write. `displayName` is
+// rendered in a payer's transaction history and on the checkout chip, so it is
+// held to a chip-sized length rather than a paragraph.
+const DISPLAY_NAME_MAX = 64;
+const AVATAR_FILE_ID_MAX = 128;
+const DESCRIPTION_MAX = 512;
+
+const brandingFields = {
+  displayName: z.string().min(1).max(DISPLAY_NAME_MAX).optional(),
+  avatarFileId: z.string().min(1).max(AVATAR_FILE_ID_MAX).optional(),
+  description: z.string().min(1).max(DESCRIPTION_MAX).optional(),
+};
+
 export const createMerchantBodySchema = z.object({
   network: z.enum(["mainnet", "testnet"]),
   xpub: z.string().min(1),
   webhookUrl: z.string().url().optional(),
   webhookSecret: z.string().min(1).optional(),
   requiredConfirmations: z.number().int().positive().optional(),
+  ...brandingFields,
 });
 
 /** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
@@ -34,6 +49,10 @@ export const patchMerchantBodySchema = z.object({
   webhookUrl: z.string().url().nullable().optional(),
   webhookSecret: z.string().min(1).nullable().optional(),
   requiredConfirmations: z.number().int().positive().optional(),
+  // `.nullable()` on top of the create bounds: `null` clears the field.
+  displayName: brandingFields.displayName.unwrap().nullable().optional(),
+  avatarFileId: brandingFields.avatarFileId.unwrap().nullable().optional(),
+  description: brandingFields.description.unwrap().nullable().optional(),
 });
 
 export type RegisterMerchantResult =
@@ -58,6 +77,9 @@ export async function registerMerchant(
     webhookUrl?: string;
     webhookSecret?: string;
     requiredConfirmations?: number;
+    displayName?: string;
+    avatarFileId?: string;
+    description?: string;
   },
 ): Promise<RegisterMerchantResult> {
   // Test/live firewall (F2.0 task 1b): a development/staging caller can only
@@ -86,6 +108,9 @@ export async function registerMerchant(
       webhookUrl: params.webhookUrl,
       webhookSecret: params.webhookSecret,
       requiredConfirmations: params.requiredConfirmations,
+      displayName: params.displayName,
+      avatarFileId: params.avatarFileId,
+      description: params.description,
     });
   } catch (err) {
     // The non-custody firewall refusing a key the caller sent is a bad
@@ -125,6 +150,9 @@ export async function applyMerchantPatch(
     webhookUrl?: string | null;
     webhookSecret?: string | null;
     requiredConfirmations?: number;
+    displayName?: string | null;
+    avatarFileId?: string | null;
+    description?: string | null;
   },
 ): Promise<MerchantRow | null> {
   // The patch is applied and re-read in ONE statement, so what the response
@@ -136,6 +164,9 @@ export async function applyMerchantPatch(
     webhookUrl: params.webhookUrl,
     webhookSecret: params.webhookSecret,
     requiredConfirmations: params.requiredConfirmations,
+    displayName: params.displayName,
+    avatarFileId: params.avatarFileId,
+    description: params.description,
   });
 }
 

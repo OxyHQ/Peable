@@ -17,6 +17,7 @@ import type {
   WebhookEventType,
 } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
+import type { DatabaseOrTransaction } from "../db/postgres";
 import { findWebhookTarget } from "../db/merchants/merchantRepository";
 import {
   updateIntentState,
@@ -68,24 +69,43 @@ export async function transitionIntent(
   return getDb().transaction(async (tx) => {
     const row = await updateIntentState(tx, intentId, change);
     if (!row) return null;
-
-    const eventType = WEBHOOK_EVENT_FOR[row.status];
-    if (eventType === undefined) return row;
-
-    // The one read allowed to select `webhook_secret`. Only the URL is used
-    // here — the secret is re-read at attempt time, so a merchant who rotates
-    // it mid-backoff has their retries signed with the new one.
-    const target = await findWebhookTarget(tx, row.merchantId);
-    if (!target) return row;
-
-    await enqueueWebhook(tx, {
-      merchantId: row.merchantId,
-      paymentIntentId: row.id,
-      event: buildEvent(eventType, toPaymentIntentDTO(row)),
-      url: target.url,
-    });
-
+    await enqueueIntentWebhook(tx, row);
     return row;
+  });
+}
+
+/**
+ * Enqueue the merchant's event for a row that has ALREADY been advanced, on the
+ * caller's transaction.
+ *
+ * Exported because `transitionIntent` is no longer the only path that moves an
+ * intent: the expiry sweeper advances a whole batch in one claiming statement
+ * (`expireDueIntents`) and cannot go through the one-row-at-a-time transition.
+ * What it must not lose is the property that makes ADR 0001 D7 true — the state
+ * change and the outbox row commit together — so it takes this helper and its
+ * own `tx` rather than growing a third copy of the enqueue.
+ *
+ * MUST be called inside the same transaction as the state change. Called after
+ * a commit it becomes the best-effort delivery the outbox exists to replace.
+ */
+export async function enqueueIntentWebhook(
+  tx: DatabaseOrTransaction,
+  row: PaymentIntentRow,
+): Promise<void> {
+  const eventType = WEBHOOK_EVENT_FOR[row.status];
+  if (eventType === undefined) return;
+
+  // The one read allowed to select `webhook_secret`. Only the URL is used
+  // here — the secret is re-read at attempt time, so a merchant who rotates
+  // it mid-backoff has their retries signed with the new one.
+  const target = await findWebhookTarget(tx, row.merchantId);
+  if (!target) return;
+
+  await enqueueWebhook(tx, {
+    merchantId: row.merchantId,
+    paymentIntentId: row.id,
+    event: buildEvent(eventType, toPaymentIntentDTO(row)),
+    url: target.url,
   });
 }
 

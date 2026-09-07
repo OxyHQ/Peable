@@ -6,7 +6,7 @@
 </p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/@peable.to/sdk"><img alt="@peable.to/sdk" src="https://img.shields.io/npm/v/@peable.to/sdk?style=flat-square&label=%40oxyhq%2Fpay&labelColor=440151&color=D26AE7"></a>
+  <a href="https://www.npmjs.com/package/@peable.to/sdk"><img alt="@peable.to/sdk" src="https://img.shields.io/npm/v/@peable.to/sdk?style=flat-square&label=%40peable.to%2Fsdk&labelColor=440151&color=D26AE7"></a>
   <img alt="Bun" src="https://img.shields.io/badge/bun-1.0+-440151?style=flat-square&logo=bun&logoColor=white">
   <img alt="Expo" src="https://img.shields.io/badge/Expo-57-440151?style=flat-square&logo=expo&logoColor=white">
   <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Drizzle-440151?style=flat-square&logo=postgresql&logoColor=white">
@@ -139,8 +139,9 @@ There is no bespoke Peable API key. The SDK is configured with the **same
 `ApplicationCredential`** Oxy Console already issues, presents it to the Oxy API to mint a
 short lived service token, and re mints when that token expires.
 
-The backend verifies callers with `@oxyhq/core/server`, using `createOxyAuthMiddleware`,
-`requireOxyAuth` and `getRequiredOxyUserId`. There is no app local bearer parser.
+The backend verifies callers with `@oxyhq/core/server`, using `createOxyAuthMiddleware`
+and `getRequiredOxyUserId` for human callers, `serviceAuth()` for merchant service tokens,
+and `authSocket()` for Socket.IO. There is no app local bearer parser.
 
 The payer side is different by design: a payer is anonymous and proves nothing except
 possession of a payment intent's `clientSecret`, which travels in a request header rather

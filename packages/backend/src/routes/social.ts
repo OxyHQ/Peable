@@ -6,11 +6,17 @@ import { oxyClient, isNotFoundError } from "@oxyhq/core";
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxyhq/core/server";
 import type {
   SocialNextAddressResponse,
+  SocialPayment,
+  SocialPaymentsResponse,
   SocialReceiveCursorResponse,
 } from "@peable.to/shared-types";
 import { reserveNextSocialAddress, getReservedThrough } from "../services/socialReceive";
 import { getDb } from "../db/postgres";
-import { insertSendAttribution } from "../db/social/sendAttribution";
+import {
+  insertSendAttribution,
+  listAttributionsForViewer,
+} from "../db/social/sendAttribution";
+import { ENRICH_MAX_ADDRESSES, enrichAddresses } from "../services/enrichment";
 import { sendError, wrap } from "../lib/http";
 
 const nextAddressBodySchema = z.object({
@@ -18,6 +24,10 @@ const nextAddressBodySchema = z.object({
 });
 
 const cursorQuerySchema = z.object({
+  network: z.enum(["mainnet", "testnet"]),
+});
+
+const paymentsQuerySchema = z.object({
   network: z.enum(["mainnet", "testnet"]),
 });
 
@@ -192,6 +202,64 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       // resync its watch window (spec cursor-sync fix).
       const reservedThrough = await getReservedThrough(oxyUserId, parsed.data.network);
       const body: SocialReceiveCursorResponse = { reservedThrough };
+      res.status(200).json(body);
+    }),
+  );
+
+  /**
+   * The caller's own social payment history — the only one a surface WITHOUT a
+   * key can ask for.
+   *
+   * Every other view of a payment starts from addresses the device derived
+   * (`POST /v1/enrich`, the cursor), which needs a seed. The web build has none,
+   * so it can only say who it is; this endpoint answers from the attribution
+   * table, where the caller's user id is already one of the two named parties.
+   *
+   * The viewer scoping lives in `listAttributionsForViewer`'s WHERE clause, not
+   * in a filter here: an attribution names two people, and a row the caller is
+   * not party to must never leave the database.
+   *
+   * Bounded by `ENRICH_MAX_ADDRESSES` — the same number `POST /v1/enrich`
+   * accepts — because the enrichment below is the expensive half (an Oxy
+   * profile batch), and letting the listing outrun what enrichment is sized for
+   * would silently return rows with `unknown` counterparties.
+   */
+  router.get(
+    "/v1/social/me/payments",
+    requireOxyUser,
+    wrap(async (req, res) => {
+      const oxyUserId = getRequiredOxyUserId(req);
+
+      const parsed = paymentsQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        sendError(
+          res,
+          422,
+          "invalid_request_error",
+          parsed.error.issues[0]?.message ?? "invalid query",
+        );
+        return;
+      }
+
+      const rows = await listAttributionsForViewer(
+        getDb(),
+        oxyUserId,
+        parsed.data.network,
+        ENRICH_MAX_ADDRESSES,
+      );
+      const enriched = await enrichAddresses(
+        rows.map((row) => row.address),
+        oxyUserId,
+      );
+
+      const payments: SocialPayment[] = rows.map((row) => ({
+        address: row.address,
+        direction: row.senderUserId === oxyUserId ? "sent" : "received",
+        counterparty: enriched[row.address] ?? { kind: "unknown" },
+        createdAt: row.createdAt.toISOString(),
+      }));
+
+      const body: SocialPaymentsResponse = { payments };
       res.status(200).json(body);
     }),
   );

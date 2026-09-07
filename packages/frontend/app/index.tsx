@@ -5,7 +5,7 @@
  *   signed out          -> "Sign in with Oxy"
  *   signed in, keyless  -> "Set up your Oxy ID"
  *   signed in, native   -> derive the identity wallet -> PIN gate -> (tabs)
- *   web                 -> your own profile: handle + QR to receive (no key)
+ *   no keystore         -> read-only: handle, QR to receive, payment history
  *
  * This screen is the sole authority for the swap; it renders neutral in-place
  * branches and never navigates a child across the boundary.
@@ -21,6 +21,7 @@ import { hasPin } from "../src/storage/secure-store";
 import { decideEntryRoute } from "../src/wallet/entry-route";
 import { Button } from "../src/ui/components/Button";
 import { CreateOxyIdView } from "../src/ui/components/CreateOxyIdView";
+import { ReadOnlyWalletView } from "../src/ui/components/ReadOnlyWalletView";
 import { t } from "../src/i18n";
 
 export default function IndexScreen() {
@@ -101,18 +102,30 @@ export default function IndexScreen() {
       );
     case "create-identity":
       return <CreateOxyIdView />;
-    // A browser cannot hold the wallet — the seed derives from an identity key
-    // that lives in the platform keystore and never leaves the device. It CAN
-    // do the half that needs no private key: your handle, and the QR people
-    // scan to pay you. `/@you` already renders exactly that (its `self` branch),
-    // so route there rather than dead-ending on "open it on your phone".
+    // No keystore here, so no identity seed, so no signing. Everything else a
+    // wallet does needs no private key, and this branch renders it IN PLACE —
+    // the same way `signin` and `create-identity` do, and the way this screen's
+    // own contract says it works.
+    //
+    // It used to `<Redirect>` to `/@you`. That handed the browser a screen with
+    // a back arrow whose fallback is `router.replace("/(tabs)")`, so one tap
+    // opened the wallet UI this branch exists to rule out — and because a route
+    // group adds no URL segment, `(tabs)` and this screen both answer `/`, so
+    // the entry decision re-ran and bounced straight back. The bug was the
+    // navigation, not the destination.
     //
     // `username` is always present here: this branch is only reachable once
     // `isAuthenticated` is true. The fallback exists so a malformed session
     // cannot render a blank screen.
-    case "web-no-wallet":
+    case "read-only":
       return user?.username ? (
-        <Redirect href={`/@${user.username}`} />
+        <View className="flex-1 bg-background">
+          <ReadOnlyWalletView
+            username={user.username}
+            displayName={user.name?.displayName ?? undefined}
+            avatarFileId={user.avatar ?? undefined}
+          />
+        </View>
       ) : (
         <View className="flex-1 bg-background items-center justify-center px-8">
           <Text className="text-foreground text-2xl text-center mb-3">{t("onboarding.webFallbackTitle")}</Text>

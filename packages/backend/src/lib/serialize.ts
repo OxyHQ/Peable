@@ -66,6 +66,9 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
     xpub: row.xpub,
     webhookUrl: row.webhookUrl ?? undefined,
     requiredConfirmations: row.requiredConfirmations,
+    displayName: row.displayName ?? undefined,
+    avatarFileId: row.avatarFileId ?? undefined,
+    description: row.description ?? undefined,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

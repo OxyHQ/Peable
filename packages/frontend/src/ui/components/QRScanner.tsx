@@ -31,12 +31,25 @@ import Animated, {
 import { useTheme } from "@oxyhq/bloom/theme";
 import { Button } from "./Button";
 import { t } from "../../i18n";
+import { parseScannedData } from "../../pay/scanned-code";
+import type { ScannedCode } from "../../pay/scanned-code";
 
 interface QRScannerProps {
   visible: boolean;
-  onScan: (address: string) => void;
+  onScan: (code: ScannedCode) => void;
   onClose: () => void;
+  /**
+   * Kinds this caller can act on; anything else is ignored and scanning
+   * continues. Defaults to both. A screen that can only fill an address field
+   * passes `["address"]` so a payment request does not close the scanner and
+   * then silently do nothing.
+   */
+  accepts?: readonly ScannedCode["kind"][];
 }
+
+/** Default for `QRScannerProps.accepts` — a module constant so the default is a
+ * stable reference and cannot re-run the scan callback every render. */
+const ALL_SCANNED_KINDS: readonly ScannedCode["kind"][] = ["address", "payment-request"];
 
 const FRAME_SIZE = 260;
 const CORNER_LENGTH = 32;
@@ -45,40 +58,6 @@ const CORNER_RADIUS = 20;
 const SCAN_LINE_HEIGHT = 2;
 const SCAN_LINE_INSET = 16;
 const SCAN_LINE_DURATION_MS = 1800;
-
-/**
- * Parse a scanned QR string to extract a FairCoin address.
- * Supports:
- *   faircoin:FxxxxAddress?amount=1.0
- *   faircoin:FxxxxAddress
- *   FxxxxAddress (raw)
- *   TxxxxAddress (testnet raw)
- */
-function parseScannedData(data: string): string | null {
-  const trimmed = data.trim();
-
-  // faircoin: URI scheme
-  if (trimmed.toLowerCase().startsWith("faircoin:")) {
-    const withoutScheme = trimmed.slice("faircoin:".length);
-    // Strip query params if present
-    const address = withoutScheme.split("?")[0];
-    if (address && address.length >= 25) {
-      return address;
-    }
-    return null;
-  }
-
-  // Raw address starting with F (mainnet) or T (testnet)
-  if (
-    (trimmed.startsWith("F") || trimmed.startsWith("T")) &&
-    trimmed.length >= 25 &&
-    trimmed.length <= 36
-  ) {
-    return trimmed;
-  }
-
-  return null;
-}
 
 interface CornerIndicatorProps {
   position: "tl" | "tr" | "bl" | "br";
@@ -196,7 +175,12 @@ function ScanLine({ color, active }: ScanLineProps) {
   );
 }
 
-export function QRScanner({ visible, onScan, onClose }: QRScannerProps) {
+export function QRScanner({
+  visible,
+  onScan,
+  onClose,
+  accepts = ALL_SCANNED_KINDS,
+}: QRScannerProps) {
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
   const [torchOn, setTorchOn] = useState(false);
@@ -207,16 +191,18 @@ export function QRScanner({ visible, onScan, onClose }: QRScannerProps) {
     (result: { data: string }) => {
       if (scanned) return;
 
-      const address = parseScannedData(result.data);
-      if (address) {
-        setScanned(true);
-        onScan(address);
-        onClose();
-        // Reset scanned state after modal closes
-        setTimeout(() => setScanned(false), 500);
-      }
+      const code = parseScannedData(result.data);
+      // An unparseable code, or one this caller cannot act on, leaves the
+      // scanner running rather than closing it on a no-op.
+      if (!code || !accepts.includes(code.kind)) return;
+
+      setScanned(true);
+      onScan(code);
+      onClose();
+      // Reset scanned state after modal closes
+      setTimeout(() => setScanned(false), 500);
     },
-    [scanned, onScan, onClose],
+    [scanned, onScan, onClose, accepts],
   );
 
   const handleClose = useCallback(() => {

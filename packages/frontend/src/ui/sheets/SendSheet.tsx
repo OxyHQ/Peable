@@ -51,6 +51,7 @@ import {
 } from "../components";
 import { FairCoinSymbol } from "../components/FairCoinSymbol";
 import { QRScanner } from "../components/QRScanner";
+import type { ScannedCode } from "../../pay/scanned-code";
 import { ContactPicker } from "../components/ContactPicker";
 import { SocialRecipientPicker, type SocialRecipient } from "../components/SocialRecipientPicker";
 import { UserAvatar } from "../components/UserAvatar";
@@ -315,9 +316,32 @@ export function SendSheet({
     }
   }, []);
 
-  const handleQRScan = useCallback((address: string) => {
-    setToAddress(address);
-  }, []);
+  const handleQRScan = useCallback(
+    (code: ScannedCode) => {
+      if (code.kind === "payment-request") {
+        // A Peable checkout QR is not an address to send to — it is a whole
+        // payment request. Hand it to the approve screen, which is the only
+        // place that can report the txid back to the Gateway. Mirrors the
+        // deep-link path in app/_layout.tsx.
+        const { request } = code;
+        router.push({
+          pathname: "/pay/[intent]",
+          params: {
+            intent: request.intentId,
+            secret: request.clientSecret,
+            address: request.address,
+            amount: request.amount.toString(),
+            network: request.network,
+          },
+        });
+        return;
+      }
+
+      setToAddress(code.address);
+      if (code.amount !== undefined) setAmount(code.amount);
+    },
+    [router],
+  );
 
   const handleOpenScanner = useCallback(() => {
     setShowQRScanner(true);

@@ -113,7 +113,7 @@ import {
 
 export type FeeLevel = "low" | "medium" | "high";
 
-export type IdentityInitResult = "initialized" | "no-identity" | "web-unsupported";
+export type IdentityInitResult = "initialized" | "no-identity" | "no-keystore";
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -229,7 +229,8 @@ export interface WalletState {
   /**
    * Bring up the SINGLE Oxy-identity-derived wallet. Derives the seed from the
    * on-device identity, builds the KeyManager, and runs the normal init. No
-   * mnemonic. Native-only; returns "web-unsupported" on web and "no-identity"
+   * mnemonic. Needs the on-device keystore; returns "no-keystore" without one
+   * and "no-identity"
    * for a keyless account (routes onboarding to create an Oxy ID).
    */
   initializeFromIdentity: (onReady?: () => void) => Promise<IdentityInitResult>;
@@ -1665,12 +1666,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   initializeFromIdentity: async (onReady?: () => void): Promise<IdentityInitResult> => {
-    // The wallet is native-only: the identity key is unavailable on web
-    // (spec §9). Distinguish "web" (permanently unsupported) from "no-identity"
-    // (a keyless account that can create an Oxy ID) so onboarding routes each
-    // correctly.
+    // The IDENTITY-derived wallet needs the on-device keystore the identity key
+    // lives in (`@oxyhq/core` keyManager -> expo-secure-store). `Platform.OS`
+    // is the current proxy for "is that keystore here": a browser has none.
+    //
+    // This is narrower than "the wallet does not work on web". The BIP39 and
+    // watch-only paths below (`createNewWallet`, `importWallet`,
+    // `importWatchOnly`) carry no platform gate and write through
+    // `storage/kv-store.ts`, which has a real web branch — Peable's fork of
+    // FAIRWallet deleted the create/restore SCREENS, not the capability. What a
+    // browser genuinely cannot do is derive THIS seed, and therefore sign.
     if (Platform.OS === "web") {
-      return "web-unsupported";
+      return "no-keystore";
     }
     const seed = await deriveIdentitySeed();
     if (!seed) {

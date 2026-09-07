@@ -14,12 +14,23 @@ describe("decideEntryRoute", () => {
     expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: null, hasPinConfigured: null }).kind).toBe("loading");
   });
 
-  // The INPUT keeps `wallet-store`'s own name for the probe result; only the
-  // ROUTE was renamed. Collapsing the two would have hidden the case this
-  // guards: an unrecognised `identityInit` falls through to "loading", so a
-  // test that renamed both would have gone green while the screen hung.
-  test("signed in on web → no wallet is possible, route to the profile", () => {
-    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "web-unsupported", hasPinConfigured: null }).kind).toBe("web-no-wallet");
+  // An unrecognised `identityInit` falls through to "loading", so a rename that
+  // changed the probe result and the route together would go green while the
+  // screen hung forever. This asserts the exact pair the store actually emits.
+  test("signed in with no keystore → the read-only surface", () => {
+    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "no-keystore", hasPinConfigured: null }).kind).toBe("read-only");
+  });
+
+  /**
+   * The rename this replaces was not cosmetic. `"web-unsupported"` named the
+   * PLATFORM, and the entry screen acted on it by redirecting away — which sent
+   * the browser to a screen whose back arrow fell through to `(tabs)`, the very
+   * wallet the branch exists to say is impossible. What is actually absent is
+   * the on-device keystore the identity seed derives from; everything a browser
+   * CAN do (balance, history, receiving) needs no key at all.
+   */
+  test("the retired platform-shaped name no longer routes anywhere", () => {
+    expect(decideEntryRoute({ isAuthResolved: true, isAuthenticated: true, identityInit: "web-unsupported" as never, hasPinConfigured: null }).kind).toBe("loading");
   });
 
   test("signed in, keyless account → create Oxy ID", () => {
