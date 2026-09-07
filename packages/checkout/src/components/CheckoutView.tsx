@@ -65,9 +65,37 @@ export function CheckoutView({ intent: initialIntent, merchant, successUrl }: Ch
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
 
-    subscribe(initialIntent.id, initialIntent.clientSecret, (updated) => {
-      if (!cancelled) setIntent(updated);
-    })
+    subscribe(
+      initialIntent.id,
+      initialIntent.clientSecret,
+      (updated) => {
+        if (!cancelled) setIntent(updated);
+      },
+      (state) => {
+        if (cancelled) return;
+        if (state === 'lost') {
+          // Poll while the socket is gone. Until this existed, only a REJECTED
+          // subscribe reached the fallback — a drop AFTER it resolved was
+          // invisible, and the payer sat frozen with polling switched off.
+          setRealtimeUnavailable(true);
+          return;
+        }
+        // Re-read BEFORE standing the poll down, and in this order. socket.io
+        // replays nothing, so every update emitted during the outage is gone;
+        // clearing the flag first would turn the poll off and leave the page on
+        // a snapshot that is already stale, with nothing left to correct it.
+        getPaymentIntent(initialIntent.id, initialIntent.clientSecret)
+          .then((updated) => {
+            if (cancelled) return;
+            setIntent(updated);
+            setRealtimeUnavailable(false);
+          })
+          .catch(() => {
+            // Keep polling. The socket is back but this one read failed, and
+            // the fallback is exactly what covers that.
+          });
+      },
+    )
       .then((unsub) => {
         if (cancelled) {
           unsub();
@@ -76,8 +104,8 @@ export function CheckoutView({ intent: initialIntent, merchant, successUrl }: Ch
         unsubscribe = unsub;
       })
       .catch(() => {
-        // Realtime is out. Hand over to the polling effect rather than leaving
-        // the payer on a frozen snapshot.
+        // Realtime never opened at all. Hand over to the polling effect rather
+        // than leaving the payer on a frozen snapshot.
         if (!cancelled) setRealtimeUnavailable(true);
       });
 

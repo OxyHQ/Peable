@@ -17,6 +17,20 @@ import { errorFromResponse, PeableApiError, PeableInvalidRequestError } from '..
 
 const DEFAULT_GATEWAY_URL = 'https://api.peable.to';
 
+/**
+ * Whether updates are actually arriving.
+ *
+ * `'live'` means the socket is connected AND rejoined to this intent's room —
+ * both, because a connected socket in no room delivers nothing and is
+ * indistinguishable from a quiet payment.
+ *
+ * `'lost'` is a report, not a recovery: socket.io keeps retrying the transport
+ * on its own, but it replays NOTHING, so anything emitted during the gap is
+ * gone. A host that wants those updates has to re-read the intent when `'live'`
+ * comes back.
+ */
+export type RealtimeConnectionState = 'live' | 'lost';
+
 export interface PeableCheckoutClient {
   /**
    * `GET /v1/payment_intents/:id` — the initial REST snapshot. Sends
@@ -24,11 +38,19 @@ export interface PeableCheckoutClient {
    * param, so the capability token never lands in server/CDN access logs.
    */
   getPaymentIntent(id: string, clientSecret: string): Promise<PaymentIntent>;
-  /** Realtime status stream over the Gateway's socket contract, filtered to this intent. */
+  /**
+   * Realtime status stream over the Gateway's socket contract, filtered to this
+   * intent.
+   *
+   * `onConnectionChange` is optional and additive: it reports drops and
+   * recoveries AFTER this promise resolves, which nothing could observe before.
+   * A caller that omits it behaves exactly as it did.
+   */
   subscribe(
     id: string,
     clientSecret: string,
     onUpdate: (intent: PaymentIntent) => void,
+    onConnectionChange?: (state: RealtimeConnectionState) => void,
   ): Promise<{ unsubscribe(): void }>;
   /** `POST /v1/payment_intents/:id/submit_tx` — report a broadcast txid. */
   submitTx(id: string, clientSecret: string, txid: string): Promise<PaymentIntent>;
@@ -123,6 +145,7 @@ export function createPeableCheckout(
     id: string,
     clientSecret: string,
     onUpdate: (intent: PaymentIntent) => void,
+    onConnectionChange?: (state: RealtimeConnectionState) => void,
   ): Promise<{ unsubscribe(): void }> {
     const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(baseUrl, {
       transports: ['websocket'],
@@ -162,6 +185,22 @@ export function createPeableCheckout(
     };
     socket.on('intent.updated', listener);
 
+    // A drop AFTER this point used to be invisible to the caller. `subscribe`
+    // had already resolved, so a `.catch` on it could not fire again, and the
+    // reconnect below restores DELIVERY but replays nothing — socket.io has no
+    // buffer for frames emitted while the socket was gone. A payment that
+    // settled during a thirty-second blip therefore never reached the page, and
+    // the payer watched a snapshot that would never update again.
+    //
+    // Reported rather than handled here: the SDK cannot know what a host wants
+    // to do about it. The hosted checkout turns REST polling on and re-reads
+    // the intent before turning it off again.
+    let closedByUs = false;
+    const onDisconnect = (): void => {
+      if (!closedByUs) onConnectionChange?.('lost');
+    };
+    socket.on('disconnect', onDisconnect);
+
     // socket.io-client's default reconnection restores the TRANSPORT, but the
     // server spins up a fresh Socket with no room membership — so every
     // reconnect (mobile network blip, backgrounded tab, LB cycle) must re-run
@@ -172,18 +211,32 @@ export function createPeableCheckout(
     // the user reopening the screen. `reconnect` is a Manager-level event
     // (`socket.io`, not `socket` itself) in socket.io-client.
     const onReconnect = (): void => {
-      void socket.emitWithAck('subscribe', { intentId: id, clientSecret }).catch(() => {
-        // Fire-and-forget: `onUpdate` has no error channel to surface a
-        // failed resubscribe (e.g. the intent expired between drop and
-        // reconnect) — socket.io keeps retrying the transport regardless, so
-        // there is nothing actionable to do with this rejection here.
-      });
+      void socket
+        .emitWithAck('subscribe', { intentId: id, clientSecret })
+        .then((ack) => {
+          // `'live'` only once the ROOM is rejoined, never on the transport
+          // alone: a socket that is connected and in no room delivers nothing,
+          // and telling the host it is live there would have them stand their
+          // fallback down into permanent silence.
+          if (ack.ok) onConnectionChange?.('live');
+        })
+        .catch(() => {
+          // The subscription is gone for good (the intent expired between drop
+          // and reconnect, say). Staying `lost` is the honest report: socket.io
+          // keeps retrying the transport, but nothing will arrive on it.
+        });
     };
     socket.io.on('reconnect', onReconnect);
 
     return {
       unsubscribe(): void {
+        // Set BEFORE `disconnect()`: a deliberate close fires `disconnect` like
+        // any other, and reporting `'lost'` there would have a host spin up a
+        // fallback for a subscription it just tore down — on an unmounting
+        // component, at that.
+        closedByUs = true;
         socket.off('intent.updated', listener);
+        socket.off('disconnect', onDisconnect);
         socket.io.off('reconnect', onReconnect);
         socket.disconnect();
       },

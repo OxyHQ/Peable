@@ -9,6 +9,7 @@
 import { isValidUsername } from "@oxyhq/contracts";
 import type { NetworkType } from "@fairco.in/core";
 import { PROFILE_WEB_ORIGIN } from "../config";
+import { SOCIAL_PAY_NETWORK } from "./social-network";
 
 /**
  * Read the Oxy handle out of the route's `[username]` segment.
@@ -91,7 +92,11 @@ export function decideProfilePayAction(input: {
 
   // Last, so a testnet wallet that is merely signed out still reads "sign in"
   // rather than a network warning it cannot act on.
-  if (network !== "testnet") return { kind: "mainnet-blocked" };
+  //
+  // The constant, not the literal: `ReadOnlyWalletView` asks the gateway for
+  // payments on the same network this gate lets people send on, and when the
+  // two were written separately they disagreed.
+  if (network !== SOCIAL_PAY_NETWORK) return { kind: "mainnet-blocked" };
 
   return { kind: "send" };
 }

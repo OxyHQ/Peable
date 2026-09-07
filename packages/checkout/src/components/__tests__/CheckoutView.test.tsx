@@ -69,6 +69,11 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
     initialIntent.id,
     initialIntent.clientSecret,
     expect.any(Function),
+    // The connection-state callback. Asserted here as well as in
+    // `CheckoutViewReconnect.test.tsx` because a change that dropped it would
+    // otherwise only break the file that is about it, and this is the case that
+    // pins the whole call shape.
+    expect.any(Function),
   );
   expect(capturedOnUpdate).not.toBeNull();
 

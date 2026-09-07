@@ -22,7 +22,7 @@
 import { View, Text, ScrollView, ActivityIndicator } from "react-native";
 import { useQuery } from "@tanstack/react-query";
 import type { SocialPayment } from "@peable.to/shared-types";
-import { useWalletStore } from "../../wallet/wallet-store";
+import { SOCIAL_PAY_NETWORK } from "../../pay/social-network";
 import { getMyPayments } from "../../services/gateway-client";
 import { fetchBalancesSat } from "../../services/explorer-address";
 import { ProfileQRCard } from "./ProfileQRCard";
@@ -69,7 +69,13 @@ export function ReadOnlyWalletView({
   displayName?: string;
   avatarFileId?: string;
 }) {
-  const network = useWalletStore((s) => s.network);
+  // NOT `useWalletStore((s) => s.network)`. No wallet initializes on this
+  // surface — that is what makes it read-only — so the store never leaves its
+  // default of `mainnet`, while the app can only create social payments on
+  // `SOCIAL_PAY_NETWORK`. Reading the store here asked about the one network
+  // that structurally has nothing to show, and every web visitor saw an empty
+  // history that looked exactly like never having been paid.
+  const network = SOCIAL_PAY_NETWORK;
 
   const payments = useQuery({
     queryKey: ["read-only-payments", network],
