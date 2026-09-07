@@ -87,6 +87,7 @@ describe("expireDueIntents", () => {
     const inFlight = await seedIntent(m, { expiresAt: PAST });
     // `payment_intents_broadcast_requires_txid_check` needs both in one write.
     await updateIntentState(gatewayDb(), inFlight.id, {
+      from: inFlight.status,
       status: "broadcast",
       txid: "d".repeat(64),
     });

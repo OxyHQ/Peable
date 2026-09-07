@@ -129,13 +129,17 @@ export class SettlementWatcher {
     // after this commit rather than inside it is an event a crash loses, with
     // the intent already settled and nothing recording that a merchant was
     // never told.
-    const updated = await transitionIntent(intent.id, {
+    const result = await transitionIntent(intent.id, {
+      from: current,
       status: next,
       confirmations,
     });
-    if (!updated) return;
+    // Both failures are the same non-event HERE: a row that moved (the expiry
+    // sweeper got there first) or vanished has nothing this poll should
+    // announce, and the next tick re-reads whatever it became.
+    if (result.kind !== 'updated') return;
 
-    await this.deps.onChange(updated);
+    await this.deps.onChange(result.row);
   }
 
   start(): void {

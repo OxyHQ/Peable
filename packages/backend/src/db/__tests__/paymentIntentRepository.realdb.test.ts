@@ -184,7 +184,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
     let raised: unknown;
     try {
-      await updateIntentState(suite!.db, created!.id, { status: 'broadcast' });
+      await updateIntentState(suite!.db, created!.id, { from: 'created', status: 'broadcast' });
     } catch (error) {
       raised = error;
     }
@@ -193,11 +193,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     ).toBe(true);
 
     const withTxid = await updateIntentState(suite!.db, created!.id, {
+      from: 'created',
       status: 'broadcast',
       txid: 'a'.repeat(64),
     });
-    expect(withTxid?.status).toBe('broadcast');
-    expect(withTxid?.txid).toBe('a'.repeat(64));
+    expect(withTxid.kind).toBe('updated');
+    const row = withTxid.kind === 'updated' ? withTxid.row : undefined;
+    expect(row?.status).toBe('broadcast');
+    expect(row?.txid).toBe('a'.repeat(64));
   });
 
   /**
@@ -263,7 +266,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const stranger = await makeMerchant();
     const settled = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, settled!.id, { status: 'broadcast', txid: 'b'.repeat(64) });
+    await updateIntentState(suite!.db, settled!.id, {
+      from: 'created',
+      status: 'broadcast',
+      txid: 'b'.repeat(64),
+    });
     await insertPaymentIntent(suite!.db, intentParams(merchant.id));
     await insertPaymentIntent(suite!.db, intentParams(stranger.id));
 
@@ -310,6 +317,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const watchable = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
     await updateIntentState(suite!.db, watchable!.id, {
+      from: 'created',
       status: 'broadcast',
       txid: 'c'.repeat(64),
     });
@@ -324,14 +332,28 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     // the one legal transition into a queryable status that no writer pairs
     // with a txid — which is exactly why `failed` is outside that CHECK.
     const noTxid = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, noTxid!.id, { status: 'awaiting_approval' });
-    await updateIntentState(suite!.db, noTxid!.id, { status: 'approved' });
-    await updateIntentState(suite!.db, noTxid!.id, { status: 'failed' });
+    await updateIntentState(suite!.db, noTxid!.id, {
+      from: 'created',
+      status: 'awaiting_approval',
+    });
+    await updateIntentState(suite!.db, noTxid!.id, {
+      from: 'awaiting_approval',
+      status: 'approved',
+    });
+    await updateIntentState(suite!.db, noTxid!.id, { from: 'approved', status: 'failed' });
     // Carrying a txid is not enough either: settled is terminal.
     const terminal = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, terminal!.id, { status: 'broadcast', txid: 'd'.repeat(64) });
-    await updateIntentState(suite!.db, terminal!.id, { status: 'confirming' });
-    await updateIntentState(suite!.db, terminal!.id, { status: 'settled', confirmations: 6 });
+    await updateIntentState(suite!.db, terminal!.id, {
+      from: 'created',
+      status: 'broadcast',
+      txid: 'd'.repeat(64),
+    });
+    await updateIntentState(suite!.db, terminal!.id, { from: 'broadcast', status: 'confirming' });
+    await updateIntentState(suite!.db, terminal!.id, {
+      from: 'confirming',
+      status: 'settled',
+      confirmations: 6,
+    });
 
     const found = await findWatchableIntents(suite!.db, ['broadcast', 'confirming']);
     const ids = found.map((row) => row.publicId);
@@ -342,10 +364,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     // Querying `failed` returns the txid-less row if `isNotNull` is dropped.
     const failedWithTxid = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
     await updateIntentState(suite!.db, failedWithTxid!.id, {
+      from: 'created',
       status: 'broadcast',
       txid: 'e'.repeat(64),
     });
-    await updateIntentState(suite!.db, failedWithTxid!.id, { status: 'failed' });
+    await updateIntentState(suite!.db, failedWithTxid!.id, {
+      from: 'broadcast',
+      status: 'failed',
+    });
 
     const failedOnes = (await findWatchableIntents(suite!.db, ['failed'])).map((row) => row.publicId);
     expect(failedOnes).toContain(failedWithTxid!.publicId);
@@ -399,6 +425,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
   it('returns null for an unknown intent rather than throwing', async () => {
     expect(await findIntentByPublicId(suite!.db, `pi_${uuidv7()}`)).toBeNull();
-    expect(await updateIntentState(suite!.db, uuidv7(), { status: 'expired' })).toBeNull();
+    // `missing`, not `stale`: the compare-and-swap tells "no such row" apart
+    // from "the row moved", and only the first is a 404 to a caller.
+    expect(await updateIntentState(suite!.db, uuidv7(), { from: 'created', status: 'expired' }))
+      .toEqual({ kind: 'missing' });
   });
 });

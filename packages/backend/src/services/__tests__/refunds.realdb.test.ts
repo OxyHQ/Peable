@@ -100,8 +100,11 @@ async function settledIntent(amount: string) {
   });
   if (!intent) throw new Error("could not seed the intent");
   await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_${String(counter)}`);
-  const settled = await updateIntentState(gatewayDb(), intent.id, { status: "settled" });
-  return settled ?? intent;
+  const settled = await updateIntentState(gatewayDb(), intent.id, {
+    from: "created",
+    status: "settled",
+  });
+  return settled.kind === "updated" ? settled.row : intent;
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {

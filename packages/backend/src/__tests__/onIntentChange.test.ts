@@ -51,16 +51,19 @@ test("the outbox row exists before onIntentChange runs, not because of it", asyn
   });
   const seeded = await seedIntent(merchant);
   const broadcast = await updateIntentState(gatewayDb(), seeded.id, {
+    from: seeded.status,
     status: "broadcast",
     txid: "tx_delivery_log",
   });
-  if (!broadcast) throw new Error("intent fixture missing");
+  if (broadcast.kind !== "updated") throw new Error("intent fixture missing");
 
-  const settled = await transitionIntent(broadcast.id, {
+  const transition = await transitionIntent(broadcast.row.id, {
+    from: "broadcast",
     status: "settled",
     confirmations: 1,
   });
-  if (!settled) throw new Error("transition returned no row");
+  if (transition.kind !== "updated") throw new Error("transition returned no row");
+  const settled = transition.row;
 
   const beforeAnnounce = (
     await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, limit: 50 })

@@ -56,6 +56,7 @@ test("advances a paid intent broadcast → confirming → settled as confirmatio
   // sets both in ONE statement — which is what
   // `payment_intents_broadcast_requires_txid_check` requires.
   await updateIntentState(gatewayDb(), intent.id, {
+    from: "created",
     status: "broadcast",
     txid: "tx_settle",
   });
@@ -120,6 +121,7 @@ test("marks an under-value payment as failed", async () => {
     expiresAt: new Date(now.getTime() + 60_000),
   });
   await updateIntentState(gatewayDb(), intent.id, {
+    from: "created",
     status: "broadcast",
     txid: "tx_under",
   });

@@ -210,6 +210,18 @@ and the outbox becomes the best-effort delivery it was built to replace; emit
 the socket frame inside the transaction and a payer is told about a transition
 that then rolled back.
 
+**A status write is a COMPARE-AND-SWAP, and `IntentStateChange.from` is the
+compare half.** Every caller reads the intent, decides a target with
+`applyEvent` — a pure function over that earlier read — and only then writes, so
+without `status = from` in the WHERE the state machine is advisory: `ALLOWED`
+has `expired: []`, and an event racing `expireDueIntents` still wrote `settled`
+over `expired` and enqueued a second, contradicting outcome for one payment.
+`from` is required so a caller that cannot name where it started does not
+compile, and the result is three-way — `updated` / `stale` / `missing` — because
+a route answers 409 for a row that moved and 404 for one that is not there.
+`expireDueIntents` needs none of this: its own statement carries the status
+predicate and `for update skip locked`.
+
 ## Auth
 
 Backend uses `@oxyhq/core/server`: `createOxyAuthMiddleware` on routes,
