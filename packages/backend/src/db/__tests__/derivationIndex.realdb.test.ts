@@ -223,6 +223,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     expect(names).toEqual([
       'checkout_sessions',
       'connected_accounts',
+      'disputes',
       'merchants',
       'payment_intents',
       'payment_links',

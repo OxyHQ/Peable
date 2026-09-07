@@ -91,8 +91,20 @@ export async function transitionIntent(
 export async function enqueueIntentWebhook(
   tx: DatabaseOrTransaction,
   row: PaymentIntentRow,
+  options?: {
+    /**
+     * Send THIS event instead of the one the row's status implies.
+     *
+     * For the events that are not about the payment's own lifecycle. A dispute
+     * is the clearest case: the intent stays `settled` the whole time the
+     * network holds the money, so `WEBHOOK_EVENT_FOR[row.status]` would resolve
+     * to `payment_intent.settled` and tell the merchant their payment had just
+     * succeeded — again — at the exact moment it was being contested.
+     */
+    readonly eventType?: WebhookEventType;
+  },
 ): Promise<void> {
-  const eventType = WEBHOOK_EVENT_FOR[row.status];
+  const eventType = options?.eventType ?? WEBHOOK_EVENT_FOR[row.status];
   if (eventType === undefined) return;
 
   // The one read allowed to select `webhook_secret`. Only the URL is used

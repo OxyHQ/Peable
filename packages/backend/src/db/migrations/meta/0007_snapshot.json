@@ -1,0 +1,2395 @@
+{
+  "id": "a4d73ff5-54da-482c-9627-d34faee51e0d",
+  "prevId": "929cadf0-481e-4c7d-adbc-5a7f785c012a",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.checkout_sessions": {
+      "name": "checkout_sessions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oxy_app_id": {
+          "name": "oxy_app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_intent_id": {
+          "name": "payment_intent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'FAIR'"
+        },
+        "rail": {
+          "name": "rail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'faircoin'"
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "success_url": {
+          "name": "success_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "cancel_url": {
+          "name": "cancel_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "checkout_sessions_public_id_key": {
+          "name": "checkout_sessions_public_id_key",
+          "columns": [
+            {
+              "expression": "public_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "checkout_sessions_payment_intent_id_key": {
+          "name": "checkout_sessions_payment_intent_id_key",
+          "columns": [
+            {
+              "expression": "payment_intent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "checkout_sessions_oxy_app_id_environment_idx": {
+          "name": "checkout_sessions_oxy_app_id_environment_idx",
+          "columns": [
+            {
+              "expression": "oxy_app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "environment",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "checkout_sessions_merchant_id_idx": {
+          "name": "checkout_sessions_merchant_id_idx",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "checkout_sessions_payment_intent_id_payment_intents_id_fk": {
+          "name": "checkout_sessions_payment_intent_id_payment_intents_id_fk",
+          "tableFrom": "checkout_sessions",
+          "tableTo": "payment_intents",
+          "columnsFrom": [
+            "payment_intent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "checkout_sessions_merchant_identity_fkey": {
+          "name": "checkout_sessions_merchant_identity_fkey",
+          "tableFrom": "checkout_sessions",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id",
+            "oxy_app_id",
+            "environment",
+            "network"
+          ],
+          "columnsTo": [
+            "id",
+            "oxy_app_id",
+            "environment",
+            "network"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "checkout_sessions_merchant_identity_no_network_fkey": {
+          "name": "checkout_sessions_merchant_identity_no_network_fkey",
+          "tableFrom": "checkout_sessions",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id",
+            "oxy_app_id",
+            "environment"
+          ],
+          "columnsTo": [
+            "id",
+            "oxy_app_id",
+            "environment"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "checkout_sessions_environment_check": {
+          "name": "checkout_sessions_environment_check",
+          "value": "environment in ('development', 'staging', 'production')"
+        },
+        "checkout_sessions_rail_check": {
+          "name": "checkout_sessions_rail_check",
+          "value": "rail in ('faircoin', 'card')"
+        },
+        "checkout_sessions_currency_check": {
+          "name": "checkout_sessions_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "checkout_sessions_network_check": {
+          "name": "checkout_sessions_network_check",
+          "value": "network is null or network in ('mainnet', 'testnet')"
+        },
+        "checkout_sessions_rail_network_agrees_check": {
+          "name": "checkout_sessions_rail_network_agrees_check",
+          "value": "(\"checkout_sessions\".\"rail\" = 'faircoin') = (\"checkout_sessions\".\"network\" is not null)"
+        },
+        "checkout_sessions_rail_currency_agrees_check": {
+          "name": "checkout_sessions_rail_currency_agrees_check",
+          "value": "(\"checkout_sessions\".\"rail\" = 'faircoin') = (\"checkout_sessions\".\"currency\" = 'FAIR')"
+        },
+        "checkout_sessions_amount_check": {
+          "name": "checkout_sessions_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "checkout_sessions_metadata_object_check": {
+          "name": "checkout_sessions_metadata_object_check",
+          "value": "jsonb_typeof(\"checkout_sessions\".\"metadata\") = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.connected_accounts": {
+      "name": "connected_accounts",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_account_id": {
+          "name": "provider_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "country": {
+          "name": "country",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "default_currency": {
+          "name": "default_currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "payouts_enabled": {
+          "name": "payouts_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "charges_enabled": {
+          "name": "charges_enabled",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "transfers_capability": {
+          "name": "transfers_capability",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "card_payments_capability": {
+          "name": "card_payments_capability",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "requirements_currently_due": {
+          "name": "requirements_currently_due",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "requirements_eventually_due": {
+          "name": "requirements_eventually_due",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "requirements_past_due": {
+          "name": "requirements_past_due",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "requirements_pending_verification": {
+          "name": "requirements_pending_verification",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "disabled_reason_codes": {
+          "name": "disabled_reason_codes",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'"
+        },
+        "last_synced_at": {
+          "name": "last_synced_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "connected_accounts_sync_idx": {
+          "name": "connected_accounts_sync_idx",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "last_synced_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "connected_accounts_merchant_id_fkey": {
+          "name": "connected_accounts_merchant_id_fkey",
+          "tableFrom": "connected_accounts",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "connected_accounts_public_id_key": {
+          "name": "connected_accounts_public_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_id"
+          ]
+        },
+        "connected_accounts_merchant_external_ref_key": {
+          "name": "connected_accounts_merchant_external_ref_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "merchant_id",
+            "external_ref"
+          ]
+        },
+        "connected_accounts_provider_account_id_key": {
+          "name": "connected_accounts_provider_account_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "provider_account_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "connected_accounts_provider_check": {
+          "name": "connected_accounts_provider_check",
+          "value": "provider in ('stripe')"
+        },
+        "connected_accounts_external_ref_check": {
+          "name": "connected_accounts_external_ref_check",
+          "value": "length(\"connected_accounts\".\"external_ref\") > 0"
+        },
+        "connected_accounts_provider_account_id_check": {
+          "name": "connected_accounts_provider_account_id_check",
+          "value": "length(\"connected_accounts\".\"provider_account_id\") > 0"
+        },
+        "connected_accounts_country_check": {
+          "name": "connected_accounts_country_check",
+          "value": "\"connected_accounts\".\"country\" = upper(\"connected_accounts\".\"country\") and length(\"connected_accounts\".\"country\") = 2"
+        },
+        "connected_accounts_transfers_capability_check": {
+          "name": "connected_accounts_transfers_capability_check",
+          "value": "transfers_capability is null or transfers_capability in ('active', 'pending', 'inactive')"
+        },
+        "connected_accounts_card_payments_capability_check": {
+          "name": "connected_accounts_card_payments_capability_check",
+          "value": "card_payments_capability is null or card_payments_capability in ('active', 'pending', 'inactive')"
+        },
+        "connected_accounts_requirements_check": {
+          "name": "connected_accounts_requirements_check",
+          "value": "\"connected_accounts\".\"requirements_currently_due\" >= 0 and \"connected_accounts\".\"requirements_eventually_due\" >= 0\n          and \"connected_accounts\".\"requirements_past_due\" >= 0 and \"connected_accounts\".\"requirements_pending_verification\" >= 0"
+        },
+        "connected_accounts_disabled_reason_codes_check": {
+          "name": "connected_accounts_disabled_reason_codes_check",
+          "value": "not ('' = any(\"connected_accounts\".\"disabled_reason_codes\"))"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.disputes": {
+      "name": "disputes",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_intent_id": {
+          "name": "payment_intent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'needs_response'"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_object_id": {
+          "name": "provider_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "reason": {
+          "name": "reason",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "evidence_due_at": {
+          "name": "evidence_due_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "disputes_payment_intent_idx": {
+          "name": "disputes_payment_intent_idx",
+          "columns": [
+            {
+              "expression": "payment_intent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "disputes_evidence_due_idx": {
+          "name": "disputes_evidence_due_idx",
+          "columns": [
+            {
+              "expression": "evidence_due_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "disputes_merchant_id_fkey": {
+          "name": "disputes_merchant_id_fkey",
+          "tableFrom": "disputes",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "disputes_payment_intent_id_fkey": {
+          "name": "disputes_payment_intent_id_fkey",
+          "tableFrom": "disputes",
+          "tableTo": "payment_intents",
+          "columnsFrom": [
+            "payment_intent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "disputes_public_id_key": {
+          "name": "disputes_public_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_id"
+          ]
+        },
+        "disputes_provider_object_key": {
+          "name": "disputes_provider_object_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "provider_object_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "disputes_provider_check": {
+          "name": "disputes_provider_check",
+          "value": "provider in ('stripe')"
+        },
+        "disputes_status_check": {
+          "name": "disputes_status_check",
+          "value": "status in ('needs_response', 'under_review', 'won', 'lost')"
+        },
+        "disputes_currency_check": {
+          "name": "disputes_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "disputes_amount_check": {
+          "name": "disputes_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "disputes_amount_positive_check": {
+          "name": "disputes_amount_positive_check",
+          "value": "\"disputes\".\"amount\"::numeric > 0"
+        },
+        "disputes_closed_has_no_deadline_check": {
+          "name": "disputes_closed_has_no_deadline_check",
+          "value": "\"disputes\".\"status\" not in ('won', 'lost') or \"disputes\".\"evidence_due_at\" is null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.merchants": {
+      "name": "merchants",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oxy_app_id": {
+          "name": "oxy_app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "xpub": {
+          "name": "xpub",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_derivation_index": {
+          "name": "next_derivation_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "webhook_url": {
+          "name": "webhook_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "webhook_secret": {
+          "name": "webhook_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "required_confirmations": {
+          "name": "required_confirmations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "livemode": {
+          "name": "livemode",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "display_name": {
+          "name": "display_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "avatar_file_id": {
+          "name": "avatar_file_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "description": {
+          "name": "description",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "merchants_public_id_key": {
+          "name": "merchants_public_id_key",
+          "columns": [
+            {
+              "expression": "public_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "merchants_oxy_app_id_environment_key": {
+          "name": "merchants_oxy_app_id_environment_key",
+          "columns": [
+            {
+              "expression": "oxy_app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "environment",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "merchants_id_network_key": {
+          "name": "merchants_id_network_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "network"
+          ]
+        },
+        "merchants_id_oxy_app_id_environment_network_key": {
+          "name": "merchants_id_oxy_app_id_environment_network_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "oxy_app_id",
+            "environment",
+            "network"
+          ]
+        },
+        "merchants_id_oxy_app_id_environment_key": {
+          "name": "merchants_id_oxy_app_id_environment_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "id",
+            "oxy_app_id",
+            "environment"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "merchants_environment_check": {
+          "name": "merchants_environment_check",
+          "value": "environment in ('development', 'staging', 'production')"
+        },
+        "merchants_network_check": {
+          "name": "merchants_network_check",
+          "value": "network in ('mainnet', 'testnet')"
+        },
+        "merchants_next_derivation_index_check": {
+          "name": "merchants_next_derivation_index_check",
+          "value": "\"merchants\".\"next_derivation_index\" >= 0"
+        },
+        "merchants_required_confirmations_check": {
+          "name": "merchants_required_confirmations_check",
+          "value": "\"merchants\".\"required_confirmations\" > 0"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.payment_intents": {
+      "name": "payment_intents",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "rail": {
+          "name": "rail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'faircoin'"
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'FAIR'"
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "txid": {
+          "name": "txid",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "confirmations": {
+          "name": "confirmations",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "provider_object_id": {
+          "name": "provider_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "client_secret": {
+          "name": "client_secret",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "expires_at": {
+          "name": "expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "payment_intents_public_id_key": {
+          "name": "payment_intents_public_id_key",
+          "columns": [
+            {
+              "expression": "public_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_intents_merchant_id_idempotency_key_key": {
+          "name": "payment_intents_merchant_id_idempotency_key_key",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "idempotency_key",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_intents_merchant_id_idx": {
+          "name": "payment_intents_merchant_id_idx",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_intents_address_idx": {
+          "name": "payment_intents_address_idx",
+          "columns": [
+            {
+              "expression": "address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_intents_provider_object_key": {
+          "name": "payment_intents_provider_object_key",
+          "columns": [
+            {
+              "expression": "provider",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "provider_object_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "where": "\"payment_intents\".\"provider_object_id\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_intents_merchant_id_network_fkey": {
+          "name": "payment_intents_merchant_id_network_fkey",
+          "tableFrom": "payment_intents",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id",
+            "network"
+          ],
+          "columnsTo": [
+            "id",
+            "network"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "payment_intents_merchant_id_fkey": {
+          "name": "payment_intents_merchant_id_fkey",
+          "tableFrom": "payment_intents",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_intents_status_check": {
+          "name": "payment_intents_status_check",
+          "value": "status in ('created', 'awaiting_approval', 'approved', 'broadcast', 'confirming', 'requires_action', 'processing', 'settled', 'refunded', 'partially_refunded', 'expired', 'failed', 'rejected')"
+        },
+        "payment_intents_rail_check": {
+          "name": "payment_intents_rail_check",
+          "value": "rail in ('faircoin', 'card')"
+        },
+        "payment_intents_currency_check": {
+          "name": "payment_intents_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "payment_intents_rail_currency_agrees_check": {
+          "name": "payment_intents_rail_currency_agrees_check",
+          "value": "(\"payment_intents\".\"rail\" = 'faircoin') = (\"payment_intents\".\"currency\" = 'FAIR')"
+        },
+        "payment_intents_network_check": {
+          "name": "payment_intents_network_check",
+          "value": "network is null or network in ('mainnet', 'testnet')"
+        },
+        "payment_intents_faircoin_requires_chain_fields_check": {
+          "name": "payment_intents_faircoin_requires_chain_fields_check",
+          "value": "\"payment_intents\".\"rail\" <> 'faircoin' or (\"payment_intents\".\"address\" is not null and \"payment_intents\".\"network\" is not null)"
+        },
+        "payment_intents_card_has_no_chain_fields_check": {
+          "name": "payment_intents_card_has_no_chain_fields_check",
+          "value": "\"payment_intents\".\"rail\" <> 'card' or (\"payment_intents\".\"address\" is null and \"payment_intents\".\"network\" is null and \"payment_intents\".\"txid\" is null and \"payment_intents\".\"confirmations\" = 0)"
+        },
+        "payment_intents_chain_statuses_are_faircoin_check": {
+          "name": "payment_intents_chain_statuses_are_faircoin_check",
+          "value": "status not in ('awaiting_approval', 'approved', 'broadcast', 'confirming') or rail = 'faircoin'"
+        },
+        "payment_intents_card_statuses_are_card_check": {
+          "name": "payment_intents_card_statuses_are_card_check",
+          "value": "status not in ('requires_action', 'processing', 'refunded', 'partially_refunded') or rail = 'card'"
+        },
+        "payment_intents_provider_check": {
+          "name": "payment_intents_provider_check",
+          "value": "provider is null or provider in ('stripe')"
+        },
+        "payment_intents_card_requires_provider_check": {
+          "name": "payment_intents_card_requires_provider_check",
+          "value": "\"payment_intents\".\"rail\" <> 'card' or \"payment_intents\".\"provider\" is not null"
+        },
+        "payment_intents_faircoin_has_no_provider_check": {
+          "name": "payment_intents_faircoin_has_no_provider_check",
+          "value": "\"payment_intents\".\"rail\" <> 'faircoin' or (\"payment_intents\".\"provider\" is null and \"payment_intents\".\"provider_object_id\" is null)"
+        },
+        "payment_intents_provider_object_needs_provider_check": {
+          "name": "payment_intents_provider_object_needs_provider_check",
+          "value": "\"payment_intents\".\"provider_object_id\" is null or \"payment_intents\".\"provider\" is not null"
+        },
+        "payment_intents_amount_check": {
+          "name": "payment_intents_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "payment_intents_confirmations_check": {
+          "name": "payment_intents_confirmations_check",
+          "value": "\"payment_intents\".\"confirmations\" >= 0"
+        },
+        "payment_intents_metadata_object_check": {
+          "name": "payment_intents_metadata_object_check",
+          "value": "jsonb_typeof(\"payment_intents\".\"metadata\") = 'object'"
+        },
+        "payment_intents_broadcast_requires_txid_check": {
+          "name": "payment_intents_broadcast_requires_txid_check",
+          "value": "\"payment_intents\".\"rail\" <> 'faircoin' or \"payment_intents\".\"status\" not in ('broadcast', 'confirming', 'settled') or \"payment_intents\".\"txid\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.payment_links": {
+      "name": "payment_links",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "oxy_app_id": {
+          "name": "oxy_app_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "environment": {
+          "name": "environment",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'FAIR'"
+        },
+        "rail": {
+          "name": "rail",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'faircoin'"
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "metadata": {
+          "name": "metadata",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "success_url": {
+          "name": "success_url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "payment_links_public_id_key": {
+          "name": "payment_links_public_id_key",
+          "columns": [
+            {
+              "expression": "public_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_links_oxy_app_id_environment_idx": {
+          "name": "payment_links_oxy_app_id_environment_idx",
+          "columns": [
+            {
+              "expression": "oxy_app_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "environment",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "payment_links_merchant_id_idx": {
+          "name": "payment_links_merchant_id_idx",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "payment_links_merchant_identity_fkey": {
+          "name": "payment_links_merchant_identity_fkey",
+          "tableFrom": "payment_links",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id",
+            "oxy_app_id",
+            "environment",
+            "network"
+          ],
+          "columnsTo": [
+            "id",
+            "oxy_app_id",
+            "environment",
+            "network"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "payment_links_merchant_identity_no_network_fkey": {
+          "name": "payment_links_merchant_identity_no_network_fkey",
+          "tableFrom": "payment_links",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id",
+            "oxy_app_id",
+            "environment"
+          ],
+          "columnsTo": [
+            "id",
+            "oxy_app_id",
+            "environment"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "payment_links_environment_check": {
+          "name": "payment_links_environment_check",
+          "value": "environment in ('development', 'staging', 'production')"
+        },
+        "payment_links_rail_check": {
+          "name": "payment_links_rail_check",
+          "value": "rail in ('faircoin', 'card')"
+        },
+        "payment_links_currency_check": {
+          "name": "payment_links_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "payment_links_network_check": {
+          "name": "payment_links_network_check",
+          "value": "network is null or network in ('mainnet', 'testnet')"
+        },
+        "payment_links_rail_network_agrees_check": {
+          "name": "payment_links_rail_network_agrees_check",
+          "value": "(\"payment_links\".\"rail\" = 'faircoin') = (\"payment_links\".\"network\" is not null)"
+        },
+        "payment_links_rail_currency_agrees_check": {
+          "name": "payment_links_rail_currency_agrees_check",
+          "value": "(\"payment_links\".\"rail\" = 'faircoin') = (\"payment_links\".\"currency\" = 'FAIR')"
+        },
+        "payment_links_amount_check": {
+          "name": "payment_links_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "payment_links_metadata_object_check": {
+          "name": "payment_links_metadata_object_check",
+          "value": "jsonb_typeof(\"payment_links\".\"metadata\") = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.provider_events": {
+      "name": "provider_events",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_event_id": {
+          "name": "provider_event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_account_id": {
+          "name": "provider_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "type": {
+          "name": "type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "livemode": {
+          "name": "livemode",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "api_version": {
+          "name": "api_version",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "object_ids": {
+          "name": "object_ids",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "processing_error": {
+          "name": "processing_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "provider_events_unprocessed_idx": {
+          "name": "provider_events_unprocessed_idx",
+          "columns": [
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"provider_events\".\"processed_at\" is null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "provider_events_identity_key": {
+          "name": "provider_events_identity_key",
+          "nullsNotDistinct": true,
+          "columns": [
+            "provider",
+            "provider_account_id",
+            "provider_event_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "provider_events_provider_check": {
+          "name": "provider_events_provider_check",
+          "value": "provider in ('stripe')"
+        },
+        "provider_events_payload_object_check": {
+          "name": "provider_events_payload_object_check",
+          "value": "jsonb_typeof(\"provider_events\".\"payload\") = 'object'"
+        },
+        "provider_events_object_ids_object_check": {
+          "name": "provider_events_object_ids_object_check",
+          "value": "jsonb_typeof(\"provider_events\".\"object_ids\") = 'object'"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.refunds": {
+      "name": "refunds",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_intent_id": {
+          "name": "payment_intent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_object_id": {
+          "name": "provider_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_code": {
+          "name": "failure_code",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "refunds_payment_intent_idx": {
+          "name": "refunds_payment_intent_idx",
+          "columns": [
+            {
+              "expression": "payment_intent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "refunds_merchant_id_fkey": {
+          "name": "refunds_merchant_id_fkey",
+          "tableFrom": "refunds",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "refunds_payment_intent_id_fkey": {
+          "name": "refunds_payment_intent_id_fkey",
+          "tableFrom": "refunds",
+          "tableTo": "payment_intents",
+          "columnsFrom": [
+            "payment_intent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "refunds_public_id_key": {
+          "name": "refunds_public_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_id"
+          ]
+        },
+        "refunds_merchant_external_ref_key": {
+          "name": "refunds_merchant_external_ref_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "merchant_id",
+            "external_ref"
+          ]
+        },
+        "refunds_provider_object_key": {
+          "name": "refunds_provider_object_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "provider_object_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "refunds_provider_check": {
+          "name": "refunds_provider_check",
+          "value": "provider in ('stripe')"
+        },
+        "refunds_status_check": {
+          "name": "refunds_status_check",
+          "value": "status in ('pending', 'succeeded', 'failed')"
+        },
+        "refunds_currency_check": {
+          "name": "refunds_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "refunds_external_ref_check": {
+          "name": "refunds_external_ref_check",
+          "value": "length(\"refunds\".\"external_ref\") > 0"
+        },
+        "refunds_amount_check": {
+          "name": "refunds_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "refunds_amount_positive_check": {
+          "name": "refunds_amount_positive_check",
+          "value": "\"refunds\".\"amount\"::numeric > 0"
+        },
+        "refunds_succeeded_has_provider_object_check": {
+          "name": "refunds_succeeded_has_provider_object_check",
+          "value": "\"refunds\".\"status\" <> 'succeeded' or \"refunds\".\"provider_object_id\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.social_receive_cursors": {
+      "name": "social_receive_cursors",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "oxy_user_id": {
+          "name": "oxy_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "next_derivation_index": {
+          "name": "next_derivation_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 1
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "social_receive_cursors_oxy_user_id_network_key": {
+          "name": "social_receive_cursors_oxy_user_id_network_key",
+          "columns": [
+            {
+              "expression": "oxy_user_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "network",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "social_receive_cursors_network_check": {
+          "name": "social_receive_cursors_network_check",
+          "value": "network in ('mainnet', 'testnet')"
+        },
+        "social_receive_cursors_next_derivation_index_check": {
+          "name": "social_receive_cursors_next_derivation_index_check",
+          "value": "next_derivation_index >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.social_send_attributions": {
+      "name": "social_send_attributions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "address": {
+          "name": "address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "network": {
+          "name": "network",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "sender_user_id": {
+          "name": "sender_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "recipient_user_id": {
+          "name": "recipient_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "derivation_index": {
+          "name": "derivation_index",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "social_send_attributions_address_network_key": {
+          "name": "social_send_attributions_address_network_key",
+          "columns": [
+            {
+              "expression": "address",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "network",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "social_send_attributions_network_check": {
+          "name": "social_send_attributions_network_check",
+          "value": "network in ('mainnet', 'testnet')"
+        },
+        "social_send_attributions_derivation_index_check": {
+          "name": "social_send_attributions_derivation_index_check",
+          "value": "derivation_index >= 1"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.transfers": {
+      "name": "transfers",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "public_id": {
+          "name": "public_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_intent_id": {
+          "name": "payment_intent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "connected_account_id": {
+          "name": "connected_account_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "external_ref": {
+          "name": "external_ref",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount": {
+          "name": "amount",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "currency": {
+          "name": "currency",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "amount_reversed": {
+          "name": "amount_reversed",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'0'"
+        },
+        "status": {
+          "name": "status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "provider": {
+          "name": "provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "provider_object_id": {
+          "name": "provider_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "source_payment_object_id": {
+          "name": "source_payment_object_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "failure_message": {
+          "name": "failure_message",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "transfers_payment_intent_idx": {
+          "name": "transfers_payment_intent_idx",
+          "columns": [
+            {
+              "expression": "payment_intent_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "transfers_connected_account_idx": {
+          "name": "transfers_connected_account_idx",
+          "columns": [
+            {
+              "expression": "connected_account_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "transfers_merchant_id_fkey": {
+          "name": "transfers_merchant_id_fkey",
+          "tableFrom": "transfers",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfers_payment_intent_id_fkey": {
+          "name": "transfers_payment_intent_id_fkey",
+          "tableFrom": "transfers",
+          "tableTo": "payment_intents",
+          "columnsFrom": [
+            "payment_intent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "transfers_connected_account_id_fkey": {
+          "name": "transfers_connected_account_id_fkey",
+          "tableFrom": "transfers",
+          "tableTo": "connected_accounts",
+          "columnsFrom": [
+            "connected_account_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "transfers_public_id_key": {
+          "name": "transfers_public_id_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "public_id"
+          ]
+        },
+        "transfers_merchant_external_ref_key": {
+          "name": "transfers_merchant_external_ref_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "merchant_id",
+            "external_ref"
+          ]
+        },
+        "transfers_provider_object_key": {
+          "name": "transfers_provider_object_key",
+          "nullsNotDistinct": false,
+          "columns": [
+            "provider",
+            "provider_object_id"
+          ]
+        }
+      },
+      "policies": {},
+      "checkConstraints": {
+        "transfers_provider_check": {
+          "name": "transfers_provider_check",
+          "value": "provider in ('stripe')"
+        },
+        "transfers_status_check": {
+          "name": "transfers_status_check",
+          "value": "status in ('pending', 'paid', 'partially_reversed', 'reversed', 'failed')"
+        },
+        "transfers_currency_check": {
+          "name": "transfers_currency_check",
+          "value": "currency in ('FAIR', 'EUR', 'USD')"
+        },
+        "transfers_external_ref_check": {
+          "name": "transfers_external_ref_check",
+          "value": "length(\"transfers\".\"external_ref\") > 0"
+        },
+        "transfers_amount_check": {
+          "name": "transfers_amount_check",
+          "value": "amount ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "transfers_amount_reversed_check": {
+          "name": "transfers_amount_reversed_check",
+          "value": "amount_reversed ~ '^(0|[1-9][0-9]*)$'"
+        },
+        "transfers_reversed_within_amount_check": {
+          "name": "transfers_reversed_within_amount_check",
+          "value": "\"transfers\".\"amount_reversed\"::numeric <= \"transfers\".\"amount\"::numeric"
+        },
+        "transfers_reversal_status_agrees_check": {
+          "name": "transfers_reversal_status_agrees_check",
+          "value": "(\"transfers\".\"status\" <> 'reversed' or \"transfers\".\"amount_reversed\"::numeric = \"transfers\".\"amount\"::numeric)\n          and (\"transfers\".\"status\" <> 'partially_reversed'\n               or (\"transfers\".\"amount_reversed\"::numeric > 0\n                   and \"transfers\".\"amount_reversed\"::numeric < \"transfers\".\"amount\"::numeric))"
+        },
+        "transfers_settled_has_provider_object_check": {
+          "name": "transfers_settled_has_provider_object_check",
+          "value": "\"transfers\".\"status\" = 'pending' or \"transfers\".\"status\" = 'failed'\n          or \"transfers\".\"provider_object_id\" is not null"
+        }
+      },
+      "isRLSEnabled": false
+    },
+    "public.webhook_deliveries": {
+      "name": "webhook_deliveries",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "text",
+          "primaryKey": true,
+          "notNull": true
+        },
+        "merchant_id": {
+          "name": "merchant_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payment_intent_id": {
+          "name": "payment_intent_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "payload": {
+          "name": "payload",
+          "type": "jsonb",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'{}'::jsonb"
+        },
+        "url": {
+          "name": "url",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "delivered": {
+          "name": "delivered",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": false
+        },
+        "last_status": {
+          "name": "last_status",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'pending'"
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "next_attempt_at": {
+          "name": "next_attempt_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_owner": {
+          "name": "lease_owner",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "lease_expires_at": {
+          "name": "lease_expires_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "date_trunc('milliseconds', now())"
+        }
+      },
+      "indexes": {
+        "webhook_deliveries_merchant_id_idx": {
+          "name": "webhook_deliveries_merchant_id_idx",
+          "columns": [
+            {
+              "expression": "merchant_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "webhook_deliveries_due_idx": {
+          "name": "webhook_deliveries_due_idx",
+          "columns": [
+            {
+              "expression": "next_attempt_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"webhook_deliveries\".\"next_attempt_at\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {
+        "webhook_deliveries_merchant_id_merchants_id_fk": {
+          "name": "webhook_deliveries_merchant_id_merchants_id_fk",
+          "tableFrom": "webhook_deliveries",
+          "tableTo": "merchants",
+          "columnsFrom": [
+            "merchant_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "webhook_deliveries_payment_intent_id_payment_intents_id_fk": {
+          "name": "webhook_deliveries_payment_intent_id_payment_intents_id_fk",
+          "tableFrom": "webhook_deliveries",
+          "tableTo": "payment_intents",
+          "columnsFrom": [
+            "payment_intent_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {
+        "webhook_deliveries_event_type_check": {
+          "name": "webhook_deliveries_event_type_check",
+          "value": "event_type in ('payment_intent.confirming', 'payment_intent.settled', 'payment_intent.failed', 'payment_intent.rejected', 'payment_intent.expired', 'payment_intent.refunded', 'payment_intent.partially_refunded', 'payment_intent.disputed', 'payment_intent.dispute_closed')"
+        },
+        "webhook_deliveries_last_status_check": {
+          "name": "webhook_deliveries_last_status_check",
+          "value": "last_status in ('pending', 'delivered', 'failed', 'dead')"
+        },
+        "webhook_deliveries_attempts_check": {
+          "name": "webhook_deliveries_attempts_check",
+          "value": "\"webhook_deliveries\".\"attempts\" >= 0"
+        },
+        "webhook_deliveries_status_agrees_check": {
+          "name": "webhook_deliveries_status_agrees_check",
+          "value": "\"webhook_deliveries\".\"delivered\" = (\"webhook_deliveries\".\"last_status\" = 'delivered')"
+        },
+        "webhook_deliveries_schedule_agrees_check": {
+          "name": "webhook_deliveries_schedule_agrees_check",
+          "value": "(\"webhook_deliveries\".\"last_status\" = 'pending') = (\"webhook_deliveries\".\"next_attempt_at\" is not null)"
+        },
+        "webhook_deliveries_lease_agrees_check": {
+          "name": "webhook_deliveries_lease_agrees_check",
+          "value": "(\"webhook_deliveries\".\"lease_owner\" is null) = (\"webhook_deliveries\".\"lease_expires_at\" is null)"
+        },
+        "webhook_deliveries_terminal_has_no_lease_check": {
+          "name": "webhook_deliveries_terminal_has_no_lease_check",
+          "value": "\"webhook_deliveries\".\"last_status\" = 'pending' or \"webhook_deliveries\".\"lease_owner\" is null"
+        },
+        "webhook_deliveries_payload_object_check": {
+          "name": "webhook_deliveries_payload_object_check",
+          "value": "jsonb_typeof(\"webhook_deliveries\".\"payload\") = 'object'"
+        },
+        "webhook_deliveries_pending_has_envelope_check": {
+          "name": "webhook_deliveries_pending_has_envelope_check",
+          "value": "\"webhook_deliveries\".\"last_status\" <> 'pending' or \"webhook_deliveries\".\"payload\" <> '{}'::jsonb"
+        }
+      },
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

@@ -202,8 +202,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
   /**
    * An event type the drain does not act on is HANDLED, not failed.
    *
-   * Refunds and disputes land here today. Marking them processed is what keeps
-   * them out of the drain's set — the alternative is a row retried on every
+   * Refunds land here today; disputes no longer do — `charge.dispute.*` is
+   * routed and acted on. Marking an unmapped event processed is what keeps it
+   * out of the drain's set — the alternative is a row retried on every
    * pass forever, and an operator surface where "unprocessed" stops meaning
    * anything.
    */

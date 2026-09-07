@@ -31,7 +31,13 @@ import { applyTransferReversal, findTransferByProviderObject } from "../../db/tr
 import { refreshConnectedAccount } from "../accounts/connectedAccountService";
 import { getDb } from "../../db/postgres";
 import { applyEvent, type IntentEvent } from "../intentState";
-import { announceIntentChange, transitionIntent } from "../intentTransition";
+import {
+  announceIntentChange,
+  enqueueIntentWebhook,
+  transitionIntent,
+} from "../intentTransition";
+import { upsertDispute } from "../../db/disputes/disputeRepository";
+import type { DisputeStatus } from "../../db/schema/valueSets";
 import { redactProviderMessage } from "./redact";
 import type { ProviderId } from "./provider";
 
@@ -98,6 +104,26 @@ const REFUND_EVENTS: ReadonlySet<string> = new Set([
   "refund.created",
 ]);
 
+/**
+ * Dispute events, and the gateway status each one means.
+ *
+ * A CLOSED map from the provider's seven-state vocabulary to the gateway's
+ * four (ADR 0001 D3: the acquirer stays invisible, so its vocabulary does not
+ * reach the wire). `warning_*` collapses onto the state it is a warning ABOUT,
+ * because a merchant's only useful question is whether evidence is due.
+ *
+ * `charge.dispute.funds_withdrawn` and `funds_reinstated` are deliberately
+ * ABSENT. They describe money moving, which on this gateway is a refund row's
+ * job, and mapping them to a dispute status would make the money movement and
+ * the dispute outcome two names for one thing — so the network reinstating
+ * funds on a dispute it later lost would silently mark it `won`.
+ */
+const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
+  "charge.dispute.created": "needs_response",
+  "charge.dispute.updated": "under_review",
+  "charge.dispute.closed": "won",
+};
+
 /** Transfer events that carry a cumulative reversed total. */
 const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
   "transfer.reversed",
@@ -136,6 +162,9 @@ export async function processProviderEvent(
     }
     if (REFUND_EVENTS.has(event.type)) {
       return await handleRefundEvent(db, event);
+    }
+    if (event.type in DISPUTE_STATUS_FOR_EVENT) {
+      return await handleDisputeEvent(db, event);
     }
 
     const intentEvent = INTENT_EVENT_FOR[event.type];
@@ -351,4 +380,145 @@ async function handleRefundEvent(
   const status = await applyRefundToIntent(intent);
   await markProviderEventProcessed(db, event.id);
   return { kind: "applied", intentId: intent.id, status };
+}
+
+/**
+ * A dispute the card network opened, updated or closed.
+ *
+ * ## The inversion, which is why this is not `handleRefundEvent` with a rename
+ *
+ * `handleRefundEvent` treats "no refund row for this provider object" as
+ * `unmatched` and lets the drain retry. That is right there: Peable writes the
+ * refund row BEFORE calling the provider, so absence means our own write has
+ * not landed yet and waiting is what resolves it.
+ *
+ * Here absence is the NORMAL first state. Peable never creates a dispute —
+ * the network does — so a missing row means this is the first time we have
+ * heard of it, and waiting would wait forever. It CREATES.
+ *
+ * The lookup that CAN legitimately be absent is the intent, and that one keeps
+ * refund semantics: `unmatched` and retryable, because it is the two-step
+ * create's own window (the row is written before the provider call returns, so
+ * a dispute event racing that window finds nothing and will find it next pass).
+ *
+ * ## The merchant is told ONCE
+ *
+ * `upsertDispute` reports whether it created the row, and only a creation
+ * enqueues `payment_intent.disputed`. A provider WILL redeliver — receipt is
+ * acknowledged before processing — and a merchant told twice that one payment
+ * is disputed has no way to tell that from two disputes on it.
+ *
+ * A close is the exception and enqueues every time it changes the status,
+ * because `dispute_closed` carries the outcome and arriving twice with the same
+ * outcome is idempotent for the merchant in a way "you have a new dispute" is
+ * not.
+ */
+async function handleDisputeEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const disputeObjectId = event.objectIds.dispute;
+  if (!disputeObjectId) {
+    // Mapped as a dispute event and carrying no dispute id: the envelope and
+    // the map disagree, which is a bug here rather than at the provider.
+    await markProviderEventFailed(db, event.id, "the dispute event names no dispute");
+    return { kind: "failed", error: "the dispute event names no dispute" };
+  }
+
+  const intentObjectId = event.objectIds[PAYMENT_OBJECT_KEY];
+  if (!intentObjectId) {
+    await markProviderEventFailed(db, event.id, "the dispute event names no payment");
+    return { kind: "failed", error: "the dispute event names no payment" };
+  }
+
+  const provider = event.provider as ProviderId;
+  const intent = await findIntentByProviderObject(db, provider, intentObjectId);
+  // The ONE place refund semantics still apply: retryable, because a dispute
+  // arriving inside the two-step create's window finds no intent yet.
+  if (!intent) return { kind: "unmatched" };
+
+  const detail = readDisputeDetail(event.payload);
+  if (!detail) {
+    await markProviderEventFailed(db, event.id, "the dispute event carries no amount");
+    return { kind: "failed", error: "the dispute event carries no amount" };
+  }
+
+  const status = DISPUTE_STATUS_FOR_EVENT[event.type] ?? "needs_response";
+  // A closed dispute has no deadline left to meet, and the CHECK refuses the
+  // combination — so the status decides the column rather than the payload.
+  const closed = status === "won" || status === "lost";
+
+  const { dispute, created } = await upsertDispute(db, {
+    merchantId: intent.merchantId,
+    paymentIntentId: intent.id,
+    provider,
+    providerObjectId: disputeObjectId,
+    amount: detail.amount,
+    currency: intent.currency,
+    status: closed ? detail.outcome ?? status : status,
+    ...(detail.reason === null ? {} : { reason: detail.reason }),
+    evidenceDueAt: closed ? null : detail.evidenceDueAt,
+  });
+
+  if (created || closed) {
+    await enqueueIntentWebhook(db, intent, {
+      eventType: created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
+    });
+  }
+
+  await markProviderEventProcessed(db, event.id);
+  return { kind: "applied", intentId: intent.id, status: dispute.status };
+}
+
+/** What a dispute payload says, narrowed to what the row needs. */
+interface DisputeDetail {
+  readonly amount: string;
+  readonly reason: string | null;
+  readonly evidenceDueAt: Date | null;
+  /** `won` or `lost`, when the payload states an outcome. */
+  readonly outcome: DisputeStatus | null;
+}
+
+/**
+ * Read a dispute payload.
+ *
+ * `amount` is required and everything else is optional, which is the honest
+ * split: a dispute with no amount is one this gateway cannot record (the CHECK
+ * refuses a zero), while a missing reason or deadline is a provider that did
+ * not send one — common, and not a failure.
+ *
+ * The outcome is read from `status` rather than from the event type because
+ * `charge.dispute.closed` closes a dispute the merchant may have WON or LOST,
+ * and defaulting either way would tell them the opposite of what happened for
+ * half of all closed disputes.
+ */
+function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | null {
+  const data = payload.data;
+  if (typeof data !== "object" || data === null) return null;
+  const object = (data as Record<string, unknown>).object;
+  if (typeof object !== "object" || object === null) return null;
+  const fields = object as Record<string, unknown>;
+
+  const amount = fields.amount;
+  if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) return null;
+
+  const reason = typeof fields.reason === "string" && fields.reason.length > 0
+    ? fields.reason
+    : null;
+
+  // Seconds since the epoch, as every provider timestamp in this payload is.
+  const due = fields.evidence_details;
+  let evidenceDueAt: Date | null = null;
+  if (typeof due === "object" && due !== null) {
+    const by = (due as Record<string, unknown>).due_by;
+    if (typeof by === "number" && Number.isSafeInteger(by) && by > 0) {
+      evidenceDueAt = new Date(by * 1000);
+    }
+  }
+
+  const status = fields.status;
+  const outcome: DisputeStatus | null =
+    status === "won" ? "won" : status === "lost" ? "lost" : null;
+
+  return { amount: String(amount), reason, evidenceDueAt, outcome };
 }
