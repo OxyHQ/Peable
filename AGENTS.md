@@ -144,20 +144,25 @@ the legal firewall: if a merchant ever hands over an `xprv`, the gateway refuses
 it rather than silently gaining the ability to spend their funds. Never relax it,
 and never add a code path that accepts a private extended key.
 
-`services/reserveAddress.ts` claims the next derivation index with
-`findOneAndUpdate({ $inc: { nextDerivationIndex: 1 } }, { new: false })`. The
-`new: false` is load-bearing: it returns the **pre**-increment document, so the
-index that call owns is exactly what it read, and concurrent callers each get a
-distinct index with no read-modify-write race. A `new: true` here silently hands
-two intents the same address.
+`services/reserveAddress.ts` claims the next derivation index through
+`db/merchants/derivationIndex.ts`, whose `UPDATE … SET x = x + 1 … RETURNING
+x - 1` takes the row lock and returns the **pre**-increment value — exactly the
+index that call owns, so concurrent callers each get a distinct index with no
+read-modify-write race. The `- 1` is load-bearing: dropping it hands out an
+index one higher than the one recorded, and the address a payer is shown is not
+the address the next reservation avoids. The same statement returns the xpub, so
+the key the address derives from is the one the reservation was taken against.
 
 ## Backend surface
 
 Routes (`src/routes/`): `checkoutSessions`, `dashboard`, `enrich`, `merchants`,
 `paymentIntents`, `paymentLinks`, `social`, `webhookDeliveries`.
 
-Models (`src/models/`): `CheckoutSession`, `Merchant`, `PaymentIntent`,
-`PaymentLink`, `SocialReceiveCursor`, `SocialSendAttribution`, `WebhookDelivery`.
+Repositories (`src/db/`), the only thing that reaches Postgres — there is no
+`src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
+`payments/` (`paymentIntentRepository`, `paymentLinkRepository`,
+`checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
+`webhooks/` (`webhookDeliveryRepository`).
 
 ## Auth
 
