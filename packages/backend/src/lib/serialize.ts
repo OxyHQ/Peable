@@ -1,6 +1,7 @@
 import type {
   CheckoutSession,
   CheckoutSessionPublic,
+  Dispute,
   Merchant,
   MerchantDisplay,
   PaymentIntent,
@@ -13,6 +14,7 @@ import type { MerchantRow } from "../db/merchants/merchantRepository";
 import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
 import type { PaymentLinkRow } from "../db/payments/paymentLinkRepository";
 import type { CheckoutSessionRow } from "../db/payments/checkoutSessionRepository";
+import type { DisputeRow } from "../db/disputes/disputeRepository";
 import type { WebhookDeliveryRow } from "../db/webhooks/webhookDeliveryRepository";
 
 /**
@@ -210,5 +212,32 @@ export function toCheckoutSessionPublicDTO(
     cancelUrl: row.cancelUrl ?? undefined,
     merchant,
     paymentIntent: toPaymentIntentDTO(intent),
+  };
+}
+
+/**
+ * A dispute row on the wire.
+ *
+ * Takes the intent's PUBLIC id as an argument rather than reading it, for the
+ * reason `listDeliveriesForMerchant` joins it in: the row holds the INTERNAL
+ * foreign key, and every contract here calls the public `pi_…` the `id`.
+ *
+ * The network's own dispute id never appears. It is the acquirer's handle, not
+ * the merchant's, and putting it on a contract would make an acquirer detail
+ * something integrations start depending on — which is the coupling ADR 0001 D3
+ * exists to prevent.
+ */
+export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Dispute {
+  return {
+    id: row.publicId,
+    object: 'dispute',
+    paymentIntentId: paymentIntentPublicId,
+    amount: row.amount,
+    currency: row.currency,
+    status: row.status,
+    reason: row.reason,
+    evidenceDueAt: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
+    createdAt: row.createdAt.toISOString(),
+    updatedAt: row.updatedAt.toISOString(),
   };
 }

@@ -8,6 +8,7 @@ import {
   signWebhook,
   type PaymentIntent,
   type WebhookEvent,
+  type WebhookEventPayload,
   type WebhookEventType,
 } from "@peable.to/shared-types";
 import { newId } from "../lib/ids";
@@ -27,19 +28,25 @@ const HTTP_OK_MAX = 300;
 const HTTP_SERVER_ERROR_MIN = 500;
 
 /**
- * Wrap a PaymentIntent in a Stripe-parity `evt_` webhook envelope. `created` is
- * the emission time in ISO-8601; the resource sits under `data.object`.
+ * Wrap a resource in a Stripe-parity `evt_` webhook envelope. `created` is the
+ * emission time in ISO-8601; the resource sits under `data.object`.
+ *
+ * GENERIC over the event type, so `WebhookEventPayload` decides which resource
+ * each one may carry. It used to take a `PaymentIntent` for every type, which
+ * was true until the two dispute events arrived and would then have shipped a
+ * settlement's payload under `payment_intent.disputed` — the compiler now
+ * refuses that pairing at the one place events are built.
  */
-export function buildEvent(
-  type: WebhookEventType,
-  intent: PaymentIntent,
-): WebhookEvent {
+export function buildEvent<K extends WebhookEventType>(
+  type: K,
+  object: WebhookEventPayload[K],
+): WebhookEvent<K> {
   return {
     id: newId("evt"),
     object: "event",
     type,
     created: new Date(Date.now()).toISOString(),
-    data: { object: intent },
+    data: { object },
   };
 }
 

@@ -8,7 +8,9 @@ import { uuidv7 } from '@oxyhq/db';
 import type { ProviderId } from '../../services/providers/provider';
 import type {
   CurrencyCode,
+  PaymentIntent,
   PaymentIntentRail,
+  WebhookEventPayload,
   WebhookEventType,
 } from '@peable.to/shared-types';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
@@ -348,9 +350,23 @@ export async function seedSession(
   return row;
 }
 
+/**
+ * The event types that carry a PaymentIntent — DERIVED from the contract's own
+ * `WebhookEventPayload`, not listed.
+ *
+ * `seedDelivery` takes an intent, so it can only seed an event that carries
+ * one. Before `WebhookEventPayload` existed this parameter was the whole
+ * `WebhookEventType`, and seeding `payment_intent.disputed` here would have
+ * built an envelope whose `data.object` was a settlement — a fixture that
+ * disagrees with production while looking exactly like it.
+ */
+type IntentWebhookEventType = {
+  [K in WebhookEventType]: WebhookEventPayload[K] extends PaymentIntent ? K : never;
+}[WebhookEventType];
+
 export interface SeedDeliveryValues {
   readonly eventId?: string;
-  readonly eventType?: WebhookEventType;
+  readonly eventType?: IntentWebhookEventType;
   readonly url?: string;
   /**
    * Leave a seeded delivery `pending` instead of settling it.

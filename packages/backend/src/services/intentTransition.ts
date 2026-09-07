@@ -13,7 +13,9 @@
  * for a transition that then failed to commit.
  */
 import type {
+  Dispute,
   PaymentIntentStatus,
+  WebhookEvent,
   WebhookEventType,
 } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
@@ -91,32 +93,65 @@ export async function transitionIntent(
 export async function enqueueIntentWebhook(
   tx: DatabaseOrTransaction,
   row: PaymentIntentRow,
-  options?: {
-    /**
-     * Send THIS event instead of the one the row's status implies.
-     *
-     * For the events that are not about the payment's own lifecycle. A dispute
-     * is the clearest case: the intent stays `settled` the whole time the
-     * network holds the money, so `WEBHOOK_EVENT_FOR[row.status]` would resolve
-     * to `payment_intent.settled` and tell the merchant their payment had just
-     * succeeded — again — at the exact moment it was being contested.
-     */
-    readonly eventType?: WebhookEventType;
-  },
 ): Promise<void> {
-  const eventType = options?.eventType ?? WEBHOOK_EVENT_FOR[row.status];
+  const eventType = WEBHOOK_EVENT_FOR[row.status];
   if (eventType === undefined) return;
+  await enqueue(tx, row, buildEvent(eventType, toPaymentIntentDTO(row)));
+}
 
-  // The one read allowed to select `webhook_secret`. Only the URL is used
-  // here — the secret is re-read at attempt time, so a merchant who rotates
-  // it mid-backoff has their retries signed with the new one.
+/**
+ * Enqueue a DISPUTE event for the merchant, on the intent it contests.
+ *
+ * Its own function rather than an `eventType` option on the one above, and the
+ * reason is the payload rather than the name. A dispute event carries a
+ * `Dispute` (`WebhookEventPayload`), so a shared function would have to take
+ * the resource as a parameter too — and then "which resource goes with which
+ * event" would be the caller's problem at every call site instead of the
+ * contract's.
+ *
+ * Two things stay true from the intent path and are why this still takes the
+ * row: the delivery is keyed to the payment being contested, so a merchant can
+ * correlate it, and the enqueue is in the CALLER's transaction (ADR 0001 D7).
+ *
+ * The intent's own status is deliberately untouched. It stayed `settled`
+ * throughout — a dispute is the network's process, not a stage of the payment's
+ * lifecycle — and emitting the status-derived event here would have told the
+ * merchant their payment had just succeeded, again, at the exact moment it was
+ * being contested.
+ */
+export async function enqueueDisputeWebhook(
+  tx: DatabaseOrTransaction,
+  row: PaymentIntentRow,
+  dispute: Dispute,
+  eventType: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
+): Promise<void> {
+  await enqueue(tx, row, buildEvent(eventType, dispute));
+}
+
+/**
+ * The shared half: find the merchant's endpoint and write the outbox row.
+ *
+ * The one read allowed to select `webhook_secret`. Only the URL is used here —
+ * the secret is re-read at attempt time, so a merchant who rotates it
+ * mid-backoff has their retries signed with the new one.
+ *
+ * A merchant with no endpoint enqueues NOTHING, which is not a silent drop: an
+ * outbox row for an endpoint that does not exist would retry to exhaustion and
+ * dead-letter, filling an operator surface with deliveries nobody ever asked
+ * for.
+ */
+async function enqueue(
+  tx: DatabaseOrTransaction,
+  row: PaymentIntentRow,
+  event: WebhookEvent,
+): Promise<void> {
   const target = await findWebhookTarget(tx, row.merchantId);
   if (!target) return;
 
   await enqueueWebhook(tx, {
     merchantId: row.merchantId,
     paymentIntentId: row.id,
-    event: buildEvent(eventType, toPaymentIntentDTO(row)),
+    event,
     url: target.url,
   });
 }

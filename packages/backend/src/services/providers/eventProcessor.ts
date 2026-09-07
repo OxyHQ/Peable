@@ -33,10 +33,12 @@ import { getDb } from "../../db/postgres";
 import { applyEvent, type IntentEvent } from "../intentState";
 import {
   announceIntentChange,
+  enqueueDisputeWebhook,
   enqueueIntentWebhook,
   transitionIntent,
 } from "../intentTransition";
 import { upsertDispute } from "../../db/disputes/disputeRepository";
+import { toDisputeDTO } from "../../lib/serialize";
 import type { DisputeStatus } from "../../db/schema/valueSets";
 import { redactProviderMessage } from "./redact";
 import type { ProviderId } from "./provider";
@@ -461,9 +463,15 @@ async function handleDisputeEvent(
   });
 
   if (created || closed) {
-    await enqueueIntentWebhook(db, intent, {
-      eventType: created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
-    });
+    // The DISPUTE is the payload, not the intent. `disputed` is a deadline, and
+    // a merchant who has to make a second call to learn when evidence is due is
+    // a merchant who can miss it while their integration works as documented.
+    await enqueueDisputeWebhook(
+      db,
+      intent,
+      toDisputeDTO(dispute, intent.publicId),
+      created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
+    );
   }
 
   await markProviderEventProcessed(db, event.id);
