@@ -109,7 +109,7 @@ async function settledIntent(amount: string): Promise<string> {
   });
   if (!intent) throw new Error("could not seed the intent");
   await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_route_${String(counter)}`);
-  await updateIntentState(gatewayDb(), intent.id, { status: "settled" });
+  await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
   return publicId;
 }
 

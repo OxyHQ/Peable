@@ -313,9 +313,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the webhook outbox', () => {
     const merchant = await merchantWithHook();
     const intent = await seedIntent(merchant);
 
-    const moved = await transitionIntent(intent.id, { status: 'rejected' });
+    const moved = await transitionIntent(intent.id, {
+      from: intent.status,
+      status: 'rejected',
+    });
 
-    expect(moved?.status).toBe('rejected');
+    expect(moved.kind === 'updated' && moved.row.status).toBe('rejected');
     const queued = await gatewayDb()
       .select({ id: webhookDeliveries.id, eventType: webhookDeliveries.eventType })
       .from(webhookDeliveries)
@@ -329,7 +332,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the webhook outbox', () => {
     const merchant = await seedMerchant();
     const intent = await seedIntent(merchant);
 
-    await transitionIntent(intent.id, { status: 'rejected' });
+    await transitionIntent(intent.id, { from: intent.status, status: 'rejected' });
 
     const queued = await gatewayDb()
       .select({ id: webhookDeliveries.id })

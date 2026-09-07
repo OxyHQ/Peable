@@ -186,8 +186,11 @@ export async function applyRefundToIntent(intent: PaymentIntentRow): Promise<str
   const next = applyEvent(intent.status, target === "refunded" ? "refund_full" : "refund_partial");
   if (next === intent.status) return intent.status;
 
-  const updated = await transitionIntent(intent.id, { status: next });
-  if (!updated) return intent.status;
-  announceIntentChange(updated);
-  return updated.status;
+  const result = await transitionIntent(intent.id, { from: intent.status, status: next });
+  // The caller is told the status it still has, not the one it wanted. A refund
+  // recomputes from the SUM, so the next call over these same rows reaches the
+  // right target from wherever the row actually ended up.
+  if (result.kind !== "updated") return intent.status;
+  announceIntentChange(result.row);
+  return result.row.status;
 }

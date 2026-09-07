@@ -21,7 +21,10 @@ import {
   findIntentForMerchant,
   listIntentsForMerchant,
 } from "../db/payments/paymentIntentRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
+import type {
+  IntentStateResult,
+  PaymentIntentRow,
+} from "../db/payments/paymentIntentRepository";
 import {
   createIntent,
   NetworkMismatchError,
@@ -36,6 +39,35 @@ import { railBodyFields } from "../lib/railSchema";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+
+/**
+ * Answer a transition that did not apply.
+ *
+ * Two statuses, not one. Both routes here read the intent, validate the
+ * transition against what they read, and only then write — so between those two
+ * steps the expiry sweeper or a provider event can move the row. That is a
+ * CONFLICT (409): the request was well-formed and addressed a payment that
+ * exists, it simply describes a move from a state the payment has left. A 404
+ * would tell the caller their payment does not exist, which is both false and
+ * unactionable — the status is what they need to see.
+ *
+ * `missing` keeps the 404 it always had.
+ */
+function sendStaleOrMissing(
+  res: Parameters<typeof sendError>[0],
+  result: Exclude<IntentStateResult, { kind: 'updated' }>,
+): void {
+  if (result.kind === "missing") {
+    sendError(res, 404, "invalid_request_error", "payment intent not found");
+    return;
+  }
+  sendError(
+    res,
+    409,
+    "invalid_request_error",
+    `the payment intent moved to '${result.current}' while this request was in flight`,
+  );
+}
 
 /** Exported: `routes/dashboard.ts` parses the SAME query shape for its list route (F2.5) so the two never drift. */
 export const listQuerySchema = z.object({
@@ -417,13 +449,16 @@ export function createPaymentIntentsRouter(deps: {
       // settlement watcher, which never produces that status, or a manual
       // redelivery of a row that therefore never existed. The event type has
       // been in the published contract since the first release.
-      const rejected = await transitionIntent(intent.id, { status: nextStatus });
-      if (!rejected) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+      const rejected = await transitionIntent(intent.id, {
+        from: intent.status,
+        status: nextStatus,
+      });
+      if (rejected.kind !== "updated") {
+        sendStaleOrMissing(res, rejected);
         return;
       }
-      announceIntentChange(rejected);
-      res.status(200).json(toPaymentIntentDTO(rejected));
+      announceIntentChange(rejected.row);
+      res.status(200).json(toPaymentIntentDTO(rejected.row));
     }),
   );
 
@@ -486,15 +521,16 @@ export function createPaymentIntentsRouter(deps: {
       // "payment sent, waiting to be seen on-chain" frame on the payer's own
       // checkout page, which this route previously left to the next poll.
       const broadcast = await transitionIntent(intent.id, {
+        from: intent.status,
         status: nextStatus,
         txid: parsed.data.txid,
       });
-      if (!broadcast) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+      if (broadcast.kind !== "updated") {
+        sendStaleOrMissing(res, broadcast);
         return;
       }
-      announceIntentChange(broadcast);
-      res.status(200).json(toPaymentIntentDTO(broadcast));
+      announceIntentChange(broadcast.row);
+      res.status(200).json(toPaymentIntentDTO(broadcast.row));
     }),
   );
 

@@ -183,7 +183,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
       "../../db/payments/paymentIntentRepository"
     );
     await linkProviderObject(gatewayDb(), intent.id, "stripe", "pi_stripe_settled");
-    await updateIntentState(gatewayDb(), intent.id, { status: "settled" });
+    await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
 
     // The credential stub: whichever merchant `actingApp` names. Both routers
     // resolve the merchant through it, so switching it is how the

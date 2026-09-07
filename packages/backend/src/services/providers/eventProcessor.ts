@@ -217,12 +217,24 @@ export async function processProviderEvent(
       return { kind: "noop", intentId: intent.id };
     }
 
-    const updated = await transitionIntent(intent.id, { status: target });
-    if (!updated) {
-      // The row moved between the read and the update. Not marked processed:
-      // the next pass re-reads and either applies it or finds it already there.
-      return { kind: "failed", error: "the intent changed underneath the update" };
+    const result = await transitionIntent(intent.id, {
+      from: intent.status,
+      status: target,
+    });
+    if (result.kind !== "updated") {
+      // The row moved between the read and the update — which this comment has
+      // always claimed and which only became true when `updateIntentState`
+      // grew its compare-and-swap. Not marked processed: the next pass re-reads
+      // and either applies the event or finds the intent already there.
+      return {
+        kind: "failed",
+        error:
+          result.kind === "stale"
+            ? `the intent moved to '${result.current}' underneath the update`
+            : "the intent vanished underneath the update",
+      };
     }
+    const updated = result.row;
 
     await markProviderEventProcessed(db, event.id);
     // Outside the transition's transaction, and after it — a socket frame is

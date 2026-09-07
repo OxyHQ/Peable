@@ -424,25 +424,66 @@ export async function findWatchableIntents(
 }
 
 export interface IntentStateChange {
+  /**
+   * The status this transition was decided FROM, and the compare half of the
+   * compare-and-swap below.
+   *
+   * REQUIRED, not optional. Every caller reads the intent, hands its status to
+   * `applyEvent` to decide a target, and only then writes — so a caller that
+   * cannot name where it started is a caller whose decision was made against
+   * nothing, and it should not compile.
+   */
+  readonly from: PaymentIntentStatus;
   readonly status: PaymentIntentStatus;
   readonly txid?: string | undefined;
   readonly confirmations?: number | undefined;
 }
 
 /**
- * Advance an intent's state.
+ * What an attempted transition did.
+ *
+ * Three outcomes and not two, because `null` used to mean both "no such row"
+ * and "the row moved", and the callers need to tell them apart: a route answers
+ * 404 for the first and 409 for the second, and the event drain retries only
+ * the second.
+ */
+export type IntentStateResult =
+  | { readonly kind: 'updated'; readonly row: PaymentIntentRow }
+  | { readonly kind: 'stale'; readonly current: PaymentIntentStatus }
+  | { readonly kind: 'missing' };
+
+/**
+ * Advance an intent's state, from a known status to the next one.
  *
  * The transition itself is decided by `services/intentState.ts`; this only
  * records the outcome. `txid` is part of the SAME statement rather than a second
  * write, which is what keeps `payment_intents_broadcast_requires_txid_check`
  * satisfiable: moving to `broadcast` without the txid alongside it is refused by
  * the database, not merely by convention.
+ *
+ * ## Why `status = from` is in the WHERE
+ *
+ * This used to be `WHERE id = ?` alone, and the validation lived entirely in
+ * `applyEvent` — a PURE function reading a status fetched in an earlier
+ * statement. So the state machine was advisory: `ALLOWED` in the shared
+ * contract has `expired: []`, and an event racing `expireDueIntents` still
+ * wrote `settled` over `expired` and enqueued a second, contradicting outcome
+ * for one payment. Every one of the callers reads then writes, so this was not
+ * one caller's slip.
+ *
+ * The idiom is already in this file: {@link linkProviderObject}, thirty lines
+ * down, guards on `provider_object_id IS NULL` for exactly this reason. It just
+ * never reached the status write.
+ *
+ * The re-read on a miss is one extra statement on the FAILURE path only, and it
+ * buys the distinction between a row that moved and a row that is not there —
+ * which is the difference between a 409 and a 404.
  */
 export async function updateIntentState(
   db: DatabaseOrTransaction,
   id: string,
   change: IntentStateChange
-): Promise<PaymentIntentRow | null> {
+): Promise<IntentStateResult> {
   const values: Record<string, string | number> = { status: change.status };
   if (change.txid !== undefined) values.txid = change.txid;
   if (change.confirmations !== undefined) values.confirmations = change.confirmations;
@@ -450,9 +491,20 @@ export async function updateIntentState(
   const [row] = await db
     .update(paymentIntents)
     .set(values)
-    .where(eq(paymentIntents.id, id))
+    .where(and(eq(paymentIntents.id, id), eq(paymentIntents.status, change.from)))
     .returning(INTENT_COLUMNS);
-  return row ? toIntentRow(row) : null;
+  if (row) return { kind: 'updated', row: toIntentRow(row) };
+
+  // Read on the caller's `db` so it sees the same snapshot the failed update
+  // did — a separate connection could report a status from after the race.
+  const [current] = await db
+    .select({ status: paymentIntents.status })
+    .from(paymentIntents)
+    .where(eq(paymentIntents.id, id));
+  if (!current) return { kind: 'missing' };
+  // Same cast `toIntentRow` makes on the same column: the CHECK is what keeps
+  // the text in the closed set, and drizzle types it as `string`.
+  return { kind: 'stale', current: current.status as PaymentIntentStatus };
 }
 
 /**

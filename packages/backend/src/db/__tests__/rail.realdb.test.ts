@@ -84,10 +84,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
 
-    const settled = await updateIntentState(gatewayDb(), intent!.id, { status: 'settled' });
+    const settled = await updateIntentState(gatewayDb(), intent!.id, {
+      from: 'created',
+      status: 'settled',
+    });
 
-    expect(settled?.status).toBe('settled');
-    expect(settled?.txid).toBeNull();
+    expect(settled.kind).toBe('updated');
+    const row = settled.kind === 'updated' ? settled.row : undefined;
+    expect(row?.status).toBe('settled');
+    expect(row?.txid).toBeNull();
   });
 
   /**
@@ -153,7 +158,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
     await expect(
-      updateIntentState(gatewayDb(), intent!.id, { status: 'confirming', txid: 'deadbeef' })
+      updateIntentState(gatewayDb(), intent!.id, {
+        from: 'created',
+        status: 'confirming',
+        txid: 'deadbeef',
+      })
     ).rejects.toThrow();
   });
 
@@ -161,7 +170,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await seedIntent(merchant);
     await expect(
-      updateIntentState(gatewayDb(), intent.id, { status: 'requires_action' })
+      updateIntentState(gatewayDb(), intent.id, { from: intent.status, status: 'requires_action' })
     ).rejects.toThrow();
   });
 
@@ -199,10 +208,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
   test('the watchable query never returns a card intent', async () => {
     const merchant = await seedMerchant();
     const card = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
-    await updateIntentState(gatewayDb(), card!.id, { status: 'settled' });
+    await updateIntentState(gatewayDb(), card!.id, { from: 'created', status: 'settled' });
 
     const faircoin = await seedIntent(merchant);
     await updateIntentState(gatewayDb(), faircoin.id, {
+      from: faircoin.status,
       status: 'broadcast',
       txid: 'a'.repeat(64),
     });

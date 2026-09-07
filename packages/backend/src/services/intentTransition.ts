@@ -24,6 +24,7 @@ import { findWebhookTarget } from "../db/merchants/merchantRepository";
 import {
   updateIntentState,
   type IntentStateChange,
+  type IntentStateResult,
   type PaymentIntentRow,
 } from "../db/payments/paymentIntentRepository";
 import { enqueueWebhook } from "../db/webhooks/webhookOutboxRepository";
@@ -60,19 +61,22 @@ export const WEBHOOK_EVENT_FOR: Partial<
  * Apply a state change and enqueue the merchant's event in the same
  * transaction.
  *
- * @returns the updated row, or `null` when no row matched — which is not an
- *   error: a row that vanished between a poll and this update is the settlement
- *   watcher's ordinary race, and the caller decides what that means.
+ * @returns `updated` with the row; `stale` when the intent moved between the
+ *   caller's read and this write, carrying the status it moved to; `missing`
+ *   when there is no such row. Neither failure is an error on its own — a
+ *   settlement poll racing the expiry sweeper is ordinary — but they mean
+ *   different things to different callers, which is why they are told apart.
+ *   Nothing is enqueued unless the row actually moved.
  */
 export async function transitionIntent(
   intentId: string,
   change: IntentStateChange,
-): Promise<PaymentIntentRow | null> {
+): Promise<IntentStateResult> {
   return getDb().transaction(async (tx) => {
-    const row = await updateIntentState(tx, intentId, change);
-    if (!row) return null;
-    await enqueueIntentWebhook(tx, row);
-    return row;
+    const result = await updateIntentState(tx, intentId, change);
+    if (result.kind !== 'updated') return result;
+    await enqueueIntentWebhook(tx, result.row);
+    return result;
   });
 }
 

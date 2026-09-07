@@ -162,7 +162,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("settlement events and the sync sweep",
     });
     if (!intent) throw new Error("could not seed the intent");
     await linkProviderObject(gatewayDb(), intent.id, "stripe", "pi_stripe_for_settlement");
-    await updateIntentState(gatewayDb(), intent.id, { status: "settled" });
+    await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
     intentInternalId = intent.id;
   });
 
