@@ -4,6 +4,7 @@ import type {
   SocialNextAddressResponse,
   SocialReceiveCursorResponse,
   EnrichmentResult,
+  SocialPaymentsResponse,
 } from '@peable.to/shared-types';
 import { oxyServices } from '@/services/oxy-services';
 import { GATEWAY_API_URL } from '@/config';
@@ -122,6 +123,27 @@ export async function getSocialReceiveCursor(
   network: NetworkType,
 ): Promise<SocialReceiveCursorResponse> {
   return gateway.client.get<SocialReceiveCursorResponse>('/v1/social/me/cursor', {
+    params: { network },
+  });
+}
+
+/**
+ * The caller's own social payment history — the one payment view a surface
+ * without a key can ask for.
+ *
+ * Every other view starts from addresses the device derived (`enrichAddresses`,
+ * `getSocialReceiveCursor`), which needs a seed. The web build has none, so it
+ * asks by identity instead and the backend answers from the attribution rows
+ * the caller is already a named party to.
+ *
+ * Returns `{ payments }` directly (no `{ data }` envelope) — same shape as
+ * `GET /v1/social/me/cursor`; see that function for why unwrapping again would
+ * yield `undefined`.
+ */
+export async function getMyPayments(
+  network: NetworkType,
+): Promise<SocialPaymentsResponse> {
+  return gateway.client.get<SocialPaymentsResponse>('/v1/social/me/payments', {
     params: { network },
   });
 }

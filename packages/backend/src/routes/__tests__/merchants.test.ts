@@ -18,6 +18,8 @@ import {
   useGatewayDatabase,
 } from "../../__tests__/helpers/gatewayTestDatabase";
 import { createMerchantsRouter } from "../merchants";
+import { findMerchantByAppEnvironment } from "../../db/merchants/merchantRepository";
+import { resolveMerchantDisplay } from "../../services/merchantDisplay";
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
 // (m/44'/1'/0' neutered) — public-key-only, cannot spend.
@@ -64,6 +66,9 @@ interface MerchantResponse {
   xpub: string;
   webhookUrl?: string;
   requiredConfirmations: number;
+  displayName?: string;
+  avatarFileId?: string;
+  description?: string;
   error?: { type: string; message: string };
 }
 
@@ -370,6 +375,132 @@ describe("PATCH /v1/merchants/me", () => {
         body: JSON.stringify({ requiredConfirmations: 2 }),
       });
       expect(res.status).toBe(401);
+    } finally {
+      s.close();
+    }
+  });
+});
+
+describe("merchant branding", () => {
+  // Before these fields had a write path, `merchants.display_name`,
+  // `avatar_file_id` and `description` were read by `resolveMerchantDisplay`
+  // and `enrichAddresses` but written by nothing, so EVERY merchant rendered
+  // to a payer as the "Peable merchant" fallback with no logo.
+  test("registration persists the branding fields and returns them", async () => {
+    const { app } = createApp(DEV_APP_ID, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      const res = await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network: "testnet",
+          xpub: XPUB,
+          displayName: "Mercaria",
+          avatarFileId: "file_mercaria_logo",
+          description: "Fair goods, fairly paid for.",
+        }),
+      });
+      expect(res.status).toBe(201);
+      const body = await readJson(res);
+      expect(body.displayName).toBe("Mercaria");
+      expect(body.avatarFileId).toBe("file_mercaria_logo");
+      expect(body.description).toBe("Fair goods, fairly paid for.");
+    } finally {
+      s.close();
+    }
+  });
+
+  test("the payer-facing display resolves to the merchant's own name", async () => {
+    const { app } = createApp(DEV_APP_ID, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network: "testnet",
+          xpub: XPUB,
+          displayName: "Mercaria",
+        }),
+      });
+
+      const row = await findMerchantByAppEnvironment(gatewayDb(), DEV_APP_ID, "development");
+      if (!row) throw new Error("merchant was not registered");
+      const display = await resolveMerchantDisplay(row);
+
+      // This string is what the hosted checkout page shows the payer.
+      expect(display.name).toBe("Mercaria");
+    } finally {
+      s.close();
+    }
+  });
+
+  test("PATCH updates branding, and an explicit null clears it", async () => {
+    const { app } = createApp(DEV_APP_ID, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ network: "testnet", xpub: XPUB, displayName: "Old" }),
+      });
+
+      const patched = await fetch(`${url}/v1/merchants/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "New", description: null }),
+      });
+      expect(patched.status).toBe(200);
+      const body = await readJson(patched);
+      expect(body.displayName).toBe("New");
+      expect(body.description).toBeUndefined();
+    } finally {
+      s.close();
+    }
+  });
+
+  test("an absent branding field leaves the stored value alone", async () => {
+    const { app } = createApp(DEV_APP_ID, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ network: "testnet", xpub: XPUB, displayName: "Kept" }),
+      });
+
+      // Patching an unrelated field must not blank the name — `null` clears,
+      // absent means "leave alone", the same contract webhookUrl already has.
+      const patched = await fetch(`${url}/v1/merchants/me`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requiredConfirmations: 3 }),
+      });
+      const body = await readJson(patched);
+      expect(body.displayName).toBe("Kept");
+      expect(body.requiredConfirmations).toBe(3);
+    } finally {
+      s.close();
+    }
+  });
+
+  test("an over-long displayName is refused (422)", async () => {
+    const { app } = createApp(DEV_APP_ID, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      // The columns are bare `text()` with no CHECK, so the route schema is the
+      // only thing standing between a merchant and an unbounded write.
+      const res = await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          network: "testnet",
+          xpub: XPUB,
+          displayName: "x".repeat(200),
+        }),
+      });
+      expect(res.status).toBe(422);
     } finally {
       s.close();
     }

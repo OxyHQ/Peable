@@ -14,6 +14,7 @@ import {
 import {
   findAttributionsForViewer,
   insertSendAttribution,
+  listAttributionsForViewer,
 } from '../social/sendAttribution';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -419,5 +420,68 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook delivery and social attributio
 
   it('answers an empty address list without a query', async () => {
     expect(await findAttributionsForViewer(suite!.db, [], uuidv7())).toEqual([]);
+  });
+
+  /**
+   * The address-free view, for a surface that cannot derive addresses of its
+   * own (the web build has no key, so it cannot know which addresses are its).
+   *
+   * Same leak risk as `findAttributionsForViewer` and the same shape of proof:
+   * seeding only one side would pass against a query that dropped the OR, and
+   * seeding no stranger would pass against one that dropped the viewer filter
+   * entirely — which is the whole security property here.
+   */
+  it('lists what the viewer sent AND received, and nothing of a stranger', async () => {
+    const viewer = uuidv7();
+    const counterparty = uuidv7();
+    const stranger = uuidv7();
+    const sent = `T${uuidv7()}`;
+    const received = `T${uuidv7()}`;
+    const unrelated = `T${uuidv7()}`;
+
+    await insertSendAttribution(suite!.db, {
+      address: sent,
+      network: 'testnet',
+      senderUserId: viewer,
+      recipientUserId: counterparty,
+      derivationIndex: 1,
+    });
+    await insertSendAttribution(suite!.db, {
+      address: received,
+      network: 'testnet',
+      senderUserId: counterparty,
+      recipientUserId: viewer,
+      derivationIndex: 2,
+    });
+    await insertSendAttribution(suite!.db, {
+      address: unrelated,
+      network: 'testnet',
+      senderUserId: stranger,
+      recipientUserId: counterparty,
+      derivationIndex: 3,
+    });
+
+    const rows = await listAttributionsForViewer(suite!.db, viewer, 'testnet');
+    expect(rows.map((r) => r.address).sort()).toEqual([sent, received].sort());
+  });
+
+  /**
+   * A wallet shows one network at a time. Without the network predicate a
+   * testnet payment would surface in a mainnet balance, and the amounts are
+   * not comparable.
+   */
+  it('scopes the viewer listing to one network', async () => {
+    const viewer = uuidv7();
+    const onTestnet = `T${uuidv7()}`;
+    await insertSendAttribution(suite!.db, {
+      address: onTestnet,
+      network: 'testnet',
+      senderUserId: viewer,
+      recipientUserId: uuidv7(),
+      derivationIndex: 1,
+    });
+
+    expect(await listAttributionsForViewer(suite!.db, viewer, 'mainnet')).toEqual([]);
+    expect((await listAttributionsForViewer(suite!.db, viewer, 'testnet')).map((r) => r.address)).toEqual([onTestnet]);
   });
 });

@@ -125,3 +125,4 @@ test("getTip returns a positive tip from the live mainnet explorer", async () =>
   const tip = await getTip("mainnet");
   expect(tip).toBeGreaterThan(0);
 }, 20000);
+

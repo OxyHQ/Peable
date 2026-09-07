@@ -57,3 +57,39 @@ export interface EnrichRequest {
 export interface EnrichResponse {
   data: Record<string, EnrichmentResult>;
 }
+
+/** Which side of a social payment the caller was on. */
+export type SocialPaymentDirection = 'sent' | 'received';
+
+/**
+ * One social payment as the CALLER saw it, for `GET /v1/social/me/payments`.
+ *
+ * The address-free view, and the only payment history a surface without a key
+ * can ask for: deriving addresses needs a seed, so a browser cannot use the
+ * address-list endpoints (`POST /v1/enrich`, the cursor) at all. `direction` is
+ * the field that cannot be recovered from the address alone — the backend knows
+ * it because the attribution names both parties, and resolving it here is what
+ * keeps the caller from having to learn its own user id to compare against.
+ *
+ * Carries NO amount. An attribution records which address was minted for a
+ * payment relationship, not what was paid; the amount lives on-chain, and the
+ * client reads it from the Explorer against `address`.
+ */
+export interface SocialPayment {
+  /** The single-use social-receive address minted for this payment. */
+  address: string;
+  direction: SocialPaymentDirection;
+  /**
+   * The other party. Reuses the enrichment contract, including its degradation:
+   * a failed identity lookup answers `{ kind: 'unknown' }` rather than dropping
+   * the payment, so a history never silently loses rows to an Oxy outage.
+   */
+  counterparty: EnrichmentResult;
+  /** ISO-8601. When the address was minted, which is when the payment was set up. */
+  createdAt: string;
+}
+
+/** Response of `GET /v1/social/me/payments`, newest first. */
+export interface SocialPaymentsResponse {
+  payments: SocialPayment[];
+}

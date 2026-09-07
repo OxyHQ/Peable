@@ -46,6 +46,9 @@ export {
 export {
   type SocialNextAddressResponse,
   type SocialReceiveCursorResponse,
+  type SocialPaymentDirection,
+  type SocialPayment,
+  type SocialPaymentsResponse,
   type EnrichmentKind,
   type EnrichmentResult,
   type EnrichRequest,

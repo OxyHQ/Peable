@@ -25,7 +25,7 @@
  */
 
 import { Tabs, TabList, TabTrigger, useTabSlot } from "expo-router/ui";
-import { usePathname } from "expo-router";
+import { Redirect, usePathname } from "expo-router";
 import { Screen } from "react-native-screens";
 import {
   View,
@@ -37,6 +37,7 @@ import {
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { t } from "../../src/i18n";
+import { useWalletStore } from "../../src/wallet/wallet-store";
 import { useTheme } from "@oxyhq/bloom/theme";
 
 const MEDIUM_BREAKPOINT = 600;
@@ -126,6 +127,7 @@ function isActiveTab(pathname: string, href: TabDef["href"]): boolean {
 
 export default function TabLayout() {
   const theme = useTheme();
+  const walletInitialized = useWalletStore((state) => state.initialized);
   const { width } = useWindowDimensions();
   const showRail = width >= MEDIUM_BREAKPOINT;
   const pathname = usePathname();
@@ -136,6 +138,21 @@ export default function TabLayout() {
     minHeight: 0,
   };
 
+
+  // Nothing here works without a wallet: every tab reads balances, addresses or
+  // the UTXO set. `app/index.tsx` already refuses to send a keyless surface
+  // into this group, but it is not the only way in — `[username].tsx`'s back
+  // handler and `NotFoundScreen` both `router.replace("/(tabs)")` with no
+  // capability check, and one of those shipped a browser straight into a wallet
+  // UI with no wallet behind it. The gate belongs where the group is ENTERED, so
+  // it holds no matter who navigates here.
+  //
+  // Mirrors the one redirect `AuthRouter` allows itself in Mention: bounce OUT
+  // of a group the viewer must not be in. `/` then re-runs the entry decision
+  // and lands on the surface this host can actually support.
+  if (!walletInitialized) {
+    return <Redirect href="/" />;
+  }
 
   const tabs: readonly TabDef[] = [
     { name: "index", href: "/", icon: "wallet", label: t("wallet.title") },

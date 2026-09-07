@@ -45,6 +45,17 @@ function didFor(userId: string): DidDocument {
   };
 }
 
+/**
+ * `PROFILES` is a `Record<string, ...>`, so indexing it yields `| undefined`.
+ * Tests that need a fixture by name want a hard failure on a typo, not an
+ * optional chain that quietly asserts nothing.
+ */
+function testProfile(key: string): { id: string; username: string } {
+  const found = PROFILES[key];
+  if (!found) throw new Error(`unknown test profile: ${key}`);
+  return found;
+}
+
 const getProfileByUsernameMock = mock(async (username: string) => {
   // Simulates a real oxy-api outage/timeout — no `.status` on the error, the
   // same shape a network failure produces. Must NOT be treated as a 404.
@@ -63,6 +74,18 @@ const getProfileByUsernameMock = mock(async (username: string) => {
   return profile as unknown as User;
 });
 const resolveDidMock = mock(async (userId: string) => didFor(userId));
+// `enrichAddresses` resolves counterparty identity through this one.
+const getUsersByIdsMock = mock(async (ids: string[]) =>
+  ids
+    .map((id) => Object.values(PROFILES).find((p) => p.id === id))
+    .filter((p): p is { id: string; username: string } => p !== undefined)
+    .map((p) => ({
+      id: p.id,
+      username: p.username,
+      name: { displayName: p.username.toUpperCase() },
+      avatar: null,
+    })) as unknown as User[],
+);
 
 // `mock.module` replaces `@oxyhq/core` process-wide for the rest of this bun
 // test run, including for OTHER test files whose `oxyClient` binding resolves
@@ -77,6 +100,7 @@ const mockedOxyClient = new Proxy(realOxyClient, {
   get(target, prop, receiver) {
     if (prop === "getProfileByUsername") return getProfileByUsernameMock;
     if (prop === "resolveDid") return resolveDidMock;
+    if (prop === "getUsersByIds") return getUsersByIdsMock;
     const value = Reflect.get(target, prop, receiver);
     return typeof value === "function" ? value.bind(target) : value;
   },
@@ -276,5 +300,90 @@ describe("GET /v1/social/me/cursor", () => {
     const { status, body } = await getCursor(undefined, "user_alice");
     expect(status).toBe(422);
     expect(body.error?.type).toBe("invalid_request_error");
+  });
+});
+
+// --- GET /v1/social/me/payments -------------------------------------------
+
+interface PaymentsResponse {
+  payments?: {
+    address: string;
+    direction: "sent" | "received";
+    // `EnrichmentResult`: never null, degrades to `{ kind: 'unknown' }`.
+    counterparty: { kind: string; username?: string; displayName?: string };
+    createdAt: string;
+  }[];
+  error?: { type: string; message: string };
+}
+
+async function getPayments(
+  network: string | undefined,
+  userId: string,
+): Promise<{ status: number; body: PaymentsResponse }> {
+  const query = network ? `?network=${network}` : "";
+  const res = await fetch(`${baseUrl}/v1/social/me/payments${query}`, {
+    headers: { "X-Test-User-Id": userId },
+  });
+  return { status: res.status, body: (await res.json()) as PaymentsResponse };
+}
+
+describe("GET /v1/social/me/payments", () => {
+  /**
+   * The web build has no key, so it cannot derive its own addresses and cannot
+   * use the address-list endpoints. This is the only view it can ask for, and
+   * `direction` is the half that cannot come from the address alone.
+   */
+  test("returns what the caller sent and received, each with its direction", async () => {
+    await gatewayDb().insert(socialSendAttributions).values([
+      {
+        address: "Tsent000000000000000000000000000000",
+        network: "testnet",
+        senderUserId: testProfile("alice").id,
+        recipientUserId: testProfile("keylessbob").id,
+        derivationIndex: 1,
+      },
+      {
+        address: "Trecv000000000000000000000000000000",
+        network: "testnet",
+        senderUserId: testProfile("keylessbob").id,
+        recipientUserId: testProfile("alice").id,
+        derivationIndex: 2,
+      },
+    ]);
+
+    const { status, body } = await getPayments("testnet", testProfile("alice").id);
+    expect(status).toBe(200);
+    const byAddress = Object.fromEntries(
+      (body.payments ?? []).map((p) => [p.address, p]),
+    );
+    expect(byAddress["Tsent000000000000000000000000000000"]?.direction).toBe("sent");
+    expect(byAddress["Trecv000000000000000000000000000000"]?.direction).toBe("received");
+    expect(byAddress["Tsent000000000000000000000000000000"]?.counterparty.username).toBe(
+      "keylessbob",
+    );
+  });
+
+  /**
+   * The security property, stated as a test: an attribution names two people,
+   * so a caller who is neither must not learn that the payment exists.
+   */
+  test("never returns a payment the caller is not party to", async () => {
+    await gatewayDb().insert(socialSendAttributions).values({
+      address: "Tstranger00000000000000000000000000",
+      network: "testnet",
+      senderUserId: "user_someone_else",
+      recipientUserId: "user_another",
+      derivationIndex: 3,
+    });
+
+    const { body } = await getPayments("testnet", testProfile("alice").id);
+    expect((body.payments ?? []).map((p) => p.address)).not.toContain(
+      "Tstranger00000000000000000000000000",
+    );
+  });
+
+  test("rejects an unknown network rather than guessing one", async () => {
+    const { status } = await getPayments("dogenet", testProfile("alice").id);
+    expect(status).toBe(422);
   });
 });

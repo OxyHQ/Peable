@@ -23,6 +23,7 @@ import { getDatabase } from "../src/wallet/wallet-store";
 import type { ContactRow } from "../src/storage/database";
 import { ContactAvatar, EmptyState } from "../src/ui/components";
 import { QRScanner } from "../src/ui/components/QRScanner";
+import type { ScannedCode } from "../src/pay/scanned-code";
 import { useTheme } from "@oxyhq/bloom/theme";
 import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
 import { t } from "../src/i18n";
@@ -32,6 +33,9 @@ import { t } from "../src/i18n";
 // ---------------------------------------------------------------------------
 
 const CONTENT_MAX_WIDTH_CLASS = "w-full max-w-2xl mx-auto";
+
+/** Module constant so the prop keeps a stable reference across renders. */
+const CONTACT_SCAN_KINDS: readonly ScannedCode["kind"][] = ["address"];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -162,8 +166,11 @@ function ContactForm({
     }
   }, [clipboardErrorControl]);
 
-  const handleQRScan = useCallback((scannedAddress: string) => {
-    setAddress(scannedAddress);
+  // `accepts` below narrows this to the address case; an address book has
+  // nothing to do with a payment request.
+  const handleQRScan = useCallback((code: ScannedCode) => {
+    if (code.kind !== "address") return;
+    setAddress(code.address);
   }, []);
 
   const canSave = name.trim().length > 0 && address.trim().length >= 25;
@@ -317,6 +324,7 @@ function ContactForm({
 
       <QRScanner
         visible={showQRScanner}
+        accepts={CONTACT_SCAN_KINDS}
         onScan={handleQRScan}
         onClose={() => setShowQRScanner(false)}
       />

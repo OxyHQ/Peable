@@ -33,11 +33,11 @@ import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useAuth } from "@oxyhq/services";
 import { isNotFoundError } from "@oxyhq/core";
-import QRCode from "react-native-qrcode-svg";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { NotFoundScreen } from "../src/ui/components/NotFoundScreen";
 import { ScreenHeader } from "../src/ui/components/ScreenHeader";
 import { UserAvatar } from "../src/ui/components/UserAvatar";
+import { ProfileQRCard } from "../src/ui/components/ProfileQRCard";
 import { Button } from "../src/ui/components/Button";
 import { oxyServices } from "../src/services/oxy-services";
 import { reserveNextSocialAddress, KeylessRecipientError } from "../src/services/gateway-client";
@@ -45,16 +45,13 @@ import { useWalletStore } from "../src/wallet/wallet-store";
 import {
   parseProfileHandle,
   decideProfilePayAction,
-  buildProfileUrl,
 } from "../src/pay/profile-route";
 import { FONT_PHUDU_BLACK } from "../src/utils/fonts";
 import { t } from "../src/i18n";
 
 /** Matches ReceiveSheet's address QR, so the two read as one app. */
-const PROFILE_QR_SIZE = 220;
 
 /** Stripped for display only; the QR always encodes the full URL. */
-const HTTPS_PREFIX = /^https:\/\//;
 
 /** How long a resolved profile stays fresh — identities change rarely. */
 const PROFILE_STALE_TIME_MS = 5 * 60 * 1000;
@@ -283,33 +280,15 @@ function PayAction({
     case "loading":
       return <ActivityIndicator />;
 
-    case "self": {
-      const profileUrl = buildProfileUrl(username);
+    case "self":
       return (
         <View className="items-center">
           <Text className="text-muted-foreground text-base text-center mb-5">
             {t("profile.self")}
           </Text>
-          {/* True white behind the code, not the surface token: `bg-surface` is
-              near-black in the dark theme this app defaults to, and a QR needs
-              a light quiet zone to stay scannable. Same panel ReceiveSheet
-              wraps the address QR in. */}
-          <View className="bg-white rounded-3xl p-5 items-center justify-center">
-            <QRCode
-              value={profileUrl}
-              size={PROFILE_QR_SIZE}
-              color="#1b1e09"
-              backgroundColor="transparent"
-            />
-          </View>
-          {/* The link in plain text under it: a QR is useless to someone
-              reading this over a call, or copying it into a message. */}
-          <Text className="text-muted-foreground text-sm mt-4" selectable>
-            {profileUrl.replace(HTTPS_PREFIX, "")}
-          </Text>
+          <ProfileQRCard username={username} />
         </View>
       );
-    }
 
     case "web":
       return (
