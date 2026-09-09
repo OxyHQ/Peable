@@ -17,7 +17,7 @@
   },
   "dependencies": {
     "@fairco.in/core": "0.5.0",
-    "@oxyhq/core": "^23.3.2",
+    "@oxyhq/core": "^23.3.4",
     "@oxyhq/db": "0.1.2",
     "@peable.to/shared-types": "*",
     "@scure/bip32": "^1.7.0",
