@@ -7,7 +7,7 @@ import { useMemo } from "react";
 import { View, Text, Pressable } from "react-native";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import type { EnrichmentResult } from "@peable.to/shared-types";
 import { AmountText } from "./AmountText";
 import { ConfirmationRing } from "./ConfirmationRing";

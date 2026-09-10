@@ -75,7 +75,7 @@ const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   "../../__tests__/helpers/gatewayTestDatabase"
 );
 const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
-const { uuidv7 } = await import("@oxyhq/db");
+const { uuidv7 } = await import("@oxy.so/db");
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;

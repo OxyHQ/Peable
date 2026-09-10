@@ -12,8 +12,8 @@ import { Socket } from "node:net";
 import { eq, sql } from "drizzle-orm";
 import express from "express";
 import type { RequestHandler } from "express";
-import { uuidv7 } from "@oxyhq/db";
-import type { OxyAuthRequest, SafeFetchResult } from "@oxyhq/core/server";
+import { uuidv7 } from "@oxy.so/db";
+import type { OxyAuthRequest, SafeFetchResult } from "@oxy.so/core/server";
 import { webhookDeliveries } from "../../db/schema";
 import {
   gatewayDb,

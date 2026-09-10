@@ -1,7 +1,7 @@
 import { and, eq, inArray } from 'drizzle-orm';
 import { getNetwork, type NetworkType } from '@fairco.in/core';
-import type { OxyServiceEnvironment } from '@oxyhq/core/server';
-import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
+import type { OxyServiceEnvironment } from '@oxy.so/core/server';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { deriveIntentAddress } from '../../services/derivation';
 import { merchants } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';

@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, mock } from "bun:test";
-import { oxyClient as realOxyClient } from "@oxyhq/core";
-import type { DidDocument } from "@oxyhq/contracts";
+import { oxyClient as realOxyClient } from "@oxy.so/core";
+import type { DidDocument } from "@oxy.so/contracts";
 import {
   resetGatewayTables,
   useGatewayDatabase,
@@ -33,7 +33,7 @@ function didWithKey(userId: string, publicKeyHex: string | null): DidDocument {
 
 const resolveDidMock = mock(async (userId: string) => didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX));
 
-// `mock.module` replaces `@oxyhq/core` process-wide for the rest of this bun
+// `mock.module` replaces `@oxy.so/core` process-wide for the rest of this bun
 // test run, including for OTHER test files whose `oxyClient` binding resolves
 // after this one applies. Wrap the REAL `oxyClient` in a `Proxy` that only
 // intercepts `resolveDid` and forwards everything else (`serviceAuth`,
@@ -50,7 +50,7 @@ const mockedOxyClient = new Proxy(realOxyClient, {
   },
 });
 
-mock.module("@oxyhq/core", () => ({
+mock.module("@oxy.so/core", () => ({
   oxyClient: mockedOxyClient,
 }));
 

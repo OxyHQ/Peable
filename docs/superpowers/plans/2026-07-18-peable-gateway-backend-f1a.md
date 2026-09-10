@@ -6,7 +6,7 @@
 
 **Architecture:** Merchant (authenticated via a Console-issued Oxy service app-key) calls `POST /v1/payment_intents`; the backend derives a fresh receive address from the merchant's **watch-only xpub** (public key only — cannot spend), returns a `pi_…` intent + `client_secret`. A tip-driven settlement watcher observes that address on the FairCoin Explorer; on mempool-seen → `confirming`, on N confs → `settled`, emitting Socket.io events and an HMAC-signed webhook. The payer's self-custody wallet (Track B, separate plan) signs the actual on-chain tx — the backend never holds keys or funds.
 
-**Tech Stack:** Bun + Express + Mongoose (MongoDB) + Socket.io; `@oxyhq/core/server` (auth/CORS/rate-limit/`safeFetch`); `@fairco.in/core` (address/units/network) + `@scure/bip32` (xpub derivation); `bun test`.
+**Tech Stack:** Bun + Express + Mongoose (MongoDB) + Socket.io; `@oxy.so/core/server` (auth/CORS/rate-limit/`safeFetch`); `@fairco.in/core` (address/units/network) + `@scure/bip32` (xpub derivation); `bun test`.
 
 ## Global Constraints
 
@@ -16,8 +16,8 @@
 - **Amounts:** `bigint` base units (m⊜; `1 FAIR = UNITS_PER_COIN = 100_000_000`). Never floats. Mongo stores the decimal string; the domain uses `bigint`.
 - **Package manager:** `bun` only; hoisted linker (`bunfig.toml` at root). Commit `bun.lock` with its `package.json` change. Tests via `bun test`.
 - **Clean code, no tricky things:** no `as any`, `@ts-ignore`, `!`, `var`, `console.log`, silent `catch {}`, TODO/HACK, barrel/re-export shims. Direct imports from owners. `setInterval` in singletons calls `.unref?.()`.
-- **Fix upstream (authorized):** if `@fairco.in/core`, the FairCoin Explorer, or `@oxyhq/core` needs a capability (e.g. a watch-only address endpoint), improve it at the source cleanly — never monkey-patch downstream.
-- **Auth:** merchant routes use `oxyClient.serviceAuth()` (confidential app-key); any user routes use `requireOxyAuth`/`getRequiredOxyUserId` from `@oxyhq/core/server`. CORS via `createOxyCors`; outbound webhook fetch via `safeFetch` (SSRF).
+- **Fix upstream (authorized):** if `@fairco.in/core`, the FairCoin Explorer, or `@oxy.so/core` needs a capability (e.g. a watch-only address endpoint), improve it at the source cleanly — never monkey-patch downstream.
+- **Auth:** merchant routes use `oxyClient.serviceAuth()` (confidential app-key); any user routes use `requireOxyAuth`/`getRequiredOxyUserId` from `@oxy.so/core/server`. CORS via `createOxyCors`; outbound webhook fetch via `safeFetch` (SSRF).
 - **Verification chain uses FairCoin testnet** (`TESTNET` from `@fairco.in/core`).
 
 ---
@@ -79,7 +79,7 @@ Expected: the archive branch holds the full pre-rewrite tree; the feature branch
 git rm -r packages/backend/src packages/backend/server.ts packages/backend/dist
 ```
 
-- [ ] **Step 3: Rewrite `packages/backend/package.json`** — name `@peable.to/backend`, scripts `dev` (`bun --watch src/server.ts`), `build` (`tsc`), `test` (`bun test`), `typecheck` (`tsc --noEmit`); deps: `express`, `mongoose`, `socket.io`, `@oxyhq/core`, `@fairco.in/core`, `@scure/bip32`, `zod`; devDeps `@types/express`, `mongodb-memory-server`. Run `bun install` from root; commit `bun.lock` in this task's commit.
+- [ ] **Step 3: Rewrite `packages/backend/package.json`** — name `@peable.to/backend`, scripts `dev` (`bun --watch src/server.ts`), `build` (`tsc`), `test` (`bun test`), `typecheck` (`tsc --noEmit`); deps: `express`, `mongoose`, `socket.io`, `@oxy.so/core`, `@fairco.in/core`, `@scure/bip32`, `zod`; devDeps `@types/express`, `mongodb-memory-server`. Run `bun install` from root; commit `bun.lock` in this task's commit.
 
 - [ ] **Step 4: Reset `packages/shared-types/src`** — delete the custodial type files (`wallet.ts`, `paymentMethod.ts`, old `payment.ts`/`invoice.ts`/`transaction.ts`), leave `src/` empty except a placeholder `index.ts` (`export {};`).
 
@@ -312,7 +312,7 @@ export function deriveIntentAddress(xpub: string, change: number, index: number,
 
 - [ ] **Step 1: Failing test** — a stub endpoint receives a correctly-signed POST (verify with `verifyWebhook`); a 500 triggers a retry; an SSRF target (`http://169.254.169.254`) is refused by `safeFetch`.
 - [ ] **Step 2: Run — FAIL.**
-- [ ] **Step 3: Implement** using `safeFetch` from `@oxyhq/core/server`.
+- [ ] **Step 3: Implement** using `safeFetch` from `@oxy.so/core/server`.
 - [ ] **Step 4: Run — PASS.**
 - [ ] **Step 5: Commit.** `git commit -am "feat(backend): signed webhook dispatcher"`
 

@@ -7,7 +7,7 @@
  * that refuses legitimate refunds. None of that is visible to a mock.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { isCheckViolation, uuidv7 } from '@oxyhq/db';
+import { isCheckViolation, uuidv7 } from '@oxy.so/db';
 import {
   applyAccountSnapshot,
   findAccountByExternalRef,

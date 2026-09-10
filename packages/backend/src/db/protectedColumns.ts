@@ -1,4 +1,4 @@
-import { publicColumns as publicColumnsOf, type PublicColumns } from '@oxyhq/db/assert';
+import { publicColumns as publicColumnsOf, type PublicColumns } from '@oxy.so/db/assert';
 import type { PgTable } from 'drizzle-orm/pg-core';
 
 /**

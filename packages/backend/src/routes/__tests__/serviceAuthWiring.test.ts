@@ -3,7 +3,7 @@ import { createHmac } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { loadConfig } from "../../config";
 import {
   seedMerchant,

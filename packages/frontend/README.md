@@ -39,7 +39,7 @@ Built with Expo SDK 55, React Native 0.83, and pure TypeScript cryptography.
 | Storage | expo-secure-store (native keychain), expo-sqlite (chain data) |
 | P2P | Custom SPV client over TCP (react-native-tcp-socket on mobile, Node.js net on Electron) |
 | Map | `@maplibre/maplibre-react-native` v10 with Carto vector tiles (no API key) |
-| UI kit | `@oxyhq/bloom` (theme, prompt dialogs) |
+| UI kit | `@oxy.so/bloom` (theme, prompt dialogs) |
 | Lists | `@shopify/flash-list` v2 with `@gorhom/bottom-sheet` v5 integration |
 | Animation | `react-native-reanimated` 4.x |
 | Desktop | Electron with custom `app://` protocol for proper SPA routing |

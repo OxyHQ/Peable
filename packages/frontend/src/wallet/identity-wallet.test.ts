@@ -2,16 +2,16 @@ import { describe, test, expect, mock } from "bun:test";
 import { getNetwork, hexToBytes } from "@fairco.in/core";
 import { KeyManager as FairKeyManager } from "./key-manager";
 
-// Mock @oxyhq/core BEFORE importing the module under test. `mock.module` is
+// Mock @oxy.so/core BEFORE importing the module under test. `mock.module` is
 // process-wide, so the replacement must KEEP every other export: a factory
 // returning only `KeyManager` deletes the rest of the Oxy SDK for every test
 // file that runs after this one in the same `bun test` process, and any module
 // importing e.g. `isValidUsername` then fails to load. The spread snapshots the
 // real namespace into a plain object before the registry entry is replaced.
-const realOxyCore = { ...(await import("@oxyhq/core")) };
+const realOxyCore = { ...(await import("@oxy.so/core")) };
 let scopedResult: Uint8Array | null = new Uint8Array(32).fill(7);
 const deriveScopedSeed = mock(async (_info: string) => scopedResult);
-mock.module("@oxyhq/core", () => ({
+mock.module("@oxy.so/core", () => ({
   ...realOxyCore,
   KeyManager: { deriveScopedSeed },
 }));

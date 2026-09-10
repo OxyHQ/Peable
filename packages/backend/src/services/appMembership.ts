@@ -1,6 +1,6 @@
 import type { IncomingMessage } from "node:http";
 import { z } from "zod";
-import { safeFetch as realSafeFetch, SsrfRejection, UpstreamError } from "@oxyhq/core/server";
+import { safeFetch as realSafeFetch, SsrfRejection, UpstreamError } from "@oxy.so/core/server";
 import { config } from "../config";
 import type { SafeFetchFn } from "./webhookDispatcher";
 

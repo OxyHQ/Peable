@@ -10,7 +10,7 @@
 
 import { useMemo } from "react";
 import { Stack } from "expo-router";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 
 export default function BuyLayout() {
   const theme = useTheme();

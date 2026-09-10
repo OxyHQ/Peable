@@ -4,7 +4,7 @@
 
 import { View, Text, Pressable } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { t } from "../../i18n";
 
 interface ScreenHeaderProps {

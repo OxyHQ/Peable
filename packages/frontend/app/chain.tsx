@@ -14,7 +14,7 @@ import { View, Text, ScrollView } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useBloomTheme } from "@oxyhq/bloom/theme";
+import { useBloomTheme } from "@oxy.so/bloom/theme";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
 import { Button, ListItem, ScreenHeader } from "../src/ui/components";
 import { t } from "../src/i18n";

@@ -14,7 +14,7 @@
  */
 
 import type { NetworkType } from '@fairco.in/core';
-import { OXY_SERVICE_ENVIRONMENTS } from '@oxyhq/core/server';
+import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type {
   PaymentIntentRail,
   PaymentIntentStatus,

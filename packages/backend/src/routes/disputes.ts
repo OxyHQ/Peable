@@ -18,7 +18,7 @@
  */
 import { Router } from "express";
 import type { RequestHandler } from "express";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
 import { listDisputesForIntent } from "../db/disputes/disputeRepository";

@@ -13,7 +13,7 @@ export const OXY_BASE_URL =
   process.env.EXPO_PUBLIC_OXY_BASE_URL ?? 'https://api.oxy.so';
 
 // Peable's registered Oxy OAuth client id (ApplicationCredential publicKey),
-// reused from the Peable Console client. Required by @oxyhq/services for the
+// reused from the Peable Console client. Required by @oxy.so/services for the
 // cross-app device sign-in flow. Public and safe to commit.
 export const OXY_CLIENT_ID =
   process.env.EXPO_PUBLIC_OXY_CLIENT_ID ??

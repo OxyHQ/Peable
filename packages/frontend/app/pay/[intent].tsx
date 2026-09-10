@@ -32,8 +32,8 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import * as Linking from "expo-linking";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useAuth } from "@oxyhq/services";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useAuth } from "@oxy.so/services";
+import { useTheme } from "@oxy.so/bloom/theme";
 import {
   formatFair,
   explorerTxUrl,

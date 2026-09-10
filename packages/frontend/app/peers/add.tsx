@@ -5,8 +5,8 @@
 import { useCallback, useState } from "react";
 import { View, Text, ScrollView, TextInput } from "react-native";
 import { useRouter } from "expo-router";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { getDatabase } from "../../src/wallet/wallet-store";
 import { Button } from "../../src/ui/components/Button";
 import { COIN_NAME } from "@fairco.in/core";

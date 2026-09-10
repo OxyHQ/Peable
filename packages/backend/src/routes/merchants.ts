@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
-import type { OxyServiceEnvironment } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import type { OxyServiceEnvironment } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import {
   insertMerchant,

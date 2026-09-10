@@ -23,8 +23,8 @@ import {
 } from "../src/ui/components";
 import { PinDots } from "../src/ui/components/PinDots";
 import { PinPad } from "../src/ui/components/PinPad";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { t } from "../src/i18n";
 
 const PIN_LENGTH = 6;

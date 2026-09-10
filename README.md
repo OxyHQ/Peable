@@ -139,7 +139,7 @@ There is no bespoke Peable API key. The SDK is configured with the **same
 `ApplicationCredential`** Oxy Console already issues, presents it to the Oxy API to mint a
 short lived service token, and re mints when that token expires.
 
-The backend verifies callers with `@oxyhq/core/server`, using `createOxyAuthMiddleware`
+The backend verifies callers with `@oxy.so/core/server`, using `createOxyAuthMiddleware`
 and `getRequiredOxyUserId` for human callers, `serviceAuth()` for merchant service tokens,
 and `authSocket()` for Socket.IO. There is no app local bearer parser.
 

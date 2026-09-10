@@ -20,7 +20,7 @@ import { useCallback, useMemo, useState } from "react";
 import { View, Text, Pressable } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { formatFair, parseFairToUnits } from "@fairco.in/core";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { useWalletStore, FEE_RATES } from "../../wallet/wallet-store";
 import { MAIN_POCKET_ACCOUNT, findPocket } from "../../wallet/pockets";
 import { AmountInput, Button, EmptyState, ListItem } from "../components";

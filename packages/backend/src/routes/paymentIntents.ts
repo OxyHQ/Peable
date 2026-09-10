@@ -5,9 +5,9 @@ import type {
   Response,
 } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
-import { verifySecret } from "@oxyhq/core/server";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { verifySecret } from "@oxy.so/core/server";
+import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
 import {
   PAYMENT_INTENT_STATUSES,
   type CreatePaymentIntentParams,

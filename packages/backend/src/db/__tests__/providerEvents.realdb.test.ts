@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { isCheckViolation } from '@oxyhq/db';
+import { isCheckViolation } from '@oxy.so/db';
 import {
   findProviderEventById,
   findProviderEventByIdentity,

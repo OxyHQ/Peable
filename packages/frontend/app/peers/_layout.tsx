@@ -3,7 +3,7 @@
  */
 
 import { Stack } from "expo-router";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { t } from "../../src/i18n";
 
 export default function PeersLayout() {

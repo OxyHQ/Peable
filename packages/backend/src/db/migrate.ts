@@ -6,7 +6,7 @@ import {
   type RequiredExtension,
   readTargetDatabase,
   runMigrations,
-} from '@oxyhq/db/migrate';
+} from '@oxy.so/db/migrate';
 
 /**
  * The ONLY thing that applies migrations to an Peable database.
@@ -16,7 +16,7 @@ import {
  * one-shot ECS task before the service rolls. `drizzle-kit migrate` is NOT an
  * alternative: it is a devDependency and never reaches the production image.
  *
- * `--target-database` is mandatory here even though `@oxyhq/db` leaves it
+ * `--target-database` is mandatory here even though `@oxy.so/db` leaves it
  * optional. A migrator pointed at the wrong database does not fail — it finds
  * an empty ledger, applies the whole journal, prints a success line and exits
  * 0, over a database nobody meant to touch.

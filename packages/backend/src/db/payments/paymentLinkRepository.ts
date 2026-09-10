@@ -1,8 +1,8 @@
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
-import type { OxyServiceEnvironment } from '@oxyhq/core/server';
+import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
-import { uuidv7 } from '@oxyhq/db';
+import { uuidv7 } from '@oxy.so/db';
 import { paymentLinks } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 

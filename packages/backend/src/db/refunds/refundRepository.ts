@@ -8,7 +8,7 @@
  */
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
-import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { refunds } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';

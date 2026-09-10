@@ -9,7 +9,7 @@
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import type { SafeFetchResult } from '@oxyhq/core/server';
+import type { SafeFetchResult } from '@oxy.so/core/server';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
 import { merchants, webhookDeliveries } from '../../db/schema';

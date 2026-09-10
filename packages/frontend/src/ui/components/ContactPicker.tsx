@@ -9,7 +9,7 @@ import { FlashList } from "@shopify/flash-list";
 import { useContactsStore } from "../../wallet/contacts-store";
 import { getDatabase } from "../../wallet/wallet-store";
 import type { ContactRow } from "../../storage/database";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { ContactAvatar } from "./ContactAvatar";
 import { t } from "../../i18n";
 

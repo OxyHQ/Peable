@@ -9,7 +9,7 @@ Mongo model was inconsistent, this schema is not.
 
 ## Substrate
 
-`drizzle-orm` over `postgres.js`, through `@oxyhq/db` — which owns the column
+`drizzle-orm` over `postgres.js`, through `@oxy.so/db` — which owns the column
 builders, the id generator, the casing authority (`DATABASE_CASING`), the
 driver-error predicates, the migration ledger with its deploy-phase enforcement,
 and the throwaway-database harness. Do not hand-roll anything that package
@@ -282,7 +282,7 @@ make every read name them explicitly, which is the opposite of a guard.
 
 ## Timestamps
 
-`created_at` and `updated_at` are `timestamptz` from `@oxyhq/db`, defaulted at
+`created_at` and `updated_at` are `timestamptz` from `@oxy.so/db`, defaulted at
 millisecond precision (a `timestamptz` carries microseconds and a JS `Date` does
 not, which silently breaks any keyset built on one). `updated_at` is maintained
 by the application through drizzle's `$onUpdate` — so it fires on `db.update()`

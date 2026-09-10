@@ -14,7 +14,7 @@ export interface PeableErrorDetails {
   /**
    * The raw upstream discriminator: `error.type` from the Gateway's own
    * `{ error: { type, message } }` envelope, or the flat `error` code string
-   * from `@oxyhq/core`'s auth middleware (`{ error: 'INVALID_TOKEN', ... }`)
+   * from `@oxy.so/core`'s auth middleware (`{ error: 'INVALID_TOKEN', ... }`)
    * — see `errorFromResponse`'s doc comment for why both shapes exist.
    */
   code?: string;
@@ -107,7 +107,7 @@ function isFlatGatewayErrorBody(body: unknown): body is FlatGatewayErrorBody {
  * request was rejected:
  * - The Gateway's own route handlers use the Stripe-style nested envelope
  *   `{ error: { type, message } }` (`lib/http.ts`'s `sendError`).
- * - `@oxyhq/core`'s Express auth middleware (`oxyClient.serviceAuth()` /
+ * - `@oxy.so/core`'s Express auth middleware (`oxyClient.serviceAuth()` /
  *   `requireScope()` — rejecting a missing/expired/insufficiently-scoped
  *   service token BEFORE a route handler ever runs) and oxy-api's own
  *   `ApiError.toJSON()` use a FLAT envelope: `{ error: <CODE_STRING>,

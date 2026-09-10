@@ -10,7 +10,7 @@ import type { Server } from "node:http";
 import { eq, sql } from "drizzle-orm";
 import express from "express";
 import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 import { merchants, paymentIntents } from "../../db/schema";
 import type { MerchantRow } from "../../db/merchants/merchantRepository";
 import { updatePaymentLink } from "../../db/payments/paymentLinkRepository";

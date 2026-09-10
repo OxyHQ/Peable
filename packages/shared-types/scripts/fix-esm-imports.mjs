@@ -8,7 +8,7 @@
  * @peable.to/shared-types has exactly one runtime dependency (`@fairco.in/core`),
  * which ships a spec-compliant ESM build with its own `.js`-extensioned
  * internal specifiers, so no CJS default-import interop rewrites are needed
- * here. (Mirrors `@oxyhq/contracts`'s post-build script.)
+ * here. (Mirrors `@oxy.so/contracts`'s post-build script.)
  */
 
 import { readdir, readFile, stat, writeFile } from 'node:fs/promises';

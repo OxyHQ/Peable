@@ -1,7 +1,7 @@
 import { isIP } from "node:net";
 import type { Server, Socket } from "socket.io";
-import { oxyClient } from "@oxyhq/core";
-import { verifySecret } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { verifySecret } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
 import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";

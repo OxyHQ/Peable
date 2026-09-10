@@ -1,6 +1,6 @@
 import { getNetwork, hexToBytes, deriveSocialReceiveAddress } from "@fairco.in/core";
 import type { NetworkType } from "@fairco.in/core";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { getDb } from "../db/postgres";
 import {
   readReservedThrough,

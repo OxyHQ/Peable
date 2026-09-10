@@ -14,7 +14,7 @@
 import { useCallback, useState } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import { Redirect, useFocusEffect } from "expo-router";
-import { useAuth } from "@oxyhq/services";
+import { useAuth } from "@oxy.so/services";
 import { useWalletStore, type IdentityInitResult } from "../src/wallet/wallet-store";
 import { useLockStore } from "../src/wallet/lock-store";
 import { hasPin } from "../src/storage/secure-store";

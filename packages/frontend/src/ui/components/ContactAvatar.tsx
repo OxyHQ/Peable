@@ -4,7 +4,7 @@
  * Shared across the contacts screen, contact picker, transaction list, and send screen.
  */
 
-import { Avatar } from "@oxyhq/bloom/avatar";
+import { Avatar } from "@oxy.so/bloom/avatar";
 
 interface ContactAvatarProps {
   name: string;

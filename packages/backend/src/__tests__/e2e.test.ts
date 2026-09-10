@@ -19,7 +19,7 @@ import type { NetworkType } from "@fairco.in/core";
 import type {
   OxyAuthRequest,
   SafeFetchResult,
-} from "@oxyhq/core/server";
+} from "@oxy.so/core/server";
 import { verifyWebhook } from "@peable.to/shared-types";
 import { merchants, paymentIntents } from "../db/schema";
 import {

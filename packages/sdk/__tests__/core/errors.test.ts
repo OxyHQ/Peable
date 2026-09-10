@@ -49,7 +49,7 @@ describe('errorFromResponse', () => {
     expect(err).toBeInstanceOf(PeableApiError);
   });
 
-  // `@oxyhq/core`'s Express auth middleware (serviceAuth()/requireScope())
+  // `@oxy.so/core`'s Express auth middleware (serviceAuth()/requireScope())
   // rejects a missing/expired/insufficiently-scoped service token with a
   // FLAT envelope, not the Gateway's own nested `sendError` shape. A caller
   // of this SDK hits this shape on the most common failure — an expired

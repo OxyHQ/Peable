@@ -15,7 +15,7 @@ const DEFAULT_NETWORK: NetworkType = "mainnet";
 // The hosted checkout page's host (F2.2/F2.3) — see `2026-07-19-fase2-checkout-links.md`.
 const DEFAULT_CHECKOUT_BASE_URL = "https://checkout.peable.to";
 // The SAME literal fallback the shared `oxyClient` singleton itself is built
-// with (`@oxyhq/core`'s `OXY_API_URL = process.env.OXY_API_URL || 'https://api.oxy.so'`)
+// with (`@oxy.so/core`'s `OXY_API_URL = process.env.OXY_API_URL || 'https://api.oxy.so'`)
 // — not re-exported from that package's public entry, so mirrored here rather
 // than imported, matching the convention every other Oxy backend
 // (`Mention/packages/backend`, `oxy-ship`, …) already uses for the same constant.

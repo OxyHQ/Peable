@@ -13,15 +13,15 @@ Peable is the FairCoin money app of the Oxy ecosystem: **you sign in with your O
 1. **100% self-custody (MiCA legal firewall).** The user's FairCoin private keys are derived and held **only on the user's device**; the backend and Oxy servers NEVER see, hold, or can reconstruct a spending key or custody funds. Only the identity holder can spend. This is the legal basis (avoids CASP licensing) and MUST NOT be weakened.
 2. **Keys never leave the device.** Identity/derived keys live in Keychain/SecureStore (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`, hardware-backed where available). Spending requires device unlock + app PIN/biometric.
 3. **Security review before mainnet.** The derivation scheme (esp. the identity-key-derived social-receive branch) MUST pass a `security-reviewer` audit before any mainnet build ships. No "100% unhackable" claims — standard self-custody threat model applies and is documented in §10.
-4. **Fix upstream, never patch the consumer.** Generic wallet-core work (Pockets) is implemented in **FAIRWallet upstream** and pulled into Peable via `git subtree pull`. Generic identity-key access (identity→seed via `deriveScopedSeed`, raw key via `getPrivateKey`/`getSharedPrivateKey`) lives in `@oxyhq/core` (platform-agnostic, MUST NOT import faircoin). FairCoin-specific crypto (the identity-pubkey→FairCoin social-receive address derivation) lives in **`@fairco.in/core`** (generic secp256k1 inputs, no Oxy dep). Only Oxy-specific product code (onboarding, social send UI, identity wiring, the glue) diverges in Peable.
+4. **Fix upstream, never patch the consumer.** Generic wallet-core work (Pockets) is implemented in **FAIRWallet upstream** and pulled into Peable via `git subtree pull`. Generic identity-key access (identity→seed via `deriveScopedSeed`, raw key via `getPrivateKey`/`getSharedPrivateKey`) lives in `@oxy.so/core` (platform-agnostic, MUST NOT import faircoin). FairCoin-specific crypto (the identity-pubkey→FairCoin social-receive address derivation) lives in **`@fairco.in/core`** (generic secp256k1 inputs, no Oxy dep). Only Oxy-specific product code (onboarding, social send UI, identity wiring, the glue) diverges in Peable.
 
 ## 3. Scope & decomposition
 
 Three workstreams, sequenced. Each is independently testable.
 
 - **WS-P — Pockets (FAIRWallet upstream).** Parametrise the wallet by BIP44 account index; Pockets UI. Generic, reusable, no Oxy dependency. Lands in FAIRWallet → subtree-pulled into Peable.
-- **WS-F — Foundation: Oxy-identity wallet + Oxy-first onboarding (Peable + `@oxyhq/core`).** Replace the `hasWallet()` onboarding with sign-in-with-Oxy; derive the single wallet from the Oxy identity; handle keyless accounts.
-- **WS-S — Social send/receive + rich transaction identity (Peable + backend + `@oxyhq/core`).** `@username` payments: resolve → derive → send; social-receive address scheme; user-search UI; raw-address send kept as secondary. PLUS the transaction history showing merchant name+logo / user avatar+name per §4.8 (the Stripe/Revolut-grade ledger — enrichment service + attribution records).
+- **WS-F — Foundation: Oxy-identity wallet + Oxy-first onboarding (Peable + `@oxy.so/core`).** Replace the `hasWallet()` onboarding with sign-in-with-Oxy; derive the single wallet from the Oxy identity; handle keyless accounts.
+- **WS-S — Social send/receive + rich transaction identity (Peable + backend + `@oxy.so/core`).** `@username` payments: resolve → derive → send; social-receive address scheme; user-search UI; raw-address send kept as secondary. PLUS the transaction history showing merchant name+logo / user avatar+name per §4.8 (the Stripe/Revolut-grade ledger — enrichment service + attribution records).
 
 **Out of scope (this design):** fiat on-ramp, invoices/subscriptions/payment-links (Gateway phase 2), Terminal/NFC, web wallet (native-only — see §9), swapping FairCoin↔fiat.
 
@@ -33,7 +33,7 @@ The FairCoin HD wallet seed is derived on-device from the Oxy self-sovereign ide
 
 **Derivation recipe (spending tree):**
 ```
-identityPrivKey (32 bytes, from KeyManager)                       // @oxyhq/core, on-device only
+identityPrivKey (32 bytes, from KeyManager)                       // @oxy.so/core, on-device only
 seed = hkdfSha256(ikm = identityPrivKey,
                   salt = SDK-fixed salt,
                   info = utf8("peable/faircoin/v1"),
@@ -41,17 +41,17 @@ seed = hkdfSha256(ikm = identityPrivKey,
 hd   = KeyManager.fromSeed(seed, network)                         // Peable wallet key-manager
                                                                   // = HDKey.fromMasterSeed(seed); m/44'/119'/account'/…
 ```
-- `hkdfSha256` already exists (`@oxyhq/core` `crypto/kdf.ts`); the pattern mirrors `RecoveryPhraseService.deriveBackupMaterial`.
+- `hkdfSha256` already exists (`@oxy.so/core` `crypto/kdf.ts`); the pattern mirrors `RecoveryPhraseService.deriveBackupMaterial`.
 - `KeyManager.fromSeed` already accepts an arbitrary 32-byte seed (`@scure/bip32` `HDKey.fromMasterSeed`, 256-bit advised). **Do NOT** route HKDF output through `mnemonicToSeed` (BIP39 doesn't validate input → silently wrong seed; footgun already flagged in `wallet-store.ts`).
 - FairCoin coin type: mainnet `44'/119'`, testnet `44'/1'`.
 - This spending tree is **private**: its addresses are NOT publicly derivable (privacy for the user's own balance/change/pockets).
 
 **Where the identity key comes from (native-only):**
 - Peable reads the identity key from the **shared keychain** `group.so.oxy.shared` (`KeyManager.getSharedPrivateKey()`), the ecosystem SSO mechanism written by Commons. Peable MUST ship the shared-keychain entitlement (iOS `keychain-access-groups` incl. `group.so.oxy.shared`, same Team ID; Android `sharedUserId="so.oxy.shared"` + the shared Oxy release keystore).
-- **Cleaner API (upstream, fix de raíz):** add `KeyManager.deriveScopedSeed(info: string): Promise<Uint8Array>` to `@oxyhq/core` so Peable never handles the raw identity private key — it asks the SDK for a domain-separated 32-byte seed. The SDK does the HKDF internally.
+- **Cleaner API (upstream, fix de raíz):** add `KeyManager.deriveScopedSeed(info: string): Promise<Uint8Array>` to `@oxy.so/core` so Peable never handles the raw identity private key — it asks the SDK for a domain-separated 32-byte seed. The SDK does the HKDF internally.
 - On web the identity key is `null` → no wallet (see §9).
 
-**Keyless (custodial) Oxy accounts:** detect via `oxy.listAuthMethods()` / `resolveDid()` (no `identity` verification method) or on-device `hasSharedIdentity()`/`hasIdentity()`. If the user has no self-sovereign identity, onboarding routes them to **create one** (Commons handoff, or in-app `@oxyhq/core` `RecoveryPhraseService.generateIdentityWithRecovery()` + `oxy.linkIdentityKey()`), surfacing the Oxy recovery phrase. Only after an identity exists can a wallet be derived.
+**Keyless (custodial) Oxy accounts:** detect via `oxy.listAuthMethods()` / `resolveDid()` (no `identity` verification method) or on-device `hasSharedIdentity()`/`hasIdentity()`. If the user has no self-sovereign identity, onboarding routes them to **create one** (Commons handoff, or in-app `@oxy.so/core` `RecoveryPhraseService.generateIdentityWithRecovery()` + `oxy.linkIdentityKey()`), surfacing the Oxy recovery phrase. Only after an identity exists can a wallet be derived.
 
 ### 4.2 Onboarding (WS-F)
 
@@ -135,7 +135,7 @@ Three enrichment sources, each keyed to a transaction (txid) or address:
 
 ## 5. Upstream additions (fix de raíz)
 
-**`@oxyhq/core` (platform-agnostic — NO FairCoin, NO new WS-S publish):**
+**`@oxy.so/core` (platform-agnostic — NO FairCoin, NO new WS-S publish):**
 - `KeyManager.deriveScopedSeed(info: string): Promise<Uint8Array>` — HKDF the identity key to a 32-byte, domain-separated seed without exposing the raw key (used by the identity WALLET, WS-F, already published).
 - (Reuse existing) `getPrivateKey()`/`getSharedPrivateKey()` — the raw identity secp256k1 key the recipient's social-receive spending-key derivation needs (already exposed; no change). Plus `resolveDid`, `searchProfiles`, `getProfileByUsername`, `listAuthMethods`, identity-creation/link.
 
@@ -177,8 +177,8 @@ The identity key is unavailable on web (`getPrivateKey`/`getSharedPrivateKey` �
 ## 10. Implementation phases (sequencing)
 
 1. **WS-P Pockets** in FAIRWallet upstream → push → `git subtree pull` into Peable. (Independent; can start first.)
-2. **WS-F Foundation:** `@oxyhq/core` `deriveScopedSeed` (+ publish) → Peable wallet-init from identity → Oxy-first onboarding + keyless handling. Remove multi-wallet UI.
-3. **WS-S Social:** `@fairco.in/core` social-receive helper (+ publish; `@oxyhq/core` unchanged — recipient uses its existing raw-identity-key access) → backend user-address reservation + transaction-attribution/enrichment service (§4.8) → Peable social send/receive UI (user search, default+fresh addresses) + rich transaction history (merchant name+logo / user avatar+name) → demote raw-address send.
+2. **WS-F Foundation:** `@oxy.so/core` `deriveScopedSeed` (+ publish) → Peable wallet-init from identity → Oxy-first onboarding + keyless handling. Remove multi-wallet UI.
+3. **WS-S Social:** `@fairco.in/core` social-receive helper (+ publish; `@oxy.so/core` unchanged — recipient uses its existing raw-identity-key access) → backend user-address reservation + transaction-attribution/enrichment service (§4.8) → Peable social send/receive UI (user search, default+fresh addresses) + rich transaction history (merchant name+logo / user avatar+name) → demote raw-address send.
 4. **Security review** (`security-reviewer`) of the full derivation + social scheme → address findings → only then a mainnet-capable build.
 
 Each phase gets its own implementation plan (`writing-plans`).

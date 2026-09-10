@@ -1,13 +1,13 @@
 import { Router } from "express";
 import type { Request, RequestHandler, Response } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import {
   createOxyAuthMiddleware,
   getRequiredOxyUserId,
   OXY_SERVICE_ENVIRONMENTS,
-} from "@oxyhq/core/server";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxyhq/core/server";
+} from "@oxy.so/core/server";
+import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import { findIntentForMerchant } from "../db/payments/paymentIntentRepository";
 import {

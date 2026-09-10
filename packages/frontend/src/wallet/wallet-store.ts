@@ -1667,7 +1667,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   initializeFromIdentity: async (onReady?: () => void): Promise<IdentityInitResult> => {
     // The IDENTITY-derived wallet needs the on-device keystore the identity key
-    // lives in (`@oxyhq/core` keyManager -> expo-secure-store). `Platform.OS`
+    // lives in (`@oxy.so/core` keyManager -> expo-secure-store). `Platform.OS`
     // is the current proxy for "is that keystore here": a browser has none.
     //
     // This is narrower than "the wallet does not work on web". The BIP39 and

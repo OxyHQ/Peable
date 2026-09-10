@@ -10,8 +10,8 @@
 
 import { useCallback } from "react";
 import type { ViewStyle } from "react-native";
-import { Button as BloomButton } from "@oxyhq/bloom/button";
-import type { ButtonVariant as BloomButtonVariant } from "@oxyhq/bloom/button";
+import { Button as BloomButton } from "@oxy.so/bloom/button";
+import type { ButtonVariant as BloomButtonVariant } from "@oxy.so/bloom/button";
 import { hapticImpact } from "../../utils/haptics";
 
 type ButtonVariant = "primary" | "secondary" | "danger" | "outline" | "ghost";

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import type { CreatePaymentLinkParams } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findMerchantById } from "../db/merchants/merchantRepository";

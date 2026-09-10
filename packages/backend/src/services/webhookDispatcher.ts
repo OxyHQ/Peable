@@ -3,7 +3,7 @@ import {
   SsrfRejection,
   UpstreamError,
   type SafeFetchResult,
-} from "@oxyhq/core/server";
+} from "@oxy.so/core/server";
 import {
   signWebhook,
   type PaymentIntent,
@@ -14,7 +14,7 @@ import {
 import { newId } from "../lib/ids";
 
 /** The concrete `safeFetch` signature — injected in tests, real one in prod. */
-export type SafeFetchFn = typeof import("@oxyhq/core/server").safeFetch;
+export type SafeFetchFn = typeof import("@oxy.so/core/server").safeFetch;
 
 /** Where a merchant's signed webhook events are POSTed, and the signing secret. */
 export interface WebhookTarget {

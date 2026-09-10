@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { eq, sql } from 'drizzle-orm';
-import { uuidv7 } from '@oxyhq/db';
-import { isCheckViolation, isUniqueViolation, sqlStateOf } from '@oxyhq/db';
+import { uuidv7 } from '@oxy.so/db';
+import { isCheckViolation, isUniqueViolation, sqlStateOf } from '@oxy.so/db';
 import { reserveNextDerivationIndex } from '../merchants/derivationIndex';
 import { merchants } from '../schema';
 import { MAX_DERIVATION_INDEX } from '../schema/valueSets';

@@ -19,8 +19,8 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { formatUnits, COIN_TICKER, explorerTxUrl } from "@fairco.in/core";
 import {
   useWalletStore,
@@ -28,7 +28,7 @@ import {
   type WalletTransaction,
 } from "../../wallet/wallet-store";
 import { AmountText, EmptyState } from "../components";
-import { Button as BloomButton } from "@oxyhq/bloom/button";
+import { Button as BloomButton } from "@oxy.so/bloom/button";
 import { FairCoinSymbol } from "../components/FairCoinSymbol";
 import type { ContactRow } from "../../storage/database";
 import { FONT_PHUDU_BLACK } from "../../utils/fonts";

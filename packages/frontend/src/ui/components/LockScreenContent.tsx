@@ -23,7 +23,7 @@ import {
 } from "../../storage/pin-attempts";
 import { PinPad } from "./PinPad";
 import { PinDots } from "./PinDots";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { hapticSuccess, hapticError } from "../../utils/haptics";
 import { playUnlocked } from "../../services/sounds";
 import { APP_DISPLAY_NAME } from "../../config";

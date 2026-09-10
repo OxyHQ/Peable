@@ -19,7 +19,7 @@ import { View, Text, TextInput, ScrollView, Switch } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter, useFocusEffect } from "expo-router";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { ListItem, ScreenHeader } from "../src/ui/components";
 import { t } from "../src/i18n";
 import {

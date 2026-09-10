@@ -3,8 +3,8 @@ import { getTableName, is, sql } from 'drizzle-orm';
 import { PgTable } from 'drizzle-orm/pg-core';
 import { deriveKeyFromSeed, getNetwork, mnemonicToSeed } from '@fairco.in/core';
 import type { NetworkType } from '@fairco.in/core';
-import type { OxyServiceEnvironment } from '@oxyhq/core/server';
-import { uuidv7 } from '@oxyhq/db';
+import type { OxyServiceEnvironment } from '@oxy.so/core/server';
+import { uuidv7 } from '@oxy.so/db';
 import type { ProviderId } from '../../services/providers/provider';
 import type {
   CurrencyCode,

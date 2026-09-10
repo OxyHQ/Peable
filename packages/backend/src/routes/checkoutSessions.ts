@@ -1,8 +1,8 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
-import { verifySecret } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { verifySecret } from "@oxy.so/core/server";
 import type { CreateCheckoutSessionParams } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findMerchantById } from "../db/merchants/merchantRepository";

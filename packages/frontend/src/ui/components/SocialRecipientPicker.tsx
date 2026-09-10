@@ -9,7 +9,7 @@ import { useCallback, useEffect, useState } from "react";
 import { View, Text, TextInput, Pressable, Modal, ActivityIndicator } from "react-native";
 import { FlashList } from "@shopify/flash-list";
 import { useQuery } from "@tanstack/react-query";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { oxyServices } from "../../services/oxy-services";
 import { UserAvatar } from "./UserAvatar";
 import { t } from "../../i18n";

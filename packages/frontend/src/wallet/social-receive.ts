@@ -1,7 +1,7 @@
 /**
  * Peable's on-device half of the social-receive scheme (design spec §4.3).
- * Reads the raw identity private key from `@oxyhq/core`'s EXISTING
- * `KeyManager.getSharedPrivateKey()`/`getPrivateKey()` — no `@oxyhq/core`
+ * Reads the raw identity private key from `@oxy.so/core`'s EXISTING
+ * `KeyManager.getSharedPrivateKey()`/`getPrivateKey()` — no `@oxy.so/core`
  * change needed; this mirrors `deriveIdentitySeed`'s own key-source priority
  * (shared ecosystem identity first, then this device's primary identity) but
  * SKIPS the HKDF step: the social-receive branch is, by design, the ONE
@@ -23,7 +23,7 @@ import {
   publicKeyFromPrivateKey,
 } from "@fairco.in/core";
 import type { NetworkConfig } from "@fairco.in/core";
-import { KeyManager as IdentityKeyManager } from "@oxyhq/core";
+import { KeyManager as IdentityKeyManager } from "@oxy.so/core";
 
 /**
  * How many unused social-receive addresses stay watched beyond the highest
@@ -33,7 +33,7 @@ import { KeyManager as IdentityKeyManager } from "@oxyhq/core";
 export const SOCIAL_RECEIVE_GAP_LIMIT = 20;
 
 /**
- * Lowercase + left-pad to 64 hex chars. Mirrors `@oxyhq/core`'s internal
+ * Lowercase + left-pad to 64 hex chars. Mirrors `@oxy.so/core`'s internal
  * `KeyManager.canonicalPrivateKey` (private to that package, not exported) —
  * tolerates the 1-in-256 leading-zero-strip `elliptic`'s `getPrivate('hex')`
  * produces and legacy uppercase-stored keys. Every raw private-key hex
