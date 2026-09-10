@@ -297,9 +297,18 @@ describe('subscribe', () => {
     });
     // `intent.updated` must still be registered exactly once — a reconnect
     // must never re-add the listener (which would double-fire onUpdate).
-    expect(socket.on).toHaveBeenCalledTimes(1);
+    //
+    // Counted BY EVENT NAME rather than as a total `socket.on` count. The total
+    // was a proxy that held only while `intent.updated` was the sole listener,
+    // and it went red when a `disconnect` listener was added beside it — for a
+    // change that does not touch the property this case is about. A proxy that
+    // fails on unrelated work is one somebody eventually deletes.
+    const intentUpdatedCalls = socket.on.mock.calls.filter(
+      ([event]) => event === 'intent.updated',
+    );
+    expect(intentUpdatedCalls).toHaveLength(1);
 
-    const listener = socket.on.mock.calls[0]?.[1] as (intent: PaymentIntent) => void;
+    const listener = intentUpdatedCalls[0]?.[1] as (intent: PaymentIntent) => void;
     listener({ ...INTENT, id: 'pi_1', status: 'broadcast' });
     expect(updates).toHaveLength(1);
   });
@@ -340,5 +349,126 @@ describe('subscribe', () => {
       PeableApiError,
     );
     expect(socket.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * A drop AFTER `subscribe` resolves.
+   *
+   * Nothing could observe one before: the promise had already settled, so its
+   * `.catch` could not fire again, and socket.io reconnects the transport
+   * silently while replaying NO frames. A payment that settled during the gap
+   * therefore never reached the page and never would.
+   */
+  test('reports a drop after subscribe resolved', async () => {
+    const socket = installFakeSocket({ ok: true });
+    const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
+    const states: string[] = [];
+
+    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+
+    const disconnectHandler = socket.on.mock.calls.find(
+      ([event]) => event === 'disconnect',
+    )?.[1] as () => void;
+    expect(disconnectHandler).toBeInstanceOf(Function);
+
+    disconnectHandler();
+    expect(states).toEqual(['lost']);
+  });
+
+  /**
+   * `'live'` follows the ROOM rejoin, not the transport.
+   *
+   * The server spins up a fresh Socket on reconnect with no room membership, so
+   * a connected socket that has not rejoined delivers nothing — and a host told
+   * it was live there would stand its fallback down into permanent silence.
+   */
+  test('reports live only after the room is rejoined', async () => {
+    const socket = installFakeSocket([{ ok: true }, { ok: true }]);
+    const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
+    const states: string[] = [];
+
+    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+    const reconnectHandler = socket.io.on.mock.calls[0]?.[1] as () => void;
+
+    reconnectHandler();
+    // Before the resubscribe ack settles, nothing has been claimed.
+    expect(states).toEqual([]);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(states).toEqual(['live']);
+  });
+
+  /**
+   * A resubscribe the gateway REFUSES (the intent expired between drop and
+   * reconnect) leaves the caller `lost`. Reporting `live` off the transport
+   * alone would be the same permanent silence.
+   */
+  test('stays lost when the rejoin is refused', async () => {
+    const socket = installFakeSocket([{ ok: true }, { ok: false }]);
+    const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
+    const states: string[] = [];
+
+    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+    const reconnectHandler = socket.io.on.mock.calls[0]?.[1] as () => void;
+
+    reconnectHandler();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(states).toEqual([]);
+  });
+
+  /**
+   * The deliberate close must NOT look like a drop. `unsubscribe` disconnects,
+   * which fires `disconnect` like any other close — reporting `'lost'` there
+   * would have a host spin up a fallback for a subscription it just tore down,
+   * on an unmounting component.
+   */
+  test('unsubscribing does not report a lost connection', async () => {
+    const socket = installFakeSocket({ ok: true });
+    const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
+    const states: string[] = [];
+
+    const subscription = await client.subscribe(
+      'pi_1',
+      'secret_1',
+      () => {},
+      (state) => states.push(state),
+    );
+    const disconnectHandler = socket.on.mock.calls.find(
+      ([event]) => event === 'disconnect',
+    )?.[1] as () => void;
+
+    subscription.unsubscribe();
+    // Whether or not the fake re-fires it, a close we asked for is not a drop.
+    disconnectHandler();
+
+    expect(states).toEqual([]);
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  /**
+   * Vacuity floor for the four cases above: a caller that passes no callback
+   * behaves exactly as it did, which is what makes the parameter additive on a
+   * published package rather than a change every consumer must absorb.
+   */
+  test('a subscriber that wants no connection reports still works', async () => {
+    const socket = installFakeSocket({ ok: true });
+    const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
+    const updates: PaymentIntent[] = [];
+
+    await client.subscribe('pi_1', 'secret_1', (intent) => updates.push(intent));
+
+    const disconnectHandler = socket.on.mock.calls.find(
+      ([event]) => event === 'disconnect',
+    )?.[1] as () => void;
+    expect(() => disconnectHandler()).not.toThrow();
+
+    const listener = socket.on.mock.calls.find(([event]) => event === 'intent.updated')?.[1] as (
+      intent: PaymentIntent,
+    ) => void;
+    listener({ ...INTENT, id: 'pi_1', status: 'broadcast' });
+    expect(updates).toHaveLength(1);
   });
 });

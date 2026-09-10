@@ -30,13 +30,30 @@ export interface AddressBalances {
   readonly totalSat: bigint;
 }
 
+/** The Explorer's answer for an address it has no record of. */
+const UNKNOWN_ADDRESS = 404;
+
 /**
  * What each address holds right now, and their total, in base units.
  *
- * An address the Explorer has never seen answers 0n rather than throwing: a
+ * ## Zero means zero, and only the Explorer may say so
+ *
+ * An address the Explorer has never seen answers `0n` rather than throwing: a
  * freshly derived receive address is exactly that until someone pays it, and a
  * wallet whose newest address is unused must still show the balance of the
  * rest.
+ *
+ * That reason justifies ONE response and this function used to apply it to
+ * every failure — a 429, a 502, a truncated body, all rendered as `0n`. A
+ * wallet showing zero during an Explorer outage tells someone their money is
+ * gone, which is the worst thing this screen can say and the one thing it must
+ * never say by accident. So every other failure THROWS, and the caller's query
+ * reports the balance as unavailable while whatever it had stays on screen.
+ *
+ * This is also what makes `ReadOnlyWalletView`'s split real rather than aspirational:
+ * balances are a separate query precisely "so a history that already loaded must
+ * not disappear because the chain read failed" — which needs the chain read to
+ * actually fail.
  */
 export async function fetchBalancesSat(
   addresses: readonly string[],
@@ -50,13 +67,21 @@ export async function fetchBalancesSat(
     unique.map(async (address) => {
       const url = `${EXPLORER_BASE_URL}/api/address/${encodeURIComponent(address)}?network=${network}`;
       const response = await fetch(url);
-      if (!response.ok) return [address, 0n] as const;
+      if (response.status === UNKNOWN_ADDRESS) return [address, 0n] as const;
+      if (!response.ok) {
+        throw new Error(
+          `Explorer balance request for ${address} failed: ${String(response.status)} ${response.statusText}`
+        );
+      }
 
+      // A body this cannot read is NOT a zero balance. It is an answer we do
+      // not understand, and guessing the most alarming possible number from it
+      // is not a safe default.
       const body: unknown = await response.json();
       const balanceSat = (body as { addressInfo?: { balanceSat?: unknown } })?.addressInfo
         ?.balanceSat;
       if (typeof balanceSat !== 'number' || !Number.isSafeInteger(balanceSat)) {
-        return [address, 0n] as const;
+        throw new Error(`Explorer balance response for ${address} carried no usable balanceSat`);
       }
       return [address, BigInt(balanceSat)] as const;
     })

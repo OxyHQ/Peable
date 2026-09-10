@@ -1,4 +1,5 @@
 import { test, expect } from "bun:test";
+import { SOCIAL_PAY_NETWORK } from "./social-network";
 import {
   parseProfileHandle,
   decideProfilePayAction,
@@ -102,6 +103,25 @@ test("blocks the send action on mainnet (finding F-1)", () => {
   // can neither see nor spend. The page must not offer it there.
   expect(decideProfilePayAction({ ...READY, network: "mainnet" })).toEqual({
     kind: "mainnet-blocked",
+  });
+});
+
+/**
+ * The gate and the read-only history must name the SAME network.
+ *
+ * They did not: this gate hard-coded `"testnet"` while `ReadOnlyWalletView`
+ * took the wallet store's network — which on web is the store's DEFAULT
+ * (`mainnet`), because no wallet initializes on that surface at all. So the app
+ * could only create social payments on one network and only ever asked about
+ * the other, and every web visitor saw an empty history that looked exactly
+ * like never having been paid. Nothing errored and nothing logged.
+ *
+ * Both now read `SOCIAL_PAY_NETWORK`, and this is what keeps that true: the
+ * gate must permit sending on precisely the network the history is read from.
+ */
+test("permits sending on exactly the network the read-only history asks about", () => {
+  expect(decideProfilePayAction({ ...READY, network: SOCIAL_PAY_NETWORK })).toEqual({
+    kind: "send",
   });
 });
 
