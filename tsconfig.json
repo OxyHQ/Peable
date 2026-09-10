@@ -22,10 +22,10 @@
   // expect in-place .d.ts outputs the noEmit frontend never emits → TS6305).
   //
   // `packages/shared-types` is deliberately NOT referenced here: it is a
-  // publish-ready dual CJS/ESM package now (mirrors `@oxyhq/contracts`), built
+  // publish-ready dual CJS/ESM package now (mirrors `@oxy.so/contracts`), built
   // with 3 non-composite tsconfigs (cjs/esm/types) rather than a single
   // composite project — consumers resolve it via node_modules like any other
-  // published dependency, the same way oxy-api resolves `@oxyhq/contracts`.
+  // published dependency, the same way oxy-api resolves `@oxy.so/contracts`.
   "files": [],
   "references": [
     { "path": "./packages/backend" },

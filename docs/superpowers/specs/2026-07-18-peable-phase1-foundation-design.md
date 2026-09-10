@@ -5,7 +5,7 @@
 
 ## Contexto
 
-Peable pivota de una plataforma **custodial** (muerta, no funcionaba) a una **pasarela de pagos no-custodial sobre FairCoin** — "Stripe sobre FairCoin". La app se basa en un fork de **FAIRWallet** (self-custodial, SPV/P2P, `@oxyhq/bloom`) vendorizado vía `git subtree` en `packages/frontend`, con **identidad Oxy** añadida encima. FairCoin/FAIRWallet siguen siendo un proyecto **aparte** (usable sin Oxy); Peable es el hermano vinculado a la cuenta Oxy.
+Peable pivota de una plataforma **custodial** (muerta, no funcionaba) a una **pasarela de pagos no-custodial sobre FairCoin** — "Stripe sobre FairCoin". La app se basa en un fork de **FAIRWallet** (self-custodial, SPV/P2P, `@oxy.so/bloom`) vendorizado vía `git subtree` en `packages/frontend`, con **identidad Oxy** añadida encima. FairCoin/FAIRWallet siguen siendo un proyecto **aparte** (usable sin Oxy); Peable es el hermano vinculado a la cuenta Oxy.
 
 **Restricción legal load-bearing (MiCA):** custodiar los FairCoins convertiría a Oxy en CASP (licencia, capital, AML, auditorías). Self-custody queda **fuera** de MiCA. Por tanto la **no-custodia es un invariante de diseño, no una feature** — es el firewall legal.
 
@@ -60,7 +60,7 @@ Un cambio que viole 1-4 es un bug legal, no solo técnico.
 
 **Dentro (F1):**
 - App: fork FAIRWallet en `packages/frontend` + `OxyProvider` (identidad Oxy vinculada) + pantalla **aprobar-pago** + bandeja de payment-requests + manejo de push.
-- Backend nuevo de cero (`packages/backend`): modelo `PaymentIntent`, registro merchant (xpub watch-only + endpoint webhook), API de intents, **watcher de liquidación** (watch-only vía Explorer), dispatcher de webhooks, auth `@oxyhq/core/server`, Socket.io para updates realtime del intent al monedero.
+- Backend nuevo de cero (`packages/backend`): modelo `PaymentIntent`, registro merchant (xpub watch-only + endpoint webhook), API de intents, **watcher de liquidación** (watch-only vía Explorer), dispatcher de webhooks, auth `@oxy.so/core/server`, Socket.io para updates realtime del intent al monedero.
 - `shared-types`: DTOs `PaymentIntent`, enum de estados, tipos de evento webhook.
 
 **Fuera (fases posteriores):** SDK `@peable.to/sdk`, dashboard en Console, POS/tap-to-pay, suscripciones/recurrencia, on/off-ramp fiat, refunds, payouts, multi-merchant a escala, antifraude.
@@ -126,7 +126,7 @@ Ambos convergen en el mismo `PaymentIntent`. F1 implementa los dos; el flujo hé
 - Modelos: `PaymentIntent`, `Merchant` (Oxy app id + xpub watch-only + índice de derivación + webhook url/secret + confirmaciones requeridas).
 - Rutas: `POST /v1/payment-intents` (crear, auth merchant), `GET /v1/payment-intents/:id` (payer y merchant), `POST /v1/payment-intents/:id/reject`. Registro merchant vía app-keys de Console.
 - Servicios: `derivation` (dirección por intent desde xpub), `settlement-watcher` (Explorer watch-only), `webhook-dispatcher` (firmado, reintentos).
-- Auth: `@oxyhq/core/server` — merchant vía `serviceAuth`/app-key; payer vía `requireOxyAuth`. CORS `createOxyCors`, SSRF `safeFetch` en el fetch de webhooks.
+- Auth: `@oxy.so/core/server` — merchant vía `serviceAuth`/app-key; payer vía `requireOxyAuth`. CORS `createOxyCors`, SSRF `safeFetch` en el fetch de webhooks.
 - Socket.io: `io.use(oxy.authSocket())`, salas por `socket.user.id`, jamás client-supplied.
 
 **`packages/shared-types`** (de cero): `PaymentIntent` DTO, enum de estados, `WebhookEvent` (`payment_intent.settled`, etc.), tipos de creación. Sin tipos de custodia.

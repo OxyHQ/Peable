@@ -1,4 +1,4 @@
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import type { MerchantDisplay } from "@peable.to/shared-types";
 import type { MerchantRow } from "../db/merchants/merchantRepository";
 

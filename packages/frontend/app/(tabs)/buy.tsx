@@ -26,7 +26,7 @@ import {
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { parseFairToUnits } from "@fairco.in/core";
 import { Button, EmptyState } from "../../src/ui/components";
 import { BuyAmountInput } from "../../src/components/buy/AmountInput";

@@ -11,7 +11,7 @@
 
 import { useMemo } from "react";
 import { View, Text, Pressable } from "react-native";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { parseFairToUnits, UNITS_PER_COIN } from "@fairco.in/core";
 import { AmountInput } from "../../ui/components/AmountInput";
 import { FairCoinSymbol } from "../../ui/components/FairCoinSymbol";

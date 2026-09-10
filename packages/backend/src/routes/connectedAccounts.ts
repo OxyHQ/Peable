@@ -9,7 +9,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { getDb } from "../db/postgres";
 import {
   findAccountByExternalRef,

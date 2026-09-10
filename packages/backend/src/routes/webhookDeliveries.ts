@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { getDb } from "../db/postgres";
 import { findWebhookTarget } from "../db/merchants/merchantRepository";
 import type { MerchantRow } from "../db/merchants/merchantRepository";

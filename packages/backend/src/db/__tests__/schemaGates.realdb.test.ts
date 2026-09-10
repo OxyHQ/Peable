@@ -6,8 +6,8 @@ import {
   findIdColumnViolations,
   findImplicitWholeRowReads,
   findSchemaInvariantViolations,
-} from '@oxyhq/db/assert';
-import { phaseMarkerLine } from '@oxyhq/db/migrate';
+} from '@oxy.so/db/assert';
+import { phaseMarkerLine } from '@oxy.so/db/migrate';
 import { PROTECTED_COLUMNS } from '../protectedColumns';
 import {
   checkoutSessions,

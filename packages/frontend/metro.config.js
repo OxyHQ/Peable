@@ -9,7 +9,7 @@ const monorepoRoot = path.resolve(projectRoot, "../..");
 // Metro monorepo-aware under the hoisted linker: it sets `watchFolders` (root
 // node_modules + every package), `resolver.nodeModulesPaths`
 // ([app node_modules, hoisted root node_modules]) and enables
-// `unstable_enablePackageExports` (required by @oxyhq/bloom subpath exports).
+// `unstable_enablePackageExports` (required by @oxy.so/bloom subpath exports).
 // We keep those defaults untouched and only layer on this app's own needs.
 const config = getDefaultConfig(projectRoot);
 
@@ -63,7 +63,7 @@ config.resolver = {
     blockPath(path.join(monorepoRoot, "packages/backend")),
     blockPath(path.join(monorepoRoot, "packages/shared-types/src")),
   ],
-  assetExts: [...(config.resolver?.assetExts ?? []), "wasm"],
+  assetExts: [...(config.resolver?.assetExts ?? []), "wasm", "woff2"],
   resolveRequest(context, moduleName, platform) {
     // On web, replace react-native-tcp-socket with an empty shim
     // (TCP sockets are not available in browsers; Electron uses IPC instead)

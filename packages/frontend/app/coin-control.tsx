@@ -9,7 +9,7 @@ import { View, Text, Pressable, ScrollView } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
 import {
   AmountText,
@@ -17,7 +17,7 @@ import {
   EmptyState,
   ScreenHeader,
 } from "../src/ui/components";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { t } from "../src/i18n";
 
 // ---------------------------------------------------------------------------

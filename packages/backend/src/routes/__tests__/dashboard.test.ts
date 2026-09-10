@@ -13,8 +13,8 @@ import { and, eq, sql } from "drizzle-orm";
 import express from "express";
 import type { RequestHandler } from "express";
 import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from "@fairco.in/core";
-import { uuidv7 } from "@oxyhq/db";
-import type { OxyAuthRequest, SafeFetchResult } from "@oxyhq/core/server";
+import { uuidv7 } from "@oxy.so/db";
+import type { OxyAuthRequest, SafeFetchResult } from "@oxy.so/core/server";
 import { merchants } from "../../db/schema";
 import { findMerchantByAppEnvironment } from "../../db/merchants/merchantRepository";
 import type { AppMembershipResult } from "../../services/appMembership";
@@ -65,7 +65,7 @@ const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
  * Stub `assertAppMembership`: allowed iff the caller is `MEMBER_USER_ID` —
  * proves the router's 403 gate without a real oxy-api round trip (Proxy-
  * wrapped-real-client isn't applicable here since `assertAppMembership` is
- * itself an injected router dependency, not `@oxyhq/core`).
+ * itself an injected router dependency, not `@oxy.so/core`).
  */
 const stubAssertAppMembership = async (userId: string): Promise<AppMembershipResult> => ({
   allowed: userId === MEMBER_USER_ID,

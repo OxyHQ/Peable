@@ -4,9 +4,9 @@ import type { Server } from "node:http";
 import express from "express";
 import type { RequestHandler } from "express";
 import { eq } from "drizzle-orm";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
-import { oxyClient as realOxyClient, type User } from "@oxyhq/core";
-import type { DidDocument } from "@oxyhq/contracts";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
+import { oxyClient as realOxyClient, type User } from "@oxy.so/core";
+import type { DidDocument } from "@oxy.so/contracts";
 import { socialSendAttributions } from "../../db/schema";
 import {
   gatewayDb,
@@ -87,7 +87,7 @@ const getUsersByIdsMock = mock(async (ids: string[]) =>
     })) as unknown as User[],
 );
 
-// `mock.module` replaces `@oxyhq/core` process-wide for the rest of this bun
+// `mock.module` replaces `@oxy.so/core` process-wide for the rest of this bun
 // test run, including for OTHER test files whose `oxyClient` binding resolves
 // after this one applies. Wrap the REAL `oxyClient` in a `Proxy` that only
 // intercepts the two methods this route needs and forwards everything else
@@ -106,7 +106,7 @@ const mockedOxyClient = new Proxy(realOxyClient, {
   },
 });
 
-mock.module("@oxyhq/core", () => ({
+mock.module("@oxy.so/core", () => ({
   oxyClient: mockedOxyClient,
 }));
 

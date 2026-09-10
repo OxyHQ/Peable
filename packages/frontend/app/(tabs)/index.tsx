@@ -48,7 +48,7 @@ import {
 import { SendReceiveSheet } from "../../src/ui/sheets/SendReceiveSheet";
 import { hapticSelection, hapticSuccess } from "../../src/utils/haptics";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import {
   startPricePolling,
   stopPricePolling,
@@ -57,8 +57,8 @@ import {
   type PriceData,
 } from "../../src/services/price";
 import { queryClient } from "../../src/services/query-client";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Tabs, TabsTrigger } from "@oxyhq/bloom/tabs";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Tabs, TabsTrigger } from "@oxy.so/bloom/tabs";
 import { BUY_BASE_URL } from "@fairco.in/core";
 import { useTransactionEnrichment } from "../../src/hooks/useTransactionEnrichment";
 import { t } from "../../src/i18n";

@@ -10,7 +10,7 @@ import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
 import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 
 let refundCounter = 0;
 const providerCalls: string[] = [];
@@ -66,7 +66,7 @@ const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   "../../__tests__/helpers/gatewayTestDatabase"
 );
 const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
-const { uuidv7 } = await import("@oxyhq/db");
+const { uuidv7 } = await import("@oxy.so/db");
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;

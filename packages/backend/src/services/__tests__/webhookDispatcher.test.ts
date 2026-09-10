@@ -1,7 +1,7 @@
 import { test, expect } from "bun:test";
 import { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
-import { SsrfRejection, type SafeFetchResult } from "@oxyhq/core/server";
+import { SsrfRejection, type SafeFetchResult } from "@oxy.so/core/server";
 import { verifyWebhook, type PaymentIntent } from "@peable.to/shared-types";
 import {
   attemptDelivery,

@@ -31,10 +31,10 @@ import {
 } from "../../src/storage/secure-store";
 import { ListItem, PinDots, PinPad } from "../../src/ui/components";
 import type { NetworkType } from "@fairco.in/core";
-import { useBloomTheme } from "@oxyhq/bloom/theme";
-import type { ThemeMode } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
-import type { DialogControlProps } from "@oxyhq/bloom/dialog";
+import { useBloomTheme } from "@oxy.so/bloom/theme";
+import type { ThemeMode } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
+import type { DialogControlProps } from "@oxy.so/bloom/dialog";
 import { findLanguageOption, t } from "../../src/i18n";
 import { useLanguageStore } from "../../src/i18n/store";
 import Constants from "expo-constants";

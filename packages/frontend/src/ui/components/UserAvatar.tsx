@@ -9,7 +9,7 @@
  * recipient picker, the receive screen, and the transaction history.
  */
 import type React from "react";
-import { Avatar } from "@oxyhq/bloom/avatar";
+import { Avatar } from "@oxy.so/bloom/avatar";
 
 export function UserAvatar({
   avatarFileId,

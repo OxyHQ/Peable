@@ -24,8 +24,8 @@ import type { ContactRow } from "../src/storage/database";
 import { ContactAvatar, EmptyState } from "../src/ui/components";
 import { QRScanner } from "../src/ui/components/QRScanner";
 import type { ScannedCode } from "../src/pay/scanned-code";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { t } from "../src/i18n";
 
 // ---------------------------------------------------------------------------

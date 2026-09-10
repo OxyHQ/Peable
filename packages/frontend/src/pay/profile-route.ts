@@ -6,7 +6,7 @@
  * renderer, mirroring `wallet/entry-route.ts` for `app/index.tsx`.
  */
 
-import { isValidUsername } from "@oxyhq/contracts";
+import { isValidUsername } from "@oxy.so/contracts";
 import type { NetworkType } from "@fairco.in/core";
 import { PROFILE_WEB_ORIGIN } from "../config";
 
@@ -18,7 +18,7 @@ import { PROFILE_WEB_ORIGIN } from "../config";
  * other unknown single-segment path that this root-level dynamic route also
  * matches: without the check, `/typo` would query the Oxy identity API for a
  * user named "typo" instead of rendering the app's 404. `isValidUsername` is
- * Oxy's own rule (`@oxyhq/core`), so anything this accepts is a handle the
+ * Oxy's own rule (`@oxy.so/core`), so anything this accepts is a handle the
  * identity API can actually be asked about, and everything else 404s locally
  * without a round trip.
  */

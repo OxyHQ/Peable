@@ -34,7 +34,7 @@ export type KeylessAction = { kind: "create" | "sync"; url: string };
  * method on the server (present on some device), vs. a fully keyless
  * (password-only) account. A `webauthn` (passkey) entry does not count — a
  * passkey-only account stays custodial and still cannot derive a wallet (see
- * `AuthMethodEntry` in `@oxyhq/contracts`, whose `type` union is exactly
+ * `AuthMethodEntry` in `@oxy.so/contracts`, whose `type` union is exactly
  * `'identity' | 'webauthn'`).
  */
 export function hasIdentityAuthMethod(methods: readonly { type?: string }[]): boolean {

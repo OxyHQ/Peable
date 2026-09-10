@@ -12,8 +12,8 @@ import express, {
   type RequestHandler,
 } from "express";
 import { Server as SocketServer } from "socket.io";
-import { oxyClient } from "@oxyhq/core";
-import { createOxyCors, createOxyRateLimit } from "@oxyhq/core/server";
+import { oxyClient } from "@oxy.so/core";
+import { createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { config } from "./config";
 import { connectPostgres } from "./db/postgres";
 import { createPaymentIntentsRouter } from "./routes/paymentIntents";
@@ -137,7 +137,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // address. Without this, EVERY request behind the shared ALB collapses
   // into the same handful of buckets in `createOxyRateLimit` below — the
   // exact "shared load balancer IP" failure mode that library's own doc
-  // comment (`@oxyhq/core/server/rateLimit.ts`) warns about. Matches every
+  // comment (`@oxy.so/core/server/rateLimit.ts`) warns about. Matches every
   // other Oxy backend on ECS (oxy-api, mention, homiio, syra). Engine.io
   // (the realtime layer's transport) has no equivalent trust-proxy concept
   // of its own and is NOT affected by this setting — see

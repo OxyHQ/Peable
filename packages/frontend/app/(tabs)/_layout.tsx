@@ -4,7 +4,7 @@
  */
 
 import { NativeTabs } from "expo-router/unstable-native-tabs";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { t } from "../../src/i18n";
 
 export default function TabLayout() {

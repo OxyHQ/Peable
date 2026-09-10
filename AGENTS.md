@@ -224,11 +224,11 @@ predicate and `for update skip locked`.
 
 ## Auth
 
-Backend uses `@oxyhq/core/server`: `createOxyAuthMiddleware` on routes,
+Backend uses `@oxy.so/core/server`: `createOxyAuthMiddleware` on routes,
 `getRequiredOxyUserId` to read the caller, `authSocket()` for Socket.IO, plus
 `createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
 `requireOxyAuth` call site in this repo. Frontend uses `OxyProvider` and `useOxy`
-from `@oxyhq/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
+from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
 
 The hosted checkout is deliberately **anonymous**: a payer has no Oxy session, so
 do not add an Oxy auth requirement to a payer-facing route.
@@ -236,7 +236,7 @@ do not add an Oxy auth requirement to a payer-facing route.
 ## The web build is read-only, not unsupported
 
 Only SIGNING is native-only, and the reason is narrow: the identity wallet's
-seed derives from a key in the on-device keystore (`@oxyhq/core` keyManager ->
+seed derives from a key in the on-device keystore (`@oxy.so/core` keyManager ->
 `expo-secure-store`), and a browser has none. `Platform.OS === "web"` in
 `wallet-store.ts`'s `initializeFromIdentity` is the proxy for that one question
 and is the ONLY platform gate in the store — `createNewWallet`, `importWallet`

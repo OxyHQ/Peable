@@ -10,7 +10,7 @@
 import { useCallback, useEffect } from "react";
 import { View, Text, Pressable, Platform } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { hapticSelection, hapticImpact } from "../../utils/haptics";
 
 interface PinPadProps {

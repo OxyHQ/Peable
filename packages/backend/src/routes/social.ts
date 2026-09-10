@@ -2,8 +2,8 @@ import { Router } from "express";
 import type { Request, RequestHandler } from "express";
 import { z } from "zod";
 import { rateLimit } from "express-rate-limit";
-import { oxyClient, isNotFoundError } from "@oxyhq/core";
-import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxyhq/core/server";
+import { oxyClient, isNotFoundError } from "@oxy.so/core";
+import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxy.so/core/server";
 import type {
   SocialNextAddressResponse,
   SocialPayment,

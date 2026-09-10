@@ -17,7 +17,7 @@ import Svg, {
   Stop,
   Circle,
 } from "react-native-svg";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { FONT_PHUDU_BLACK } from "../../utils/fonts";
 import { formatFiatAmount, t } from "../../i18n";
 import type { PriceHistoryPoint } from "../../services/market";

@@ -8,7 +8,7 @@ import {
   pgTable,
   text,
 } from 'drizzle-orm/pg-core';
-import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxyhq/db';
+import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
 import { WEBHOOK_DELIVERY_STATUSES, WEBHOOK_EVENT_TYPES } from './valueSets';

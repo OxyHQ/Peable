@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { HDKey } from '@scure/bip32';
 import { TESTNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
-import { uuidv7 } from '@oxyhq/db';
+import { uuidv7 } from '@oxy.so/db';
 import {
   WatchOnlyViolationError,
   findMerchantByAppEnvironment,

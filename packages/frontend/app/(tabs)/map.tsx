@@ -64,8 +64,8 @@ import {
   type SymbolLayerStyle,
 } from "@maplibre/maplibre-react-native";
 import * as Location from "expo-location";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { t } from "../../src/i18n";
 import {
   PLACES,

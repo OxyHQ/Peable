@@ -10,7 +10,7 @@ import express from "express";
 import type { RequestHandler } from "express";
 import { eq, sql } from "drizzle-orm";
 import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from "@fairco.in/core";
-import type { OxyAuthRequest } from "@oxyhq/core/server";
+import type { OxyAuthRequest } from "@oxy.so/core/server";
 import { merchants } from "../../db/schema";
 import {
   gatewayDb,

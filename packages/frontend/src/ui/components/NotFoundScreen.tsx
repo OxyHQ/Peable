@@ -12,7 +12,7 @@ import { View, Text, Image, Pressable } from "react-native";
 import { SafeAreaView } from "../safe-area-view";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { Button } from "./Button";
 import { FONT_PHUDU_BLACK } from "../../utils/fonts";
 import { APP_DISPLAY_NAME } from "../../config";

@@ -22,8 +22,8 @@ import {
 } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
-import { Dialog, useDialogControl } from "@oxyhq/bloom/dialog";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
+import { useTheme } from "@oxy.so/bloom/theme";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { explorerTxUrl } from "@fairco.in/core";
 import {

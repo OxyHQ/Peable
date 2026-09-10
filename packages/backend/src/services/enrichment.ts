@@ -1,4 +1,4 @@
-import { oxyClient, getNormalizedUserHandle } from "@oxyhq/core";
+import { oxyClient, getNormalizedUserHandle } from "@oxy.so/core";
 import type { EnrichmentResult } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentsByAddresses } from "../db/payments/paymentIntentRepository";

@@ -9,7 +9,7 @@
  */
 import { and, eq, isNotNull, lte, or, sql } from 'drizzle-orm';
 import type { WebhookEvent, WebhookEventType } from '@peable.to/shared-types';
-import { uuidv7 } from '@oxyhq/db';
+import { uuidv7 } from '@oxy.so/db';
 import { webhookDeliveries } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 

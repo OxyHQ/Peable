@@ -8,7 +8,7 @@
  *
  * `read-only` is signed in WITH NO SPEND CAPABILITY — not an unsupported
  * platform. The identity seed derives from a key held in the on-device keystore
- * (`@oxyhq/core` keyManager — "never leave the device"), and a browser has no
+ * (`@oxy.so/core` keyManager — "never leave the device"), and a browser has no
  * equivalent, so it can never SIGN. Everything else needs no private key: the
  * balance and history are public chain data, the receive address derives from a
  * public xpub, and the payment history is the caller's own row in the gateway.

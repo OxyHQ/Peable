@@ -1,7 +1,7 @@
 // The payer-side REST+socket client core — the "./checkout" entry's payer
 // capability (Fase 2 SDK plan, Task 5). Mirrors the wallet's
 // `gateway-client.ts`/`gateway-socket.ts` but standalone: no
-// `@oxyhq/services`/`@oxyhq/core` — this is a third-party browser bundle, so
+// `@oxy.so/services`/`@oxy.so/core` — this is a third-party browser bundle, so
 // it talks to the Gateway over bare `fetch` + `socket.io-client`.
 //
 // Holds NO service token and NO private key — only a public `client_secret`,

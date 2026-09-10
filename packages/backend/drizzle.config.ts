@@ -1,4 +1,4 @@
-import { DATABASE_CASING } from '@oxyhq/db';
+import { DATABASE_CASING } from '@oxy.so/db';
 import { defineConfig } from 'drizzle-kit';
 
 /**
@@ -6,7 +6,7 @@ import { defineConfig } from 'drizzle-kit';
  * later applies. It never applies anything itself — `drizzle-kit migrate` is a
  * devDependency command that cannot reach the production image.
  *
- * `casing` is read from `@oxyhq/db` rather than spelled out, because the same
+ * `casing` is read from `@oxy.so/db` rather than spelled out, because the same
  * setting decides the column names the runtime handle REFERENCES
  * (`db/postgres.ts`) and the column names these migrations CREATE. Two copies
  * of that decision produce queries against columns that do not exist.

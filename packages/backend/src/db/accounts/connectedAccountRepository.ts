@@ -8,7 +8,7 @@
  * believes is payable on no evidence.
  */
 import { and, asc, eq, sql } from 'drizzle-orm';
-import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { connectedAccounts } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';

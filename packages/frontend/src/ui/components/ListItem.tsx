@@ -10,8 +10,8 @@
 
 import { View, Text, StyleSheet } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
-import { Item } from "@oxyhq/bloom/item";
+import { useTheme } from "@oxy.so/bloom/theme";
+import { Item } from "@oxy.so/bloom/item";
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 

@@ -14,7 +14,7 @@ import type React from "react";
 import { useCallback, useState } from "react";
 import { View, Text, TextInput, Pressable } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { useWalletStore } from "../../wallet/wallet-store";
 import { POCKET_COLORS, POCKET_EMOJIS, type PocketInfo } from "../../wallet/pockets";
 import { AmountInput, Button } from "../components";

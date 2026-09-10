@@ -28,7 +28,7 @@ import Animated, {
   Easing,
   cancelAnimation,
 } from "react-native-reanimated";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { Button } from "./Button";
 import { t } from "../../i18n";
 import { parseScannedData } from "../../pay/scanned-code";

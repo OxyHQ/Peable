@@ -9,7 +9,7 @@
 import { Router } from "express";
 import type { Response, RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxyhq/core";
+import { oxyClient } from "@oxy.so/core";
 import { isBaseUnitString } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";

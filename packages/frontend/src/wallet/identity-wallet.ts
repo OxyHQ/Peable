@@ -2,14 +2,14 @@
  * Bridge from the Oxy self-sovereign identity to the single FairCoin wallet.
  *
  * The wallet seed is derived on-device from the Oxy identity key via
- * `@oxyhq/core`'s `KeyManager.deriveScopedSeed` (HKDF, domain-separated) — the
+ * `@oxy.so/core`'s `KeyManager.deriveScopedSeed` (HKDF, domain-separated) — the
  * raw identity private key never enters this app. The 32-byte seed feeds the
  * FairCoin HD `KeyManager.fromSeed` directly; it is NEVER routed through a BIP39
  * mnemonic (`mnemonicToSeed` does not validate its input and would silently
  * derive a different, wrong seed — spec §4.1).
  */
 
-import { KeyManager as IdentityKeyManager } from "@oxyhq/core";
+import { KeyManager as IdentityKeyManager } from "@oxy.so/core";
 import { bytesToHex } from "@fairco.in/core";
 
 /**

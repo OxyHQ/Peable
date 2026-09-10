@@ -18,7 +18,7 @@ import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { FlashList, type ListRenderItem } from "@shopify/flash-list";
-import { useTheme } from "@oxyhq/bloom/theme";
+import { useTheme } from "@oxy.so/bloom/theme";
 import { EmptyState, ScreenHeader } from "../src/ui/components";
 import { SUPPORTED_LANGUAGES, t, type LanguageOption } from "../src/i18n";
 import { useLanguageStore } from "../src/i18n/store";

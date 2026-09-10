@@ -1,6 +1,6 @@
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
-import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { socialSendAttributions } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 

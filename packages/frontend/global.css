@@ -2,11 +2,11 @@
 @import "tailwindcss/preflight.css" layer(base);
 @import "tailwindcss/utilities.css";
 @import "nativewind/theme";
-@import "@oxyhq/bloom/design-tokens/theme.css";
+@import "@oxy.so/bloom/design-tokens/theme.css";
 
 @source "./app/**/*.{js,jsx,ts,tsx}";
 @source "./src/**/*.{js,jsx,ts,tsx}";
-@source "./node_modules/@oxyhq/bloom/lib/**/*.{js,jsx}";
+@source "./node_modules/@oxy.so/bloom/lib/**/*.{js,jsx}";
 
 /*
  * FAIRWallet semantic token contract. The base `--x` variables are injected at

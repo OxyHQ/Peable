@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { sql } from 'drizzle-orm';
-import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxyhq/db';
+import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
 import { insertMerchant, type MerchantRow } from '../merchants/merchantRepository';
 import { insertPaymentIntent } from '../payments/paymentIntentRepository';
 import {

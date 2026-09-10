@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { CurrencyCode, PaymentIntentRail, PaymentIntentStatus } from '@peable.to/shared-types';
-import { isUniqueViolation, uuidv7 } from '@oxyhq/db';
+import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 // Type-only: this repository must not pull the Stripe SDK into a query path.
 import type { ProviderId } from '../../services/providers/provider';
 import { paymentIntents } from '../schema';
@@ -293,7 +293,7 @@ export interface ListIntentsParams {
  *    Ordering by `created_at` instead would need a tiebreaker and would skip
  *    rows sharing a millisecond with a page boundary.
  *  - **Creation order holds only to the MILLISECOND.** A uuid v7 leads with 48
- *    bits of big-endian milliseconds and `@oxyhq/db`'s generator fills the rest
+ *    bits of big-endian milliseconds and `@oxy.so/db`'s generator fills the rest
  *    with randomness — RFC 9562's optional monotonic counter is not used. So
  *    two rows minted in the same millisecond come back in arbitrary relative
  *    order. Measured: 94 of 200 same-millisecond pairs invert, which is the

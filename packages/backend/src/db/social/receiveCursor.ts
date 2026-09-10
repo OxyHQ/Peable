@@ -2,7 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
-import { uuidv7 } from '@oxyhq/db';
+import { uuidv7 } from '@oxy.so/db';
 
 /**
  * Claim the next unused social-receive index for a user on a network,

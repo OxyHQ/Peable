@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
-import { createdAt, generatedId, inList, updatedAt } from '@oxyhq/db';
+import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
 import { NETWORK_TYPES, SERVICE_ENVIRONMENTS } from './valueSets';
 
 /**

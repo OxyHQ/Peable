@@ -86,7 +86,7 @@ jobs:
           # variable nothing reads — but it must not be re-added here.
           APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           APP_OXY_ACCESS_TOKEN_SECRET: ${{ secrets.OXY_ACCESS_TOKEN_SECRET }}
-          # Read by @oxyhq/core (request hashing).
+          # Read by @oxy.so/core (request hashing).
           APP_IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
           APP_DEVICE_ID_SALT: ${{ secrets.DEVICE_ID_SALT }}
           # The card rail (ADR 0001). Absent from this list until now, which is
@@ -141,7 +141,7 @@ jobs:
 
       # ── Migrations run as one-shot ECS tasks, around the rollout ─────────────
       #
-      # Two phases, and the split is the whole point (see @oxyhq/db's phases.ts):
+      # Two phases, and the split is the whole point (see @oxy.so/db's phases.ts):
       # `pre` is additive and safe while the OLD image still serves, so it runs
       # BEFORE the service update; `post` drops and narrows, which would break
       # the old image, so it runs AFTER the new one is live. Every migration file
@@ -197,7 +197,7 @@ jobs:
           # into a silent one plus a crash-loop with no migrations applied.
 
       # Does this release contain a post-rollout migration at all? Grepped with
-      # the pattern @oxyhq/db EXPORTS (`POST_PHASE_GREP_PATTERN`), never a copy —
+      # the pattern @oxy.so/db EXPORTS (`POST_PHASE_GREP_PATTERN`), never a copy —
       # `src/db/__tests__/deployWorkflow.test.ts` asserts this workflow contains
       # that exact string, so the two cannot drift. The grep is sound only
       # because the migrator separately proves every file carries exactly one
@@ -309,7 +309,7 @@ jobs:
       # running=0 desired=0`, matches `RUNNING == DESIRED`, exits 0 — and `post`
       # still runs. So the phase is never stranded.
       #
-      # Why stranding is not merely a delay: `@oxyhq/db`'s migration ledger is a
+      # Why stranding is not merely a delay: `@oxy.so/db`'s migration ledger is a
       # HIGH-WATER MARK. An unapplied `post` is not deferred, it DEADLOCKS — every
       # later `pre` is refused, so every subsequent deploy fails at its migration
       # step. Measured in Alia as four consecutive merges deploying red while

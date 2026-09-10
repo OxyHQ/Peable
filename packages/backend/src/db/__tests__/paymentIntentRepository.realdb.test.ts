@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
-import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxyhq/db';
+import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
 import {
   findIntentByIdForMerchant,
   findIntentByIdempotencyKey,
@@ -238,7 +238,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   /**
    * Creation order holds to the MILLISECOND and no finer.
    *
-   * `@oxyhq/db`'s uuid v7 is 48 bits of milliseconds plus randomness — RFC
+   * `@oxy.so/db`'s uuid v7 is 48 bits of milliseconds plus randomness — RFC
    * 9562's optional monotonic counter is not used — so two ids minted in the
    * same millisecond invert about half the time (measured: 94 of 200 pairs).
    * That is a real difference from Mongo, whose ObjectId carries a per-process

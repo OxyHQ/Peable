@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { MIGRATION_RUNS, POST_PHASE_GREP_PATTERN } from '@oxyhq/db/migrate';
+import { MIGRATION_RUNS, POST_PHASE_GREP_PATTERN } from '@oxy.so/db/migrate';
 import { MIGRATIONS_FOLDER } from '../migrate';
 
 /**
@@ -25,7 +25,7 @@ import { MIGRATIONS_FOLDER } from '../migrate';
  *  - a phase value outside `MIGRATION_RUNS` is refused by the migrator at deploy
  *    time, which is the right behaviour and a terrible moment to discover it.
  *
- * `POST_PHASE_GREP_PATTERN` is exported by `@oxyhq/db` for exactly this: its own
+ * `POST_PHASE_GREP_PATTERN` is exported by `@oxy.so/db` for exactly this: its own
  * docblock says a CI gate can assert the workflow carries the string.
  */
 
@@ -54,7 +54,7 @@ const workflow = Bun.YAML.parse(workflowSource) as WorkflowFile;
 const steps = workflow.jobs.deploy?.steps ?? [];
 
 describe('the deploy workflow and the migrator agree', () => {
-  it('greps migrations with the pattern @oxyhq/db exports, not a copy of it', () => {
+  it('greps migrations with the pattern @oxy.so/db exports, not a copy of it', () => {
     // Vacuity floor: were the constant ever exported as an empty string, the
     // assertion below would pass against any workflow at all.
     expect(POST_PHASE_GREP_PATTERN.length).toBeGreaterThan(10);

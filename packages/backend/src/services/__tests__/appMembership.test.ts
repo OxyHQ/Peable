@@ -1,8 +1,8 @@
 import { test, expect, describe, mock } from "bun:test";
 import { IncomingMessage } from "node:http";
 import { Socket } from "node:net";
-import { SsrfRejection } from "@oxyhq/core/server";
-import type { SafeFetchResult } from "@oxyhq/core/server";
+import { SsrfRejection } from "@oxy.so/core/server";
+import type { SafeFetchResult } from "@oxy.so/core/server";
 import { assertAppMembership } from "../appMembership";
 
 const OXY_API_URL = "https://oxy-api.test";

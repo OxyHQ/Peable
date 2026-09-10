@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response, RequestHandler } from "express";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxyhq/core/server";
+import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
 
 /** Stripe-ish error envelope: `{ error: { type, message } }`. */
 export function sendError(
