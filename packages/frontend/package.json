@@ -29,7 +29,7 @@
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
     "@oxy.so/bloom": "1.0.0",
-    "@oxy.so/contracts": "1.0.0",
+    "@oxy.so/contracts": "1.0.1",
     "@oxy.so/core": "1.0.0",
     "@oxy.so/services": "1.0.0",
     "@peable.to/shared-types": "*",

@@ -30,7 +30,7 @@
     "zod": "^3.23.8"
   },
   "devDependencies": {
-    "@oxy.so/contracts": "1.0.0",
+    "@oxy.so/contracts": "1.0.1",
     "@types/bun": "latest",
     "@types/express": "^4.17.21",
     "@types/node": "^20.0.0",
