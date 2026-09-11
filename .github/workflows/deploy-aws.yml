@@ -44,7 +44,11 @@ env:
   # reaches somewhere else fails instead of migrating it — a migrator pointed at
   # the wrong database does not error, it finds an empty ledger, applies the
   # whole journal and reports success over a database nobody meant to touch.
-  PG_DATABASE: peable
+  # The product rename keeps the existing production database so merchant and
+  # payment history survives the cutover. The database name is an internal
+  # identifier; changing it is neither required nor safe during a rolling
+  # service rename.
+  PG_DATABASE: oxypay
 
 jobs:
   deploy:

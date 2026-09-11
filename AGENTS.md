@@ -64,8 +64,10 @@ with a message naming the variable, instead of serving requests that all 500.
 That is also why `deploy-aws.yml` no longer probes the live task definition for
 the secret before migrating: the state that probe skipped over is unreachable.
 
-Database `peable` on the shared `oxy-postgres` RDS instance, owned by role
-`peable`. **No extensions** — measured, and stated as an explicit empty list in
+Production uses the existing `oxypay` database on the shared `oxy-postgres` RDS
+instance so the OxyPay-to-Peable product rename preserves every merchant and
+payment record. The database name is an internal legacy identifier, not a
+separate product. **No extensions** — measured, and stated as an explicit empty list in
 `src/db/migrate.ts`.
 
 - **Every id is two ids, and confusing them is silent.** A public `pi_…` /
