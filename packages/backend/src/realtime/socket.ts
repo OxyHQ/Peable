@@ -1,3 +1,4 @@
+import { observeEcosystemSocket } from '../ecosystemActivity';
 import { isIP } from "node:net";
 import type { Server, Socket } from "socket.io";
 import { oxyClient } from "@oxy.so/core";
@@ -285,6 +286,7 @@ export function initSocket(io: Server, deps: SocketDeps = {}): void {
   io.use(optionalSocketAuth(identityAuth));
 
   io.on("connection", (socket: Socket) => {
+    observeEcosystemSocket(socket);
     socket.on(
       "subscribe",
       async (payload: unknown, ack?: (result: { ok: boolean }) => void) => {

@@ -1,3 +1,4 @@
+import { startEcosystemActivity, stopEcosystemActivity, ecosystemActivityMiddleware } from './ecosystemActivity';
 /**
  * Peable Gateway — backend entry point.
  *
@@ -15,7 +16,7 @@ import { Server as SocketServer } from "socket.io";
 import { oxyClient } from "@oxy.so/core";
 import { createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { config } from "./config";
-import { connectPostgres } from "./db/postgres";
+import { connectPostgres, disconnectPostgres } from "./db/postgres";
 import { createPaymentIntentsRouter } from "./routes/paymentIntents";
 import { createMerchantsRouter } from "./routes/merchants";
 import { createWebhookDeliveriesRouter } from "./routes/webhookDeliveries";
@@ -33,10 +34,10 @@ import { SettlementWatcher } from "./services/settlementWatcher";
 import type { PaymentIntentRow } from "./db/payments/paymentIntentRepository";
 import { getTransaction } from "./services/explorer";
 import type { SafeFetchFn } from "./services/webhookDispatcher";
-import { kickWebhookOutbox, startWebhookOutbox } from "./services/webhookOutbox";
-import { startExpirySweeper } from "./services/expirySweeper";
-import { startProviderEventDrain } from "./services/providerEventDrain";
-import { startAccountSync } from "./services/accountSync";
+import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from "./services/webhookOutbox";
+import { startExpirySweeper, stopExpirySweeper } from "./services/expirySweeper";
+import { startProviderEventDrain, stopProviderEventDrain } from "./services/providerEventDrain";
+import { startAccountSync, stopAccountSync } from "./services/accountSync";
 import {
   initSocket,
   emitIntentUpdate,
@@ -131,6 +132,7 @@ export async function onIntentChange(
  */
 export function createGateway(deps: GatewayDeps = {}): Gateway {
   const app = express();
+  app.use(ecosystemActivityMiddleware);
 
   // Trust the ALB as exactly one hop: `req.ip` then resolves through
   // `X-Forwarded-For` to the real client address instead of the ALB's own
@@ -267,6 +269,25 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
 export async function start(): Promise<void> {
   await connectPostgres();
   const gateway = createGateway();
+  startEcosystemActivity(() => gateway.httpServer.listening);
+  let stopping = false;
+  const stop = () => {
+    if (stopping) return;
+    stopping = true;
+    gateway.watcher.stop();
+    stopWebhookOutbox();
+    stopExpirySweeper();
+    stopProviderEventDrain();
+    stopAccountSync();
+    gateway.io.close(() => {
+      void stopEcosystemActivity().finally(() => disconnectPostgres()).catch(() => {
+        console.error('Failed to close activity publisher or database');
+        process.exitCode = 1;
+      });
+    });
+  };
+  process.once('SIGTERM', stop);
+  process.once('SIGINT', stop);
   gateway.watcher.start();
   startWebhookOutbox({ safeFetch: undefined });
   startExpirySweeper();
