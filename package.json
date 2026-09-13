@@ -2,7 +2,7 @@
   "name": "peable",
   "version": "0.1.0",
   "license": "SEE LICENSE IN LICENSE",
-  "description": "Peable monorepo — backend, mobile/web app, and shared types.",
+  "description": "Peable monorepo \u2014 backend, mobile/web app, and shared types.",
   "private": true,
   "packageManager": "bun@1.3.14",
   "workspaces": [
@@ -25,7 +25,8 @@
     "install:all": "bun install",
     "start:frontend": "bun run --filter @peable.to/frontend start",
     "start:backend": "bun run --filter @peable.to/backend start",
-    "postinstall": "bun run build:shared-types"
+    "postinstall": "bun run build:shared-types",
+    "test:edge": "bun test scripts/edge-activity.test.ts"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

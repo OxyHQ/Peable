@@ -13,13 +13,14 @@
     "ios": "expo run:ios",
     "web": "expo start --web",
     "electron": "electron electron/main.js",
-    "build": "expo export --platform web",
+    "build": "expo export --platform web && bun run build:edge",
     "electron:build": "bun run build && electron-builder",
     "typecheck": "tsc --noEmit",
     "test": "bun test src",
     "lint": "expo lint",
     "build:android": "eas build --platform android --profile preview",
-    "build:android:local": "npx expo prebuild --platform android && cd android && ./gradlew assembleRelease"
+    "build:android:local": "npx expo prebuild --platform android && cd android && ./gradlew assembleRelease",
+    "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -97,7 +98,8 @@
     "tailwindcss": "4.3.2",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.4.3",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "@oxy.so/telemetry": "1.1.0"
   },
   "devDependencies": {
     "@babel/core": "^7.27.0",
