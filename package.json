@@ -46,9 +46,5 @@
   },
   "dependencies": {
     "@oxy.so/core": "^1.1.2"
-  },
-  "resolutions": {
-    "@oxy.so/contracts": "^1.1.1",
-    "@oxy.so/telemetry": "^1.1.1"
   }
 }
