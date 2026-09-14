@@ -37,6 +37,7 @@ import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import type { DialogControlProps } from "@oxy.so/bloom/dialog";
 import { findLanguageOption, t } from "../../src/i18n";
 import { useLanguageStore } from "../../src/i18n/store";
+import { useAuth } from "@oxy.so/services";
 import Constants from "expo-constants";
 
 const APP_VERSION: string =
@@ -255,6 +256,7 @@ function AppearancePicker() {
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { showBottomSheet } = useAuth();
   const { theme: { colors: themeColors } } = useBloomTheme();
   const network = useWalletStore((s) => s.network);
   const connectedPeers = useWalletStore((s) => s.connectedPeers);
@@ -452,8 +454,8 @@ export default function SettingsScreen() {
   }, [router]);
 
   const handleLanguage = useCallback(() => {
-    router.push("/language");
-  }, [router]);
+    showBottomSheet?.("LanguageSelector");
+  }, [showBottomSheet]);
 
   const handleCycleCurrency = useCallback(async () => {
     const currencies = ["USD", "EUR", "BTC"];

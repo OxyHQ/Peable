@@ -40,7 +40,7 @@ import { useWalletStore } from "../src/wallet/wallet-store";
 import { useLockStore } from "../src/wallet/lock-store";
 import { LockGate } from "../src/ui/components/LockGate";
 import { getAutoLockTimeout } from "../src/storage/secure-store";
-import { initLanguage } from "../src/i18n";
+import { SUPPORTED_LANGUAGES } from "../src/i18n";
 import { useLanguageStore } from "../src/i18n/store";
 import { getItemAsync, setItemAsync } from "../src/storage/kv-store";
 import { startTxNotifier } from "../src/services/tx-notifier";
@@ -58,16 +58,16 @@ const KeyboardProvider =
     ? ({ children }: { children: React.ReactNode }) => <>{children}</>
     : NativeKeyboardProvider;
 
-// Module-level initialization. Resolves the persisted or device language,
-// then syncs the reactive store so React components see the correct value.
-const languageInitPromise = initLanguage()
-  .then(() => {
-    useLanguageStore.getState().hydrate();
-  })
-  .catch(() => {
-    // Defaults from `initLanguage` remain in place; `hydrate` is still safe.
-    useLanguageStore.getState().hydrate();
-  });
+// Oxy resolves which language the app shows — the signed-in account's
+// primary locale, or the device/guest locale when signed out — and reports
+// it through `OxyProvider`'s `language` config below. Only the locales this
+// app actually ships a translation catalog for (`translated: true`) may be
+// declared "supported"; anything else would make Oxy resolve to a language
+// this app can't render, so it falls back to `DEFAULT_LANGUAGE` instead.
+const TRANSLATED_LANGUAGE_CODES = SUPPORTED_LANGUAGES.filter(
+  (lang) => lang.translated,
+).map((lang) => lang.code);
+const DEFAULT_LANGUAGE = "en";
 
 // Start watching wallet transactions for incoming-payment alerts. Must run
 // before any wallet state is hydrated so the subscriber sees every new tx
@@ -276,9 +276,6 @@ export default function RootLayout() {
       }
       setThemeReady(true);
     });
-    languageInitPromise.then(() => {
-      if (!cancelled) setLanguageReady(true);
-    });
     return () => {
       cancelled = true;
     };
@@ -287,6 +284,23 @@ export default function RootLayout() {
   const handleModeChange = useCallback((next: ThemeMode) => {
     setMode(next);
     setItemAsync(THEME_MODE_KEY, next);
+  }, []);
+
+  // `OxyProvider`'s `language` config — see the module-level comment above
+  // `TRANSLATED_LANGUAGE_CODES`. `onChange` is how Oxy tells this app which
+  // locale to show; it flows into the reactive store, which `AppContent`
+  // below remounts on via `key={language}`. Both handlers flip
+  // `languageReady` so splash-hide waits for Oxy's first resolution — success
+  // or failure — the same way it previously waited on the local
+  // `initLanguage()` bootstrap this replaces.
+  const handleLanguageChange = useCallback(async (locale: string) => {
+    await useLanguageStore.getState().setLanguage(locale);
+    setLanguageReady(true);
+  }, []);
+
+  const handleLanguageError = useCallback((error: unknown, locale: string) => {
+    console.warn("Failed to follow the Oxy-resolved language", error, locale);
+    setLanguageReady(true);
   }, []);
 
   return (
@@ -305,6 +319,12 @@ export default function RootLayout() {
               authRedirectUri={OXY_AUTH_REDIRECT_URI}
               storageKeyPrefix="peable"
               queryClient={queryClient}
+              language={{
+                supportedLocales: TRANSLATED_LANGUAGE_CODES,
+                fallbackLocale: DEFAULT_LANGUAGE,
+                onChange: handleLanguageChange,
+                onError: handleLanguageError,
+              }}
             >
               <ImageResolverProvider
                 value={(id, variant) => oxyServices.getFileDownloadUrl(id, variant)}
@@ -359,7 +379,6 @@ function AppContent({ ready }: { ready: boolean }) {
         <Stack.Screen name="coin-control" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="peers" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="chain" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="language" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "modal" }} />
         <Stack.Screen name="transaction/[txid]" options={{ headerShown: false }} />
         <Stack.Screen name="pay/[intent]" options={{ headerShown: false }} />
