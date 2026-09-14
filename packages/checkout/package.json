@@ -2,14 +2,15 @@
   "name": "@peable.to/checkout",
   "version": "0.1.0",
   "private": true,
-  "description": "Peable hosted checkout — the anonymous payer-facing web app served at checkout.peable.to (payment sessions, links, and intents).",
+  "description": "Peable hosted checkout \u2014 the anonymous payer-facing web app served at checkout.peable.to (payment sessions, links, and intents).",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && bun run build:edge",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
-    "test": "bun test src"
+    "test": "bun test src",
+    "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
     "@fairco.in/core": "0.5.0",
@@ -18,7 +19,8 @@
     "qr-creator": "^1.0.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-router-dom": "^7.18.1"
+    "react-router-dom": "^7.18.1",
+    "@oxy.so/telemetry": "^1.1.1"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.11.0",
