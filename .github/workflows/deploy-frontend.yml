@@ -59,8 +59,20 @@ jobs:
           # side of the exchange.
           EXPO_PUBLIC_OXY_AUTH_REDIRECT_URI: https://peable.to
 
-      - uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/frontend/dist --project-name=peable-frontend --branch=main
+      # `bunx wrangler@4` DIRECTLY, never `cloudflare/wrangler-action` — the
+      # action is forbidden fleet-wide (~/Oxy/docs/infra-and-deploys.md). It
+      # installs its own wrangler into the working tree mid-deploy, and that
+      # install is what failed run 35019486292 (2026-09-15), publishing nothing:
+      #
+      #   [command] /home/runner/.bun/bin/bun i wrangler@3.90.0
+      #   error: Fail extracting tarball for "wrangler"
+      #
+      # Same error that cost Homiio a production outage and failed Clarity's
+      # deploy. Pinned to a major so a new wrangler major cannot change the
+      # deploy path with no diff to show for it. Credentials come from the
+      # environment, which is where wrangler reads them.
+      - name: Deploy to Cloudflare Pages
+        run: bunx wrangler@4 pages deploy packages/frontend/dist --project-name=peable-frontend --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
