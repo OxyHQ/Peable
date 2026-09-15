@@ -17,6 +17,7 @@ import { useCallback, useMemo, useState } from "react";
 import { View, Text, ScrollView, Switch, Pressable } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import * as LocalAuthentication from "expo-local-authentication";
 import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
@@ -263,6 +264,7 @@ function AppearancePicker() {
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const bottomInset = useTabScreenBottomInset();
   const router = useRouter();
   const { showBottomSheet, user } = useAuth();
   const readOnly = useWalletCapability() === "read-only";
@@ -654,7 +656,8 @@ export default function SettingsScreen() {
       <View className="h-px bg-border" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pt-5 pb-10"
+        contentContainerClassName="pt-5"
+        contentContainerStyle={{ paddingBottom: bottomInset + 40 }}
         showsVerticalScrollIndicator={false}
       >
         {/* Account */}
