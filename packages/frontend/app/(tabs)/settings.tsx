@@ -1,20 +1,23 @@
 /**
  * Settings screen.
- * Account, network, wallets, security, backup, masternode, advanced, about, and
+ * Account, wallets, security, appearance, network, backup, advanced, about, and
  * danger zone.
  *
- * On a READ-ONLY host (a browser: no keystore, so no wallet — see
- * `src/wallet/capability.ts`) only the sections that need no wallet render:
- * account, appearance and about. Everything else reads or mutates a wallet
- * that does not exist there.
+ * Rows are grouped into Bloom's iOS-style `SettingsListGroup` cards: an
+ * uppercase section header above a rounded surface whose rows are separated by
+ * the group's own inset hairlines. Each row leads with the home screen's green
+ * icon-circle so the palette stays consistent across tabs.
  *
- * Card-less design matching the home screen: uppercase section labels above
- * flat rows on the background with hairline dividers between them — no boxes,
- * no surface fills, no borders around row groups.
+ * Kept in step with FAIRWallet's screen (this file is its fork). Peable's own
+ * deltas: an Oxy account group, no multi-wallet manager (Peable has the single
+ * identity wallet), the language sheet Oxy owns, and a READ-ONLY host (a
+ * browser: no keystore, so no wallet — see `src/wallet/capability.ts`) that
+ * renders only the groups that need no wallet: account, appearance and about.
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, ScrollView, Switch, Pressable } from "react-native";
+import { View, Text, ScrollView, Pressable } from "react-native";
+import { Switch } from "@oxy.so/bloom/switch";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
@@ -36,26 +39,24 @@ import {
   getCurrency,
   setCurrency,
 } from "../../src/storage/secure-store";
-import { ListItem, PinDots, PinPad } from "../../src/ui/components";
+import { PinDots, PinPad } from "../../src/ui/components";
 import type { NetworkType } from "@fairco.in/core";
 import { useBloomTheme } from "@oxy.so/bloom/theme";
 import type { ThemeMode } from "@oxy.so/bloom/theme";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import type { DialogControlProps } from "@oxy.so/bloom/dialog";
-import { findLanguageOption, t } from "../../src/i18n";
-import { useLanguageStore } from "../../src/i18n/store";
+import { SettingsListGroup, SettingsListItem } from "@oxy.so/bloom/settings-list";
+import { toast } from "@oxy.so/bloom/toast";
 import { useAuth } from "@oxy.so/services";
 import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
 import { UserAvatar } from "../../src/ui/components/UserAvatar";
+import { findLanguageOption, t } from "../../src/i18n";
+import { useLanguageStore } from "../../src/i18n/store";
 import Constants from "expo-constants";
 
 const APP_VERSION: string =
   Constants.expoConfig?.version ?? Constants.manifest2?.extra?.expoClient?.version ?? "1.0.0";
 const PIN_LENGTH = 6;
-
-/** Uppercase section header — matches the home screen's section labels. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
 
 /** Middle-truncate an address for the identity header (10 head / 8 tail). */
 function truncateAddress(address: string): string {
@@ -64,23 +65,20 @@ function truncateAddress(address: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Settings section — an uppercase label above flat rows on the background,
-// separated by the ListItem's own hairlines. No surface box, no border.
+// Row icon — the home screen's green icon-circle, used as the leading element
+// of every settings row.
 // ---------------------------------------------------------------------------
 
-function SettingsSection({
-  title,
-  children,
+function RowIcon({
+  name,
 }: {
-  title: string;
-  children: React.ReactNode;
+  name: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
 }) {
+  const { theme: { colors } } = useBloomTheme();
+
   return (
-    <View className="mb-7">
-      <Text className={`${SECTION_LABEL} mb-1 px-4`}>{title}</Text>
-      {/* Flat, card-less: rows sit directly on the background with the
-          ListItem's own inter-row hairlines — no surface box, no border. */}
-      <View>{children}</View>
+    <View className="w-8 h-8 rounded-full bg-primary/10 items-center justify-center">
+      <MaterialCommunityIcons name={name} size={18} color={colors.primary} />
     </View>
   );
 }
@@ -226,7 +224,7 @@ function AppearancePicker() {
   ];
 
   return (
-    <View className="flex-row gap-2 px-4 py-3">
+    <View className="flex-row gap-2 px-3 py-3">
       {modes.map((m) => {
         const isActive = mode === m.value;
         return (
@@ -291,7 +289,6 @@ export default function SettingsScreen() {
   const switchNetworkControl = useDialogControl();
   const resyncControl = useDialogControl();
   const recoveryControl = useDialogControl();
-  const messageControl = useDialogControl();
   const [biometricsEnabled, setBiometricsEnabled] = useState(false);
   const [biometricsAvailable, setBiometricsAvailable] = useState(false);
   const [showPinModal, setShowPinModal] = useState(false);
@@ -301,22 +298,6 @@ export default function SettingsScreen() {
   const [recoveryMnemonic, setRecoveryMnemonic] = useState("");
   const [autoLockMinutes, setAutoLockMinutes] = useState(5);
   const [displayCurrency, setDisplayCurrency] = useState("USD");
-  const [messageDialog, setMessageDialog] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-
-  const showMessage = useCallback(
-    (title: string, description: string) => {
-      setMessageDialog({ title, description });
-      messageControl.open();
-    },
-    [messageControl],
-  );
-
-  const handleMessageDismiss = useCallback(() => {
-    setMessageDialog(null);
-  }, []);
 
   const isMainnet = network === "mainnet";
 
@@ -341,8 +322,8 @@ export default function SettingsScreen() {
           setBiometricsEnabled(enabled && hardwareAvailable && enrolled);
           setAutoLockMinutes(lockTimeout);
           setDisplayCurrency(currency);
-        } catch (error: unknown) {
-          console.warn("Could not load persisted wallet settings; using defaults", error);
+        } catch (_settingsError: unknown) {
+          // Settings load failed — defaults from useState initializers are safe.
         }
       };
       loadSettings();
@@ -352,6 +333,11 @@ export default function SettingsScreen() {
     }, []),
   );
 
+
+  const handleManageAccount = useCallback(() => {
+    showBottomSheet?.("ManageAccount");
+  }, [showBottomSheet]);
+
   const handleContacts = useCallback(() => {
     router.push("/contacts");
   }, [router]);
@@ -359,11 +345,8 @@ export default function SettingsScreen() {
   const handleCopyAddress = useCallback(async () => {
     if (!receiveAddress) return;
     await Clipboard.setStringAsync(receiveAddress);
-    showMessage(
-      t("receive.addressCopied.title"),
-      t("receive.addressCopied.description"),
-    );
-  }, [receiveAddress, showMessage]);
+    toast.success(t("receive.addressCopied.description"));
+  }, [receiveAddress]);
 
   const handleToggleNetwork = useCallback(() => {
     switchNetworkControl.open();
@@ -403,15 +386,15 @@ export default function SettingsScreen() {
           // Viewing the phrase clears the home "back up your wallet" reminder.
           void markBackedUp();
         } else {
-          showMessage(t("common.error"), t("settings.recovery.error.retrieve"));
+          toast.error(t("settings.recovery.error.retrieve"));
         }
       } catch {
-        showMessage(t("common.error"), t("settings.recovery.error.load"));
+        toast.error(t("settings.recovery.error.load"));
       }
     } else if (action === "change_pin") {
       router.push("/onboarding/pin-setup");
     }
-  }, [pinAction, router, recoveryControl, showMessage, markBackedUp]);
+  }, [pinAction, router, recoveryControl, markBackedUp]);
 
   const handleRecoveryDismiss = useCallback(() => {
     setRecoveryMnemonic("");
@@ -420,10 +403,7 @@ export default function SettingsScreen() {
   const handleToggleBiometrics = useCallback(
     async (enabled: boolean) => {
       if (enabled && !biometricsAvailable) {
-        showMessage(
-          t("settings.biometrics.unavailable.title"),
-          t("settings.biometrics.unavailable.description"),
-        );
+        toast.error(t("settings.biometrics.unavailable.title"));
         return;
       }
 
@@ -442,10 +422,10 @@ export default function SettingsScreen() {
         await storeBiometricsEnabled(enabled);
         setBiometricsEnabled(enabled);
       } catch {
-        showMessage(t("common.error"), t("settings.biometrics.updateError"));
+        toast.error(t("settings.biometrics.updateError"));
       }
     },
-    [biometricsAvailable, showMessage],
+    [biometricsAvailable],
   );
 
   const handleMasternode = useCallback(() => {
@@ -464,11 +444,8 @@ export default function SettingsScreen() {
     router.push("/coin-control");
   }, [router]);
 
-  const handleManageAccount = useCallback(() => {
-    showBottomSheet?.("ManageAccount");
-  }, [showBottomSheet]);
-
   const handleLanguage = useCallback(() => {
+    // Oxy resolves the app's language from the account, so the picker is Oxy's.
     showBottomSheet?.("LanguageSelector");
   }, [showBottomSheet]);
 
@@ -512,17 +489,16 @@ export default function SettingsScreen() {
           UTI: "public.json",
         });
       } else {
-        showMessage(
-          t("settings.backup.saved.title"),
-          t("settings.backup.saved.description", { path: file.uri }),
-        );
+        // No native share sheet (web / desktop): the description also explains
+        // why no sheet appeared, so it — not the bare title — is the toast.
+        toast.success(t("settings.backup.saved.description", { path: file.uri }));
       }
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t("settings.backup.exportFailed");
-      showMessage(t("common.error"), message);
+      toast.error(message);
     }
-  }, [exportBackup, showMessage]);
+  }, [exportBackup]);
 
   const handleImportBackup = useCallback(async () => {
     try {
@@ -540,21 +516,18 @@ export default function SettingsScreen() {
       const json = await new File(asset.uri).text();
 
       if (!json.trim()) {
-        showMessage(t("common.error"), t("settings.backup.importEmpty"));
+        toast.error(t("settings.backup.importEmpty"));
         return;
       }
 
       await importBackup(json);
-      showMessage(
-        t("settings.backup.imported.title"),
-        t("settings.backup.imported.description"),
-      );
+      toast.success(t("settings.backup.imported.description"));
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t("settings.backup.importFailed");
-      showMessage(t("common.error"), message);
+      toast.error(message);
     }
-  }, [importBackup, showMessage]);
+  }, [importBackup]);
 
   const handleResync = useCallback(() => {
     resyncControl.open();
@@ -572,9 +545,9 @@ export default function SettingsScreen() {
     } catch (err: unknown) {
       const message =
         err instanceof Error ? err.message : t("settings.resync.failed");
-      showMessage(t("common.error"), message);
+      toast.error(message);
     }
-  }, [rescanWallet, refreshBalance, showMessage]);
+  }, [rescanWallet, refreshBalance]);
 
   const handleConfirmWipe = useCallback(async () => {
     await wipeWallet();
@@ -656,226 +629,176 @@ export default function SettingsScreen() {
       <View className="h-px bg-border" />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pt-5"
+        contentContainerClassName="px-4 pt-5"
         contentContainerStyle={{ paddingBottom: bottomInset + 40 }}
         showsVerticalScrollIndicator={false}
       >
-        {/* Account */}
-        <SettingsSection title={t("settings.account")}>
-          <ListItem
+        {/* Account — the Oxy identity this wallet derives from. */}
+        <SettingsListGroup title={t("settings.account")}>
+          <SettingsListItem
             title={t("settings.oxyAccount")}
-            icon="account-circle"
-            iconColor={themeColors.primary}
-            iconBg="bg-primary/10"
+            icon={<RowIcon name="account-circle" />}
             onPress={handleManageAccount}
-            isLast
           />
-        </SettingsSection>
+        </SettingsListGroup>
 
         {readOnly ? null : (
           <>
             {/* Wallets */}
-            <SettingsSection title={t("settings.walletsGroup")}>
-              <ListItem
+            <SettingsListGroup title={t("settings.walletsGroup")}>
+              <SettingsListItem
                 title={t("settings.contacts")}
-                icon="account-group"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="account-group" />}
                 onPress={handleContacts}
-                isLast
               />
-            </SettingsSection>
+            </SettingsListGroup>
 
             {/* Security */}
-            <SettingsSection title={t("settings.security")}>
-              <ListItem
+            <SettingsListGroup title={t("settings.security")}>
+              <SettingsListItem
                 title={t("settings.change_pin")}
-                icon="lock"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="lock" />}
                 onPress={handleChangePIN}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.biometrics")}
-                icon="fingerprint"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="fingerprint" />}
                 showChevron={false}
-                trailing={
+                rightElement={
                   <Switch
                     value={biometricsEnabled}
                     onValueChange={handleToggleBiometrics}
-                    trackColor={{
-                      false: themeColors.border,
-                      true: themeColors.primaryLight,
-                    }}
-                    thumbColor={themeColors.text}
                   />
                 }
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.auto_lock")}
                 value={t("settings.autoLockValue", { minutes: autoLockMinutes })}
-                icon="clock-outline"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="clock-outline" />}
                 onPress={handleCycleAutoLock}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.exportKey")}
-                icon="shield-key"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="shield-key" />}
                 onPress={handleExportKey}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.notifications")}
-                icon="bell-ring"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="bell-ring" />}
                 onPress={handleNotifications}
-                isLast
               />
-            </SettingsSection>
+            </SettingsListGroup>
+
           </>
         )}
 
-        {/* Appearance */}
-        <SettingsSection title={t("settings.appearance")}>
-          <ListItem
+        {/* Appearance — the theme segmented control sits as the group's last
+            row, below the language and currency rows. */}
+        <SettingsListGroup title={t("settings.appearance")}>
+          <SettingsListItem
             title={t("settings.language.title")}
             value={
               currentLanguageOption
                 ? currentLanguageOption.nativeName
                 : language
             }
-            icon="translate"
-            iconColor={themeColors.primary}
-            iconBg="bg-primary/10"
+            icon={<RowIcon name="translate" />}
             onPress={handleLanguage}
           />
-          <ListItem
+          <SettingsListItem
             title={t("settings.currency")}
             value={displayCurrency}
-            icon="currency-usd"
-            iconColor={themeColors.primary}
-            iconBg="bg-primary/10"
+            icon={<RowIcon name="currency-usd" />}
             onPress={handleCycleCurrency}
           />
           <AppearancePicker />
-        </SettingsSection>
+        </SettingsListGroup>
 
         {readOnly ? null : (
           <>
 
             {/* Network */}
-            <SettingsSection title={t("settings.network")}>
-              <ListItem
+            <SettingsListGroup title={t("settings.network")}>
+              <SettingsListItem
                 title={t("settings.network")}
                 value={isMainnet ? t("settings.mainnet") : t("settings.testnet")}
-                icon="earth"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="earth" />}
                 onPress={handleToggleNetwork}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.networkStatus")}
-                icon="pulse"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="pulse" />}
                 onPress={() => router.push("/chain")}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.connectedPeers")}
                 value={String(connectedPeers)}
-                icon="server-network"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="server-network" />}
                 onPress={() => router.push("/peers")}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.resync")}
-                icon="sync"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="sync" />}
                 onPress={handleResync}
-                isLast
               />
-            </SettingsSection>
+            </SettingsListGroup>
 
             {/* Backup */}
-            <SettingsSection title={t("settings.backup")}>
-              <ListItem
+            <SettingsListGroup title={t("settings.backup")}>
+              <SettingsListItem
                 title={t("settings.show_phrase")}
-                icon="eye"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="eye" />}
                 onPress={handleShowRecovery}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.exportBackup")}
-                icon="download"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="download" />}
                 onPress={handleExportBackup}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.importBackup")}
-                icon="upload"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="upload" />}
                 onPress={handleImportBackup}
-                isLast
               />
-            </SettingsSection>
+            </SettingsListGroup>
 
             {/* Advanced */}
-            <SettingsSection title={t("settings.advanced")}>
-              <ListItem
+            <SettingsListGroup title={t("settings.advanced")}>
+              <SettingsListItem
                 title={t("settings.coinControl")}
-                icon="tune"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="tune" />}
                 onPress={handleCoinControl}
               />
-              <ListItem
+              <SettingsListItem
                 title={t("settings.masternode")}
-                icon="server"
-                iconColor={themeColors.primary}
-                iconBg="bg-primary/10"
+                icon={<RowIcon name="server" />}
                 onPress={handleMasternode}
-                isLast
               />
-            </SettingsSection>
+            </SettingsListGroup>
+
           </>
         )}
 
         {/* About */}
-        <SettingsSection title={t("settings.about")}>
-          <ListItem
+        <SettingsListGroup title={t("settings.about")}>
+          <SettingsListItem
             title={t("settings.aboutApp")}
             value={t("settings.version", { version: APP_VERSION })}
-            icon="information"
-            iconColor={themeColors.primary}
-            iconBg="bg-primary/10"
+            icon={<RowIcon name="information" />}
             showChevron={false}
-            isLast
           />
-        </SettingsSection>
+        </SettingsListGroup>
 
         {/* Danger Zone */}
         {readOnly ? null : (
-          <SettingsSection title={t("settings.dangerZone")}>
-            <ListItem
+          <SettingsListGroup title={t("settings.dangerZone")}>
+            <SettingsListItem
               title={t("settings.wipe")}
-              icon="delete"
-              iconColor={themeColors.primary}
-              iconBg="bg-primary/10"
+              icon={<RowIcon name="delete" />}
               destructive
               onPress={() => wipeControl.open()}
-              isLast
             />
-          </SettingsSection>
+          </SettingsListGroup>
         )}
       </ScrollView>
 
@@ -938,15 +861,6 @@ export default function SettingsScreen() {
         control={recoveryControl}
         mnemonic={recoveryMnemonic}
         onDismiss={handleRecoveryDismiss}
-      />
-
-      {/* Shared info/error message prompt */}
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={messageDialog?.title ?? ""}
-        description={messageDialog?.description ?? ""}
-        actions={[{ label: t("common.ok"), onPress: handleMessageDismiss }]}
       />
     </View>
   );
