@@ -140,7 +140,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     try {
       await suite!.db
         .insert(socialReceiveCursors)
-        .values({ id: uuidv7(), oxyUserId, network: 'testnet' });
+        .values({ id: uuidv7(), oxyUserId, network: 'testnet', identityPublicKey: KEY_A });
     } catch (error) {
       raised = error;
     }
@@ -158,6 +158,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
         id: uuidv7(),
         oxyUserId: uuidv7(),
         network: 'testnet',
+        identityPublicKey: KEY_A,
         nextDerivationIndex: 0,
       });
     } catch (error) {
@@ -175,6 +176,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
         id: uuidv7(),
         oxyUserId: uuidv7(),
         network: 'regtest',
+        identityPublicKey: KEY_A,
       });
     } catch (error) {
       raised = error;

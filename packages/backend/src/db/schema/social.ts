@@ -40,10 +40,13 @@ export const socialReceiveCursors = pgTable(
      * still the key I derive from?" — the alternative is a device widening its
      * watch window in a tree nobody is paying into, which is silent.
      *
-     * Nullable because cursors created before this column existed cannot be
-     * backfilled: the key they used is not recoverable from anything stored.
+     * NOT NULL: every cursor says which key it belongs to, so a device reading
+     * one never has to handle "the backend does not know". The cursors that
+     * predate the column are deleted by the migration that adds the constraint
+     * — they are index counters from testing, no funds and no user, and the key
+     * behind them is not recoverable from anything stored.
      */
-    identityPublicKey: text(),
+    identityPublicKey: text().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
