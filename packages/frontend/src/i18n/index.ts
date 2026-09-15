@@ -59,6 +59,12 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "common.back": "Back",
     "common.close": "Close",
     "common.retry": "Retry",
+
+    // ---------- Crash recovery ----------
+    "crash.title": "Something went wrong",
+    "crash.subtitle":
+      "Your coins are safe — they live on the FairCoin network, not in this screen. Try again, and if it keeps happening, restart the app.",
+    "crash.retry": "Try again",
     "common.edit": "Edit",
     "common.import": "Import",
     "common.create": "Create",
@@ -272,6 +278,21 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Card payments are coming soon. Apply for early access at fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Pool quote unavailable right now. Please try again in a moment.",
+    "buy.history.title": "Recent orders",
+    "buy.history.amount": "Buy {amount} FAIR",
+    "buy.history.openOrder": "Open the order for {amount} FAIR",
+    "buy.status.AWAITING_PAYMENT": "Awaiting payment",
+    "buy.status.PAYMENT_DETECTED": "Payment seen",
+    "buy.status.SWAPPING": "Swapping",
+    "buy.status.BURNING": "Burning",
+    "buy.status.DELIVERING": "Delivering",
+    "buy.status.DELIVERED": "Delivered",
+    "buy.status.FAILED": "Failed",
+    "buy.status.EXPIRED": "Expired",
+    "buy.error.currencyUnavailable":
+      "That payment method isn't supported yet. Pick another one.",
+    "buy.error.unavailable":
+      "Buying is temporarily unavailable. Nothing was charged — please try again later.",
     "buy.error.network":
       "Network error contacting the bridge. Check your connection and retry.",
     "buy.error.generic": "Could not create your buy order: {message}",
@@ -324,7 +345,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "receive.new_address": "New Address",
     "receive.subtitle": "Share this address to receive FairCoin",
     "receive.yourAddress": "Your address",
-    "receive.addressCopied.title": "Copied",
     "receive.addressCopied.description": "Address copied to clipboard",
     "receive.hideList": "Hide list",
     "receive.allAddresses": "All ({count})",
@@ -376,8 +396,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.recovery.error.retrieve": "Could not retrieve recovery phrase.",
     "settings.recovery.error.load": "Failed to load recovery phrase.",
     "settings.biometrics.unavailable.title": "Biometrics Unavailable",
-    "settings.biometrics.unavailable.description":
-      "Your device does not have biometric authentication set up. Please enable it in your device settings first.",
     "settings.biometrics.verifyPrompt": "Verify biometrics to enable",
     "settings.biometrics.updateError": "Failed to update biometrics setting.",
     "settings.backup.exportDialogTitle": "Save Peable backup",
@@ -386,7 +404,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Saved to {path}. Sharing is not available on this platform.",
     "settings.backup.exportFailed": "Export failed",
     "settings.backup.importEmpty": "The selected file is empty.",
-    "settings.backup.imported.title": "Backup Imported",
     "settings.backup.imported.description":
       "Contacts, labels, and settings have been restored.",
     "settings.backup.importFailed": "Import failed",
@@ -502,7 +519,14 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "A Pocket is a separate balance inside your wallet. It's still yours (self-custody), just organized.",
     "pockets.create.nameLabel": "POCKET NAME",
     "pockets.create.namePlaceholder": "e.g. Savings",
-    "pockets.create.emojiLabel": "EMOJI",
+    "pockets.create.imageLabel": "IMAGE",
+    "pockets.create.addImage": "Add image",
+    "pockets.create.changeImage": "Change image",
+    "pockets.create.removeImage": "Remove",
+    "pockets.create.imageSourceTitle": "Choose image",
+    "pockets.create.gallery": "Gallery",
+    "pockets.create.camera": "Camera",
+    "pockets.create.permissionDenied": "Permission needed to pick an image",
     "pockets.create.colorLabel": "COLOR",
     "pockets.create.goalLabel": "GOAL (OPTIONAL)",
     "pockets.create.goalPlaceholder": "0.00",
@@ -557,7 +581,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "coinControl.useCta.one": "Use {count} UTXO for Next Transaction",
     "coinControl.useCta.other": "Use {count} UTXOs for Next Transaction",
     "coinControl.selectCta": "Select UTXOs",
-    "coinControl.applied.title": "Coin Control",
     "coinControl.applied.description.one":
       "{count} UTXO selected for next transaction.",
     "coinControl.applied.description.other":
@@ -629,7 +652,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "exportKey.result.title": "Encrypted Key",
     "exportKey.result.subtitle": "Your BIP38 encrypted private key",
     "exportKey.result.copyCta": "Copy Encrypted Key",
-    "exportKey.result.copied.title": "Copied",
     "exportKey.result.copied.description": "Encrypted key copied to clipboard",
     "exportKey.warning.title": "Important",
     "exportKey.warning.description":
@@ -681,12 +703,9 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "transaction.note": "Note",
     "transaction.notePlaceholder": "Add a note for this transaction...",
     "transaction.saveNote": "Save Note",
-    "transaction.savedNote.title": "Saved",
     "transaction.savedNote.description": "Transaction note saved",
     "transaction.copyTxid": "Copy Transaction ID",
-    "transaction.txidCopied.title": "Copied",
     "transaction.txidCopied.description": "Transaction ID copied to clipboard",
-    "transaction.addressCopied.title": "Copied",
     "transaction.addressCopied.description": "Address copied to clipboard",
     "transaction.viewExplorer": "View on Explorer",
     "transaction.addToContacts": "Add Address to Contacts",
@@ -863,6 +882,12 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "common.back": "Atr\u00e1s",
     "common.close": "Cerrar",
     "common.retry": "Reintentar",
+
+    // ---------- Recuperación tras un fallo ----------
+    "crash.title": "Algo ha ido mal",
+    "crash.subtitle":
+      "Tus monedas están a salvo: viven en la red FairCoin, no en esta pantalla. Inténtalo de nuevo y, si sigue ocurriendo, reinicia la app.",
+    "crash.retry": "Reintentar",
     "common.edit": "Editar",
     "common.import": "Importar",
     "common.create": "Crear",
@@ -1078,6 +1103,21 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "El pago con tarjeta llegar\u00e1 pronto. Reg\u00edstrate para acceso anticipado en fairco.in/contact.",
     "buy.error.poolUnavailable":
       "Cotizaci\u00f3n no disponible. Vuelve a intentarlo en un momento.",
+    "buy.history.title": "Pedidos recientes",
+    "buy.history.amount": "Comprar {amount} FAIR",
+    "buy.history.openOrder": "Abrir el pedido de {amount} FAIR",
+    "buy.status.AWAITING_PAYMENT": "Esperando pago",
+    "buy.status.PAYMENT_DETECTED": "Pago detectado",
+    "buy.status.SWAPPING": "Intercambiando",
+    "buy.status.BURNING": "Quemando",
+    "buy.status.DELIVERING": "Entregando",
+    "buy.status.DELIVERED": "Entregado",
+    "buy.status.FAILED": "Fallido",
+    "buy.status.EXPIRED": "Caducado",
+    "buy.error.currencyUnavailable":
+      "Ese m\u00e9todo de pago a\u00fan no est\u00e1 disponible. Elige otro.",
+    "buy.error.unavailable":
+      "La compra no est\u00e1 disponible ahora mismo. No se te ha cobrado nada; int\u00e9ntalo m\u00e1s tarde.",
     "buy.error.network":
       "Error de red al contactar al bridge. Comprueba tu conexi\u00f3n y reintenta.",
     "buy.error.generic": "No se pudo crear tu orden: {message}",
@@ -1130,7 +1170,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "receive.new_address": "Nueva Direcci\u00f3n",
     "receive.subtitle": "Comparte esta direcci\u00f3n para recibir FairCoin",
     "receive.yourAddress": "Tu direcci\u00f3n",
-    "receive.addressCopied.title": "Copiado",
     "receive.addressCopied.description": "Direcci\u00f3n copiada al portapapeles",
     "receive.hideList": "Ocultar lista",
     "receive.allAddresses": "Todas ({count})",
@@ -1185,8 +1224,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "settings.recovery.error.load":
       "Fall\u00f3 la carga de la frase de recuperaci\u00f3n.",
     "settings.biometrics.unavailable.title": "Biometr\u00eda No Disponible",
-    "settings.biometrics.unavailable.description":
-      "Tu dispositivo no tiene autenticaci\u00f3n biom\u00e9trica configurada. Por favor, actívala en los ajustes del dispositivo primero.",
     "settings.biometrics.verifyPrompt": "Verifica biometr\u00eda para activar",
     "settings.biometrics.updateError":
       "Fall\u00f3 la actualizaci\u00f3n del ajuste biom\u00e9trico.",
@@ -1196,7 +1233,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Guardado en {path}. Compartir no est\u00e1 disponible en esta plataforma.",
     "settings.backup.exportFailed": "Fall\u00f3 la exportaci\u00f3n",
     "settings.backup.importEmpty": "El archivo seleccionado est\u00e1 vac\u00edo.",
-    "settings.backup.imported.title": "Respaldo Importado",
     "settings.backup.imported.description":
       "Contactos, etiquetas y ajustes han sido restaurados.",
     "settings.backup.importFailed": "Fall\u00f3 la importaci\u00f3n",
@@ -1321,7 +1357,15 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       "Una pocket es un saldo aparte dentro de tu wallet. Sigue siendo tuyo (self-custody), solo organizado.",
     "pockets.create.nameLabel": "NOMBRE DEL BOLSILLO",
     "pockets.create.namePlaceholder": "p. ej. Ahorros",
-    "pockets.create.emojiLabel": "EMOJI",
+    "pockets.create.imageLabel": "IMAGEN",
+    "pockets.create.addImage": "Añadir imagen",
+    "pockets.create.changeImage": "Cambiar imagen",
+    "pockets.create.removeImage": "Quitar",
+    "pockets.create.imageSourceTitle": "Elegir imagen",
+    "pockets.create.gallery": "Galería",
+    "pockets.create.camera": "Cámara",
+    "pockets.create.permissionDenied":
+      "Se necesita permiso para elegir una imagen",
     "pockets.create.colorLabel": "COLOR",
     "pockets.create.goalLabel": "OBJETIVO (OPCIONAL)",
     "pockets.create.goalPlaceholder": "0.00",
@@ -1379,7 +1423,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "coinControl.useCta.other":
       "Usar {count} UTXOs para la Pr\u00f3xima Transacci\u00f3n",
     "coinControl.selectCta": "Seleccionar UTXOs",
-    "coinControl.applied.title": "Control de Monedas",
     "coinControl.applied.description.one":
       "{count} UTXO seleccionado para la pr\u00f3xima transacci\u00f3n.",
     "coinControl.applied.description.other":
@@ -1455,7 +1498,6 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "exportKey.result.title": "Clave Cifrada",
     "exportKey.result.subtitle": "Tu clave privada cifrada BIP38",
     "exportKey.result.copyCta": "Copiar Clave Cifrada",
-    "exportKey.result.copied.title": "Copiado",
     "exportKey.result.copied.description":
       "Clave cifrada copiada al portapapeles",
     "exportKey.warning.title": "Importante",
@@ -1508,13 +1550,10 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     "transaction.note": "Nota",
     "transaction.notePlaceholder": "Agrega una nota para esta transacci\u00f3n...",
     "transaction.saveNote": "Guardar Nota",
-    "transaction.savedNote.title": "Guardado",
     "transaction.savedNote.description": "Nota de transacci\u00f3n guardada",
     "transaction.copyTxid": "Copiar ID de Transacci\u00f3n",
-    "transaction.txidCopied.title": "Copiado",
     "transaction.txidCopied.description":
       "ID de transacci\u00f3n copiado al portapapeles",
-    "transaction.addressCopied.title": "Copiado",
     "transaction.addressCopied.description":
       "Direcci\u00f3n copiada al portapapeles",
     "transaction.viewExplorer": "Ver en Explorador",

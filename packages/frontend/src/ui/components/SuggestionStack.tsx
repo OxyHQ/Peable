@@ -58,7 +58,7 @@ function SwipableCard({
         .failOffsetY([-16, 16])
         .onUpdate((e) => {
           "worklet";
-          translateX.value = e.translationX;
+          translateX.set(e.translationX);
         })
         .onEnd((e) => {
           "worklet";
@@ -67,23 +67,21 @@ function SwipableCard({
             Math.abs(e.velocityX) > FLING_VELOCITY;
           if (dismiss) {
             const dir = e.translationX < 0 || e.velocityX < 0 ? -1 : 1;
-            translateX.value = withTiming(
-              dir * OFFSCREEN,
-              { duration: 180 },
-              (done) => {
+            translateX.set(
+              withTiming(dir * OFFSCREEN, { duration: 180 }, (done) => {
                 if (done) runOnJS(onDismiss)(item.id);
-              },
+              }),
             );
           } else {
-            translateX.value = withTiming(0, { duration: 150 });
+            translateX.set(withTiming(0, { duration: 150 }));
           }
         }),
     [translateX, onDismiss, item.id],
   );
 
   const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: translateX.value }],
-    opacity: 1 - Math.min(1, Math.abs(translateX.value) / OFFSCREEN) * 0.5,
+    transform: [{ translateX: translateX.get() }],
+    opacity: 1 - Math.min(1, Math.abs(translateX.get()) / OFFSCREEN) * 0.5,
   }));
 
   return (

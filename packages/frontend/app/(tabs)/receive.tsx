@@ -23,6 +23,7 @@ export default function ReceiveScreen() {
           paddingBottom: insets.bottom + 24,
           paddingHorizontal: 16,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <ReceiveSheet />
       </ScrollView>

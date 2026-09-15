@@ -12,6 +12,11 @@
 
 import * as SQLite from "expo-sqlite";
 import { databaseFileName } from "./db-name";
+import {
+  HEADER_BLOB_MIGRATION_SQL,
+  needsHeaderBlobMigration,
+} from "./header-blob-migration";
+import { HEADER_HASH_VERSION, planHeaderRepair } from "./header-integrity";
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -19,9 +24,16 @@ import { databaseFileName } from "./db-name";
 
 export interface BlockHeaderRow {
   height: number;
-  hash: string;
-  prev_hash: string;
-  merkle_root: string;
+  /**
+   * 32 raw bytes, NOT hex. A block header is 80 bytes on the wire; storing its
+   * three hashes as 64-character hex made each row ~400 bytes — roughly 5x the
+   * data it represents, and ~27 MB for a synced mainnet chain. BLOB columns
+   * hold the bytes the SPV client already works in, so nothing has to be
+   * encoded or decoded on the hot sync path either.
+   */
+  hash: Uint8Array;
+  prev_hash: Uint8Array;
+  merkle_root: Uint8Array;
   timestamp: number;
   bits: number;
   nonce: number;
@@ -75,6 +87,13 @@ export interface SocialReceiveAddressRow {
   used: number;
 }
 
+export interface WatchAddressRow {
+  address: string;
+  redeem_script: string;
+  label: string;
+  created_at: number;
+}
+
 export interface PeerRow {
   host: string;
   port: number;
@@ -101,6 +120,26 @@ export interface TxNoteRow {
 export interface AddressLabelRow {
   address: string;
   label: string;
+  updated_at: number;
+}
+
+/**
+ * A buy order the bridge accepted, cached locally so the user can see what
+ * happened to it after leaving the quote screen. The bridge remains the source
+ * of truth; `status` is refreshed from its API.
+ */
+export interface BuyOrderRow {
+  id: string;
+  fair_amount_sats: string;
+  payment_currency: string;
+  payment_amount: string;
+  payment_symbol: string;
+  status: string;
+  /** FairCoin txid of the delivery, "" until delivered. */
+  delivery_txid: string;
+  /** Bridge failure reason, "" unless failed. */
+  error_message: string;
+  created_at: number;
   updated_at: number;
 }
 
@@ -134,9 +173,9 @@ const SCHEMA_SQL = `
 
   CREATE TABLE IF NOT EXISTS block_headers (
     height INTEGER PRIMARY KEY,
-    hash TEXT UNIQUE NOT NULL,
-    prev_hash TEXT NOT NULL,
-    merkle_root TEXT NOT NULL,
+    hash BLOB UNIQUE NOT NULL,
+    prev_hash BLOB NOT NULL,
+    merkle_root BLOB NOT NULL,
     timestamp INTEGER NOT NULL,
     bits INTEGER NOT NULL,
     nonce INTEGER NOT NULL,
@@ -180,6 +219,13 @@ const SCHEMA_SQL = `
     used INTEGER DEFAULT 0
   );
 
+  CREATE TABLE IF NOT EXISTS watch_addresses (
+    address TEXT PRIMARY KEY,
+    redeem_script TEXT NOT NULL,
+    label TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS peers (
     host TEXT PRIMARY KEY,
     port INTEGER NOT NULL,
@@ -215,6 +261,24 @@ const SCHEMA_SQL = `
     use_count INTEGER DEFAULT 1
   );
 
+  CREATE TABLE IF NOT EXISTS schema_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+  );
+
+  CREATE TABLE IF NOT EXISTS buy_orders (
+    id TEXT PRIMARY KEY,
+    fair_amount_sats TEXT NOT NULL,
+    payment_currency TEXT NOT NULL,
+    payment_amount TEXT NOT NULL,
+    payment_symbol TEXT NOT NULL,
+    status TEXT NOT NULL,
+    delivery_txid TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS rescan_state (
     id INTEGER PRIMARY KEY CHECK (id = 1),
     start_height INTEGER NOT NULL,
@@ -224,7 +288,10 @@ const SCHEMA_SQL = `
     updated_at INTEGER NOT NULL
   );
 
-  CREATE INDEX IF NOT EXISTS idx_block_headers_hash ON block_headers(hash);
+  -- No explicit index on block_headers(hash): the UNIQUE constraint already
+  -- creates one, and a second copy doubled the index cost on the largest
+  -- table in the database for no lookup benefit.
+  DROP INDEX IF EXISTS idx_block_headers_hash;
   CREATE INDEX IF NOT EXISTS idx_utxos_address ON utxos(address);
   CREATE INDEX IF NOT EXISTS idx_utxos_unspent ON utxos(spent, address);
   CREATE INDEX IF NOT EXISTS idx_utxos_block_height ON utxos(block_height);
@@ -234,6 +301,7 @@ const SCHEMA_SQL = `
   CREATE INDEX IF NOT EXISTS idx_social_receive_used ON social_receive_addresses(used);
   CREATE INDEX IF NOT EXISTS idx_contacts_address ON contacts(address);
   CREATE INDEX IF NOT EXISTS idx_contacts_name ON contacts(name);
+  CREATE INDEX IF NOT EXISTS idx_buy_orders_created ON buy_orders(created_at);
 `;
 
 /**
@@ -282,8 +350,77 @@ export class Database {
    * much faster than 16+ individual calls.
    */
   private async initialize(): Promise<void> {
+    // Header storage must be converted BEFORE the schema batch: on a legacy
+    // wallet the `block_headers` table already exists with TEXT columns, and
+    // `CREATE TABLE IF NOT EXISTS` would leave it that way.
+    await this.migrateHeaderHashesToBlob();
     await this.db.execAsync(SCHEMA_SQL);
     await this.migrateUtxoColumns();
+    await this.repairHeaderStore();
+  }
+
+  /**
+   * Drop a header store written by a broken hash implementation, once.
+   *
+   * Runs only while the persisted hash version is behind the current one, so
+   * an intact store costs a single `schema_meta` read per launch rather than a
+   * Quark hash. See `header-integrity.ts` for why this lives here.
+   */
+  private async repairHeaderStore(): Promise<void> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'header_hash_version'",
+    );
+    const storedVersion = row ? Number(row.value) : 0;
+
+    const tip = await this.getLatestHeader();
+    const plan = planHeaderRepair(storedVersion, tip);
+    if (plan === "up-to-date") return;
+
+    if (plan === "wipe") {
+      await this.db.runAsync("DELETE FROM block_headers");
+      // The rescan is described in heights of a chain that no longer exists.
+      await this.db.runAsync("DELETE FROM rescan_state");
+    }
+
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('header_hash_version', ?)",
+      String(HEADER_HASH_VERSION),
+    );
+  }
+
+  /**
+   * Convert a legacy `block_headers` table from 64-character hex TEXT to raw
+   * 32-byte BLOBs.
+   *
+   * Hex tripled the cost of the only table that grows without bound: ~400 bytes
+   * per row for an 80-byte header, ~27 MB for a synced mainnet chain. The
+   * conversion is a single `unhex()` pass inside one transaction (SQLite 3.41+;
+   * expo-sqlite ships 3.49+), so it is atomic — a failure mid-way rolls back
+   * and leaves the old table intact.
+   *
+   * No-op when the table is absent (fresh wallet) or already BLOB.
+   */
+  private async migrateHeaderHashesToBlob(): Promise<void> {
+    const columns = await this.db.getAllAsync<{ name: string; type: string }>(
+      "SELECT name, type FROM pragma_table_info('block_headers')",
+    );
+    // Absent table → nothing to migrate; already BLOB → nothing to do.
+    const hashColumn = columns.find((c) => c.name === "hash");
+    if (!needsHeaderBlobMigration(hashColumn?.type)) return;
+
+    await this.db.withTransactionAsync(async () => {
+      await this.db.execAsync(HEADER_BLOB_MIGRATION_SQL);
+    });
+
+    // DROP TABLE only frees pages for reuse; without this the file keeps the
+    // old size on disk and the user sees none of the ~15 MB back. VACUUM
+    // cannot run inside a transaction, hence its position here. Best-effort:
+    // the data is already correct, reclaiming space is not worth failing boot.
+    try {
+      await this.db.execAsync("VACUUM");
+    } catch {
+      // Left for the next VACUUM opportunity.
+    }
   }
 
   /**
@@ -393,7 +530,7 @@ export class Database {
     return row ?? null;
   }
 
-  async getHeaderByHash(hash: string): Promise<BlockHeaderRow | null> {
+  async getHeaderByHash(hash: Uint8Array): Promise<BlockHeaderRow | null> {
     const row = await this.db.getFirstAsync<BlockHeaderRow>(
       "SELECT * FROM block_headers WHERE hash = ?",
       hash,
@@ -811,6 +948,32 @@ export class Database {
     );
   }
 
+  // -----------------------------------------------------------------------
+  // Watch addresses (non-HD, e.g. multisig)
+  // -----------------------------------------------------------------------
+
+  async insertWatchAddress(
+    address: string,
+    redeemScript: string,
+    label: string,
+  ): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    await this.db.runAsync(
+      `INSERT OR IGNORE INTO watch_addresses (address, redeem_script, label, created_at)
+       VALUES (?, ?, ?, ?)`,
+      address,
+      redeemScript,
+      label,
+      now,
+    );
+  }
+
+  async getWatchAddresses(): Promise<WatchAddressRow[]> {
+    return this.db.getAllAsync<WatchAddressRow>(
+      "SELECT * FROM watch_addresses ORDER BY created_at",
+    );
+  }
+
   /**
    * The next unused derivation index for a chain: one past the highest *used*
    * index in the database (0 if none are used). Used to restore the BIP44
@@ -913,6 +1076,59 @@ export class Database {
       now,
       now,
       services,
+    );
+  }
+
+  // -----------------------------------------------------------------------
+  // Buy orders
+  // -----------------------------------------------------------------------
+
+  /**
+   * Insert or refresh a buy order. Keyed on the bridge's order id, so
+   * re-recording the same order (a retry, a resumed screen) is idempotent.
+   */
+  async upsertBuyOrder(row: BuyOrderRow): Promise<void> {
+    await this.db.runAsync(
+      `INSERT OR REPLACE INTO buy_orders
+        (id, fair_amount_sats, payment_currency, payment_amount, payment_symbol,
+         status, delivery_txid, error_message, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      row.id,
+      row.fair_amount_sats,
+      row.payment_currency,
+      row.payment_amount,
+      row.payment_symbol,
+      row.status,
+      row.delivery_txid,
+      row.error_message,
+      row.created_at,
+      row.updated_at,
+    );
+  }
+
+  async updateBuyOrderStatus(
+    id: string,
+    status: string,
+    deliveryTxid: string,
+    errorMessage: string,
+    updatedAt: number,
+  ): Promise<void> {
+    await this.db.runAsync(
+      `UPDATE buy_orders
+         SET status = ?, delivery_txid = ?, error_message = ?, updated_at = ?
+       WHERE id = ?`,
+      status,
+      deliveryTxid,
+      errorMessage,
+      updatedAt,
+      id,
+    );
+  }
+
+  async getBuyOrders(limit: number): Promise<BuyOrderRow[]> {
+    return this.db.getAllAsync<BuyOrderRow>(
+      "SELECT * FROM buy_orders ORDER BY created_at DESC LIMIT ?",
+      limit,
     );
   }
 

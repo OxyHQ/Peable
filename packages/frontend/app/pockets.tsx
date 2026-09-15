@@ -1,6 +1,6 @@
 /**
  * Pockets home — Revolut-style cards screen. Header, a total-across-pockets
- * hero, the Pocket card list (colored emoji chip + optional goal bar), and a
+ * hero, the Pocket card list (image avatar + optional goal bar), and a
  * dashed "New pocket" row. Tapping a card opens that Pocket's detail sheet
  * (`PocketDetailSheet`), which owns its own Move/Add/Switch/Manage flows.
  * Presented as a modal from the home pill's "Manage pockets" row.
@@ -105,7 +105,11 @@ export default function PocketsScreen() {
           </Pressable>
         }
       />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pt-2 pb-8">
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="px-5 pt-2 pb-8"
+        showsVerticalScrollIndicator={false}
+      >
         {/* Total across pockets */}
         <View className="mb-6">
           <Text className={SECTION_LABEL}>{t("pockets.total.label")}</Text>

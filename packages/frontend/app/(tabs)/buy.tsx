@@ -11,24 +11,22 @@
  *   3. Navigates to `/buy/quote?orderId=…` which renders the QR + status.
  *
  * Watch-only wallets cannot derive addresses, so we surface a friendly
- * empty state instead of disabling the tab outright (the bottom-bar entry
- * stays consistent across wallet types).
+ * empty state instead of disabling the tab outright.
+ *
+ * Layout mirrors the rest of the app: a styled `SafeAreaView` (correct top +
+ * bottom insets, no manual math), a `ScreenHeader`, a scrolling body, and a
+ * flex footer holding the primary CTA — the button sits just above the bottom
+ * safe inset without any absolute positioning or bottom-padding hacks.
  */
 
 import { useCallback, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
+import { ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { parseFairToUnits } from "@fairco.in/core";
-import { Button, EmptyState } from "../../src/ui/components";
+import { Button, EmptyState, ScreenHeader } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { BuyAmountInput } from "../../src/components/buy/AmountInput";
 import {
   PaymentMethodPicker,
@@ -39,9 +37,10 @@ import {
   requestBuyQuote,
   type PaymentCurrency,
 } from "../../src/api/buy";
-import { useWalletStore } from "../../src/wallet/wallet-store";
+import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
+import { recordBuyOrder } from "../../src/wallet/buy-history";
+import { BuyHistoryList } from "../../src/ui/components/BuyHistoryList";
 import { useLanguageStore } from "../../src/i18n/store";
-import { FONT_PHUDU_BLACK } from "../../src/utils/fonts";
 import { t } from "../../src/i18n";
 
 const CONTENT_MAX_WIDTH = 600;
@@ -102,11 +101,10 @@ function buildPaymentOptions(): readonly PaymentMethodOption[] {
 
 function truncateMid(value: string, head: number, tail: number): string {
   if (value.length <= head + tail + 1) return value;
-  return `${value.slice(0, head)}\u2026${value.slice(-tail)}`;
+  return `${value.slice(0, head)}…${value.slice(-tail)}`;
 }
 
 export default function BuyScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const theme = useTheme();
   const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
@@ -153,6 +151,22 @@ export default function BuyScreen() {
         fairDestinationAddress: deliveryAddress,
         userIdentifier: activeWalletId,
       });
+      // Persist BEFORE navigating. If the user backs out of the quote screen —
+      // or the app dies — the order still has to be findable, otherwise a
+      // payment they may already have sent has no trace on the device.
+      const db = getDatabase();
+      if (db) {
+        await recordBuyOrder(db, {
+          id: quote.id,
+          fairAmountSats: BigInt(quote.fairAmountSats),
+          paymentCurrency: quote.paymentCurrency,
+          paymentAmountFormatted: quote.paymentAmountFormatted,
+          paymentSymbol: quote.paymentSymbol,
+          status: "AWAITING_PAYMENT",
+          createdAt: Math.floor(Date.now() / 1000),
+        });
+      }
+
       router.push({
         pathname: "/buy/quote",
         params: { orderId: quote.id },
@@ -167,6 +181,16 @@ export default function BuyScreen() {
           setError(t("buy.error.cardNotConfigured"));
         } else if (err.code === "pool_quote_failed") {
           setError(t("buy.error.poolUnavailable"));
+        } else if (err.code === "currency_unavailable") {
+          setError(t("buy.error.currencyUnavailable"));
+        } else if (err.status >= 500) {
+          // A server-side fault. Its `message` is written for whoever operates
+          // the bridge, not for the person holding the phone — the live service
+          // answers `address_allocation_failed` with "Bridge HD not configured
+          // for buy flow", which tells a user nothing and leaks how the bridge
+          // is built. Only client-side (4xx) messages, which describe something
+          // the user can actually change, are shown verbatim below.
+          setError(t("buy.error.unavailable"));
         } else {
           setError(t("buy.error.generic", { message: err.message }));
         }
@@ -189,52 +213,43 @@ export default function BuyScreen() {
 
   if (isWatchOnly) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
+        <ScreenHeader title={t("buy.title")} />
         <EmptyState
           icon="lock"
           title={t("buy.title")}
           subtitle={t("buy.error.watchOnly")}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={["top", "left", "right"]}
+    >
+      <ScreenHeader title={t("buy.title")} subtitle={t("buy.subtitle")} />
+
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-40 gap-5"
-        contentContainerStyle={{
-          paddingTop: insets.top + 12,
-          paddingHorizontal: 16,
-        }}
+        contentContainerClassName="px-4 pt-2 pb-6 gap-6"
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View
-          className="w-full self-center gap-5"
+          className="w-full self-center gap-6"
           style={{ maxWidth: CONTENT_MAX_WIDTH }}
         >
-          {/* Header */}
-          <View className="items-center pt-2">
-            <Text
-              className="text-foreground"
-              style={{ fontFamily: FONT_PHUDU_BLACK, fontSize: 28 }}
-            >
-              {t("buy.title")}
-            </Text>
-            <Text className="text-muted-foreground text-sm mt-1 text-center">
-              {t("buy.subtitle")}
-            </Text>
-          </View>
-
           {/* Amount — card-less hero (glyph + Phudu, like the home balance) */}
-          <View className="pt-1">
-            <BuyAmountInput
-              value={amount}
-              onValueChange={setAmount}
-              presets={PRESETS}
-            />
-          </View>
+          <BuyAmountInput
+            value={amount}
+            onValueChange={setAmount}
+            presets={PRESETS}
+          />
 
           {/* Payment method */}
           <View className="gap-2">
@@ -244,19 +259,6 @@ export default function BuyScreen() {
               value={paymentCurrency}
               onChange={setPaymentCurrency}
             />
-          </View>
-
-          {/* Disclosure */}
-          <View className="flex-row items-start gap-2 px-1">
-            <MaterialCommunityIcons
-              name="information-outline"
-              size={14}
-              color={theme.colors.textSecondary}
-              style={{ marginTop: 2 }}
-            />
-            <Text className="text-[11px] text-muted-foreground flex-1">
-              {t("buy.disclosure")}
-            </Text>
           </View>
 
           {/* Active-wallet badge: confirms which wallet receives FAIR. */}
@@ -283,6 +285,19 @@ export default function BuyScreen() {
             </View>
           ) : null}
 
+          {/* Disclosure */}
+          <View className="flex-row items-start gap-2 px-1">
+            <MaterialCommunityIcons
+              name="information-outline"
+              size={14}
+              color={theme.colors.textSecondary}
+              style={{ marginTop: 2 }}
+            />
+            <Text className="text-[11px] text-muted-foreground flex-1">
+              {t("buy.disclosure")}
+            </Text>
+          </View>
+
           {error ? (
             <View className="bg-destructive/10 rounded-2xl p-3.5">
               <Text className="text-destructive text-sm text-center">
@@ -290,35 +305,34 @@ export default function BuyScreen() {
               </Text>
             </View>
           ) : null}
+
+          {/* Past orders. Renders nothing until there is one, so a first-time
+              buyer sees the form exactly as before. */}
+          <BuyHistoryList />
         </View>
       </ScrollView>
 
-      {/* Fixed bottom CTA — hairline divider instead of a bordered bar */}
-      <View
-        className="absolute left-0 right-0 bottom-0 bg-background"
-        style={{ paddingBottom: insets.bottom + 12, paddingTop: 12 }}
-      >
-        <View className="absolute left-0 right-0 top-0 h-px bg-border" />
+      {/* Fixed footer CTA — a flex sibling of the scroll body, so it sits just
+          above the bottom safe inset (handled by SafeAreaView) with no absolute
+          positioning or bottom-padding hack. */}
+      {/* Buy is a TAB: the native tab bar already occupies the bottom safe
+          area, so the footer uses a fixed padding — adding insets.bottom here
+          would double-count and float the button above the tab bar. */}
+      <View className="border-t border-border">
         <View
-          className="w-full self-center px-4"
+          className="w-full self-center px-4 pt-3 pb-3"
           style={{ maxWidth: CONTENT_MAX_WIDTH }}
         >
-          {submitting ? (
-            <View className="items-center py-2">
-              <ActivityIndicator color={theme.colors.primary} />
-            </View>
-          ) : (
-            <Button
-              title={t("buy.cta.getInstructions")}
-              onPress={handleSubmit}
-              variant="primary"
-              size="lg"
-              disabled={!canSubmit}
-            />
-          )}
-          <Pressable accessibilityRole="none" />
+          <Button
+            title={t("buy.cta.getInstructions")}
+            onPress={handleSubmit}
+            variant="primary"
+            size="lg"
+            loading={submitting}
+            disabled={!canSubmit}
+          />
         </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }

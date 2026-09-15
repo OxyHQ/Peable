@@ -56,7 +56,7 @@ import { ContactPicker } from "../components/ContactPicker";
 import { SocialRecipientPicker, type SocialRecipient } from "../components/SocialRecipientPicker";
 import { UserAvatar } from "../components/UserAvatar";
 import { reserveNextSocialAddress, KeylessRecipientError } from "../../services/gateway-client";
-import { getCachedPrice } from "../../services/price";
+import { usePrice } from "../../hooks/usePrice";
 import type { RecentRecipientRow, ContactRow } from "../../storage/database";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { Divider } from "@oxy.so/bloom/divider";
@@ -281,11 +281,7 @@ export function SendSheet({
     validationError === null &&
     !reservingAddress;
 
-  // Computed inline (not memoised): `getCachedPrice()` is module state, not a
-  // reactive dependency, so a useMemo keyed only on amountSats would freeze
-  // the first price it saw. Reading it every render keeps the fiat estimate
-  // in sync with the latest poll, and the arithmetic is trivially cheap.
-  const cachedPrice = getCachedPrice();
+  const cachedPrice = usePrice();
   const usdEquivalent =
     cachedPrice && amountSats !== null && amountSats > 0n
       ? ((Number(amountSats) / Number(UNITS_PER_COIN)) * cachedPrice.usd).toFixed(2)

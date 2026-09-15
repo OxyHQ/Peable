@@ -8,16 +8,10 @@
  * Overview shows the FairCoin holding, Activity shows the day-grouped feed.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { View, Text, Pressable } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
-import Animated, {
-  runOnJS,
-  useAnimatedScrollHandler,
-  useAnimatedStyle,
-  useSharedValue,
-  withTiming,
-} from "react-native-reanimated";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as WebBrowser from "expo-web-browser";
@@ -36,26 +30,15 @@ import {
 } from "../../src/ui/components/SuggestionStack";
 import { HomeOverview } from "../../src/ui/components/HomeOverview";
 import { ArrowCircleDownIcon } from "../../src/ui/components/ArrowCircleDownIcon";
-import { HubIcon } from "../../src/ui/components/HubIcon";
 import { SendIcon } from "../../src/ui/components/SendIcon";
 import { PocketSwitcherSheet } from "../../src/ui/sheets/PocketSwitcherSheet";
-import { findPocket, MAIN_POCKET_ACCOUNT } from "../../src/wallet/pockets";
 import { TransactionDetailSheet } from "../../src/ui/sheets/TransactionDetailSheet";
-import {
-  RefreshRainbowBar,
-  RAINBOW_BAND_HEIGHT,
-} from "../../src/ui/components/RefreshRainbowBar";
+import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { SendReceiveSheet } from "../../src/ui/sheets/SendReceiveSheet";
-import { hapticSelection, hapticSuccess } from "../../src/utils/haptics";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import {
-  startPricePolling,
-  stopPricePolling,
-  getCachedPrice,
-  fetchPrice,
-  type PriceData,
-} from "../../src/services/price";
+import { fetchPrice } from "../../src/services/price";
+import { usePrice } from "../../src/hooks/usePrice";
 import { queryClient } from "../../src/services/query-client";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { Tabs, TabsTrigger } from "@oxy.so/bloom/tabs";
@@ -82,10 +65,6 @@ interface ActivityGroup {
 
 const DAY_MS = 86_400_000;
 const SYNCING_COLOR = "#fbbf24";
-/** Reveal (px) the pull must reach on release to trigger a refresh. */
-const REFRESH_TRIGGER = 42;
-/** Damping applied to the finger travel so the band trails the drag. */
-const PULL_DAMPING = 0.6;
 
 /** Human day label for a unix-seconds timestamp: Today / Yesterday / a date. */
 function dayLabel(timestampSec: number): string {
@@ -152,28 +131,19 @@ export default function HomeScreen() {
   const receiveAddress = useWalletStore((s) => s.currentReceiveAddress);
   const refreshBalance = useWalletStore((s) => s.refreshBalance);
   const hasBackedUp = useWalletStore((s) => s.hasBackedUp);
-  const pockets = useWalletStore((s) => s.pockets);
-  const activeAccount = useWalletStore((s) => s.activeAccount);
-  const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
   const loadPockets = useWalletStore((s) => s.loadPockets);
 
-  const [price, setPrice] = useState<PriceData | null>(getCachedPrice);
+  const price = usePrice();
   const [tab, setTab] = useState<HomeTab>("activity");
 
   // Send / Receive share ONE bottom-sheet with a Send|Receive toggle; the pills
   // just open it on the right side.
   const sheetControl = useDialogControl();
   const [sheetMode, setSheetMode] = useState<"send" | "receive">("send");
-  // Tapping the active-Pocket pill opens a quick Pocket-switcher sheet.
+  // The Pockets action pill opens a quick Pocket-switcher sheet. The
+  // active-Pocket chip that used to name it here is gone (63df893), so the
+  // name is no longer derived on this screen.
   const pocketSwitcherControl = useDialogControl();
-  const activePocket = useMemo(
-    () => findPocket(pockets, activeAccount),
-    [pockets, activeAccount],
-  );
-  const activePocketName =
-    !activePocket || activePocket.account === MAIN_POCKET_ACCOUNT
-      ? t("pockets.mainName")
-      : activePocket.name;
   // Tapping an activity row opens the transaction detail in a bottom sheet.
   const txDetailControl = useDialogControl();
   const [detailTxid, setDetailTxid] = useState<string | null>(null);
@@ -187,9 +157,7 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      startPricePolling((updated) => setPrice(updated));
       loadPockets();
-      return () => stopPricePolling();
     }, [loadPockets]),
   );
 
@@ -241,93 +209,24 @@ export default function HomeScreen() {
     await WebBrowser.openBrowserAsync(`${BUY_BASE_URL}/?${params.toString()}`);
   }, [receiveAddress]);
 
-  // Pull-to-refresh: the rainbow band IS the indicator. A Pan gesture (running
-  // alongside the scroll) reveals the band by `pull` px as the user drags down
-  // while at the top; releasing past REFRESH_TRIGGER runs the refresh and holds
-  // the band briefly before it collapses. No native RefreshControl.
-  // The scroll's own gesture, composed simultaneously with the pull so dragging
-  // at the top reveals the band while normal scrolling still works.
-  const nativeGesture = useMemo(() => Gesture.Native(), []);
-  const scrollY = useSharedValue(0);
-  const pull = useSharedValue(0);
-  const refreshingSV = useSharedValue(false);
-  /** True once this drag has passed the trigger threshold (for a one-shot haptic). */
-  const passedTrigger = useSharedValue(false);
-  const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const scrollHandler = useAnimatedScrollHandler((event) => {
-    scrollY.value = event.contentOffset.y;
-  });
-
+  // Pull-to-refresh: the rainbow band IS the indicator. Gesture, threshold,
+  // haptics and hold live in one shared hook so every refreshable screen
+  // behaves identically.
   const startRefresh = useCallback(() => {
     refreshBalance();
     // A pull should re-pull remote data, not only recompute the local balance:
     // refetch the FAIR price for the header and invalidate the Overview's
     // React Query data (price history + network stats) so both refresh too.
-    void fetchPrice().then((updated) => {
-      if (updated) setPrice(updated);
-    });
+    // `fetchPrice` notifies subscribers itself, so there is nothing to store.
+    void fetchPrice();
     void queryClient.invalidateQueries();
-    if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    refreshTimer.current = setTimeout(() => {
-      refreshingSV.value = false;
-      pull.value = withTiming(0, { duration: 220 });
-      // A distinct "done" haptic as the band collapses.
-      hapticSuccess();
-    }, 1500);
-  }, [refreshBalance, pull, refreshingSV]);
+  }, [refreshBalance]);
 
-  useEffect(
-    () => () => {
-      if (refreshTimer.current) clearTimeout(refreshTimer.current);
-    },
-    [],
-  );
-
-  const pullGesture = useMemo(
-    () =>
-      Gesture.Pan()
-        .onBegin(() => {
-          "worklet";
-          passedTrigger.value = false;
-        })
-        .onUpdate((event) => {
-          "worklet";
-          if (refreshingSV.value) return;
-          const next =
-            scrollY.value <= 0 && event.translationY > 0
-              ? Math.min(event.translationY * PULL_DAMPING, RAINBOW_BAND_HEIGHT)
-              : 0;
-          // Light haptic tick the first time the pull passes the trigger; re-arm
-          // if the user drags back below it so a second pull ticks again.
-          if (!passedTrigger.value && next >= REFRESH_TRIGGER) {
-            passedTrigger.value = true;
-            runOnJS(hapticSelection)();
-          } else if (passedTrigger.value && next < REFRESH_TRIGGER) {
-            passedTrigger.value = false;
-          }
-          pull.value = next;
-        })
-        .onEnd(() => {
-          "worklet";
-          if (refreshingSV.value) return;
-          if (pull.value >= REFRESH_TRIGGER) {
-            refreshingSV.value = true;
-            pull.value = withTiming(RAINBOW_BAND_HEIGHT, { duration: 140 });
-            runOnJS(startRefresh)();
-          } else {
-            pull.value = withTiming(0, { duration: 140 });
-          }
-        }),
-    [scrollY, pull, refreshingSV, passedTrigger, startRefresh],
-  );
-
-  const composedGesture = useMemo(
-    () => Gesture.Simultaneous(pullGesture, nativeGesture),
-    [pullGesture, nativeGesture],
-  );
-
-  const bandStyle = useAnimatedStyle(() => ({ height: pull.value }));
+  const {
+    gesture: composedGesture,
+    scrollHandler,
+    band,
+  } = usePullToRefreshBand(startRefresh);
 
   const activityGroups = useMemo(
     () => groupByDay(transactions.slice(0, 10)),
@@ -414,32 +313,6 @@ export default function HomeScreen() {
             size="lg"
             align="start"
           />
-          {/* Active-Pocket pill — opens the Pocket switcher. Watch-only
-              wallets have no Pockets, so the pill (and the whole Pockets
-              surface) is hidden for them. */}
-          {!isWatchOnly ? (
-            <Pressable
-              className="self-start flex-row items-center bg-surface rounded-full pl-1.5 pr-3 py-1.5 mt-2 active:opacity-70"
-              onPress={() => pocketSwitcherControl.open()}
-              accessibilityRole="button"
-              accessibilityLabel={t("pockets.switcherTitle")}
-            >
-              <View
-                className="w-5 h-5 rounded-full items-center justify-center mr-1.5"
-                style={{ backgroundColor: `${activePocket?.color ?? theme.colors.primary}29` }}
-              >
-                <Text style={{ fontSize: 11 }}>{activePocket?.emoji ?? "💧"}</Text>
-              </View>
-              <Text className="text-foreground text-sm font-medium">
-                {activePocketName}
-              </Text>
-              <MaterialCommunityIcons
-                name="chevron-down"
-                size={16}
-                color={theme.colors.textSecondary}
-              />
-            </Pressable>
-          ) : null}
         </View>
 
         {/* ---- Quick actions ---- */}
@@ -472,12 +345,9 @@ export default function HomeScreen() {
             onPress={handleBuy}
           />
           <ActionButton
-            icon="server-network"
-            label={t("wallet.nodes")}
-            onPress={() => router.push("/masternode")}
-            renderIcon={({ color, size }) => (
-              <HubIcon color={color} size={size} />
-            )}
+            icon="wallet-bifold-outline"
+            label={t("pockets.title")}
+            onPress={() => router.push("/pockets")}
           />
         </View>
 
@@ -507,9 +377,7 @@ export default function HomeScreen() {
         </View>
 
         {/* ---- Pull-to-refresh rainbow band: below the tabs, grows as you drag ---- */}
-        <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
-          <RefreshRainbowBar />
-        </Animated.View>
+        {band}
 
         {/* ---- Tab content ---- */}
         {tab === "overview" ? (

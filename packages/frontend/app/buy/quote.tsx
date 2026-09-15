@@ -24,6 +24,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import * as WebBrowser from "expo-web-browser";
 import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import { useTheme } from "@oxy.so/bloom/theme";
+import { toast } from "@oxy.so/bloom/toast";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { explorerTxUrl } from "@fairco.in/core";
 import {
@@ -31,28 +32,23 @@ import {
   EmptyState,
   ScreenHeader,
 } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { PaymentInstructions } from "../../src/components/buy/PaymentInstructions";
 import {
   BuyApiError,
   getBuyStatus,
-  type BuyOrderStatus,
   type BuyQuoteResponse,
   type BuyStatusResponse,
 } from "../../src/api/buy";
+import { getDatabase } from "../../src/wallet/wallet-store";
+import {
+  isTerminalBuyStatus,
+  updateBuyOrderStatus,
+} from "../../src/wallet/buy-history";
 import { t } from "../../src/i18n";
 
 const CONTENT_MAX_WIDTH = 600;
 const POLL_INTERVAL_MS = 5000;
-const TERMINAL_STATUSES: readonly BuyOrderStatus[] = [
-  "DELIVERED",
-  "FAILED",
-  "EXPIRED",
-];
-
-function isTerminal(status: BuyOrderStatus | null): boolean {
-  return status !== null && TERMINAL_STATUSES.includes(status);
-}
-
 /**
  * The status endpoint returns enough information to reconstruct the bare
  * minimum the PaymentInstructions component needs, so we synthesise a quote
@@ -125,6 +121,17 @@ export default function BuyQuoteScreen() {
       const fresh = await getBuyStatus(orderId);
       setStatus(fresh);
       setError(null);
+      // Keep the local record in step with the bridge, so the Buy screen's
+      // order list is right even if the user never opens this screen again.
+      const db = getDatabase();
+      if (db) {
+        void updateBuyOrderStatus(db, fresh.id, fresh.status, {
+          deliveryTxId: fresh.fairDeliveryTxId,
+          errorMessage: fresh.errorMessage,
+        }).catch(() => {
+          // The cache is an optimisation; the bridge stays the source of truth.
+        });
+      }
       return fresh;
     } catch (err: unknown) {
       if (err instanceof BuyApiError && err.status === 404) {
@@ -151,7 +158,7 @@ export default function BuyQuoteScreen() {
         const fresh = await refreshStatus();
         if (cancelled) return;
         setLoading(false);
-        if (fresh && isTerminal(fresh.status) && timer) {
+        if (fresh && isTerminalBuyStatus(fresh.status) && timer) {
           clearInterval(timer);
           timer = null;
         }
@@ -208,16 +215,19 @@ export default function BuyQuoteScreen() {
   }, [router]);
 
   const handleCopiedAddress = useCallback(() => {
-    // Hook for showing a Bloom toast in future; no-op for now to keep the
-    // component self-contained.
+    toast.success(t("buy.instructions.copiedAddress"));
   }, []);
+
   const handleCopiedAmount = useCallback(() => {
-    // Same as above.
+    toast.success(t("buy.instructions.copiedAmount"));
   }, []);
 
   if (!orderId) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader
           title={t("buy.title")}
           onBack={() => router.back()}
@@ -227,47 +237,57 @@ export default function BuyQuoteScreen() {
           title={t("notFound.title")}
           subtitle={t("notFound.description")}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (loading && !status) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
         <View className="flex-1 items-center justify-center px-6">
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
   if (!quoteShape || !status) {
     return (
-      <View className="flex-1 bg-background" style={{ paddingTop: insets.top }}>
+      <SafeAreaView
+        className="flex-1 bg-background"
+        edges={["top", "bottom", "left", "right"]}
+      >
         <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
         <EmptyState
           icon="alert-circle"
           title={t("notFound.title")}
           subtitle={error ?? t("notFound.description")}
         />
-      </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View className="flex-1 bg-background">
+    <SafeAreaView
+      className="flex-1 bg-background"
+      edges={["top", "left", "right"]}
+    >
       <ScreenHeader
         title={t("buy.instructions.title")}
         onBack={() => router.back()}
       />
       <ScrollView
         className="flex-1"
-        contentContainerClassName="pb-32 gap-4"
+        contentContainerClassName="pb-6 gap-4"
         contentContainerStyle={{
           paddingTop: 4,
           paddingHorizontal: 16,
         }}
+        showsVerticalScrollIndicator={false}
       >
         <View
           className="w-full self-center gap-4"
@@ -314,13 +334,11 @@ export default function BuyQuoteScreen() {
       </ScrollView>
 
       <View
-        className="absolute left-0 right-0 bottom-0 bg-background"
-        style={{ paddingBottom: insets.bottom + 12, paddingTop: 12 }}
+        className="border-t border-border"
+        style={{ paddingBottom: Math.max(insets.bottom, 12) }}
       >
-        {/* Hairline divider (replaces the old top border) */}
-        <View className="absolute left-0 right-0 top-0 h-px bg-border" />
         <View
-          className="w-full self-center px-4 gap-2"
+          className="w-full self-center px-4 pt-3 gap-2"
           style={{ maxWidth: CONTENT_MAX_WIDTH }}
         >
           {isDelivered ? (
@@ -362,6 +380,6 @@ export default function BuyQuoteScreen() {
           { label: t("common.cancel"), color: "cancel" },
         ]}
       />
-    </View>
+    </SafeAreaView>
   );
 }

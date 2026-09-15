@@ -15,6 +15,12 @@ import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
 import { KeyManager } from "./key-manager";
 
+// ---------------------------------------------------------------------------
+// BIP44 account index (Pockets). Each account is an isolated subtree; account 0
+// must remain byte-for-byte identical to the pre-Pockets single-account wallet.
+// ---------------------------------------------------------------------------
+
+
 const MAINNET = getNetwork("mainnet");
 
 // Canonical BIP39 trial mnemonic — deterministic derivation.
@@ -315,5 +321,39 @@ describe("KeyManager account index (Pockets)", () => {
     expect(watch1.getExternalAddresses()[0]).not.toBe(
       acct0.getExternalAddresses()[0],
     );
+  });
+});
+
+describe("KeyManager watch addresses", () => {
+  // Real 2-of-3 mainnet multisig P2SH address (same fixture used across the
+  // @fairco.in/core multisig test suite).
+  const MULTISIG_ADDRESS = "7iKBxUNbBbTa8n1Q32oLucmvmKL7c572P2";
+
+  test("a fresh manager does not own an unregistered watch address", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(false);
+    expect(km.getAllAddresses()).not.toContain(MULTISIG_ADDRESS);
+  });
+
+  test("registerWatchAddress makes ownsAddress true and includes it in getAllAddresses", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(true);
+    expect(km.getAllAddresses()).toContain(MULTISIG_ADDRESS);
+    expect(km.getWatchAddresses()).toEqual([MULTISIG_ADDRESS]);
+  });
+
+  test("wipe() clears registered watch addresses (cross-wallet isolation)", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    km.wipe();
+    expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(false);
+    expect(km.getWatchAddresses()).toEqual([]);
+  });
+
+  test("getPrivateKeyForAddress still throws for a watch address (no key material, by design)", () => {
+    const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
+    km.registerWatchAddress(MULTISIG_ADDRESS);
+    expect(() => km.getPrivateKeyForAddress(MULTISIG_ADDRESS)).toThrow();
   });
 });

@@ -7,13 +7,12 @@
 
 import { sha256 } from "@noble/hashes/sha256";
 import type { NetworkConfig, BlockHeader } from "@fairco.in/core";
-import { hashBlockHeader as quarkHashBlockHeader, getCheckpointHash, hexToBytes } from "@fairco.in/core";
+import { bytesEqual, hashBlockHeader as quarkHashBlockHeader, getCheckpointHash, hexToBytes } from "@fairco.in/core";
 import { BloomFilter } from "./bloom-filter";
 import { validateMerkleProof } from "./merkle-proof";
 import {
   validateHeaderChain,
   planChainUpdate,
-  proofOfWorkLimit,
   HeaderValidationError,
   type HeaderChainAnchor,
   type ValidatedHeader,
@@ -47,6 +46,7 @@ import {
   type PeerEventSink,
 } from "./peer-manager";
 import type { NativeDnsResolver } from "./dns-seeds";
+import { getSyncAnchor } from "./sync-anchor";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -96,6 +96,16 @@ export interface SPVClientConfig {
    * `addr` messages.
    */
   initialKnownAddresses?: readonly string[];
+  /**
+   * Start the header chain at the network's verified checkpoint anchor instead
+   * of genesis, skipping tens of thousands of headers on first sync.
+   *
+   * ONLY safe for a wallet whose mnemonic this app generated: it cannot have
+   * received coins before it existed. A restored or imported wallet must leave
+   * this false, or payments below the anchor are invisible and the balance is
+   * silently wrong. Ignored once the store already holds headers.
+   */
+  startFromCheckpoint?: boolean;
 }
 
 export interface SPVClientEvents {
@@ -127,6 +137,21 @@ export interface SPVClientEvents {
    * @param oldTipHeight Height of the tip that is being discarded.
    */
   onReorg?: (forkHeight: number, oldTipHeight: number) => Promise<void> | void;
+  /**
+   * Fired once per peer that completes the version handshake AND passes the
+   * NODE_BLOOM service gate — i.e. an address that is genuinely usable for SPV
+   * right now. The consumer persists these so the next cold start can dial
+   * known-good nodes immediately instead of waiting on DNS seed resolution.
+   */
+  onPeerReady?: (peer: ReadyPeerInfo) => void;
+}
+
+/** Connection details of a peer that reached the ready state. */
+export interface ReadyPeerInfo {
+  readonly host: string;
+  readonly port: number;
+  /** Advertised service bitmask from the peer's `version` message. */
+  readonly services: bigint;
 }
 
 // ---------------------------------------------------------------------------
@@ -211,14 +236,6 @@ async function buildLocator(store: HeaderStore): Promise<Uint8Array[]> {
   return locator;
 }
 
-function bytesEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i] !== b[i]) return false;
-  }
-  return true;
-}
-
 // ---------------------------------------------------------------------------
 // SPVClient
 // ---------------------------------------------------------------------------
@@ -228,6 +245,7 @@ export class SPVClient {
   private readonly peerManager: PeerManager;
   private readonly network: NetworkConfig;
   private readonly powLimit: bigint;
+  private readonly startFromCheckpoint: boolean;
 
   private events: SPVClientEvents = {};
   private bloomFilter: BloomFilter | undefined;
@@ -253,7 +271,8 @@ export class SPVClient {
   constructor(config: SPVClientConfig) {
     this.headerStore = config.headerStore;
     this.network = config.network;
-    this.powLimit = proofOfWorkLimit();
+    this.powLimit = config.network.powLimit;
+    this.startFromCheckpoint = config.startFromCheckpoint ?? false;
 
     const peerManagerConfig: PeerManagerConfig = {
       network: config.network,
@@ -287,10 +306,12 @@ export class SPVClient {
     // `prevBlock`; without genesis in the store there is no anchor and header
     // validation rejects block 1, so sync (and therefore receiving) never
     // starts.
-    await this.ensureGenesis();
-
-    // Load current chain height from store
-    this.chainHeight = await this.headerStore.getChainHeight();
+    // The store is repaired and migrated by the storage layer before it is
+    // handed over, so the client can assume it is coherent. One read of the tip
+    // serves both remaining startup steps.
+    const tip = await this.headerStore.getLatestHeader();
+    const seeded = await this.ensureStartHeader(tip);
+    this.chainHeight = seeded?.height ?? 0;
 
     await this.peerManager.start();
   }
@@ -301,11 +322,23 @@ export class SPVClient {
    * internal (wire) byte order the header store and `prevBlock` linkage use —
    * i.e. the reverse of the display genesis hash.
    */
-  private async ensureGenesis(): Promise<void> {
-    const existing = await this.headerStore.getLatestHeader();
+  private async ensureStartHeader(
+    existing: StoredBlockHeader | undefined,
+  ): Promise<StoredBlockHeader | undefined> {
     if (existing) {
-      return;
+      return existing;
     }
+
+    // A wallet with no possible history starts at the verified checkpoint
+    // anchor instead, skipping every header below it.
+    if (this.startFromCheckpoint) {
+      const anchor = getSyncAnchor(this.network.name);
+      if (anchor) {
+        await this.headerStore.saveHeaders([anchor]);
+        return anchor;
+      }
+    }
+
     const genesis: StoredBlockHeader = {
       hash: hexToBytes(this.network.genesisHash).reverse(),
       height: 0,
@@ -317,6 +350,7 @@ export class SPVClient {
       nonce: this.network.genesisNonce,
     };
     await this.headerStore.saveHeaders([genesis]);
+    return genesis;
   }
 
   /**
@@ -333,6 +367,16 @@ export class SPVClient {
    * Sends our Bloom filter and begins header sync if not already syncing.
    */
   private handlePeerReady(peer: Peer): void {
+    // Report the address so it can be cached for the next cold start. Emitted
+    // before the filter/sync work so a throwing consumer can't stall the sync.
+    if (this.events.onPeerReady) {
+      this.events.onPeerReady({
+        host: peer.host,
+        port: peer.port,
+        services: peer.services,
+      });
+    }
+
     // Send Bloom filter to the newly connected peer
     if (this.bloomFilter) {
       const filterPayload = serializeFilterLoad(
@@ -380,9 +424,13 @@ export class SPVClient {
         const locator = await buildLocator(this.headerStore);
         const stopHash = new Uint8Array(32); // all zeros = to the tip
 
+        // Only ask a peer that actually has blocks above our tip: a node that
+        // is itself behind answers with nothing, which the loop below reads as
+        // "caught up".
         const sent = this.peerManager.sendToOne(
           "getblocks",
           serializeGetBlocks(locator, stopHash),
+          { minBestHeight: this.chainHeight + 1 },
         );
         if (!sent) {
           // No ready peers, wait and retry
@@ -662,6 +710,7 @@ export class SPVClient {
         checkpointHashHex: (height) =>
           getCheckpointHash(height, this.network.name),
         genesisHashHex: this.network.genesisHash,
+        lastPowBlockHeight: this.network.lastPowBlock,
       });
     } catch (err) {
       if (err instanceof HeaderValidationError) {

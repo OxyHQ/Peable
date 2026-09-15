@@ -45,6 +45,9 @@ jobs:
       - name: Typecheck
         run: bunx tsc --noEmit
 
+      - name: Test
+        run: bun test src
+
       - name: Prebuild Android project
         run: bunx expo prebuild --platform android --clean
 
@@ -57,8 +60,12 @@ jobs:
             -Dorg.gradle.parallel=true
 
       - name: Collect and rename APKs
+        # `release_tag` is attacker-controllable workflow_dispatch input: pass it
+        # through the environment instead of interpolating it into the script.
+        env:
+          RELEASE_TAG: ${{ github.event.inputs.release_tag }}
         run: |
-          VERSION="${GITHUB_REF_NAME:-${{ github.event.inputs.release_tag || 'dev' }}}"
+          VERSION="${GITHUB_REF_NAME:-${RELEASE_TAG:-dev}}"
           mkdir -p apk-output
           for apk in $(find android/app/build/outputs/apk/release -name "*.apk"); do
             filename=$(basename "$apk")

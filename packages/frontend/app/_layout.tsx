@@ -28,6 +28,7 @@ import { KeyboardProvider as NativeKeyboardProvider } from "react-native-keyboar
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { OxyProvider } from "@oxy.so/services";
 import { BloomThemeProvider, useBloomTheme } from "@oxy.so/bloom/theme";
+import { ToastOutlet } from "@oxy.so/bloom/toast";
 import type { ThemeMode } from "@oxy.so/bloom/theme";
 import { ImageResolverProvider } from "@oxy.so/bloom/image-resolver";
 import { parseFairCoinURI } from "@fairco.in/core";
@@ -39,6 +40,8 @@ import { useExplorerRealtime } from "../src/hooks/useExplorerRealtime";
 import { useWalletStore } from "../src/wallet/wallet-store";
 import { useLockStore } from "../src/wallet/lock-store";
 import { LockGate } from "../src/ui/components/LockGate";
+import { ErrorBoundary } from "../src/ui/components/ErrorBoundary";
+import { installCrashHandler } from "../src/services/crash-log";
 import { getAutoLockTimeout } from "../src/storage/secure-store";
 import { SUPPORTED_LANGUAGES } from "../src/i18n";
 import { useLanguageStore } from "../src/i18n/store";
@@ -69,6 +72,10 @@ const TRANSLATED_LANGUAGE_CODES = SUPPORTED_LANGUAGES.filter(
 ).map((lang) => lang.code);
 const DEFAULT_LANGUAGE = "en";
 
+// Capture uncaught JS errors before anything else runs, so a crash during the
+// module-scope startup below is still recorded.
+installCrashHandler();
+
 // Start watching wallet transactions for incoming-payment alerts. Must run
 // before any wallet state is hydrated so the subscriber sees every new tx
 // beyond the initial snapshot.
@@ -93,6 +100,12 @@ SplashScreen.preventAutoHideAsync().catch(() => {
 });
 
 const THEME_MODE_KEY = "fairwallet_theme_mode";
+
+// Read the persisted theme at module scope, alongside `languageInitPromise`, so
+// the storage round-trip is already in flight before the first render instead of
+// being kicked off from inside it (a render-phase side effect that React 19
+// rejects with "state update on a component that hasn't mounted yet").
+const themeModePromise = getItemAsync(THEME_MODE_KEY).catch(() => null);
 
 // ---------------------------------------------------------------------------
 // Hooks
@@ -268,16 +281,16 @@ export default function RootLayout() {
   const language = useLanguageStore((s) => s.language);
 
   useEffect(() => {
-    let cancelled = false;
-    getItemAsync(THEME_MODE_KEY).then((stored) => {
-      if (cancelled) return;
+    let active = true;
+    themeModePromise.then((stored) => {
+      if (!active) return;
       if (stored === "light" || stored === "dark" || stored === "system") {
         setMode(stored);
       }
       setThemeReady(true);
     });
     return () => {
-      cancelled = true;
+      active = false;
     };
   }, []);
 
@@ -330,10 +343,19 @@ export default function RootLayout() {
                 value={(id, variant) => oxyServices.getFileDownloadUrl(id, variant)}
               >
                 <BottomSheetModalProvider>
+                  {/* Inside the theme provider so the fallback screen is themed,
+                      and around AppContent so a throw in any screen is contained
+                      instead of unmounting the app to a black screen. */}
+                  <ErrorBoundary>
                   <AppContent
                     key={language}
                     ready={fontsLoaded && themeReady && languageReady}
                   />
+                  </ErrorBoundary>
+                  {/* Global toast outlet (Bloom + sonner-native). Sibling of the
+                      app content so toasts survive the language-key remount and
+                      overlay every screen. */}
+                  <ToastOutlet />
                 </BottomSheetModalProvider>
               </ImageResolverProvider>
             </OxyProvider>
@@ -351,9 +373,13 @@ function AppContent({ ready }: { ready: boolean }) {
   // Overview's network stats tick live off the WebSocket.
   useExplorerRealtime();
 
-  // Hide splash screen once fonts and theme are loaded
+  // Hide the splash once fonts and theme are loaded. `ready` only ever flips
+  // false → true, so this runs exactly once.
   useEffect(() => {
-    if (ready) void SplashScreen.hideAsync();
+    if (!ready) return;
+    SplashScreen.hideAsync().catch(() => {
+      // Already hidden, or no activity attached yet (dev-client reload).
+    });
   }, [ready]);
 
   return (

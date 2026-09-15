@@ -5,11 +5,11 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { SafeAreaView } from "../src/ui/safe-area-view";
 import { useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
+import { toast } from "@oxy.so/bloom/toast";
 import { useWalletStore, getDatabase } from "../src/wallet/wallet-store";
 import {
   AmountText,
@@ -18,6 +18,9 @@ import {
   ScreenHeader,
 } from "../src/ui/components";
 import { useTheme } from "@oxy.so/bloom/theme";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
+import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
 import { t } from "../src/i18n";
 
 // ---------------------------------------------------------------------------
@@ -52,7 +55,6 @@ const SECTION_LABEL =
 
 export default function CoinControlScreen() {
   const router = useRouter();
-  const chainHeight = useWalletStore((s) => s.chainHeight);
   const existingSelection = useWalletStore((s) => s.selectedUTXOs);
   const setSelectedUTXOs = useWalletStore((s) => s.setSelectedUTXOs);
   const clearSelectedUTXOs = useWalletStore((s) => s.clearSelectedUTXOs);
@@ -68,25 +70,13 @@ export default function CoinControlScreen() {
     return map;
   });
 
-  const [message, setMessage] = useState<{
-    title: string;
-    description: string;
-  } | null>(null);
-  const messageControl = useDialogControl();
-
-  const showMessage = useCallback(
-    (title: string, description: string) => {
-      setMessage({ title, description });
-      messageControl.open();
-    },
-    [messageControl],
-  );
-
-  // Load UTXOs on layout (similar to useFocusEffect without useEffect)
-  const handleLayout = useCallback(() => {
-    if (loaded) return;
+  const loadUtxos = useCallback(() => {
     const db = getDatabase();
     if (!db) return;
+    // Read the tip at call time instead of depending on it: `chainHeight` is
+    // written once per merkle block, and a new `loadUtxos` identity rebuilds
+    // the whole gesture graph through the refresh hook on every one of them.
+    const tip = useWalletStore.getState().chainHeight;
 
     db.getUnspentUTXOs().then((rows) => {
       const items: UTXOItem[] = rows.map((row) => ({
@@ -96,14 +86,23 @@ export default function CoinControlScreen() {
         value: BigInt(row.value),
         blockHeight: row.block_height,
         confirmations:
-          chainHeight > 0 && row.block_height > 0
-            ? chainHeight - row.block_height + 1
+          tip > 0 && row.block_height > 0
+            ? tip - row.block_height + 1
             : 0,
       }));
       setUtxos(items);
       setLoaded(true);
     });
-  }, [loaded, chainHeight]);
+  }, []);
+
+  // Load once on layout (no useEffect); a pull re-reads, so confirmations catch
+  // up with the chain tip without leaving and re-entering the screen.
+  const handleLayout = useCallback(() => {
+    if (loaded) return;
+    loadUtxos();
+  }, [loaded, loadUtxos]);
+
+  const { gesture, scrollHandler, band } = usePullToRefreshBand(loadUtxos);
 
   const handleToggle = useCallback((txid: string, vout: number) => {
     const key = `${txid}:${vout}`;
@@ -141,13 +140,13 @@ export default function CoinControlScreen() {
     }
     setSelectedUTXOs(selectedUtxos);
     const count = selectedUtxos.length;
-    showMessage(
-      t("coinControl.applied.title"),
+    toast.success(
       count === 1
         ? t("coinControl.applied.description.one", { count })
         : t("coinControl.applied.description.other", { count }),
     );
-  }, [utxos, selected, setSelectedUTXOs, showMessage]);
+    router.back();
+  }, [utxos, selected, setSelectedUTXOs, router]);
 
   const handleClear = useCallback(() => {
     setSelected(new Map());
@@ -177,7 +176,16 @@ export default function CoinControlScreen() {
         }
         onBack={() => router.back()}
       />
-      <ScrollView className="flex-1" contentContainerClassName="px-5 pb-4">
+      {band}
+
+      <GestureDetector gesture={gesture}>
+        <Animated.ScrollView
+          className="flex-1"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerClassName="px-5 pb-4"
+          showsVerticalScrollIndicator={false}
+        >
         {/* Selection actions — borderless pills */}
         <View className="flex-row gap-2 mt-2 mb-5">
           <Pressable
@@ -278,7 +286,8 @@ export default function CoinControlScreen() {
             />
           </View>
         ) : null}
-      </ScrollView>
+        </Animated.ScrollView>
+      </GestureDetector>
 
       {/* Bottom action bar */}
       <View className="px-5 py-4 border-t border-border">
@@ -295,22 +304,6 @@ export default function CoinControlScreen() {
           disabled={selectedCount === 0}
         />
       </View>
-
-      <Dialog
-        control={messageControl}
-        placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[
-          {
-            label: t("common.ok"),
-            onPress: () => {
-              setMessage(null);
-              router.back();
-            },
-          },
-        ]}
-      />
     </SafeAreaView>
   );
 }

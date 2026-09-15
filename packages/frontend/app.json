@@ -81,6 +81,13 @@
         }
       ],
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Peable needs photo access to set a Pocket image.",
+          "cameraPermission": "Peable needs camera access to take a Pocket photo."
+        }
+      ],
+      [
         "expo-location",
         {
           "locationWhenInUsePermission": "Peable uses your location to show nearby places that accept FairCoin."

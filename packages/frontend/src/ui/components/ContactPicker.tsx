@@ -167,6 +167,7 @@ export function ContactPicker({
             keyExtractor={keyExtractor}
             className="flex-1"
             contentContainerClassName="pb-8"
+            showsVerticalScrollIndicator={false}
           />
         )}
       </View>

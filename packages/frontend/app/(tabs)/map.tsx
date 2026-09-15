@@ -452,7 +452,7 @@ export default function MapScreen() {
   // down in lockstep with the sheet clearing the search pill.
   const headerSpacerStyle = useAnimatedStyle(() => ({
     height: interpolate(
-      sheetAnimatedIndex.value,
+      sheetAnimatedIndex.get(),
       [SHEET_INDEX_MID, SHEET_INDEX_TOP],
       [0, sheetTopInset],
       Extrapolation.CLAMP,
@@ -833,6 +833,7 @@ export default function MapScreen() {
               data={placesWithDistance}
               keyExtractor={(item) => item.place.id}
               contentContainerStyle={LIST_CONTENT_CONTAINER_STYLE}
+              showsVerticalScrollIndicator={false}
               ListHeaderComponent={
                 <View>
                   <Animated.View style={headerSpacerStyle} />
@@ -1083,7 +1084,10 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
   );
 
   return (
-    <BottomSheetScrollView contentContainerStyle={contentStyle}>
+    <BottomSheetScrollView
+      contentContainerStyle={contentStyle}
+      showsVerticalScrollIndicator={false}
+    >
       {/* Hero image (or tinted category fallback) — top corners are rounded
        * to match the parent sheet's rounded top. We clip the wrapper View
        * with `overflow: hidden` so the child <Image> and the overlaid drag

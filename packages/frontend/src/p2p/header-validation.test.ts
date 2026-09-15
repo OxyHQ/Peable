@@ -14,11 +14,13 @@
 
 import { describe, test, expect } from "bun:test";
 import {
-  validateHeaderChain,
-  planChainUpdate,
   compactToTarget,
   isValidTargetBits,
-  proofOfWorkLimit,
+  getNetwork,
+} from "@fairco.in/core";
+import {
+  validateHeaderChain,
+  planChainUpdate,
   HeaderValidationError,
   type HeaderChainAnchor,
 } from "./header-validation";
@@ -64,7 +66,7 @@ function buildChain(
   return headers;
 }
 
-const POW_LIMIT = proofOfWorkLimit();
+const POW_LIMIT = getNetwork("mainnet").powLimit;
 
 // ---------------------------------------------------------------------------
 // Compact ("nBits") target decoding
@@ -162,10 +164,22 @@ describe("validateHeaderChain — linkage", () => {
   });
 });
 
+/**
+ * Render a hash the way checkpoint tables and `NetworkConfig.genesisHash` do:
+ * reversed relative to the internal `uint256` byte order the validator works
+ * in. Comparing the two conventions directly never matches, which is what made
+ * the checkpoint machinery silently inert before.
+ */
+function displayHex(hash: Uint8Array): string {
+  return Buffer.from(hash).reverse().toString("hex");
+}
+
 describe("validateHeaderChain — genesis & checkpoints", () => {
   test("first batch with no anchor must start at the known genesis", () => {
     const genesis = buildChain(1, 42, new Uint8Array(32))[0];
-    const genesisHashHex = Buffer.from(fakeHash(genesis)).toString("hex");
+    // Display order — the convention `NetworkConfig.genesisHash` and every
+    // explorer use, i.e. the reverse of the internal `uint256` bytes.
+    const genesisHashHex = displayHex(fakeHash(genesis));
     const headers = [genesis, ...buildChain(2, 43, fakeHash(genesis))];
     const result = validateHeaderChain(
       { headers, anchor: undefined, powLimit: POW_LIMIT, genesisHashHex },
@@ -212,7 +226,7 @@ describe("validateHeaderChain — genesis & checkpoints", () => {
       height: 4,
     };
     const headers = buildChain(2, 500, anchor.hash); // heights 5 and 6
-    const correct = Buffer.from(fakeHash(headers[1])).toString("hex");
+    const correct = displayHex(fakeHash(headers[1]));
     const checkpointHashHex = (height: number): string | null =>
       height === 6 ? correct : null;
     const result = validateHeaderChain(

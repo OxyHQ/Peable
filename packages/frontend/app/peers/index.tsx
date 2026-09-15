@@ -9,12 +9,16 @@
  */
 
 import { useCallback, useMemo, useState } from "react";
-import { View, Text, ScrollView } from "react-native";
+import { View, Text } from "react-native";
+import { GestureDetector } from "react-native-gesture-handler";
+import Animated from "react-native-reanimated";
 import { useFocusEffect, useRouter } from "expo-router";
 import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
 import type { PeerRow } from "../../src/storage/database";
-import { EmptyState } from "../../src/ui/components";
+import { EmptyState, ScreenHeader } from "../../src/ui/components";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
 import { Button } from "../../src/ui/components/Button";
+import { usePullToRefreshBand } from "../../src/hooks/usePullToRefreshBand";
 import { t } from "../../src/i18n";
 
 const DNS_SEEDS = [
@@ -73,14 +77,18 @@ export default function PeersScreen() {
 
   const [peers, setPeers] = useState<PeerRow[]>([]);
 
-  useFocusEffect(
-    useCallback(() => {
-      const db = getDatabase();
-      if (db) {
-        db.getKnownPeers(100).then(setPeers);
-      }
-    }, []),
-  );
+  const loadPeers = useCallback(() => {
+    const db = getDatabase();
+    if (!db) return;
+    db.getKnownPeers(100).then(setPeers);
+  }, []);
+
+  useFocusEffect(loadPeers);
+
+  // Pull down to re-read the known-peer cache, which the SPV client writes to
+  // as nodes complete their handshake.
+  const { gesture, scrollHandler, band } =
+    usePullToRefreshBand(loadPeers);
 
   // Qualitative connection state: a colored dot + big status word carry the
   // signal (no bordered chip). Offline = destructive, syncing = warning,
@@ -106,12 +114,24 @@ export default function PeersScreen() {
   const isTestnet = network === "testnet";
 
   return (
-    <ScrollView
+    <SafeAreaView
       className="flex-1 bg-background"
-      contentContainerClassName="pt-4 pb-10"
+      edges={["top", "bottom", "left", "right"]}
     >
+      <ScreenHeader title={t("peers.title")} onBack={() => router.back()} />
+      <GestureDetector gesture={gesture}>
+        <Animated.ScrollView
+          className="flex-1"
+          onScroll={scrollHandler}
+          scrollEventThrottle={16}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+      {/* Pull-to-refresh rainbow band — same as Home: inside the scroll view,
+          revealed on pull, never pinned. */}
+      {band}
       {/* ---- Status hero: colored dot + status word + connected count ---- */}
-      <View className="px-5">
+      <View className="px-5 pt-4">
         <View className="flex-row items-center gap-2.5">
           <View className={`w-2.5 h-2.5 rounded-full ${status.dot}`} />
           <Text className="text-foreground text-2xl font-semibold">
@@ -211,6 +231,8 @@ export default function PeersScreen() {
           ))}
         </View>
       </View>
-    </ScrollView>
+        </Animated.ScrollView>
+      </GestureDetector>
+    </SafeAreaView>
   );
 }

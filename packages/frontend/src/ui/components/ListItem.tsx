@@ -28,6 +28,7 @@ interface ListItemProps {
   iconColor?: string;
   iconBg?: string;
   onPress?: () => void;
+  onLongPress?: () => void;
   trailing?: React.ReactNode;
   destructive?: boolean;
   showChevron?: boolean;
@@ -42,6 +43,7 @@ export function ListItem({
   iconColor,
   iconBg = "bg-primary/10",
   onPress,
+  onLongPress,
   trailing,
   destructive = false,
   showChevron,
@@ -85,6 +87,7 @@ export function ListItem({
       leading={leading}
       trailing={trailingContent}
       onPress={onPress}
+      onLongPress={onLongPress}
       destructive={destructive}
       style={
         isLast
