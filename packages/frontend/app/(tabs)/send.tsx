@@ -11,11 +11,19 @@
 
 import { View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { useLocalSearchParams } from "expo-router";
+import { Redirect, useLocalSearchParams } from "expo-router";
+import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
 import { SendSheet } from "../../src/ui/sheets/SendSheet";
 import type { SocialRecipient } from "../../src/ui/components/SocialRecipientPicker";
 
 export default function SendScreen() {
+  // Hidden from a read-only host's rail; this catches a typed or linked URL.
+  // `/(tabs)` is inside the same shell, so it cannot bounce back here.
+  if (useWalletCapability() === "read-only") return <Redirect href="/(tabs)" />;
+  return <SendForm />;
+}
+
+function SendForm() {
   const insets = useSafeAreaInsets();
   // Deep link params: `address` / `amount` from a `faircoin:` URI or QR scan,
   // and `recipientId` / `recipientUsername` / … from `/@username`, which

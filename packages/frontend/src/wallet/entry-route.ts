@@ -13,10 +13,11 @@
  * balance and history are public chain data, the receive address derives from a
  * public xpub, and the payment history is the caller's own row in the gateway.
  *
- * The screen renders that surface IN PLACE rather than navigating to it. The
- * predecessor redirected to `/@you`, which put the browser on a screen whose
- * back arrow fell through to `(tabs)` — the wallet this branch exists to say is
- * impossible here.
+ * The screen sends it into `(tabs)`, which admits the read-only capability
+ * (`capability.ts`) and renders each tab's keyless branch. The first attempt
+ * redirected to `/@you`, whose back arrow fell through to a `(tabs)` that then
+ * admitted only an initialized wallet and bounced back; the second rendered in
+ * place, outside the shell, and lost the navigation with it.
  */
 
 import type { IdentityInitResult } from "./wallet-store";

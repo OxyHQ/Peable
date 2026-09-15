@@ -25,7 +25,7 @@
  */
 
 import { Tabs, TabList, TabTrigger, useTabSlot } from "expo-router/ui";
-import { Redirect, usePathname } from "expo-router";
+import { usePathname } from "expo-router";
 import { Screen } from "react-native-screens";
 import {
   View,
@@ -37,7 +37,8 @@ import {
 } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { t } from "../../src/i18n";
-import { useWalletStore } from "../../src/wallet/wallet-store";
+import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
+import { SignInView } from "../../src/ui/components/SignInView";
 import { useTheme } from "@oxy.so/bloom/theme";
 
 const MEDIUM_BREAKPOINT = 600;
@@ -114,6 +115,8 @@ type TabDef = {
   label: string;
 };
 
+const READ_ONLY_HIDDEN_TABS: ReadonlySet<string> = new Set(["send", "buy"]);
+
 function isIndexActive(pathname: string): boolean {
   return pathname === "/" || pathname === "/(tabs)" || pathname === "";
 }
@@ -127,7 +130,7 @@ function isActiveTab(pathname: string, href: TabDef["href"]): boolean {
 
 export default function TabLayout() {
   const theme = useTheme();
-  const walletInitialized = useWalletStore((state) => state.initialized);
+  const capability = useWalletCapability();
   const { width } = useWindowDimensions();
   const showRail = width >= MEDIUM_BREAKPOINT;
   const pathname = usePathname();
@@ -139,22 +142,32 @@ export default function TabLayout() {
   };
 
 
-  // Nothing here works without a wallet: every tab reads balances, addresses or
-  // the UTXO set. `app/index.tsx` already refuses to send a keyless surface
-  // into this group, but it is not the only way in — `[username].tsx`'s back
-  // handler and `NotFoundScreen` both `router.replace("/(tabs)")` with no
-  // capability check, and one of those shipped a browser straight into a wallet
-  // UI with no wallet behind it. The gate belongs where the group is ENTERED, so
-  // it holds no matter who navigates here.
+  // The gate belongs where the group is ENTERED, so it holds no matter who
+  // navigates here — `[username].tsx`'s back handler and `NotFoundScreen` both
+  // `router.replace("/(tabs)")` with no check of their own, and one of those
+  // once shipped a browser straight into a wallet UI with no wallet behind it.
   //
-  // Mirrors the one redirect `AuthRouter` allows itself in Mention: bounce OUT
-  // of a group the viewer must not be in. `/` then re-runs the entry decision
-  // and lands on the surface this host can actually support.
-  if (!walletInitialized) {
-    return <Redirect href="/" />;
+  // It asks about CAPABILITY, not `initialized`. A browser can never initialize
+  // the identity wallet, so gating on `initialized` kept every web visitor out
+  // of the shell and rendered the read-only surface outside it, with no rail
+  // and no Settings. `read-only` is admitted and each tab renders its keyless
+  // branch. `pending` renders nothing, so a reload on `/settings` is not
+  // decided before auth resolves.
+  //
+  // `none` — on this keyless host, that is signed out — renders sign-in IN
+  // PLACE. It used to `<Redirect href="/" />`, but inside this group `/` is
+  // `(tabs)/index`: the layout rendered the redirect again, forever, and React
+  // aborted with error #185. That is what `peable.to/settings` showed signed
+  // out. Once signed in, the capability becomes `read-only` and the tab the
+  // visitor asked for renders.
+  if (capability === "pending") {
+    return <View style={[styles.container, { backgroundColor: theme.colors.background }]} />;
+  }
+  if (capability === "none") {
+    return <SignInView />;
   }
 
-  const tabs: readonly TabDef[] = [
+  const allTabs: readonly TabDef[] = [
     { name: "index", href: "/", icon: "wallet", label: t("wallet.title") },
     {
       name: "send",
@@ -181,6 +194,14 @@ export default function TabLayout() {
       label: t("wallet.settings"),
     },
   ];
+
+  // Send and Buy both need a key — Send signs, Buy delivers to an address
+  // derived from the wallet's xpub — so a read-only host does not offer them.
+  // Their screens also redirect a read-only visitor home, for a typed URL.
+  const tabs =
+    capability === "read-only"
+      ? allTabs.filter((tab) => !READ_ONLY_HIDDEN_TABS.has(tab.name))
+      : allTabs;
 
   const renderTrigger = (tab: TabDef) => {
     const active = isActiveTab(pathname, tab.href);

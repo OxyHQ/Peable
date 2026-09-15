@@ -1,15 +1,16 @@
 /**
  * The wallet a browser CAN be: everything except spending.
  *
- * Rendered in place by `app/index.tsx` when the entry decision is `read-only`.
- * It does not navigate — its predecessor redirected to `/@you`, which put the
- * browser on a screen whose back arrow fell through to `(tabs)`, the very
- * wallet that branch exists to say is impossible here.
+ * Rendered by the `(tabs)` home and receive screens when the host's capability
+ * is `read-only` (`src/wallet/capability.ts`) — inside the shell, so the
+ * navigation rail and Settings are there like on any other host. Two earlier
+ * homes for it both lost that: a redirect to `/@you`, whose back arrow fell
+ * into a `(tabs)` that bounced it, and a render in place on `app/index.tsx`,
+ * outside the shell.
  *
- * It is laid out as the wallet HOME (`app/(tabs)/index.tsx`) — header, action
- * pills, Activity / Receive tabs — not as a profile page. An earlier version
- * led with a large avatar and the profile QR, so opening the app in a browser
- * looked like landing on someone's profile rather than on a wallet.
+ * Laid out as the wallet HOME (`app/(tabs)/index.tsx`): header, then activity.
+ * The receive code is the rail's Receive tab (`ReadOnlyReceiveView`). Not as a profile page — leading with a big avatar and
+ * the QR made opening the app in a browser look like landing on a profile.
  *
  * WHAT IT CAN SHOW, AND WHY NONE OF IT NEEDS A KEY. The receive code derives
  * from a public handle; the payment history is the caller's own rows in the
@@ -24,28 +25,22 @@
  * amounts still sitting unswept, and says whose number it is.
  */
 
-import { useState } from "react";
 import { View, Text, ScrollView, ActivityIndicator } from "react-native";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useQuery } from "@tanstack/react-query";
+import { useAuth } from "@oxy.so/services";
 import { useTheme } from "@oxy.so/bloom/theme";
-import { Tabs, TabsTrigger } from "@oxy.so/bloom/tabs";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
 import type { SocialPayment } from "@peable.to/shared-types";
 import { SOCIAL_PAY_NETWORK } from "../../pay/social-network";
 import { getMyPayments } from "../../services/gateway-client";
 import { fetchBalancesSat } from "../../services/explorer-address";
 import { SafeAreaView } from "../safe-area-view";
-import { ActionButton } from "./ActionButton";
-import { ArrowCircleDownIcon } from "./ArrowCircleDownIcon";
 import { Badge } from "./Badge";
 import { ProfileQRCard } from "./ProfileQRCard";
 import { UserAvatar } from "./UserAvatar";
 import { t, formatFairAmount } from "../../i18n";
 
 const HEADER_AVATAR_SIZE = 32;
-
-type ReadOnlyTab = "activity" | "receive";
 
 function counterpartyName(payment: SocialPayment): string {
   const { displayName, username } = payment.counterparty;
@@ -76,18 +71,38 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
   );
 }
 
-export function ReadOnlyWalletView({
-  username,
-  displayName,
-  avatarFileId,
-}: {
-  username: string;
-  displayName?: string;
-  avatarFileId?: string;
-}) {
+/**
+ * The read-only capability is only reachable signed in, so `username` is
+ * always present in practice. This exists so a malformed session renders a
+ * sentence instead of a blank screen.
+ */
+function MissingHandle() {
+  return (
+    <View className="flex-1 bg-background items-center justify-center px-8">
+      <Text className="text-foreground text-2xl text-center mb-3">{t("onboarding.webFallbackTitle")}</Text>
+      <Text className="text-muted-foreground text-base text-center">{t("onboarding.webFallbackSubtitle")}</Text>
+    </View>
+  );
+}
+
+/** The receive code a keyless host can offer: the profile link, as a QR. */
+export function ReadOnlyReceiveView() {
+  const { user } = useAuth();
+  if (!user?.username) return <MissingHandle />;
+  return (
+    <View className="items-center py-4">
+      <Text className="text-foreground text-2xl font-semibold text-center">{t("receive.title")}</Text>
+      <Text className="text-muted-foreground text-sm text-center mt-2 mb-8 leading-5 max-w-sm">
+        {t("profile.self")}
+      </Text>
+      <ProfileQRCard username={user.username} />
+    </View>
+  );
+}
+
+export function ReadOnlyWalletView() {
+  const { user } = useAuth();
   const theme = useTheme();
-  const [tab, setTab] = useState<ReadOnlyTab>("activity");
-  const receiveControl = useDialogControl();
 
   // NOT `useWalletStore((s) => s.network)`. No wallet initializes on this
   // surface — that is what makes it read-only — so the store never leaves its
@@ -113,6 +128,8 @@ export function ReadOnlyWalletView({
     enabled: addresses.length > 0,
   });
 
+  if (!user?.username) return <MissingHandle />;
+
   return (
     <View className="flex-1 bg-background">
       {/* ---- Header: same shape as the wallet home, with the capability named ---- */}
@@ -127,9 +144,9 @@ export function ReadOnlyWalletView({
           <View className="flex-row items-center gap-3">
             <Badge text={t("readOnly.badge")} variant="neutral" size="sm" />
             <UserAvatar
-              avatarFileId={avatarFileId}
-              displayName={displayName}
-              username={username}
+              avatarFileId={user.avatar ?? undefined}
+              displayName={user.name?.displayName ?? undefined}
+              username={user.username}
               size={HEADER_AVATAR_SIZE}
             />
           </View>
@@ -142,7 +159,7 @@ export function ReadOnlyWalletView({
         showsVerticalScrollIndicator={false}
       >
         {/* ---- Where the balance sits on the home: what this surface can't do ---- */}
-        <View className="px-4 pt-4 pb-5">
+        <View className="px-4 pt-4 pb-6">
           <View className="bg-surface rounded-2xl p-4 flex-row items-center">
             <MaterialCommunityIcons
               name="cellphone-key"
@@ -155,68 +172,32 @@ export function ReadOnlyWalletView({
           </View>
         </View>
 
-        {/* ---- Quick actions: only the one that needs no key ---- */}
-        <View className="flex-row gap-2.5 px-4 pb-4">
-          <ActionButton
-            icon="arrow-down"
-            label={t("wallet.receive")}
-            onPress={() => receiveControl.open()}
-            renderIcon={({ color, size }) => <ArrowCircleDownIcon color={color} size={size} />}
+        {/* ---- Activity ---- */}
+        <Text className="text-muted-foreground text-xs font-semibold uppercase px-4 mb-1">
+          {t("wallet.activity")}
+        </Text>
+        <Text className="text-muted-foreground text-xs leading-4 px-4 mb-2">
+          {t("readOnly.balanceNote")}
+        </Text>
+
+        {payments.isPending ? <ActivityIndicator className="mt-4" /> : null}
+
+        {payments.isError ? (
+          <Text className="text-destructive text-sm px-4">{t("readOnly.history.error")}</Text>
+        ) : null}
+
+        {payments.data && payments.data.payments.length === 0 ? (
+          <Text className="text-muted-foreground text-sm px-4">{t("readOnly.history.empty")}</Text>
+        ) : null}
+
+        {payments.data?.payments.map((payment) => (
+          <PaymentRow
+            key={payment.address}
+            payment={payment}
+            unspentSat={balances.data?.byAddress.get(payment.address)}
           />
-        </View>
-
-        <View className="border-b border-border px-4">
-          <Tabs
-            value={tab}
-            onValueChange={(next) => {
-              if (next === "activity" || next === "receive") setTab(next);
-            }}
-            variant="underline"
-            style={{ borderBottomWidth: 0 }}
-          >
-            <TabsTrigger value="activity" label={t("wallet.activity")} />
-            <TabsTrigger value="receive" label={t("wallet.receive")} />
-          </Tabs>
-        </View>
-
-        {tab === "receive" ? (
-          <View className="px-4 pt-8 items-center">
-            <ProfileQRCard username={username} />
-          </View>
-        ) : (
-          <View className="pt-3">
-            <Text className="text-muted-foreground text-xs leading-4 px-4 mb-2">
-              {t("readOnly.balanceNote")}
-            </Text>
-
-            {payments.isPending ? <ActivityIndicator className="mt-4" /> : null}
-
-            {payments.isError ? (
-              <Text className="text-destructive text-sm px-4">{t("readOnly.history.error")}</Text>
-            ) : null}
-
-            {payments.data && payments.data.payments.length === 0 ? (
-              <Text className="text-muted-foreground text-sm px-4">
-                {t("readOnly.history.empty")}
-              </Text>
-            ) : null}
-
-            {payments.data?.payments.map((payment) => (
-              <PaymentRow
-                key={payment.address}
-                payment={payment}
-                unspentSat={balances.data?.byAddress.get(payment.address)}
-              />
-            ))}
-          </View>
-        )}
+        ))}
       </ScrollView>
-
-      <Dialog control={receiveControl} placement="bottom" title={t("wallet.receive")}>
-        <View className="items-center pb-6">
-          <ProfileQRCard username={username} />
-        </View>
-      </Dialog>
     </View>
   );
 }

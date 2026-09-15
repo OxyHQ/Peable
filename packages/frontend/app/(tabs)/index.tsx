@@ -17,6 +17,8 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import * as WebBrowser from "expo-web-browser";
 import * as Localization from "expo-localization";
 import { useWalletStore } from "../../src/wallet/wallet-store";
+import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
+import { ReadOnlyWalletView } from "../../src/ui/components/ReadOnlyWalletView";
 import {
   BalanceDisplay,
   ActionButton,
@@ -118,6 +120,12 @@ function groupByDay(transactions: StoreTransaction[]): ActivityGroup[] {
 // ---------------------------------------------------------------------------
 
 export default function HomeScreen() {
+  // A read-only host (a browser: no keystore, so no wallet) gets the keyless
+  // home. Branching in a wrapper keeps `WalletHome`'s hooks unconditional.
+  return useWalletCapability() === "read-only" ? <ReadOnlyWalletView /> : <WalletHome />;
+}
+
+function WalletHome() {
   const router = useRouter();
   const theme = useTheme();
 
