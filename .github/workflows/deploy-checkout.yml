@@ -65,8 +65,11 @@ jobs:
           VITE_GATEWAY_URL: https://api.peable.to
           VITE_WALLET_DEEPLINK_SCHEME: peable
 
-      - uses: cloudflare/wrangler-action@9acf94ace14e7dc412b076f2c5c20b8ce93c79cd
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy packages/checkout/dist --project-name=peable-checkout --branch=main
+      # `bunx wrangler@4` DIRECTLY, never `cloudflare/wrangler-action`: its
+      # mid-deploy `bun i wrangler` is what failed the frontend deploy in run
+      # 35019486292. The reasoning is in deploy-frontend.yml.
+      - name: Deploy to Cloudflare Pages
+        run: bunx wrangler@4 pages deploy packages/checkout/dist --project-name=peable-checkout --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
