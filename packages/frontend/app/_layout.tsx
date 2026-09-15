@@ -409,9 +409,6 @@ function AppContent({ ready }: { ready: boolean }) {
         <Stack.Screen name="transaction/[txid]" options={{ headerShown: false }} />
         <Stack.Screen name="pay/[intent]" options={{ headerShown: false }} />
         <Stack.Screen name="buy" options={{ headerShown: false }} />
-        {/* Public `/@username` profile — see `app/[username].tsx`. Also the
-            catch-all for unknown single-segment URLs, which it 404s itself. */}
-        <Stack.Screen name="[username]" options={{ headerShown: false }} />
       </Stack>
       {/* Full-screen lock overlay: covers every authenticated route while the
           app is locked so no screen can be reached behind it (finding C1). */}

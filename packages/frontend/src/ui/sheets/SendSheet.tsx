@@ -13,7 +13,7 @@
  * `faircoin:` deep-link params in; the home pill opens it empty). The QR scanner
  * and contact picker still open as their own full-screen overlays on top.
  *
- * `recipient` arrives from the `/@username` profile page (`app/[username].tsx`),
+ * `recipient` arrives from the `/@username` profile page (`app/(tabs)/[username].tsx`),
  * which resolved the Oxy identity AND reserved the address before navigating —
  * so it comes in ALREADY resolved, alongside that address in `address`. It only
  * seeds the initial pick; from then on the picker and the clear button own the

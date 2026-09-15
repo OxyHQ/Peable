@@ -1,6 +1,13 @@
 /**
  * The public `/@username` profile — "Make a Peable to John on peable.to/@john".
  *
+ * SHELL. It lives in `(tabs)` as a route with no bar entry, so a signed-in
+ * visitor keeps the rail / bottom bar here like on any other screen (Mention
+ * nests its profile in its app shell the same way). It sat at `app/` root
+ * before, outside the tab navigator, and rendered with no navigation at all.
+ * A signed-out payer still gets it: the tabs layout lets this route through
+ * its capability gate and shows no bar to someone with no wallet.
+ *
  * ROUTING. expo-router has no partial-segment match, so there is no way to
  * write a route file that matches only `@`-prefixed paths. The technique here
  * is Mention's (`app/(app)/[username]/_layout.tsx` +
@@ -27,27 +34,28 @@
  */
 
 import { useCallback, useState } from "react";
-import { View, Text, ActivityIndicator, Platform, Linking } from "react-native";
+import { View, Text, ActivityIndicator, Platform, Linking, ScrollView } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import Constants from "expo-constants";
 import { useAuth } from "@oxy.so/services";
 import { isNotFoundError } from "@oxy.so/core";
-import { SafeAreaView } from "../src/ui/safe-area-view";
-import { NotFoundScreen } from "../src/ui/components/NotFoundScreen";
-import { ScreenHeader } from "../src/ui/components/ScreenHeader";
-import { UserAvatar } from "../src/ui/components/UserAvatar";
-import { ProfileQRCard } from "../src/ui/components/ProfileQRCard";
-import { Button } from "../src/ui/components/Button";
-import { oxyServices } from "../src/services/oxy-services";
-import { reserveNextSocialAddress, KeylessRecipientError } from "../src/services/gateway-client";
-import { useWalletStore } from "../src/wallet/wallet-store";
+import { SafeAreaView } from "../../src/ui/safe-area-view";
+import { NotFoundScreen } from "../../src/ui/components/NotFoundScreen";
+import { ScreenHeader } from "../../src/ui/components/ScreenHeader";
+import { UserAvatar } from "../../src/ui/components/UserAvatar";
+import { ProfileQRCard } from "../../src/ui/components/ProfileQRCard";
+import { Button } from "../../src/ui/components/Button";
+import { oxyServices } from "../../src/services/oxy-services";
+import { reserveNextSocialAddress, KeylessRecipientError } from "../../src/services/gateway-client";
+import { useWalletStore } from "../../src/wallet/wallet-store";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import {
   parseProfileHandle,
   decideProfilePayAction,
-} from "../src/pay/profile-route";
-import { FONT_PHUDU_BLACK } from "../src/utils/fonts";
-import { t } from "../src/i18n";
+} from "../../src/pay/profile-route";
+import { FONT_PHUDU_BLACK } from "../../src/utils/fonts";
+import { t } from "../../src/i18n";
 
 /** Matches ReceiveSheet's address QR, so the two read as one app. */
 
@@ -84,6 +92,7 @@ export default function ProfileRoute() {
 
 function ProfileScreen({ handle }: { handle: string }) {
   const router = useRouter();
+  const bottomInset = useTabScreenBottomInset();
   const { user, isAuthenticated, isAuthResolved, signIn } = useAuth();
   const walletInitialized = useWalletStore((s) => s.initialized);
   const network = useWalletStore((s) => s.network);
@@ -205,10 +214,17 @@ function ProfileScreen({ handle }: { handle: string }) {
   });
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
       <ScreenHeader title={`@${profile.username}`} onBack={handleBack} />
 
-      <View className="flex-1 items-center px-8 pt-6">
+      {/* Scrolls, and clears the floating tab bar: the self branch's QR card
+          alone is taller than a small phone's space under the header. */}
+      <ScrollView
+        className="flex-1"
+        contentContainerClassName="items-center px-8 pt-6"
+        contentContainerStyle={{ paddingBottom: bottomInset + 24 }}
+        showsVerticalScrollIndicator={false}
+      >
         <UserAvatar
           avatarFileId={profile.avatar ?? undefined}
           displayName={profile.name.displayName}
@@ -247,7 +263,7 @@ function ProfileScreen({ handle }: { handle: string }) {
             <Text className="text-destructive text-sm text-center mt-4">{payError}</Text>
           ) : null}
         </View>
-      </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

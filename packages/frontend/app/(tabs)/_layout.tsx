@@ -22,6 +22,7 @@
  */
 
 import { View } from "react-native";
+import { useSegments } from "expo-router";
 import { Tabs } from "expo-router/tabs";
 import { TabBarMinimizeProvider } from "@oxy.so/bloom/tab-bar";
 import { useTheme } from "@oxy.so/bloom/theme";
@@ -39,10 +40,19 @@ import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
  */
 const READ_ONLY_HIDDEN_TABS: ReadonlySet<WalletTabName> = new Set(["send", "buy"]);
 
+/**
+ * The public `/@username` profile (and, through the same dynamic segment, the
+ * 404 for any unknown single-segment URL). A payer arriving from a shared link
+ * has no session and must still see it.
+ */
+const PUBLIC_ROUTE = "[username]";
+
 export default function TabLayout() {
   const theme = useTheme();
   const layout = useWalletNavLayout();
   const capability = useWalletCapability();
+  const segments = useSegments();
+  const onPublicRoute = segments[segments.length - 1] === PUBLIC_ROUTE;
 
   // The gate belongs where the group is ENTERED, so it holds no matter who
   // navigates here — `[username].tsx`'s back handler and `NotFoundScreen` both
@@ -63,7 +73,12 @@ export default function TabLayout() {
   // only through `app/index.tsx`, and `lockWallet` tears the wallet down (so
   // `initialized` goes false) while the lock overlay covers the shell. Gating
   // it would swap the tabs for sign-in underneath the PIN pad.
-  if (!hasIdentityKeystore()) {
+  //
+  // The public profile is the exception: it renders for anyone, inside the
+  // navigator but with NO bar while there is no capability behind the viewer —
+  // a rail of wallet destinations means nothing to a signed-out payer.
+  const noShell = !hasIdentityKeystore() && (capability === "pending" || capability === "none");
+  if (!hasIdentityKeystore() && !onPublicRoute) {
     if (capability === "pending") {
       return <View style={{ flex: 1, backgroundColor: theme.colors.background }} />;
     }
@@ -79,11 +94,15 @@ export default function TabLayout() {
     <TabBarMinimizeProvider>
       <Tabs
         tabBar={(props) =>
-          layout === "rail" ? <WalletRail {...props} tabs={tabs} /> : <WalletTabBar {...props} tabs={tabs} />
+          noShell ? null : layout === "rail" ? (
+            <WalletRail {...props} tabs={tabs} />
+          ) : (
+            <WalletTabBar {...props} tabs={tabs} />
+          )
         }
         screenOptions={{
           headerShown: false,
-          tabBarPosition: layout === "rail" ? "left" : "bottom",
+          tabBarPosition: layout === "rail" && !noShell ? "left" : "bottom",
           sceneStyle: { backgroundColor: theme.colors.background },
         }}
       >
@@ -93,6 +112,7 @@ export default function TabLayout() {
         <Tabs.Screen name="receive" />
         <Tabs.Screen name="buy" />
         <Tabs.Screen name="settings" />
+        <Tabs.Screen name={PUBLIC_ROUTE} />
       </Tabs>
     </TabBarMinimizeProvider>
   );
