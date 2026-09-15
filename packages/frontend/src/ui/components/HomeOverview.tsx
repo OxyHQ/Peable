@@ -38,7 +38,6 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 export function HomeOverview(): React.JSX.Element {
-  const [mountedAt] = useState(() => Date.now());
   const network = useWalletStore((s) => s.network);
   const transactions = useWalletStore((s) => s.transactions);
 
