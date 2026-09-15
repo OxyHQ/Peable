@@ -3,7 +3,7 @@
  *
  * Lives here rather than in the route file because TWO routes render it:
  * `app/+not-found.tsx` for any URL expo-router cannot resolve, and
- * `app/[username].tsx` for the single-segment paths that root-level dynamic
+ * `app/(tabs)/[username].tsx` for the single-segment paths that root-level dynamic
  * route matches but that are not `@handle` profile URLs (see
  * `pay/profile-route.ts`).
  */

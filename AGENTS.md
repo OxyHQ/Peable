@@ -281,6 +281,11 @@ The tab chrome is Bloom — `Rail` in a wide browser window, the floating
 platform (harvested from FAIRWallet#9). The bar floats, so a tab screen clears
 it with `useTabScreenBottomInset()`; a new tab that skips it hides its last row.
 
+The public `/@username` profile (`app/(tabs)/[username].tsx`, also the 404
+catch-all) is a bar-less route INSIDE that navigator, so a signed-in visitor
+keeps the rail there. The gate lets it through for a signed-out payer and
+renders no bar for them; moving it back to `app/` root drops the shell.
+
 ## `packages/frontend` is FAIRWallet, and upstream is alive
 
 This repo's git history IS FAIRWallet's — the first commit is

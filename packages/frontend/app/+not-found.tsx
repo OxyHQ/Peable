@@ -3,7 +3,7 @@
  *
  * expo-router automatically renders this file for any URL that doesn't resolve
  * to a real route. The body lives in `src/ui/components/NotFoundScreen` because
- * `app/[username].tsx` renders the same 404 for the non-`@handle` single-segment
+ * `app/(tabs)/[username].tsx` renders the same 404 for the non-`@handle` single-segment
  * paths its dynamic segment also matches.
  */
 
