@@ -19,6 +19,7 @@ import * as Localization from "expo-localization";
 import { useWalletStore } from "../../src/wallet/wallet-store";
 import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
 import { ReadOnlyWalletView } from "../../src/ui/components/ReadOnlyWalletView";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import {
   BalanceDisplay,
   ActionButton,
@@ -127,6 +128,7 @@ export default function HomeScreen() {
 
 function WalletHome() {
   const router = useRouter();
+  const bottomInset = useTabScreenBottomInset();
   const theme = useTheme();
 
   const balance = useWalletStore((s) => s.balance);
@@ -309,7 +311,7 @@ function WalletHome() {
           onScroll={scrollHandler}
           scrollEventThrottle={16}
           className="flex-1"
-          contentContainerStyle={{ paddingBottom: 24 }}
+          contentContainerStyle={{ paddingBottom: bottomInset + 24 }}
           showsVerticalScrollIndicator={false}
         >
           {/* ---- Balance ---- */}

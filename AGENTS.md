@@ -255,10 +255,10 @@ probe result is `"no-keystore"` and the route is `"read-only"`.
 
 **Say what is absent, not which platform you are on — and gate the SHELL on
 capability, never on `initialized`.** `src/wallet/capability.ts` decides
-`full` / `read-only` / `pending` / `none`; `app/(tabs)/_layout.web.tsx` admits
+`full` / `read-only` / `pending` / `none`; `app/(tabs)/_layout.tsx` admits
 `read-only`, and each tab renders its keyless branch (home activity, profile
 receive code, settings without wallet sections). Send and Buy need a key, so
-the read-only rail omits them and their screens redirect home.
+the read-only rail and bar omit them and their screens redirect home.
 
 It took three tries, and each wrong one is easy to rebuild. First the entry
 named the platform (`"web-unsupported"`) and redirected to `/@you`, whose back
@@ -271,9 +271,15 @@ capability is what lets `app/index.tsx` send `read-only` into `(tabs)` like
 **Never `<Redirect href="/" />` from inside `(tabs)`.** A route group adds no
 URL segment, so `/` there resolves to `(tabs)/index`, the layout renders the
 redirect again, and React aborts with error #185 — `peable.to/settings` did
-exactly that signed out. The web layout renders `SignInView` in place for
-`none` instead. `(tabs)` still refuses a keystore host with no wallet, because
-`app/index.tsx` is not the only way in.
+exactly that signed out. The layout renders `SignInView` in place for `none` on
+a keyless host instead. A keystore host is deliberately NOT gated there:
+`lockWallet` drops `initialized` while the PIN overlay covers the shell, and a
+gate would swap the tabs for sign-in underneath it.
+
+The tab chrome is Bloom — `Rail` in a wide browser window, the floating
+`TabBar` everywhere else — from one `expo-router/tabs` navigator on every
+platform (harvested from FAIRWallet#9). The bar floats, so a tab screen clears
+it with `useTabScreenBottomInset()`; a new tab that skips it hides its last row.
 
 ## `packages/frontend` is FAIRWallet, and upstream is alive
 

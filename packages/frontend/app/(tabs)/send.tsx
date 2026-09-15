@@ -13,6 +13,7 @@ import { View, ScrollView } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Redirect, useLocalSearchParams } from "expo-router";
 import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import { SendSheet } from "../../src/ui/sheets/SendSheet";
 import type { SocialRecipient } from "../../src/ui/components/SocialRecipientPicker";
 
@@ -25,6 +26,7 @@ export default function SendScreen() {
 
 function SendForm() {
   const insets = useSafeAreaInsets();
+  const bottomInset = useTabScreenBottomInset();
   // Deep link params: `address` / `amount` from a `faircoin:` URI or QR scan,
   // and `recipientId` / `recipientUsername` / … from `/@username`, which
   // resolved the Oxy identity and reserved `address` before navigating here.
@@ -58,7 +60,7 @@ function SendForm() {
         className="flex-1"
         contentContainerStyle={{
           paddingTop: insets.top + 12,
-          paddingBottom: insets.bottom + 24,
+          paddingBottom: bottomInset + 24,
           paddingHorizontal: 16,
         }}
         keyboardShouldPersistTaps="handled"

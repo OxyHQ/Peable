@@ -13,7 +13,7 @@
  *   pending    keyless host, auth not resolved yet — render nothing rather
  *              than bouncing a deep link (`/settings`) back to `/`
  *   none       no shell for this viewer: on a keyless host that means signed
- *              out, and the web layout renders sign-in in place
+ *              out, and the tabs layout renders sign-in in place
  *
  * Pure so the table is unit-testable; `use-wallet-capability.ts` feeds it.
  */

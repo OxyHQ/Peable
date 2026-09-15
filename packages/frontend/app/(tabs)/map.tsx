@@ -76,6 +76,7 @@ import {
   type PlaceCategory,
 } from "../../src/data/places";
 import { EmptyState } from "../../src/ui/components/EmptyState";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import { hapticSelection } from "../../src/utils/haptics";
 import { COIN_TICKER } from "@fairco.in/core";
 
@@ -140,7 +141,6 @@ const SHEET_SNAP_POINTS: (string | number)[] = ["15%", "62%", "100%"];
 const SHEET_INDEX_MID = 1;
 const SHEET_INDEX_TOP = 2;
 
-const LIST_CONTENT_CONTAINER_STYLE = { paddingBottom: 24 } as const;
 
 // Fallback map center when PLACES is empty (Madrid).
 const FALLBACK_CENTER: Position = [-3.7038, 40.4168];
@@ -304,6 +304,9 @@ function formatDistanceLabel(km: number | null): string | null {
 export default function MapScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  // The floating tab bar covers the bottom of the sheet; its rows clear it.
+  const bottomInset = useTabScreenBottomInset();
+  const listContentStyle = useMemo(() => ({ paddingBottom: bottomInset + 24 }), [bottomInset]);
   const theme = useTheme();
   const { height: windowHeight } = useWindowDimensions();
 
@@ -832,7 +835,7 @@ export default function MapScreen() {
               renderScrollComponent={BottomSheetFlashListScrollable}
               data={placesWithDistance}
               keyExtractor={(item) => item.place.id}
-              contentContainerStyle={LIST_CONTENT_CONTAINER_STYLE}
+              contentContainerStyle={listContentStyle}
               showsVerticalScrollIndicator={false}
               ListHeaderComponent={
                 <View>
@@ -1054,8 +1057,8 @@ interface PlaceDetailProps {
 }
 
 function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
+  const bottomInset = useTabScreenBottomInset();
   const theme = useTheme();
-  const insets = useSafeAreaInsets();
   const distanceLabel = formatDistanceLabel(km);
   const heroIcon = CATEGORY_ICON[place.category];
 
@@ -1079,8 +1082,8 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
   }, [place.website]);
 
   const contentStyle = useMemo(
-    () => ({ paddingBottom: insets.bottom + 16 }),
-    [insets.bottom],
+    () => ({ paddingBottom: bottomInset + 16 }),
+    [bottomInset],
   );
 
   return (

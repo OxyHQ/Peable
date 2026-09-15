@@ -27,6 +27,7 @@ import { useTheme } from "@oxy.so/bloom/theme";
 import { parseFairToUnits } from "@fairco.in/core";
 import { Button, EmptyState, ScreenHeader } from "../../src/ui/components";
 import { SafeAreaView } from "../../src/ui/safe-area-view";
+import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
 import { BuyAmountInput } from "../../src/components/buy/AmountInput";
 import {
   PaymentMethodPicker,
@@ -115,6 +116,7 @@ export default function BuyScreen() {
 
 function BuyForm() {
   const router = useRouter();
+  const bottomInset = useTabScreenBottomInset();
   const theme = useTheme();
   const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
   const activeWalletId = useWalletStore((s) => s.activeWalletId);
@@ -324,13 +326,13 @@ function BuyForm() {
       {/* Fixed footer CTA — a flex sibling of the scroll body, so it sits just
           above the bottom safe inset (handled by SafeAreaView) with no absolute
           positioning or bottom-padding hack. */}
-      {/* Buy is a TAB: the native tab bar already occupies the bottom safe
-          area, so the footer uses a fixed padding — adding insets.bottom here
-          would double-count and float the button above the tab bar. */}
+      {/* Buy is a TAB, and the tab bar FLOATS over the screen, so the footer
+          clears it by the bar's footprint (which already includes the bottom
+          safe area) — see `useTabScreenBottomInset`. */}
       <View className="border-t border-border">
         <View
-          className="w-full self-center px-4 pt-3 pb-3"
-          style={{ maxWidth: CONTENT_MAX_WIDTH }}
+          className="w-full self-center px-4 pt-3"
+          style={{ maxWidth: CONTENT_MAX_WIDTH, paddingBottom: bottomInset + 12 }}
         >
           <Button
             title={t("buy.cta.getInstructions")}

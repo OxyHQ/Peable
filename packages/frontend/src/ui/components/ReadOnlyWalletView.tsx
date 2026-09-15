@@ -35,6 +35,7 @@ import { SOCIAL_PAY_NETWORK } from "../../pay/social-network";
 import { getMyPayments } from "../../services/gateway-client";
 import { fetchBalancesSat } from "../../services/explorer-address";
 import { SafeAreaView } from "../safe-area-view";
+import { useTabScreenBottomInset } from "../navigation/tabs";
 import { Badge } from "./Badge";
 import { ProfileQRCard } from "./ProfileQRCard";
 import { UserAvatar } from "./UserAvatar";
@@ -103,6 +104,8 @@ export function ReadOnlyReceiveView() {
 export function ReadOnlyWalletView() {
   const { user } = useAuth();
   const theme = useTheme();
+  // The tab bar floats over the screen; see `useTabScreenBottomInset`.
+  const bottomInset = useTabScreenBottomInset();
 
   // NOT `useWalletStore((s) => s.network)`. No wallet initializes on this
   // surface — that is what makes it read-only — so the store never leaves its
@@ -155,7 +158,7 @@ export function ReadOnlyWalletView() {
 
       <ScrollView
         className="flex-1"
-        contentContainerStyle={{ paddingBottom: 24 }}
+        contentContainerStyle={{ paddingBottom: bottomInset + 24 }}
         showsVerticalScrollIndicator={false}
       >
         {/* ---- Where the balance sits on the home: what this surface can't do ---- */}
