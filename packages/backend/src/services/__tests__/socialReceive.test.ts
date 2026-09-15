@@ -84,6 +84,51 @@ test("resolveIdentityPublicKey returns null for a keyless (custodial) user", asy
   expect(key).toBeNull();
 });
 
+// A document can list more than one identity key — a linked device adds one.
+// The account's own key is `#key-1`, and it is chosen BY NAME: picking
+// whichever came first meant the address a payer derives could belong to a key
+// the recipient's device does not hold, decided by list order.
+test("resolveIdentityPublicKey takes the account's own #key-1, not whichever key is listed first", async () => {
+  resolveDidMock.mockImplementationOnce(async (userId: string) => {
+    const doc = didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+    const accountKey = doc.verificationMethod[0]!;
+    return {
+      ...doc,
+      verificationMethod: [
+        { ...accountKey, id: `did:web:oxy.so:u:${userId}#device-7` },
+        accountKey,
+      ],
+    };
+  });
+
+  const key = await resolveIdentityPublicKey("user_two_keys");
+
+  expect(key).not.toBeNull();
+  // Same bytes as the account key, which is the one the recipient's device holds.
+  expect(Buffer.from(key!).toString("hex")).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+});
+
+test("resolveIdentityPublicKey returns null when the document lists no account key", async () => {
+  resolveDidMock.mockImplementationOnce(async (userId: string) => {
+    const doc = didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+    return {
+      ...doc,
+      verificationMethod: [{ ...doc.verificationMethod[0]!, id: `did:web:oxy.so:u:${userId}#device-7` }],
+    };
+  });
+
+  expect(await resolveIdentityPublicKey("user_device_key_only")).toBeNull();
+});
+
+test("the cursor records the identity key its addresses came from", async () => {
+  await reserveNextSocialAddress("user_key_recorded", "testnet");
+
+  const cursor = await getReservedThrough("user_key_recorded", "testnet");
+
+  expect(cursor.reservedThrough).toBe(1);
+  expect(cursor.identityPublicKey).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+});
+
 test("reserveNextSocialAddress claims index 1, 2, 3 in order with distinct addresses (index 0 never handed out)", async () => {
   const first = await reserveNextSocialAddress("user_a", "testnet");
   const second = await reserveNextSocialAddress("user_a", "testnet");
@@ -115,23 +160,23 @@ test("concurrent first-time reservations for the same user never collide on an i
 });
 
 test("getReservedThrough returns 0 for a user with no cursor yet", async () => {
-  expect(await getReservedThrough("user_no_cursor", "testnet")).toBe(0);
+  expect((await getReservedThrough("user_no_cursor", "testnet")).reservedThrough).toBe(0);
 });
 
 test("getReservedThrough tracks the highest index reserveNextSocialAddress has EVER handed out, without reserving another one", async () => {
   await reserveNextSocialAddress("user_b", "testnet");
   await reserveNextSocialAddress("user_b", "testnet");
 
-  expect(await getReservedThrough("user_b", "testnet")).toBe(2);
+  expect((await getReservedThrough("user_b", "testnet")).reservedThrough).toBe(2);
   // Read-only — calling it again does not advance the cursor.
-  expect(await getReservedThrough("user_b", "testnet")).toBe(2);
+  expect((await getReservedThrough("user_b", "testnet")).reservedThrough).toBe(2);
 
   await reserveNextSocialAddress("user_b", "testnet");
-  expect(await getReservedThrough("user_b", "testnet")).toBe(3);
+  expect((await getReservedThrough("user_b", "testnet")).reservedThrough).toBe(3);
 });
 
 test("getReservedThrough is scoped per network", async () => {
   await reserveNextSocialAddress("user_c", "testnet");
-  expect(await getReservedThrough("user_c", "testnet")).toBe(1);
-  expect(await getReservedThrough("user_c", "mainnet")).toBe(0);
+  expect((await getReservedThrough("user_c", "testnet")).reservedThrough).toBe(1);
+  expect((await getReservedThrough("user_c", "mainnet")).reservedThrough).toBe(0);
 });

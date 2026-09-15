@@ -28,6 +28,14 @@ export interface SocialReceiveCursorResponse {
    * caller's stable default address and is never reserved through this flow.
    */
   reservedThrough: number;
+  /**
+   * The identity public key (hex) those addresses were derived from, as the
+   * backend saw it. A device compares it with the key it derives from itself:
+   * if they differ, its watch window is in the wrong tree and widening it only
+   * watches more addresses nobody is paying into. `null` for a caller with no
+   * cursor yet, and for one created before the backend recorded the key.
+   */
+  identityPublicKey: string | null;
 }
 
 /** Where a transaction's counterparty identity came from (spec §4.8). */

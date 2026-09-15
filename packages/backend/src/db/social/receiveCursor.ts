@@ -37,7 +37,8 @@ import { uuidv7 } from '@oxy.so/db';
 export async function reserveNextSocialReceiveIndex(
   db: DatabaseOrTransaction,
   oxyUserId: string,
-  network: NetworkType
+  network: NetworkType,
+  identityPublicKey: string
 ): Promise<number> {
   const [row] = await db
     .insert(socialReceiveCursors)
@@ -46,10 +47,17 @@ export async function reserveNextSocialReceiveIndex(
       oxyUserId,
       network,
       nextDerivationIndex: SOCIAL_RECEIVE_FIRST_FRESH_INDEX + 1,
+      identityPublicKey,
     })
     .onConflictDoUpdate({
       target: [socialReceiveCursors.oxyUserId, socialReceiveCursors.network],
-      set: { nextDerivationIndex: sql`${socialReceiveCursors.nextDerivationIndex} + 1` },
+      // The key is written on every reservation, not only on the insert: it is
+      // the key THIS address was derived from, and a recipient whose account
+      // key changes must not leave the cursor claiming the previous one.
+      set: {
+        nextDerivationIndex: sql`${socialReceiveCursors.nextDerivationIndex} + 1`,
+        identityPublicKey,
+      },
     })
     .returning({ index: sql<number>`${socialReceiveCursors.nextDerivationIndex} - 1` });
 
@@ -69,14 +77,21 @@ export async function reserveNextSocialReceiveIndex(
  * The column holds the NEXT index, so the highest already reserved is one less.
  * `FIRST_FRESH_INDEX - 1` when no cursor exists, which is the same answer as
  * "no address has been reserved", stated in the same units.
+ *
+ * Returns the identity key those addresses were derived from alongside it, so
+ * the caller's device can compare it with the key it derives from itself. It is
+ * `null` for a cursor that predates the column, and for a user with no cursor.
  */
 export async function readReservedThrough(
   db: DatabaseOrTransaction,
   oxyUserId: string,
   network: NetworkType
-): Promise<number> {
+): Promise<{ reservedThrough: number; identityPublicKey: string | null }> {
   const [row] = await db
-    .select({ nextDerivationIndex: socialReceiveCursors.nextDerivationIndex })
+    .select({
+      nextDerivationIndex: socialReceiveCursors.nextDerivationIndex,
+      identityPublicKey: socialReceiveCursors.identityPublicKey,
+    })
     .from(socialReceiveCursors)
     .where(
       and(
@@ -85,6 +100,11 @@ export async function readReservedThrough(
       )
     );
 
-  if (!row) return SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1;
-  return row.nextDerivationIndex - 1;
+  if (!row) {
+    return { reservedThrough: SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1, identityPublicKey: null };
+  }
+  return {
+    reservedThrough: row.nextDerivationIndex - 1,
+    identityPublicKey: row.identityPublicKey,
+  };
 }

@@ -1,4 +1,4 @@
-import { getNetwork, hexToBytes, deriveSocialReceiveAddress } from "@fairco.in/core";
+import { bytesToHex, getNetwork, hexToBytes, deriveSocialReceiveAddress } from "@fairco.in/core";
 import type { NetworkType } from "@fairco.in/core";
 import { oxyClient } from "@oxy.so/core";
 import { getDb } from "../db/postgres";
@@ -23,18 +23,30 @@ export const SOCIAL_RECEIVE_FIRST_FRESH_INDEX = 1;
 const SECP256K1_VERIFICATION_METHOD_TYPE = "EcdsaSecp256k1VerificationKey2019";
 
 /**
+ * Fragment of the account's OWN identity key in a DID document. Oxy emits it
+ * first (`buildDidDocument`), then any additional linked-device keys.
+ */
+const ACCOUNT_KEY_FRAGMENT = "#key-1";
+
+/**
  * Resolve `oxyUserId`'s identity secp256k1 public key from their DID document
  * (`GET /u/:userId/did.json`, public — no auth). Returns `null` for a
  * KEYLESS (custodial) account: no `identity` auth method, hence no
  * `EcdsaSecp256k1VerificationKey2019` verification method to derive from.
+ *
+ * It picks `#key-1` BY NAME — the account's own key. A document may list more
+ * than one identity key, and taking whichever came first meant the address a
+ * payer derives could belong to a key the recipient's device does not hold:
+ * money at an address nobody can spend, chosen by list order.
  */
 export async function resolveIdentityPublicKey(
   oxyUserId: string,
 ): Promise<Uint8Array | null> {
   const doc = await oxyClient.resolveDid(oxyUserId);
-  const vm = doc.verificationMethod.find(
-    (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE,
+  const secp256k1 = doc.verificationMethod.filter(
+    (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE && "publicKeyHex" in entry,
   );
+  const vm = secp256k1.find((entry) => entry.id.endsWith(ACCOUNT_KEY_FRAGMENT));
   if (!vm || !("publicKeyHex" in vm)) {
     return null;
   }
@@ -70,7 +82,15 @@ export async function reserveNextSocialAddress(
     return null;
   }
 
-  const index = await reserveNextSocialReceiveIndex(getDb(), oxyUserId, network);
+  // The key the address was derived from is recorded with the cursor, so the
+  // recipient's device can ask "is this still the key I derive from?" instead
+  // of widening a watch window in the wrong tree.
+  const index = await reserveNextSocialReceiveIndex(
+    getDb(),
+    oxyUserId,
+    network,
+    bytesToHex(identityPublicKey),
+  );
   const address = deriveSocialReceiveAddress(identityPublicKey, index, getNetwork(network));
   return { index, address };
 }
@@ -86,10 +106,13 @@ export async function reserveNextSocialAddress(
  * `reserveNextSocialAddress`'s claim above), so the highest index already
  * reserved is one less than that. `0` when no cursor exists yet (the user has
  * never had an address reserved on this network).
+ *
+ * Carries the identity key those addresses were derived from, so the caller's
+ * device can check it still derives from the same one.
  */
 export async function getReservedThrough(
   oxyUserId: string,
   network: NetworkType,
-): Promise<number> {
+): Promise<{ reservedThrough: number; identityPublicKey: string | null }> {
   return readReservedThrough(getDb(), oxyUserId, network);
 }

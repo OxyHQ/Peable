@@ -7,6 +7,10 @@ import {
 } from '../social/receiveCursor';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX as SERVICE_FIRST_FRESH_INDEX } from '../../services/socialReceive';
+
+/** Two identity public keys, as hex — the cursor stores whatever it is given. */
+const KEY_A = '02' + 'aa'.repeat(32);
+const KEY_B = '02' + 'bb'.repeat(32);
 import {
   POSTGRES_TESTS_ENABLED,
   createSuiteDatabase,
@@ -53,7 +57,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('creates the cursor on first use and hands out the first fresh index', async () => {
     const oxyUserId = uuidv7();
 
-    const reserved = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
+    const reserved = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
     expect(reserved).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX);
     expect(typeof reserved).toBe('number');
@@ -66,9 +70,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('hands out consecutive indices as NUMBERS across the create and update branches', async () => {
     const oxyUserId = uuidv7();
 
-    const first = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
-    const second = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
-    const third = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
+    const first = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const second = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const third = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
     expect([first, second, third]).toEqual([1, 2, 3]);
     expect(typeof second).toBe('number');
@@ -86,7 +90,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
 
     const reserved = await Promise.all(
       Array.from({ length: concurrency }, () =>
-        reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet')
+        reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A)
       )
     );
 
@@ -101,9 +105,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('keeps a separate counter per network', async () => {
     const oxyUserId = uuidv7();
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
-    const mainnetFirst = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'mainnet');
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const mainnetFirst = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'mainnet', KEY_A);
 
     expect(mainnetFirst).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX);
   });
@@ -111,22 +115,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('reads back the highest index reserved, without reserving another', async () => {
     const oxyUserId = uuidv7();
 
-    expect(await readReservedThrough(suite!.db, oxyUserId, 'testnet')).toBe(
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
       SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1
     );
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
-    expect(await readReservedThrough(suite!.db, oxyUserId, 'testnet')).toBe(2);
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
+      2
+    );
     // Reading did not advance anything.
-    expect(await readReservedThrough(suite!.db, oxyUserId, 'testnet')).toBe(2);
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
+      2
+    );
     expect(await nextIndex(oxyUserId)).toBe(3);
   });
 
   it('refuses a second cursor for the same user and network', async () => {
     const oxyUserId = uuidv7();
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet');
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
     let raised: unknown;
     try {
@@ -172,5 +180,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
       raised = error;
     }
     expect(isCheckViolation(raised, 'social_receive_cursors_network_check')).toBe(true);
+  });
+  /**
+   * The address is a function of the identity key, so the cursor has to say
+   * which key produced it. Without that, a device asking "how far should I
+   * watch?" gets a number and no way to tell whether it is watching the right
+   * tree at all.
+   */
+  it('records the identity key the addresses were derived from', async () => {
+    const oxyUserId = uuidv7();
+
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
+      KEY_A
+    );
+  });
+
+  it('follows the key the latest reservation used', async () => {
+    const oxyUserId = uuidv7();
+
+    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const second = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_B);
+
+    // The counter is untouched by the key changing: it counts addresses.
+    expect(second).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX + 1);
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
+      KEY_B
+    );
+  });
+
+  it('reports no key for a user who has never had an address reserved', async () => {
+    expect((await readReservedThrough(suite!.db, uuidv7(), 'testnet')).identityPublicKey).toBeNull();
   });
 });

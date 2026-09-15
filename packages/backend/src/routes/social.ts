@@ -10,6 +10,7 @@ import type {
   SocialPaymentsResponse,
   SocialReceiveCursorResponse,
 } from "@peable.to/shared-types";
+import { config } from "../config";
 import { reserveNextSocialAddress, getReservedThrough } from "../services/socialReceive";
 import { getDb } from "../db/postgres";
 import {
@@ -108,6 +109,20 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       }
       const { network } = parsed.data;
 
+      // The network gate lives HERE, not only in the wallet. Social-receive
+      // addresses are derived from the recipient's identity key, and a payer
+      // reaching a network this deployment has not cleared for that derivation
+      // sends money to an address nobody has proven the recipient can spend.
+      if (network !== config.socialPayNetwork) {
+        sendError(
+          res,
+          403,
+          "invalid_request_error",
+          `paying by @username is not enabled on ${network}`,
+        );
+        return;
+      }
+
       const { username } = req.params;
       if (!username) {
         sendError(res, 422, "invalid_request_error", "username is required");
@@ -200,8 +215,11 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       // Read-only: reserves nothing, so a device can poll it freely to
       // resync its watch window (spec cursor-sync fix).
-      const reservedThrough = await getReservedThrough(oxyUserId, parsed.data.network);
-      const body: SocialReceiveCursorResponse = { reservedThrough };
+      const { reservedThrough, identityPublicKey } = await getReservedThrough(
+        oxyUserId,
+        parsed.data.network,
+      );
+      const body: SocialReceiveCursorResponse = { reservedThrough, identityPublicKey };
       res.status(200).json(body);
     }),
   );

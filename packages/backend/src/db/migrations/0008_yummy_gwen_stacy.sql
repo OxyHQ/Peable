@@ -1,0 +1,13 @@
+-- oxy:deploy-phase=pre
+-- The identity key a cursor's addresses were derived from.
+--
+-- `pre`: it is a nullable column with no default and no constraint, so the
+-- running image keeps serving through it — the old code simply never writes it
+-- — and the new image can rely on it from its first request.
+--
+-- NULLABLE and never backfilled, deliberately. The key that produced an
+-- existing cursor's addresses is not recoverable from anything stored: only the
+-- index was kept. A default would be a guess about money, so those rows stay
+-- honest about not knowing, and a device reading `null` learns nothing rather
+-- than the wrong thing.
+ALTER TABLE "social_receive_cursors" ADD COLUMN "identity_public_key" text;

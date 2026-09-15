@@ -27,6 +27,18 @@ export interface AppConfig {
   /** Network the gateway operates on (`mainnet` | `testnet`). */
   network: NetworkType;
   /**
+   * The ONE network on which this deployment mints social-receive addresses
+   * (pay by `@username`).
+   *
+   * Separate from `network`, and defaulting to `testnet`, because it is a
+   * different question: the gateway can settle merchant payments on mainnet
+   * while person-to-person addresses — derived from a recipient's identity key
+   * rather than from a registered xpub — stay off it until that derivation has
+   * cleared its release gates. Until this file said so, the restriction lived
+   * only in the wallet, so any other client could reserve a mainnet address.
+   */
+  socialPayNetwork: NetworkType;
+  /**
    * PostgreSQL connection string. REQUIRED — there is no default and no
    * `undefined` case.
    *
@@ -219,6 +231,7 @@ export function loadConfig(
       DEFAULT_EXPLORER_BASE_URL,
     ),
     network: readNetwork(env.PEABLE_NETWORK),
+    socialPayNetwork: readNetwork(env.PEABLE_SOCIAL_PAY_NETWORK ?? "testnet"),
     databaseUrl: readRequired(env.DATABASE_URL, "DATABASE_URL"),
     port: readPort(env.PORT),
     allowedOrigins: readOrigins(env.PEABLE_ALLOWED_ORIGINS),
