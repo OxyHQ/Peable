@@ -239,9 +239,10 @@ do not add an Oxy auth requirement to a payer-facing route.
 
 Only SIGNING is native-only, and the reason is narrow: the identity wallet's
 seed derives from a key in the on-device keystore (`@oxy.so/core` keyManager ->
-`expo-secure-store`), and a browser has none. `Platform.OS === "web"` in
-`wallet-store.ts`'s `initializeFromIdentity` is the proxy for that one question
-and is the ONLY platform gate in the store — `createNewWallet`, `importWallet`
+`expo-secure-store`), and a browser has none. `hasIdentityKeystore()`
+(`src/wallet/keystore.ts`, a `Platform.OS` proxy) answers that one question for
+both `wallet-store.ts`'s `initializeFromIdentity` and the shell's capability
+gate, and is the ONLY platform gate in the store — `createNewWallet`, `importWallet`
 and `importWatchOnly` carry none, and `storage/kv-store.ts` has a real web
 branch. Peable's fork deleted FAIRWallet's create/restore SCREENS (`4287418`),
 not the capability.
@@ -252,14 +253,27 @@ public chain data, the receive address derives from a public xpub, and
 addresses, which is the only payment view a keyless surface can ask for. So the
 probe result is `"no-keystore"` and the route is `"read-only"`.
 
-**Say what is absent, not which platform you are on, and never redirect to say
-it.** The predecessor named the platform (`"web-unsupported"`) and acted on it
-by redirecting to `/@you`; that landed on a screen whose back arrow falls
-through to `router.replace("/(tabs)")`, and since a route group adds no URL
-segment, `(tabs)` and `app/index.tsx` both answer `/` — so the entry decision
-re-ran and bounced back, flashing a wallet UI with no wallet behind it. Render
-capability branches in place. `(tabs)` refuses to mount without an initialized
-wallet, because `app/index.tsx` is not the only way in.
+**Say what is absent, not which platform you are on — and gate the SHELL on
+capability, never on `initialized`.** `src/wallet/capability.ts` decides
+`full` / `read-only` / `pending` / `none`; `app/(tabs)/_layout.web.tsx` admits
+`read-only`, and each tab renders its keyless branch (home activity, profile
+receive code, settings without wallet sections). Send and Buy need a key, so
+the read-only rail omits them and their screens redirect home.
+
+It took three tries, and each wrong one is easy to rebuild. First the entry
+named the platform (`"web-unsupported"`) and redirected to `/@you`, whose back
+arrow fell into a `(tabs)` that admitted only an initialized wallet and bounced
+back. Then the read-only view rendered in place on `app/index.tsx` — outside
+the shell, so a browser had no navigation rail and no Settings. Gating on
+capability is what lets `app/index.tsx` send `read-only` into `(tabs)` like
+`ready`, with nothing to bounce off.
+
+**Never `<Redirect href="/" />` from inside `(tabs)`.** A route group adds no
+URL segment, so `/` there resolves to `(tabs)/index`, the layout renders the
+redirect again, and React aborts with error #185 — `peable.to/settings` did
+exactly that signed out. The web layout renders `SignInView` in place for
+`none` instead. `(tabs)` still refuses a keystore host with no wallet, because
+`app/index.tsx` is not the only way in.
 
 ## `packages/frontend` is FAIRWallet, and upstream is alive
 

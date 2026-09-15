@@ -9,7 +9,6 @@
  */
 
 import { create, type StoreApi } from "zustand";
-import { Platform } from "react-native";
 import {
   generateMnemonic,
   validateMnemonic,
@@ -84,6 +83,7 @@ import {
   buildSeedSecret,
   deriveIdentitySeed,
 } from "./identity-wallet";
+import { hasIdentityKeystore } from "./keystore";
 import {
   SOCIAL_RECEIVE_GAP_LIMIT,
   getIdentityPrivateKeyBytes,
@@ -1706,8 +1706,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   initializeFromIdentity: async (onReady?: () => void): Promise<IdentityInitResult> => {
     // The IDENTITY-derived wallet needs the on-device keystore the identity key
-    // lives in (`@oxy.so/core` keyManager -> expo-secure-store). `Platform.OS`
-    // is the current proxy for "is that keystore here": a browser has none.
+    // lives in (`@oxy.so/core` keyManager -> expo-secure-store), and a browser
+    // has none. `hasIdentityKeystore` answers that for the shell's capability
+    // gate too, so the two cannot disagree.
     //
     // This is narrower than "the wallet does not work on web". The BIP39 and
     // watch-only paths below (`createNewWallet`, `importWallet`,
@@ -1715,7 +1716,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // `storage/kv-store.ts`, which has a real web branch — Peable's fork of
     // FAIRWallet deleted the create/restore SCREENS, not the capability. What a
     // browser genuinely cannot do is derive THIS seed, and therefore sign.
-    if (Platform.OS === "web") {
+    if (!hasIdentityKeystore()) {
       return "no-keystore";
     }
     const seed = await deriveIdentitySeed();

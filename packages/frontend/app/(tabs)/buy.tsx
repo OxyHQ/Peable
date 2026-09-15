@@ -21,7 +21,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { ScrollView, Text, View } from "react-native";
-import { useRouter } from "expo-router";
+import { Redirect, useRouter } from "expo-router";
 import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useTheme } from "@oxy.so/bloom/theme";
 import { parseFairToUnits } from "@fairco.in/core";
@@ -38,6 +38,7 @@ import {
   type PaymentCurrency,
 } from "../../src/api/buy";
 import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
+import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
 import { recordBuyOrder } from "../../src/wallet/buy-history";
 import { BuyHistoryList } from "../../src/ui/components/BuyHistoryList";
 import { useLanguageStore } from "../../src/i18n/store";
@@ -105,6 +106,14 @@ function truncateMid(value: string, head: number, tail: number): string {
 }
 
 export default function BuyScreen() {
+  // Hidden from a read-only host's rail; this catches a typed or linked URL.
+  // `/(tabs)` is inside the same shell, so it cannot bounce back here.
+  // Buy delivers to an address derived from the wallet, which needs a key.
+  if (useWalletCapability() === "read-only") return <Redirect href="/(tabs)" />;
+  return <BuyForm />;
+}
+
+function BuyForm() {
   const router = useRouter();
   const theme = useTheme();
   const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
