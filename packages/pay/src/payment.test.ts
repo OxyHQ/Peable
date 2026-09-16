@@ -263,6 +263,26 @@ describe('sendPayment', () => {
     expect(chain.broadcasts).toEqual([]);
   });
 
+  /**
+   * Every consumer multiplies the rate inside a BigInt, so a fractional one is
+   * a RangeError thrown from inside fee arithmetic, nowhere near the explorer
+   * response that produced it. Rounded up, never down: below the relay minimum
+   * costs the whole transaction.
+   */
+  test('a fractional rate from the explorer is rounded up, not thrown on', async () => {
+    const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)], {
+      feePerByte: async () => 1.5,
+    });
+
+    const result = await sendPayment(
+      { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n },
+      chain
+    );
+
+    // 1 input + 2 outputs = 226 bytes, charged at 2 rather than 1.
+    expect(result.feeSat).toBe(452n);
+  });
+
   test('a non-positive rate from the caller is refused', async () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]);
 

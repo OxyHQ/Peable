@@ -195,10 +195,9 @@ export async function sendPayment(
 /**
  * What a payment WOULD cost, without making one.
  *
- * Nothing is derived beyond addresses, nothing is signed, nothing is sent. An
- * amount the wallet cannot cover is `insufficientFunds: true` rather than a
- * throw, because a UI asks this on every keystroke and an exception per keypress
- * is not an answer.
+ * Nothing is signed and nothing is sent. An amount the wallet cannot cover is
+ * `insufficientFunds: true` rather than a throw, because a UI asks this on every
+ * keystroke and an exception per keypress is not an answer.
  */
 export async function quotePayment(
   request: QuoteRequest,
@@ -278,20 +277,25 @@ export async function readBalance(
  * error the payer can see — the money still looks spendable, the payment never
  * arrives, and nothing in the wallet says why. Failing here is a message; a
  * guessed rate is a silent loss.
+ *
+ * The rate is rounded UP to a whole base unit per byte, because every consumer
+ * of it — `estimateFeeForInputs` here, `buildTransaction` in core — multiplies
+ * it inside a `BigInt`, and `BigInt(1.5)` is a RangeError thrown from deep
+ * inside fee arithmetic, nowhere near the explorer response that produced it.
+ * Up and not down: an extra base unit per byte costs a rounding error, while a
+ * rate rounded below the relay minimum costs the whole transaction.
  */
 async function resolveFeePerByte(
   requested: number | undefined,
   network: NetworkType,
   chain: ChainAccess
 ): Promise<number> {
-  if (requested !== undefined) {
-    if (!Number.isFinite(requested) || requested <= 0) {
-      throw new Error(`feePerByte must be a positive number, got ${requested}`);
-    }
-    return requested;
+  const rate =
+    requested ?? (await (chain.fetchFeePerByte ?? fetchFeePerByte)(network));
+  if (!Number.isFinite(rate) || rate <= 0) {
+    throw new Error(`feePerByte must be a positive number, got ${rate}`);
   }
-  const fetchRate = chain.fetchFeePerByte ?? fetchFeePerByte;
-  return await fetchRate(network);
+  return Math.ceil(rate);
 }
 
 /**
