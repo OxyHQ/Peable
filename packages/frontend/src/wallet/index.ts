@@ -1,7 +1,7 @@
-export { KeyManager } from "./key-manager";
-export type { DerivedAddress } from "./key-manager";
-export { UTXOSet } from "./utxo-set";
-export type { UTXO } from "./utxo-set";
+export { KeyManager } from "@peable.to/pay";
+export type { DerivedAddress } from "@peable.to/pay";
+export { UTXOSet } from "@peable.to/pay";
+export type { UTXO } from "@peable.to/pay";
 export { useWalletStore } from "./wallet-store";
 export type {
   FeeLevel,

@@ -21,8 +21,7 @@ import {
 } from "@fairco.in/core";
 import { HDKey } from "@scure/bip32";
 import { mnemonicToSeedSync } from "@scure/bip39";
-import { KeyManager } from "./key-manager";
-import { UTXOSet } from "./utxo-set";
+import { KeyManager, UTXOSet } from "@peable.to/pay";
 import { applyTransactionToWallet, type ConfirmationInfo } from "./apply-transaction";
 import type { ParsedTransaction } from "../p2p/messages";
 

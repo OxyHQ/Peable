@@ -1,6 +1,6 @@
 import { describe, test, expect, mock } from "bun:test";
 import { getNetwork, hexToBytes } from "@fairco.in/core";
-import { KeyManager as FairKeyManager } from "./key-manager";
+import { KeyManager as FairKeyManager } from "@peable.to/pay";
 
 // Mock @oxy.so/core BEFORE importing the module under test. `mock.module` is
 // process-wide, so the replacement must KEEP every other export: a factory

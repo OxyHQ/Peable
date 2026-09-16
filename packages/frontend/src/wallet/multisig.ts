@@ -25,7 +25,7 @@ import {
   type SerializedMultisigSigningRequest,
 } from "@fairco.in/core";
 import type { Database } from "../storage/database";
-import type { KeyManager } from "./key-manager";
+import type { KeyManager } from "@peable.to/pay";
 
 /**
  * Compute the P2SH address for a redeem script, persist it as a watch

@@ -7,7 +7,7 @@
  */
 
 import type { NetworkConfig } from "@fairco.in/core";
-import { KeyManager, type DerivedAddress } from "./key-manager";
+import { KeyManager, type DerivedAddress } from "@peable.to/pay";
 
 export function resolveMoveDestinationAddress(
   seed: Uint8Array,

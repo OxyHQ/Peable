@@ -17,7 +17,7 @@
  * native module that cannot run under `bun test`).
  */
 
-import { UTXOSet, type UTXO } from "./utxo-set";
+import { UTXOSet, type UTXO } from "@peable.to/pay";
 
 /** A persisted UTXO row, including reorg-tracking columns. */
 export interface RewindableUTXO {

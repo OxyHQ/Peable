@@ -14,7 +14,7 @@ import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
 import { useWalletStore } from "../src/wallet/wallet-store";
 import { verifyPin } from "../src/storage/secure-store";
 import { encryptBIP38, getNetwork } from "@fairco.in/core";
-import { KeyManager } from "../src/wallet/key-manager";
+import { KeyManager } from "@peable.to/pay";
 import {
   Button,
   ListItem,

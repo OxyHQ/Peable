@@ -22,7 +22,7 @@ import { getNetwork, hexToBytes, UNITS_PER_COIN } from "@fairco.in/core";
 import { parseTx } from "../p2p/messages";
 import type { MerkleBlockMsg } from "../p2p/messages";
 import { validateMerkleProof } from "../p2p/merkle-proof";
-import { UTXOSet } from "./utxo-set";
+import { UTXOSet } from "@peable.to/pay";
 import {
   applyTransactionToWallet,
   reverseBytesToHex,

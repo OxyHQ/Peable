@@ -25,8 +25,9 @@
     "install:all": "bun install",
     "start:frontend": "bun run --filter @peable.to/frontend start",
     "start:backend": "bun run --filter @peable.to/backend start",
-    "postinstall": "bun run build:shared-types",
-    "test:edge": "bun test scripts/edge-activity.test.ts"
+    "postinstall": "bun run build:shared-types && bun run build:pay",
+    "test:edge": "bun test scripts/edge-activity.test.ts",
+    "build:pay": "bun run --filter @peable.to/pay build"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",
