@@ -19,6 +19,7 @@ mock.module("@oxy.so/core", () => ({
 const {
   SOCIAL_RECEIVE_GAP_LIMIT,
   getIdentityPrivateKeyBytes,
+  identityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
   getSocialReceiveSpendingKey,
   computeWindowExtension,
@@ -30,6 +31,32 @@ const TESTNET = getNetwork("testnet");
 describe("SOCIAL_RECEIVE_GAP_LIMIT", () => {
   test("is 20", () => {
     expect(SOCIAL_RECEIVE_GAP_LIMIT).toBe(20);
+  });
+});
+
+describe("identityPublicKeyHex", () => {
+  // The name this device's social-receive addresses exist under. The backend
+  // derives what payers are sent to from the key the ACCOUNT publishes, so the
+  // two being comparable is the only way to notice they have stopped matching.
+  test("names the key the watch window is derived from", () => {
+    const hex = identityPublicKeyHex(IDENTITY_PRIV_A);
+
+    expect(hex).toMatch(/^[0-9a-f]+$/);
+    // Same key in, same name out: the comparison is only meaningful if it is
+    // stable across launches.
+    expect(identityPublicKeyHex(IDENTITY_PRIV_A)).toBe(hex);
+    // And a different identity is a different name, never a collision.
+    expect(identityPublicKeyHex(hexToBytes("bb".repeat(32)))).not.toBe(hex);
+  });
+
+  test("is the key the derived addresses actually came from", () => {
+    const [first] = deriveSocialReceiveWatchWindow(IDENTITY_PRIV_A, 0, 1, TESTNET);
+    const fromOtherKey = deriveSocialReceiveWatchWindow(hexToBytes("bb".repeat(32)), 0, 1, TESTNET);
+
+    // Stated as the property the check relies on: a window derived under a
+    // different key is a different set of addresses, so watching it would be
+    // watching a tree nobody is paying into.
+    expect(first!.address).not.toBe(fromOtherKey[0]!.address);
   });
 });
 

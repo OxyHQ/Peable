@@ -1046,6 +1046,29 @@ export class Database {
   }
 
   /**
+   * The identity public key the persisted social-receive window was derived
+   * from, or `null` for a window that predates this record.
+   *
+   * Every address in that window is a function of the identity key. Store which
+   * key produced them and a device can notice that it now derives from a
+   * different one — the alternative is watching a tree nobody is paying into,
+   * which looks exactly like not being paid.
+   */
+  async getSocialReceiveIdentityKey(): Promise<string | null> {
+    const row = await this.db.getFirstAsync<{ value: string }>(
+      "SELECT value FROM schema_meta WHERE key = 'social_receive_identity_key'",
+    );
+    return row?.value ?? null;
+  }
+
+  async setSocialReceiveIdentityKey(publicKeyHex: string): Promise<void> {
+    await this.db.runAsync(
+      "INSERT OR REPLACE INTO schema_meta (key, value) VALUES ('social_receive_identity_key', ?)",
+      publicKeyHex,
+    );
+  }
+
+  /**
    * Drop every persisted social-receive address. `databaseFileName` has no
    * network component, so this DB file is shared across mainnet/testnet for
    * a given wallet+Pocket — a window derived on one network is a stale,

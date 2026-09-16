@@ -178,7 +178,12 @@ export function ReceiveSheet({
           </View>
         ) : null}
 
-        {user?.username ? (
+        {/* `@username` is offered only while this device actually has a social
+            receive address. It is absent when the account publishes a different
+            identity key than this device holds: payers would be sent to
+            addresses derived from that other key, which this wallet can neither
+            see nor spend, and the handle would be an invitation to lose money. */}
+        {user?.username && socialReceiveDefaultAddress ? (
           <View className="items-center">
             <Text className="text-muted-foreground text-sm">{t("receive.payMeAt")}</Text>
             <Text className="text-foreground text-lg font-bold mt-0.5">@{user.username}</Text>
