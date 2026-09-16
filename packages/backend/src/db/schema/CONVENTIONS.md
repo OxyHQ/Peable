@@ -246,6 +246,38 @@ Two that ARE there, because every writer was checked:
   spellings of one fact and both writers derive the second from the first; the
   CHECK is that derivation, where the two cannot come apart.
 
+### The three on `social_send_attributions`' source columns
+
+`source_app` / `source_ref` say what a social payment was for — which app the
+payer was in, and that app's own id for the thing. Both are **nullable and never
+defaulted**: most social payments are one person paying another for nothing in
+particular, so NULL means "no app said", which is a fact, where a default would
+be a claim the recipient reads as if the payer had made it.
+
+The writer is one function — `insertSendAttribution`, reached only from
+`POST /v1/social/:username/next_address` — and all three CHECKs were checked
+against it:
+
+- `…_source_ref_needs_app_check`. A `ref` means something only inside the app
+  that minted it, so a ref with no app names nothing anybody can resolve. The
+  route parses the two together inside one `source` object whose `app` is
+  required, and `InsertAttributionParams` takes that same object rather than two
+  loose strings, so the half-filled state is not expressible above the database
+  either.
+- `…_source_app_length_check` / `…_source_ref_length_check`. The bounds the
+  route's zod schema validates (`SOCIAL_SOURCE_APP_MAX_LENGTH` and
+  `SOCIAL_SOURCE_REF_MAX_LENGTH`, imported from `@peable.to/shared-types` by
+  BOTH, so the request and the table cannot drift), restated where they are true
+  of the data. This is the money CHECK's argument applied to a different risk:
+  `source_ref` is deliberately **opaque** — nothing in this repository parses,
+  resolves, joins or indexes it — so nothing downstream would ever notice it
+  growing, and an unbounded column nothing reads is how a display hint becomes
+  somewhere to stash a payload.
+
+All three are `<column> IS NULL OR …`, which is why `0010` can add them in the
+same `pre` migration as the columns: they are vacuous for every row an image
+that predates them writes.
+
 ## A Mongoose hook has no Postgres counterpart, and losing one is silent
 
 The most dangerous thing about this port is not a column type. It is that

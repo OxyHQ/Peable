@@ -49,6 +49,10 @@ export {
   type CreateCheckoutSessionParams,
 } from './checkoutSession';
 export {
+  SOCIAL_SOURCE_APP_MAX_LENGTH,
+  SOCIAL_SOURCE_REF_MAX_LENGTH,
+  type SocialPaymentSource,
+  type SocialNextAddressRequest,
   type SocialNextAddressResponse,
   type SocialReceiveCursorResponse,
   type SocialPaymentDirection,

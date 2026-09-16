@@ -7,6 +7,7 @@ import type {
   PaymentIntent,
   PaymentLink,
   PublicPaymentLink,
+  SocialPaymentSource,
   WebhookDelivery,
 } from "@peable.to/shared-types";
 import { config } from "../config";
@@ -240,4 +241,36 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
+}
+
+/**
+ * The two source columns of a social attribution as the wire's optional
+ * `SocialPaymentSource`, or `undefined` when the payer's app named nothing.
+ *
+ * `undefined` and not `{ app: 'unknown' }`: a payment with no context is the
+ * ordinary case (one person paying another), and a placeholder would be the
+ * gateway asserting something no caller said. A client renders the context or
+ * renders nothing.
+ *
+ * `app` decides, never `ref`. A ref with no app is refused by
+ * `social_send_attributions_source_ref_needs_app_check`, so the row cannot say
+ * otherwise — and keying off `ref` would drop the context of an app that named
+ * itself without pointing at one thing.
+ *
+ * `ref` is copied out verbatim and is not inspected. Nothing in this repository
+ * parses, resolves or links it; that is the property that keeps "what was this
+ * payment for" a string the two parties' apps understand rather than something
+ * the gateway knows.
+ */
+export function toSocialPaymentSource(row: {
+  sourceApp: string | null;
+  sourceRef: string | null;
+}): SocialPaymentSource | undefined {
+  if (row.sourceApp === null) return undefined;
+  // `ref` is omitted rather than set to `null` when absent: the contract types
+  // it optional, and `JSON.stringify` drops an `undefined` property, so the two
+  // shapes are not interchangeable on the wire.
+  return row.sourceRef === null
+    ? { app: row.sourceApp }
+    : { app: row.sourceApp, ref: row.sourceRef };
 }

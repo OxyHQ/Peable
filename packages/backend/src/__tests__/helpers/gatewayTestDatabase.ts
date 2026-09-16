@@ -10,6 +10,7 @@ import type {
   CurrencyCode,
   PaymentIntent,
   PaymentIntentRail,
+  SocialPaymentSource,
   WebhookEventPayload,
   WebhookEventType,
 } from '@peable.to/shared-types';
@@ -430,6 +431,12 @@ export interface SeedAttributionValues {
   readonly senderUserId?: string;
   readonly recipientUserId?: string;
   readonly derivationIndex?: number;
+  /**
+   * What the paying app said the payment was for. Undefined by default, which
+   * is the ordinary case — a plain person-to-person payment names nothing, and
+   * a seeded default would make every suite look like a tip.
+   */
+  readonly source?: SocialPaymentSource;
 }
 
 export async function seedAttribution(
@@ -444,6 +451,7 @@ export async function seedAttribution(
     // 1, never 0: index 0 is the recipient's on-device default address and the
     // CHECK refuses it, so a zero default would make every seed fail.
     derivationIndex: values.derivationIndex ?? 1,
+    source: values.source,
   });
   if (!row) {
     throw new Error(`seedAttribution: address ${values.address ?? unique} is already attributed`);

@@ -2,6 +2,67 @@
 // Gateway backend, the wallet frontend, and (indirectly) the enrichment
 // service's callers. Mirrors the Stripe-parity style of paymentIntent.ts.
 
+import type { NetworkType } from './network';
+
+/**
+ * Longest `SocialPaymentSource.app` the gateway accepts. An app slug, not a
+ * label — 32 characters is more than any Oxy app id needs and short enough that
+ * the column can never become a place to put prose.
+ *
+ * Published with the contract because it is what a request is REFUSED for: a
+ * caller that cannot read the bound from the types finds it out with a 422.
+ */
+export const SOCIAL_SOURCE_APP_MAX_LENGTH = 32;
+
+/**
+ * Longest `SocialPaymentSource.ref` the gateway accepts.
+ *
+ * The bound is the whole defence here, because the value is opaque: Peable
+ * never parses, resolves or links a `ref`, so nothing downstream would notice
+ * it growing. 128 characters holds any id an app mints (a uuid, a snowflake, a
+ * base64 hash) and refuses a payload.
+ */
+export const SOCIAL_SOURCE_REF_MAX_LENGTH = 128;
+
+/**
+ * Display-only context for one social payment: which app the payer was in, and
+ * that app's own id for what the payment was for (a Mention post, say).
+ *
+ * **Opaque to Peable, by design.** `ref` is never parsed, resolved, joined or
+ * shown to anyone but the two parties — the gateway stores a string and hands
+ * the same string back. That is what keeps "tip a post" from widening what the
+ * payment gateway knows about a user: it learns that an id exists, not what it
+ * names. The app that minted the `ref` is the only thing that can resolve it,
+ * and it already knows.
+ *
+ * It affects NOTHING about the money. The address a payer is shown comes from
+ * the recipient's identity key and the reservation cursor, neither of which
+ * this is an input to; a request carrying a source and one carrying none
+ * reserve the same index.
+ */
+export interface SocialPaymentSource {
+  /** The calling app, e.g. `'mention'`. At most {@link SOCIAL_SOURCE_APP_MAX_LENGTH} characters. */
+  app: string;
+  /**
+   * That app's own opaque id for what the payment was for, e.g. a post id. At
+   * most {@link SOCIAL_SOURCE_REF_MAX_LENGTH} characters. Absent when the app
+   * has no single thing to name.
+   */
+  ref?: string;
+}
+
+/**
+ * Body of `POST /v1/social/:username/next_address` (spec §4.4 step 3).
+ *
+ * `source` is OPTIONAL and stays that way: a plain person-to-person payment is
+ * for nothing in particular, and a required field would make every caller
+ * invent an answer.
+ */
+export interface SocialNextAddressRequest {
+  network: NetworkType;
+  source?: SocialPaymentSource;
+}
+
 /** Response of `POST /v1/social/:username/next_address` (spec §4.4 step 3). */
 export interface SocialNextAddressResponse {
   address: string;
@@ -95,6 +156,17 @@ export interface SocialPayment {
    * the payment, so a history never silently loses rows to an Oxy outage.
    */
   counterparty: EnrichmentResult;
+  /**
+   * What the payment was for, as the paying app named it at reservation time.
+   * Absent for a plain person-to-person payment, which is most of them —
+   * present only when the payer's app sent one, and never invented here.
+   *
+   * Display-only, exactly like `counterparty`: rendering it is all a client may
+   * do with it, and a client that cannot resolve `source.ref` (because it is
+   * not the app that minted it) shows the payment without the context rather
+   * than dropping the payment.
+   */
+  source?: SocialPaymentSource;
   /** ISO-8601. When the address was minted, which is when the payment was set up. */
   createdAt: string;
 }

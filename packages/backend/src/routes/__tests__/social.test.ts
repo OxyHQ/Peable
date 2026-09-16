@@ -7,6 +7,10 @@ import { eq } from "drizzle-orm";
 import type { OxyAuthRequest } from "@oxy.so/core/server";
 import { oxyClient as realOxyClient, type User } from "@oxy.so/core";
 import type { DidDocument } from "@oxy.so/contracts";
+import {
+  SOCIAL_SOURCE_APP_MAX_LENGTH,
+  SOCIAL_SOURCE_REF_MAX_LENGTH,
+} from "@peable.to/shared-types";
 import { socialSendAttributions } from "../../db/schema";
 import {
   gatewayDb,
@@ -243,6 +247,141 @@ describe("POST /v1/social/:username/next_address", () => {
     expect(body.error?.type).toBe("invalid_request_error");
   });
 
+  /**
+   * "Tip a post": the payer's app says which app it is and hands over its own
+   * opaque id for the thing being paid for, so the RECIPIENT can later see what
+   * the payment was about.
+   */
+  test("records the paying app's context on the attribution", async () => {
+    const { status, body } = await postNextAddress(
+      "alice",
+      { network: "testnet", source: { app: "mention", ref: "post_abc123" } },
+      "user_source_full_sender",
+    );
+    expect(status).toBe(200);
+
+    const [attribution] = await gatewayDb()
+      .select()
+      .from(socialSendAttributions)
+      .where(eq(socialSendAttributions.address, body.address ?? ""));
+    // Stored verbatim: the ref is opaque to Peable, so anything other than a
+    // copy would be the gateway interpreting what its users pay for.
+    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(["mention", "post_abc123"]);
+  });
+
+  test("accepts an app that names no single thing, storing a null ref", async () => {
+    const { status, body } = await postNextAddress(
+      "alice",
+      { network: "testnet", source: { app: "mention" } },
+      "user_source_app_only_sender",
+    );
+    expect(status).toBe(200);
+
+    const [attribution] = await gatewayDb()
+      .select()
+      .from(socialSendAttributions)
+      .where(eq(socialSendAttributions.address, body.address ?? ""));
+    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(["mention", null]);
+  });
+
+  /**
+   * The context is optional and must STAY optional: a plain person-to-person
+   * payment is for nothing in particular. NULL is then the honest record of
+   * that, where a default would invent a context the payer never stated.
+   */
+  test("leaves both context columns null when the payer names none", async () => {
+    const { status, body } = await postNextAddress(
+      "alice",
+      { network: "testnet" },
+      "user_source_absent_sender",
+    );
+    expect(status).toBe(200);
+
+    const [attribution] = await gatewayDb()
+      .select()
+      .from(socialSendAttributions)
+      .where(eq(socialSendAttributions.address, body.address ?? ""));
+    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual([null, null]);
+  });
+
+  /**
+   * The context is display-only and is an input to NOTHING that decides where
+   * money goes. Asserted by reserving twice for the same recipient — once with
+   * a source and once without — and requiring consecutive indices: a source
+   * that reached the derivation would show up here as a different address or a
+   * skipped index.
+   */
+  test("the context changes neither the index reserved nor the address derived", async () => {
+    const sender = "user_source_neutral_sender";
+    const plain = await postNextAddress("alice", { network: "testnet" }, sender);
+    const sourced = await postNextAddress(
+      "alice",
+      { network: "testnet", source: { app: "mention", ref: "post_1" } },
+      sender,
+    );
+
+    expect([plain.body.index, sourced.body.index]).toEqual([1, 2]);
+    expect(sourced.body.address).not.toBe(plain.body.address);
+  });
+
+  test("422s on a source.ref longer than the published bound", async () => {
+    const { status, body } = await postNextAddress("alice", {
+      network: "testnet",
+      source: { app: "mention", ref: "p".repeat(SOCIAL_SOURCE_REF_MAX_LENGTH + 1) },
+    });
+    expect(status).toBe(422);
+    expect(body.error?.type).toBe("invalid_request_error");
+  });
+
+  test("422s on a source.app longer than the published bound", async () => {
+    const { status } = await postNextAddress("alice", {
+      network: "testnet",
+      source: { app: "m".repeat(SOCIAL_SOURCE_APP_MAX_LENGTH + 1) },
+    });
+    expect(status).toBe(422);
+  });
+
+  /**
+   * A ref means something only inside the app that minted it, so a ref with no
+   * app names nothing anybody could resolve. Refused here as well as by
+   * `social_send_attributions_source_ref_needs_app_check`, because a 422 is a
+   * better answer to a caller than a 500 from a constraint.
+   */
+  test("422s on a source that names a ref but no app", async () => {
+    const { status } = await postNextAddress("alice", {
+      network: "testnet",
+      source: { ref: "post_abc123" },
+    });
+    expect(status).toBe(422);
+  });
+
+  /**
+   * The `.strict()` on the source object, stated as a test. Zod strips an
+   * unknown key by default, so without it this exact body — the obvious
+   * misspelling of `ref` — would reserve an address, record a context missing
+   * the only part the recipient cares about, and answer 200.
+   */
+  test("422s on an unknown key inside source rather than silently dropping it", async () => {
+    const { status } = await postNextAddress("alice", {
+      network: "testnet",
+      source: { app: "mention", postId: "post_abc123" },
+    });
+    expect(status).toBe(422);
+  });
+
+  /**
+   * `ref` is bounded to an id shape, not to prose: an opaque column nothing
+   * reads is exactly where a free-text memo about two users would end up
+   * unnoticed.
+   */
+  test("422s on a source.ref carrying whitespace-separated prose", async () => {
+    const { status } = await postNextAddress("alice", {
+      network: "testnet",
+      source: { app: "mention", ref: "thanks for the coffee yesterday" },
+    });
+    expect(status).toBe(422);
+  });
+
   test("502s with type api_error (not 404) when the profile lookup fails upstream", async () => {
     const { status, body } = await postNextAddress("flaky", { network: "testnet" });
     expect(status).toBe(502);
@@ -321,6 +460,8 @@ interface PaymentsResponse {
     direction: "sent" | "received";
     // `EnrichmentResult`: never null, degrades to `{ kind: 'unknown' }`.
     counterparty: { kind: string; username?: string; displayName?: string };
+    // Optional and ABSENT (not null) for a payment nobody gave a context to.
+    source?: { app: string; ref?: string };
     createdAt: string;
   }[];
   error?: { type: string; message: string };
@@ -395,5 +536,71 @@ describe("GET /v1/social/me/payments", () => {
   test("rejects an unknown network rather than guessing one", async () => {
     const { status } = await getPayments("dogenet", testProfile("alice").id);
     expect(status).toBe(422);
+  });
+
+  /**
+   * The recipient's half of "tip a post": the payer's app named what the
+   * payment was for at reservation time, and this is where the RECIPIENT — who
+   * was never asked — reads it back.
+   *
+   * Both rows are seeded, because a response that carried the context onto
+   * every payment would pass a test that only checked the sourced one.
+   */
+  test("carries the context on the payment that has one, and omits it on the one that does not", async () => {
+    await gatewayDb().insert(socialSendAttributions).values([
+      {
+        address: "Ttip0000000000000000000000000000000",
+        network: "testnet",
+        senderUserId: testProfile("keylessbob").id,
+        recipientUserId: testProfile("alice").id,
+        derivationIndex: 1,
+        sourceApp: "mention",
+        sourceRef: "post_abc123",
+      },
+      {
+        address: "Tplain00000000000000000000000000000",
+        network: "testnet",
+        senderUserId: testProfile("keylessbob").id,
+        recipientUserId: testProfile("alice").id,
+        derivationIndex: 2,
+      },
+    ]);
+
+    const { status, body } = await getPayments("testnet", testProfile("alice").id);
+    expect(status).toBe(200);
+    const byAddress = Object.fromEntries((body.payments ?? []).map((p) => [p.address, p]));
+
+    expect(byAddress["Ttip0000000000000000000000000000000"]?.source).toEqual({
+      app: "mention",
+      ref: "post_abc123",
+    });
+    // Absent, not null: `SocialPayment.source` is optional, and a client
+    // checking `'source' in payment` must not see a context nobody sent.
+    const plain = byAddress["Tplain00000000000000000000000000000"];
+    expect(plain).toBeDefined();
+    expect(Object.keys(plain ?? {})).not.toContain("source");
+  });
+
+  /**
+   * Display-only means display-only. The context rides alongside the payment
+   * and changes nothing about it — same address, same direction, same
+   * counterparty as the row without one.
+   */
+  test("the context does not affect the address, direction or counterparty", async () => {
+    await gatewayDb().insert(socialSendAttributions).values({
+      address: "Tsourced000000000000000000000000000",
+      network: "testnet",
+      senderUserId: testProfile("alice").id,
+      recipientUserId: testProfile("keylessbob").id,
+      derivationIndex: 1,
+      sourceApp: "mention",
+      sourceRef: "post_xyz",
+    });
+
+    const { body } = await getPayments("testnet", testProfile("alice").id);
+    const payment = (body.payments ?? [])[0];
+    expect(payment?.address).toBe("Tsourced000000000000000000000000000");
+    expect(payment?.direction).toBe("sent");
+    expect(payment?.counterparty.username).toBe("keylessbob");
   });
 });
