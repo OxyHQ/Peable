@@ -93,24 +93,36 @@ describe("enrichAddresses", () => {
 
 describe("getSocialReceiveCursor", () => {
   test("returns the cursor directly (no {data} double-unwrap) and sends network as a query param", async () => {
-    // The real Gateway route sends `{ reservedThrough }` with no `data`
-    // envelope, so the mock returns the NAKED shape (the post-unwrap shape)
-    // — otherwise this test can't catch a re-introduced `.data` unwrap.
-    getMock.mockImplementationOnce(async () => ({ reservedThrough: 7 }));
+    // The real Gateway route sends the cursor with no `data` envelope, so the
+    // mock returns the NAKED shape (the post-unwrap shape) — otherwise this
+    // test can't catch a re-introduced `.data` unwrap.
+    const cursor = { reservedThrough: 7, identityPublicKey: `02${"ab".repeat(32)}` };
+    getMock.mockImplementationOnce(async () => cursor);
 
     const result = await getSocialReceiveCursor("testnet");
 
     expect(getMock).toHaveBeenCalledWith("/v1/social/me/cursor", {
       params: { network: "testnet" },
     });
-    expect(result).toEqual({ reservedThrough: 7 });
+    expect(result).toEqual(cursor);
   });
 
-  test("returns reservedThrough: 0 for a caller with no reservation cursor yet", async () => {
-    getMock.mockImplementationOnce(async () => ({ reservedThrough: 0 }));
+  // The device compares that key with the one it derives from itself, so it
+  // has to survive the client untouched rather than being dropped on the way.
+  test("carries the identity key the backend derived those addresses from", async () => {
+    const identityPublicKey = `02${"cd".repeat(32)}`;
+    getMock.mockImplementationOnce(async () => ({ reservedThrough: 3, identityPublicKey }));
+
+    const result = await getSocialReceiveCursor("testnet");
+
+    expect(result.identityPublicKey).toBe(identityPublicKey);
+  });
+
+  test("returns reservedThrough: 0 and no key for a caller with no reservation cursor yet", async () => {
+    getMock.mockImplementationOnce(async () => ({ reservedThrough: 0, identityPublicKey: null }));
 
     const result = await getSocialReceiveCursor("mainnet");
 
-    expect(result).toEqual({ reservedThrough: 0 });
+    expect(result).toEqual({ reservedThrough: 0, identityPublicKey: null });
   });
 });
