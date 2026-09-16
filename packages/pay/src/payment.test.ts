@@ -408,7 +408,7 @@ describe('quotePayment', () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 100_000n)]);
 
     const quote = await quotePayment(
-      { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 5_000_000n, feePerByte: 10 },
+      { seed: SEED, network: NETWORK, amountSat: 5_000_000n, feePerByte: 10 },
       chain
     );
 
@@ -422,18 +422,31 @@ describe('quotePayment', () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]);
 
     await quotePayment(
-      { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
+      { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
       chain
     );
 
     expect(chain.broadcasts).toEqual([]);
   });
 
+  /** A send screen quotes a fee and a maximum before an address is typed. */
+  test('a quote needs no destination', async () => {
+    const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]);
+
+    const quote = await quotePayment(
+      { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
+      chain
+    );
+
+    expect(quote.insufficientFunds).toBe(false);
+    expect(quote.feeSat).toBeGreaterThan(0n);
+  });
+
   test('the rate is fetched when the caller gives none, and reported back', async () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]);
 
     const quote = await quotePayment(
-      { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n },
+      { seed: SEED, network: NETWORK, amountSat: 500_000n },
       chain
     );
 
@@ -448,7 +461,7 @@ describe('quotePayment', () => {
     ]);
 
     const quote = await quotePayment(
-      { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
+      { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
       chain
     );
 

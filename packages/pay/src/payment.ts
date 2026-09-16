@@ -72,15 +72,25 @@ export interface WalletRef {
   readonly minConfirmations?: number;
 }
 
-export interface PaymentRequest extends WalletRef {
-  /** Destination address. Validated by the builder against `network`. */
-  readonly to: string;
+/**
+ * What a payment costs is decided entirely by the wallet's own coins, the
+ * amount and the rate — the destination changes nothing. So a quote does not
+ * ask for one: a send screen shows the fee and the maximum sendable while the
+ * address field is still empty, and requiring `to` there would force a caller
+ * to invent a placeholder address and quote against a payment nobody is making.
+ */
+export interface QuoteRequest extends WalletRef {
   readonly amountSat: bigint;
   /**
    * Fee rate in base units per byte. Omitted, the Explorer is asked. There is
    * no default constant — see {@link resolveFeePerByte}.
    */
   readonly feePerByte?: number;
+}
+
+export interface PaymentRequest extends QuoteRequest {
+  /** Destination address. Validated by the builder against `network`. */
+  readonly to: string;
 }
 
 export interface PaymentResult {
@@ -191,7 +201,7 @@ export async function sendPayment(
  * is not an answer.
  */
 export async function quotePayment(
-  request: PaymentRequest,
+  request: QuoteRequest,
   chain: ChainAccess = {}
 ): Promise<PaymentQuote> {
   const { seed, network, amountSat } = request;

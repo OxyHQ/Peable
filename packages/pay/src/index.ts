@@ -42,6 +42,7 @@ export { sendPayment, quotePayment, readBalance } from './payment';
 export type {
   ChainAccess,
   WalletRef,
+  QuoteRequest,
   PaymentRequest,
   PaymentResult,
   PaymentQuote,
