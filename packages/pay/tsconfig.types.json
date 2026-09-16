@@ -17,6 +17,7 @@
     "node_modules",
     "dist",
     "**/__tests__",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/*.test.tsx"
   ]
 }

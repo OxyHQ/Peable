@@ -33,6 +33,28 @@ imports `KeyManager`, `UTXOSet` and coin selection from it — those files live
 there now, and a copy in the app would be a second answer to the same
 question.
 
+**`@peable.to/pay/ui` is a SEPARATE entry and must never be reachable from the
+root barrel.** It is `PeablePaySheet` — the Bloom dialog an Oxy app renders to
+pay a person — plus the pure modules under it (`src/ui/machine.ts`, `amount.ts`,
+`failure.ts`), and it names React, React Native, `@oxy.so/bloom` and
+`react-native-qrcode-svg`, all of them OPTIONAL peers. `tsc` resolves a
+re-exported specifier whether or not anything calls it, so one line of
+`export * from './ui'` turns four optional peers into hard install requirements
+for the backend and every server-side consumer of `sendPayment`.
+`src/ui/barrelIsolation.test.ts` walks the real module graph and fails if that
+line ever appears. The `./ui` subpath has **no CJS build** and no `require`
+condition: its Bloom imports are all subpaths that live only in bloom's
+`exports` map, and the CJS pass has to use node10 resolution (`@fairco.in/core`
+is ESM-only, so `node16` refuses the whole package) — which cannot see subpath
+exports at all.
+
+The sheet takes a `getSeed` CALLBACK, never a seed. The bytes live in one async
+function's local and are zeroed in its `finally`; a seed passed as a prop would
+sit in the parent's element tree for as long as the sheet is mounted. Its
+ABSENCE — not `Platform.OS` — is what selects the "continue on your phone" state
+with the `faircoin:` QR, same capability-over-platform rule as the wallet's own
+web build.
+
 `bunfig.toml` sets `linker = "hoisted"`. Expo, Metro and Babel resolve transitive
 deps through the standard `node_modules` chain, and the default isolated linker
 breaks that plus ECS image resolution. Copy `bunfig.toml` into any Dockerfile
