@@ -1,6 +1,7 @@
 import { and, desc, eq, inArray, or } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
+import type { SocialPaymentSource } from '@peable.to/shared-types';
 import { socialSendAttributions } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 
@@ -19,6 +20,10 @@ export interface SocialSendAttributionRow {
   readonly senderUserId: string;
   readonly recipientUserId: string;
   readonly derivationIndex: number;
+  /** The app the payer reserved from, or `null` for a plain person-to-person payment. */
+  readonly sourceApp: string | null;
+  /** That app's opaque id for what the payment was for. Never parsed here. */
+  readonly sourceRef: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -30,6 +35,8 @@ const ATTRIBUTION_COLUMNS = {
   senderUserId: socialSendAttributions.senderUserId,
   recipientUserId: socialSendAttributions.recipientUserId,
   derivationIndex: socialSendAttributions.derivationIndex,
+  sourceApp: socialSendAttributions.sourceApp,
+  sourceRef: socialSendAttributions.sourceRef,
   createdAt: socialSendAttributions.createdAt,
   updatedAt: socialSendAttributions.updatedAt,
 } as const;
@@ -44,6 +51,17 @@ export interface InsertAttributionParams {
   readonly senderUserId: string;
   readonly recipientUserId: string;
   readonly derivationIndex: number;
+  /**
+   * What the paying app said this payment was for, when it said anything.
+   *
+   * The wire shape itself (`SocialPaymentSource`), not two loose strings: the
+   * two columns are one fact and `source_ref` without `source_app` is refused
+   * by a CHECK, so a signature that could express the half-filled state would
+   * only push that error to the server.
+   *
+   * Absent for a plain person-to-person payment, which stores NULLs.
+   */
+  readonly source?: SocialPaymentSource;
 }
 
 /**
@@ -69,6 +87,11 @@ export async function insertSendAttribution(
         senderUserId: params.senderUserId,
         recipientUserId: params.recipientUserId,
         derivationIndex: params.derivationIndex,
+        // `?? null` on both, so "the payer named no context" is written as NULL
+        // rather than left to drizzle's default — and so a `source` carrying no
+        // `ref` cannot store `undefined` beside a filled `source_app`.
+        sourceApp: params.source?.app ?? null,
+        sourceRef: params.source?.ref ?? null,
       })
       .returning(ATTRIBUTION_COLUMNS);
     return row ? toAttributionRow(row) : null;

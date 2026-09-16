@@ -1,6 +1,10 @@
 import { sql } from 'drizzle-orm';
 import { check, integer, pgTable, text, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
+import {
+  SOCIAL_SOURCE_APP_MAX_LENGTH,
+  SOCIAL_SOURCE_REF_MAX_LENGTH,
+} from '@peable.to/shared-types';
 import { NETWORK_TYPES } from './valueSets';
 
 /**
@@ -97,6 +101,27 @@ export const socialSendAttributions = pgTable(
      * now matches the two counters that produce it.
      */
     derivationIndex: integer().notNull(),
+    /**
+     * The app the payer reserved this address from, e.g. `mention`.
+     *
+     * NULLABLE and never defaulted: most social payments are one person paying
+     * another for nothing in particular, and a default would invent a context
+     * the payer did not state. `NULL` therefore means exactly "no app said what
+     * this was for", which is a fact; `'unknown'` would be a claim.
+     */
+    sourceApp: text(),
+    /**
+     * The `source_app` app's own id for what the payment was for — a post id,
+     * say. **Opaque here and it must stay opaque:** nothing in this repository
+     * parses it, resolves it, joins on it or indexes it, so the gateway learns
+     * that an id exists and not what it names. The moment something reads INTO
+     * it, Peable starts knowing what its users are paying for, which is the one
+     * thing this column was designed not to do.
+     *
+     * Nullable for the same reason as `source_app`, and independently: an app
+     * can name itself without having a single thing to point at.
+     */
+    sourceRef: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -112,6 +137,39 @@ export const socialSendAttributions = pgTable(
     check(
       'social_send_attributions_derivation_index_check',
       sql.raw(`derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`)
+    ),
+    // A `ref` is meaningful only inside the app that minted it, so a ref with
+    // no app names nothing anybody could ever resolve. Checked against the only
+    // writer — `insertSendAttribution`, reached from
+    // `POST /v1/social/:username/next_address`, where the two arrive together
+    // inside one optional `source` object whose `app` is required — so this
+    // refuses no legal write. Existing rows carry NULL in both, and a CHECK is
+    // satisfied by NULL.
+    check(
+      'social_send_attributions_source_ref_needs_app_check',
+      sql.raw(`source_ref is null or source_app is not null`)
+    ),
+    // The length bounds the route validates, restated where they are true of
+    // the DATA rather than of one code path. `source_ref` is opaque — nothing
+    // reads it, so nothing downstream would ever notice it growing — and an
+    // unbounded opaque column is how a display hint becomes a place to stash a
+    // payload.
+    //
+    // `sql.raw` with the bound interpolated into the STRING, never `${bound}`
+    // in a `sql` template: that renders as a BOUND PARAMETER, which drizzle-kit
+    // writes into the migration as the literal `$1`, and a CHECK cannot carry
+    // one. See the note on the cursor's index CHECK above.
+    check(
+      'social_send_attributions_source_app_length_check',
+      sql.raw(
+        `source_app is null or char_length(source_app) between 1 and ${SOCIAL_SOURCE_APP_MAX_LENGTH}`
+      )
+    ),
+    check(
+      'social_send_attributions_source_ref_length_check',
+      sql.raw(
+        `source_ref is null or char_length(source_ref) between 1 and ${SOCIAL_SOURCE_REF_MAX_LENGTH}`
+      )
     ),
   ]
 );

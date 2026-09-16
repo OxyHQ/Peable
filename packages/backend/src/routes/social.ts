@@ -4,11 +4,14 @@ import { z } from "zod";
 import { rateLimit } from "express-rate-limit";
 import { oxyClient, isNotFoundError } from "@oxy.so/core";
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxy.so/core/server";
-import type {
-  SocialNextAddressResponse,
-  SocialPayment,
-  SocialPaymentsResponse,
-  SocialReceiveCursorResponse,
+import {
+  SOCIAL_SOURCE_APP_MAX_LENGTH,
+  SOCIAL_SOURCE_REF_MAX_LENGTH,
+  type SocialNextAddressRequest,
+  type SocialNextAddressResponse,
+  type SocialPayment,
+  type SocialPaymentsResponse,
+  type SocialReceiveCursorResponse,
 } from "@peable.to/shared-types";
 import { config } from "../config";
 import { reserveNextSocialAddress, getReservedThrough } from "../services/socialReceive";
@@ -19,10 +22,74 @@ import {
 } from "../db/social/sendAttribution";
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from "../services/enrichment";
 import { sendError, wrap } from "../lib/http";
+import { toSocialPaymentSource } from "../lib/serialize";
+
+/**
+ * Optional, display-only context for one social payment: which app the payer
+ * was in, and that app's own id for what they were paying for (a Mention post,
+ * say).
+ *
+ * **Optional, and it stays optional.** A plain person-to-person payment is for
+ * nothing in particular; requiring this would make every caller invent an
+ * answer, and an invented context is worse than none.
+ *
+ * `.strict()` is the "reject anything else" half and is load-bearing rather
+ * than tidy. Zod strips an unknown key silently by default, so `{ app, postId }`
+ * — the obvious misspelling of `ref` — would reserve an address and record a
+ * context missing the only part the recipient cares about, with a 200 to say it
+ * worked. The bounds come from `@peable.to/shared-types`, which is also where
+ * the column CHECKs read them, so the request, the contract and the table
+ * cannot drift apart.
+ *
+ * `ref` is validated for SHAPE and never for meaning: printable non-space ASCII
+ * bounds it to something id-shaped, so the field cannot quietly become a free
+ * text memo the gateway is then storing on behalf of two users. Peable never
+ * parses it beyond this.
+ */
+const paymentSourceSchema = z
+  .object({
+    app: z
+      .string()
+      .min(1)
+      .max(SOCIAL_SOURCE_APP_MAX_LENGTH)
+      .regex(/^[a-z0-9][a-z0-9._-]*$/, "source.app must be a lowercase app slug"),
+    ref: z
+      .string()
+      .min(1)
+      .max(SOCIAL_SOURCE_REF_MAX_LENGTH)
+      .regex(/^[\x21-\x7e]+$/, "source.ref must be an opaque id, without spaces")
+      .optional(),
+  })
+  .strict();
 
 const nextAddressBodySchema = z.object({
   network: z.enum(["mainnet", "testnet"]),
+  source: paymentSourceSchema.optional(),
 });
+
+/** True only when `A` and `B` are the SAME type, not merely assignable to each other. */
+type Exact<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
+  ? true
+  : false;
+/** Fails to compile when its argument is anything but `true`. */
+type AssertTrue<T extends true> = T;
+
+/**
+ * Compile-time proof that what this route PARSES and what
+ * `@peable.to/shared-types` PUBLISHES are one shape — a field accepted here
+ * that the contract does not name, or a contract field this parser would strip,
+ * is an error on this line instead of a mismatch a consumer of the published
+ * package meets at runtime.
+ *
+ * `Exact`, not an annotation of `z.ZodType<SocialNextAddressRequest>` on the
+ * schema. MEASURED: that annotation accepts an extra required field without a
+ * word, because `ZodType`'s output parameter appears in method positions and is
+ * therefore bivariant — the obvious spelling of this check does not check
+ * anything.
+ */
+export type NextAddressBodyIsTheContract = AssertTrue<
+  Exact<z.infer<typeof nextAddressBodySchema>, SocialNextAddressRequest>
+>;
 
 const cursorQuerySchema = z.object({
   network: z.enum(["mainnet", "testnet"]),
@@ -107,7 +174,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         );
         return;
       }
-      const { network } = parsed.data;
+      const { network, source } = parsed.data;
 
       // The network gate lives HERE, not only in the wallet. Social-receive
       // addresses are derived from the recipient's identity key, and a payer
@@ -186,6 +253,12 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         senderUserId,
         recipientUserId: recipient.id,
         derivationIndex: reservation.index,
+        // Recorded AFTER the reservation and an input to nothing before it. The
+        // address comes from the recipient's identity key and their cursor, so
+        // a request carrying a source and one carrying none reserve the same
+        // index — the context is something the recipient reads later, never
+        // something that decides where money goes.
+        source,
       });
 
       const body: SocialNextAddressResponse = {
@@ -274,6 +347,11 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         address: row.address,
         direction: row.senderUserId === oxyUserId ? "sent" : "received",
         counterparty: enriched[row.address] ?? { kind: "unknown" },
+        // Display-only, like `counterparty`, and handed back exactly as the
+        // paying app sent it: `toSocialPaymentSource` copies the two columns
+        // and reads into neither. Omitted entirely for a payment nobody gave
+        // a context to.
+        source: toSocialPaymentSource(row),
         createdAt: row.createdAt.toISOString(),
       }));
 

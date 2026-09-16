@@ -1,6 +1,10 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { sql } from 'drizzle-orm';
 import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
+import {
+  SOCIAL_SOURCE_APP_MAX_LENGTH,
+  SOCIAL_SOURCE_REF_MAX_LENGTH,
+} from '@peable.to/shared-types';
 import { insertMerchant, type MerchantRow } from '../merchants/merchantRepository';
 import { insertPaymentIntent } from '../payments/paymentIntentRepository';
 import {
@@ -376,6 +380,109 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook delivery and social attributio
         derivationIndex: 2,
       })
     ).toBeNull();
+  });
+
+  /**
+   * "Tip a post" stores what the payment was for beside the relationship. Both
+   * halves are asserted in one case — a sourced attribution and a plain one —
+   * because a repository that dropped the columns entirely would still satisfy
+   * the plain half on its own.
+   */
+  it('round-trips the paying app\'s context, and stores nothing when none was named', async () => {
+    const sourced = await insertSendAttribution(suite!.db, {
+      address: `T${uuidv7()}`,
+      network: 'testnet',
+      senderUserId: uuidv7(),
+      recipientUserId: uuidv7(),
+      derivationIndex: 1,
+      source: { app: 'mention', ref: 'post_abc123' },
+    });
+    // Verbatim: the ref is opaque, so the repository copies it and reads
+    // nothing out of it.
+    expect([sourced?.sourceApp, sourced?.sourceRef]).toEqual(['mention', 'post_abc123']);
+
+    const appOnly = await insertSendAttribution(suite!.db, {
+      address: `T${uuidv7()}`,
+      network: 'testnet',
+      senderUserId: uuidv7(),
+      recipientUserId: uuidv7(),
+      derivationIndex: 1,
+      source: { app: 'mention' },
+    });
+    expect([appOnly?.sourceApp, appOnly?.sourceRef]).toEqual(['mention', null]);
+
+    // NULL, never a default: most payments are for nothing in particular, and
+    // an invented context would be indistinguishable from one the payer gave.
+    const plain = await insertSendAttribution(suite!.db, {
+      address: `T${uuidv7()}`,
+      network: 'testnet',
+      senderUserId: uuidv7(),
+      recipientUserId: uuidv7(),
+      derivationIndex: 1,
+    });
+    expect([plain?.sourceApp, plain?.sourceRef]).toEqual([null, null]);
+  });
+
+  /**
+   * A ref means something only inside the app that minted it. The route refuses
+   * the pair with a 422, but the CHECK is what makes the state unreachable for
+   * a writer that is not the route — which is the only guarantee a reader of
+   * this table can rely on.
+   */
+  it('refuses a source ref that names no app', async () => {
+    let raised: unknown;
+    try {
+      await suite!.db.execute(sql`
+        insert into social_send_attributions
+          (id, address, network, sender_user_id, recipient_user_id, derivation_index, source_ref)
+        values (${uuidv7()}, ${`T${uuidv7()}`}, 'testnet', ${uuidv7()}, ${uuidv7()}, 1, 'post_abc123')
+      `);
+    } catch (error) {
+      raised = error;
+    }
+    expect(isCheckViolation(raised, 'social_send_attributions_source_ref_needs_app_check')).toBe(
+      true
+    );
+  });
+
+  /**
+   * The bound on an OPAQUE column, where it is true of the data rather than of
+   * one route. Nothing reads `source_ref`, so nothing downstream would ever
+   * notice it growing into a payload — this constraint is the only thing that
+   * would.
+   */
+  it('refuses a source ref longer than the published bound', async () => {
+    let raised: unknown;
+    try {
+      await insertSendAttribution(suite!.db, {
+        address: `T${uuidv7()}`,
+        network: 'testnet',
+        senderUserId: uuidv7(),
+        recipientUserId: uuidv7(),
+        derivationIndex: 1,
+        source: { app: 'mention', ref: 'p'.repeat(SOCIAL_SOURCE_REF_MAX_LENGTH + 1) },
+      });
+    } catch (error) {
+      raised = error;
+    }
+    expect(isCheckViolation(raised, 'social_send_attributions_source_ref_length_check')).toBe(true);
+  });
+
+  it('refuses a source app longer than the published bound', async () => {
+    let raised: unknown;
+    try {
+      await insertSendAttribution(suite!.db, {
+        address: `T${uuidv7()}`,
+        network: 'testnet',
+        senderUserId: uuidv7(),
+        recipientUserId: uuidv7(),
+        derivationIndex: 1,
+        source: { app: 'm'.repeat(SOCIAL_SOURCE_APP_MAX_LENGTH + 1) },
+      });
+    } catch (error) {
+      raised = error;
+    }
+    expect(isCheckViolation(raised, 'social_send_attributions_source_app_length_check')).toBe(true);
   });
 
   it('refuses an attribution at the recipient\'s default index', async () => {
