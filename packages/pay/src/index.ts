@@ -36,3 +36,14 @@ export type { AddressInfo } from './explorer/address';
 export { discoverUtxos } from './explorer/discovery';
 export type { AddressSource } from './explorer/discovery';
 export { broadcastTransaction, fetchFeePerByte } from './explorer/broadcast';
+export { fetchChainTip } from './explorer/chain-tip';
+
+export { sendPayment, quotePayment, readBalance } from './payment';
+export type {
+  ChainAccess,
+  WalletRef,
+  PaymentRequest,
+  PaymentResult,
+  PaymentQuote,
+  WalletBalance,
+} from './payment';
