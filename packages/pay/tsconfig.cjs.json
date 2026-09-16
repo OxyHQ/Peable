@@ -1,6 +1,11 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
+    // Node10 resolution, deliberately. `@fairco.in/core` is ESM-only, so
+    // `node16` refuses the whole package with TS1479 ("cannot be imported with
+    // require") — this CJS build works at all only because node10 resolution
+    // does not ask. The cost is that node10 cannot read a dependency's
+    // `exports` map, which is why `src/ui` is excluded below.
     "module": "CommonJS",
     "moduleResolution": "node",
     "outDir": "dist/cjs",
@@ -16,6 +21,17 @@
     "node_modules",
     "dist",
     "**/__tests__",
-    "**/*.test.ts"
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    // The `./ui` entry has NO CJS build, and `package.json` gives it no
+    // `require` condition to match. Every `@oxy.so/bloom` import it makes is a
+    // subpath (`@oxy.so/bloom/dialog`, `/button`, …) that exists only in
+    // bloom's `exports` map, and node10 resolution cannot see subpath exports
+    // at all — it fails each one with TS2307 and then loses contextual typing
+    // on the surrounding callbacks (TS7006), which is the exact cascade
+    // `package-rules.md` describes. Nothing consuming this entry wants CJS
+    // anyway: Metro takes the `react-native` condition and every bundler takes
+    // `import`, and both get ESM.
+    "src/ui"
   ]
 }

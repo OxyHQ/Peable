@@ -8,6 +8,7 @@
       "DOM"
     ],
     "declaration": true,
+    "jsx": "react-jsx",
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
