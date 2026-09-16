@@ -30,3 +30,9 @@ export type {
   SelectedInputs,
   SendEstimate,
 } from './wallet/coin-selection';
+
+export { fetchAddressInfo } from './explorer/address';
+export type { AddressInfo } from './explorer/address';
+export { discoverUtxos } from './explorer/discovery';
+export type { AddressSource } from './explorer/discovery';
+export { broadcastTransaction, fetchFeePerByte } from './explorer/broadcast';
