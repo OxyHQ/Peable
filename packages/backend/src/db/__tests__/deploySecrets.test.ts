@@ -61,6 +61,9 @@ const NOT_SYNCED: Readonly<Record<string, string>> = {
   EXPLORER_BASE_URL: "a public Explorer URL, defaulted from @fairco.in/core",
   // Plain configuration, and both have safe defaults in `config.ts`.
   PEABLE_NETWORK: "mainnet|testnet, a deployment shape rather than a credential",
+  PEABLE_SOCIAL_PAY_NETWORK:
+    "which network pay-by-@username is enabled on; a deployment decision, and " +
+    "it defaults to testnet, so a deployment that never sets it stays closed",
   PEABLE_ALLOWED_ORIGINS: "a CORS allow-list; public by definition",
   PEABLE_CHECKOUT_BASE_URL: "the public checkout origin",
   OXY_API_URL: "the public Oxy API origin",

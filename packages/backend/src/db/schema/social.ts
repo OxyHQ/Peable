@@ -32,6 +32,21 @@ export const socialReceiveCursors = pgTable(
     network: text().notNull(),
     /** See `merchants.next_derivation_index` for why this is `integer` and not `bigint`. */
     nextDerivationIndex: integer().notNull().default(SOCIAL_RECEIVE_FIRST_FRESH_INDEX),
+    /**
+     * The identity public key the addresses on this cursor were derived from,
+     * hex. Every address here is a function of that key, and the key is not
+     * ours: it is whatever the recipient's DID publishes at the moment of the
+     * reservation. Recording it is what lets a recipient's device ask "is this
+     * still the key I derive from?" — the alternative is a device widening its
+     * watch window in a tree nobody is paying into, which is silent.
+     *
+     * NOT NULL: every cursor says which key it belongs to, so a device reading
+     * one never has to handle "the backend does not know". The cursors that
+     * predate the column are deleted by the migration that adds the constraint
+     * — they are index counters from testing, no funds and no user, and the key
+     * behind them is not recoverable from anything stored.
+     */
+    identityPublicKey: text().notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

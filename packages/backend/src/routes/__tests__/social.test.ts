@@ -227,6 +227,16 @@ describe("POST /v1/social/:username/next_address", () => {
     expect(body.error?.type).toBe("keyless_recipient");
   });
 
+  // The wallet refuses mainnet for pay-by-@username, but the wallet is not the
+  // only client a bearer token can drive. The deployment decides, and it says so
+  // here rather than trusting whoever is calling.
+  test("403s on a network this deployment has not enabled for social pay", async () => {
+    const { status, body } = await postNextAddress("alice", { network: "mainnet" });
+
+    expect(status).toBe(403);
+    expect(body.error?.message).toContain("mainnet");
+  });
+
   test("422s on a malformed network field", async () => {
     const { status, body } = await postNextAddress("alice", { network: "regtest" });
     expect(status).toBe(422);
