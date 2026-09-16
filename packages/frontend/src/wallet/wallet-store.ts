@@ -87,6 +87,7 @@ import { hasIdentityKeystore } from "./keystore";
 import {
   SOCIAL_RECEIVE_GAP_LIMIT,
   getIdentityPrivateKeyBytes,
+  identityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
   getSocialReceiveSpendingKey,
   computeWindowExtension,
@@ -533,6 +534,19 @@ async function setUpSocialReceive(
   }
   socialReceiveIdentityPrivateKey = identityPrivateKey;
 
+  // Which key this window belongs to. Every address in it is a function of the
+  // identity key, so a window derived from a different one watches addresses
+  // nobody will ever pay — indistinguishable, from the inside, from not being
+  // paid. Re-derive instead of extending it.
+  const identityPublicKey = identityPublicKeyHex(identityPrivateKey);
+  const windowKey = await db.getSocialReceiveIdentityKey();
+  if (windowKey !== null && windowKey !== identityPublicKey) {
+    console.warn(
+      "[social-receive] the persisted window was derived from a different identity key; re-deriving",
+    );
+    await db.clearSocialReceiveAddresses();
+  }
+
   let persisted = await db.getSocialReceiveAddresses();
   if (persisted.length === 0) {
     const initial = deriveSocialReceiveWatchWindow(
@@ -544,6 +558,7 @@ async function setUpSocialReceive(
     await db.insertSocialReceiveAddresses(initial);
     persisted = await db.getSocialReceiveAddresses();
   }
+  await db.setSocialReceiveIdentityKey(identityPublicKey);
 
   socialReceiveAddressIndex = new Map(persisted.map((row) => [row.address, row.index_num]));
   const defaultRow = persisted.find((row) => row.index_num === 0);
@@ -562,7 +577,21 @@ async function setUpSocialReceive(
   const highestUsed = await db.getHighestUsedSocialReceiveIndex();
   let reservedThrough = 0;
   try {
-    ({ reservedThrough } = await getSocialReceiveCursor(networkType));
+    const cursor = await getSocialReceiveCursor(networkType);
+    // The backend derives the addresses payers are sent to from the key the
+    // account PUBLISHES. If that is not the key this device holds, every index
+    // it hands out belongs to a tree this wallet cannot see or spend from, and
+    // widening the window only watches more of the wrong tree. Stop, and stop
+    // offering `@username` as a way to be paid (below) rather than collecting
+    // payments nobody can reach.
+    if (cursor.identityPublicKey !== null && cursor.identityPublicKey !== identityPublicKey) {
+      console.warn(
+        "[social-receive] this account publishes a different identity key than this device holds; social receive is off",
+      );
+      set({ socialReceiveDefaultAddress: null });
+      return;
+    }
+    reservedThrough = cursor.reservedThrough;
   } catch (error) {
     // Offline / Gateway error: degrade to the local-only window derived
     // above rather than blocking wallet bring-up on a network round-trip.

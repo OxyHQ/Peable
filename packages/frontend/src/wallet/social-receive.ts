@@ -17,6 +17,7 @@
  * directly unit-testable without any SQLite or SPV setup.
  */
 import {
+  bytesToHex,
   hexToBytes,
   deriveSocialReceiveAddress,
   deriveSocialReceiveSpendingKey,
@@ -60,6 +61,19 @@ export async function getIdentityPrivateKeyBytes(): Promise<Uint8Array | null> {
     return null;
   }
   return hexToBytes(canonicalizePrivateKeyHex(hex));
+}
+
+/**
+ * The identity public key, hex — the name under which this device's
+ * social-receive addresses exist.
+ *
+ * Both sides of social receive derive from it: this device computes its watch
+ * window from it, and the backend derives what payers are sent to from the key
+ * the account publishes. Comparing the two is the only way to notice they have
+ * stopped being the same key.
+ */
+export function identityPublicKeyHex(identityPrivateKey: Uint8Array): string {
+  return bytesToHex(publicKeyFromPrivateKey(identityPrivateKey));
 }
 
 /**
