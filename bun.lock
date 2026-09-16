@@ -78,6 +78,7 @@
         "@oxy.so/core": "^1.2.1",
         "@oxy.so/services": "^1.1.0",
         "@oxy.so/telemetry": "^1.1.1",
+        "@peable.to/pay": "workspace:^",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
         "@react-native-community/netinfo": "^12.0.1",
@@ -158,6 +159,23 @@
       "optionalDependencies": {
         "@tailwindcss/oxide-linux-x64-gnu": "4.3.2",
         "lightningcss-linux-x64-gnu": "1.30.1",
+      },
+    },
+    "packages/pay": {
+      "name": "@peable.to/pay",
+      "version": "0.1.0",
+      "dependencies": {
+        "@noble/hashes": "1.8.0",
+        "@scure/bip32": "1.7.0",
+        "@scure/bip39": "1.6.0",
+      },
+      "devDependencies": {
+        "@fairco.in/core": "0.5.0",
+        "@types/bun": "latest",
+        "typescript": "~5.9.2",
+      },
+      "peerDependencies": {
+        "@fairco.in/core": ">=0.5.0 <0.6.0",
       },
     },
     "packages/sdk": {
@@ -568,6 +586,8 @@
     "@peable.to/checkout": ["@peable.to/checkout@workspace:packages/checkout"],
 
     "@peable.to/frontend": ["@peable.to/frontend@workspace:packages/frontend"],
+
+    "@peable.to/pay": ["@peable.to/pay@workspace:packages/pay"],
 
     "@peable.to/sdk": ["@peable.to/sdk@workspace:packages/sdk"],
 

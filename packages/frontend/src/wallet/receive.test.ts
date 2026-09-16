@@ -24,7 +24,7 @@ import {
   UNITS_PER_COIN,
 } from "@fairco.in/core";
 import { parseTx, type ParsedTransaction } from "../p2p/messages";
-import { UTXOSet } from "./utxo-set";
+import { UTXOSet } from "@peable.to/pay";
 import {
   applyTransactionToWallet,
   reverseBytesToHex,

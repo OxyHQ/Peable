@@ -1,7 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import { getNetwork, deriveAddress } from "@fairco.in/core";
 import { mnemonicToSeedSync } from "@scure/bip39";
-import { KeyManager } from "./key-manager";
+import { KeyManager } from "@peable.to/pay";
 import { resolveMoveDestinationAddress } from "./move-address";
 
 const MAINNET = getNetwork("mainnet");

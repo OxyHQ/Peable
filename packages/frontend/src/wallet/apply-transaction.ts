@@ -18,7 +18,7 @@ import {
   type NetworkConfig,
 } from "@fairco.in/core";
 import { parseTx, type ParsedTransaction } from "../p2p/messages";
-import { UTXOSet, type UTXO } from "./utxo-set";
+import { UTXOSet, type UTXO } from "@peable.to/pay";
 import type { WalletTransaction } from "./wallet-store";
 
 // ---------------------------------------------------------------------------

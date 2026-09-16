@@ -29,7 +29,7 @@ import { SPVClient } from "../p2p/spv-client";
 import { planRescan, type RescanProgress } from "../p2p/rescan";
 import { DatabaseHeaderStore } from "../p2p/header-store";
 import { createSocketProvider } from "../p2p/socket-provider";
-import { KeyManager } from "./key-manager";
+import { KeyManager } from "@peable.to/pay";
 import { loadWatchAddressesIntoKeyManager } from "./multisig";
 import { resolveMoveDestinationAddress } from "./move-address";
 import {
@@ -38,12 +38,13 @@ import {
   getOrDeriveBip39Seed,
   type ResolveWalletSeedDeps,
 } from "./resolve-wallet-seed";
-import { UTXOSet, type UTXO } from "./utxo-set";
 import {
+  UTXOSet,
   selectInputsForSend,
   estimateSend as computeSendEstimate,
+  type UTXO,
   type SendEstimate,
-} from "./coin-selection";
+} from "@peable.to/pay";
 import {
   applyTransactionToWallet,
   reconstructWalletTransaction,

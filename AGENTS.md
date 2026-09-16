@@ -10,8 +10,9 @@ self-custodial wallet that spends on it. Bun monorepo, `packages/` layout.
 
 ## Packages
 
-There are **five**, not three. Two of them are published to npm, so a change in
-`shared-types` or `sdk` is an external API change, not an internal refactor.
+There are **six**, not three. Three of them are published to npm, so a change in
+`shared-types`, `sdk` or `pay` is an external API change, not an internal
+refactor.
 
 | Path | Name | What it is |
 |---|---|---|
@@ -20,9 +21,17 @@ There are **five**, not three. Two of them are published to npm, so a change in
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
 | `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry mints Oxy service tokens from an `ApplicationCredential` and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
+| `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app |
 
 The package directory name and the npm name differ for the SDK: `packages/sdk`
 publishes as `@peable.to/sdk`.
+
+`packages/pay` is consumed from its BUILD OUTPUT, like `shared-types`: root
+`postinstall` builds both, and `ci.yml` / `deploy-frontend.yml` state
+`bun run build:pay` rather than relying on that side effect. The frontend
+imports `KeyManager`, `UTXOSet` and coin selection from it — those files live
+there now, and a copy in the app would be a second answer to the same
+question.
 
 `bunfig.toml` sets `linker = "hoisted"`. Expo, Metro and Babel resolve transitive
 deps through the standard `node_modules` chain, and the default isolated linker

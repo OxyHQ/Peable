@@ -1,0 +1,21 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "outDir": "dist/esm",
+    "declaration": false,
+    "noEmit": false,
+    "incremental": false,
+    "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo/esm/.tsbuildinfo"
+  },
+  "include": [
+    "src"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "**/__tests__",
+    "**/*.test.ts"
+  ]
+}

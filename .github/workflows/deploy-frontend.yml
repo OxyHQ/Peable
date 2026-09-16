@@ -43,6 +43,11 @@ jobs:
       # a side effect of installing — the same reason `ci.yml` repeats it.
       - run: bun run build:shared-types
 
+      # `@peable.to/pay` is consumed from its build output, same as
+      # shared-types. Stated rather than left to `postinstall`, for the same
+      # reason: a job should not depend on a side effect of installing.
+      - run: bun run build:pay
+
       - run: bun run build:frontend
         env:
           # Every one of these has a correct production default in
