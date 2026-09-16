@@ -59,7 +59,11 @@ documents:
   source tree and consume `@fairco.in/core@0.5.0`.
 - [ ] Re-verify cold boot, sign-in, key rotation, social receive and the full
   approve-payment flow on a production-equivalent physical device before
-  enabling mainnet social payments.
+  enabling mainnet social payments. The code half of finding F-1 is done —
+  `docs/adr/0002-social-receive-is-bound-to-one-identity-key.md` lists what it
+  changed and what is still required — so what remains here is the device
+  verification itself, on a device WITH the shared-identity slot and one
+  without.
 - [ ] Complete the internal FAIRWallet-to-Peable naming sweep without changing
   third-party attribution.
 

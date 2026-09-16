@@ -47,7 +47,8 @@ export function parseProfileHandle(
  *   records the sender's attribution.
  * - `wallet-not-ready` — native, signed in, but no derived wallet yet
  *   (keyless account, or the identity wallet hasn't been brought up).
- * - `mainnet-blocked` — pay-by-@username has not cleared mainnet. Finding F-1:
+ * - `mainnet-blocked` — pay-by-@username has not cleared mainnet. Finding F-1
+ *   (`docs/adr/0002-social-receive-is-bound-to-one-identity-key.md`):
  *   rotating the Oxy identity key desyncs the shared key slot, so a payer can
  *   send to addresses the recipient can neither see nor spend — silent,
  *   permanent loss. Testnet only until that is fixed upstream.

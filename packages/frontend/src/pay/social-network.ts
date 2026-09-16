@@ -24,6 +24,12 @@
  * Rotating the Oxy identity key desyncs the shared key slot, so a payer can
  * send to addresses the recipient can neither see nor spend — silent, permanent
  * loss. Testnet only until that is fixed upstream.
+ *
+ * The fix and what remains are written down in
+ * `docs/adr/0002-social-receive-is-bound-to-one-identity-key.md`. Flipping this
+ * constant is the LAST step of that list, not the first: the deployment gates
+ * social pay too (`PEABLE_SOCIAL_PAY_NETWORK`), so a client that flips alone
+ * only earns a 403.
  */
 import type { NetworkType } from "@fairco.in/core";
 
