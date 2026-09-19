@@ -132,6 +132,30 @@ export async function insertCheckoutSession(
 }
 
 /**
+ * The session that wraps this intent — the IDEMPOTENT replay lookup.
+ *
+ * `checkout_sessions.payment_intent_id` is unique, so this answers at most one
+ * row. That uniqueness is what makes an `Idempotency-Key` on session creation
+ * work with no column of its own: the key converges the INTENT
+ * (`payment_intents.idempotency_key`), and the session that already wraps that
+ * intent is the session that key created.
+ *
+ * Unscoped by merchant, and safe: the caller has already resolved the intent
+ * through a merchant-scoped read, and adding a second owner predicate here
+ * would be a second authority for a decision already made.
+ */
+export async function findSessionByIntentId(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string
+): Promise<CheckoutSessionRow | null> {
+  const [row] = await db
+    .select(SESSION_COLUMNS)
+    .from(checkoutSessions)
+    .where(eq(checkoutSessions.paymentIntentId, paymentIntentId));
+  return row ? toSessionRow(row) : null;
+}
+
+/**
  * The PUBLIC checkout-page read: `cs_…` alone.
  *
  * The page at `/c/:id` is loaded by an anonymous payer and authorized by the

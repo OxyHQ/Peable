@@ -313,3 +313,87 @@ describe("GET /v1/checkout_sessions/:id/public", () => {
     expect(res.status).toBe(404);
   });
 });
+
+/**
+ * `Idempotency-Key` on session creation.
+ *
+ * This route used to ignore the header, with a comment arguing that a session
+ * "wraps exactly ONE intent minted fresh at session-create time (Stripe
+ * Checkout Session parity) — there is nothing to replay against". Parity with
+ * an object model is not a reason to drop the caller's retry semantics: a
+ * merchant whose create timed out and retried got a SECOND session and a second
+ * payment intent, and the first stayed alive until it expired. Two live
+ * sessions for one order is two prices a buyer can be shown and two payments
+ * they can make.
+ */
+describe("POST /v1/checkout_sessions with an Idempotency-Key", () => {
+  test("a retry converges on the same session and mints no second intent", async () => {
+    const before = await countIntentsForMerchant(merchantId);
+    const body = JSON.stringify({ amount: "31000000", network: "testnet" });
+    const headers = {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "session-retry-1",
+    };
+
+    const first = await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: "POST",
+      headers,
+      body,
+    });
+    const second = await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: "POST",
+      headers,
+      body,
+    });
+
+    expect(first.status).toBe(201);
+    // 200, not 201: nothing was created, and the status code is what tells a
+    // merchant whether they just made a second checkout.
+    expect(second.status).toBe(200);
+
+    const a = await readJson<CheckoutSessionResponse>(first);
+    const b = await readJson<CheckoutSessionResponse>(second);
+    expect(b.id).toBe(a.id);
+    expect(b.paymentIntentId).toBe(a.paymentIntentId);
+    expect(await countIntentsForMerchant(merchantId)).toBe(before + 1);
+  });
+
+  /** A key naming a DIFFERENT amount is a conflict, not a replay. */
+  test("refuses a key replayed with a different amount", async () => {
+    const headers = {
+      "Content-Type": "application/json",
+      "Idempotency-Key": "session-conflict-1",
+    };
+    await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ amount: "41000000", network: "testnet" }),
+    });
+    const conflicting = await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ amount: "42000000", network: "testnet" }),
+    });
+
+    expect(conflicting.status).toBe(409);
+  });
+
+  /**
+   * ...and a create with NO key still mints a fresh session every time.
+   *
+   * The header has never been required here, and making it so would break every
+   * integration that has not sent one.
+   */
+  test("mints a fresh session for every keyless create", async () => {
+    const body = JSON.stringify({ amount: "51000000", network: "testnet" });
+    const headers = { "Content-Type": "application/json" };
+    const first = await readJson<CheckoutSessionResponse>(
+      await fetch(`${baseUrl}/v1/checkout_sessions`, { method: "POST", headers, body }),
+    );
+    const second = await readJson<CheckoutSessionResponse>(
+      await fetch(`${baseUrl}/v1/checkout_sessions`, { method: "POST", headers, body }),
+    );
+
+    expect(second.id).not.toBe(first.id);
+  });
+});

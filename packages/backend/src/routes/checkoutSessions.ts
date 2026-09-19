@@ -8,12 +8,14 @@ import { getDb } from "../db/postgres";
 import { findMerchantById } from "../db/merchants/merchantRepository";
 import { findIntentById } from "../db/payments/paymentIntentRepository";
 import {
+  findSessionByIntentId,
   findSessionByPublicId,
   findSessionForMerchant,
   insertCheckoutSession,
 } from "../db/payments/checkoutSessionRepository";
 import {
   createIntent,
+  IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
@@ -68,18 +70,52 @@ export function createCheckoutSessionsRouter(deps: {
       }
       const params: CreateCheckoutSessionParams = parsed.data as CreateCheckoutSessionParams;
 
+      /**
+       * An `Idempotency-Key` on this route is HONOURED when it is sent.
+       *
+       * The comment here used to say a session "wraps exactly ONE intent minted
+       * fresh at session-create time (Stripe Checkout Session parity) — there
+       * is nothing to replay against". Parity with Stripe's object model is not
+       * a reason to drop the caller's retry semantics: a merchant whose create
+       * timed out and retried got a SECOND session and a second payment intent,
+       * and the first one stayed alive until it expired. Two live sessions for
+       * one order is two prices a buyer can be shown and two payments they can
+       * make.
+       *
+       * No new column is needed. The key converges the INTENT
+       * (`payment_intents.idempotency_key`), and `checkout_sessions` is unique
+       * on the intent it wraps — so the session that already wraps the replayed
+       * intent IS the session that key created. Optional, because the header
+       * has never been required here and making it so would break every
+       * integration that has not sent one.
+       */
+      const idempotencyKey = req.header("Idempotency-Key")?.trim();
+
       try {
-        // No `idempotencyKey`: a checkout session wraps exactly ONE intent
-        // minted fresh at session-create time (Stripe Checkout Session
-        // parity) — there is nothing to replay against.
-        const { intent } = await createIntent({
+        const { intent, reused } = await createIntent({
           merchant,
           amount: params.amount,
           ...(params.rail !== undefined ? { rail: params.rail } : {}),
           ...(params.currency !== undefined ? { currency: params.currency } : {}),
           ...(params.network !== undefined ? { network: params.network } : {}),
           metadata: params.metadata,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
         });
+
+        if (reused) {
+          // The key named an intent that already exists, so the session that
+          // wraps it already exists too. 200, not 201: nothing was created, and
+          // the status code is what tells a merchant whether they just made a
+          // second checkout.
+          const existing = await findSessionByIntentId(getDb(), intent.id);
+          if (existing) {
+            res.status(200).json(toCheckoutSessionDTO(existing, intent));
+            return;
+          }
+          // The intent exists and no session wraps it — a create interrupted
+          // between the two writes. Fall through and write the session, which
+          // is what finishing that create means.
+        }
 
         // Explicit field whitelist — never spread `req.body`.
         //
@@ -108,11 +144,23 @@ export function createCheckoutSessionsRouter(deps: {
           cancelUrl: params.cancelUrl,
         });
         if (!session) {
-          // Unreachable: the intent was minted by the `createIntent` call
-          // directly above, so nothing else can have wrapped it. Stated rather
-          // than asserted away, so a future change that reuses an intent here
-          // fails loudly instead of serializing `null`.
-          throw new Error(`checkout session insert found intent ${intent.id} already wrapped`);
+          /**
+           * Another request wrapped this intent between the read above and this
+           * insert — two concurrent creates with one `Idempotency-Key`. The
+           * unique index decided the winner; re-reading it is correct rather
+           * than merely convenient, because both requests named the same intent
+           * and therefore the same session.
+           *
+           * Before the key was honoured this branch was unreachable and said
+           * so: every session minted a fresh intent, so nothing else could have
+           * wrapped it.
+           */
+          const winner = await findSessionByIntentId(getDb(), intent.id);
+          if (!winner) {
+            throw new Error(`checkout session insert found intent ${intent.id} already wrapped`);
+          }
+          res.status(200).json(toCheckoutSessionDTO(winner, intent));
+          return;
         }
 
         res.status(201).json(toCheckoutSessionDTO(session, intent));
@@ -123,6 +171,10 @@ export function createCheckoutSessionsRouter(deps: {
         }
         if (err instanceof EnvironmentModeMismatchError) {
           sendEnvironmentMismatch(res, err.message);
+          return;
+        }
+        if (err instanceof IdempotencyConflictError) {
+          sendError(res, 409, "invalid_request_error", err.message);
           return;
         }
         // 503, not 422: the rail is not configured on this deployment, which is

@@ -27,6 +27,7 @@ import type {
 } from "../db/payments/paymentIntentRepository";
 import {
   createIntent,
+  IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
@@ -305,6 +306,14 @@ export function createPaymentIntentsRouter(deps: {
         // card payment. Refused before Stripe was called at all.
         if (err instanceof EnvironmentModeMismatchError) {
           sendEnvironmentMismatch(res, err.message);
+          return;
+        }
+        // The key is in use for a DIFFERENT operation. Neither a bad request
+        // nor a success: answering 200 with the stored intent would tell the
+        // caller their new payment exists, and they would wait for money
+        // against an amount they never asked for.
+        if (err instanceof IdempotencyConflictError) {
+          sendError(res, 409, "invalid_request_error", err.message);
           return;
         }
         // 503, not 422: the caller cannot fix this by sending different fields.
