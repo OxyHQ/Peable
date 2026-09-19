@@ -10,6 +10,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 const providerCalls: { fn: string; request: Record<string, unknown> }[] = [];
 let refundCounter = 0;
 let refundThrows: Error | null = null;
+/**
+ * What the provider says about the refund it just made.
+ *
+ * `succeeded` is the ordinary case and the default. The other two are not
+ * exotic — Stripe is explicit that a refund can be pending and that a bank can
+ * reject one days later — and until `createRefund` read this field at all, both
+ * of them were stored as successes.
+ */
+let refundState: "succeeded" | "pending" | "failed" = "succeeded";
 
 const fakeProvider = {
   id: "stripe" as const,
@@ -19,8 +28,9 @@ const fakeProvider = {
     refundCounter += 1;
     return {
       providerObjectId: `re_stripe_${String(refundCounter)}`,
-      status: "partially_refunded",
-      state: "succeeded",
+      status: refundState === "succeeded" ? "partially_refunded" : "settled",
+      state: refundState,
+      ...(refundState === "failed" ? { failureCode: "insufficient_funds" } : {}),
     };
   },
   createPayment: async () => {
@@ -121,6 +131,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
   beforeEach(() => {
     providerCalls.length = 0;
     refundThrows = null;
+    refundState = "succeeded";
   });
 
   afterAll(() => {
@@ -294,7 +305,85 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
 
     const rows = await listRefundsForIntent(gatewayDb(), intent.id);
     expect(rows[0]?.status).toBe("pending");
-    // ...and pending money has not moved, so it does not reduce the balance.
+
+    /**
+     * ...and the pending amount IS reserved against the balance.
+     *
+     * This assertion used to read `"10000"`, on the reasoning that pending
+     * money has not moved. True of the payment's STATUS and wrong for the
+     * budget: a refund sitting pending at the provider will most likely land,
+     * so two concurrent refunds that each read only the succeeded total would
+     * both pass a check only one of them should — and the payer would be sent
+     * more than they paid, which nothing reverses automatically and which they
+     * have no reason to report.
+     *
+     * The payment's own status is still derived from succeeded rows only, which
+     * the `sumSucceededRefunds` assertion in the failed-refund case above pins.
+     */
+    expect(await remainingRefundable(intent)).toBe("9000");
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+  });
+
+  /**
+   * A refund the provider reports as PENDING is not money that came back.
+   *
+   * `createRefund` used to call `markRefundSucceeded` the moment
+   * `provider.refund` returned, ignoring `result.state` — which the adapter has
+   * always reported. So a pending refund was stored as succeeded, counted
+   * toward the payment's refunded total, and moved the payment to `refunded`.
+   * One that then failed left a payment permanently claiming money had gone
+   * back that never did.
+   */
+  test("a pending refund is stored pending and does not move the payment", async () => {
+    const intent = await settledIntent("10000");
+    refundState = "pending";
+
+    const { refund, paymentStatus } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_pending",
+      amount: "4000",
+    });
+
+    expect(refund.status).toBe("pending");
+    expect(paymentStatus).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    // Nothing has come back...
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+    // ...and the amount is reserved, so a second refund cannot exceed the total.
+    expect(await remainingRefundable(intent)).toBe("6000");
+    /**
+     * The provider's id is recorded even though the money has not moved. It is
+     * the ONLY handle a later `refund.updated` can be matched on, so a pending
+     * refund with no id stored is one whose eventual outcome arrives as
+     * `unmatched` and is never applied.
+     */
+    expect(refund.providerObjectId).not.toBeNull();
+  });
+
+  /**
+   * A refund the provider reports as FAILED is not money that came back
+   * either, and the payment must not move.
+   */
+  test("a provider-reported failure is stored failed, with its reason", async () => {
+    const intent = await settledIntent("10000");
+    refundState = "failed";
+
+    const { refund, paymentStatus } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_reported_failure",
+      amount: "4000",
+    });
+
+    expect(refund.status).toBe("failed");
+    expect(refund.failureCode).toBe("insufficient_funds");
+    expect(paymentStatus).toBe("settled");
+    // A failed refund reserves nothing: the whole amount is still refundable,
+    // so a retry under a new reference is not blocked by a refund that never
+    // happened.
     expect(await remainingRefundable(intent)).toBe("10000");
   });
 

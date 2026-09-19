@@ -3,6 +3,7 @@ import {
   PAYMENT_INTENT_STATUSES,
   canStillBePaid,
   isValidStatusTransition,
+  reachesSettlementFromPayer,
   type PaymentIntentStatus,
 } from '../paymentIntent';
 
@@ -68,4 +69,41 @@ test('classifies every status the table defines, and no others', () => {
 test('follows the chain path all the way to settled', () => {
   expect(isValidStatusTransition('awaiting_approval', 'settled')).toBe(false);
   expect(canStillBePaid('awaiting_approval')).toBe(true);
+});
+
+/**
+ * The gate that keeps the STATED payable set honest against the table.
+ *
+ * `canStillBePaid` used to derive its answer by walking `ALLOWED`, and that
+ * derivation broke the moment refunds could be undone: `refunded → settled`
+ * makes `settled` reachable from `settled` in two steps, so reachability would
+ * call a finished payment payable and reintroduce the original bug exactly.
+ *
+ * So the set is stated and this checks it: a payable status must still be able
+ * to reach `settled` without passing through a post-settlement status, and a
+ * non-payable one must not. The property survives any edge added to the table,
+ * which is more than either previous derivation managed.
+ */
+test('every payable status reaches settlement from the payer, and no other does', () => {
+  for (const status of PAYMENT_INTENT_STATUSES) {
+    expect([status, reachesSettlementFromPayer(status)]).toEqual([status, PAYABLE[status]]);
+  }
+});
+
+/**
+ * A refund can be UNDONE, and the table has to say so.
+ *
+ * A bank can reject a refund days after the provider accepted it
+ * (`refund.failed`). Without a path back, a payment whose only refund failed
+ * would claim `refunded` forever — the merchant's books saying money went back
+ * that is still with them, and no legal transition able to correct it.
+ */
+test('lets a failed refund return the payment to where the money actually is', () => {
+  expect(isValidStatusTransition('refunded', 'settled')).toBe(true);
+  expect(isValidStatusTransition('refunded', 'partially_refunded')).toBe(true);
+  expect(isValidStatusTransition('partially_refunded', 'settled')).toBe(true);
+  // ...and none of that makes a finished payment payable again.
+  expect(canStillBePaid('refunded')).toBe(false);
+  expect(canStillBePaid('partially_refunded')).toBe(false);
+  expect(canStillBePaid('settled')).toBe(false);
 });

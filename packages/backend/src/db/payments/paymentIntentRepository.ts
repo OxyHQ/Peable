@@ -634,6 +634,35 @@ export async function findIntentByProviderObject(
 }
 
 /**
+ * Which intent produced this CHARGE?
+ *
+ * The companion to `findIntentByProviderObject`, and a separate function
+ * because it reads a different column: a provider event about a refund or a
+ * dispute names the charge, not the payment, and matching a `ch_…` against
+ * `provider_object_id` finds nothing — silently, as an `unmatched` event that
+ * an operator eventually has to explain.
+ *
+ * `provider` is part of the key for the same reason it is there: object ids are
+ * unique within one provider's numbering and nowhere else.
+ */
+export async function findIntentByProviderCharge(
+  db: DatabaseOrTransaction,
+  provider: ProviderId,
+  providerChargeId: string
+): Promise<PaymentIntentRow | null> {
+  const [row] = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.provider, provider),
+        eq(paymentIntents.providerChargeId, providerChargeId)
+      )
+    );
+  return row ? toIntentRow(row) : null;
+}
+
+/**
  * The statuses an unpaid intent may expire FROM — exactly those whose
  * transition list in shared-types' `ALLOWED` table contains `expired`.
  *

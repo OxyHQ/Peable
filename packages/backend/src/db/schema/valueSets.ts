@@ -154,6 +154,23 @@ export const TRANSFER_STATUSES = [
 export const REFUND_STATUSES = ['pending', 'succeeded', 'failed'] as const;
 
 /**
+ * Who created a refund.
+ *
+ *  - `merchant` — asked for through this API, carrying the merchant's own
+ *                 `external_ref`, which is its idempotency.
+ *  - `provider` — it appeared at the acquirer (a dashboard refund, a dispute
+ *                 the network resolved) and was IMPORTED. There is no merchant
+ *                 reference and there cannot be one: the merchant did not make
+ *                 it and has no id for it.
+ *
+ * The distinction is not derivable from `external_ref IS NULL` even though the
+ * two agree today. "Did we do this" is a question an operator asks directly,
+ * and answering it from the absence of another column is how a future
+ * merchant-initiated refund with no reference silently reads as imported.
+ */
+export const REFUND_ORIGINS = ['merchant', 'provider'] as const;
+
+/**
  * Where one REVERSAL of a transfer stands.
  *
  * The same three words as a refund and a different subject, which is why it is

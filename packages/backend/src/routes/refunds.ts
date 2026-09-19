@@ -58,7 +58,16 @@ const createRefundBodySchema = z.object({
 interface RefundDTO {
   readonly id: string;
   readonly object: "refund";
-  readonly externalRef: string;
+  /**
+   * The merchant's own id for this refund — `null` for an IMPORTED one.
+   *
+   * A refund issued from the acquirer's dashboard, or created by the network
+   * resolving a dispute, has no merchant reference and cannot be given one:
+   * they did not make it. `origin` beside it is what tells them which is which,
+   * rather than leaving them to infer it from a null.
+   */
+  readonly externalRef: string | null;
+  readonly origin: "merchant" | "provider";
   readonly paymentIntentId: string;
   readonly amount: string;
   readonly currency: string;
@@ -87,6 +96,7 @@ function toRefundDTO(
     id: row.publicId,
     object: "refund",
     externalRef: row.externalRef,
+    origin: row.origin,
     paymentIntentId: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,

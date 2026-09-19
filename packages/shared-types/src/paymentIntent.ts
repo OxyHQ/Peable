@@ -101,10 +101,24 @@ const ALLOWED: Record<PaymentIntentStatus, readonly PaymentIntentStatus[]> = {
   requires_action: ['processing', 'settled', 'failed', 'expired', 'rejected'],
   processing: ['settled', 'failed'],
   // Money coming back requires money to have arrived, so both refund states are
-  // reachable only from `settled` (or from each other, one way).
+  // reachable only from `settled`.
   settled: ['refunded', 'partially_refunded'],
-  partially_refunded: ['refunded'],
-  refunded: [],
+  /**
+   * ...and money coming back can be UNDONE, which is why these edges run both
+   * ways.
+   *
+   * A refund is not final when the provider accepts it: a bank can reject one
+   * days later, and the provider then says so (`refund.failed`). Without a path
+   * back, a payment whose only refund failed would claim `refunded` forever —
+   * the merchant's books saying money went back that is still with them, and no
+   * transition anywhere able to correct it.
+   *
+   * The target is always recomputed from the SUM of succeeded refunds
+   * (`applyRefundToIntent`), never stepped, so these edges describe where that
+   * sum can legally land rather than a sequence anyone walks.
+   */
+  partially_refunded: ['refunded', 'settled'],
+  refunded: ['partially_refunded', 'settled'],
   expired: [],
   failed: [],
   rejected: [],
@@ -124,34 +138,87 @@ export const PAYMENT_INTENT_STATUSES: readonly PaymentIntentStatus[] = Object.ke
 ) as PaymentIntentStatus[];
 
 /**
- * Whether a payer can still complete a payment against an intent in this
- * status — that is, whether `settled` is still reachable from it.
+ * The statuses a payer can still complete a payment FROM.
  *
- * **This is not "is the status a leaf of the table", and the difference is a
- * bug that shipped.** The hosted checkout used to ask leaf-ness, which meant
- * `settled` while `settled` had no outgoing edges. Adding the refund
+ * **Twice now this question has been answered by walking the transition table,
+ * and twice the table has moved underneath it.**
+ *
+ * The hosted checkout first asked leaf-ness — "has this status no outgoing
+ * edges" — which meant `settled` while `settled` had none. Adding the refund
  * transitions (`settled → refunded | partially_refunded`) gave it edges, so a
- * settled payment stopped looking finished — and the checkout began REUSING a
- * remembered settled intent instead of minting a fresh one, showing a payer who
- * had already paid their old receipt forever with no way to pay the link again.
- * Nothing about that is visible from the transition table alone, which is
- * exactly why the question has to be asked in the payer's terms.
+ * settled payment stopped looking finished, and the checkout began REUSING a
+ * remembered settled intent instead of minting a fresh one: a payer who had
+ * already paid saw their old receipt forever, with no way to pay the link
+ * again.
  *
- * Reachability is transitive and requires at least one step, so `settled`
- * itself answers `false`: it is where paying ENDS. `partially_refunded` is
- * false too — money can still move, but not from the payer.
+ * The fix was reachability — "is `settled` still reachable" — and that held
+ * until refunds could be UNDONE. `refunded → settled` (a bank rejecting a
+ * refund days later) makes `settled` reachable from `settled` in two steps, so
+ * reachability answers `true` for a payment that is finished, and the original
+ * bug returns unchanged.
+ *
+ * So the set is stated, not derived. It is exactly the statuses in which the
+ * gateway is still waiting on the PAYER — which is what the question means, in
+ * the payer's own terms, and is the one formulation no edge added elsewhere can
+ * silently change. `paymentIntent.test.ts` pins it against the table: every
+ * member must still be able to reach `settled` without passing through a
+ * post-settlement status, and no non-member may.
+ */
+const PAYABLE_STATUSES: ReadonlySet<PaymentIntentStatus> = new Set([
+  'created',
+  'awaiting_approval',
+  'approved',
+  'broadcast',
+  'confirming',
+  'requires_action',
+  'processing',
+]);
+
+/**
+ * Whether a payer can still complete a payment against an intent in this
+ * status.
+ *
+ * `settled` answers `false`: it is where paying ENDS. `partially_refunded`
+ * answers `false` too — money can still move, but not from the payer.
  */
 export function canStillBePaid(status: PaymentIntentStatus): boolean {
+  return PAYABLE_STATUSES.has(status);
+}
+
+/**
+ * The statuses a payment reaches only AFTER the payer has finished.
+ *
+ * Exported for the gate below rather than for production use: the property that
+ * makes `PAYABLE_STATUSES` checkable is that a payable status reaches `settled`
+ * without going through one of these.
+ */
+export const POST_SETTLEMENT_STATUSES: readonly PaymentIntentStatus[] = [
+  'settled',
+  'refunded',
+  'partially_refunded',
+];
+
+/**
+ * Whether `settled` is reachable from `status` without passing through a
+ * post-settlement status. The derivation `canStillBePaid` used to BE, kept as
+ * the thing that checks it rather than as the thing that answers it.
+ */
+export function reachesSettlementFromPayer(status: PaymentIntentStatus): boolean {
+  const blocked = new Set<PaymentIntentStatus>(POST_SETTLEMENT_STATUSES);
+  // A payment that has ALREADY settled is one the payer has finished with,
+  // whatever edges lead out of it. Checked before the walk rather than inside
+  // it, because `partially_refunded → settled` is a direct edge and the walk
+  // would find it in one step — and that edge is a refund being undone, not a
+  // payer paying.
+  if (blocked.has(status)) return false;
+
   const seen = new Set<PaymentIntentStatus>();
-  // Starts from the SUCCESSORS, never from `status` itself: seeding the queue
-  // with `settled` would make `canStillBePaid('settled')` true by reflexivity,
-  // which is the whole thing this function exists to answer `false` to.
   const queue: PaymentIntentStatus[] = [...ALLOWED[status]];
 
   while (queue.length > 0) {
     const next = queue.shift() as PaymentIntentStatus;
     if (next === 'settled') return true;
-    if (seen.has(next)) continue;
+    if (seen.has(next) || blocked.has(next)) continue;
     seen.add(next);
     queue.push(...ALLOWED[next]);
   }

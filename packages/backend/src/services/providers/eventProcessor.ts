@@ -23,8 +23,19 @@ import {
   markProviderEventFailed,
   markProviderEventProcessed,
 } from "../../db/providers/providerEventRepository";
-import { findIntentById, findIntentByProviderObject } from "../../db/payments/paymentIntentRepository";
-import { findRefundByProviderObject } from "../../db/refunds/refundRepository";
+import {
+  findIntentById,
+  findIntentByProviderCharge,
+  findIntentByProviderObject,
+  type PaymentIntentRow,
+} from "../../db/payments/paymentIntentRepository";
+import {
+  applyRefundState,
+  findRefundByProviderObject,
+  importProviderRefund,
+  type RefundStatus,
+} from "../../db/refunds/refundRepository";
+import { newId } from "../../lib/ids";
 import { applyRefundToIntent } from "../refunds/refundService";
 import { findAccountByProviderAccountId } from "../../db/accounts/connectedAccountRepository";
 import { applyTransferReversal, findTransferByProviderObject } from "../../db/transfers/transferRepository";
@@ -104,7 +115,31 @@ const REFUND_EVENTS: ReadonlySet<string> = new Set([
   "charge.refunded",
   "refund.updated",
   "refund.created",
+  // `refund.failed` was ABSENT, and its absence is the expensive half. A bank
+  // can reject a refund days after the provider accepted it; without this
+  // event the row stays `succeeded`, the payment stays `refunded`, and the
+  // merchant's books say money went back that is still with them.
+  "refund.failed",
 ]);
+
+/**
+ * The provider's refund vocabulary, mapped onto the gateway's three states.
+ *
+ * `canceled` lands on `failed` rather than on a fourth state: from the
+ * merchant's and the payer's side the two are the same fact — the money is not
+ * coming — and a state nothing can act on differently is a state that only
+ * makes "how much came back" harder to compute.
+ *
+ * Anything unrecognised answers `null`, which the handler treats as "leave the
+ * row alone" rather than as a failure: a provider adding a state is not a
+ * reason to mark a payment's refund dead.
+ */
+function toRefundStatus(status: unknown): RefundStatus | null {
+  if (status === "succeeded") return "succeeded";
+  if (status === "failed" || status === "canceled") return "failed";
+  if (status === "pending" || status === "requires_action") return "pending";
+  return null;
+}
 
 /**
  * Dispute events, and the gateway status each one means.
@@ -358,32 +393,58 @@ function readReversedTotal(payload: Record<string, unknown>): string | null {
 /**
  * A refund the provider reports.
  *
- * Only a refund this gateway ALREADY has a row for is acted on. A refund made
- * entirely outside Peable — from the provider's own dashboard — has no row
- * here, and inventing one would put an amount in this database that nothing
- * chose: the row carries a merchant `external_ref`, which is the merchant's
- * identifier for a refund they did not make and cannot supply. Such an event
- * stays visible and unprocessed for an operator, which is the honest outcome.
+ * ## What this used to do, and what it missed
+ *
+ * It looked the refund up by provider object, and if it found one, recomputed
+ * the payment's status from the rows. Two things were wrong with that.
+ *
+ * First it never READ the event: a `refund.updated` carrying `failed` was
+ * processed by re-summing rows that still said `succeeded`, so the row's own
+ * state never moved and the payment kept claiming money had gone back. The
+ * status on the payload is the provider's authoritative word about THIS refund
+ * and is now what the row is set from.
+ *
+ * Second, a refund with no local row was `unmatched` forever. The comment
+ * argued that inventing a merchant `external_ref` for a refund the merchant
+ * never made would put an amount in this database that nothing chose — right
+ * about the reference, wrong about the refund. A dashboard refund, or the
+ * network resolving a dispute, is money that left; the payer has it and this
+ * gateway called the payment `settled`. `refunds.origin` and a nullable
+ * `external_ref` let it be recorded as what it is: imported, with no merchant
+ * reference, because there is none.
  */
 async function handleRefundEvent(
   db: ReturnType<typeof getDb>,
   event: ProviderEventRow,
 ): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
   const refundObjectId = event.objectIds.refund;
   if (!refundObjectId) {
-    // `charge.refunded` names the CHARGE, not the refund. Nothing to act on
-    // here without a refund id, and the payment's own status is already driven
-    // by the refund rows — so this is handled rather than failed.
+    // `charge.refunded` names the CHARGE, not the refund, so there is no row to
+    // move. The payment's status is still recomputed from whatever rows exist:
+    // the refund that produced this charge event arrives as its own
+    // `refund.created`/`refund.updated`, and those are what import it.
+    const chargeId = event.objectIds.charge;
+    const byCharge = chargeId
+      ? await findIntentByProviderCharge(db, provider, chargeId)
+      : null;
+    if (byCharge) await applyRefundToIntent(byCharge);
     await markProviderEventProcessed(db, event.id);
-    return { kind: "no_mapping" };
+    return byCharge
+      ? { kind: "applied", intentId: byCharge.id, status: byCharge.status }
+      : { kind: "no_mapping" };
   }
 
-  const refund = await findRefundByProviderObject(
-    db,
-    event.provider as ProviderId,
-    refundObjectId,
-  );
-  if (!refund) return { kind: "unmatched" };
+  const detail = readRefundDetail(event.payload);
+  const refund = await findRefundByProviderObject(db, provider, refundObjectId);
+
+  if (!refund) {
+    const imported = await importRefundFromEvent(db, event, refundObjectId, detail);
+    if (!imported) return { kind: "unmatched" };
+    const status = await applyRefundToIntent(imported.intent);
+    await markProviderEventProcessed(db, event.id);
+    return { kind: "applied", intentId: imported.intent.id, status };
+  }
 
   const intent = await findIntentById(db, refund.paymentIntentId);
   if (!intent) {
@@ -391,9 +452,98 @@ async function handleRefundEvent(
     return { kind: "failed", error: "the refund names an intent that cannot be read" };
   }
 
+  // The row FIRST, from the provider's own word, and the payment afterwards
+  // from the rows. `applyRefundState` refuses to move a row that already
+  // reached a terminal state, so a `pending` arriving after the `succeeded`
+  // that followed it cannot walk the money back.
+  if (detail.status !== null) {
+    await applyRefundState(db, refund.id, detail.status, detail.failureCode);
+  }
+
   const status = await applyRefundToIntent(intent);
   await markProviderEventProcessed(db, event.id);
   return { kind: "applied", intentId: intent.id, status };
+}
+
+/** What a refund payload says, narrowed to what a row needs. */
+interface RefundDetail {
+  readonly amount: string | null;
+  readonly status: RefundStatus | null;
+  readonly failureCode: string | null;
+}
+
+/**
+ * Read a stored refund payload.
+ *
+ * Every field it reads is on the redaction allow-list — `amount`, `status` and
+ * `failure_reason` — which is the constraint this file's header states: a
+ * handler may read a field the allow-list KEEPS and must never depend on one it
+ * drops, because a dropped field reads as `"[redacted]"` rather than as
+ * missing. `failure_reason` was added to that list alongside this handler; it
+ * had been silently redacted, so a failed refund's reason was unreadable.
+ */
+function readRefundDetail(payload: Record<string, unknown>): RefundDetail {
+  const empty: RefundDetail = { amount: null, status: null, failureCode: null };
+  const data = payload.data;
+  if (typeof data !== "object" || data === null) return empty;
+  const object = (data as Record<string, unknown>).object;
+  if (typeof object !== "object" || object === null) return empty;
+  const fields = object as Record<string, unknown>;
+
+  const rawAmount = fields.amount;
+  const amount =
+    typeof rawAmount === "number" && Number.isSafeInteger(rawAmount) && rawAmount > 0
+      ? String(rawAmount)
+      : null;
+
+  const failure = fields.failure_reason;
+  return {
+    amount,
+    status: toRefundStatus(fields.status),
+    failureCode: typeof failure === "string" && failure.length > 0 ? failure : null,
+  };
+}
+
+/**
+ * Record a refund that was created OUTSIDE this gateway.
+ *
+ * `null` when the event does not name a payment this gateway knows, or carries
+ * no usable amount — both of which the caller reports as `unmatched` and the
+ * drain retries, because the likelier cause is our own two-step create's window
+ * rather than a refund we can never account for.
+ */
+async function importRefundFromEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+  refundObjectId: string,
+  detail: RefundDetail,
+): Promise<{ readonly intent: PaymentIntentRow } | null> {
+  if (detail.amount === null) return null;
+
+  const provider = event.provider as ProviderId;
+  const paymentObjectId = event.objectIds[PAYMENT_OBJECT_KEY];
+  const chargeId = event.objectIds.charge;
+  const intent = paymentObjectId
+    ? await findIntentByProviderObject(db, provider, paymentObjectId)
+    : chargeId
+      ? await findIntentByProviderCharge(db, provider, chargeId)
+      : null;
+  if (!intent) return null;
+
+  await importProviderRefund(db, {
+    publicId: newId("re"),
+    merchantId: intent.merchantId,
+    paymentIntentId: intent.id,
+    amount: detail.amount,
+    currency: intent.currency,
+    provider,
+    providerObjectId: refundObjectId,
+    // Defaults to `pending` rather than `succeeded` when the payload says
+    // nothing: claiming money came back is the answer that is expensive to be
+    // wrong about, and the next `refund.updated` corrects it.
+    status: detail.status ?? "pending",
+  });
+  return { intent };
 }
 
 /**

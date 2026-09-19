@@ -50,6 +50,11 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   "declinecode",
   "failurecode",
   "failuremessage",
+  // Stripe's own name for why a refund did not go through. Absent from this
+  // list, it stored as `"[redacted]"` — so a failed refund's reason was
+  // unreadable in the one table a support query looks at, and the handler that
+  // wanted it could not tell "no reason given" from "we dropped it".
+  "failurereason",
   "outcome",
   "networkstatus",
   "amount",
@@ -61,6 +66,21 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   "created",
   "availableon",
   "arrivaldate",
+  /**
+   * A dispute's evidence DEADLINE — `evidence_details.due_by`.
+   *
+   * `eventProcessor` reads this field to fill `disputes.evidence_due_at`, and
+   * this allow-list dropped it: the nested `evidence_details` object was walked
+   * (every nested object is), and then `due_by` failed the key test and stored
+   * as the string `"[redacted]"`. The handler's `typeof by === "number"` guard
+   * then answered false, so the deadline was silently null on EVERY dispute —
+   * a merchant could be told they were being disputed without being told when
+   * evidence was due, and would discover it by losing.
+   *
+   * It is a scalar timestamp with no personal data in it, which is the same
+   * ground `created` and `arrival_date` are here on.
+   */
+  "dueby",
   "livemode",
   "paymentintent",
   "charge",

@@ -16,6 +16,8 @@ export {
   type CreatePaymentIntentParams,
   isValidStatusTransition,
   canStillBePaid,
+  reachesSettlementFromPayer,
+  POST_SETTLEMENT_STATUSES,
   PAYMENT_INTENT_STATUSES,
   PAYMENT_INTENT_RAILS,
   CHAIN_ONLY_STATUSES,
