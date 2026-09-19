@@ -38,20 +38,10 @@
 import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
 import {
   isSettlementReportingProvider,
+  UNKNOWN_SETTLEMENT,
   type ProviderSettlement,
 } from "./providers/provider";
 import { resolveProvider } from "./providers/registry";
-
-/** Nothing is known. Every figure `null`, and `status` says why it is not zero. */
-const UNKNOWN: ProviderSettlement = {
-  status: "unknown",
-  gross: null,
-  fee: null,
-  net: null,
-  currency: null,
-  availableOn: null,
-  exchangeRate: null,
-};
 
 /**
  * What the provider says this payment settled to.
@@ -75,14 +65,14 @@ export async function reportSettlement(
     // never holds them and takes nothing, so there is no fee to report — and
     // reporting `0` would be a claim about a settlement that does not work that
     // way at all.
-    return UNKNOWN;
+    return UNKNOWN_SETTLEMENT;
   }
   // No charge means no balance transaction: the payment has not been captured,
   // or the two-step create never linked. Not a fee of zero.
-  if (!intent.providerChargeId) return UNKNOWN;
+  if (!intent.providerChargeId) return UNKNOWN_SETTLEMENT;
 
   const provider = resolveProvider(intent.provider);
-  if (!provider || !isSettlementReportingProvider(provider)) return UNKNOWN;
+  if (!provider || !isSettlementReportingProvider(provider)) return UNKNOWN_SETTLEMENT;
 
   try {
     return await provider.getSettlement(intent.providerChargeId);
@@ -90,6 +80,6 @@ export async function reportSettlement(
     // A provider that cannot be reached knows the answer; we do not. Saying
     // `unknown` is the only honest response, and it is also what keeps a
     // reconciliation read from failing because of an outage elsewhere.
-    return UNKNOWN;
+    return UNKNOWN_SETTLEMENT;
   }
 }

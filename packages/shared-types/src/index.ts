@@ -28,7 +28,7 @@ export {
   type WebhookEvent,
   type WebhookEventPayload,
 } from './event';
-export { type Dispute, type DisputeStatus } from './dispute';
+export { type Dispute, type DisputeEvidence, type DisputeStatus } from './dispute';
 export {
   type CapabilityStatus,
   type ConnectedAccount,

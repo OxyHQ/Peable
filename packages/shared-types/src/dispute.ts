@@ -72,3 +72,56 @@ export interface Dispute {
   createdAt: string;
   updatedAt: string;
 }
+
+/**
+ * A merchant's response to a dispute — the whole field set, declared once.
+ *
+ * ## Why this is the wire contract and not four private copies
+ *
+ * It was four: the backend's provider port, the route's zod schema, the Stripe
+ * adapter's name map, and the SDK's params type. Every one of them is the SAME
+ * list, and the cost of them drifting is specific and silent — a field added to
+ * three of the four is one a merchant sends, the gateway accepts, and the
+ * network never sees. They find out when the dispute is decided against them.
+ *
+ * So the set lives here, with the wire contracts, and the other three are
+ * pinned to it: `provider.ts` aliases it, `routes/disputes.ts` declares its
+ * schema `satisfies Record<keyof DisputeEvidence, …>`, and the Stripe adapter's
+ * map is a total `Record<keyof DisputeEvidence, …>`. Adding a field here makes
+ * all three fail to compile until they carry it.
+ *
+ * ## What is not here
+ *
+ * The field NAMES are the network's, spelled the way the rest of these
+ * contracts spell things. They are not a Peable vocabulary and are not mapped
+ * to one: a merchant assembling a defence is reading their acquirer's guidance,
+ * and a gateway that renamed the fields would make that guidance not apply.
+ *
+ * FILE attachments are deliberately absent. They need the provider's upload
+ * API, a size and type policy, and somewhere for the bytes to live on the way
+ * through — and offering half of that would let a merchant submit a defence
+ * missing the receipt it rests on.
+ *
+ * None of it is ever stored. It carries a customer's name, their email, a
+ * billing address and correspondence; it is forwarded to the acquirer and
+ * forgotten. What is recorded is `evidenceSubmittedAt` and nothing more.
+ */
+export interface DisputeEvidence {
+  productDescription?: string;
+  customerName?: string;
+  customerEmailAddress?: string;
+  customerPurchaseIp?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  shippingCarrier?: string;
+  shippingDate?: string;
+  shippingTrackingNumber?: string;
+  serviceDate?: string;
+  accessActivityLog?: string;
+  cancellationPolicyDisclosure?: string;
+  cancellationRebuttal?: string;
+  duplicateChargeExplanation?: string;
+  refundPolicyDisclosure?: string;
+  refundRefusalExplanation?: string;
+  uncategorizedText?: string;
+}

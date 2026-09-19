@@ -10,7 +10,7 @@
  * This router does not know what a marketplace fee is and must not learn.
  */
 import { Router } from "express";
-import type { Response, RequestHandler } from "express";
+import type { RequestHandler } from "express";
 import { z } from "zod";
 import { oxyClient } from "@oxy.so/core";
 import { isBaseUnitString } from "@peable.to/shared-types";
@@ -41,13 +41,13 @@ import {
 } from "../services/transfers/transferService";
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
-import { redactProviderMessage } from "../services/providers/redact";
 import { toTransferDTO, type TransferDTO } from "../lib/serializeSettlement";
 import {
   requireAuthenticated,
   requireProviderMode,
   sendEnvironmentMismatch,
   sendError,
+  sendProviderError,
   wrap,
 } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
@@ -119,18 +119,6 @@ function resolveReversalRef(
   if (header) return header;
   const body = bodyValue?.trim();
   return body && body.length > 0 ? body : null;
-}
-
-function sendProviderError(res: Response, error: ProviderError): void {
-  // 502 for a retryable provider fault, 422 for a permanent refusal. The
-  // distinction is the merchant's to act on: one means try again, the other
-  // means the request as sent will never work.
-  sendError(
-    res,
-    error.retryable ? 502 : 422,
-    error.retryable ? "api_error" : "invalid_request_error",
-    redactProviderMessage(error.message),
-  );
 }
 
 /**

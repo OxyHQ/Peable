@@ -221,6 +221,34 @@ export interface AccountSnapshot {
  * forever — a seller told to do something they already did, with no way to
  * clear it.
  */
+/**
+ * Exactly the columns a provider snapshot writes — no more, no fewer.
+ *
+ * `applyAccountSnapshot`'s `.set()` is checked against this with `satisfies`,
+ * which is total in both directions: a field named here and missing from the
+ * write fails, and a field written and missing here fails too.
+ *
+ * It exists so `readinessChanged` can be pinned to the same set. That function
+ * decides whether a merchant is TOLD about a change, it was written as a
+ * hand-kept list of comparisons, and it had already fallen one behind — it
+ * omitted `defaultCurrency`, so an account whose payout currency changed
+ * updated silently and the marketplace settling into it would have found out
+ * from a transfer in the wrong currency. Adding a column to the write now
+ * forces a decision there rather than defaulting to silence.
+ */
+export type SnapshotWrittenField =
+  | 'payoutsEnabled'
+  | 'chargesEnabled'
+  | 'transfersCapability'
+  | 'cardPaymentsCapability'
+  | 'requirementsCurrentlyDue'
+  | 'requirementsEventuallyDue'
+  | 'requirementsPastDue'
+  | 'requirementsPendingVerification'
+  | 'disabledReasonCodes'
+  | 'defaultCurrency'
+  | 'lastSyncedAt';
+
 export async function applyAccountSnapshot(
   db: DatabaseOrTransaction,
   accountId: string,
@@ -244,7 +272,7 @@ export async function applyAccountSnapshot(
       disabledReasonCodes: snapshot.disabledReasonCodes.filter((code) => code.length > 0),
       defaultCurrency: snapshot.defaultCurrency,
       lastSyncedAt: now,
-    })
+    } satisfies Record<SnapshotWrittenField, unknown>)
     .where(eq(connectedAccounts.id, accountId))
     .returning(ACCOUNT_COLUMNS);
   return row ? toRow(row) : null;

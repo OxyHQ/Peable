@@ -101,7 +101,7 @@ export async function enqueueIntentWebhook(
 ): Promise<void> {
   const eventType = WEBHOOK_EVENT_FOR[row.status];
   if (eventType === undefined) return;
-  await enqueue(tx, row, buildEvent(eventType, toPaymentIntentDTO(row)));
+  await enqueue(tx, toAddress(row), buildEvent(eventType, toPaymentIntentDTO(row)));
 }
 
 /**
@@ -130,7 +130,7 @@ export async function enqueueDisputeWebhook(
   dispute: Dispute,
   eventType: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
 ): Promise<void> {
-  await enqueue(tx, row, buildEvent(eventType, dispute));
+  await enqueue(tx, toAddress(row), buildEvent(eventType, dispute));
 }
 
 /**
@@ -158,18 +158,23 @@ export async function enqueueConnectedAccountWebhook(
   merchantId: string,
   account: ConnectedAccount,
 ): Promise<void> {
-  const target = await findWebhookTarget(tx, merchantId);
-  if (!target) return;
+  await enqueue(tx, { merchantId }, buildEvent('connected_account.updated', account));
+}
 
-  await enqueueWebhook(tx, {
-    merchantId,
-    event: buildEvent('connected_account.updated', account),
-    url: target.url,
-  });
+/** Where an intent's events go: its merchant, correlated to the payment. */
+function toAddress(row: PaymentIntentRow): { merchantId: string; paymentIntentId: string } {
+  return { merchantId: row.merchantId, paymentIntentId: row.id };
 }
 
 /**
  * The shared half: find the merchant's endpoint and write the outbox row.
+ *
+ * Takes an ADDRESS — a merchant, and optionally the payment the event is about
+ * — rather than an intent row, because not every event here is about a payment.
+ * `connected_account.updated` is the first that is not, and it had grown a
+ * second copy of this function to say so; the difference between them was one
+ * field, and the identical halves were the endpoint lookup, the
+ * merchant-with-no-endpoint rule and the ADR 0001 D7 in-transaction write.
  *
  * The one read allowed to select `webhook_secret`. Only the URL is used here —
  * the secret is re-read at attempt time, so a merchant who rotates it
@@ -182,15 +187,15 @@ export async function enqueueConnectedAccountWebhook(
  */
 async function enqueue(
   tx: DatabaseOrTransaction,
-  row: PaymentIntentRow,
+  to: { readonly merchantId: string; readonly paymentIntentId?: string },
   event: WebhookEvent,
 ): Promise<void> {
-  const target = await findWebhookTarget(tx, row.merchantId);
+  const target = await findWebhookTarget(tx, to.merchantId);
   if (!target) return;
 
   await enqueueWebhook(tx, {
-    merchantId: row.merchantId,
-    paymentIntentId: row.id,
+    merchantId: to.merchantId,
+    paymentIntentId: to.paymentIntentId,
     event,
     url: target.url,
   });

@@ -30,7 +30,7 @@
  * stranger's opinion.
  */
 
-import type { CurrencyCode } from "@peable.to/shared-types";
+import type { CurrencyCode, DisputeEvidence } from "@peable.to/shared-types";
 
 /** The providers this gateway can route a fiat payment through. */
 export type ProviderId = "stripe";
@@ -48,6 +48,10 @@ export type ProviderStage =
   | "getStatus"
   | "verifyEvent"
   | "account"
+  // Reading what a payment came to. Its own stage because a failure here is
+  // the one on this list that is not a money movement at all: it degrades a
+  // reconciliation read to `unknown`, and nothing is left half-done.
+  | "settlement"
   // Answering a dispute. Its own stage rather than reusing `account`, because
   // the operator question it raises is different: a failure here means a
   // merchant's response did not reach the network before a deadline, which is
@@ -427,37 +431,21 @@ export interface AccountHoldingProvider extends PaymentProvider {
  * through — a different piece of work, and offering half of it would let a
  * merchant submit a response missing the receipt it depends on.
  */
-export interface DisputeEvidence {
-  readonly productDescription?: string;
-  readonly customerName?: string;
-  readonly customerEmailAddress?: string;
-  readonly customerPurchaseIp?: string;
-  readonly billingAddress?: string;
-  readonly shippingAddress?: string;
-  readonly shippingCarrier?: string;
-  readonly shippingDate?: string;
-  readonly shippingTrackingNumber?: string;
-  readonly serviceDate?: string;
-  readonly accessActivityLog?: string;
-  readonly cancellationPolicyDisclosure?: string;
-  readonly cancellationRebuttal?: string;
-  readonly duplicateChargeExplanation?: string;
-  readonly refundPolicyDisclosure?: string;
-  readonly refundRefusalExplanation?: string;
-  readonly uncategorizedText?: string;
-}
+/**
+ * Re-exported from the wire contract, which is where the set is declared.
+ *
+ * The port used to carry its own copy of these seventeen fields, and so did the
+ * route's schema, the Stripe adapter's name map and the SDK. A field added to
+ * three of the four is one a merchant sends, the gateway accepts, and the
+ * network never sees — they find out when the dispute is decided against them.
+ */
+export type { DisputeEvidence };
 
 export interface SubmitDisputeEvidenceRequest {
   /** The provider's own id for the dispute. */
   readonly providerObjectId: string;
   readonly evidence: DisputeEvidence;
   readonly idempotencyKey: string;
-}
-
-export interface ProviderDisputeResult {
-  readonly providerObjectId: string;
-  /** What the provider says the dispute is now, in ITS vocabulary. */
-  readonly status: string;
 }
 
 /**
@@ -473,9 +461,21 @@ export interface ProviderDisputeResult {
  * cost of getting that wrong. Responding is a one-shot act here: it submits.
  */
 export interface DisputeHandlingProvider extends PaymentProvider {
-  submitDisputeEvidence(
-    request: SubmitDisputeEvidenceRequest,
-  ): Promise<ProviderDisputeResult>;
+  /**
+   * Returns NOTHING, deliberately.
+   *
+   * It returned the provider's dispute id and status, and no caller read
+   * either — nor could one usefully: the status a provider reports immediately
+   * after a submission is `under_review`, which is not news, and the outcome
+   * arrives later as a `charge.dispute.closed` event that goes through
+   * `handleDisputeEvent` like every other network-initiated fact. A return
+   * value here would be a second, earlier, less reliable source for something
+   * this system already has one path for.
+   *
+   * What the caller needs is whether the submission REACHED the network, and
+   * that is carried by resolving rather than throwing.
+   */
+  submitDisputeEvidence(request: SubmitDisputeEvidenceRequest): Promise<void>;
 }
 
 /** Whether this rail can answer a dispute. */
@@ -516,6 +516,25 @@ export interface ProviderSettlement {
   /** Present only when the settlement currency differs from the charge's. */
   readonly exchangeRate: number | null;
 }
+
+/**
+ * Nothing is known: every figure `null`, and `status` says why it is not zero.
+ *
+ * Shared rather than written out per caller, because it is an ANSWER and not a
+ * default — the Stripe adapter returns it for a charge with no balance
+ * transaction, and `reportSettlement` returns it for a rail that takes no fee,
+ * a payment with no charge, and a provider it cannot reach. Two identical
+ * copies of it invite one of them growing a zero.
+ */
+export const UNKNOWN_SETTLEMENT: ProviderSettlement = {
+  status: "unknown",
+  gross: null,
+  fee: null,
+  net: null,
+  currency: null,
+  availableOn: null,
+  exchangeRate: null,
+};
 
 /**
  * A provider that can report what a payment settled to.

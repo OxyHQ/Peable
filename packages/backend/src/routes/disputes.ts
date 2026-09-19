@@ -39,14 +39,15 @@ import {
   submitDisputeEvidence,
 } from "../services/disputeEvidence";
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
+import type { DisputeEvidence } from "@peable.to/shared-types";
 import { ProviderError } from "../services/providers/provider";
-import { redactProviderMessage } from "../services/providers/redact";
 import { toDisputeDTO } from "../lib/serialize";
 import {
   requireAuthenticated,
   requireProviderMode,
   sendEnvironmentMismatch,
   sendError,
+  sendProviderError,
   wrap,
 } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
@@ -93,7 +94,7 @@ const evidenceBodySchema = z
     refundPolicyDisclosure: evidenceField,
     refundRefusalExplanation: evidenceField,
     uncategorizedText: evidenceField,
-  })
+  } satisfies Record<keyof DisputeEvidence, typeof evidenceField>)
   // Unknown keys are REFUSED rather than dropped. A merchant who sent
   // `trackingNumber` instead of `shippingTrackingNumber` would otherwise submit
   // — finally — a response missing the field they were relying on, and find out
@@ -219,12 +220,7 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
           return;
         }
         if (error instanceof ProviderError) {
-          sendError(
-            res,
-            error.retryable ? 502 : 422,
-            error.retryable ? "api_error" : "invalid_request_error",
-            redactProviderMessage(error.message),
-          );
+          sendProviderError(res, error);
           return;
         }
         throw error;

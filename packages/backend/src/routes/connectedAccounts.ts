@@ -24,13 +24,13 @@ import {
 } from "../services/accounts/connectedAccountService";
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
-import { redactProviderMessage } from "../services/providers/redact";
 import { toConnectedAccountDTO } from "../lib/serializeSettlement";
 import {
   requireAuthenticated,
   requireProviderMode,
   sendEnvironmentMismatch,
   sendError,
+  sendProviderError,
   wrap,
 } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
@@ -65,19 +65,6 @@ const accountLinkBodySchema = z.object({
   refreshUrl: z.string().url(),
   returnUrl: z.string().url(),
 });
-
-/** Turn a provider failure into an HTTP answer without leaking its text raw. */
-function sendProviderError(res: Parameters<typeof sendError>[0], error: ProviderError): void {
-  // 502 for a retryable provider fault and 422 for a permanent refusal. The
-  // distinction is the merchant's to act on: one means try again, the other
-  // means the request as sent will never work.
-  sendError(
-    res,
-    error.retryable ? 502 : 422,
-    error.retryable ? "api_error" : "invalid_request_error",
-    redactProviderMessage(error.message),
-  );
-}
 
 export function createConnectedAccountsRouter(deps: {
   requireMerchant: RequestHandler;
