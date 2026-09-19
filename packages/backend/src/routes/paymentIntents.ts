@@ -31,10 +31,17 @@ import {
   RailMismatchError,
   RailUnavailableError,
 } from "../services/createIntent";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { applyEvent } from "../services/intentState";
 import { announceIntentChange, transitionIntent } from "../services/intentTransition";
 import { toPaymentIntentDTO } from "../lib/serialize";
-import { sendError, wrap, requireServiceApp, requireAuthenticated } from "../lib/http";
+import {
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+  requireServiceApp,
+  requireAuthenticated,
+} from "../lib/http";
 import { railBodyFields } from "../lib/railSchema";
 
 const DEFAULT_LIST_LIMIT = 20;
@@ -289,6 +296,12 @@ export function createPaymentIntentsRouter(deps: {
         // server fault. Which mistake they made is in the message.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
           sendError(res, 422, "invalid_request_error", err.message);
+          return;
+        }
+        // A development or staging credential asking a live deployment for a
+        // card payment. Refused before Stripe was called at all.
+        if (err instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, err.message);
           return;
         }
         // 503, not 422: the caller cannot fix this by sending different fields.

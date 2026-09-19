@@ -18,10 +18,11 @@ import {
   RailMismatchError,
   RailUnavailableError,
 } from "../services/createIntent";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { resolveMerchantDisplay } from "../services/merchantDisplay";
 import { newId } from "../lib/ids";
 import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from "../lib/serialize";
-import { sendError, wrap, requireAuthenticated } from "../lib/http";
+import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 import { railBodyFields } from "../lib/railSchema";
 
@@ -118,6 +119,10 @@ export function createCheckoutSessionsRouter(deps: {
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
           sendError(res, 422, "invalid_request_error", err.message);
+          return;
+        }
+        if (err instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, err.message);
           return;
         }
         // 503, not 422: the rail is not configured on this deployment, which is

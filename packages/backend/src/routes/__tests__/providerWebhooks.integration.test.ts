@@ -48,8 +48,11 @@ const TEST_STRIPE_CONFIG: StripeConfig = {
   webhookSecretPrevious: undefined,
   connectWebhookSecretPrevious: undefined,
   // FALSE, and the livemode-mismatch case below depends on it: on a real
-  // deployment this is derived from the `sk_test_`/`sk_live_` prefix.
+  // deployment this is derived from the key's own mode, which
+  // `classifyStripeKey` reads off one of four prefixes rather than off
+  // `sk_live_` alone — `rk_live_…` is a live key too.
   livemode: false,
+  keyMode: "test",
 };
 
 /**

@@ -11,6 +11,7 @@ import {
 import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
 import type { Database } from "../db/postgres";
 import type { PaymentProvider, ProviderClientAction } from "./providers/provider";
+import { assertEnvironmentMatchesProvider } from "./providers/environmentGuard";
 import { resolveCardProvider, resolveProvider } from "./providers/registry";
 import { reserveNextAddress } from "./reserveAddress";
 import { newId, clientSecretFor } from "../lib/ids";
@@ -261,6 +262,14 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   const { merchant, amount, metadata, expiresInSeconds, idempotencyKey } = input;
   const { rail, currency, network } = resolveRail(merchant, input);
 
+  // BEFORE the idempotency lookup, not just before the insert, because the
+  // replay path calls the provider too (`clientActionFor` re-reads the payment).
+  // A refused environment has to leave nothing behind and send nothing: an
+  // intent written and then abandoned would sit in `created` until the sweeper
+  // expired it, and a merchant debugging a rejected credential would find
+  // payments they never made.
+  if (rail === "card") assertEnvironmentMatchesProvider(merchant.environment);
+
   const db = getDb();
 
   // Idempotency (fast path): a prior intent for this key wins as-is. Only
@@ -295,6 +304,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       "the card rail is not configured on this deployment",
     );
   }
+
 
   // Explicit field whitelist — never spread a caller body (mass-assignment
   // would be an IDOR). `status`, `currency` and `confirmations` take their

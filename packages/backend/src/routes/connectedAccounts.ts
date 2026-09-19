@@ -22,10 +22,17 @@ import {
   ensureConnectedAccount,
   refreshConnectedAccount,
 } from "../services/accounts/connectedAccountService";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
 import { redactProviderMessage } from "../services/providers/redact";
 import { toConnectedAccountDTO } from "../lib/serializeSettlement";
-import { requireAuthenticated, sendError, wrap } from "../lib/http";
+import {
+  requireAuthenticated,
+  requireProviderMode,
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+} from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 
 /** How many accounts one list call may return. */
@@ -83,6 +90,7 @@ export function createConnectedAccountsRouter(deps: {
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = createAccountBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -93,6 +101,7 @@ export function createConnectedAccountsRouter(deps: {
       try {
         const { account, created } = await ensureConnectedAccount({
           merchantId: merchant.id,
+          environment: merchant.environment,
           externalRef: parsed.data.externalRef,
           country: parsed.data.country,
           businessType: parsed.data.businessType,
@@ -101,6 +110,10 @@ export function createConnectedAccountsRouter(deps: {
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -201,6 +214,7 @@ export function createConnectedAccountsRouter(deps: {
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const { accountId } = req.params;
       if (!accountId) {
@@ -215,10 +229,16 @@ export function createConnectedAccountsRouter(deps: {
       }
 
       try {
-        res.status(200).json(toConnectedAccountDTO(await refreshConnectedAccount(account)));
+        res
+          .status(200)
+          .json(toConnectedAccountDTO(await refreshConnectedAccount(account, merchant.environment)));
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -245,6 +265,7 @@ export function createConnectedAccountsRouter(deps: {
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = accountLinkBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -266,6 +287,7 @@ export function createConnectedAccountsRouter(deps: {
 
       try {
         const link = await createAccountLink({
+          environment: merchant.environment,
           account,
           refreshUrl: parsed.data.refreshUrl,
           returnUrl: parsed.data.returnUrl,
@@ -278,6 +300,10 @@ export function createConnectedAccountsRouter(deps: {
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

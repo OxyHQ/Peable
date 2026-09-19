@@ -123,9 +123,18 @@ export async function insertMerchant(
   assertWatchOnly(params.xpub, params.network);
 
   try {
-    // Explicit field list, never a spread of caller input. `livemode` and
-    // `next_derivation_index` take their column defaults; `xpub`, `network`
-    // and `environment` are immutable afterwards.
+    // Explicit field list, never a spread of caller input.
+    // `next_derivation_index` takes its column default; `xpub`, `network` and
+    // `environment` are immutable afterwards.
+    //
+    // `livemode` is DERIVED from `environment` here rather than defaulted.
+    // Until this line existed, every row carried `false` including every
+    // production merchant — a published field that looked like a test/live
+    // guarantee and participated in no decision, which is worse than not
+    // having it: an integrator reading `livemode: false` off a production
+    // merchant has been told something untrue. `merchants_livemode_agrees_check`
+    // now refuses the pair disagreeing, so a second writer cannot reintroduce
+    // the drift.
     const [row] = await db
       .insert(merchants)
       .values({
@@ -133,6 +142,7 @@ export async function insertMerchant(
         publicId: params.publicId,
         oxyAppId: params.oxyAppId,
         environment: params.environment,
+        livemode: params.environment === 'production',
         network: params.network,
         xpub: params.xpub,
         webhookUrl: params.webhookUrl ?? null,

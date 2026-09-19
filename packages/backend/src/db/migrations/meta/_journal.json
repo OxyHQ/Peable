@@ -78,6 +78,13 @@
       "when": 1789521389706,
       "tag": "0010_fancy_garia",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1789808303931,
+      "tag": "0011_magical_cyclops",
+      "breakpoints": true
     }
   ]
 }

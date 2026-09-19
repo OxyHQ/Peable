@@ -42,13 +42,23 @@ export const merchants = pgTable(
     webhookSecret: text(),
     requiredConfirmations: integer().notNull().default(1),
     /**
-     * Stripe-parity flag, currently written by nothing and read by nothing —
-     * every row carries the default. Kept because removing a field from a
-     * published wire model is a product decision, not a port decision.
+     * Whether this merchant's payments are REAL money, derived from the
+     * environment of the credential that registered it.
      *
-     * It is NOT constrained against `environment`. The obvious CHECK
-     * (`livemode` ⇔ `environment = 'production'`) would refuse the
-     * registration of every production merchant, because no writer sets it.
+     * The comment that used to sit here said this field was "written by nothing
+     * and read by nothing — every row carries the default", and that it was
+     * deliberately NOT constrained against `environment` because the obvious
+     * CHECK would refuse every production merchant. That was accurate and it
+     * described a field that looked like a test/live guarantee, appeared on the
+     * published wire model, and participated in no decision: a production
+     * merchant read back `livemode: false`.
+     *
+     * `insertMerchant` — the single writer — now sets it from `environment`,
+     * which makes the obvious CHECK correct instead of impossible. The actual
+     * enforcement of test/live isolation is
+     * `services/providers/environmentGuard.ts`, which compares `environment`
+     * against the deployment's key mode before any provider call; this column
+     * is the same fact in the row, so a reader does not have to know that.
      */
     livemode: boolean().notNull().default(false),
     /** Display name shown in the payer's transaction history ("Paid at <name>"). */
@@ -111,6 +121,17 @@ export const merchants = pgTable(
     ),
     check('merchants_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),
     check('merchants_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
+    /**
+     * `livemode` ⇔ `environment = 'production'`, and nothing else.
+     *
+     * The three non-production environments are grouped on purpose: Oxy's
+     * `OXY_SERVICE_ENVIRONMENTS` may gain a member, and a new one must land on
+     * the side that cannot move real money.
+     */
+    check(
+      'merchants_livemode_agrees_check',
+      sql`${table.livemode} = (${table.environment} = 'production')`
+    ),
     // The create and update schemas both validate `.positive()`; this is that
     // range, in the one place a write that skipped them still has to pass.
     check('merchants_required_confirmations_check', sql`${table.requiredConfirmations} > 0`),

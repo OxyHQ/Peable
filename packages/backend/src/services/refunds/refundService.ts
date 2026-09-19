@@ -6,7 +6,7 @@
  * sum of succeeded refund rows. A stored total on the payment would be a second
  * home for the same fact, and the two disagree the first time a write is lost.
  */
-import type { CurrencyCode } from "@peable.to/shared-types";
+import type { CurrencyCode, MerchantEnvironment } from "@peable.to/shared-types";
 import {
   findRefundByExternalRef,
   insertRefund,
@@ -20,6 +20,7 @@ import { getDb } from "../../db/postgres";
 import { newId } from "../../lib/ids";
 import { applyEvent } from "../intentState";
 import { announceIntentChange, transitionIntent } from "../intentTransition";
+import { assertEnvironmentMatchesProvider } from "../providers/environmentGuard";
 import { ProviderError, type PaymentProvider } from "../providers/provider";
 import { redactProviderMessage } from "../providers/redact";
 import { resolveProvider } from "../providers/registry";
@@ -50,6 +51,12 @@ export class RefundsUnavailableError extends Error {
 
 export interface CreateRefundInput {
   readonly merchantId: string;
+  /**
+   * The environment of the credential asking. Checked against the provider's
+   * mode before anything is sent — separating merchant ROWS by environment does
+   * not stop a development credential reaching a live key.
+   */
+  readonly environment: MerchantEnvironment;
   readonly intent: PaymentIntentRow;
   /** The MERCHANT's own id for this refund. The idempotency. */
   readonly externalRef: string;
@@ -106,6 +113,10 @@ function requireRefundProvider(intent: PaymentIntentRow): PaymentProvider {
  */
 export async function createRefund(input: CreateRefundInput): Promise<CreateRefundResult> {
   const { intent } = input;
+  // FIRST, before the payment's own state is examined. This is an
+  // authorization decision, and a wrong-mode credential must not be able to
+  // learn whether a payment is settled by reading which refusal it gets.
+  assertEnvironmentMatchesProvider(input.environment);
   if (intent.status !== "settled" && intent.status !== "partially_refunded") {
     throw new PaymentNotRefundableError(intent.status);
   }

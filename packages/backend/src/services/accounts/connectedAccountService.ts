@@ -8,6 +8,7 @@
  * database constraint rather than a check — a check loses the race that
  * produces the second account.
  */
+import type { MerchantEnvironment } from "@peable.to/shared-types";
 import {
   applyAccountSnapshot,
   findAccountByExternalRef,
@@ -17,6 +18,7 @@ import {
 } from "../../db/accounts/connectedAccountRepository";
 import { getDb } from "../../db/postgres";
 import { newId } from "../../lib/ids";
+import { assertEnvironmentMatchesProvider } from "../providers/environmentGuard";
 import {
   isAccountHoldingProvider,
   type AccountHoldingProvider,
@@ -83,6 +85,8 @@ function requireAccountProvider(): AccountHoldingProvider {
 
 export interface EnsureAccountInput {
   readonly merchantId: string;
+  /** The asking credential's environment — checked against the provider's mode. */
+  readonly environment: MerchantEnvironment;
   /** The MERCHANT's own id for this seller. The address, and the idempotency. */
   readonly externalRef: string;
   /** ISO-3166-1 alpha-2. Upper-cased here; the CHECK insists on it. */
@@ -116,6 +120,11 @@ export interface EnsureAccountResult {
 export async function ensureConnectedAccount(
   input: EnsureAccountInput,
 ): Promise<EnsureAccountResult> {
+  // A connected account opened under the wrong mode is the least recoverable
+  // mistake on this surface: the object cannot be deleted, so a development
+  // credential that opened a LIVE Express account leaves a real one behind,
+  // generating real requirement emails to a real person, forever.
+  assertEnvironmentMatchesProvider(input.environment);
   const provider = requireAccountProvider();
   const db = getDb();
   const country = input.country.toUpperCase();
@@ -173,7 +182,16 @@ export async function ensureConnectedAccount(
  */
 export async function refreshConnectedAccount(
   account: ConnectedAccountRow,
+  environment?: MerchantEnvironment,
 ): Promise<ConnectedAccountRow> {
+  // OPTIONAL, and that is a decision rather than an oversight. A merchant-
+  // initiated refresh passes the credential's environment and is checked; the
+  // event drain and the staleness sweep reach this with an account row and no
+  // credential at all, and refusing them would stop readiness ever arriving on
+  // a correctly-configured deployment. Reading an account moves no money, which
+  // is what makes the asymmetry safe — `ensureConnectedAccount` and
+  // `createAccountLink`, which do, both require it.
+  if (environment !== undefined) assertEnvironmentMatchesProvider(environment);
   const provider = requireAccountProvider();
   const snapshot = await provider.getAccount(account.providerAccountId);
   const updated = await applyAccountSnapshot(
@@ -185,6 +203,8 @@ export async function refreshConnectedAccount(
 }
 
 export interface AccountLinkInput {
+  /** The asking credential's environment — checked against the provider's mode. */
+  readonly environment: MerchantEnvironment;
   readonly account: ConnectedAccountRow;
   readonly refreshUrl: string;
   readonly returnUrl: string;
@@ -200,6 +220,7 @@ export interface AccountLinkInput {
 export async function createAccountLink(
   input: AccountLinkInput,
 ): Promise<{ url: string; expiresAt: Date }> {
+  assertEnvironmentMatchesProvider(input.environment);
   const provider = requireAccountProvider();
   return provider.accountLink({
     providerAccountId: input.account.providerAccountId,

@@ -25,9 +25,16 @@ import {
   RefundsUnavailableError,
   remainingRefundable,
 } from "../services/refunds/refundService";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
 import { redactProviderMessage } from "../services/providers/redact";
-import { requireAuthenticated, sendError, wrap } from "../lib/http";
+import {
+  requireAuthenticated,
+  requireProviderMode,
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+} from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 
 const createRefundBodySchema = z.object({
@@ -112,6 +119,9 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      // BEFORE the intent lookup, whose 404 would otherwise let a wrong-mode
+      // credential probe which `pi_…` values this merchant owns.
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = createRefundBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -149,6 +159,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       try {
         const { refund, created, paymentStatus } = await createRefund({
           merchantId: merchant.id,
+          environment: merchant.environment,
           intent,
           externalRef: body.externalRef,
           amount: body.amount,
@@ -166,6 +177,10 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         }
         if (error instanceof RefundsUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

@@ -20,10 +20,11 @@ import {
   assertRailAvailable,
   resolveRail,
 } from "../services/createIntent";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { resolveMerchantDisplay } from "../services/merchantDisplay";
 import { newId } from "../lib/ids";
 import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from "../lib/serialize";
-import { sendError, wrap, requireAuthenticated } from "../lib/http";
+import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 import { railBodyFields } from "../lib/railSchema";
 
@@ -356,6 +357,15 @@ export function createPaymentLinksRouter(deps: {
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
           sendError(res, 503, "api_error", err.message);
+          return;
+        }
+        // A link created by a development credential, opened against a live
+        // deployment. Unreachable while the link, its merchant and this
+        // deployment agree — the link's environment comes from its merchant —
+        // but this is the PAYER's path, so a misconfiguration here would charge
+        // a real card against a test integration.
+        if (err instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, err.message);
           return;
         }
         throw err;
