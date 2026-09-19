@@ -39,9 +39,21 @@ export const webhookDeliveries = pgTable(
       .notNull()
       .references(() => merchants.id, { onDelete: 'restrict' }),
     /**
-     * The intent the event was about. Holds the intent's PRIMARY KEY; the Mongo
-     * field held the public `pi_…` id, and the serializer renders that from the
-     * join.
+     * The intent the event was about, when it was about one. Holds the intent's
+     * PRIMARY KEY; the Mongo field held the public `pi_…`, and the serializer
+     * renders that from the join.
+     *
+     * NULLABLE, because not every merchant-facing event is about a payment.
+     * `connected_account.updated` is about a SELLER — their readiness changed —
+     * and a payment intent has nothing to do with it. While this column was
+     * `NOT NULL` that event could not be enqueued at all, which is why the
+     * account handler updated the local row and told the merchant nothing: a
+     * seller finished onboarding and the marketplace had no way to learn it
+     * without polling.
+     *
+     * Naming some unrelated payment to satisfy the constraint was the other
+     * option and is worse than the gap — a delivery that points at a payment
+     * the event is not about is a delivery a merchant correlates wrongly.
      *
      * `cascade`, unlike every other reference in this schema: a delivery log is
      * derived from its intent and has no meaning without it, where an intent is
@@ -49,9 +61,7 @@ export const webhookDeliveries = pgTable(
      * today; this states what the consequence would be rather than leaving it
      * to whoever writes that statement.
      */
-    paymentIntentId: text()
-      .notNull()
-      .references(() => paymentIntents.id, { onDelete: 'cascade' }),
+    paymentIntentId: text().references(() => paymentIntents.id, { onDelete: 'cascade' }),
     /** The `evt_…` envelope id that was signed and sent. */
     eventId: text().notNull(),
     eventType: text().notNull(),
@@ -169,6 +179,21 @@ export const webhookDeliveries = pgTable(
     check(
       'webhook_deliveries_payload_object_check',
       sql`jsonb_typeof(${table.payload}) = 'object'`
+    ),
+    /**
+     * An event ABOUT a payment names one; an event about something else does
+     * not.
+     *
+     * The column became nullable for `connected_account.updated`, which is
+     * about a seller. Left unconstrained, that widening would also let a
+     * `payment_intent.settled` be enqueued with no intent — a delivery a
+     * merchant cannot correlate to anything, and one the list join would then
+     * have to drop or render with a null `intentId`. The rule is stated here
+     * rather than trusted to the one function that writes the rows.
+     */
+    check(
+      'webhook_deliveries_intent_event_has_intent_check',
+      sql`(${table.eventType} like 'payment_intent.%') = (${table.paymentIntentId} is not null)`
     ),
     /**
      * A row that will be ATTEMPTED carries a real envelope.

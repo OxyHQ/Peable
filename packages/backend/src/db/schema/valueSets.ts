@@ -221,6 +221,10 @@ export const WEBHOOK_EVENT_TYPES = [
   'payment_intent.partially_refunded',
   'payment_intent.disputed',
   'payment_intent.dispute_closed',
+  // The first event that is not about a payment. Its delivery names no intent,
+  // which is what `webhook_deliveries_intent_event_has_intent_check` allows for
+  // by keying on the `payment_intent.` prefix rather than on a list.
+  'connected_account.updated',
 ] as const satisfies readonly WebhookEventType[];
 export type WebhookEventTypesAreComplete = AssertAllListed<
   WebhookEventType,

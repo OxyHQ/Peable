@@ -2,6 +2,7 @@
 // object nested under `data.object`, delivered HMAC-signed by the dispatcher.
 import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
+import type { ConnectedAccount } from './settlement';
 
 export type WebhookEventType =
   | 'payment_intent.confirming'
@@ -44,7 +45,30 @@ export type WebhookEventType =
    * this union keeps compiling and simply never matches them.
    */
   | 'payment_intent.disputed'
-  | 'payment_intent.dispute_closed';
+  | 'payment_intent.dispute_closed'
+  /**
+   * A seller's account changed — their READINESS, in practice.
+   *
+   * The first event here that is not about a payment, and it exists because
+   * readiness is the one fact about a seller a marketplace cannot act without
+   * and could not learn: the gateway refreshed the account row from the
+   * provider and told the merchant nothing, so the only ways to find out a
+   * seller had finished onboarding were to poll `GET /v1/connected_accounts`
+   * or to attempt a settlement and read the refusal.
+   *
+   * Emitted when the fields a merchant ACTS on change — payability, the two
+   * capabilities, the requirement counts, the disabled reasons — and not on
+   * every refresh. A periodic sync sweep re-reads every account whether or not
+   * anything moved, and an event per sweep would be a stream a merchant learns
+   * to ignore.
+   *
+   * It carries a {@link ConnectedAccount} and its delivery names NO payment
+   * intent, which is why `WebhookDelivery.intentId` is nullable.
+   *
+   * Additive to a published contract: an existing consumer that switches on
+   * this union keeps compiling and simply never matches it.
+   */
+  | 'connected_account.updated';
 
 /**
  * Which resource each event type carries under `data.object`.
@@ -65,6 +89,7 @@ export interface WebhookEventPayload {
   'payment_intent.partially_refunded': PaymentIntent;
   'payment_intent.disputed': Dispute;
   'payment_intent.dispute_closed': Dispute;
+  'connected_account.updated': ConnectedAccount;
 }
 
 /**

@@ -34,8 +34,16 @@ const CLAIMED_COLUMNS = {
 
 export interface EnqueueWebhookParams {
   readonly merchantId: string;
-  /** The INTERNAL id of the intent the event is about, not its `pi_…`. */
-  readonly paymentIntentId: string;
+  /**
+   * The INTERNAL id of the intent the event is about, not its `pi_…`.
+   *
+   * OPTIONAL, because not every merchant-facing event is about a payment:
+   * `connected_account.updated` is about a seller.
+   * `webhook_deliveries_intent_event_has_intent_check` refuses the two
+   * combinations that would be wrong — a payment event with no intent, and a
+   * non-payment event naming one.
+   */
+  readonly paymentIntentId?: string | undefined;
   readonly event: WebhookEvent;
   /** The merchant's endpoint as of enqueue. Re-read at each attempt. */
   readonly url: string;
@@ -59,7 +67,7 @@ export async function enqueueWebhook(
     .values({
       id: uuidv7(),
       merchantId: params.merchantId,
-      paymentIntentId: params.paymentIntentId,
+      paymentIntentId: params.paymentIntentId ?? null,
       eventId: params.event.id,
       eventType: params.event.type,
       payload: params.event as unknown as Record<string, unknown>,

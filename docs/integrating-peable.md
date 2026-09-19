@@ -189,6 +189,29 @@ afterwards. Do not cancel an order on `payment_intent.failed` alone. On the
 chain rail `failed` means `underpaid` and IS terminal — the rail is on the
 intent, so a handler can tell them apart.
 
+### `connected_account.updated` — the one event that is not about a payment
+
+Its `data.object` is a `ConnectedAccount`, and its `intentId` on the delivery
+log is `null`. It fires when something a marketplace ACTS on changes about a
+seller — payability, either capability, the requirement counts, the disabled
+reasons — and not on every refresh, because a periodic sweep re-reads every
+account whether or not anything moved.
+
+This is how you learn a seller finished onboarding. The alternatives were
+polling `GET /v1/connected_accounts` or attempting a settlement and reading the
+refusal.
+
+```ts
+if (event.type === 'connected_account.updated') {
+  const seller = event.data.object;          // ConnectedAccount, not PaymentIntent
+  if (seller.payable) enableCheckoutFor(seller.externalRef);
+}
+```
+
+`payable` is a convenience, not the authority: every field it is derived from is
+on the same object, and a marketplace with its own readiness policy should read
+those.
+
 ### Resuming an unpaid checkout
 
 A `PaymentIntent` deliberately carries no confirmation credential: one on that
