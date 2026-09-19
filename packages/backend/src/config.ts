@@ -111,6 +111,24 @@ export interface StripeConfig {
   /** True only when `STRIPE_ENABLED` is set AND every required secret is present. */
   enabled: boolean;
   secretKey: string | undefined;
+  /**
+   * The PUBLISHABLE key — public by construction, and the one Stripe value
+   * that is meant to reach a browser.
+   *
+   * The hosted checkout needs it to mount the provider's own card fields, and
+   * it must not be a build-time constant in that bundle: the checkout is
+   * deployed once and serves whichever gateway it is pointed at, so a key baked
+   * into it would be the wrong mode the first time a test deployment used the
+   * same page. It is served from `POST /v1/payment_intents/:id/client_action`
+   * beside the confirmation credential, which is the one response that already
+   * proves the caller may pay this payment.
+   *
+   * NOT part of `resolveStripeEnabled`'s required set: a deployment that only
+   * serves server-side integrators (Mercaria mounts its own fields) needs no
+   * publishable key, and refusing to enable the rail without one would turn a
+   * working configuration off.
+   */
+  publishableKey: string | undefined;
   /** Platform-scope endpoint secret. */
   webhookSecret: string | undefined;
   /** Connect-scope endpoint secret — a DIFFERENT endpoint with its own secret. */
@@ -291,6 +309,7 @@ export function loadConfig(
     stripe: {
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
+      publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY),
       webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET),
       connectWebhookSecret: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET),
       webhookSecretPrevious: readOptional(env.STRIPE_WEBHOOK_SECRET_PREVIOUS),

@@ -43,6 +43,9 @@ const REAL_STRIPE_CONFIG: StripeConfig = config.stripe;
 const TEST_STRIPE_CONFIG: StripeConfig = {
   enabled: true,
   secretKey: "sk_test_dummy_key_for_signature_tests",
+  // Absent: nothing in this file mounts a card form, and the rail does not
+  // require one — a deployment serving only server-side integrators needs none.
+  publishableKey: undefined,
   webhookSecret: PLATFORM_SECRET,
   connectWebhookSecret: CONNECT_SECRET,
   webhookSecretPrevious: undefined,

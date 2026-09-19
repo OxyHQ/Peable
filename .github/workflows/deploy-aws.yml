@@ -170,6 +170,11 @@ jobs:
           # sync_secret, which is the correct steady state.
           APP_STRIPE_ENABLED: ${{ secrets.STRIPE_ENABLED }}
           APP_STRIPE_SECRET_KEY: ${{ secrets.STRIPE_SECRET_KEY }}
+          # Public by construction, and carried here anyway: it belongs beside
+          # the secret key because the two have to describe the SAME mode, and
+          # splitting them across two provisioning mechanisms is how a live
+          # deployment ends up serving a test publishable key to a card form.
+          APP_STRIPE_PUBLISHABLE_KEY: ${{ secrets.STRIPE_PUBLISHABLE_KEY }}
           APP_STRIPE_WEBHOOK_SECRET: ${{ secrets.STRIPE_WEBHOOK_SECRET }}
           APP_STRIPE_CONNECT_WEBHOOK_SECRET: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET }}
           APP_STRIPE_WEBHOOK_SECRET_PREVIOUS: ${{ secrets.STRIPE_WEBHOOK_SECRET_PREVIOUS }}
@@ -191,6 +196,7 @@ jobs:
           sync_secret DEVICE_ID_SALT "$APP_DEVICE_ID_SALT" "/oxy/$APP/DEVICE_ID_SALT"
           sync_secret STRIPE_ENABLED "$APP_STRIPE_ENABLED" "/oxy/$APP/STRIPE_ENABLED"
           sync_secret STRIPE_SECRET_KEY "$APP_STRIPE_SECRET_KEY" "/oxy/$APP/STRIPE_SECRET_KEY"
+          sync_secret STRIPE_PUBLISHABLE_KEY "$APP_STRIPE_PUBLISHABLE_KEY" "/oxy/$APP/STRIPE_PUBLISHABLE_KEY"
           sync_secret STRIPE_WEBHOOK_SECRET "$APP_STRIPE_WEBHOOK_SECRET" "/oxy/$APP/STRIPE_WEBHOOK_SECRET"
           sync_secret STRIPE_CONNECT_WEBHOOK_SECRET "$APP_STRIPE_CONNECT_WEBHOOK_SECRET" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET"
           sync_secret STRIPE_WEBHOOK_SECRET_PREVIOUS "$APP_STRIPE_WEBHOOK_SECRET_PREVIOUS" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_PREVIOUS"
