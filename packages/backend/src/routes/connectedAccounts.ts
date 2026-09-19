@@ -35,8 +35,19 @@ import {
 } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 
-/** How many accounts one list call may return. */
-const LIST_LIMIT = 100;
+/** How many accounts one list call returns when the caller does not say. */
+const DEFAULT_LIST_LIMIT = 25;
+/** ...and the most it will return however large a `limit` is asked for. */
+const MAX_LIST_LIMIT = 100;
+
+/**
+ * Mirrors the payment-intent list query, deliberately: a merchant paginating
+ * two collections in one integration should not have to learn two shapes.
+ */
+const listQuerySchema = z.object({
+  limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
+  starting_after: z.string().optional(),
+});
 
 const createAccountBodySchema = z.object({
   /**
@@ -135,8 +146,53 @@ export function createConnectedAccountsRouter(deps: {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const rows = await listAccountsForMerchant(getDb(), merchant.id, LIST_LIMIT);
-      res.status(200).json({ object: "list", data: rows.map(toConnectedAccountDTO) });
+      const parsed = listQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        sendError(
+          res,
+          422,
+          "invalid_request_error",
+          parsed.error.issues[0]?.message ?? "invalid query",
+        );
+        return;
+      }
+
+      const db = getDb();
+      /**
+       * The cursor arrives as a PUBLIC `ca_…` and the keyset walk runs on the
+       * primary key, so it is resolved here — ownership-scoped, so a cursor
+       * naming ANOTHER merchant's seller is a 422 exactly like an unknown one
+       * and never confirms that the account exists.
+       */
+      let after: string | undefined;
+      if (parsed.data.starting_after) {
+        const cursor = await findAccountByPublicId(db, merchant.id, parsed.data.starting_after);
+        if (!cursor) {
+          sendError(
+            res,
+            422,
+            "invalid_request_error",
+            "starting_after references an unknown connected account",
+          );
+          return;
+        }
+        after = cursor.id;
+      }
+
+      const page = await listAccountsForMerchant(
+        db,
+        merchant.id,
+        parsed.data.limit ?? DEFAULT_LIST_LIMIT,
+        after,
+      );
+      // `has_more` rather than a silently truncated list: this route used to
+      // return at most 100 sellers with nothing saying there were more, and a
+      // caller reconciling against it concludes the rest are gone.
+      res.status(200).json({
+        object: "list",
+        data: page.data.map(toConnectedAccountDTO),
+        has_more: page.hasMore,
+      });
     }),
   );
 

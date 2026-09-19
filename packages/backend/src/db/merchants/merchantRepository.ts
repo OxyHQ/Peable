@@ -22,8 +22,10 @@ export interface MerchantRow {
   readonly publicId: string;
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  readonly network: NetworkType;
-  readonly xpub: string;
+  /** `null` on a CARD-ONLY merchant, which registers no FairCoin account. */
+  readonly network: NetworkType | null;
+  /** `null` on a card-only merchant. Nullable TOGETHER with `network`. */
+  readonly xpub: string | null;
   readonly webhookUrl: string | null;
   readonly requiredConfirmations: number;
   readonly livemode: boolean;
@@ -63,6 +65,21 @@ export class WatchOnlyViolationError extends Error {
 }
 
 /**
+ * Raised when a registration describes HALF a FairCoin account.
+ *
+ * Separate from the watch-only violation because it is a different mistake:
+ * that one is a merchant handing over a key that can spend, this one is a
+ * merchant naming a chain with no key or a key with no chain. Both are 422s and
+ * the message is what tells the integrator which they made.
+ */
+export class ChainRegistrationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ChainRegistrationError';
+  }
+}
+
+/**
  * The non-custody firewall, re-implemented because Postgres has no counterpart
  * to a Mongoose hook.
  *
@@ -97,8 +114,16 @@ function assertWatchOnly(xpub: string, network: NetworkType): void {
 export interface InsertMerchantParams {
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  readonly network: NetworkType;
-  readonly xpub: string;
+  /**
+   * The FairCoin half, and it is OPTIONAL — both fields or neither.
+   *
+   * A card-only merchant registers with neither. They were required, so such a
+   * merchant had to supply a watch-only key for a chain they never intended to
+   * use: either a real key they then had to custody, or a fixture that silently
+   * made their receive addresses underivable by their own wallet.
+   */
+  readonly network?: NetworkType | undefined;
+  readonly xpub?: string | undefined;
   readonly publicId: string;
   readonly webhookUrl?: string | undefined;
   readonly webhookSecret?: string | undefined;
@@ -120,7 +145,17 @@ export async function insertMerchant(
   db: DatabaseOrTransaction,
   params: InsertMerchantParams
 ): Promise<MerchantRow | null> {
-  assertWatchOnly(params.xpub, params.network);
+  // One capability, two halves. `merchants_chain_fields_agree_check` refuses
+  // the mix in the database; this refuses it with a message that names what is
+  // missing rather than a constraint name.
+  if ((params.network == null) !== (params.xpub == null)) {
+    throw new ChainRegistrationError(
+      "accepting FairCoin needs both a network and a watch-only xpub, or neither",
+    );
+  }
+  if (params.xpub != null && params.network != null) {
+    assertWatchOnly(params.xpub, params.network);
+  }
 
   try {
     // Explicit field list, never a spread of caller input.
@@ -143,8 +178,8 @@ export async function insertMerchant(
         oxyAppId: params.oxyAppId,
         environment: params.environment,
         livemode: params.environment === 'production',
-        network: params.network,
-        xpub: params.xpub,
+        network: params.network ?? null,
+        xpub: params.xpub ?? null,
         webhookUrl: params.webhookUrl ?? null,
         webhookSecret: params.webhookSecret ?? null,
         ...(params.requiredConfirmations === undefined
@@ -306,12 +341,14 @@ export async function updateMerchantSettings(
  */
 function toMerchantRow(row: {
   environment: string;
-  network: string;
+  network: string | null;
   [key: string]: unknown;
 }): MerchantRow {
   return {
     ...row,
     environment: row.environment as OxyServiceEnvironment,
-    network: row.network as NetworkType,
+    // `null` for a card-only merchant, and the cast covers only the non-null
+    // case: `merchants_network_check` keeps the text in the closed set.
+    network: row.network as NetworkType | null,
   } as MerchantRow;
 }

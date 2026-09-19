@@ -344,7 +344,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
       merchant,
       amount: "100000000",
       rail: "faircoin",
-      network: merchant.network,
+      // `?? undefined`: the merchant's network is nullable now (a card-only
+      // merchant has none), and this fixture registers one.
+      network: merchant.network ?? undefined,
       idempotencyKey: `k-${Date.now().toString()}-g`,
     });
 

@@ -174,6 +174,15 @@ export function resolveRail(
     if (input.network === undefined) {
       throw new RailMismatchError("the faircoin rail requires a network");
     }
+    if (merchant.network === null) {
+      // A CARD-ONLY merchant. There is no xpub to derive a receive address
+      // from, so this is refused here with a message naming what is missing —
+      // rather than reaching `reserveNextAddress`, which would have burned a
+      // derivation index before discovering the same thing.
+      throw new RailMismatchError(
+        "this merchant has not registered a FairCoin account; register a network and xpub to accept it",
+      );
+    }
     if (input.network !== merchant.network) {
       throw new NetworkMismatchError(input.network, merchant.network);
     }

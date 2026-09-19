@@ -21,9 +21,20 @@ export const merchants = pgTable(
     oxyAppId: text().notNull(),
     /** Test/live isolation: the environment of the credential that registered this merchant. */
     environment: text().notNull(),
-    network: text().notNull(),
+    /**
+     * The FairCoin chain this merchant accepts on — NULL for a card-only one.
+     *
+     * Nullable together with `xpub`, and `merchants_chain_fields_agree_check`
+     * says so: they are two halves of one capability. Registration used to
+     * require both unconditionally, so a merchant who only wanted to take cards
+     * had to supply a watch-only extended key for a chain they had no intention
+     * of using — and whatever they supplied would have been either a real key
+     * they now had to custody or a fixture that silently made their FairCoin
+     * receive addresses undeliverable.
+     */
+    network: text(),
     /** Watch-only account extended public key. Never a private key — see the table comment. */
-    xpub: text().notNull(),
+    xpub: text(),
     /**
      * The NEXT unused BIP32 child index. Claimed by
      * `db/merchants/derivationIndex.ts`, never by a read-modify-write.
@@ -119,7 +130,24 @@ export const merchants = pgTable(
       'merchants_environment_check',
       sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`)
     ),
-    check('merchants_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),
+    check(
+      'merchants_network_check',
+      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`)
+    ),
+    /**
+     * A merchant accepts FairCoin with BOTH halves, or with neither.
+     *
+     * A network with no key is a chain nothing can derive an address on; a key
+     * with no network cannot be interpreted at all — an extended key's version
+     * bytes are network-specific, so `deriveIntentAddress` needs the pair. The
+     * failure of a half-configured merchant is a payer being shown an address
+     * on the wrong chain, which is unrecoverable, so it is refused here rather
+     * than checked at the one call site that happens to look.
+     */
+    check(
+      'merchants_chain_fields_agree_check',
+      sql`(${table.network} is null) = (${table.xpub} is null)`
+    ),
     check('merchants_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
     /**
      * `livemode` ⇔ `environment = 'production'`, and nothing else.

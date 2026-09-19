@@ -441,6 +441,63 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
     return String(created.json.id);
   }
 
+  /**
+   * The seller list PAGINATES.
+   *
+   * It used to take a hard `limit` of 100 with no cursor and no `has_more`, so
+   * a marketplace with more sellers than that could not reach the rest and
+   * nothing in the response said so. A silently truncated list is worse than a
+   * refusal: a caller reconciling against it concludes the sellers are gone.
+   */
+  test("pages through sellers with a cursor and says when there are more", async () => {
+    for (const ref of ["page_a", "page_b", "page_c"]) {
+      await call("POST", "/v1/connected_accounts", {
+        externalRef: ref,
+        country: "ES",
+        businessType: "individual",
+      });
+    }
+
+    const first = await call("GET", "/v1/connected_accounts?limit=2");
+    expect(first.status).toBe(200);
+    const firstPage = first.json.data as { id: string }[];
+    expect(firstPage).toHaveLength(2);
+    expect(first.json.has_more).toBe(true);
+
+    const second = await call(
+      "GET",
+      `/v1/connected_accounts?limit=2&starting_after=${firstPage[1]?.id ?? ""}`,
+    );
+    const secondPage = second.json.data as { id: string }[];
+    // No overlap: the cursor walks the primary key, which is unique where a
+    // timestamp is not.
+    expect(secondPage.map((row) => row.id)).not.toContain(firstPage[0]?.id);
+    expect(secondPage.map((row) => row.id)).not.toContain(firstPage[1]?.id);
+  });
+
+  /**
+   * A cursor naming ANOTHER merchant's seller is refused exactly like an
+   * unknown one, and never confirms that the account exists.
+   */
+  test("refuses a cursor from another merchant without confirming it", async () => {
+    const mine = await call("POST", "/v1/connected_accounts", {
+      externalRef: "cursor_owner",
+      country: "ES",
+      businessType: "individual",
+    });
+
+    actingApp = otherMerchant.oxyAppId;
+    const foreign = await call(
+      "GET",
+      `/v1/connected_accounts?starting_after=${String(mine.json.id)}`,
+    );
+    const unknown = await call("GET", "/v1/connected_accounts?starting_after=ca_nope");
+
+    expect(foreign.status).toBe(422);
+    expect(unknown.status).toBe(422);
+    expect(JSON.stringify(foreign.json)).toEqual(JSON.stringify(unknown.json));
+  });
+
   test("settles a seller and reports the public ids only", async () => {
     const accountId = await payableAccount("store_t_a");
     const { status, json } = await call("POST", "/v1/transfers", {
