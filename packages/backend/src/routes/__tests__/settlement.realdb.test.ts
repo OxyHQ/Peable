@@ -25,6 +25,9 @@ let accountCounter = 0;
 let transferCounter = 0;
 let accountSnapshotOverrides: Record<string, unknown> = {};
 let createAccountThrows: Error | null = null;
+/** What the authoritative payment read reports. `succeeded` is the normal case. */
+let getStatusStatus = "succeeded";
+let getStatusThrows: Error | null = null;
 
 const fakeProvider = {
   id: "stripe" as const,
@@ -89,8 +92,24 @@ const fakeProvider = {
   refund: async () => {
     throw new Error("not used");
   },
-  getStatus: async () => {
-    throw new Error("not used");
+  /**
+   * The AUTHORITATIVE read a settlement makes before it moves anything.
+   *
+   * `transferService` resolves the CHARGE here — `source_transaction` names a
+   * `ch_…` and the caller used to hand it the payment's `pi_…`, which Stripe
+   * refuses with `No such charge`. A fake that answered only a status would let
+   * that bug back in, so it answers both ids, distinctly.
+   */
+  getStatus: async (providerObjectId: string) => {
+    providerCalls.push({ fn: "getStatus", request: { providerObjectId } });
+    if (getStatusThrows) throw getStatusThrows;
+    return {
+      providerObjectId,
+      status: getStatusStatus,
+      ...(getStatusStatus === "succeeded"
+        ? { chargeObjectId: providerObjectId.replace(/^pi_/, "ch_") }
+        : {}),
+    };
   },
   verifyEvent: async () => {
     throw new Error("not used");
@@ -212,6 +231,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
     providerCalls.length = 0;
     accountSnapshotOverrides = {};
     createAccountThrows = null;
+    getStatusStatus = "succeeded";
+    getStatusThrows = null;
     actingApp = merchant.oxyAppId;
   });
 
@@ -362,6 +383,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
 
   // ── transfers ────────────────────────────────────────────────────────────
 
+  /**
+   * A fresh SETTLED card payment, with its own `pi_…`.
+   *
+   * The file's shared `pi_settled_for_transfers` cannot serve the cases below:
+   * the charge is cached on the intent after the first settlement, and the
+   * budget is a property of one payment, so two cases sharing a payment would
+   * each be reading state the other left. Each one mints its own.
+   */
+  async function settledCardIntent(publicId: string, amount: string): Promise<void> {
+    const { updateIntentState, linkProviderObject } = await import(
+      "../../db/payments/paymentIntentRepository"
+    );
+    const intent = await insertPaymentIntent(gatewayDb(), {
+      publicId,
+      merchantId: merchant.id,
+      rail: "card",
+      amount,
+      currency: "EUR",
+      network: null,
+      address: null,
+      provider: "stripe",
+      clientSecret: `cs_${publicId}`,
+      idempotencyKey: `idem_${publicId}`,
+      metadata: {},
+      expiresAt: new Date(Date.now() + 900_000),
+    });
+    if (!intent) throw new Error(`could not seed ${publicId}`);
+    await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_${publicId}`);
+    await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
+  }
+
   async function payableAccount(ref: string): Promise<string> {
     const created = await call("POST", "/v1/connected_accounts", {
       externalRef: ref,
@@ -397,8 +449,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
    * funds. Without it a transfer created moments after a charge fails against a
    * platform balance that is real but not yet available — intermittently,
    * which reads as a provider outage.
+   *
+   * It takes a CHARGE id and this used to be handed the PAYMENT's. Stripe
+   * answers `No such charge: 'pi_…'`, so every settlement failed at the
+   * provider, which reads as an outage rather than as two ids being confused.
+   * The assertion is now on `ch_…` AND on it not being the `pi_…`: asserting
+   * only that some id was passed is what let the original bug look correct.
    */
-  test("names the source charge and the payment's own transfer group", async () => {
+  test("names the source CHARGE, not the payment, and the payment's own group", async () => {
     const accountId = await payableAccount("store_t_b");
     await call("POST", "/v1/transfers", {
       paymentIntentId: "pi_settled_for_transfers",
@@ -408,9 +466,155 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
     });
 
     const created = providerCalls.find((entry) => entry.fn === "createTransfer");
-    expect(created?.request.sourcePaymentObjectId).toBe("pi_stripe_settled");
+    expect(created?.request.sourceChargeObjectId).toBe("ch_stripe_settled");
+    expect(created?.request.sourceChargeObjectId).not.toBe("pi_stripe_settled");
     expect(created?.request.groupRef).toBe("pi_settled_for_transfers");
     expect(created?.request.idempotencyKey).toBe(`tr:${String(created?.request.transferId)}`);
+  });
+
+  /**
+   * The charge is resolved ONCE per payment, not once per seller.
+   *
+   * A multi-seller cart settles N times out of one payment. Re-reading the
+   * payment per seller is N provider round trips for one fact that cannot
+   * change, and `payment_intents.provider_charge_id` exists to hold it.
+   */
+  test("resolves the charge once and reuses it for the next seller", async () => {
+    await settledCardIntent("pi_cart_two_sellers", "100000");
+    const first = await payableAccount("store_charge_a");
+    const second = await payableAccount("store_charge_b");
+    providerCalls.length = 0;
+
+    await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_cart_two_sellers",
+      connectedAccountId: first,
+      externalRef: "order_charge_1",
+      amount: "1000",
+    });
+    const readsAfterFirst = providerCalls.filter((entry) => entry.fn === "getStatus").length;
+
+    await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_cart_two_sellers",
+      connectedAccountId: second,
+      externalRef: "order_charge_2",
+      amount: "1000",
+    });
+    const readsAfterSecond = providerCalls.filter((entry) => entry.fn === "getStatus").length;
+
+    expect(readsAfterFirst).toBe(1);
+    expect(readsAfterSecond).toBe(1);
+    // ...and the second settlement still names the charge.
+    const transfers = providerCalls.filter((entry) => entry.fn === "createTransfer");
+    expect(transfers).toHaveLength(2);
+    expect(transfers[1]?.request.sourceChargeObjectId).toBe("ch_stripe_pi_cart_two_sellers");
+  });
+
+  /**
+   * The settlement budget: a payment cannot fund more than it brought in.
+   *
+   * Nothing used to bound how much one payment could settle. The overflow comes
+   * out of the platform's GENERAL balance, which is other merchants' money in
+   * flight — so an arithmetic slip in one marketplace's split is paid for by
+   * everybody else's payments, and the only signal is a balance that drifts.
+   */
+  test("refuses to settle more than the payment brought in", async () => {
+    await settledCardIntent("pi_budget", "10000");
+    const seller = await payableAccount("store_budget_a");
+    const other = await payableAccount("store_budget_b");
+
+    const first = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_budget",
+      connectedAccountId: seller,
+      externalRef: "budget_1",
+      amount: "9000",
+    });
+    expect(first.status).toBe(201);
+
+    const second = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_budget",
+      connectedAccountId: other,
+      externalRef: "budget_2",
+      amount: "2000",
+    });
+    expect(second.status).toBe(422);
+    // The message says how much is LEFT, because that is the number the
+    // merchant has to correct their split against.
+    expect(String((second.json.error as Record<string, string>).message)).toContain("1000");
+
+    // ...and the remaining 1000 still settles.
+    const third = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_budget",
+      connectedAccountId: other,
+      externalRef: "budget_3",
+      amount: "1000",
+    });
+    expect(third.status).toBe(201);
+  });
+
+  /**
+   * A settlement reference naming a DIFFERENT operation is a conflict.
+   *
+   * `external_ref` is the merchant's own id for what a transfer settles and the
+   * key this table converges on. A second request reusing it with another
+   * payment or amount is not a replay, and answering 200 with the stored row
+   * tells the caller their new settlement succeeded when nothing happened —
+   * which is how a seller silently does not get paid.
+   */
+  test("refuses a settlement reference reused for another amount", async () => {
+    await settledCardIntent("pi_conflict", "50000");
+    const seller = await payableAccount("store_conflict");
+
+    const first = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_conflict",
+      connectedAccountId: seller,
+      externalRef: "conflict_ref",
+      amount: "1000",
+    });
+    expect(first.status).toBe(201);
+
+    const reused = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_conflict",
+      connectedAccountId: seller,
+      externalRef: "conflict_ref",
+      amount: "2000",
+    });
+    expect(reused.status).toBe(409);
+
+    // The same reference with the SAME content is still an ordinary replay.
+    const replay = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_conflict",
+      connectedAccountId: seller,
+      externalRef: "conflict_ref",
+      amount: "1000",
+    });
+    expect(replay.status).toBe(200);
+    expect(replay.json.id).toBe(first.json.id);
+  });
+
+  /**
+   * A payment the PROVIDER does not report as captured funds no transfer.
+   *
+   * The gateway's own `settled` status can be right while the money is not
+   * there — an out-of-order event, a repaired row — and a transfer with no
+   * `source_transaction` behind it draws on the platform's GENERAL balance,
+   * which is other merchants' money in flight. 409, because the two sides
+   * disagree about a fact rather than the request being malformed.
+   */
+  test("refuses to settle when the provider reports no captured charge", async () => {
+    await settledCardIntent("pi_no_charge", "100000");
+    const accountId = await payableAccount("store_no_charge");
+    getStatusStatus = "processing";
+
+    const { status } = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_no_charge",
+      connectedAccountId: accountId,
+      externalRef: "order_no_charge",
+      amount: "1000",
+    });
+
+    expect(status).toBe(409);
+    // Nothing was created, at the provider or here.
+    expect(providerCalls.filter((entry) => entry.fn === "createTransfer")).toHaveLength(0);
   });
 
   /**

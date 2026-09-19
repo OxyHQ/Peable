@@ -29,6 +29,11 @@ export interface PaymentIntentRow {
   readonly provider: ProviderId | null;
   /** The provider's own id for the object that moves the money. `null` until it exists. */
   readonly providerObjectId: string | null;
+  /**
+   * The provider's id for the CHARGE the payment produced — a DIFFERENT object
+   * from `providerObjectId`, and the one a transfer's source must name.
+   */
+  readonly providerChargeId: string | null;
   readonly clientSecret: string;
   readonly metadata: Record<string, string>;
   readonly expiresAt: Date;
@@ -55,6 +60,7 @@ const INTENT_COLUMNS = {
   confirmations: paymentIntents.confirmations,
   provider: paymentIntents.provider,
   providerObjectId: paymentIntents.providerObjectId,
+  providerChargeId: paymentIntents.providerChargeId,
   clientSecret: paymentIntents.clientSecret,
   metadata: paymentIntents.metadata,
   expiresAt: paymentIntents.expiresAt,
@@ -166,6 +172,34 @@ export async function findIntentByIdempotencyKey(
         eq(paymentIntents.idempotencyKey, idempotencyKey)
       )
     );
+  return row ? toIntentRow(row) : null;
+}
+
+/**
+ * Take the row lock on one intent, inside the caller's transaction.
+ *
+ * The settlement budget's serialization point. "How much of this payment has
+ * already been promised to sellers" is a question whose answer two concurrent
+ * settlements of the same cart would both read as the same number — and both
+ * would then pass a budget check that only one of them should. Locking the
+ * PAYMENT rather than the transfer rows is what makes the check exclusive:
+ * every settlement out of one payment has to queue behind the same row,
+ * including the first one, which has no transfer rows to lock.
+ *
+ * @throws when called outside a transaction — `for update` outside one takes a
+ *   lock that is released immediately, which is the same as no lock at all.
+ *   Not enforced here (the driver cannot tell), which is why the single caller
+ *   is inside `db.transaction` and says so.
+ */
+export async function lockIntentForUpdate(
+  tx: DatabaseOrTransaction,
+  id: string
+): Promise<PaymentIntentRow | null> {
+  const [row] = await tx
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(eq(paymentIntents.id, id))
+    .for('update');
   return row ? toIntentRow(row) : null;
 }
 
@@ -535,6 +569,39 @@ export async function linkProviderObject(
         eq(paymentIntents.id, intentId),
         eq(paymentIntents.provider, provider),
         isNull(paymentIntents.providerObjectId)
+      )
+    )
+    .returning({ id: paymentIntents.id });
+  return rows.length === 1;
+}
+
+/**
+ * Record the CHARGE this payment produced.
+ *
+ * A separate write from `linkProviderObject` because the two ids become known
+ * at different times: the payment exists the moment it is created, the charge
+ * only once the payer has confirmed. Guarded on `provider_charge_id IS NULL`
+ * for the same reason that one is guarded — a payment produces one charge, and
+ * a second id arriving means either a retry that re-read the same value (in
+ * which case nothing needs writing) or something this row cannot explain, which
+ * must not be silently adopted.
+ *
+ * @returns `true` when this call did the linking.
+ */
+export async function linkProviderCharge(
+  db: DatabaseOrTransaction,
+  intentId: string,
+  provider: ProviderId,
+  providerChargeId: string
+): Promise<boolean> {
+  const rows = await db
+    .update(paymentIntents)
+    .set({ providerChargeId })
+    .where(
+      and(
+        eq(paymentIntents.id, intentId),
+        eq(paymentIntents.provider, provider),
+        isNull(paymentIntents.providerChargeId)
       )
     )
     .returning({ id: paymentIntents.id });

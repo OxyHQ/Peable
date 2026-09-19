@@ -76,6 +76,22 @@ function toStripeAmount(amount: string, stage: "createPayment" | "refund" | "tra
   return value;
 }
 
+/**
+ * The charge id off a PaymentIntent's `latest_charge`, whichever shape it is in.
+ *
+ * Stripe returns it as a bare id string unless the caller expanded it, in which
+ * case it is the whole Charge object. Both are ordinary, so both are read —
+ * `typeof x === 'string'` alone would silently answer `undefined` for every
+ * expanded read and send a settlement looking for a charge it already had.
+ */
+function readChargeId(
+  latestCharge: Stripe.PaymentIntent["latest_charge"],
+): string | undefined {
+  if (typeof latestCharge === "string") return latestCharge;
+  if (typeof latestCharge === "object" && latestCharge !== null) return latestCharge.id;
+  return undefined;
+}
+
 /** Stripe wants a lowercase ISO code; the gateway's set is uppercase. */
 function toStripeCurrency(currency: string): string {
   return currency.toLowerCase();
@@ -238,7 +254,14 @@ export class StripePaymentProvider
         // against a balance that has not landed yet. Without it, a transfer
         // created moments after a charge fails with `balance_insufficient` on a
         // platform whose money is real but not yet available.
-        source_transaction: request.sourcePaymentObjectId,
+        //
+        // It takes a CHARGE id. This used to be handed the PaymentIntent's
+        // `pi_…`, which Stripe refuses with `No such charge` — so every
+        // multi-seller settlement failed, and it failed at the provider rather
+        // than here, which reads as an outage. `transferService` now resolves
+        // the charge (`latest_charge`) before it calls, and the parameter name
+        // says which id it wants.
+        source_transaction: request.sourceChargeObjectId,
         metadata: { ...request.metadata, peable_transfer_id: request.transferId },
       },
       request.idempotencyKey,
@@ -380,6 +403,7 @@ export class StripePaymentProvider
 
   private toResult(intent: Stripe.PaymentIntent): ProviderPaymentResult {
     const status = mapPaymentIntentStatus(intent.status);
+    const chargeObjectId = readChargeId(intent.latest_charge);
     return {
       providerObjectId: intent.id,
       status,
@@ -388,6 +412,10 @@ export class StripePaymentProvider
       ...(intent.client_secret
         ? { clientAction: { kind: "client_secret" as const, value: intent.client_secret } }
         : {}),
+      // The CHARGE, which is a different object from the payment and is what a
+      // transfer's `source_transaction` names. Absent while the payment has not
+      // produced one.
+      ...(chargeObjectId !== undefined ? { chargeObjectId } : {}),
     };
   }
 

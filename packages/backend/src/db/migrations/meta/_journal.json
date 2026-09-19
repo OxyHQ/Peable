@@ -85,6 +85,13 @@
       "when": 1789808303931,
       "tag": "0011_magical_cyclops",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1789808583677,
+      "tag": "0012_stormy_valkyrie",
+      "breakpoints": true
     }
   ]
 }

@@ -192,6 +192,11 @@ describe('id-column classification', () => {
           reason:
             "the provider's own id for the object that moves the money; uniqueness is held by payment_intents_provider_object_key, and a reference is not expressible because the row is at the provider",
         },
+        {
+          column: 'payment_intents.provider_charge_id',
+          reason:
+            "the provider's own ch_… for the charge the payment produced — a DIFFERENT object from provider_object_id, and the one a transfer's source_transaction names; the row is at the provider",
+        },
       ],
       minimumTables: ALL_TABLES.length,
     });

@@ -204,13 +204,20 @@ describe("StripePaymentProvider", () => {
    * funds. Without it a transfer created moments after a charge fails with
    * `balance_insufficient` against a platform whose money is real but not yet
    * available — an intermittent failure that looks like a Stripe outage.
+   *
+   * It takes a CHARGE id, which is why the request field is
+   * `sourceChargeObjectId`. This test always passed a `ch_…` and the caller
+   * always supplied a `pi_…`: the adapter is not where the substitution
+   * happened, so no assertion here could have caught it. The name is now the
+   * type's documentation, and `transferService` resolves the charge before it
+   * calls.
    */
   test("a transfer names its source transaction and its group", async () => {
     const provider = new StripePaymentProvider();
     await provider.createTransfer({
       intentId: "pi_public_1",
       transferId: "tr_gateway_1",
-      sourcePaymentObjectId: "ch_1",
+      sourceChargeObjectId: "ch_1",
       destinationAccountId: "acct_seller",
       amount: { amount: "500", currency: "EUR" },
       groupRef: "group_1",

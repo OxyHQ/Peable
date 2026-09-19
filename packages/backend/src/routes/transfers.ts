@@ -35,6 +35,8 @@ import {
   createTransfer,
   PaymentNotSettledError,
   reverseTransfer,
+  TransferExceedsPaymentError,
+  TransferSourceUnresolvedError,
   TransfersUnavailableError,
 } from "../services/transfers/transferService";
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
@@ -61,7 +63,12 @@ const baseUnitAmount = z
   .refine(
     isBaseUnitString,
     "amount must be a canonical integer string in the currency's smallest unit",
-  );
+  )
+  // `'0'` is a canonical integer string and passes the predicate above, and a
+  // zero transfer is not a transfer: it would consume the merchant's
+  // `externalRef`, so the REAL settlement of that order could never be created
+  // afterwards. The refund route refuses a zero for the same reason.
+  .refine((value) => value !== "0", "a transfer of 0 is not a transfer");
 
 const createTransferBodySchema = z
   .object({
@@ -116,6 +123,30 @@ async function serializeTransfer(
     throw new Error(`transfer ${transfer.publicId} names an account that cannot be read`);
   }
   return toTransferDTO(transfer, seller.publicId, intent.publicId);
+}
+
+/**
+ * Why a stored settlement and a new request naming the same `external_ref` are
+ * not the same operation — or `null` when they are.
+ *
+ * Deliberately does NOT compare the seller: the stored row holds an internal
+ * account id and the request may name the seller by either address, so the
+ * comparison would need a lookup whose only purpose is to produce an error. The
+ * payment and the amount are what decide whether money is being moved
+ * differently, and both are on the row.
+ */
+function transferReplayConflict(
+  existing: TransferRow,
+  body: { readonly paymentIntentId: string; readonly amount: string },
+  requestedIntent: PaymentIntentRow,
+): string | null {
+  if (existing.paymentIntentId !== requestedIntent.id) {
+    return `${body.paymentIntentId} does not match the payment this settlement reference already names`;
+  }
+  if (existing.amount !== body.amount) {
+    return `this settlement reference already names an amount of ${existing.amount}`;
+  }
+  return null;
 }
 
 export function createTransfersRouter(deps: { requireMerchant: RequestHandler }): Router {
@@ -173,7 +204,34 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
        */
       const existing = await findTransferByExternalRef(db, merchant.id, body.externalRef);
       if (existing) {
-        res.status(200).json(await serializeTransfer(merchant.id, existing, intent));
+        /**
+         * A reused reference naming a DIFFERENT operation is a conflict, not a
+         * replay.
+         *
+         * `external_ref` is the merchant's own settlement id and the unique key
+         * this table converges on. A second request carrying the same ref with
+         * another payment, amount or seller is not the same operation, and
+         * answering 200 with the stored row tells the caller their new
+         * settlement succeeded when nothing happened at all — the shape that
+         * loses a seller their money silently.
+         */
+        const conflict = transferReplayConflict(existing, body, intent);
+        if (conflict) {
+          sendError(res, 409, "invalid_request_error", conflict);
+          return;
+        }
+        /**
+         * Serialized against the STORED transfer's own intent, never the one
+         * this request names.
+         *
+         * The two are the same here — the conflict check above has just proven
+         * it — and that is exactly why reading it off the request was invisible:
+         * it produced a correct answer until the day a caller reused a ref, and
+         * then it produced a response describing a settlement that does not
+         * exist, built from ids the caller had supplied themselves.
+         */
+        const storedIntent = await findIntentByPublicIdForTransfer(db, existing);
+        res.status(200).json(await serializeTransfer(merchant.id, existing, storedIntent));
         return;
       }
 
@@ -201,8 +259,23 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           .status(created ? 201 : 200)
           .json(await serializeTransfer(merchant.id, transfer, intent, account));
       } catch (error) {
-        if (error instanceof PaymentNotSettledError || error instanceof AccountNotPayableError) {
+        if (
+          error instanceof PaymentNotSettledError ||
+          error instanceof AccountNotPayableError ||
+          // The settlement budget: this payment cannot fund what was asked for.
+          // 422 rather than 409 — the request as sent will never work, and the
+          // message says how much is left.
+          error instanceof TransferExceedsPaymentError
+        ) {
           sendError(res, 422, "invalid_request_error", error.message);
+          return;
+        }
+        // The gateway believes the payment settled and the PROVIDER reports no
+        // captured charge. 409, because the two disagree about a fact rather
+        // than the request being wrong: retrying after reconciliation is the
+        // action, editing the body is not.
+        if (error instanceof TransferSourceUnresolvedError) {
+          sendError(res, 409, "invalid_request_error", error.message);
           return;
         }
         if (error instanceof TransfersUnavailableError) {

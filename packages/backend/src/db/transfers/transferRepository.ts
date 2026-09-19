@@ -223,6 +223,34 @@ export async function applyTransferReversal(
   return row ? toRow(row) : null;
 }
 
+/**
+ * What this payment has already committed to sellers.
+ *
+ * Every transfer that is NOT `failed`, minus what has come back. A `failed`
+ * transfer moved nothing and never will, so counting it would refuse a
+ * legitimate re-settlement of the same money; a `pending` one has been sent to
+ * the provider and may well land, so NOT counting it is how two concurrent
+ * settlements of a two-seller cart both pass a budget check that only one of
+ * them should.
+ *
+ * Summed as NUMERIC: these are canonical integer strings, and `'9' + '10'`
+ * concatenates while `'9' > '10'` is false.
+ */
+export async function sumCommittedTransfers(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string
+): Promise<string> {
+  const [row] = await db
+    .select({
+      total: sql<string>`coalesce(sum((${transfers.amount}::numeric - ${transfers.amountReversed}::numeric)), 0)::text`,
+    })
+    .from(transfers)
+    .where(
+      and(eq(transfers.paymentIntentId, paymentIntentId), sql`${transfers.status} <> 'failed'`)
+    );
+  return row?.total ?? '0';
+}
+
 /** The merchant's own address for a settlement — the idempotency lookup. */
 export async function findTransferByExternalRef(
   db: DatabaseOrTransaction,

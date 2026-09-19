@@ -19,8 +19,13 @@ import {
   insertTransfer,
   markTransferFailed,
   markTransferPaid,
+  sumCommittedTransfers,
   type TransferRow,
 } from "../../db/transfers/transferRepository";
+import {
+  linkProviderCharge,
+  lockIntentForUpdate,
+} from "../../db/payments/paymentIntentRepository";
 import type { ConnectedAccountRow } from "../../db/accounts/connectedAccountRepository";
 import type { PaymentIntentRow } from "../../db/payments/paymentIntentRepository";
 import { getDb } from "../../db/postgres";
@@ -54,6 +59,36 @@ export class AccountNotPayableError extends Error {
   }
 }
 
+/**
+ * This payment has no charge behind it that a transfer could draw on.
+ *
+ * Distinct from `PaymentNotSettledError`, which is about the gateway's own
+ * view. This one means the gateway believes the payment settled and the
+ * PROVIDER does not report a charge — a disagreement an operator has to look
+ * at, not a state a merchant can fix by waiting.
+ */
+export class TransferSourceUnresolvedError extends Error {
+  constructor(intentPublicId: string) {
+    super(
+      `no captured charge could be resolved for ${intentPublicId}; ` +
+        "a transfer must draw on the charge that funded the payment",
+    );
+    this.name = "TransferSourceUnresolvedError";
+  }
+}
+
+/**
+ * The settlement budget: more was asked for than this payment can still fund.
+ */
+export class TransferExceedsPaymentError extends Error {
+  constructor(requested: string, remaining: string) {
+    super(
+      `a transfer of ${requested} exceeds the ${remaining} this payment can still settle`,
+    );
+    this.name = "TransferExceedsPaymentError";
+  }
+}
+
 function requireSettlingProvider(id: TransferRow["provider"]): SettlingPaymentProvider {
   const provider = resolveProvider(id);
   if (!provider) {
@@ -84,12 +119,63 @@ export interface CreateTransferResult {
 }
 
 /**
+ * The CHARGE this payment produced, resolved once and recorded.
+ *
+ * A transfer's `source_transaction` names a charge; `intent.providerObjectId`
+ * is the PAYMENT. Handing the payment's id over is the bug this function
+ * exists to make impossible — Stripe answers `No such charge: 'pi_…'`, so the
+ * settlement fails at the provider, which reads as an outage.
+ *
+ * The read is AUTHORITATIVE rather than assumed: it asks the provider for the
+ * payment's current state and refuses anything that is not `succeeded`. The
+ * gateway's own `settled` status can be right while the money is not there —
+ * an event arrived out of order, a test fixture, a manual repair — and a
+ * transfer against an uncaptured charge draws on the platform's general
+ * balance, which is exactly the "funds from another merchant" failure the
+ * budget below also guards.
+ *
+ * Cached in `payment_intents.provider_charge_id`, so a two-seller cart resolves
+ * once rather than once per seller.
+ */
+async function resolveSourceCharge(
+  intent: PaymentIntentRow,
+  provider: SettlingPaymentProvider,
+): Promise<string> {
+  if (intent.providerChargeId) return intent.providerChargeId;
+  if (!intent.providerObjectId) throw new TransferSourceUnresolvedError(intent.publicId);
+
+  const current = await provider.getStatus(intent.providerObjectId);
+  if (current.status !== "succeeded" || !current.chargeObjectId) {
+    throw new TransferSourceUnresolvedError(intent.publicId);
+  }
+  // Best-effort: `linkProviderCharge` is guarded on the column being NULL, so a
+  // concurrent settlement that got there first simply wins and this returns the
+  // same id it read from the provider.
+  await linkProviderCharge(getDb(), intent.id, provider.id, current.chargeObjectId);
+  return current.chargeObjectId;
+}
+
+/**
  * Settle one seller.
  *
  * Row first, provider second — the same two-step as a payment intent, and for
  * the same reason: a crash between them leaves a row that says an attempt was
  * made, which recovery can finish with the same idempotency key. The reverse
  * leaves a seller paid with nothing here recording it.
+ *
+ * ## The budget, and why the insert is inside a transaction
+ *
+ * A payment funds N transfers and nothing used to bound N. Two settlements of a
+ * two-seller cart, or a merchant's own arithmetic slip, could move more out of
+ * the platform balance than that payment ever brought in — and the difference
+ * comes from the platform's general balance, which is other merchants' money in
+ * flight. The budget is `intent.amount` minus everything already committed
+ * (`sumCommittedTransfers`), and it is evaluated while holding the INTENT's row
+ * lock so two concurrent settlements cannot both read the same remaining figure
+ * and both pass.
+ *
+ * The lock is on the payment rather than on the transfer rows because the first
+ * settlement of a payment has no transfer rows to lock.
  */
 export async function createTransfer(
   input: CreateTransferInput,
@@ -127,16 +213,39 @@ export async function createTransfer(
   const provider = requireSettlingProvider(input.intent.provider);
   const db = getDb();
 
-  const inserted = await insertTransfer(db, {
-    publicId: newId("tr"),
-    merchantId: input.merchantId,
-    paymentIntentId: input.intent.id,
-    connectedAccountId: input.account.id,
-    externalRef: input.externalRef,
-    amount: input.amount,
-    currency: input.currency,
-    provider: provider.id,
-    sourcePaymentObjectId: input.intent.providerObjectId,
+  // The charge, resolved BEFORE the row is written. A payment the provider
+  // cannot report a captured charge for is one no transfer should be recorded
+  // against: writing the row first would leave a `pending` settlement that
+  // every recovery pass retries and that can never succeed.
+  const sourceChargeObjectId = await resolveSourceCharge(input.intent, provider);
+
+  const inserted = await db.transaction(async (tx) => {
+    // The serialization point. Everything between here and the commit is the
+    // budget check, and it has to be exclusive per PAYMENT.
+    await lockIntentForUpdate(tx, input.intent.id);
+    const committed = await sumCommittedTransfers(tx, input.intent.id);
+    const remaining = BigInt(input.intent.amount) - BigInt(committed);
+    if (BigInt(input.amount) > remaining) {
+      // `BigInt`, not `Number`: canonical integer strings are unbounded and a
+      // minor-unit currency reaches past `Number.MAX_SAFE_INTEGER`, where the
+      // comparison would start rounding — in the direction that lets a transfer
+      // through.
+      throw new TransferExceedsPaymentError(
+        input.amount,
+        (remaining > 0n ? remaining : 0n).toString(),
+      );
+    }
+    return insertTransfer(tx, {
+      publicId: newId("tr"),
+      merchantId: input.merchantId,
+      paymentIntentId: input.intent.id,
+      connectedAccountId: input.account.id,
+      externalRef: input.externalRef,
+      amount: input.amount,
+      currency: input.currency,
+      provider: provider.id,
+      sourcePaymentObjectId: sourceChargeObjectId,
+    });
   });
 
   if (!inserted) {
@@ -151,7 +260,7 @@ export async function createTransfer(
     const result = await provider.createTransfer({
       intentId: input.intent.publicId,
       transferId: inserted.publicId,
-      sourcePaymentObjectId: input.intent.providerObjectId,
+      sourceChargeObjectId,
       destinationAccountId: input.account.providerAccountId,
       amount: { amount: input.amount, currency: input.currency },
       // Every movement of one checkout, tied together at the provider by the
