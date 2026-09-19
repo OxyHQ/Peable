@@ -36,11 +36,19 @@ COPY package.json bun.lock bunfig.toml tsconfig.json ./
 # install to reconcile — even packages this image does not build (frontend). The
 # heavy Expo frontend source is excluded via .dockerignore so the context stays
 # small; only its manifest is copied.
+# EVERY workspace member, including the ones this image neither builds nor
+# imports. `@peable.to/pay` was missing here and the install failed with
+# `Workspace dependency "@peable.to/pay" not found` — a red deploy in which the
+# migration and rollout steps were skipped while the frontend and checkout
+# workflows went green, so nothing in the run said the backend had not shipped.
+# `db/__tests__/dockerfile.test.ts` re-derives this list from the workspace glob
+# and fails the build when a new package is added without a line here.
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
 COPY packages/sdk/package.json packages/sdk/
 COPY packages/checkout/package.json packages/checkout/
+COPY packages/pay/package.json packages/pay/
 
 # Install the full workspace, including dev tooling (typescript, @types/*).
 # --ignore-scripts skips the root `postinstall` (build:shared-types): the source
@@ -73,6 +81,7 @@ COPY --from=builder /app/packages/backend/package.json packages/backend/
 COPY --from=builder /app/packages/frontend/package.json packages/frontend/
 COPY --from=builder /app/packages/sdk/package.json packages/sdk/
 COPY --from=builder /app/packages/checkout/package.json packages/checkout/
+COPY --from=builder /app/packages/pay/package.json packages/pay/
 
 # Compiled shared-types output (imported as dist/index.js) + the backend TS
 # source and its tsconfig (run directly under Bun — no compiled entrypoint).
@@ -88,9 +97,19 @@ ENV NODE_ENV=production
 USER appuser
 
 # config.ts: PORT (default 3001). ECS maps this container port to the ALB
-# target group. No Dockerfile HEALTHCHECK: the gateway exposes no unauthenticated
-# HTTP route to probe, so liveness is enforced by the ALB target-group health
-# check (terraform) once a `/health`-style route exists — see the deploy notes.
+# target group.
+#
+# TWO probe routes exist and they answer DIFFERENT questions (`server.ts`):
+# `/health` is liveness — the process is up — and `/ready` proves the database
+# with one round trip. The ALB target group polls `/health`; a deploy gate
+# polls `/ready`, because a task that is listening with no database serves
+# nothing. Neither reveals anything and neither is auth-gated.
+#
+# No Dockerfile HEALTHCHECK: ECS ignores it in favour of the task definition's
+# own `healthCheck`/ALB target group, so one here would be a second, silently
+# unused copy of the decision. The comment that used to sit here claimed the
+# gateway had no route to probe, which stopped being true when `/health` landed
+# and was still being read as a reason not to gate a deploy on the artifact.
 EXPOSE 3001
 
 CMD ["bun", "packages/backend/src/server.ts"]

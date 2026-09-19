@@ -16,7 +16,7 @@ import { Server as SocketServer } from "socket.io";
 import { oxyClient } from "@oxy.so/core";
 import { createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { config } from "./config";
-import { connectPostgres, disconnectPostgres } from "./db/postgres";
+import { connectPostgres, disconnectPostgres, isPostgresReady } from "./db/postgres";
 import { createPaymentIntentsRouter } from "./routes/paymentIntents";
 import { createMerchantsRouter } from "./routes/merchants";
 import { createWebhookDeliveriesRouter } from "./routes/webhookDeliveries";
@@ -152,6 +152,25 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // regardless of auth (every other route is auth-gated). It reveals nothing.
   app.get("/health", (_req, res) => {
     res.status(200).json({ status: "ok" });
+  });
+
+  /**
+   * READINESS, which is a different question from liveness.
+   *
+   * `/health` says the process is up. This says it can serve: the gateway is
+   * Postgres-native, every route reads it, and a task listening with a dead
+   * pool answers every real request with a 500 while a liveness probe keeps
+   * reporting it healthy. A deploy gate and the container-build check in CI
+   * poll THIS one, which is what makes "the image boots" a claim about serving
+   * requests rather than about `listen()` returning.
+   *
+   * 503, not 500, and no detail: an unauthenticated route must not describe the
+   * database it failed to reach.
+   */
+  app.get("/ready", (_req, res) => {
+    void isPostgresReady().then((ready) => {
+      res.status(ready ? 200 : 503).json({ status: ready ? "ready" : "unavailable" });
+    });
   });
 
   // `appOrigins`: `createOxyCors`'s built-in Oxy-family allowlist only trusts
