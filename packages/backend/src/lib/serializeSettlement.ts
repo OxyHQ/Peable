@@ -7,44 +7,22 @@
  * not learn which acquirer sat behind their seller, because the day that
  * changes should be a Peable deploy and not a merchant migration.
  *
- * These DTOs are declared here rather than in `@peable.to/shared-types` for as
- * long as they are unstable. Publishing a shape is a promise, and the settling
- * half of this contract has not yet been exercised end to end.
+ * These DTOs used to be DECLARED here, with a comment saying they stayed out of
+ * `@peable.to/shared-types` "for as long as they are unstable". The caution was
+ * right and it had a growing cost: Mercaria's adapter declared its own partial
+ * interfaces for the same responses, so one wire format had two descriptions in
+ * two repositories with nothing comparing them — and a field renamed here was a
+ * runtime failure there, discovered by a settlement that did not happen. The
+ * shapes are published now (`shared-types/settlement.ts`); what stays here is
+ * the mapping from a ROW to one of them, which is the half that is nobody
+ * else's business.
  */
+import type { ConnectedAccount, Transfer } from '@peable.to/shared-types';
 import type { ConnectedAccountRow } from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
 
-export interface ConnectedAccountDTO {
-  readonly id: string;
-  readonly object: 'connected_account';
-  /** The merchant's OWN id for this seller — how they address it. */
-  readonly externalRef: string;
-  readonly country: string;
-  readonly defaultCurrency: string | null;
-  /**
-   * Whether this seller can receive a settlement right now.
-   *
-   * A CONVENIENCE, not the authority: the fields it is derived from are all
-   * here, and a marketplace with its own readiness policy (Mercaria has one)
-   * reads those instead. Offering only this boolean would make the gateway the
-   * authority on a question its ADR 0009 D14 keeps with the merchant.
-   */
-  readonly payable: boolean;
-  readonly payoutsEnabled: boolean;
-  readonly chargesEnabled: boolean;
-  readonly transfersCapability: string | null;
-  readonly cardPaymentsCapability: string | null;
-  readonly requirements: {
-    readonly currentlyDue: number;
-    readonly eventuallyDue: number;
-    readonly pastDue: number;
-    readonly pendingVerification: number;
-  };
-  readonly disabledReasonCodes: readonly string[];
-  readonly lastSyncedAt: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+/** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
+export type ConnectedAccountDTO = ConnectedAccount;
 
 /**
  * Serialize a connected account.
@@ -80,23 +58,8 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
   };
 }
 
-export interface TransferDTO {
-  readonly id: string;
-  readonly object: 'transfer';
-  /** The merchant's OWN id for what this settles. */
-  readonly externalRef: string;
-  /** The `ca_…` of the seller — never their `acct_…`. */
-  readonly connectedAccountId: string;
-  /** The `pi_…` this transfer was funded by — never the internal primary key. */
-  readonly paymentIntentId: string;
-  readonly amount: string;
-  readonly currency: string;
-  readonly amountReversed: string;
-  readonly status: string;
-  readonly failureMessage: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
+/** @deprecated Prefer `Transfer` from `@peable.to/shared-types`. */
+export type TransferDTO = Transfer;
 
 /**
  * Serialize a transfer.

@@ -10,7 +10,7 @@ import { Router } from "express";
 import type { Response, RequestHandler } from "express";
 import { z } from "zod";
 import { oxyClient } from "@oxy.so/core";
-import { isBaseUnitString } from "@peable.to/shared-types";
+import { isBaseUnitString, type Refund } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
 import {
@@ -54,44 +54,20 @@ const createRefundBodySchema = z.object({
     .refine((value) => value !== "0", "a refund of 0 is not a refund"),
 });
 
-/** The wire shape. The provider's own refund id never appears. */
-interface RefundDTO {
-  readonly id: string;
-  readonly object: "refund";
-  /**
-   * The merchant's own id for this refund — `null` for an IMPORTED one.
-   *
-   * A refund issued from the acquirer's dashboard, or created by the network
-   * resolving a dispute, has no merchant reference and cannot be given one:
-   * they did not make it. `origin` beside it is what tells them which is which,
-   * rather than leaving them to infer it from a null.
-   */
-  readonly externalRef: string | null;
-  readonly origin: "merchant" | "provider";
-  readonly paymentIntentId: string;
-  readonly amount: string;
-  readonly currency: string;
-  /** The REFUND's own lifecycle — `pending`, `succeeded` or `failed`. */
-  readonly status: string;
-  /**
-   * Where the PAYMENT stands after this refund.
-   *
-   * On the refund response deliberately: a caller that has just refunded needs
-   * to know whether the payment is now `partially_refunded` or `refunded`, and
-   * making them re-read the intent to find out is a second round trip whose
-   * answer can have moved on by the time it arrives.
-   */
-  readonly paymentStatus: string;
-  readonly failureCode: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
+/**
+ * The wire shape, published in `@peable.to/shared-types` — the provider's own
+ * refund id never appears in it.
+ *
+ * Declared there rather than here so the SDK and an integrator's own adapter
+ * describe this response ONCE. Two private copies of a wire format in two
+ * repositories is how a renamed field becomes a runtime failure somebody else
+ * discovers.
+ */
 function toRefundDTO(
   row: RefundRow,
   paymentIntentPublicId: string,
   paymentStatus: string,
-): RefundDTO {
+): Refund {
   return {
     id: row.publicId,
     object: "refund",
