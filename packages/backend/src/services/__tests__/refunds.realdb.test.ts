@@ -387,6 +387,93 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     expect(await remainingRefundable(intent)).toBe("10000");
   });
 
+  /**
+   * An interrupted refund is FINISHED by the retry, not merely described.
+   *
+   * The row is written before the provider call so a crash between them leaves
+   * something recovery can finish. Nothing finished it: the retry found the
+   * pending row and returned it, so the merchant got a 200 for money that had
+   * not gone anywhere and no path would ever send it.
+   *
+   * Resuming is safe for the same reason the row is written first — the
+   * provider key is derived from the row's own public id, so the call either
+   * makes the refund or returns the one it already made.
+   */
+  test("finishes an interrupted refund on the retry, under the same provider key", async () => {
+    const intent = await settledIntent("10000");
+    refundThrows = new ProviderError({
+      provider: "stripe",
+      stage: "refund",
+      message: "the acquirer timed out",
+      retryable: true,
+    });
+
+    await expect(
+      createRefund({
+        merchantId: merchant.id,
+        environment: merchant.environment,
+        intent,
+        externalRef: "order_resume",
+        amount: "3000",
+      }),
+    ).rejects.toThrow(ProviderError);
+
+    const [pending] = await listRefundsForIntent(gatewayDb(), intent.id);
+    if (!pending) throw new Error("the interrupted attempt left no row to resume");
+    expect(pending.status).toBe("pending");
+    expect(pending.providerObjectId).toBeNull();
+
+    // The provider is reachable again, and the merchant retries the same ref.
+    refundThrows = null;
+    providerCalls.length = 0;
+    const { refund, created } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_resume",
+      amount: "3000",
+    });
+
+    expect(created).toBe(true);
+    expect(refund.status).toBe("succeeded");
+    expect(refund.publicId).toBe(pending.publicId);
+    // ONE row, not two.
+    expect(await listRefundsForIntent(gatewayDb(), intent.id)).toHaveLength(1);
+    // ...and the SAME provider key the interrupted attempt used, which is what
+    // makes the resume a completion rather than a second refund.
+    const call = providerCalls.find((entry) => entry.fn === "refund");
+    expect(call?.request.idempotencyKey).toBe(`re:${refund.publicId}`);
+  });
+
+  /**
+   * A FINISHED refund is history, and history does not change because it was
+   * asked about again — even when the remaining balance no longer accommodates
+   * it, which it will not, since this very refund consumed it.
+   */
+  test("a completed refund is answered from history, with no second call", async () => {
+    const intent = await settledIntent("10000");
+    const first = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_history",
+      amount: "10000",
+    });
+    providerCalls.length = 0;
+
+    const replay = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_history",
+      amount: "10000",
+    });
+
+    expect(replay.created).toBe(false);
+    expect(replay.refund.id).toBe(first.refund.id);
+    expect(providerCalls.filter((entry) => entry.fn === "refund")).toHaveLength(0);
+  });
+
   test("refuses to refund a payment that never settled", async () => {
     counter += 1;
     const intent = await insertPaymentIntent(gatewayDb(), {

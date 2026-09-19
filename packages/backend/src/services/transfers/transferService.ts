@@ -226,59 +226,88 @@ export async function createTransfer(
   // every recovery pass retries and that can never succeed.
   const sourceChargeObjectId = await resolveSourceCharge(input.intent, provider);
 
-  const inserted = await db.transaction(async (tx) => {
-    // The serialization point. Everything between here and the commit is the
-    // budget check, and it has to be exclusive per PAYMENT.
-    await lockIntentForUpdate(tx, input.intent.id);
-    const committed = await sumCommittedTransfers(tx, input.intent.id);
-    const remaining = BigInt(input.intent.amount) - BigInt(committed);
-    if (BigInt(input.amount) > remaining) {
-      // `BigInt`, not `Number`: canonical integer strings are unbounded and a
-      // minor-unit currency reaches past `Number.MAX_SAFE_INTEGER`, where the
-      // comparison would start rounding — in the direction that lets a transfer
-      // through.
-      throw new TransferExceedsPaymentError(
-        input.amount,
-        (remaining > 0n ? remaining : 0n).toString(),
-      );
-    }
-    return insertTransfer(tx, {
-      publicId: newId("tr"),
-      merchantId: input.merchantId,
-      paymentIntentId: input.intent.id,
-      connectedAccountId: input.account.id,
-      externalRef: input.externalRef,
-      amount: input.amount,
-      currency: input.currency,
-      provider: provider.id,
-      sourcePaymentObjectId: sourceChargeObjectId,
-    });
-  });
-
-  if (!inserted) {
-    const existing = await findTransferByExternalRef(db, input.merchantId, input.externalRef);
-    if (!existing) {
-      throw new Error(`transfer for ${input.externalRef} neither inserted nor found`);
-    }
+  /**
+   * An existing row for this order is either FINISHED or INTERRUPTED, and the
+   * two are answered differently.
+   *
+   * `provider_object_id` tells them apart: a transfer that reached the provider
+   * has one, and one that did not is `pending` with nothing behind it. Handing
+   * the pending row back unchanged — which is what used to happen — left a
+   * settlement no path ever retried, so the merchant's retry got a 200
+   * describing a seller who had not been paid.
+   *
+   * The budget is NOT re-evaluated when resuming. This row was budgeted when it
+   * was written and `sumCommittedTransfers` counts it, so charging it again
+   * would refuse every resume with "exceeds what this payment can settle".
+   */
+  const existing = await findTransferByExternalRef(db, input.merchantId, input.externalRef);
+  if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
+    // Finished, one way or the other. History does not change because it was
+    // asked about again.
     return { transfer: existing, created: false };
   }
+
+  const inserted =
+    existing ??
+    (await db.transaction(async (tx) => {
+      // The serialization point. Everything between here and the commit is the
+      // budget check, and it has to be exclusive per PAYMENT.
+      await lockIntentForUpdate(tx, input.intent.id);
+      const committed = await sumCommittedTransfers(tx, input.intent.id);
+      const remaining = BigInt(input.intent.amount) - BigInt(committed);
+      if (BigInt(input.amount) > remaining) {
+        // `BigInt`, not `Number`: canonical integer strings are unbounded and a
+        // minor-unit currency reaches past `Number.MAX_SAFE_INTEGER`, where the
+        // comparison would start rounding — in the direction that lets a
+        // transfer through.
+        throw new TransferExceedsPaymentError(
+          input.amount,
+          (remaining > 0n ? remaining : 0n).toString(),
+        );
+      }
+      return insertTransfer(tx, {
+        publicId: newId("tr"),
+        merchantId: input.merchantId,
+        paymentIntentId: input.intent.id,
+        connectedAccountId: input.account.id,
+        externalRef: input.externalRef,
+        amount: input.amount,
+        currency: input.currency,
+        provider: provider.id,
+        sourcePaymentObjectId: sourceChargeObjectId,
+      });
+    }));
+
+  // `null` only from the insert: a concurrent request won the unique index
+  // between the read above and the write. Its row is this order's row, so
+  // re-reading is correct rather than merely convenient.
+  const row =
+    inserted ??
+    (await findTransferByExternalRef(db, input.merchantId, input.externalRef));
+  if (!row) {
+    throw new Error(`transfer for ${input.externalRef} neither inserted nor found`);
+  }
+  if (row.providerObjectId !== null) return { transfer: row, created: false };
 
   try {
     const result = await provider.createTransfer({
       intentId: input.intent.publicId,
-      transferId: inserted.publicId,
+      transferId: row.publicId,
       sourceChargeObjectId,
       destinationAccountId: input.account.providerAccountId,
-      amount: { amount: input.amount, currency: input.currency },
+      amount: { amount: row.amount, currency: input.currency },
       // Every movement of one checkout, tied together at the provider by the
       // payment's own public id — which is what `createPayment` set as the
       // transfer group, so a reconciliation can list them without this gateway.
       groupRef: input.intent.publicId,
-      idempotencyKey: `tr:${inserted.publicId}`,
-      metadata: { peable_transfer_id: inserted.publicId },
+      idempotencyKey: `tr:${row.publicId}`,
+      metadata: { peable_transfer_id: row.publicId },
     });
-    const paid = await markTransferPaid(db, inserted.id, result.providerObjectId);
-    return { transfer: paid ?? inserted, created: true };
+    const paid = await markTransferPaid(db, row.id, result.providerObjectId);
+    // `created` is about the SETTLEMENT, not about this request: a resumed row
+    // is a settlement this call completed, and a merchant needs to know money
+    // moved. `existing` is what distinguishes it from a fresh one.
+    return { transfer: paid ?? row, created: true };
   } catch (error) {
     if (error instanceof ProviderError && !error.retryable) {
       // A PERMANENT refusal is recorded and reported. A retryable one is left
@@ -286,10 +315,10 @@ export async function createTransfer(
       // settlement is dead when the next attempt would have worked.
       const failed = await markTransferFailed(
         db,
-        inserted.id,
+        row.id,
         redactProviderMessage(error.message),
       );
-      return { transfer: failed ?? inserted, created: true };
+      return { transfer: failed ?? row, created: true };
     }
     throw error;
   }

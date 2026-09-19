@@ -137,7 +137,18 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
        * consumed it.
        */
       const existing = await findRefundByExternalRef(db, merchant.id, body.externalRef);
-      if (existing) {
+      /**
+       * A FINISHED refund is history and is answered as such. One that never
+       * reached the provider falls THROUGH to `createRefund`, which resumes it
+       * under the same provider idempotency key.
+       *
+       * The distinction is `providerObjectId`: a refund that reached the
+       * provider has one whatever its state, and one that did not is `pending`
+       * with nothing behind it. Answering 200 for that second case — which is
+       * what used to happen — told a merchant their refund existed while the
+       * payer's money had not moved and no path would ever retry it.
+       */
+      if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
         res.status(200).json(toRefundDTO(existing, intent.publicId, intent.status));
         return;
       }

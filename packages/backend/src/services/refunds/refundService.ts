@@ -136,25 +136,49 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
   const provider = requireRefundProvider(intent);
   const db = getDb();
 
-  const remaining = await remainingRefundable(intent);
-  if (BigInt(input.amount) > BigInt(remaining)) {
-    throw new RefundExceedsRemainingError(input.amount, remaining);
+  /**
+   * An existing row for this reference is either FINISHED or INTERRUPTED.
+   *
+   * `provider_object_id` tells them apart: a refund that reached the provider
+   * has one — whatever its state — and one that did not is `pending` with
+   * nothing behind it. Handing that pending row back unchanged, which is what
+   * used to happen, left a refund no path ever retried: the merchant's retry
+   * got a 200 for money that had not gone anywhere.
+   *
+   * The remaining-balance check is NOT re-applied when resuming. This amount
+   * was reserved when the row was written and `remainingRefundable` counts
+   * pending refunds, so charging it again would refuse every resume.
+   */
+  const existing = await findRefundByExternalRef(db, input.merchantId, input.externalRef);
+  if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
+    return { refund: existing, created: false, paymentStatus: intent.status };
   }
 
-  const inserted = await insertRefund(db, {
-    publicId: newId("re"),
-    merchantId: input.merchantId,
-    paymentIntentId: intent.id,
-    externalRef: input.externalRef,
-    amount: input.amount,
-    currency: intent.currency,
-    provider: provider.id,
-  });
+  if (!existing) {
+    const remaining = await remainingRefundable(intent);
+    if (BigInt(input.amount) > BigInt(remaining)) {
+      throw new RefundExceedsRemainingError(input.amount, remaining);
+    }
+  }
 
-  if (!inserted) {
-    const existing = await findRefundByExternalRef(db, input.merchantId, input.externalRef);
-    if (!existing) throw new Error(`refund ${input.externalRef} neither inserted nor found`);
-    return { refund: existing, created: false, paymentStatus: intent.status };
+  const inserted =
+    existing ??
+    (await insertRefund(db, {
+      publicId: newId("re"),
+      merchantId: input.merchantId,
+      paymentIntentId: intent.id,
+      externalRef: input.externalRef,
+      amount: input.amount,
+      currency: intent.currency,
+      provider: provider.id,
+    })) ??
+    // `null` only from the insert: a concurrent request won the unique index
+    // between the read above and the write. Its row is this reference's row.
+    (await findRefundByExternalRef(db, input.merchantId, input.externalRef));
+
+  if (!inserted) throw new Error(`refund ${input.externalRef} neither inserted nor found`);
+  if (inserted.providerObjectId !== null) {
+    return { refund: inserted, created: false, paymentStatus: intent.status };
   }
 
   let settled: RefundRow;
@@ -164,7 +188,12 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
       intentId: intent.publicId,
       providerObjectId: intent.providerObjectId ?? "",
       refundId: inserted.publicId,
-      amount: { amount: input.amount, currency: intent.currency as CurrencyCode },
+      // From the ROW, not the request. A resume re-sends the amount the
+      // interrupted attempt reserved; taking it from the request would let a
+      // retry that mistyped the amount refund a different one under the same
+      // reference — and under the same provider idempotency key, which the
+      // provider would then refuse as a changed payload.
+      amount: { amount: inserted.amount, currency: intent.currency as CurrencyCode },
       idempotencyKey: `re:${inserted.publicId}`,
       metadata: { peable_refund_id: inserted.publicId },
     });

@@ -28,6 +28,14 @@ let createAccountThrows: Error | null = null;
 /** What the authoritative payment read reports. `succeeded` is the normal case. */
 let getStatusStatus = "succeeded";
 let getStatusThrows: Error | null = null;
+/**
+ * A transient provider failure on the settlement call.
+ *
+ * RETRYABLE, which is what leaves the row `pending` and unlinked — a permanent
+ * refusal is recorded as `failed` and is terminal. The pending, unlinked row is
+ * the state the resume case needs.
+ */
+let createTransferThrows: Error | null = null;
 let reversalCounter = 0;
 /** The provider's own cumulative `amount_reversed`, per transfer object. */
 const reversedByTransfer = new Map<string, bigint>();
@@ -73,6 +81,7 @@ const fakeProvider = {
   },
   createTransfer: async (request: Record<string, unknown>) => {
     providerCalls.push({ fn: "createTransfer", request });
+    if (createTransferThrows) throw createTransferThrows;
     transferCounter += 1;
     return { providerObjectId: `tr_fake_${String(transferCounter)}`, status: "paid" };
   },
@@ -155,6 +164,7 @@ mock.module("../../services/providers/registry", () => ({
   },
 }));
 
+const { ProviderError } = await import("../../services/providers/provider");
 const { createConnectedAccountsRouter } = await import("../connectedAccounts");
 const { createTransfersRouter } = await import("../transfers");
 const { insertPaymentIntent } = await import("../../db/payments/paymentIntentRepository");
@@ -250,6 +260,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
     createAccountThrows = null;
     getStatusStatus = "succeeded";
     getStatusThrows = null;
+    createTransferThrows = null;
     actingApp = merchant.oxyAppId;
   });
 
@@ -623,6 +634,53 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
       amount: "1000",
     });
     expect(third.status).toBe(201);
+  });
+
+  /**
+   * An interrupted settlement is FINISHED by the retry.
+   *
+   * The row is written before the provider call so a crash between them leaves
+   * something recovery can finish. Nothing finished it: the retry found the
+   * pending row and answered 200, describing a seller who had not been paid,
+   * and no path would ever pay them.
+   */
+  test("finishes an interrupted settlement on the retry", async () => {
+    await settledCardIntent("pi_resume", "50000");
+    const seller = await payableAccount("store_resume");
+    createTransferThrows = new ProviderError({
+      provider: "stripe",
+      stage: "transfer",
+      message: "the acquirer timed out",
+      retryable: true,
+    });
+
+    const first = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_resume",
+      connectedAccountId: seller,
+      externalRef: "order_resume",
+      amount: "1000",
+    });
+    // A retryable provider failure surfaces as a 502 and leaves the row pending.
+    expect(first.status).toBe(502);
+
+    createTransferThrows = null;
+    providerCalls.length = 0;
+    const retry = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_resume",
+      connectedAccountId: seller,
+      externalRef: "order_resume",
+      amount: "1000",
+    });
+
+    expect(retry.status).toBe(201);
+    expect(retry.json.status).toBe("paid");
+    // The provider WAS called this time — the retry completed the settlement
+    // rather than describing it.
+    expect(providerCalls.filter((entry) => entry.fn === "createTransfer")).toHaveLength(1);
+
+    // ...and only ONE settlement exists for the order.
+    const listed = await call("GET", "/v1/payment_intents/pi_resume/transfers");
+    expect((listed.json.data as unknown[]).length).toBe(1);
   });
 
   /**

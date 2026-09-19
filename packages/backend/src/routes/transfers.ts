@@ -234,6 +234,10 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
        * the money moved, and the answer must not change because the seller's
        * account has since been restricted. Checking readiness first would turn
        * a successful settlement into a 422 on its own retry.
+       *
+       * A settlement that never reached the provider is NOT history, so it does
+       * not get that exemption: nothing moved, and a seller who can no longer
+       * be paid should not be paid by a resume.
        */
       const existing = await findTransferByExternalRef(db, merchant.id, body.externalRef);
       if (existing) {
@@ -254,18 +258,32 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           return;
         }
         /**
-         * Serialized against the STORED transfer's own intent, never the one
-         * this request names.
+         * A FINISHED settlement is history and is answered as such. One that
+         * never reached the provider falls THROUGH to be resumed.
          *
-         * The two are the same here — the conflict check above has just proven
-         * it — and that is exactly why reading it off the request was invisible:
-         * it produced a correct answer until the day a caller reused a ref, and
-         * then it produced a response describing a settlement that does not
-         * exist, built from ids the caller had supplied themselves.
+         * The distinction is `providerObjectId`, and it is the whole reason
+         * this branch is not just "return what we have": a row left `pending`
+         * by an interrupted attempt was answered 200 with a settlement that had
+         * not happened, and no path ever retried it. `createTransfer` resumes
+         * it under the same provider idempotency key, so the retry completes
+         * the settlement rather than describing a seller who was not paid.
          */
-        const storedIntent = await findIntentByPublicIdForTransfer(db, existing);
-        res.status(200).json(await serializeTransfer(merchant.id, existing, storedIntent));
-        return;
+        if (existing.providerObjectId !== null || existing.status === "failed") {
+          /**
+           * Serialized against the STORED transfer's own intent, never the one
+           * this request names.
+           *
+           * The two are the same here — the conflict check above has just
+           * proven it — and that is exactly why reading it off the request was
+           * invisible: it produced a correct answer until the day a caller
+           * reused a ref, and then it produced a response describing a
+           * settlement that does not exist, built from ids the caller had
+           * supplied themselves.
+           */
+          const storedIntent = await findIntentByPublicIdForTransfer(db, existing);
+          res.status(200).json(await serializeTransfer(merchant.id, existing, storedIntent));
+          return;
+        }
       }
 
       const account = body.connectedAccountId
