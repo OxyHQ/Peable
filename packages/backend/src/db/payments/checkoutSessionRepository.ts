@@ -94,10 +94,14 @@ export interface InsertCheckoutSessionParams {
  *
  * @returns the new row, or `null` when that intent is ALREADY wrapped by another
  *   session. "Wraps exactly one payment intent" is a unique index rather than a
- *   sentence, so two sessions sharing an intent is refused by the database. Every
- *   session mints a fresh intent today, so this refuses nothing that happens —
- *   what it refuses is a future change that would let two buyers' sessions point
- *   at one payment.
+ *   sentence, so two sessions sharing an intent is refused by the database.
+ *
+ *   This used to refuse nothing that happened, because every session minted a
+ *   fresh intent. It does now: the create route honours an `Idempotency-Key`,
+ *   so two concurrent retries of one session both reach an intent the key
+ *   converged, and this index decides which of them writes the session. The
+ *   loser re-reads the winner (`findSessionByIntentId`) rather than erroring —
+ *   both named the same intent, so both wanted the same session.
  */
 export async function insertCheckoutSession(
   db: DatabaseOrTransaction,
@@ -129,6 +133,30 @@ export async function insertCheckoutSession(
     }
     throw error;
   }
+}
+
+/**
+ * The session that wraps this intent — the IDEMPOTENT replay lookup.
+ *
+ * `checkout_sessions.payment_intent_id` is unique, so this answers at most one
+ * row. That uniqueness is what makes an `Idempotency-Key` on session creation
+ * work with no column of its own: the key converges the INTENT
+ * (`payment_intents.idempotency_key`), and the session that already wraps that
+ * intent is the session that key created.
+ *
+ * Unscoped by merchant, and safe: the caller has already resolved the intent
+ * through a merchant-scoped read, and adding a second owner predicate here
+ * would be a second authority for a decision already made.
+ */
+export async function findSessionByIntentId(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string
+): Promise<CheckoutSessionRow | null> {
+  const [row] = await db
+    .select(SESSION_COLUMNS)
+    .from(checkoutSessions)
+    .where(eq(checkoutSessions.paymentIntentId, paymentIntentId));
+  return row ? toSessionRow(row) : null;
 }
 
 /**

@@ -27,3 +27,11 @@ coverage
 # out-of-date and the install fails.
 packages/frontend/*
 !packages/frontend/package.json
+
+# Same treatment for `@peable.to/pay`: the backend does not import it (it is the
+# wallet-side money library), but its manifest has to be in the install context
+# or `--frozen-lockfile` refuses the whole workspace. Its SOURCE is excluded for
+# the same reason the frontend's is — it would otherwise be copied into every
+# build context for nothing.
+packages/pay/*
+!packages/pay/package.json

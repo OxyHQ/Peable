@@ -7,7 +7,7 @@
  * provider response — a hand-set readiness field is a seller the gateway
  * believes is payable on no evidence.
  */
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, lt, sql } from 'drizzle-orm';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { connectedAccounts } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -274,16 +274,49 @@ export async function findAccountsToSync(
 }
 
 /** Every seller a merchant has onboarded. Newest first. */
+export interface ListAccountsPage {
+  readonly data: readonly ConnectedAccountRow[];
+  /** Whether another page exists — the cursor to continue from is the last row's `ca_…`. */
+  readonly hasMore: boolean;
+}
+
+/**
+ * One PAGE of a merchant's sellers, newest first.
+ *
+ * This used to take a bare `limit` and return whatever fitted, with no cursor
+ * and no `has_more`: a marketplace with more than a hundred sellers could not
+ * see the rest of them, and nothing in the response said so. A silently
+ * truncated list is worse than a refusal — a caller reconciling against it
+ * concludes the sellers are gone.
+ *
+ * The keyset walk runs on the PRIMARY KEY rather than on `created_at`. Both are
+ * uuidv7 and therefore k-sortable, so the order is the same, and `id` is unique
+ * where a timestamp is not: two accounts created in the same millisecond would
+ * make a `created_at` cursor either skip one or repeat it forever.
+ *
+ * `limit + 1` rows are read and the extra is dropped, which answers `has_more`
+ * without a second `count(*)` over a table that grows with the merchant.
+ */
 export async function listAccountsForMerchant(
   db: DatabaseOrTransaction,
   merchantId: string,
-  limit: number
-): Promise<readonly ConnectedAccountRow[]> {
+  limit: number,
+  after?: string
+): Promise<ListAccountsPage> {
   const rows = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
-    .where(eq(connectedAccounts.merchantId, merchantId))
-    .orderBy(sql`${connectedAccounts.createdAt} desc`)
-    .limit(limit);
-  return rows.map(toRow);
+    .where(
+      and(
+        eq(connectedAccounts.merchantId, merchantId),
+        after === undefined ? undefined : lt(connectedAccounts.id, after)
+      )
+    )
+    .orderBy(desc(connectedAccounts.id))
+    .limit(limit + 1);
+
+  return {
+    data: rows.slice(0, limit).map(toRow),
+    hasMore: rows.length > limit,
+  };
 }

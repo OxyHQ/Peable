@@ -32,13 +32,20 @@ async function insertMerchant(overrides: Partial<typeof merchants.$inferInsert> 
   // any short prefix — a truncated fixture collides on `public_id` and reads as
   // a failure of the code under test.
   const id = uuidv7();
+  const environment = overrides.environment ?? 'development';
   await suite!.db.insert(merchants).values({
     id,
     publicId: `merch_${id}`,
     oxyAppId: `app_${id}`,
-    environment: 'development',
+    environment,
     network: 'testnet',
     xpub: 'xpub-watch-only-fixture',
+    // DERIVED here exactly as `insertMerchant` derives it, because this is a
+    // raw insert that bypasses the repository and
+    // `merchants_livemode_agrees_check` refuses the pair disagreeing. A
+    // fixture that hard-coded `false` would fail on that constraint for every
+    // `production` override, which reads as a failure of the code under test.
+    livemode: environment === 'production',
     ...overrides,
   });
   return id;
@@ -231,6 +238,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'refunds',
       'social_receive_cursors',
       'social_send_attributions',
+      'transfer_reversals',
       'transfers',
       'webhook_deliveries',
     ]);

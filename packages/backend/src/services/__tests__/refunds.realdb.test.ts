@@ -10,6 +10,15 @@ import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "b
 const providerCalls: { fn: string; request: Record<string, unknown> }[] = [];
 let refundCounter = 0;
 let refundThrows: Error | null = null;
+/**
+ * What the provider says about the refund it just made.
+ *
+ * `succeeded` is the ordinary case and the default. The other two are not
+ * exotic — Stripe is explicit that a refund can be pending and that a bank can
+ * reject one days later — and until `createRefund` read this field at all, both
+ * of them were stored as successes.
+ */
+let refundState: "succeeded" | "pending" | "failed" = "succeeded";
 
 const fakeProvider = {
   id: "stripe" as const,
@@ -19,8 +28,9 @@ const fakeProvider = {
     refundCounter += 1;
     return {
       providerObjectId: `re_stripe_${String(refundCounter)}`,
-      status: "partially_refunded",
-      state: "succeeded",
+      status: refundState === "succeeded" ? "partially_refunded" : "settled",
+      state: refundState,
+      ...(refundState === "failed" ? { failureCode: "insufficient_funds" } : {}),
     };
   },
   createPayment: async () => {
@@ -121,6 +131,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
   beforeEach(() => {
     providerCalls.length = 0;
     refundThrows = null;
+    refundState = "succeeded";
   });
 
   afterAll(() => {
@@ -131,6 +142,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const intent = await settledIntent("10000");
     const { refund, created, paymentStatus } = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_partial",
       amount: "3000",
@@ -148,6 +160,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const intent = await settledIntent("10000");
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_full",
       amount: "10000",
@@ -168,6 +181,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const first = await settledIntent("10000");
     await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent: first,
       externalRef: "order_two_a",
       amount: "4000",
@@ -175,6 +189,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const reread = await findIntentByPublicId(gatewayDb(), first.publicId);
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent: reread!,
       externalRef: "order_two_b",
       amount: "6000",
@@ -193,6 +208,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const intent = await settledIntent("10000");
     const first = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_dup",
       amount: "2500",
@@ -200,6 +216,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     providerCalls.length = 0;
     const second = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_dup",
       amount: "2500",
@@ -214,6 +231,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const intent = await settledIntent("10000");
     await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_left_a",
       amount: "8000",
@@ -223,6 +241,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
+        environment: merchant.environment,
         intent: reread!,
         externalRef: "order_left_b",
         amount: "2001",
@@ -248,6 +267,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
 
     const { refund } = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_failed",
       amount: "9000",
@@ -276,6 +296,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
+        environment: merchant.environment,
         intent,
         externalRef: "order_retryable",
         amount: "1000",
@@ -284,8 +305,173 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
 
     const rows = await listRefundsForIntent(gatewayDb(), intent.id);
     expect(rows[0]?.status).toBe("pending");
-    // ...and pending money has not moved, so it does not reduce the balance.
+
+    /**
+     * ...and the pending amount IS reserved against the balance.
+     *
+     * This assertion used to read `"10000"`, on the reasoning that pending
+     * money has not moved. True of the payment's STATUS and wrong for the
+     * budget: a refund sitting pending at the provider will most likely land,
+     * so two concurrent refunds that each read only the succeeded total would
+     * both pass a check only one of them should — and the payer would be sent
+     * more than they paid, which nothing reverses automatically and which they
+     * have no reason to report.
+     *
+     * The payment's own status is still derived from succeeded rows only, which
+     * the `sumSucceededRefunds` assertion in the failed-refund case above pins.
+     */
+    expect(await remainingRefundable(intent)).toBe("9000");
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+  });
+
+  /**
+   * A refund the provider reports as PENDING is not money that came back.
+   *
+   * `createRefund` used to call `markRefundSucceeded` the moment
+   * `provider.refund` returned, ignoring `result.state` — which the adapter has
+   * always reported. So a pending refund was stored as succeeded, counted
+   * toward the payment's refunded total, and moved the payment to `refunded`.
+   * One that then failed left a payment permanently claiming money had gone
+   * back that never did.
+   */
+  test("a pending refund is stored pending and does not move the payment", async () => {
+    const intent = await settledIntent("10000");
+    refundState = "pending";
+
+    const { refund, paymentStatus } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_pending",
+      amount: "4000",
+    });
+
+    expect(refund.status).toBe("pending");
+    expect(paymentStatus).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    // Nothing has come back...
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+    // ...and the amount is reserved, so a second refund cannot exceed the total.
+    expect(await remainingRefundable(intent)).toBe("6000");
+    /**
+     * The provider's id is recorded even though the money has not moved. It is
+     * the ONLY handle a later `refund.updated` can be matched on, so a pending
+     * refund with no id stored is one whose eventual outcome arrives as
+     * `unmatched` and is never applied.
+     */
+    expect(refund.providerObjectId).not.toBeNull();
+  });
+
+  /**
+   * A refund the provider reports as FAILED is not money that came back
+   * either, and the payment must not move.
+   */
+  test("a provider-reported failure is stored failed, with its reason", async () => {
+    const intent = await settledIntent("10000");
+    refundState = "failed";
+
+    const { refund, paymentStatus } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_reported_failure",
+      amount: "4000",
+    });
+
+    expect(refund.status).toBe("failed");
+    expect(refund.failureCode).toBe("insufficient_funds");
+    expect(paymentStatus).toBe("settled");
+    // A failed refund reserves nothing: the whole amount is still refundable,
+    // so a retry under a new reference is not blocked by a refund that never
+    // happened.
     expect(await remainingRefundable(intent)).toBe("10000");
+  });
+
+  /**
+   * An interrupted refund is FINISHED by the retry, not merely described.
+   *
+   * The row is written before the provider call so a crash between them leaves
+   * something recovery can finish. Nothing finished it: the retry found the
+   * pending row and returned it, so the merchant got a 200 for money that had
+   * not gone anywhere and no path would ever send it.
+   *
+   * Resuming is safe for the same reason the row is written first — the
+   * provider key is derived from the row's own public id, so the call either
+   * makes the refund or returns the one it already made.
+   */
+  test("finishes an interrupted refund on the retry, under the same provider key", async () => {
+    const intent = await settledIntent("10000");
+    refundThrows = new ProviderError({
+      provider: "stripe",
+      stage: "refund",
+      message: "the acquirer timed out",
+      retryable: true,
+    });
+
+    await expect(
+      createRefund({
+        merchantId: merchant.id,
+        environment: merchant.environment,
+        intent,
+        externalRef: "order_resume",
+        amount: "3000",
+      }),
+    ).rejects.toThrow(ProviderError);
+
+    const [pending] = await listRefundsForIntent(gatewayDb(), intent.id);
+    if (!pending) throw new Error("the interrupted attempt left no row to resume");
+    expect(pending.status).toBe("pending");
+    expect(pending.providerObjectId).toBeNull();
+
+    // The provider is reachable again, and the merchant retries the same ref.
+    refundThrows = null;
+    providerCalls.length = 0;
+    const { refund, created } = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_resume",
+      amount: "3000",
+    });
+
+    expect(created).toBe(true);
+    expect(refund.status).toBe("succeeded");
+    expect(refund.publicId).toBe(pending.publicId);
+    // ONE row, not two.
+    expect(await listRefundsForIntent(gatewayDb(), intent.id)).toHaveLength(1);
+    // ...and the SAME provider key the interrupted attempt used, which is what
+    // makes the resume a completion rather than a second refund.
+    const call = providerCalls.find((entry) => entry.fn === "refund");
+    expect(call?.request.idempotencyKey).toBe(`re:${refund.publicId}`);
+  });
+
+  /**
+   * A FINISHED refund is history, and history does not change because it was
+   * asked about again — even when the remaining balance no longer accommodates
+   * it, which it will not, since this very refund consumed it.
+   */
+  test("a completed refund is answered from history, with no second call", async () => {
+    const intent = await settledIntent("10000");
+    const first = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_history",
+      amount: "10000",
+    });
+    providerCalls.length = 0;
+
+    const replay = await createRefund({
+      merchantId: merchant.id,
+      environment: merchant.environment,
+      intent,
+      externalRef: "order_history",
+      amount: "10000",
+    });
+
+    expect(replay.created).toBe(false);
+    expect(replay.refund.id).toBe(first.refund.id);
+    expect(providerCalls.filter((entry) => entry.fn === "refund")).toHaveLength(0);
   });
 
   test("refuses to refund a payment that never settled", async () => {
@@ -308,6 +494,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
+        environment: merchant.environment,
         intent: intent!,
         externalRef: "order_unsettled",
         amount: "1000",
@@ -324,6 +511,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     const intent = await settledIntent("10000");
     const { refund } = await createRefund({
       merchantId: merchant.id,
+      environment: merchant.environment,
       intent,
       externalRef: "order_key",
       amount: "1000",
@@ -347,6 +535,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
+        environment: merchant.environment,
         intent,
         externalRef: "order_big",
         amount: "9007199254740993",

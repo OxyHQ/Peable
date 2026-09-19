@@ -17,6 +17,18 @@ mock.module('../lib/intentClient', () => ({
   submitTx: mock(async () => {
     throw new Error('submitTx is not exercised by App');
   }),
+  /**
+   * Present because `mock.module` replaces the WHOLE module, process-wide.
+   *
+   * A factory that omits an export makes every OTHER file importing it fail
+   * with `Export named 'x' not found` — and which file that is depends on bun's
+   * run order, so the symptom appears in a file that never mentioned the name.
+   * Throwing rather than stubbing keeps it honest: nothing here renders a card
+   * form, so a call would be a surprise worth seeing.
+   */
+  getClientAction: mock(async () => {
+    throw new Error('getClientAction is not exercised by this suite');
+  }),
 }));
 
 // Renders the full CheckoutView -> PayWithPeable -> Qr chain, which draws to

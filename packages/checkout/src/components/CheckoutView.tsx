@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { MerchantDisplay, PaymentIntent } from '@peable.to/shared-types';
 import { getPaymentIntent, subscribe } from '../lib/intentClient';
 import { MerchantIdentity } from './MerchantIdentity';
+import { CardPayment, isPayableCardIntent } from './CardPayment';
 import { PayWithPeable, isChainIntent } from './PayWithPeable';
 import { StatusPanel } from './StatusPanel';
 
@@ -146,11 +147,22 @@ export function CheckoutView({ intent: initialIntent, merchant, successUrl }: Ch
       {merchant && <MerchantIdentity merchant={merchant} />}
       {awaitingPayment && isChainIntent(intent) ? (
         <PayWithPeable intent={intent} />
+      ) : isPayableCardIntent(intent) ? (
+        /**
+         * The card branch, which used to be absent — a card intent fell through
+         * to `StatusPanel` with a comment saying this page had no card surface
+         * yet. So a merchant could create a card checkout, send the link, and
+         * the payer would arrive at a page showing them the status of a payment
+         * they had no way to make.
+         *
+         * `isPayableCardIntent` and not `awaitingPayment`: the two rails wait
+         * in different statuses. A card payment sits in `created` or
+         * `requires_action`, and a DECLINED one (`failed`) is still payable —
+         * the provider returns it to a confirmable state and the payer can try
+         * another card on the same payment.
+         */
+        <CardPayment intent={intent} />
       ) : (
-        // A card intent awaiting payment falls through to `StatusPanel` for
-        // now: this page has no card surface yet, and showing a wallet QR for
-        // a payment no wallet can make would be worse than showing its status.
-        // The card branch belongs here, beside this one.
         <StatusPanel intent={intent} successUrl={successUrl} />
       )}
     </div>

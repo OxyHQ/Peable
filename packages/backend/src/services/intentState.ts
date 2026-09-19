@@ -33,7 +33,12 @@ export type IntentEvent =
   // the target depends on the total that has come back and not on this leg: a
   // second partial refund that exhausts the payment is `refund_full`.
   | "refund_partial"
-  | "refund_full";
+  | "refund_full"
+  // ...and money that came back can go away again. A bank can reject a refund
+  // days after the provider accepted it (`refund.failed`), and the succeeded
+  // total drops — to zero, here. Without this the payment claims `refunded`
+  // forever while the money is still with the merchant.
+  | "refund_voided";
 
 function targetStatusFor(event: IntentEvent): PaymentIntentStatus {
   switch (event) {
@@ -75,6 +80,10 @@ function targetStatusFor(event: IntentEvent): PaymentIntentStatus {
       return "partially_refunded";
     case "refund_full":
       return "refunded";
+    // Every succeeded refund on this payment has since failed, so the money is
+    // where it was: with the merchant.
+    case "refund_voided":
+      return "settled";
   }
 }
 
@@ -106,17 +115,31 @@ const LEGAL_SOURCES: Partial<Record<IntentEvent, readonly PaymentIntentStatus[]>
   // defence in depth rather than the only guard. It is here so that if that
   // lookup ever does go wrong, it is a located error naming the event and the
   // status, instead of a settled chain payment with no transaction behind it.
-  card_requires_action: ['created'],
-  card_processing: ['created', 'requires_action'],
-  card_settled: ['created', 'requires_action', 'processing'],
+  // `failed` is a legal SOURCE for the first three, and that is the card rail's
+  // retry: one declined attempt returns the provider's payment to
+  // `requires_payment_method`, and the payer confirms it again with another
+  // card. Without those sources a later `payment_intent.succeeded` was an
+  // illegal transition, so the drain recorded a processing failure and retried
+  // it forever while a merchant who had been paid was told otherwise.
+  card_requires_action: ['created', 'failed'],
+  card_processing: ['created', 'requires_action', 'failed'],
+  card_settled: ['created', 'requires_action', 'processing', 'failed'],
   card_failed: ['created', 'requires_action', 'processing'],
   card_canceled: ['created', 'requires_action'],
   // Money can only come back if it arrived. `partially_refunded` is a legal
   // source for `refund_full` — a second refund exhausting the payment — and is
-  // NOT one for `refund_partial`, which `applyEvent` absorbs as a
-  // self-transition when the status is already there while the amounts change.
-  refund_partial: ['settled'],
+  // NOT one for `refund_partial` when nothing else changed, which `applyEvent`
+  // absorbs as a self-transition while the amounts change.
+  //
+  // `refunded` IS a source for `refund_partial`: a fully-refunded payment whose
+  // second refund was rejected by the bank drops back to partial, and the
+  // target is recomputed from the sum rather than stepped.
+  refund_partial: ['settled', 'refunded'],
   refund_full: ['settled', 'partially_refunded'],
+  // Only from a status that claims money came back. A `settled` payment with no
+  // refunds is absorbed by the self-transition; anything else reaching here
+  // would be this event inventing a settlement.
+  refund_voided: ['refunded', 'partially_refunded'],
 };
 
 /**

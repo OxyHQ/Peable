@@ -10,7 +10,7 @@ import { Router } from "express";
 import type { Response, RequestHandler } from "express";
 import { z } from "zod";
 import { oxyClient } from "@oxy.so/core";
-import { isBaseUnitString } from "@peable.to/shared-types";
+import { isBaseUnitString, type Refund } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
 import {
@@ -25,9 +25,16 @@ import {
   RefundsUnavailableError,
   remainingRefundable,
 } from "../services/refunds/refundService";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
 import { redactProviderMessage } from "../services/providers/redact";
-import { requireAuthenticated, sendError, wrap } from "../lib/http";
+import {
+  requireAuthenticated,
+  requireProviderMode,
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+} from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 
 const createRefundBodySchema = z.object({
@@ -47,39 +54,25 @@ const createRefundBodySchema = z.object({
     .refine((value) => value !== "0", "a refund of 0 is not a refund"),
 });
 
-/** The wire shape. The provider's own refund id never appears. */
-interface RefundDTO {
-  readonly id: string;
-  readonly object: "refund";
-  readonly externalRef: string;
-  readonly paymentIntentId: string;
-  readonly amount: string;
-  readonly currency: string;
-  /** The REFUND's own lifecycle — `pending`, `succeeded` or `failed`. */
-  readonly status: string;
-  /**
-   * Where the PAYMENT stands after this refund.
-   *
-   * On the refund response deliberately: a caller that has just refunded needs
-   * to know whether the payment is now `partially_refunded` or `refunded`, and
-   * making them re-read the intent to find out is a second round trip whose
-   * answer can have moved on by the time it arrives.
-   */
-  readonly paymentStatus: string;
-  readonly failureCode: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-}
-
+/**
+ * The wire shape, published in `@peable.to/shared-types` — the provider's own
+ * refund id never appears in it.
+ *
+ * Declared there rather than here so the SDK and an integrator's own adapter
+ * describe this response ONCE. Two private copies of a wire format in two
+ * repositories is how a renamed field becomes a runtime failure somebody else
+ * discovers.
+ */
 function toRefundDTO(
   row: RefundRow,
   paymentIntentPublicId: string,
   paymentStatus: string,
-): RefundDTO {
+): Refund {
   return {
     id: row.publicId,
     object: "refund",
     externalRef: row.externalRef,
+    origin: row.origin,
     paymentIntentId: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
@@ -112,6 +105,9 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      // BEFORE the intent lookup, whose 404 would otherwise let a wrong-mode
+      // credential probe which `pi_…` values this merchant owns.
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = createRefundBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -141,7 +137,18 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
        * consumed it.
        */
       const existing = await findRefundByExternalRef(db, merchant.id, body.externalRef);
-      if (existing) {
+      /**
+       * A FINISHED refund is history and is answered as such. One that never
+       * reached the provider falls THROUGH to `createRefund`, which resumes it
+       * under the same provider idempotency key.
+       *
+       * The distinction is `providerObjectId`: a refund that reached the
+       * provider has one whatever its state, and one that did not is `pending`
+       * with nothing behind it. Answering 200 for that second case — which is
+       * what used to happen — told a merchant their refund existed while the
+       * payer's money had not moved and no path would ever retry it.
+       */
+      if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
         res.status(200).json(toRefundDTO(existing, intent.publicId, intent.status));
         return;
       }
@@ -149,6 +156,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       try {
         const { refund, created, paymentStatus } = await createRefund({
           merchantId: merchant.id,
+          environment: merchant.environment,
           intent,
           externalRef: body.externalRef,
           amount: body.amount,
@@ -166,6 +174,10 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         }
         if (error instanceof RefundsUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

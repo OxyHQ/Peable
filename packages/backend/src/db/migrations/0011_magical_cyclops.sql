@@ -1,0 +1,25 @@
+-- oxy:deploy-phase=post
+-- `merchants.livemode` becomes TRUE about the merchant it describes.
+--
+-- The column shipped with a `false` default, no writer and no reader: every
+-- row carried `false`, including every production merchant, and the value
+-- reached the published `Merchant` wire model. An integrator reading
+-- `livemode: false` off a production merchant was told something untrue by a
+-- field whose whole purpose is to say which money is real.
+--
+-- `insertMerchant` now derives it from `environment`, which is what makes the
+-- obvious CHECK — the one the schema comment used to explain was impossible —
+-- correct. The backfill below is what makes it applicable to rows the old
+-- writer produced.
+--
+-- `post`, NOT `pre`, and the order is the reason. During a rolling release the
+-- OLD image is still serving and still inserts `livemode = false` for every
+-- environment; adding the constraint while it runs would make the registration
+-- of a production merchant fail with a constraint violation. Applied after the
+-- new image is live, every writer already satisfies it.
+--
+-- The UPDATE is idempotent (it is a total function of `environment`) and
+-- touches every row, which is safe at this table's size — one row per
+-- application per environment, three digits at most.
+UPDATE "merchants" SET "livemode" = ("environment" = 'production') WHERE "livemode" <> ("environment" = 'production');--> statement-breakpoint
+ALTER TABLE "merchants" ADD CONSTRAINT "merchants_livemode_agrees_check" CHECK ("merchants"."livemode" = ("merchants"."environment" = 'production'));

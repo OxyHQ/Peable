@@ -213,9 +213,17 @@ An empty table makes almost any constraint expressible, which is exactly why
 each one has to be checked against every writer first. Three that look obvious
 and are wrong:
 
-- **`livemode ⇔ environment = 'production'`** would refuse the registration of
-  every production merchant. Nothing writes `livemode`; every row carries the
-  default.
+- ~~**`livemode ⇔ environment = 'production'`** would refuse the registration
+  of every production merchant. Nothing writes `livemode`; every row carries the
+  default.~~ **NOW PRESENT** (`merchants_livemode_agrees_check`, migration
+  `0011`). The observation was accurate and the conclusion was backwards: a
+  published field that participates in no decision and reads `false` on every
+  production merchant is not a harmless default, it is the wire contract saying
+  something untrue. The fix was to give it a writer — `insertMerchant` derives
+  it from `environment` — which makes the constraint correct rather than
+  impossible. The migration is `post` and carries a backfill, because the
+  outgoing image still writes `false` for every environment and the constraint
+  cannot land while it serves.
 - **`(webhook_url IS NULL) = (webhook_secret IS NULL)`** would refuse a
   currently-legal write. Both `POST /v1/merchants` and its PATCH accept either
   field alone; the incoherent state is reachable and already handled, by
@@ -277,6 +285,44 @@ against it:
 All three are `<column> IS NULL OR …`, which is why `0010` can add them in the
 same `pre` migration as the columns: they are vacuous for every row an image
 that predates them writes.
+
+### Constraints added for the card rail's own failures
+
+Each of these exists because a specific defect reached production-shaped code,
+and each was checked against every writer first.
+
+- **`merchants_chain_fields_agree_check`** — `(network IS NULL) = (xpub IS
+  NULL)`. The two are halves of ONE capability: a network with no key derives
+  nothing, and a key with no network cannot be interpreted at all, because an
+  extended key's version bytes are network-specific. They became nullable so a
+  card-only merchant can register without supplying a watch-only key for a chain
+  they never intend to use — and the agreement CHECK is what stops that widening
+  from admitting a half-registered merchant, whose failure mode is a payer shown
+  an address on the wrong chain.
+- **`refunds_origin_ref_agrees_check`** — `(origin = 'merchant') = (external_ref
+  IS NOT NULL)`. A refund created at the acquirer (a dashboard refund, or the
+  network resolving a dispute) has no merchant reference and cannot be given
+  one. The two columns are written by different paths — the route writes the
+  first, the event drain the second — and a drift is silent in both directions:
+  a merchant refund with no reference is un-retryable, and an imported one
+  carrying a reference claims the merchant asked for a refund they never made.
+  The unique index on `(merchant_id, external_ref)` is PARTIAL for the same
+  reason; NULLs are distinct in Postgres so an unpartitioned one would also
+  work, and the `WHERE` says what is being promised.
+- **`transfer_reversals_*`** — the table exists because an AMOUNT IS NOT AN
+  IDENTITY. The reversal service derived its provider idempotency key from
+  `trr:<transfer>:<amount>`, so two distinct reversals of one transfer for the
+  same amount presented one key and the provider answered the first to the
+  second request. The rows are NOT summed to produce
+  `transfers.amount_reversed`: that column holds the PROVIDER's cumulative
+  figure, which includes reversals this gateway did not make, and a sum here
+  would be a second answer to one question.
+- **`payment_intents.provider_charge_id`** is a SECOND provider id beside
+  `provider_object_id`, not a duplicate. A payment and the charge it produces
+  are different objects, and a transfer's `source_transaction` names the charge
+  — passing the payment's `pi_…` makes the provider answer `No such charge`, so
+  every multi-seller settlement fails at the provider and reads as an outage.
+  The `faircoin_has_no_provider` CHECK gained it as a third conjunct.
 
 ## A Mongoose hook has no Postgres counterpart, and losing one is silent
 

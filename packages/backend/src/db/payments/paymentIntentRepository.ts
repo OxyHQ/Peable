@@ -29,6 +29,11 @@ export interface PaymentIntentRow {
   readonly provider: ProviderId | null;
   /** The provider's own id for the object that moves the money. `null` until it exists. */
   readonly providerObjectId: string | null;
+  /**
+   * The provider's id for the CHARGE the payment produced — a DIFFERENT object
+   * from `providerObjectId`, and the one a transfer's source must name.
+   */
+  readonly providerChargeId: string | null;
   readonly clientSecret: string;
   readonly metadata: Record<string, string>;
   readonly expiresAt: Date;
@@ -55,6 +60,7 @@ const INTENT_COLUMNS = {
   confirmations: paymentIntents.confirmations,
   provider: paymentIntents.provider,
   providerObjectId: paymentIntents.providerObjectId,
+  providerChargeId: paymentIntents.providerChargeId,
   clientSecret: paymentIntents.clientSecret,
   metadata: paymentIntents.metadata,
   expiresAt: paymentIntents.expiresAt,
@@ -166,6 +172,34 @@ export async function findIntentByIdempotencyKey(
         eq(paymentIntents.idempotencyKey, idempotencyKey)
       )
     );
+  return row ? toIntentRow(row) : null;
+}
+
+/**
+ * Take the row lock on one intent, inside the caller's transaction.
+ *
+ * The settlement budget's serialization point. "How much of this payment has
+ * already been promised to sellers" is a question whose answer two concurrent
+ * settlements of the same cart would both read as the same number — and both
+ * would then pass a budget check that only one of them should. Locking the
+ * PAYMENT rather than the transfer rows is what makes the check exclusive:
+ * every settlement out of one payment has to queue behind the same row,
+ * including the first one, which has no transfer rows to lock.
+ *
+ * @throws when called outside a transaction — `for update` outside one takes a
+ *   lock that is released immediately, which is the same as no lock at all.
+ *   Not enforced here (the driver cannot tell), which is why the single caller
+ *   is inside `db.transaction` and says so.
+ */
+export async function lockIntentForUpdate(
+  tx: DatabaseOrTransaction,
+  id: string
+): Promise<PaymentIntentRow | null> {
+  const [row] = await tx
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(eq(paymentIntents.id, id))
+    .for('update');
   return row ? toIntentRow(row) : null;
 }
 
@@ -542,6 +576,39 @@ export async function linkProviderObject(
 }
 
 /**
+ * Record the CHARGE this payment produced.
+ *
+ * A separate write from `linkProviderObject` because the two ids become known
+ * at different times: the payment exists the moment it is created, the charge
+ * only once the payer has confirmed. Guarded on `provider_charge_id IS NULL`
+ * for the same reason that one is guarded — a payment produces one charge, and
+ * a second id arriving means either a retry that re-read the same value (in
+ * which case nothing needs writing) or something this row cannot explain, which
+ * must not be silently adopted.
+ *
+ * @returns `true` when this call did the linking.
+ */
+export async function linkProviderCharge(
+  db: DatabaseOrTransaction,
+  intentId: string,
+  provider: ProviderId,
+  providerChargeId: string
+): Promise<boolean> {
+  const rows = await db
+    .update(paymentIntents)
+    .set({ providerChargeId })
+    .where(
+      and(
+        eq(paymentIntents.id, intentId),
+        eq(paymentIntents.provider, provider),
+        isNull(paymentIntents.providerChargeId)
+      )
+    )
+    .returning({ id: paymentIntents.id });
+  return rows.length === 1;
+}
+
+/**
  * The event drain's lookup: which intent is this provider object?
  *
  * `provider` is part of the key rather than decoration. Object ids are unique
@@ -561,6 +628,35 @@ export async function findIntentByProviderObject(
       and(
         eq(paymentIntents.provider, provider),
         eq(paymentIntents.providerObjectId, providerObjectId)
+      )
+    );
+  return row ? toIntentRow(row) : null;
+}
+
+/**
+ * Which intent produced this CHARGE?
+ *
+ * The companion to `findIntentByProviderObject`, and a separate function
+ * because it reads a different column: a provider event about a refund or a
+ * dispute names the charge, not the payment, and matching a `ch_…` against
+ * `provider_object_id` finds nothing — silently, as an `unmatched` event that
+ * an operator eventually has to explain.
+ *
+ * `provider` is part of the key for the same reason it is there: object ids are
+ * unique within one provider's numbering and nowhere else.
+ */
+export async function findIntentByProviderCharge(
+  db: DatabaseOrTransaction,
+  provider: ProviderId,
+  providerChargeId: string
+): Promise<PaymentIntentRow | null> {
+  const [row] = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.provider, provider),
+        eq(paymentIntents.providerChargeId, providerChargeId)
       )
     );
   return row ? toIntentRow(row) : null;
@@ -596,6 +692,48 @@ export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
 ];
 
 /**
+ * The CARD intents whose expiry has passed — READ, not claimed.
+ *
+ * The one place in this file that deliberately does not claim what it returns,
+ * and the reason is that a card intent cannot be expired by a local write
+ * alone: the payment is still confirmable at the acquirer, so it has to be
+ * cancelled THERE first (`services/cardCancellation.ts`), and only then can the
+ * row move. A claim taken before that provider call would hold a row lock
+ * across a network round trip, per row, for the length of the batch.
+ *
+ * Exclusivity moves to the compare-and-swap in `transitionIntent`: two sweepers
+ * may both read the same row and both call cancel — which is idempotent given
+ * the same key — and only one of them wins the write.
+ *
+ * `provider_object_id IS NOT NULL` is deliberately absent. An unlinked card
+ * intent (a create interrupted between the row and the provider call) has
+ * nothing to cancel, which `cancelCardPaymentAtProvider` answers
+ * `nothing_to_cancel` for; excluding it here would leave it unexpirable
+ * forever.
+ */
+export async function findDueCardIntents(
+  db: DatabaseOrTransaction,
+  now: Date,
+  limit: number
+): Promise<PaymentIntentRow[]> {
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.rail, 'card'),
+        inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
+        lt(paymentIntents.expiresAt, now)
+      )
+    )
+    // Oldest first, like the claim below: a stream that expired its newest
+    // arrivals first would starve its own head under a backlog.
+    .orderBy(paymentIntents.expiresAt)
+    .limit(limit);
+  return rows.map(toIntentRow);
+}
+
+/**
  * Claim a BOUNDED batch of intents whose expiry has passed, in ONE statement.
  *
  * The claim and the read are the same `UPDATE … RETURNING`, for the same reason
@@ -626,6 +764,14 @@ export async function expireDueIntents(
     .from(paymentIntents)
     .where(
       and(
+        // CARD intents are excluded and swept separately, one at a time, by
+        // `findDueCardIntents` above: their other half is a PaymentIntent at an
+        // acquirer that stays confirmable, so expiring one with a local write
+        // alone leaves a payment that can complete after the merchant has been
+        // told it expired. The chain rail has no such half — a FairCoin payer
+        // who did not broadcast has nothing anywhere — which is why the fast
+        // set-based claim is still right for it.
+        eq(paymentIntents.rail, 'faircoin'),
         inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
         lt(paymentIntents.expiresAt, now)
       )

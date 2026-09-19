@@ -43,13 +43,19 @@ const REAL_STRIPE_CONFIG: StripeConfig = config.stripe;
 const TEST_STRIPE_CONFIG: StripeConfig = {
   enabled: true,
   secretKey: "sk_test_dummy_key_for_signature_tests",
+  // Absent: nothing in this file mounts a card form, and the rail does not
+  // require one — a deployment serving only server-side integrators needs none.
+  publishableKey: undefined,
   webhookSecret: PLATFORM_SECRET,
   connectWebhookSecret: CONNECT_SECRET,
   webhookSecretPrevious: undefined,
   connectWebhookSecretPrevious: undefined,
   // FALSE, and the livemode-mismatch case below depends on it: on a real
-  // deployment this is derived from the `sk_test_`/`sk_live_` prefix.
+  // deployment this is derived from the key's own mode, which
+  // `classifyStripeKey` reads off one of four prefixes rather than off
+  // `sk_live_` alone — `rk_live_…` is a live key too.
   livemode: false,
+  keyMode: "test",
 };
 
 /**

@@ -82,7 +82,9 @@ mock.module("../providers/registry", () => ({
   },
 }));
 
-const { createIntent, RailUnavailableError } = await import("../createIntent");
+const { createIntent, IdempotencyConflictError, RailUnavailableError } = await import(
+  "../createIntent"
+);
 const { findIntentByProviderObject, findIntentByPublicId } = await import(
   "../../db/payments/paymentIntentRepository"
 );
@@ -195,15 +197,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
   });
 
   /**
-   * The row survives a provider failure, unlinked.
+   * The row survives a provider failure unlinked, and the RETRY FINISHES IT.
    *
    * This is the shape the whole ordering exists to produce: the create threw,
-   * so no client action reaches the payer, but the intent is on disk with
+   * so no client action reached the payer, but the intent is on disk with
    * `provider` set and `provider_object_id` NULL — which is exactly what
-   * recovery looks for and exactly what a support query needs to explain what
-   * the payer saw.
+   * recovery looks for.
+   *
+   * Recovery is what was missing. This test used to assert the opposite —
+   * "still unlinked: the replay re-reads rather than re-creating, and there is
+   * no object to read" — which described a dead end rather than a recovery: the
+   * retry found the row, got no client action, and the payer was handed a
+   * payment they could not pay, permanently, because every further retry took
+   * the same branch.
+   *
+   * Resuming is safe for exactly the reason the row is written first: the
+   * provider key is derived from the intent's own public id, so the call either
+   * creates the payment or returns the one it already made.
    */
-  test("leaves the intent on disk, unlinked, when the provider call fails", async () => {
+  test("finishes an interrupted create on the retry, under the same provider key", async () => {
     createPaymentImpl = async () => {
       throw new Error("acquirer timeout");
     };
@@ -213,20 +225,66 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
       createIntent({ merchant, amount: "2500", rail: "card", currency: "EUR", idempotencyKey: key }),
     ).rejects.toThrow("acquirer timeout");
 
-    // ...and the row is findable by the key the caller used, so the retry that
-    // follows converges on it rather than minting a second payment.
-    const { intent, reused } = await createIntent({
+    const unlinked = await findIntentByPublicId(gatewayDb(), `pi_unused`);
+    expect(unlinked).toBeNull();
+
+    // The provider is reachable again, and the merchant retries with the key
+    // they already used.
+    createPaymentImpl = async (request) => ({
+      providerObjectId: `pi_stripe_${String(request.intentId)}`,
+      status: "created",
+      clientAction: { kind: "client_secret", value: `${String(request.intentId)}_secret_resumed` },
+    });
+    providerCalls.length = 0;
+
+    const { intent, reused, clientAction } = await createIntent({
       merchant,
       amount: "2500",
       rail: "card",
       currency: "EUR",
       idempotencyKey: key,
     });
+
     expect(reused).toBe(true);
     expect(intent.provider).toBe("stripe");
-    // Still unlinked: the replay re-reads rather than re-creating, and there is
-    // no object to read.
-    expect(intent.providerObjectId).toBeNull();
+    // LINKED now, and the payer has something to do.
+    expect(
+      (await findIntentByPublicId(gatewayDb(), intent.publicId))?.providerObjectId,
+    ).toBe(`pi_stripe_${intent.publicId}`);
+    expect(clientAction?.value).toBe(`${intent.publicId}_secret_resumed`);
+
+    // The SAME provider idempotency key the interrupted attempt used, which is
+    // what makes the resume a completion rather than a second charge.
+    const call = providerCalls.find((entry) => entry.fn === "createPayment");
+    expect(call?.request.idempotencyKey).toBe(`pay:${intent.publicId}`);
+  });
+
+  /**
+   * A reused `Idempotency-Key` describing a DIFFERENT payment is a conflict.
+   *
+   * Answering 200 with the stored intent would tell the caller their new
+   * payment exists, and they would wait for money against an amount nobody
+   * asked for. The key addresses one operation; this is a second one.
+   */
+  test("refuses an Idempotency-Key replayed with a different amount", async () => {
+    const key = `k-${Date.now().toString()}-conflict`;
+    await createIntent({
+      merchant,
+      amount: "2500",
+      rail: "card",
+      currency: "EUR",
+      idempotencyKey: key,
+    });
+
+    await expect(
+      createIntent({
+        merchant,
+        amount: "9900",
+        rail: "card",
+        currency: "EUR",
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow(IdempotencyConflictError);
   });
 
   /**
@@ -286,7 +344,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
       merchant,
       amount: "100000000",
       rail: "faircoin",
-      network: merchant.network,
+      // `?? undefined`: the merchant's network is nullable now (a card-only
+      // merchant has none), and this fixture registers one.
+      network: merchant.network ?? undefined,
       idempotencyKey: `k-${Date.now().toString()}-g`,
     });
 

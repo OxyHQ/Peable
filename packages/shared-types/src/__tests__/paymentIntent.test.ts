@@ -1,8 +1,10 @@
 import { test, expect } from 'bun:test';
 import {
   PAYMENT_INTENT_STATUSES,
+  POST_SETTLEMENT_STATUSES,
   canStillBePaid,
   isValidStatusTransition,
+  reachesSettlementFromPayer,
   type PaymentIntentStatus,
 } from '../paymentIntent';
 
@@ -44,6 +46,17 @@ const PAYABLE: Record<PaymentIntentStatus, boolean> = {
   partially_refunded: false,
   refunded: false,
   expired: false,
+  /**
+   * `false`, even though a declined card CAN be retried on the same provider
+   * payment and `failed → settled` is therefore a legal edge.
+   *
+   * This answer drives the hosted checkout's reuse decision, and it has to be
+   * right for both rails from a status alone. On the chain rail `failed` means
+   * `underpaid`: coins arrived and were not enough, and handing that intent
+   * back would show a payer an address that already holds part of their money.
+   * Minting a fresh intent is correct on both rails; reusing one is correct on
+   * only one of them.
+   */
   failed: false,
   rejected: false,
 };
@@ -68,4 +81,55 @@ test('classifies every status the table defines, and no others', () => {
 test('follows the chain path all the way to settled', () => {
   expect(isValidStatusTransition('awaiting_approval', 'settled')).toBe(false);
   expect(canStillBePaid('awaiting_approval')).toBe(true);
+});
+
+/**
+ * The gate that keeps the STATED payable set honest against the table.
+ *
+ * `canStillBePaid` used to derive its answer by walking `ALLOWED`, and every
+ * derivation has eventually been broken by an edge added elsewhere — leaf-ness
+ * by the refund transitions, reachability by `refunded → settled`. So the set
+ * is stated and this checks it, in the one direction that can catch a real
+ * defect: **a status the gateway calls payable must genuinely be able to reach
+ * `settled`**. If someone removes `approved → broadcast`, a payer sitting in
+ * `approved` can no longer pay and this goes red.
+ *
+ * The converse is NOT asserted, and the reason is `failed`. A declined card
+ * attempt returns the provider's payment to `requires_payment_method`, so
+ * `failed` can reach `settled` — while the hosted checkout must still mint a
+ * FRESH intent rather than reuse it, because on the chain rail the same status
+ * means `underpaid` and reusing it would show a payer an address that already
+ * has part of their money. The two questions genuinely differ there, and
+ * asserting they agree would force one of them to be wrong.
+ */
+test('every payable status can genuinely still reach settlement', () => {
+  for (const status of PAYMENT_INTENT_STATUSES) {
+    if (!PAYABLE[status]) continue;
+    expect([status, reachesSettlementFromPayer(status)]).toEqual([status, true]);
+  }
+});
+
+/** ...and nothing past settlement is payable, whatever edges it grows. */
+test('no post-settlement status is payable', () => {
+  for (const status of POST_SETTLEMENT_STATUSES) {
+    expect([status, canStillBePaid(status)]).toEqual([status, false]);
+  }
+});
+
+/**
+ * A refund can be UNDONE, and the table has to say so.
+ *
+ * A bank can reject a refund days after the provider accepted it
+ * (`refund.failed`). Without a path back, a payment whose only refund failed
+ * would claim `refunded` forever — the merchant's books saying money went back
+ * that is still with them, and no legal transition able to correct it.
+ */
+test('lets a failed refund return the payment to where the money actually is', () => {
+  expect(isValidStatusTransition('refunded', 'settled')).toBe(true);
+  expect(isValidStatusTransition('refunded', 'partially_refunded')).toBe(true);
+  expect(isValidStatusTransition('partially_refunded', 'settled')).toBe(true);
+  // ...and none of that makes a finished payment payable again.
+  expect(canStillBePaid('refunded')).toBe(false);
+  expect(canStillBePaid('partially_refunded')).toBe(false);
+  expect(canStillBePaid('settled')).toBe(false);
 });

@@ -19,6 +19,7 @@ import { linkProviderObject } from "../../db/payments/paymentIntentRepository";
 import { listDisputesForIntent } from "../../db/disputes/disputeRepository";
 import { disputes, webhookDeliveries } from "../../db/schema";
 import { runProviderEventDrainPass } from "../providerEventDrain";
+import { redactProviderPayload } from "../providers/redact";
 import {
   gatewayDb,
   seedIntent,
@@ -31,7 +32,22 @@ type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
 let counter = 0;
 
-/** Store a dispute event exactly as the ingress would have. */
+/**
+ * Store a dispute event exactly as the ingress would have — REDACTED.
+ *
+ * The redaction was the missing half. `provider_events.payload` is written by
+ * `ingestProviderDelivery`, which reduces the body to an allow-list before
+ * storing it, and the allow-list leaves the STRING `"[redacted]"` where a value
+ * was dropped rather than a hole. So a handler reading a dropped field gets a
+ * string where it expected a number, its `typeof` guard answers false, and it
+ * reads as "the provider sent nothing".
+ *
+ * That is exactly what happened to `evidence_details.due_by`: it was not on the
+ * allow-list, so the deadline was silently null on EVERY dispute while this
+ * suite — which stored raw payloads — asserted it survived. A merchant could be
+ * told they were being disputed without being told when evidence was due, and
+ * would find out by losing.
+ */
 async function storeDisputeEvent(input: {
   type: string;
   intentObjectId: string | null;
@@ -54,7 +70,7 @@ async function storeDisputeEvent(input: {
     livemode: false,
     apiVersion: "2026-07-29.dahlia",
     objectIds,
-    payload: {
+    payload: redactProviderPayload({
       id: `evt_dispute_${String(counter)}`,
       object: "event",
       type: input.type,
@@ -68,7 +84,7 @@ async function storeDisputeEvent(input: {
           ...(input.dueBy ? { evidence_details: { due_by: input.dueBy } } : {}),
         },
       },
-    },
+    }),
   });
   if (!id) throw new Error("the event was already stored");
   return id;
@@ -248,6 +264,69 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * The ONE lookup that keeps refund semantics. A dispute arriving inside the
    * two-step create's window finds no intent, and retrying is what resolves it.
    */
+  /**
+   * A close whose outcome cannot be read is NOT a win.
+   *
+   * `DISPUTE_STATUS_FOR_EVENT` used to map `charge.dispute.closed` to `won`,
+   * and the payload was consulted only for the two outcome words. So a close
+   * carrying `warning_closed`, or a status Stripe renames, told the merchant
+   * they had WON — which is the wrong half of a coin flip to land on by
+   * default: a merchant told they won does not reconcile, does not re-bill, and
+   * finds out from their balance.
+   */
+  it("refuses to call a close a win when the outcome cannot be read", async () => {
+    const intent = await linkedCardIntent("pi_stripe_dp_unknown");
+    await storeDisputeEvent({
+      type: "charge.dispute.created",
+      intentObjectId: "pi_stripe_dp_unknown",
+      disputeObjectId: "dp_stripe_unknown",
+    });
+    await runProviderEventDrainPass();
+
+    const eventId = await storeDisputeEvent({
+      type: "charge.dispute.closed",
+      intentObjectId: "pi_stripe_dp_unknown",
+      disputeObjectId: "dp_stripe_unknown",
+      status: "some_state_nobody_mapped",
+    });
+    await runProviderEventDrainPass();
+
+    // The dispute keeps the status it had; nothing claims an outcome.
+    const rows = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(rows[0]?.status).toBe("needs_response");
+    expect(await deliveriesFor(intent.id)).not.toContain("payment_intent.dispute_closed");
+    // ...and the event stays VISIBLE for an operator rather than being marked
+    // handled with a guess.
+    const stored = await findProviderEventById(gatewayDb(), eventId);
+    expect(stored?.processedAt).toBeNull();
+    expect(stored?.processingError).toContain("outcome");
+  });
+
+  /**
+   * An INQUIRY is not a chargeback, and its close is not an outcome.
+   *
+   * Stripe's `warning_*` states describe a dispute that has not become formal
+   * yet. `warning_closed` collapses onto `under_review` rather than onto a
+   * result — calling it a win would report a verdict the network never gave.
+   */
+  it("maps a provider warning state without inventing an outcome", async () => {
+    const intent = await linkedCardIntent("pi_stripe_dp_warning");
+    await storeDisputeEvent({
+      type: "charge.dispute.updated",
+      intentObjectId: "pi_stripe_dp_warning",
+      disputeObjectId: "dp_stripe_warning",
+      status: "warning_needs_response",
+      dueBy: Math.floor(Date.now() / 1000) + 86_400,
+    });
+    await runProviderEventDrainPass();
+
+    const rows = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(rows[0]?.status).toBe("needs_response");
+    // A warning that is still open keeps its deadline — that is the one thing
+    // the merchant has to act on.
+    expect(rows[0]?.evidenceDueAt).not.toBeNull();
+  });
+
   it("leaves a dispute for an unlinked payment unprocessed, to retry", async () => {
     const eventId = await storeDisputeEvent({
       type: "charge.dispute.created",

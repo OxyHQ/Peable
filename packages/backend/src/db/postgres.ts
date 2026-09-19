@@ -93,6 +93,29 @@ export function getDb(): Database {
   return database;
 }
 
+/**
+ * Whether the database answers, right now, with one round trip.
+ *
+ * Separate from `connectPostgres`'s own probe because it answers a different
+ * question at a different time: that one is "can this process boot", asked
+ * once; this is "can this task serve a request", asked by `/ready` for as long
+ * as the task lives. A pool opened at boot can stop answering — a failover, a
+ * security-group change, RDS restarting — and a task that is still LISTENING
+ * through that is exactly the task a deploy gate must not promote.
+ *
+ * Never throws: the caller is an HTTP handler whose status code is the answer.
+ */
+export async function isPostgresReady(): Promise<boolean> {
+  const open = client;
+  if (!open) return false;
+  try {
+    await open`select 1`;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Close the pool. Safe to call when it was never opened. */
 export async function disconnectPostgres(): Promise<void> {
   const open = client;

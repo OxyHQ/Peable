@@ -111,6 +111,24 @@ export interface StripeConfig {
   /** True only when `STRIPE_ENABLED` is set AND every required secret is present. */
   enabled: boolean;
   secretKey: string | undefined;
+  /**
+   * The PUBLISHABLE key — public by construction, and the one Stripe value
+   * that is meant to reach a browser.
+   *
+   * The hosted checkout needs it to mount the provider's own card fields, and
+   * it must not be a build-time constant in that bundle: the checkout is
+   * deployed once and serves whichever gateway it is pointed at, so a key baked
+   * into it would be the wrong mode the first time a test deployment used the
+   * same page. It is served from `POST /v1/payment_intents/:id/client_action`
+   * beside the confirmation credential, which is the one response that already
+   * proves the caller may pay this payment.
+   *
+   * NOT part of `resolveStripeEnabled`'s required set: a deployment that only
+   * serves server-side integrators (Mercaria mounts its own fields) needs no
+   * publishable key, and refusing to enable the rail without one would turn a
+   * working configuration off.
+   */
+  publishableKey: string | undefined;
   /** Platform-scope endpoint secret. */
   webhookSecret: string | undefined;
   /** Connect-scope endpoint secret — a DIFFERENT endpoint with its own secret. */
@@ -129,9 +147,47 @@ export interface StripeConfig {
    *
    * Read by the webhook ingress to drop events of the other mode: a production
    * URL receives test events too, and processing one would settle a payment
-   * that does not exist.
+   * that does not exist. Read again, before any provider call, by
+   * `services/providers/environmentGuard.ts` — the mode a deployment holds and
+   * the environment a merchant's credential carries have to agree, and only the
+   * guard checks that.
    */
   livemode: boolean;
+  /**
+   * The key's mode, classified — and `unknown` is a real answer.
+   *
+   * `livemode` used to be `secretKey.startsWith('sk_live_')` and nothing else,
+   * which gets a RESTRICTED live key (`rk_live_…`) wrong in the most expensive
+   * direction: the deployment holds a live key, `livemode` reads `false`, every
+   * live webhook is dropped as a mode mismatch and a development credential is
+   * cleared to create live charges. A restricted key is the recommended shape
+   * for exactly the Accounts v2 + transfers surface this gateway uses, so it is
+   * not a hypothetical.
+   *
+   * Anything that is not one of the four known prefixes is `unknown`, and an
+   * unknown key does not enable the rail. Guessing a mode from a key nobody
+   * recognises is how a test deployment decides it is live.
+   */
+  keyMode: StripeKeyMode;
+}
+
+/** How a Stripe secret key names its own mode. */
+export type StripeKeyMode = "live" | "test" | "unknown";
+
+/**
+ * Classify a Stripe secret key.
+ *
+ * FOUR prefixes, not one. `sk_` is a standard key and `rk_` a restricted one;
+ * both exist in both modes, and Stripe's restricted keys are what a platform
+ * with a narrow permission set actually deploys. The mode is the second
+ * segment in every case, which is why this matches on the pair rather than on
+ * `includes('live')` — `sk_test_live_something` is a legal random suffix.
+ */
+export function classifyStripeKey(secretKey: string | undefined): StripeKeyMode {
+  if (secretKey === undefined) return "unknown";
+  if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) return "live";
+  if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) return "test";
+  return "unknown";
 }
 
 function readOrigins(raw: string | undefined): string[] {
@@ -206,6 +262,18 @@ function resolveStripeEnabled(env: Record<string, string | undefined>): boolean 
     );
     return false;
   }
+  // A key whose mode cannot be read is a key whose mode cannot be ENFORCED.
+  // Everything downstream — the ingress livemode filter, the environment guard
+  // before every provider call — is derived from the classification, so a rail
+  // turned on with an unclassifiable key would run with both of them answering
+  // from a guess.
+  if (classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === "unknown") {
+    process.emitWarning(
+      "[Stripe] STRIPE_SECRET_KEY is not a recognised sk_live_/rk_live_/sk_test_/rk_test_ " +
+        "key, so its mode cannot be classified; staying OFF rather than guessing.",
+    );
+    return false;
+  }
   return true;
 }
 
@@ -241,13 +309,18 @@ export function loadConfig(
     stripe: {
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
+      publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY),
       webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET),
       connectWebhookSecret: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET),
       webhookSecretPrevious: readOptional(env.STRIPE_WEBHOOK_SECRET_PREVIOUS),
       connectWebhookSecretPrevious: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS),
       // Derived, never configured: a deployment cannot claim live mode with a
-      // test key or the reverse, so the two cannot disagree.
-      livemode: (readOptional(env.STRIPE_SECRET_KEY) ?? "").startsWith("sk_live_"),
+      // test key or the reverse, so the two cannot disagree. `classifyStripeKey`
+      // rather than a `sk_live_` prefix test — a restricted live key
+      // (`rk_live_…`) is a live key, and reading it as test drops every live
+      // webhook while clearing a development credential to charge live cards.
+      livemode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === "live",
+      keyMode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)),
     },
   };
 }

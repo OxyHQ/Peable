@@ -1,5 +1,10 @@
 import type { NextFunction, Request, Response, RequestHandler } from "express";
 import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
+import type { MerchantEnvironment } from "@peable.to/shared-types";
+import {
+  EnvironmentModeMismatchError,
+  assertEnvironmentMatchesProvider,
+} from "../services/providers/environmentGuard";
 
 /** Stripe-ish error envelope: `{ error: { type, message } }`. */
 export function sendError(
@@ -53,3 +58,49 @@ export const requireAuthenticated: RequestHandler = (req, res, next) => {
   if (!requireServiceApp(req, res)) return;
   next();
 };
+
+/**
+ * Gate a money-moving route on the credential's mode, before it reads anything.
+ *
+ * The service layer checks this too, and that is defence in depth rather than
+ * duplication — but the SERVICE is reached after the route has already resolved
+ * the payment, the seller and the merchant's own refund history, and each of
+ * those lookups answers 404 or 422 on its own. A wrong-mode credential could
+ * therefore enumerate which `pi_…`, `ca_…` and `externalRef` values exist by
+ * reading which refusal came back, without ever reaching the guard.
+ *
+ * Returns `false` AND writes the response, so callers read
+ * `if (!requireProviderMode(...)) return;` — the same shape `resolveMerchant`
+ * already uses.
+ */
+export function requireProviderMode(
+  environment: MerchantEnvironment,
+  res: Response,
+): boolean {
+  try {
+    assertEnvironmentMatchesProvider(environment);
+    return true;
+  } catch (error) {
+    if (error instanceof EnvironmentModeMismatchError) {
+      sendEnvironmentMismatch(res, error.message);
+      return false;
+    }
+    throw error;
+  }
+}
+
+/**
+ * Answer a credential that reached a deployment running the other mode.
+ *
+ * 403, not 422: the request is well-formed and the caller is authenticated,
+ * they are simply not authorized to move money in this mode. A 422 would send
+ * an integrator off editing a body that was never the problem.
+ *
+ * Shared because the branch appears in every route that can reach a provider,
+ * and an omission is invisible — the operation succeeds, in the wrong mode.
+ * `routes/__tests__/environmentIsolation.realdb.test.ts` walks the routes and
+ * fails on one that answers anything else.
+ */
+export function sendEnvironmentMismatch(res: Response, message: string): void {
+  sendError(res, 403, "permission_error", message);
+}

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import { check, foreignKey, index, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
@@ -7,6 +7,7 @@ import {
   BASE_UNIT_STRING_PATTERN,
   CURRENCY_CODES,
   PROVIDER_IDS,
+  REFUND_ORIGINS,
   REFUND_STATUSES,
 } from './valueSets';
 
@@ -40,8 +41,33 @@ export const refunds = pgTable(
     publicId: text().notNull(),
     merchantId: text().notNull(),
     paymentIntentId: text().notNull(),
-    /** The MERCHANT's own id for this refund. The idempotency. */
-    externalRef: text().notNull(),
+    /**
+     * The MERCHANT's own id for this refund. The idempotency — when there IS a
+     * merchant behind it.
+     *
+     * NULLABLE, and that is the whole of `origin` below. A refund issued from
+     * the provider's dashboard, or created by the network resolving a dispute,
+     * has no merchant reference and cannot be given one: the merchant did not
+     * make it and has no id for it. The event handler used to leave such a
+     * refund `unmatched` forever rather than invent one — honest, and it left
+     * the payer's money back with this gateway still calling the payment
+     * `settled`, which is the disagreement a merchant reconciles against and
+     * cannot explain.
+     *
+     * The unique index is PARTIAL for this reason; see below.
+     */
+    externalRef: text(),
+    /**
+     * WHO created this refund — `merchant` through this API, or `provider`
+     * because it appeared at the acquirer and was imported.
+     *
+     * Not derivable from `external_ref IS NULL`, even though today the two
+     * agree: the question "did we do this" is one an operator asks directly,
+     * and answering it by the absence of another column is how a future
+     * merchant-initiated refund with no reference silently becomes an imported
+     * one.
+     */
+    origin: text().notNull().default('merchant'),
     amount: text().notNull(),
     currency: text().notNull(),
     status: text().notNull().default('pending'),
@@ -66,8 +92,16 @@ export const refunds = pgTable(
      * submission converges here instead of sending the payer their money a
      * second time — which nothing reverses automatically and which the payer
      * has no reason to report.
+     *
+     * PARTIAL, because `external_ref` is now nullable for an IMPORTED refund.
+     * Postgres treats NULLs as distinct in a plain unique index, so an
+     * unpartitioned one would work too — the `WHERE` says what is being
+     * promised, which is that the constraint governs merchant-initiated refunds
+     * and makes no claim about imported ones.
      */
-    unique('refunds_merchant_external_ref_key').on(table.merchantId, table.externalRef),
+    uniqueIndex('refunds_merchant_external_ref_key')
+      .on(table.merchantId, table.externalRef)
+      .where(sql`${table.externalRef} is not null`),
     /** One row per provider refund, so an inbound refund event maps to one row. */
     unique('refunds_provider_object_key').on(table.provider, table.providerObjectId),
     /** "What has come back off this payment?" — the read the total is summed from. */
@@ -85,7 +119,25 @@ export const refunds = pgTable(
     check('refunds_provider_check', sql.raw(`provider in (${inList(PROVIDER_IDS)})`)),
     check('refunds_status_check', sql.raw(`status in (${inList(REFUND_STATUSES)})`)),
     check('refunds_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
-    check('refunds_external_ref_check', sql`length(${table.externalRef}) > 0`),
+    check(
+      'refunds_external_ref_check',
+      sql`${table.externalRef} is null or length(${table.externalRef}) > 0`
+    ),
+    check('refunds_origin_check', sql.raw(`origin in (${inList(REFUND_ORIGINS)})`)),
+    /**
+     * A MERCHANT refund has the merchant's reference; an imported one does not.
+     *
+     * Stated structurally because the two columns are written by different
+     * paths — the route writes the first, the event drain writes the second —
+     * and the failure of a drift is silent: a merchant-initiated refund with a
+     * null reference would be un-retryable (nothing to converge on), and an
+     * imported one carrying a reference would claim the merchant asked for a
+     * refund they never made.
+     */
+    check(
+      'refunds_origin_ref_agrees_check',
+      sql`(${table.origin} = 'merchant') = (${table.externalRef} is not null)`
+    ),
     check('refunds_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     /**
      * A refund of nothing is not a refund.

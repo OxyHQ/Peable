@@ -35,12 +35,21 @@ import {
   createTransfer,
   PaymentNotSettledError,
   reverseTransfer,
+  TransferExceedsPaymentError,
+  TransferSourceUnresolvedError,
   TransfersUnavailableError,
 } from "../services/transfers/transferService";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { ProviderError } from "../services/providers/provider";
 import { redactProviderMessage } from "../services/providers/redact";
 import { toTransferDTO, type TransferDTO } from "../lib/serializeSettlement";
-import { requireAuthenticated, sendError, wrap } from "../lib/http";
+import {
+  requireAuthenticated,
+  requireProviderMode,
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+} from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
 
 /**
@@ -54,7 +63,12 @@ const baseUnitAmount = z
   .refine(
     isBaseUnitString,
     "amount must be a canonical integer string in the currency's smallest unit",
-  );
+  )
+  // `'0'` is a canonical integer string and passes the predicate above, and a
+  // zero transfer is not a transfer: it would consume the merchant's
+  // `externalRef`, so the REAL settlement of that order could never be created
+  // afterwards. The refund route refuses a zero for the same reason.
+  .refine((value) => value !== "0", "a transfer of 0 is not a transfer");
 
 const createTransferBodySchema = z
   .object({
@@ -72,7 +86,40 @@ const createTransferBodySchema = z
     { message: "name the seller by exactly one of connectedAccountId or connectedAccountRef" },
   );
 
-const reverseTransferBodySchema = z.object({ amount: baseUnitAmount });
+const reverseTransferBodySchema = z.object({
+  amount: baseUnitAmount,
+  /**
+   * The merchant's own id for THIS reversal.
+   *
+   * Optional in the BODY and required overall: the `Idempotency-Key` header is
+   * accepted as the same identity, which is what Mercaria's adapter already
+   * sends. One of the two must be present — see `resolveReversalRef`.
+   */
+  externalRef: z.string().min(1).max(255).optional(),
+});
+
+/**
+ * The durable identity of a reversal operation, from the header or the body.
+ *
+ * The route used to take neither. The provider idempotency key was derived from
+ * `trr:<transfer>:<amount>`, so two distinct reversals of one transfer for the
+ * same amount presented one key and the second silently returned the first —
+ * the seller kept money that had been taken back. The consumer was already
+ * SENDING an operation key (`Idempotency-Key`) and this route ignored it.
+ *
+ * `null` when neither is present, which the route answers 400 for: a reversal
+ * with no identity is one that cannot be retried safely, and inventing one here
+ * would make every retry a second reversal.
+ */
+function resolveReversalRef(
+  headerValue: string | undefined,
+  bodyValue: string | undefined,
+): string | null {
+  const header = headerValue?.trim();
+  if (header) return header;
+  const body = bodyValue?.trim();
+  return body && body.length > 0 ? body : null;
+}
 
 function sendProviderError(res: Response, error: ProviderError): void {
   // 502 for a retryable provider fault, 422 for a permanent refusal. The
@@ -111,6 +158,30 @@ async function serializeTransfer(
   return toTransferDTO(transfer, seller.publicId, intent.publicId);
 }
 
+/**
+ * Why a stored settlement and a new request naming the same `external_ref` are
+ * not the same operation — or `null` when they are.
+ *
+ * Deliberately does NOT compare the seller: the stored row holds an internal
+ * account id and the request may name the seller by either address, so the
+ * comparison would need a lookup whose only purpose is to produce an error. The
+ * payment and the amount are what decide whether money is being moved
+ * differently, and both are on the row.
+ */
+function transferReplayConflict(
+  existing: TransferRow,
+  body: { readonly paymentIntentId: string; readonly amount: string },
+  requestedIntent: PaymentIntentRow,
+): string | null {
+  if (existing.paymentIntentId !== requestedIntent.id) {
+    return `${body.paymentIntentId} does not match the payment this settlement reference already names`;
+  }
+  if (existing.amount !== body.amount) {
+    return `this settlement reference already names an amount of ${existing.amount}`;
+  }
+  return null;
+}
+
 export function createTransfersRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
@@ -131,6 +202,9 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      // BEFORE the intent and seller lookups below, whose 404s would otherwise
+      // let a wrong-mode credential enumerate this merchant's rows.
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = createTransferBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -160,11 +234,56 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
        * the money moved, and the answer must not change because the seller's
        * account has since been restricted. Checking readiness first would turn
        * a successful settlement into a 422 on its own retry.
+       *
+       * A settlement that never reached the provider is NOT history, so it does
+       * not get that exemption: nothing moved, and a seller who can no longer
+       * be paid should not be paid by a resume.
        */
       const existing = await findTransferByExternalRef(db, merchant.id, body.externalRef);
       if (existing) {
-        res.status(200).json(await serializeTransfer(merchant.id, existing, intent));
-        return;
+        /**
+         * A reused reference naming a DIFFERENT operation is a conflict, not a
+         * replay.
+         *
+         * `external_ref` is the merchant's own settlement id and the unique key
+         * this table converges on. A second request carrying the same ref with
+         * another payment, amount or seller is not the same operation, and
+         * answering 200 with the stored row tells the caller their new
+         * settlement succeeded when nothing happened at all — the shape that
+         * loses a seller their money silently.
+         */
+        const conflict = transferReplayConflict(existing, body, intent);
+        if (conflict) {
+          sendError(res, 409, "invalid_request_error", conflict);
+          return;
+        }
+        /**
+         * A FINISHED settlement is history and is answered as such. One that
+         * never reached the provider falls THROUGH to be resumed.
+         *
+         * The distinction is `providerObjectId`, and it is the whole reason
+         * this branch is not just "return what we have": a row left `pending`
+         * by an interrupted attempt was answered 200 with a settlement that had
+         * not happened, and no path ever retried it. `createTransfer` resumes
+         * it under the same provider idempotency key, so the retry completes
+         * the settlement rather than describing a seller who was not paid.
+         */
+        if (existing.providerObjectId !== null || existing.status === "failed") {
+          /**
+           * Serialized against the STORED transfer's own intent, never the one
+           * this request names.
+           *
+           * The two are the same here — the conflict check above has just
+           * proven it — and that is exactly why reading it off the request was
+           * invisible: it produced a correct answer until the day a caller
+           * reused a ref, and then it produced a response describing a
+           * settlement that does not exist, built from ids the caller had
+           * supplied themselves.
+           */
+          const storedIntent = await findIntentByPublicIdForTransfer(db, existing);
+          res.status(200).json(await serializeTransfer(merchant.id, existing, storedIntent));
+          return;
+        }
       }
 
       const account = body.connectedAccountId
@@ -178,6 +297,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       try {
         const { transfer, created } = await createTransfer({
           merchantId: merchant.id,
+          environment: merchant.environment,
           intent,
           account,
           externalRef: body.externalRef,
@@ -190,12 +310,31 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           .status(created ? 201 : 200)
           .json(await serializeTransfer(merchant.id, transfer, intent, account));
       } catch (error) {
-        if (error instanceof PaymentNotSettledError || error instanceof AccountNotPayableError) {
+        if (
+          error instanceof PaymentNotSettledError ||
+          error instanceof AccountNotPayableError ||
+          // The settlement budget: this payment cannot fund what was asked for.
+          // 422 rather than 409 — the request as sent will never work, and the
+          // message says how much is left.
+          error instanceof TransferExceedsPaymentError
+        ) {
           sendError(res, 422, "invalid_request_error", error.message);
+          return;
+        }
+        // The gateway believes the payment settled and the PROVIDER reports no
+        // captured charge. 409, because the two disagree about a fact rather
+        // than the request being wrong: retrying after reconciliation is the
+        // action, editing the body is not.
+        if (error instanceof TransferSourceUnresolvedError) {
+          sendError(res, 409, "invalid_request_error", error.message);
           return;
         }
         if (error instanceof TransfersUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -216,6 +355,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = reverseTransferBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -241,10 +381,48 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         return;
       }
 
+      const externalRef = resolveReversalRef(
+        req.header("Idempotency-Key"),
+        parsed.data.externalRef,
+      );
+      if (!externalRef) {
+        sendError(
+          res,
+          400,
+          "invalid_request_error",
+          "a reversal needs an Idempotency-Key header or an externalRef: " +
+            "two reversals of one settlement for the same amount are two operations, " +
+            "and an amount is not an identity",
+        );
+        return;
+      }
+
       try {
-        const updated = await reverseTransfer({ transfer, amount: parsed.data.amount });
+        const { transfer: updated, reversal, created } = await reverseTransfer({
+          merchantId: merchant.id,
+          environment: merchant.environment,
+          transfer,
+          externalRef,
+          amount: parsed.data.amount,
+        });
         const intent = await findIntentByPublicIdForTransfer(db, updated);
-        res.status(201).json(await serializeTransfer(merchant.id, updated, intent));
+        // 201 for a reversal just made, 200 for one that had already been made.
+        // The distinction is the merchant's to act on for the same reason it is
+        // on the settlement route: "did I just take another 500 off this
+        // seller" is a question they will ask.
+        res.status(created ? 201 : 200).json({
+          ...(await serializeTransfer(merchant.id, updated, intent)),
+          reversal: {
+            id: reversal.publicId,
+            object: "transfer_reversal" as const,
+            externalRef: reversal.externalRef,
+            amount: reversal.amount,
+            currency: reversal.currency,
+            status: reversal.status,
+            failureMessage: reversal.failureMessage,
+            createdAt: reversal.createdAt.toISOString(),
+          },
+        });
       } catch (error) {
         if (error instanceof TransferReversalTooLargeError) {
           sendError(res, 422, "invalid_request_error", error.message);
@@ -252,6 +430,10 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         }
         if (error instanceof TransfersUnavailableError) {
           sendError(res, 503, "api_error", error.message);
+          return;
+        }
+        if (error instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

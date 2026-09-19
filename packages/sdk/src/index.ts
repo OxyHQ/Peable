@@ -12,12 +12,42 @@ import { PaymentIntentsResource } from './resources/paymentIntents';
 import { PaymentLinksResource } from './resources/paymentLinks';
 import { CheckoutResource } from './resources/checkoutSessions';
 import { WebhooksResource } from './resources/webhooks';
+import { ConnectedAccountsResource } from './resources/connectedAccounts';
+import { DisputesResource, MerchantsResource } from './resources/merchants';
+import { RefundsResource } from './resources/refunds';
+import { TransfersResource } from './resources/transfers';
 
+/**
+ * The merchant-authed client.
+ *
+ * ## Why the namespaces below are not optional extras
+ *
+ * This class published four: intents, links, checkout and webhooks. The gateway
+ * has always served merchants, connected accounts, refunds, transfers and
+ * disputes as well — so every integrator reaching those wrote their own HTTP
+ * client and their own partial types for responses this package already knew.
+ * Mercaria did exactly that. Two descriptions of one wire format, in two
+ * repositories, with nothing comparing them: a field renamed in the gateway is
+ * a runtime failure over there, found by a settlement that does not happen.
+ *
+ * An SDK that covers less than the API it wraps does not reduce surface, it
+ * relocates it.
+ */
 export class Peable {
   readonly paymentIntents: PaymentIntentsResource;
   readonly paymentLinks: PaymentLinksResource;
   readonly checkout: CheckoutResource;
   readonly webhooks: WebhooksResource;
+  /** The merchant this credential speaks for. Resolved from the credential. */
+  readonly merchants: MerchantsResource;
+  /** Sellers a marketplace onboards, and their readiness. */
+  readonly connectedAccounts: ConnectedAccountsResource;
+  /** Money going back to a payer. */
+  readonly refunds: RefundsResource;
+  /** Money going out to a seller, and coming back from one. */
+  readonly transfers: TransfersResource;
+  /** Read-only: the network initiates these. */
+  readonly disputes: DisputesResource;
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
@@ -28,6 +58,11 @@ export class Peable {
     this.paymentLinks = new PaymentLinksResource(client);
     this.checkout = new CheckoutResource(client);
     this.webhooks = new WebhooksResource();
+    this.merchants = new MerchantsResource(client);
+    this.connectedAccounts = new ConnectedAccountsResource(client);
+    this.refunds = new RefundsResource(client);
+    this.transfers = new TransfersResource(client);
+    this.disputes = new DisputesResource(client);
   }
 }
 
@@ -49,9 +84,28 @@ export type { ServiceTokenProvider } from './core/serviceToken';
 
 export type {
   CreatePaymentIntentOptions,
+  PaymentIntentClientAction,
   PaymentIntentListParams,
   PaymentIntentList,
 } from './resources/paymentIntents';
+export type {
+  AccountLink,
+  AccountLinkParams,
+  ConnectedAccountList,
+  ConnectedAccountListParams,
+  CreateConnectedAccountParams,
+} from './resources/connectedAccounts';
+export type {
+  DisputeList,
+  RegisterMerchantParams,
+  UpdateMerchantParams,
+} from './resources/merchants';
+export type { CreateRefundParams, RefundList } from './resources/refunds';
+export type {
+  CreateTransferParams,
+  ReverseTransferParams,
+  TransferList,
+} from './resources/transfers';
 export type {
   PaymentLinkListParams,
   PaymentLinkList,

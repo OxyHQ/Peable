@@ -67,6 +67,24 @@ export async function reserveNextDerivationIndex(
     });
 
   if (!row) return null;
+  if (row.xpub === null || row.network === null) {
+    /**
+     * A CARD-ONLY merchant. Both chain columns are null together
+     * (`merchants_chain_fields_agree_check`), so there is no key to derive from
+     * and no chain to derive on.
+     *
+     * The index was still consumed by the statement above, and that is
+     * deliberate: un-incrementing it would need a second write that could lose
+     * a concurrent reservation. Burning an index costs nothing — the space is
+     * 2^31 — while a repeated one puts two payers on one address.
+     *
+     * Reaching here at all is a caller bug: `resolveRail` refuses a FairCoin
+     * intent for a merchant with no chain account, so nothing should ask. It is
+     * a named refusal rather than a cast through `null` so that bug surfaces
+     * here instead of inside `@scure/bip32`.
+     */
+    return null;
+  }
   // `network` is `text` in the schema and a closed set in the database (the
   // `merchants_network_check` CHECK). The cast is where those two facts meet;
   // it is not a widening.

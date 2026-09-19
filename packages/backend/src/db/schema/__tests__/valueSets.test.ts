@@ -126,9 +126,9 @@ describe('the base-unit amount pattern', () => {
         0
       );
     // One per money-carrying COLUMN, which is not one per table:
-    // payment_intents, checkout_sessions, payment_links, refunds and disputes
-    // carry one `amount` each; `transfers` carries `amount` AND the cumulative
-    // `amount_reversed`.
-    expect(occurrences).toBe(7);
+    // payment_intents, checkout_sessions, payment_links, refunds, disputes and
+    // transfer_reversals carry one `amount` each; `transfers` carries `amount`
+    // AND the cumulative `amount_reversed`.
+    expect(occurrences).toBe(8);
   });
 });

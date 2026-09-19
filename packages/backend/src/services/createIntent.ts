@@ -11,6 +11,7 @@ import {
 import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
 import type { Database } from "../db/postgres";
 import type { PaymentProvider, ProviderClientAction } from "./providers/provider";
+import { assertEnvironmentMatchesProvider } from "./providers/environmentGuard";
 import { resolveCardProvider, resolveProvider } from "./providers/registry";
 import { reserveNextAddress } from "./reserveAddress";
 import { newId, clientSecretFor } from "../lib/ids";
@@ -173,6 +174,15 @@ export function resolveRail(
     if (input.network === undefined) {
       throw new RailMismatchError("the faircoin rail requires a network");
     }
+    if (merchant.network === null) {
+      // A CARD-ONLY merchant. There is no xpub to derive a receive address
+      // from, so this is refused here with a message naming what is missing —
+      // rather than reaching `reserveNextAddress`, which would have burned a
+      // derivation index before discovering the same thing.
+      throw new RailMismatchError(
+        "this merchant has not registered a FairCoin account; register a network and xpub to accept it",
+      );
+    }
     if (input.network !== merchant.network) {
       throw new NetworkMismatchError(input.network, merchant.network);
     }
@@ -224,18 +234,84 @@ async function attachProviderPayment(
  *
  * Read from the provider rather than remembered, because a client secret is a
  * confirmation credential and storing one would put it in every backup and
- * every support query. `undefined` when the intent never got linked (the
- * two-step create was interrupted), which the caller reports honestly instead
- * of pretending the payer can proceed.
+ * every support query.
+ *
+ * ## It RESUMES an interrupted create, and that is the point
+ *
+ * This used to answer `undefined` for an intent with a provider and no object,
+ * with a comment calling that honest. It was honest and it was a dead end: the
+ * two-step create writes the row FIRST precisely so a crash between the two
+ * leaves something recovery can finish, and nothing finished it. The retry
+ * found the row, got no client action, and the payer was handed a payment they
+ * could not pay — permanently, because every subsequent retry took the same
+ * branch. The comment said the caller "reports honestly instead of pretending
+ * the payer can proceed"; what the caller actually reported was a 200 with no
+ * way forward.
+ *
+ * Resuming is safe for exactly the reason the row is written first: the
+ * provider idempotency key is derived from the intent's own public id, so the
+ * call either creates the payment or returns the one it already made. It is
+ * never a second charge.
+ *
+ * `undefined` still means what it always meant for the rails that have no
+ * client action at all — FairCoin, and a deployment whose card rail is off.
  */
 async function clientActionFor(
   intent: PaymentIntentRow,
 ): Promise<ProviderClientAction | undefined> {
-  if (!intent.provider || !intent.providerObjectId) return undefined;
+  if (!intent.provider) return undefined;
   const provider = resolveProvider(intent.provider);
   if (!provider) return undefined;
+
+  if (!intent.providerObjectId) {
+    return attachProviderPayment(getDb(), intent, provider);
+  }
+
   const result = await provider.getStatus(intent.providerObjectId);
   return result.clientAction;
+}
+
+/**
+ * Why a replayed key does not describe the same operation — or `null` when it
+ * does.
+ *
+ * An `Idempotency-Key` addresses ONE operation. A second request presenting it
+ * with a different amount, currency or rail is a different operation, and
+ * answering 200 with the stored intent tells the caller their new payment was
+ * created when nothing happened — the caller then waits for money that will
+ * never arrive, against an intent for an amount they did not ask for.
+ *
+ * `metadata` and `expiresInSeconds` are deliberately NOT compared: neither
+ * moves money, and a merchant whose retry carries a slightly different note
+ * should get their payment rather than a conflict.
+ */
+function replayConflict(
+  existing: PaymentIntentRow,
+  requested: { amount: string; rail: PaymentIntentRail; currency: CurrencyCode },
+): string | null {
+  if (existing.amount !== requested.amount) {
+    return `this Idempotency-Key already names a payment of ${existing.amount}`;
+  }
+  if (existing.currency !== requested.currency) {
+    return `this Idempotency-Key already names a payment in ${existing.currency}`;
+  }
+  if (existing.rail !== requested.rail) {
+    return `this Idempotency-Key already names a payment on the ${existing.rail} rail`;
+  }
+  return null;
+}
+
+/**
+ * A replayed `Idempotency-Key` presented with different content.
+ *
+ * Its own error type so routes can answer 409 — the key IS in use, which is
+ * neither a bad request nor a success.
+ */
+export class IdempotencyConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "IdempotencyConflictError";
+  }
 }
 
 /**
@@ -261,6 +337,14 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   const { merchant, amount, metadata, expiresInSeconds, idempotencyKey } = input;
   const { rail, currency, network } = resolveRail(merchant, input);
 
+  // BEFORE the idempotency lookup, not just before the insert, because the
+  // replay path calls the provider too (`clientActionFor` re-reads the payment).
+  // A refused environment has to leave nothing behind and send nothing: an
+  // intent written and then abandoned would sit in `created` until the sweeper
+  // expired it, and a merchant debugging a rejected credential would find
+  // payments they never made.
+  if (rail === "card") assertEnvironmentMatchesProvider(merchant.environment);
+
   const db = getDb();
 
   // Idempotency (fast path): a prior intent for this key wins as-is. Only
@@ -268,6 +352,8 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const existing = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (existing) {
+      const conflict = replayConflict(existing, { amount, rail, currency });
+      if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: existing, reused: true, clientAction: await clientActionFor(existing) };
     }
   }
@@ -295,6 +381,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       "the card rail is not configured on this deployment",
     );
   }
+
 
   // Explicit field whitelist — never spread a caller body (mass-assignment
   // would be an IDOR). `status`, `currency` and `confirmations` take their
@@ -337,6 +424,8 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const winner = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (winner) {
+      const conflict = replayConflict(winner, { amount, rail, currency });
+      if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: winner, reused: true, clientAction: await clientActionFor(winner) };
     }
   }

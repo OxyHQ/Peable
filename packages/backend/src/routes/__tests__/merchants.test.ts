@@ -506,3 +506,65 @@ describe("merchant branding", () => {
     }
   });
 });
+
+/**
+ * Registering a merchant that only wants to take CARDS.
+ *
+ * `network` and `xpub` were required unconditionally, so such a merchant had to
+ * supply a watch-only extended key for a chain they had no intention of using —
+ * either a real key they then had to custody, or a fixture that silently made
+ * their FairCoin receive addresses underivable by their own wallet. Neither is
+ * a thing to ask of someone who wants a card form.
+ */
+describe("card-only registration", () => {
+  test("registers with no network and no xpub (201)", async () => {
+    const { app } = createApp(`${DEV_APP_ID}_cardonly`, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      const res = await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ displayName: "Cards Only Ltd" }),
+      });
+
+      expect(res.status).toBe(201);
+      const body = await readJson(res);
+      // `null`, not a placeholder: the merchant has no FairCoin account, and a
+      // fabricated one would be a claim about a key nobody holds.
+      expect(body.network).toBeNull();
+      expect(body.xpub).toBeNull();
+      expect(body.displayName).toBe("Cards Only Ltd");
+    } finally {
+      s.close();
+    }
+  });
+
+  /**
+   * HALF a FairCoin account is refused, because the two fields are one
+   * capability: a network with no key derives nothing, and a key with no
+   * network cannot be interpreted — an extended key's version bytes are
+   * network-specific. The failure of a half-registered merchant is a payer
+   * shown an address on the wrong chain, which is unrecoverable.
+   */
+  test("refuses a network with no xpub, and an xpub with no network (422)", async () => {
+    const { app } = createApp(`${DEV_APP_ID}_halfchain`, "development");
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      const networkOnly = await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ network: "testnet" }),
+      });
+      const xpubOnly = await fetch(`${url}/v1/merchants`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ xpub: XPUB }),
+      });
+
+      expect(networkOnly.status).toBe(422);
+      expect(xpubOnly.status).toBe(422);
+    } finally {
+      s.close();
+    }
+  });
+});

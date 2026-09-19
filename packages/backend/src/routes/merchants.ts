@@ -5,6 +5,7 @@ import { oxyClient } from "@oxy.so/core";
 import type { OxyServiceEnvironment } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import {
+  ChainRegistrationError,
   insertMerchant,
   updateMerchantSettings,
   WatchOnlyViolationError,
@@ -35,14 +36,32 @@ const brandingFields = {
   description: z.string().min(1).max(DESCRIPTION_MAX).optional(),
 };
 
-export const createMerchantBodySchema = z.object({
-  network: z.enum(["mainnet", "testnet"]),
-  xpub: z.string().min(1),
-  webhookUrl: z.string().url().optional(),
-  webhookSecret: z.string().min(1).optional(),
-  requiredConfirmations: z.number().int().positive().optional(),
-  ...brandingFields,
-});
+export const createMerchantBodySchema = z
+  .object({
+    /**
+     * The FairCoin half. OPTIONAL — both fields or neither.
+     *
+     * Required unconditionally until now, so a merchant who only wanted to
+     * take cards had to supply a watch-only extended key for a chain they had
+     * no intention of using. Whatever they supplied was then either a real key
+     * they had to custody, or a fixture that silently made their FairCoin
+     * receive addresses underivable by their own wallet.
+     */
+    network: z.enum(["mainnet", "testnet"]).optional(),
+    xpub: z.string().min(1).optional(),
+    webhookUrl: z.string().url().optional(),
+    webhookSecret: z.string().min(1).optional(),
+    requiredConfirmations: z.number().int().positive().optional(),
+    ...brandingFields,
+  })
+  .refine(
+    (body) => (body.network === undefined) === (body.xpub === undefined),
+    {
+      message:
+        "accepting FairCoin needs both a network and a watch-only xpub, or neither — " +
+        "omit both to register a card-only merchant",
+    },
+  );
 
 /** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
 export const patchMerchantBodySchema = z.object({
@@ -72,8 +91,8 @@ export async function registerMerchant(
   oxyAppId: string,
   environment: OxyServiceEnvironment,
   params: {
-    network: "mainnet" | "testnet";
-    xpub: string;
+    network?: "mainnet" | "testnet";
+    xpub?: string;
     webhookUrl?: string;
     webhookSecret?: string;
     requiredConfirmations?: number;
@@ -93,6 +112,10 @@ export async function registerMerchant(
       message: `a '${environment}' environment cannot register a mainnet merchant`,
     };
   }
+  // A card-only merchant (no network) passes the firewall above vacuously, and
+  // that is correct: what it guards is the CHAIN. The equivalent guard for the
+  // card rail is `environmentGuard`, which refuses a non-production credential
+  // reaching a live provider key before any call is made.
 
   let merchant: MerchantRow | null;
   try {
@@ -117,7 +140,11 @@ export async function registerMerchant(
     // REQUEST, not a server fault. Surfacing it as a 422 says which field is
     // wrong; letting it escape would answer a spend-capable key with a 500 and
     // no indication that the key itself was the problem.
-    if (err instanceof WatchOnlyViolationError) {
+    if (err instanceof WatchOnlyViolationError || err instanceof ChainRegistrationError) {
+      // Both are the caller describing a FairCoin account this gateway will not
+      // accept — a key that can spend, or half a registration. 422 with the
+      // message says which; letting either escape would answer a spend-capable
+      // key with a 500 and no indication the key was the problem.
       return { ok: false, status: 422, message: err.message };
     }
     throw err;

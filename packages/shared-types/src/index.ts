@@ -16,6 +16,8 @@ export {
   type CreatePaymentIntentParams,
   isValidStatusTransition,
   canStillBePaid,
+  reachesSettlementFromPayer,
+  POST_SETTLEMENT_STATUSES,
   PAYMENT_INTENT_STATUSES,
   PAYMENT_INTENT_RAILS,
   CHAIN_ONLY_STATUSES,
@@ -27,6 +29,18 @@ export {
   type WebhookEventPayload,
 } from './event';
 export { type Dispute, type DisputeStatus } from './dispute';
+export {
+  type CapabilityStatus,
+  type ConnectedAccount,
+  type Refund,
+  type RefundOrigin,
+  type RefundStatus,
+  type Transfer,
+  type TransferReversal,
+  type TransferReversalStatus,
+  type TransferStatus,
+  type TransferWithReversal,
+} from './settlement';
 export {
   type WebhookDelivery,
   type WebhookDeliveryStatus,

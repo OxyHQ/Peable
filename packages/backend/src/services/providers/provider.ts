@@ -164,6 +164,20 @@ export interface ProviderPaymentResult {
   readonly providerObjectId: string;
   readonly status: ProviderPaymentStatus;
   readonly clientAction?: ProviderClientAction;
+  /**
+   * The provider's id for the CHARGE this payment produced, when it has one.
+   *
+   * A payment and the charge it produces are DIFFERENT objects with different
+   * ids, and the difference is not cosmetic: a transfer's `source_transaction`
+   * must name the CHARGE. Passing the payment's id there was the bug this field
+   * exists to make unrepeatable — Stripe answers `No such charge: 'pi_…'`, so
+   * the transfer fails and a seller is not paid, intermittently and only for
+   * payments whose funds had not yet landed.
+   *
+   * Absent until the payment produces one: a `requires_action` or `processing`
+   * payment has no charge yet, and inventing one would be a claim about money.
+   */
+  readonly chargeObjectId?: string;
 }
 
 /** Act on a payment the provider already knows about. */
@@ -254,8 +268,17 @@ export interface CreateTransferRequest {
   readonly intentId: string;
   /** The gateway's transfer id — the basis of the idempotency key. */
   readonly transferId: string;
-  /** The provider's own id for the payment being settled. */
-  readonly sourcePaymentObjectId: string;
+  /**
+   * The provider's id for the CHARGE the funds come from — never the payment's.
+   *
+   * Renamed from `sourcePaymentObjectId`, which is what it used to be called
+   * AND what it used to be given: `transferService` passed
+   * `intent.providerObjectId` (a `pi_…`) and the adapter assigned it to
+   * Stripe's `source_transaction`, which takes a `ch_…`. The name is now the
+   * type's own documentation, so the next caller cannot make the same
+   * substitution silently.
+   */
+  readonly sourceChargeObjectId: string;
   /** The seller's account AT THE PROVIDER. */
   readonly destinationAccountId: string;
   readonly amount: ProviderAmount;

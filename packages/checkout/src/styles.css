@@ -229,3 +229,59 @@ body {
 .status-panel__cta:hover {
   background: var(--oxy-purple-dark);
 }
+
+/* ── The card surface ─────────────────────────────────────────────────────
+ *
+ * The FIELDS are the provider's own iframe and this file cannot style their
+ * inside — only the box they sit in. That separation is the point: the card
+ * number never enters this document, so it never enters this bundle's scope.
+ */
+.card-payment {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.card-payment__fields {
+  /* A floor rather than a fixed height: the provider's iframe grows when it
+   * offers more payment methods, and a fixed height would clip them. The floor
+   * stops the Pay button jumping up the page while the form loads. */
+  min-height: 180px;
+}
+
+.card-payment__hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.card-payment__error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--oxy-danger) 12%, transparent);
+  color: var(--oxy-danger);
+  font-size: 13px;
+}
+
+.card-payment__button {
+  width: 100%;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 12px;
+  background: var(--oxy-purple);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.card-payment__button:hover:not(:disabled) {
+  background: var(--oxy-purple-dark);
+}
+
+.card-payment__button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}

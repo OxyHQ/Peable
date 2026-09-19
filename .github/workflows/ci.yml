@@ -134,3 +134,91 @@ jobs:
       # job, so the backend's real-database suites run here and refuse to be
       # skipped.
       - run: bun run --filter '*' test
+
+  # ── The release candidate is the IMAGE, not the source tree ────────────────
+  #
+  # `test` above proves the source. It proved the source on the push whose
+  # backend deploy failed at `Build and push (linux/arm64)` with `Workspace
+  # dependency "@peable.to/pay" not found` — because the Dockerfile copies a
+  # hand-maintained list of workspace manifests and nothing outside the deploy
+  # ever built it. The frontend and checkout workflows went green in that same
+  # push, so the run read as a release.
+  #
+  # `db/__tests__/dockerfile.test.ts` catches the manifest omission specifically.
+  # This job catches the rest of the class: a dependency that resolves in a
+  # hoisted dev tree and not in the production install, a source file the image
+  # does not copy, an entrypoint that throws at import time. It BOOTS the
+  # container against a real database and polls `/ready`, so "the image builds"
+  # is not mistaken for "the image serves".
+  #
+  # linux/amd64, deliberately. Production is arm64 and this runner is not; a
+  # QEMU cross-build here would cost minutes per run to check a property that is
+  # architecture-independent (the install closure and the entrypoint). The
+  # arm64-specific build stays in `deploy-aws.yml`, on its arm64 runner.
+  image:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: peable
+          POSTGRES_PASSWORD: peable
+          POSTGRES_DB: peable
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U peable"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Build the backend image exactly as the deploy does
+        # Context = repo root, same -f, same target. A different invocation here
+        # would check a build the deploy never performs.
+        run: docker build -f packages/backend/Dockerfile -t peable-backend:ci .
+
+      - name: Apply migrations with the image's own migrator
+        # The image runs TypeScript under Bun, so this is the SAME entrypoint the
+        # one-shot ECS migration task runs. `--phase=all` because this database
+        # is a from-zero genesis, which is the one case that flag is for.
+        run: |
+          docker run --rm --network host \
+            -e DATABASE_URL=postgres://peable:peable@localhost:5432/peable \
+            peable-backend:ci \
+            bun packages/backend/src/db/migrate.ts --target-database=peable --phase=all
+
+      - name: Boot the container and wait for readiness
+        # `/ready` and not `/health`: liveness would pass for a task that is
+        # listening with no database, which is the state this job exists to
+        # refuse. A boot failure prints the container's own log rather than a
+        # bare timeout.
+        run: |
+          docker run -d --name peable-ci --network host \
+            -e DATABASE_URL=postgres://peable:peable@localhost:5432/peable \
+            -e PORT=3001 \
+            peable-backend:ci
+          for attempt in $(seq 1 30); do
+            if curl -fsS http://localhost:3001/ready > /dev/null; then
+              echo "ready after ${attempt}s"
+              curl -fsS http://localhost:3001/health
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "::error::the backend image never became ready"
+          docker logs peable-ci
+          exit 1
+
+      - name: Stop the container cleanly
+        # SIGTERM, then a bounded wait: `server.ts` closes the socket server and
+        # the pool on it, and a container that has to be killed is a container
+        # that would be killed mid-request on every ECS rollout.
+        if: always()
+        run: |
+          docker stop --time 15 peable-ci || true
+          docker logs peable-ci || true
+          docker rm -f peable-ci || true

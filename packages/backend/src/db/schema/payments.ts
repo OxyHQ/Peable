@@ -108,6 +108,24 @@ export const paymentIntents = pgTable(
      * charge with no row anywhere, which nothing can find.
      */
     providerObjectId: text(),
+    /**
+     * The provider's id for the CHARGE this payment produced — a Stripe `ch_…`.
+     *
+     * A SECOND id, beside `provider_object_id`, because they are different
+     * objects and one of them is the wrong answer to a question that matters:
+     * a transfer's `source_transaction` names the CHARGE, and `transferService`
+     * used to hand it the payment's `pi_…`. Stripe answers `No such charge`, so
+     * the settlement fails at the provider — which reads as an outage rather
+     * than as a mix-up two functions away.
+     *
+     * NULL until the payment produces one, which is most of a card payment's
+     * life and all of a FairCoin one. Filled from `latest_charge` by whichever
+     * authoritative read gets there first (a settlement transition, a transfer
+     * resolving its source), so the association is recorded once rather than
+     * re-derived per settlement — a multi-seller cart would otherwise re-read
+     * the payment once per seller.
+     */
+    providerChargeId: text(),
     clientSecret: text().notNull(),
     idempotencyKey: text().notNull(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
@@ -261,7 +279,7 @@ export const paymentIntents = pgTable(
     ),
     check(
       'payment_intents_faircoin_has_no_provider_check',
-      sql`${table.rail} <> 'faircoin' or (${table.provider} is null and ${table.providerObjectId} is null)`
+      sql`${table.rail} <> 'faircoin' or (${table.provider} is null and ${table.providerObjectId} is null and ${table.providerChargeId} is null)`
     ),
     /**
      * An object id without a provider names an object in no numbering system —

@@ -10,6 +10,7 @@ import { verifySecret } from "@oxy.so/core/server";
 import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
 import {
   PAYMENT_INTENT_STATUSES,
+  canStillBePaid,
   type CreatePaymentIntentParams,
   type PaymentIntentStatus,
 } from "@peable.to/shared-types";
@@ -27,18 +28,45 @@ import type {
 } from "../db/payments/paymentIntentRepository";
 import {
   createIntent,
+  IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
 } from "../services/createIntent";
+import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
+import { redactProviderMessage } from "../services/providers/redact";
+import { cancelCardPaymentAtProvider } from "../services/cardCancellation";
+import { reconcileIntentWithProvider } from "../services/intentReconciliation";
+import { resolveClientAction } from "../services/clientAction";
 import { applyEvent } from "../services/intentState";
 import { announceIntentChange, transitionIntent } from "../services/intentTransition";
 import { toPaymentIntentDTO } from "../lib/serialize";
-import { sendError, wrap, requireServiceApp, requireAuthenticated } from "../lib/http";
+import {
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+  requireServiceApp,
+  requireAuthenticated,
+} from "../lib/http";
 import { railBodyFields } from "../lib/railSchema";
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
+
+/**
+ * The payer's capability token, from the header or the query.
+ *
+ * The HEADER is preferred and the query param is accepted because the hosted
+ * checkout's first REST snapshot has historically used it. Kept in one function
+ * so the three payer-authorized routes read it identically — a route that
+ * looked only at the query would silently reject every caller using the header,
+ * and vice versa.
+ */
+function readClientSecret(req: Request): string | undefined {
+  const fromQuery = req.query.client_secret;
+  if (typeof fromQuery === "string" && fromQuery.length > 0) return fromQuery;
+  return req.header("X-Peable-Client-Secret") ?? undefined;
+}
 
 /**
  * Answer a transition that did not apply.
@@ -291,6 +319,20 @@ export function createPaymentIntentsRouter(deps: {
           sendError(res, 422, "invalid_request_error", err.message);
           return;
         }
+        // A development or staging credential asking a live deployment for a
+        // card payment. Refused before Stripe was called at all.
+        if (err instanceof EnvironmentModeMismatchError) {
+          sendEnvironmentMismatch(res, err.message);
+          return;
+        }
+        // The key is in use for a DIFFERENT operation. Neither a bad request
+        // nor a success: answering 200 with the stored intent would tell the
+        // caller their new payment exists, and they would wait for money
+        // against an amount they never asked for.
+        if (err instanceof IdempotencyConflictError) {
+          sendError(res, 409, "invalid_request_error", err.message);
+          return;
+        }
         // 503, not 422: the caller cannot fix this by sending different fields.
         // The rail they asked for is not configured on this deployment, and
         // telling them their request was invalid would send them off editing it.
@@ -370,7 +412,33 @@ export function createPaymentIntentsRouter(deps: {
           sendError(res, 404, "invalid_request_error", "payment intent not found");
           return;
         }
-        res.status(200).json(toPaymentIntentDTO(intent));
+
+        /**
+         * A single merchant read of a still-payable CARD intent carries the
+         * client action; a list never does.
+         *
+         * This is the resume path a server-side integrator already writes:
+         * Mercaria's adapter re-reads the intent expecting `client_action` and
+         * found nothing, so a buyer returning to an unpaid checkout the next
+         * day got a SECOND payment rather than the one that already funds their
+         * order. `POST …/client_action` is the explicit operation; this makes
+         * the obvious call work too.
+         *
+         * Bounded three ways, because the field is a credential: ONE intent
+         * named explicitly (never a list), only while the payment can still be
+         * paid, and `Cache-Control: no-store` so nothing in front of this route
+         * keeps a copy.
+         */
+        const action =
+          intent.rail === "card" && canStillBePaid(intent.status)
+            ? await resolveClientAction(intent)
+            : { kind: "not_applicable" as const };
+        if (action.kind === "ok") res.setHeader("Cache-Control", "no-store");
+
+        res.status(200).json({
+          ...toPaymentIntentDTO(intent),
+          ...(action.kind === "ok" ? { client_action: action.action } : {}),
+        });
         return;
       }
 
@@ -378,11 +446,13 @@ export function createPaymentIntentsRouter(deps: {
       // the same idiom `submit_tx` and the socket `subscribe` already use.
       // Needed for a hosted checkout page's initial REST snapshot before its
       // socket subscription confirms (F2.0 task 3).
-      const clientSecretParam = req.query.client_secret;
-      const clientSecret =
-        typeof clientSecretParam === "string"
-          ? clientSecretParam
-          : req.header("X-Peable-Client-Secret");
+      //
+      // Deliberately carries NO client action, unlike the merchant branch
+      // above: this response is the one a checkout page polls, and a credential
+      // on a polled response is a credential in a browser's cache and in every
+      // intermediary's logs. The payer asks for it explicitly, once, through
+      // `POST …/client_action`.
+      const clientSecret = readClientSecret(req);
       if (!clientSecret) {
         sendError(
           res,
@@ -403,6 +473,111 @@ export function createPaymentIntentsRouter(deps: {
         return;
       }
       res.status(200).json(toPaymentIntentDTO(intent));
+    }),
+  );
+
+  /**
+   * What the payer's client must do next — the RESUME operation.
+   *
+   * ## Why a POST, and why its own route
+   *
+   * The DTO carries no client action on purpose: a client secret is a
+   * confirmation credential, and putting one on the payment-intent shape would
+   * hand it out on every list and every re-read. That left no way to resume,
+   * so a payer who refreshed the page or came back from an SCA challenge in a
+   * new tab had nothing to confirm with — and the only way to get one was to
+   * create a second payment.
+   *
+   * POST rather than GET because the credential must not reach a URL. A GET
+   * response is cacheable by anything in front of it, and the path lands in
+   * access logs; this answers with `Cache-Control: no-store` and keeps the
+   * secret in a body.
+   *
+   * ## Either party may ask, and neither is the other
+   *
+   * The MERCHANT proves it with their service token, which is how a
+   * server-side integrator resumes a buyer's checkout. The PAYER proves it with
+   * the intent's own `client_secret` — the same capability `submit_tx` and the
+   * socket `subscribe` already take. The two secrets are different things:
+   * Peable's is a capability over the intent, the provider's is a credential
+   * over the payment, and nothing here derives one from the other.
+   */
+  router.post(
+    "/v1/payment_intents/:id/client_action",
+    optionalServiceAuth,
+    wrap(async (req, res) => {
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 422, "invalid_request_error", "id is required");
+        return;
+      }
+
+      const { serviceApp } = req as OxyAuthRequest;
+      let intent: PaymentIntentRow | null;
+
+      if (serviceApp?.appId) {
+        let scopeGranted = false;
+        oxyClient.requireScope("payments:read")(req, res, () => {
+          scopeGranted = true;
+        });
+        if (!scopeGranted) return;
+        const merchant = await resolveMerchant(req, res);
+        if (!merchant) return;
+        intent = await findIntentForMerchant(getDb(), id, merchant.id);
+      } else {
+        const clientSecret = readClientSecret(req);
+        if (!clientSecret) {
+          sendError(
+            res,
+            401,
+            "authentication_error",
+            "missing service app credentials or client_secret",
+          );
+          return;
+        }
+        intent = await findIntentByPublicId(getDb(), id);
+        if (intent && !verifySecret(clientSecret, intent.clientSecret)) {
+          sendError(res, 403, "permission_error", "invalid client_secret");
+          return;
+        }
+      }
+
+      if (!intent) {
+        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        return;
+      }
+
+      // Never cached, never revalidated, and never stored by anything in
+      // between. The body carries a credential.
+      res.setHeader("Cache-Control", "no-store");
+
+      const outcome = await resolveClientAction(intent);
+      if (outcome.kind === "ok") {
+        res.status(200).json({ object: "client_action", ...outcome.action });
+        return;
+      }
+      if (outcome.kind === "not_applicable") {
+        // The FairCoin rail. The next step is "send coins to `address`", which
+        // the intent already says — a 422 rather than an empty 200, so a client
+        // that asked the wrong question learns that rather than waiting.
+        sendError(
+          res,
+          422,
+          "invalid_request_error",
+          "this payment needs no client action; its address is on the intent",
+        );
+        return;
+      }
+      if (outcome.kind === "unpayable") {
+        sendError(
+          res,
+          409,
+          "invalid_request_error",
+          `this payment is '${outcome.status}' and can no longer be paid`,
+        );
+        return;
+      }
+      sendError(res, 503, "api_error", outcome.error);
     }),
   );
 
@@ -440,6 +615,69 @@ export function createPaymentIntentsRouter(deps: {
           409,
           "invalid_request_error",
           err instanceof Error ? err.message : "illegal state transition",
+        );
+        return;
+      }
+
+      /**
+       * Cancel at the PROVIDER first, and only then announce it.
+       *
+       * This route used to move the row and emit `payment_intent.rejected`
+       * while the acquirer knew nothing: the payer's browser still held a live
+       * confirmation credential for a PaymentIntent that remained confirmable,
+       * so a payment the merchant had been told was rejected could complete
+       * minutes later — against an intent in a terminal status, for an order
+       * already released.
+       *
+       * The cancellation can LOSE, and the answers are not symmetric:
+       *
+       *  - `settled` means the payer confirmed first. The gateway reconciles to
+       *    the truth and answers 409 rather than announcing a cancellation it
+       *    cannot deliver.
+       *  - `unknown` means the provider could not be reached. The payment is
+       *    still live and its state is unknown, so nothing is written: a 502
+       *    tells the merchant to try again, which is the only safe answer.
+       *  - `nothing_to_cancel` is the FairCoin rail, where there is no provider
+       *    and the local transition has always been the whole of it.
+       */
+      const cancellation = await cancelCardPaymentAtProvider(
+        intent,
+        // Derived from the intent's own id, so a retry after a lost response
+        // presents the same key rather than being a second operation.
+        `cancel:${intent.publicId}`,
+      );
+      if (cancellation.kind === "settled") {
+        const reconciled = await reconcileIntentWithProvider(intent);
+        sendError(
+          res,
+          409,
+          "invalid_request_error",
+          "this payment was completed by the payer before it could be rejected" +
+            (reconciled.kind === "applied" || reconciled.kind === "agreed"
+              ? `; it is '${reconciled.status}'`
+              : ""),
+        );
+        return;
+      }
+      if (cancellation.kind === "in_flight") {
+        // The provider did not cancel it, and still has it in flight. Rejecting
+        // locally here is the exact failure this call exists to prevent: the
+        // payer can still complete a payment the merchant has been told is
+        // rejected.
+        sendError(
+          res,
+          409,
+          "invalid_request_error",
+          `the provider still has this payment in flight ('${cancellation.status}'); it cannot be rejected yet`,
+        );
+        return;
+      }
+      if (cancellation.kind === "unknown") {
+        sendError(
+          res,
+          502,
+          "api_error",
+          `the payment could not be cancelled at the provider: ${redactProviderMessage(cancellation.error)}`,
         );
         return;
       }

@@ -158,6 +158,15 @@ export async function markTransferFailed(
  * would get the second partial reversal wrong whenever it had not seen the
  * first.
  *
+ * **The adapter used to pass this leg's amount most of the time**, and this
+ * docstring was already asserting otherwise. `createReversal` does not expand
+ * `reversal.transfer`, so the adapter's expanded-object branch almost never
+ * ran and its `String(reversal.amount)` fallback was the normal path. Combined
+ * with the monotonic guard below, reversing 500 and then 500 again left the
+ * total at 500 and the seller holding half of what had been taken back. The
+ * adapter now re-reads the transfer when the expansion is absent; a comment
+ * describing a guarantee is not the same as one.
+ *
  * The status is derived HERE, in the same statement, because
  * `transfers_reversal_status_agrees_check` refuses the two disagreeing: a
  * writer that set one without the other would leave a seller's balance
@@ -221,6 +230,34 @@ export async function applyTransferReversal(
     )
     .returning(TRANSFER_COLUMNS);
   return row ? toRow(row) : null;
+}
+
+/**
+ * What this payment has already committed to sellers.
+ *
+ * Every transfer that is NOT `failed`, minus what has come back. A `failed`
+ * transfer moved nothing and never will, so counting it would refuse a
+ * legitimate re-settlement of the same money; a `pending` one has been sent to
+ * the provider and may well land, so NOT counting it is how two concurrent
+ * settlements of a two-seller cart both pass a budget check that only one of
+ * them should.
+ *
+ * Summed as NUMERIC: these are canonical integer strings, and `'9' + '10'`
+ * concatenates while `'9' > '10'` is false.
+ */
+export async function sumCommittedTransfers(
+  db: DatabaseOrTransaction,
+  paymentIntentId: string
+): Promise<string> {
+  const [row] = await db
+    .select({
+      total: sql<string>`coalesce(sum((${transfers.amount}::numeric - ${transfers.amountReversed}::numeric)), 0)::text`,
+    })
+    .from(transfers)
+    .where(
+      and(eq(transfers.paymentIntentId, paymentIntentId), sql`${transfers.status} <> 'failed'`)
+    );
+  return row?.total ?? '0';
 }
 
 /** The merchant's own address for a settlement — the idempotency lookup. */

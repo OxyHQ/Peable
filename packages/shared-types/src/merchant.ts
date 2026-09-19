@@ -12,8 +12,18 @@ export interface Merchant {
   object: 'merchant';
   oxyAppId: string;
   environment: MerchantEnvironment;
-  network: NetworkType;
-  xpub: string;
+  /**
+   * The FairCoin chain this merchant accepts on — `null` on a CARD-ONLY
+   * merchant.
+   *
+   * Nullable TOGETHER with `xpub`: they are two halves of one capability, and
+   * the gateway refuses a registration carrying only one. Registration used to
+   * demand both unconditionally, so a merchant who only wanted to take cards
+   * had to supply a watch-only key for a chain they never intended to use.
+   */
+  network: NetworkType | null;
+  /** `null` on a card-only merchant. Nullable together with `network`. */
+  xpub: string | null;
   webhookUrl?: string;
   requiredConfirmations: number;
   /**

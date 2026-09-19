@@ -8,6 +8,7 @@ import {
   BASE_UNIT_STRING_PATTERN,
   CURRENCY_CODES,
   PROVIDER_IDS,
+  TRANSFER_REVERSAL_STATUSES,
   TRANSFER_STATUSES,
 } from './valueSets';
 
@@ -155,6 +156,122 @@ export const transfers = pgTable(
       'transfers_settled_has_provider_object_check',
       sql`${table.status} = 'pending' or ${table.status} = 'failed'
           or ${table.providerObjectId} is not null`
+    ),
+  ]
+);
+
+/**
+ * One reversal of one transfer — taking part of a seller's settlement back.
+ *
+ * ## Why this is a table and not an amount on `transfers`
+ *
+ * `transfers.amount_reversed` is the cumulative TOTAL and stays exactly that.
+ * What it cannot express is WHICH reversals produced it, and that turned out to
+ * matter: `reverseTransfer` derived its provider idempotency key from
+ * `trr:<transfer>:<amount>`, so two distinct reversals of one transfer for the
+ * same amount — two 500-cent line items refunded separately, which is ordinary
+ * — presented ONE key. The provider answered the first reversal's object to the
+ * second request, the total stayed at 500, and the seller kept money that had
+ * been taken back. Nothing anywhere recorded that a second reversal had even
+ * been asked for.
+ *
+ * An amount is not an identity. This table gives each reversal one that
+ * survives a retry, a crash and a redeploy, keyed on the merchant's own
+ * reference — their `Idempotency-Key`, or an explicit `externalRef` — exactly
+ * as `refunds` and `transfers` are keyed on theirs.
+ *
+ * ## The cumulative total still comes from the provider
+ *
+ * These rows are NOT summed to produce `transfers.amount_reversed`. The
+ * provider's own `amount_reversed` is authoritative — it includes reversals
+ * this gateway did not make, and it is what the seller's balance reflects. The
+ * rows say which operations we asked for and how each one ended.
+ */
+export const transferReversals = pgTable(
+  'transfer_reversals',
+  {
+    id: generatedId(),
+    /** The `trr_…` the API returns. */
+    publicId: text().notNull(),
+    merchantId: text().notNull(),
+    /** The settlement being taken back. Internal id, never the `tr_…`. */
+    transferId: text().notNull(),
+    /**
+     * The MERCHANT's own id for this reversal — their `Idempotency-Key` on the
+     * request, or an explicit `externalRef`. Unique per merchant, so a retry
+     * converges here instead of taking a second 500 off a seller.
+     */
+    externalRef: text().notNull(),
+    amount: text().notNull(),
+    currency: text().notNull(),
+    status: text().notNull().default('pending'),
+    provider: text().notNull(),
+    /**
+     * The provider's own `trr_…`. NULL between our insert and the provider call
+     * returning — the same two-step every money movement here uses.
+     */
+    providerObjectId: text(),
+    /** Operator-facing, redacted. Why the provider refused. */
+    failureMessage: text(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique('transfer_reversals_public_id_key').on(table.publicId),
+    /**
+     * ONE reversal per (merchant, their reference). The whole point of the
+     * table: an amount is not an identity, and this is.
+     */
+    unique('transfer_reversals_merchant_external_ref_key').on(
+      table.merchantId,
+      table.externalRef
+    ),
+    /** One row per provider object, so an inbound event maps to exactly one. */
+    unique('transfer_reversals_provider_object_key').on(
+      table.provider,
+      table.providerObjectId
+    ),
+    /** "What came back off this settlement, and when?" */
+    index('transfer_reversals_transfer_idx').on(table.transferId),
+    foreignKey({
+      name: 'transfer_reversals_merchant_id_fkey',
+      columns: [table.merchantId],
+      foreignColumns: [merchants.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'transfer_reversals_transfer_id_fkey',
+      columns: [table.transferId],
+      foreignColumns: [transfers.id],
+    }).onDelete('restrict'),
+    check(
+      'transfer_reversals_provider_check',
+      sql.raw(`provider in (${inList(PROVIDER_IDS)})`)
+    ),
+    check(
+      'transfer_reversals_status_check',
+      sql.raw(`status in (${inList(TRANSFER_REVERSAL_STATUSES)})`)
+    ),
+    check(
+      'transfer_reversals_currency_check',
+      sql.raw(`currency in (${inList(CURRENCY_CODES)})`)
+    ),
+    check('transfer_reversals_external_ref_check', sql`length(${table.externalRef}) > 0`),
+    check(
+      'transfer_reversals_amount_check',
+      sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)
+    ),
+    /**
+     * A reversal of nothing is not a reversal.
+     *
+     * The pattern above accepts `'0'`, legitimate for a cumulative total like
+     * `transfers.amount_reversed` and not for this: a zero reversal would
+     * consume the merchant's reference, so the REAL one could never be created.
+     */
+    check('transfer_reversals_amount_positive_check', sql`${table.amount}::numeric > 0`),
+    /** A succeeded reversal HAS a provider object; a pending or failed one may not. */
+    check(
+      'transfer_reversals_succeeded_has_provider_object_check',
+      sql`${table.status} <> 'succeeded' or ${table.providerObjectId} is not null`
     ),
   ]
 );

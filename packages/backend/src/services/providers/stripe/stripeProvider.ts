@@ -25,6 +25,7 @@ import {
   createStripeTransferReversal,
   retrieveStripeAccount,
   retrieveStripePaymentIntent,
+  retrieveStripeTransfer,
 } from "./client";
 import {
   ProviderError,
@@ -74,6 +75,22 @@ function toStripeAmount(amount: string, stage: "createPayment" | "refund" | "tra
     });
   }
   return value;
+}
+
+/**
+ * The charge id off a PaymentIntent's `latest_charge`, whichever shape it is in.
+ *
+ * Stripe returns it as a bare id string unless the caller expanded it, in which
+ * case it is the whole Charge object. Both are ordinary, so both are read —
+ * `typeof x === 'string'` alone would silently answer `undefined` for every
+ * expanded read and send a settlement looking for a charge it already had.
+ */
+function readChargeId(
+  latestCharge: Stripe.PaymentIntent["latest_charge"],
+): string | undefined {
+  if (typeof latestCharge === "string") return latestCharge;
+  if (typeof latestCharge === "object" && latestCharge !== null) return latestCharge.id;
+  return undefined;
 }
 
 /** Stripe wants a lowercase ISO code; the gateway's set is uppercase. */
@@ -238,7 +255,14 @@ export class StripePaymentProvider
         // against a balance that has not landed yet. Without it, a transfer
         // created moments after a charge fails with `balance_insufficient` on a
         // platform whose money is real but not yet available.
-        source_transaction: request.sourcePaymentObjectId,
+        //
+        // It takes a CHARGE id. This used to be handed the PaymentIntent's
+        // `pi_…`, which Stripe refuses with `No such charge` — so every
+        // multi-seller settlement failed, and it failed at the provider rather
+        // than here, which reads as an outage. `transferService` now resolves
+        // the charge (`latest_charge`) before it calls, and the parameter name
+        // says which id it wants.
+        source_transaction: request.sourceChargeObjectId,
         metadata: { ...request.metadata, peable_transfer_id: request.transferId },
       },
       request.idempotencyKey,
@@ -261,16 +285,33 @@ export class StripePaymentProvider
       request.idempotencyKey,
     );
 
-    // The CUMULATIVE total, read off the transfer rather than accumulated here.
-    // A caller deciding whether a transfer is fully reversed must not have to
-    // add up reversals it may not have all seen.
-    const transfer = reversal.transfer;
-    const totalReversed =
-      typeof transfer === "object" && transfer !== null && "amount_reversed" in transfer
-        ? String(transfer.amount_reversed)
-        : String(reversal.amount);
+    /**
+     * The CUMULATIVE total, off the TRANSFER — never this leg's amount.
+     *
+     * The fallback this replaces was `String(reversal.amount)`, and it is the
+     * expensive kind of fallback: `reversal.transfer` is an expanded object
+     * only when Stripe happened to expand it, which on `createReversal` it does
+     * not. So the fallback was the NORMAL path, and every partial reversal
+     * reported its own leg as the cumulative figure. `applyTransferReversal`
+     * stores that verbatim and guards on the new total being no SMALLER than
+     * the stored one — so reversing 500 and then 500 again left
+     * `amount_reversed` at 500, the transfer never reached `reversed`, and the
+     * seller kept half of what had been taken back.
+     *
+     * A second round trip is the price of an authoritative number. The
+     * expansion is still read first, so a Stripe version that starts expanding
+     * costs nothing.
+     */
+    const expanded = reversal.transfer;
+    if (typeof expanded === "object" && expanded !== null && "amount_reversed" in expanded) {
+      return { providerObjectId: reversal.id, totalReversed: String(expanded.amount_reversed) };
+    }
 
-    return { providerObjectId: reversal.id, totalReversed };
+    const transfer = await retrieveStripeTransfer(request.transferObjectId);
+    return {
+      providerObjectId: reversal.id,
+      totalReversed: String(transfer.amount_reversed),
+    };
   }
 
   // -------------------------------------------------------------------------
@@ -380,6 +421,7 @@ export class StripePaymentProvider
 
   private toResult(intent: Stripe.PaymentIntent): ProviderPaymentResult {
     const status = mapPaymentIntentStatus(intent.status);
+    const chargeObjectId = readChargeId(intent.latest_charge);
     return {
       providerObjectId: intent.id,
       status,
@@ -388,6 +430,10 @@ export class StripePaymentProvider
       ...(intent.client_secret
         ? { clientAction: { kind: "client_secret" as const, value: intent.client_secret } }
         : {}),
+      // The CHARGE, which is a different object from the payment and is what a
+      // transfer's `source_transaction` names. Absent while the payment has not
+      // produced one.
+      ...(chargeObjectId !== undefined ? { chargeObjectId } : {}),
     };
   }
 
