@@ -213,8 +213,9 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
 `webhooks/` (`webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
-(`connectedAccountRepository`), `transfers/` (`transferRepository`),
-`refunds/` (`refundRepository`), `disputes/` (`disputeRepository`).
+(`connectedAccountRepository`), `transfers/` (`transferRepository`,
+`transferReversalRepository`), `refunds/` (`refundRepository`), `disputes/`
+(`disputeRepository`).
 
 **A refund and a dispute run in OPPOSITE directions, and the difference is the
 whole handler.** A refund is merchant-initiated: Peable writes the row, then
@@ -227,6 +228,41 @@ redelivered creation carries. Its two events carry a **`Dispute`** under
 `data.object`, not the intent: `WebhookEventPayload` in `shared-types/event.ts`
 is the total map of event type to resource, and `buildEvent` is generic over it,
 so a new event type cannot ship the wrong payload.
+
+### The card rail's own invariants
+
+Five, and each one exists because its absence was a defect:
+
+- **A card payment is TWO things** — a row here, and a PaymentIntent at the
+  acquirer that stays confirmable. Ending it locally (`POST /reject`, the expiry
+  sweeper) without cancelling there leaves a payment the payer can still
+  complete against a terminal status. `services/cardCancellation.ts` cancels and
+  then reports what is TRUE, because the cancellation can lose; the sweeper
+  handles the card rail one row at a time for that reason, and the chain rail
+  keeps the fast set-based claim.
+- **A payment and its CHARGE are different objects.** A transfer's
+  `source_transaction` names the charge (`payment_intents.provider_charge_id`);
+  handing it the `pi_…` makes Stripe answer `No such charge`, which reads as an
+  outage.
+- **An amount is not an identity.** `transfer_reversals` exists so two reversals
+  of one settlement for the same amount are two operations. The cumulative total
+  on `transfers.amount_reversed` is still the PROVIDER's figure and is never a
+  sum of those rows.
+- **A refund's `state` is read, always.** `pending` and `failed` are ordinary
+  answers, a bank can reject a refund days later (`refund.failed`), and
+  `refunded → settled` is a legal transition for exactly that.
+- **`failed` is not terminal on the card rail.** One declined attempt returns
+  the provider's payment to a confirmable state; `underpaid` on the chain rail
+  still is terminal, and `LEGAL_SOURCES` is what keeps the two apart.
+
+**Test/live is enforced against the KEY MODE, not by row.** A deployment holds
+ONE `STRIPE_SECRET_KEY` and therefore serves one mode;
+`services/providers/environmentGuard.ts` refuses a credential whose environment
+disagrees, at the entry of every money route AND in the service beneath it.
+Separating merchants by environment is isolation of data, not of money. Peable
+holds the provider credentials and merchants supply none — ADR 0009, which
+supersedes ADR 0001 D3 and leaves the merchant-of-record decision explicitly
+open.
 
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells

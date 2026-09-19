@@ -1,8 +1,19 @@
 # Peable
 
 <p align="center">
-  <b>A FairCoin payments gateway with Stripe's ergonomics and no custody of anyone's money.</b><br>
+  <b>A payments gateway with Stripe's ergonomics, over two rails.</b><br>
   Payment intents, payment links, hosted checkout, signed webhooks, and an SDK to drive them.
+</p>
+
+<p align="center">
+  <sub>
+    <b>FairCoin is non-custodial by construction</b> — the Gateway holds no keys and cannot
+    spend. <b>The card rail is implemented and has not been exercised against a provider
+    sandbox</b>; see
+    <a href="docs/PEABLE-ROADMAP.md">the roadmap</a>, which marks every capability with
+    <i>impl</i> / <i>sandbox</i> / <i>deployed</i> / <i>live</i> separately, because a
+    merged commit is none of the last three.
+  </sub>
 </p>
 
 <p align="center">
@@ -22,13 +33,15 @@
 ### 🔒 The Gateway cannot spend your money
 
 A merchant record holds a **watch only account `xpub` and nothing else**. There is no
-field for a private key, a mnemonic or a seed anywhere in the schema.
+field for a private key, a mnemonic or a seed anywhere in the schema, on either rail.
 
-A pre validate hook on the model rejects any private extended key handed in as `xpub`, so
-the non custody property is enforced by the database layer rather than by convention.
+`insertMerchant` — the single writer — derives a child key from whatever is handed in as
+`xpub` and refuses anything that can spend, so the non custody property is enforced on
+every write rather than by convention.
 
-Each payment intent gets a receive address derived from that `xpub`. Funds go straight to
-the merchant.
+Each FairCoin payment intent gets a receive address derived from that `xpub`. Funds go
+straight to the merchant. A merchant that only takes cards registers with no `xpub` and
+no network at all.
 
 </td>
 <td valign="top" width="50%">
@@ -40,9 +53,14 @@ creates and HMAC signed webhooks carrying a timestamp against replay.
 
 Test and live are isolated by the environment on the credential that authenticated the
 call, not by a flag the caller sends. One Oxy app gets at most one merchant per
-environment.
+environment — and a deployment holds ONE provider key, so a credential from the other
+environment is refused before any call reaches the acquirer.
 
-Amounts are canonical base unit strings and never floats. The currency is `FAIR`.
+Amounts are canonical base unit strings and never floats, on both rails.
+
+Merchants supply no Stripe key. Peable holds the provider credentials
+([ADR 0009](docs/adr/0009-peable-holds-the-provider-credentials.md)); a merchant's whole
+authentication is their Oxy application credential.
 
 </td>
 </tr>
@@ -59,6 +77,7 @@ A Bun workspace monorepo. Everything is under `packages/`.
 | [`packages/checkout`](packages/checkout/) | `@peable.to/checkout` | The hosted, anonymous, payer facing checkout web app. Vite and React |
 | [`packages/frontend`](packages/frontend/) | `@peable.to/frontend` | Expo app for iOS, Android, web and Electron |
 | [`packages/shared-types`](packages/shared-types/) | `@peable.to/shared-types` | The wire contract shared by all of the above |
+| [`packages/pay`](packages/pay/) | [`@peable.to/pay`](https://www.npmjs.com/package/@peable.to/pay) | Paying FROM an Oxy app: HD derivation, the UTXO set, coin selection |
 
 `shared-types` is the reason the webhook signer cannot drift: the Gateway signs and the
 SDK verifies through the same exported routine.

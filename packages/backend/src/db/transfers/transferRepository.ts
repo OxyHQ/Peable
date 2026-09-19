@@ -158,6 +158,15 @@ export async function markTransferFailed(
  * would get the second partial reversal wrong whenever it had not seen the
  * first.
  *
+ * **The adapter used to pass this leg's amount most of the time**, and this
+ * docstring was already asserting otherwise. `createReversal` does not expand
+ * `reversal.transfer`, so the adapter's expanded-object branch almost never
+ * ran and its `String(reversal.amount)` fallback was the normal path. Combined
+ * with the monotonic guard below, reversing 500 and then 500 again left the
+ * total at 500 and the seller holding half of what had been taken back. The
+ * adapter now re-reads the transfer when the expansion is absent; a comment
+ * describing a guarantee is not the same as one.
+ *
  * The status is derived HERE, in the same statement, because
  * `transfers_reversal_status_agrees_check` refuses the two disagreeing: a
  * writer that set one without the other would leave a seller's balance

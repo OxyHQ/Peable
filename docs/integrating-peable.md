@@ -18,11 +18,22 @@ the merchant's **watch-only** xpub. Your server never sees a private key.
    **`payments:read` + `payments:write`** → you get `{ publicKey, secret }`
    (e.g. `publicKey: oxy_dk_…`). This is the SAME credential mechanism Console
    already issues — there is no separate "Peable API key".
-3. Register the merchant once against the Gateway (creates the watch-only
-   `Merchant` from an **xpub** — never an xprv; the backend rejects an xprv):
+3. Register the merchant once against the Gateway:
    `POST https://api.peable.to/v1/merchants` (authed with the service token).
 
+   To accept **FairCoin**, send `network` AND `xpub` — a watch-only account
+   extended public key, never an xprv; the backend derives a child from whatever
+   you send and refuses anything that can spend. To accept **cards only**, send
+   NEITHER. They are two halves of one capability and the Gateway refuses one
+   without the other.
+
 Keep `secret` server-side only. The browser never sees it.
+
+**You never supply a Stripe key.** Peable holds the provider credentials and
+calls the acquirer itself; your Oxy application credential is the whole of your
+authentication ([ADR 0009](adr/0009-peable-holds-the-provider-credentials.md)).
+A merchant-of-record decision follows from that and is still open — see the
+roadmap before charging a real card on behalf of a third party.
 
 ---
 
@@ -157,9 +168,40 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
 });
 ```
 
-`event.data.object` is the full `PaymentIntent`. Status lifecycle:
-`created → (awaiting_approval → approved →) broadcast → confirming → settled`,
-with terminal `failed | expired | rejected`.
+`event.data.object` is the full `PaymentIntent` — except for
+`payment_intent.disputed` and `payment_intent.dispute_closed`, which carry a
+`Dispute`. `WebhookEventPayload` in `@peable.to/shared-types` is the total map
+of event type to resource, so a handler written against it cannot read the
+wrong shape.
+
+Status lifecycle:
+`created → (awaiting_approval → approved →) broadcast → confirming → settled`
+on the chain rail, and
+`created → (requires_action → processing →) settled` on the card rail, with
+`refunded | partially_refunded` after settlement and terminal
+`expired | rejected`.
+
+**`failed` is not terminal on the card rail.** One declined authorization
+attempt does not end a card payment: the provider returns it to a confirmable
+state and the payer can try another card on the SAME payment, so
+`failed → settled` is legal and you will receive `payment_intent.settled`
+afterwards. Do not cancel an order on `payment_intent.failed` alone. On the
+chain rail `failed` means `underpaid` and IS terminal — the rail is on the
+intent, so a handler can tell them apart.
+
+### Resuming an unpaid checkout
+
+A `PaymentIntent` deliberately carries no confirmation credential: one on that
+shape would be handed out by every list and every re-read. To send a buyer back
+to a payment they did not finish, ask for it explicitly:
+
+```ts
+const action = await peable.paymentIntents.clientAction(intent.id);
+```
+
+Use that rather than creating a second payment. A buyer returning the next day
+to a checkout that mints a fresh intent leaves the first one alive until it
+expires — two prices they can be shown and two payments they can make.
 
 ---
 
@@ -178,6 +220,14 @@ the **`environment`** on your service credential (`development`/`staging` → te
 **test-environment credential** while building; swap to a production-environment
 credential to go live. Same code, different credential.
 
+**A deployment serves ONE mode, and the Gateway enforces it.** Peable holds the
+provider key, so that key's mode IS the deployment's mode, and a credential from
+the other environment is refused with a `403` **before any call reaches the
+acquirer** — not filtered afterwards, and not merely separated by which merchant
+row it resolves. A `development` credential pointed at the live host cannot
+create a live charge, open a live connected account, refund or settle. If you
+see that 403, you are pointed at the wrong host for your credential.
+
 ---
 
 ## Typed errors
@@ -192,6 +242,34 @@ import {
 ```
 
 ---
+
+## Settling sellers, refunding and disputes
+
+These namespaces are on the SDK and are **not yet exercised against the
+provider's sandbox** — see the roadmap's four-state table before depending on
+them in production.
+
+```ts
+await peable.connectedAccounts.create({ externalRef, country, businessType });
+await peable.transfers.create({ paymentIntentId, connectedAccountRef, externalRef, amount });
+await peable.transfers.reverse(transferId, { amount, externalRef });   // identity required
+await peable.refunds.create({ paymentIntentId, externalRef, amount });
+await peable.disputes.listForPaymentIntent(paymentIntentId);
+```
+
+Three things that are easy to get wrong and expensive:
+
+- **`externalRef` is YOUR id and it is the idempotency**, on all three. Unlike a
+  header key you cannot lose it, so a retry after a timeout converges rather
+  than paying a seller — or a payer — twice. A reversal needs one too: two
+  reversals of one settlement for the same amount are two operations, and an
+  amount is not an identity.
+- **A refund's `status` is not always `succeeded`.** A provider can report one
+  `pending`, and a bank can reject it days later. Read `status`, and expect a
+  later event to move it. `remainingRefundable` on the list already reserves
+  pending refunds for you.
+- **A transfer's `amountReversed` is CUMULATIVE**, from the provider — not the
+  sum of the reversals you made, which may not be all of them.
 
 ## Mercaria integration checklist
 

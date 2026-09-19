@@ -63,11 +63,17 @@ import type { ProviderId } from "./provider";
  * this event yet" and "this event is broken", and only the second should ever
  * look like a problem.
  *
- * Refunds and disputes are deliberately absent: `charge.refunded` and the
- * dispute lifecycle need a refund record of their own to be meaningful, and
- * inventing a status change without one would report money returned that
- * nothing in this database can account for. They are the next phase, and until
- * then their events are stored, marked handled, and act on nothing.
+ * Refunds and disputes are absent from THIS map and are not unhandled: they
+ * have their own handlers below, because neither moves a payment through the
+ * lifecycle. A refund changes the payment's status only as a consequence of the
+ * refund ROWS (`applyRefundToIntent` recomputes from their sum), and a dispute
+ * changes it not at all — it is the network's process running alongside a
+ * payment that stays `settled` throughout.
+ *
+ * The comment here used to say they were "the next phase, and until then their
+ * events are stored, marked handled, and act on nothing". That stopped being
+ * true when the handlers landed, and it is the kind of stale sentence a reader
+ * trusts over the code beneath it.
  */
 const INTENT_EVENT_FOR: Readonly<Record<string, IntentEvent>> = {
   "payment_intent.succeeded": "card_settled",

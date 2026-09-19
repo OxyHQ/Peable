@@ -82,6 +82,23 @@ than a gap.
 
 ### D3. Provider credentials belong to the MERCHANT. Peable is an orchestrator, never an acquirer
 
+> **SUPERSEDED by [ADR 0009](0009-peable-holds-the-provider-credentials.md).**
+>
+> The `provider_connections` table described below does not exist and never
+> did. The gateway builds ONE Stripe client from a single `STRIPE_SECRET_KEY`
+> belonging to whoever operates the deployment, and calls Stripe as ITSELF —
+> which is also the product decision: merchants integrate with their Oxy
+> application credential and supply no Stripe key. The reasoning about hosted
+> onboarding, about the acquirer being the regulated party and about Peable
+> never holding money is unchanged and still load-bearing; what is withdrawn is
+> where the platform account sits, and therefore who the merchant of record is.
+> ADR 0009 records the implemented model and names the merchant-of-record
+> decision as outstanding.
+>
+> Left in place rather than rewritten: this section is the argument the code was
+> read against for two years, and deleting it would leave the disagreement
+> unexplained.
+
 A `provider_connections` row binds a merchant to a provider and holds that
 merchant's own encrypted credentials. Peable calls Stripe **as the merchant**.
 
