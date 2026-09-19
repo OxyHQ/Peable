@@ -19,7 +19,8 @@ import type { DatabaseOrTransaction } from '../postgres';
 export interface WebhookDeliveryRow {
   readonly id: string;
   readonly merchantId: string;
-  readonly paymentIntentId: string;
+  /** `null` when the event is not about a payment — see the table comment. */
+  readonly paymentIntentId: string | null;
   readonly eventId: string;
   readonly eventType: WebhookEventType;
   /** The event envelope as enqueued — replayed verbatim, never rebuilt. */
@@ -69,7 +70,7 @@ function toDeliveryRow(row: {
 function toDeliveryWithIntentRow(row: {
   eventType: string;
   lastStatus: string;
-  intentPublicId: string;
+  intentPublicId: string | null;
   [key: string]: unknown;
 }): WebhookDeliveryWithIntentRow {
   return {
@@ -111,8 +112,8 @@ export interface ListDeliveriesParams {
  * path has no other way to get the public one.
  */
 export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
-  /** The `pi_…` of the intent `paymentIntentId` points at. */
-  readonly intentPublicId: string;
+  /** The `pi_…` of the intent `paymentIntentId` points at, or `null`. */
+  readonly intentPublicId: string | null;
 }
 
 /**
@@ -131,12 +132,13 @@ export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
  * that already parse it. So the repository answers the question completely, in
  * one statement.
  *
- * INNER join, and it cannot drop a row: `payment_intent_id` is `NOT NULL` and
- * references `payment_intents.id`, a primary key, so every delivery has exactly
- * one intent and the page size is unchanged by the join. `hasMore` still comes
- * from the `limit + 1` overflow rather than a `count(*)` — and note there is no
- * aggregate anywhere in this module, which is why nothing here has to undo
- * postgres.js decoding an `int8` sum as a string.
+ * LEFT join, and it has to be. It was an INNER join, correct while
+ * `payment_intent_id` was `NOT NULL`: every delivery had exactly one intent, so
+ * the page size was unchanged. `connected_account.updated` is about a SELLER
+ * and names no intent — under the inner join those rows would silently vanish
+ * from the delivery log, which is the worst possible failure for a log a
+ * merchant consults to find out whether they were told something. `hasMore`
+ * still comes from the `limit + 1` overflow rather than a `count(*)`.
  *
  * The Mongo route guarded its cursor with `mongoose.isValidObjectId` before
  * looking it up. That guard is DELETED rather than widened: its only job was to
@@ -154,7 +156,7 @@ export async function listDeliveriesForMerchant(
   const rows = await db
     .select({ ...DELIVERY_COLUMNS, intentPublicId: paymentIntents.publicId })
     .from(webhookDeliveries)
-    .innerJoin(paymentIntents, eq(paymentIntents.id, webhookDeliveries.paymentIntentId))
+    .leftJoin(paymentIntents, eq(paymentIntents.id, webhookDeliveries.paymentIntentId))
     .where(and(...conditions))
     .orderBy(desc(webhookDeliveries.id))
     .limit(params.limit + 1);

@@ -8,6 +8,8 @@
  * is the one where no event is delivered at all.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { eq } from "drizzle-orm";
+import type { WebhookEvent } from "@peable.to/shared-types";
 
 const providerCalls: string[] = [];
 let accountReadiness: Record<string, unknown> = {};
@@ -94,6 +96,7 @@ const { findTransferByExternalRef, insertTransfer, markTransferPaid } = await im
 const { insertPaymentIntent, linkProviderObject, updateIntentState } = await import(
   "../../db/payments/paymentIntentRepository"
 );
+const { webhookDeliveries } = await import("../../db/schema");
 const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   "../../__tests__/helpers/gatewayTestDatabase"
 );
@@ -126,6 +129,23 @@ async function storeEvent(
   return id;
 }
 
+/** Every readiness notification enqueued so far, with its envelope parsed. */
+async function accountDeliveries(): Promise<
+  { paymentIntentId: string | null; event: WebhookEvent<"connected_account.updated"> }[]
+> {
+  const rows = await gatewayDb()
+    .select({
+      paymentIntentId: webhookDeliveries.paymentIntentId,
+      payload: webhookDeliveries.payload,
+    })
+    .from(webhookDeliveries)
+    .where(eq(webhookDeliveries.eventType, "connected_account.updated"));
+  return rows.map((row) => ({
+    paymentIntentId: row.paymentIntentId,
+    event: row.payload as unknown as WebhookEvent<"connected_account.updated">,
+  }));
+}
+
 async function seedAccount(ref: string, providerAccountId: string) {
   const row = await insertConnectedAccount(gatewayDb(), {
     publicId: `ca_${uuidv7()}`,
@@ -144,7 +164,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("settlement events and the sync sweep",
 
   beforeAll(async () => {
     useFake = true;
-    merchant = await seedMerchant();
+    // BOTH halves, deliberately: `findWebhookTarget` answers null unless the
+    // url AND the secret are present, and a null target makes every enqueue
+    // return without writing a row — which would leave the readiness-event
+    // assertions below vacuously empty.
+    merchant = await seedMerchant({
+      webhookUrl: "https://merchant.invalid/hook",
+      webhookSecret: "whsec_settlement_events",
+    });
 
     const intent = await insertPaymentIntent(gatewayDb(), {
       publicId: `pi_${uuidv7()}`,
@@ -198,6 +225,67 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("settlement events and the sync sweep",
     expect(after?.lastSyncedAt).toBeInstanceOf(Date);
     expect(after?.id).toBe(account.id);
     expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
+  });
+
+  /**
+   * ...and the MERCHANT is told, which they were not.
+   *
+   * The handler refreshed the local row and enqueued nothing, so the only ways
+   * a marketplace could learn that a seller had finished onboarding were to
+   * poll `GET /v1/connected_accounts` or to attempt a settlement and read the
+   * refusal. Readiness is the one fact about a seller a marketplace cannot act
+   * without.
+   *
+   * The delivery names NO payment intent — this is the first event that is not
+   * about a payment, and naming an unrelated payment to satisfy the old NOT
+   * NULL would have been worse than the gap.
+   */
+  test("tells the merchant when a seller's readiness changes", async () => {
+    await seedAccount("store_evt_notify", "acct_evt_notify");
+    // The seeded row is all-false; the fake provider reports `active`, so this
+    // refresh is a real readiness change.
+    await storeEvent("account.updated", { account: "acct_evt_notify" });
+    await runProviderEventDrainPass();
+
+    // Scoped to THIS seller: the cases above also change readiness, and every
+    // one of them rightly enqueues its own notification.
+    const rows = (await accountDeliveries()).filter(
+      (row) => row.event.data.object.externalRef === "store_evt_notify",
+    );
+
+    expect(rows).toHaveLength(1);
+    // NO payment intent. This is the first event that is not about a payment,
+    // and naming an unrelated one to satisfy the old NOT NULL would have been
+    // worse than the gap.
+    expect(rows[0]?.paymentIntentId).toBeNull();
+
+    // The payload is the ACCOUNT, and it carries what a merchant acts on.
+    const event = rows[0]?.event;
+    expect(event?.data.object.object).toBe("connected_account");
+    expect(event?.data.object.payable).toBe(true);
+    // ...and never the provider's own account id (ADR 0001 D3).
+    expect(JSON.stringify(event)).not.toContain("acct_evt_notify");
+  });
+
+  /**
+   * A refresh that changes NOTHING tells the merchant nothing.
+   *
+   * The sync sweep re-reads every account periodically whether or not anything
+   * moved. An event per sweep would be a stream a merchant learns to ignore,
+   * which is the same as no notification at all — so the enqueue is gated on a
+   * change to the fields they act on, not on the row having been written.
+   */
+  test("says nothing when a refresh changes nothing", async () => {
+    await seedAccount("store_evt_quiet", "acct_evt_quiet");
+    await storeEvent("account.updated", { account: "acct_evt_quiet" });
+    await runProviderEventDrainPass();
+
+    const before = (await accountDeliveries()).length;
+    // A second identical refresh.
+    await storeEvent("account.updated", { account: "acct_evt_quiet" });
+    await runProviderEventDrainPass();
+
+    expect((await accountDeliveries()).length).toBe(before);
   });
 
   /**

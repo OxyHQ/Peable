@@ -255,6 +255,16 @@ Five, and each one exists because its absence was a defect:
   the provider's payment to a confirmable state; `underpaid` on the chain rail
   still is terminal, and `LEGAL_SOURCES` is what keeps the two apart.
 
+**A webhook delivery does not always name a payment.**
+`webhook_deliveries.payment_intent_id` is nullable since
+`connected_account.updated`, which is about a SELLER — and
+`webhook_deliveries_intent_event_has_intent_check` keys on the
+`payment_intent.` prefix so a payment event still cannot be enqueued without
+one. The list join is a LEFT join for the same reason; an inner join would have
+made those rows vanish from the log a merchant consults to find out whether
+they were told something. An account acts through the provider on its OWN row,
+never `resolveCardProvider()` — that is only for opening a new one.
+
 **Test/live is enforced against the KEY MODE, not by row.** A deployment holds
 ONE `STRIPE_SECRET_KEY` and therefore serves one mode;
 `services/providers/environmentGuard.ts` refuses a credential whose environment

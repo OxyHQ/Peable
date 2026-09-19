@@ -92,7 +92,14 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
  */
 export function toWebhookDeliveryDTO(
   row: WebhookDeliveryRow,
-  intentPublicId: string,
+  /**
+   * `null` when the event is not about a payment — `connected_account.updated`
+   * is about a seller. Passed explicitly rather than read off the row for the
+   * reason the transfer serializer takes its ids explicitly: the row holds the
+   * internal key, and a serializer reaching for it would put a uuid on a
+   * contract that promises a `pi_…`.
+   */
+  intentPublicId: string | null,
 ): WebhookDelivery {
   return {
     id: row.id,

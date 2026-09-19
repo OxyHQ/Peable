@@ -165,6 +165,9 @@ mock.module("../../services/providers/registry", () => ({
 }));
 
 const { ProviderError } = await import("../../services/providers/provider");
+const { findAccountByPublicId } = await import(
+  "../../db/accounts/connectedAccountRepository"
+);
 const { createConnectedAccountsRouter } = await import("../connectedAccounts");
 const { createTransfersRouter } = await import("../transfers");
 const { insertPaymentIntent } = await import("../../db/payments/paymentIntentRepository");
@@ -451,6 +454,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
     await call("POST", `/v1/connected_accounts/${String(created.json.id)}/refresh`);
     return String(created.json.id);
   }
+
+  /**
+   * A refresh and an onboarding link go to the provider that OPENED the
+   * account, read off the row.
+   *
+   * Both used to resolve through `resolveCardProvider()` — the deployment's
+   * default. That answered correctly for as long as there was exactly one fiat
+   * provider and would have started answering wrongly the day there were two: a
+   * seller onboarded at provider A would have had their refresh sent to
+   * provider B, which does not know that account. The failure is a `No such
+   * account` from the wrong acquirer, which reads as the seller's onboarding
+   * being broken.
+   *
+   * `connected_accounts.provider` has recorded the answer since the table
+   * existed; nothing was reading it. Asserted by the PROVIDER ID reaching the
+   * adapter, which is the only observable difference while one provider exists.
+   */
+  test("acts on a seller through the provider their account records", async () => {
+    const accountId = await payableAccount("store_provider_row");
+    providerCalls.length = 0;
+
+    await call("POST", `/v1/connected_accounts/${accountId}/refresh`);
+    await call("POST", `/v1/connected_accounts/${accountId}/account_links`, {
+      refreshUrl: "https://merchant.example/refresh",
+      returnUrl: "https://merchant.example/return",
+    });
+
+    const account = await findAccountByPublicId(gatewayDb(), merchant.id, accountId);
+    expect(account?.provider).toBe("stripe");
+    // Both calls reached an adapter, and both named THIS account's object at
+    // the provider rather than one resolved from the deployment default.
+    expect(
+      providerCalls.filter(
+        (entry) =>
+          entry.fn === "getAccount" &&
+          String(entry.request.providerAccountId) === account?.providerAccountId,
+      ).length,
+    ).toBeGreaterThanOrEqual(1);
+    expect(
+      providerCalls.find((entry) => entry.fn === "accountLink")?.request.providerAccountId,
+    ).toBe(account?.providerAccountId);
+  });
 
   /**
    * The seller list PAGINATES.

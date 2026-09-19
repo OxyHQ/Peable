@@ -25,7 +25,16 @@ export interface WebhookDelivery {
   id: string;
   object: 'webhook_delivery';
   merchantId: string;
-  intentId: string;
+  /**
+   * The `pi_…` this delivery is about — `null` when the event is not about a
+   * payment.
+   *
+   * Nullable since `connected_account.updated`, which is about a SELLER. The
+   * alternative was to name an unrelated payment to keep the field a string,
+   * which is worse than a null: a consumer correlating on it would attach a
+   * seller's readiness change to a payment that has nothing to do with it.
+   */
+  intentId: string | null;
   eventId: string;
   eventType: WebhookEventType;
   url: string;

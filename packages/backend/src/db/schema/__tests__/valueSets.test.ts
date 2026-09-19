@@ -58,11 +58,29 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the nine webhook event types', () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(9);
-    for (const type of WEBHOOK_EVENT_TYPES) {
-      expect(type.startsWith('payment_intent.')).toBe(true);
-    }
+  it('lists the ten webhook event types', () => {
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(10);
+  });
+
+  /**
+   * ...and exactly one of them is not about a payment.
+   *
+   * This used to assert that EVERY type began `payment_intent.`, which was true
+   * and became a constraint nobody had chosen: `connected_account.updated` is
+   * about a seller, and its delivery names no payment intent at all. The prefix
+   * is load-bearing rather than cosmetic —
+   * `webhook_deliveries_intent_event_has_intent_check` keys on it to decide
+   * whether a delivery must carry an intent — so what is asserted now is the
+   * split, which is the thing the CHECK depends on.
+   */
+  it('splits into payment events and the one that is about a seller', () => {
+    const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) =>
+      type.startsWith('payment_intent.')
+    );
+    expect(aboutPayments).toHaveLength(9);
+    expect(
+      WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))
+    ).toEqual(['connected_account.updated']);
   });
 });
 

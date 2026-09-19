@@ -19,12 +19,15 @@ export type RedeliverResult =
       ok: true;
       delivery: WebhookDeliveryRow;
       /**
-       * The `pi_…` of the intent the redelivery was about. Carried alongside
-       * the row because the row stores the intent's INTERNAL id while
-       * `WebhookDelivery.intentId` on the wire is the public one, and this
-       * path already loaded the intent to build the event.
+       * The `pi_…` of the intent the redelivery was about, or `null` when the
+       * event was not about a payment (`connected_account.updated` is about a
+       * seller).
+       *
+       * Carried alongside the row because the row stores the intent's INTERNAL
+       * id while `WebhookDelivery.intentId` on the wire is the public one, and
+       * this path already loaded the intent when there was one.
        */
-       intentPublicId: string;
+       intentPublicId: string | null;
     }
   | { ok: false; status: number; message: string };
 
@@ -52,16 +55,29 @@ export async function redeliverWebhookDelivery(
     return { ok: false, status: 404, message: "webhook delivery not found" };
   }
 
-  // By the INTERNAL id the delivery stores, re-scoped to the merchant: the id
-  // came out of a row rather than out of the request, so the scope is restated
-  // in the WHERE clause rather than compared after the read.
-  const intent = await findIntentByIdForMerchant(db, delivery.paymentIntentId, merchant.id);
-  if (!intent) {
-    return {
-      ok: false,
-      status: 404,
-      message: "the payment intent for this delivery no longer exists",
-    };
+  /**
+   * The payment this delivery was about — when it was about one.
+   *
+   * `payment_intent_id` is nullable since `connected_account.updated`, which is
+   * about a SELLER. A redelivery of such an event needs no intent and must not
+   * refuse for the want of one; requiring it here would make exactly the events
+   * a marketplace most wants to replay the only ones it cannot.
+   *
+   * When there IS one it is looked up by the INTERNAL id the delivery stores,
+   * re-scoped to the merchant: the id came out of a row rather than out of the
+   * request, so the scope is restated in the WHERE clause rather than compared
+   * after the read.
+   */
+  let intent = null;
+  if (delivery.paymentIntentId !== null) {
+    intent = await findIntentByIdForMerchant(db, delivery.paymentIntentId, merchant.id);
+    if (!intent) {
+      return {
+        ok: false,
+        status: 404,
+        message: "the payment intent for this delivery no longer exists",
+      };
+    }
   }
 
   // The signing secret is never on `MerchantRow` — it is a protected column,
@@ -96,7 +112,7 @@ export async function redeliverWebhookDelivery(
   // stored `payload` is what makes replaying one honest.
   const enqueuedId = await enqueueWebhook(db, {
     merchantId: merchant.id,
-    paymentIntentId: intent.id,
+    ...(intent === null ? {} : { paymentIntentId: intent.id }),
     event: delivery.payload as unknown as Parameters<typeof enqueueWebhook>[1]["event"],
     url: target.url,
   });
@@ -113,7 +129,7 @@ export async function redeliverWebhookDelivery(
     return { ok: false, status: 404, message: "webhook delivery not found" };
   }
 
-  return { ok: true, delivery: redelivery, intentPublicId: intent.publicId };
+  return { ok: true, delivery: redelivery, intentPublicId: intent?.publicId ?? null };
 }
 
 /**

@@ -73,6 +73,7 @@ documents:
 | Watch-only address reservation and Explorer settlement checks | yes | — | — | — |
 | REST routes: merchants, intents, links, sessions, social, enrichment, webhook deliveries | yes | — | — | — |
 | REST routes: connected accounts, transfers and reversals, refunds, disputes | yes | no | — | no |
+| `connected_account.updated` — seller readiness reaches the merchant | yes | no | no | no |
 | Realtime intent updates and signed, retrying webhook delivery | yes | — | — | — |
 | PostgreSQL repositories, schema, phased migrations, real-database harness | yes | — | — | — |
 | Test/live isolation enforced against the provider's KEY MODE, not only by row | yes | no | no | no |

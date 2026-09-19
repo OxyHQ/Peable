@@ -13,6 +13,7 @@
  * for a transition that then failed to commit.
  */
 import type {
+  ConnectedAccount,
   Dispute,
   PaymentIntentStatus,
   WebhookEvent,
@@ -130,6 +131,41 @@ export async function enqueueDisputeWebhook(
   eventType: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
 ): Promise<void> {
   await enqueue(tx, row, buildEvent(eventType, dispute));
+}
+
+/**
+ * Enqueue a SELLER's readiness change for the merchant who onboarded them.
+ *
+ * The first event here that is not about a payment, so it takes a merchant id
+ * rather than an intent row and the delivery names no
+ * `payment_intent_id` — which is why that column became nullable, and why
+ * `webhook_deliveries_intent_event_has_intent_check` keys on the event-type
+ * prefix.
+ *
+ * It exists because readiness was unlearnable. `refreshConnectedAccount`
+ * updated the local row and told nobody, so a marketplace discovered that a
+ * seller had finished onboarding either by polling
+ * `GET /v1/connected_accounts` or by attempting a settlement and reading the
+ * refusal.
+ *
+ * In the CALLER's transaction, like every other enqueue here (ADR 0001 D7): the
+ * snapshot and the notification commit together, or a crash between them leaves
+ * an account whose readiness changed and a merchant who will never be told —
+ * and the next refresh sees no change, so nothing would ever enqueue it again.
+ */
+export async function enqueueConnectedAccountWebhook(
+  tx: DatabaseOrTransaction,
+  merchantId: string,
+  account: ConnectedAccount,
+): Promise<void> {
+  const target = await findWebhookTarget(tx, merchantId);
+  if (!target) return;
+
+  await enqueueWebhook(tx, {
+    merchantId,
+    event: buildEvent('connected_account.updated', account),
+    url: target.url,
+  });
 }
 
 /**
