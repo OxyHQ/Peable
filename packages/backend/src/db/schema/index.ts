@@ -17,6 +17,6 @@ export {
 export { webhookDeliveries } from './webhooks';
 export { providerEvents } from './providerEvents';
 export { connectedAccounts } from './connectedAccounts';
-export { transfers } from './transfers';
+export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
 export { disputes } from './disputes';

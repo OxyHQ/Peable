@@ -26,6 +26,13 @@ import {
   linkProviderCharge,
   lockIntentForUpdate,
 } from "../../db/payments/paymentIntentRepository";
+import {
+  findTransferReversalByExternalRef,
+  insertTransferReversal,
+  markTransferReversalFailed,
+  markTransferReversalSucceeded,
+  type TransferReversalRow,
+} from "../../db/transfers/transferReversalRepository";
 import type { ConnectedAccountRow } from "../../db/accounts/connectedAccountRepository";
 import type { PaymentIntentRow } from "../../db/payments/paymentIntentRepository";
 import { getDb } from "../../db/postgres";
@@ -289,45 +296,122 @@ export async function createTransfer(
 }
 
 export interface ReverseTransferInput {
+  readonly merchantId: string;
   /** The asking credential's environment — checked against the provider's mode. */
   readonly environment: MerchantEnvironment;
   readonly transfer: TransferRow;
+  /**
+   * The MERCHANT's own id for THIS reversal — their `Idempotency-Key` header or
+   * an explicit `externalRef`. Required, because the amount is not an identity.
+   */
+  readonly externalRef: string;
   /** This leg's amount, in the transfer's currency. */
   readonly amount: string;
+}
+
+export interface ReverseTransferResult {
+  readonly transfer: TransferRow;
+  readonly reversal: TransferReversalRow;
+  /** `false` when this reversal had already been made. */
+  readonly created: boolean;
 }
 
 /**
  * Take some or all of a settlement back.
  *
- * The provider reports a CUMULATIVE reversed total and that is what is stored —
- * never this leg's amount. A caller adding legs up itself gets the second
- * partial reversal wrong whenever it has not seen the first, and the two are
- * indistinguishable afterwards.
+ * ## The identity, which is the whole of this function's history
+ *
+ * The provider idempotency key used to be `trr:<transfer>:<amount>` — the LEG
+ * in the key, with a comment explaining that a key naming only the transfer
+ * would make a second partial reversal a replay of the first. The comment was
+ * right about the failure and wrong about the fix: two DISTINCT reversals of
+ * one transfer for the same amount are ordinary (two 500-cent line items
+ * refunded separately) and presented the same key, so the provider answered the
+ * first reversal's object to the second request. The seller kept 500 that had
+ * been taken back, the total never moved, and no row anywhere recorded that a
+ * second reversal had been asked for.
+ *
+ * An amount is not an identity. A `transfer_reversals` row is: the merchant's
+ * own reference is the idempotency, the key is derived from the row's
+ * `public_id`, and a retry converges on the row rather than on a coincidence of
+ * amounts.
+ *
+ * ## The cumulative total is still the provider's
+ *
+ * These rows are not summed. `transfers.amount_reversed` holds the PROVIDER's
+ * own cumulative figure, which includes reversals this gateway did not make and
+ * is what the seller's balance reflects.
  */
-export async function reverseTransfer(input: ReverseTransferInput): Promise<TransferRow> {
+export async function reverseTransfer(
+  input: ReverseTransferInput,
+): Promise<ReverseTransferResult> {
   const { transfer } = input;
+  assertEnvironmentMatchesProvider(input.environment);
   if (!transfer.providerObjectId) {
     throw new TransfersUnavailableError(
       "this transfer never reached the provider; there is nothing to reverse",
     );
   }
-  assertEnvironmentMatchesProvider(input.environment);
   const provider = requireSettlingProvider(transfer.provider);
+  const db = getDb();
 
-  const result = await provider.reverseTransfer({
-    transferId: transfer.publicId,
-    transferObjectId: transfer.providerObjectId,
-    amount: { amount: input.amount, currency: transfer.currency },
-    // The LEG is in the key, not just the transfer: two partial reversals of
-    // one transfer are two distinct operations, and a key naming only the
-    // transfer would make the second a replay of the first — silently
-    // returning the first reversal and leaving the money unreturned.
-    idempotencyKey: `trr:${transfer.publicId}:${input.amount}`,
-    metadata: { peable_transfer_id: transfer.publicId },
+  const inserted = await insertTransferReversal(db, {
+    publicId: newId("trr"),
+    merchantId: input.merchantId,
+    transferId: transfer.id,
+    externalRef: input.externalRef,
+    amount: input.amount,
+    currency: transfer.currency,
+    provider: provider.id,
   });
 
-  const updated = await applyTransferReversal(getDb(), transfer.id, result.totalReversed);
+  if (!inserted) {
+    const existing = await findTransferReversalByExternalRef(
+      db,
+      input.merchantId,
+      input.externalRef,
+    );
+    if (!existing) {
+      throw new Error(`reversal for ${input.externalRef} neither inserted nor found`);
+    }
+    // A replay answers the transfer AS STORED, without calling the provider.
+    // Re-reversing on a retry is the exact failure this row exists to prevent.
+    return { transfer, reversal: existing, created: false };
+  }
+
+  let result;
+  try {
+    result = await provider.reverseTransfer({
+      transferId: transfer.publicId,
+      transferObjectId: transfer.providerObjectId,
+      amount: { amount: input.amount, currency: transfer.currency },
+      // Derived from the REVERSAL's own durable id and nothing else. Two
+      // reversals are two rows, so they are two keys, whatever their amounts.
+      idempotencyKey: `trr:${inserted.publicId}`,
+      metadata: {
+        peable_transfer_id: transfer.publicId,
+        peable_reversal_id: inserted.publicId,
+      },
+    });
+  } catch (error) {
+    if (error instanceof ProviderError && !error.retryable) {
+      // A PERMANENT refusal is recorded. A retryable one stays `pending` and is
+      // rethrown: marking it failed would say a seller's money is staying with
+      // them when the next attempt would have taken it back.
+      const failed = await markTransferReversalFailed(
+        db,
+        inserted.id,
+        redactProviderMessage(error.message),
+      );
+      return { transfer, reversal: failed ?? inserted, created: true };
+    }
+    throw error;
+  }
+
+  const reversal =
+    (await markTransferReversalSucceeded(db, inserted.id, result.providerObjectId)) ?? inserted;
+  const updated = await applyTransferReversal(db, transfer.id, result.totalReversed);
   // `null` means the stored total was already at least this one — an
   // out-of-order provider answer. The transfer as we have it is still correct.
-  return updated ?? transfer;
+  return { transfer: updated ?? transfer, reversal, created: true };
 }

@@ -86,7 +86,40 @@ const createTransferBodySchema = z
     { message: "name the seller by exactly one of connectedAccountId or connectedAccountRef" },
   );
 
-const reverseTransferBodySchema = z.object({ amount: baseUnitAmount });
+const reverseTransferBodySchema = z.object({
+  amount: baseUnitAmount,
+  /**
+   * The merchant's own id for THIS reversal.
+   *
+   * Optional in the BODY and required overall: the `Idempotency-Key` header is
+   * accepted as the same identity, which is what Mercaria's adapter already
+   * sends. One of the two must be present — see `resolveReversalRef`.
+   */
+  externalRef: z.string().min(1).max(255).optional(),
+});
+
+/**
+ * The durable identity of a reversal operation, from the header or the body.
+ *
+ * The route used to take neither. The provider idempotency key was derived from
+ * `trr:<transfer>:<amount>`, so two distinct reversals of one transfer for the
+ * same amount presented one key and the second silently returned the first —
+ * the seller kept money that had been taken back. The consumer was already
+ * SENDING an operation key (`Idempotency-Key`) and this route ignored it.
+ *
+ * `null` when neither is present, which the route answers 400 for: a reversal
+ * with no identity is one that cannot be retried safely, and inventing one here
+ * would make every retry a second reversal.
+ */
+function resolveReversalRef(
+  headerValue: string | undefined,
+  bodyValue: string | undefined,
+): string | null {
+  const header = headerValue?.trim();
+  if (header) return header;
+  const body = bodyValue?.trim();
+  return body && body.length > 0 ? body : null;
+}
 
 function sendProviderError(res: Response, error: ProviderError): void {
   // 502 for a retryable provider fault, 422 for a permanent refusal. The
@@ -330,14 +363,48 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         return;
       }
 
+      const externalRef = resolveReversalRef(
+        req.header("Idempotency-Key"),
+        parsed.data.externalRef,
+      );
+      if (!externalRef) {
+        sendError(
+          res,
+          400,
+          "invalid_request_error",
+          "a reversal needs an Idempotency-Key header or an externalRef: " +
+            "two reversals of one settlement for the same amount are two operations, " +
+            "and an amount is not an identity",
+        );
+        return;
+      }
+
       try {
-        const updated = await reverseTransfer({
+        const { transfer: updated, reversal, created } = await reverseTransfer({
+          merchantId: merchant.id,
           environment: merchant.environment,
           transfer,
+          externalRef,
           amount: parsed.data.amount,
         });
         const intent = await findIntentByPublicIdForTransfer(db, updated);
-        res.status(201).json(await serializeTransfer(merchant.id, updated, intent));
+        // 201 for a reversal just made, 200 for one that had already been made.
+        // The distinction is the merchant's to act on for the same reason it is
+        // on the settlement route: "did I just take another 500 off this
+        // seller" is a question they will ask.
+        res.status(created ? 201 : 200).json({
+          ...(await serializeTransfer(merchant.id, updated, intent)),
+          reversal: {
+            id: reversal.publicId,
+            object: "transfer_reversal" as const,
+            externalRef: reversal.externalRef,
+            amount: reversal.amount,
+            currency: reversal.currency,
+            status: reversal.status,
+            failureMessage: reversal.failureMessage,
+            createdAt: reversal.createdAt.toISOString(),
+          },
+        });
       } catch (error) {
         if (error instanceof TransferReversalTooLargeError) {
           sendError(res, 422, "invalid_request_error", error.message);

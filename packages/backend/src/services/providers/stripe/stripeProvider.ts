@@ -25,6 +25,7 @@ import {
   createStripeTransferReversal,
   retrieveStripeAccount,
   retrieveStripePaymentIntent,
+  retrieveStripeTransfer,
 } from "./client";
 import {
   ProviderError,
@@ -284,16 +285,33 @@ export class StripePaymentProvider
       request.idempotencyKey,
     );
 
-    // The CUMULATIVE total, read off the transfer rather than accumulated here.
-    // A caller deciding whether a transfer is fully reversed must not have to
-    // add up reversals it may not have all seen.
-    const transfer = reversal.transfer;
-    const totalReversed =
-      typeof transfer === "object" && transfer !== null && "amount_reversed" in transfer
-        ? String(transfer.amount_reversed)
-        : String(reversal.amount);
+    /**
+     * The CUMULATIVE total, off the TRANSFER — never this leg's amount.
+     *
+     * The fallback this replaces was `String(reversal.amount)`, and it is the
+     * expensive kind of fallback: `reversal.transfer` is an expanded object
+     * only when Stripe happened to expand it, which on `createReversal` it does
+     * not. So the fallback was the NORMAL path, and every partial reversal
+     * reported its own leg as the cumulative figure. `applyTransferReversal`
+     * stores that verbatim and guards on the new total being no SMALLER than
+     * the stored one — so reversing 500 and then 500 again left
+     * `amount_reversed` at 500, the transfer never reached `reversed`, and the
+     * seller kept half of what had been taken back.
+     *
+     * A second round trip is the price of an authoritative number. The
+     * expansion is still read first, so a Stripe version that starts expanding
+     * costs nothing.
+     */
+    const expanded = reversal.transfer;
+    if (typeof expanded === "object" && expanded !== null && "amount_reversed" in expanded) {
+      return { providerObjectId: reversal.id, totalReversed: String(expanded.amount_reversed) };
+    }
 
-    return { providerObjectId: reversal.id, totalReversed };
+    const transfer = await retrieveStripeTransfer(request.transferObjectId);
+    return {
+      providerObjectId: reversal.id,
+      totalReversed: String(transfer.amount_reversed),
+    };
   }
 
   // -------------------------------------------------------------------------

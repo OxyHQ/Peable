@@ -19,6 +19,8 @@ const calls: Recorded[] = [];
 let paymentIntentResponse: Record<string, unknown> = {};
 let refundResponse: Record<string, unknown> = {};
 let transferResponse: Record<string, unknown> = {};
+/** What `retrieveStripeTransfer` answers, when the adapter has to ask. */
+let retrievedTransferResponse: Record<string, unknown> = {};
 let accountResponse: Record<string, unknown> = {};
 
 function record(fn: string, args: readonly unknown[]) {
@@ -66,7 +68,7 @@ mock.module("../client", () => ({
   },
   retrieveStripeTransfer: async (...args: unknown[]) => {
     record("retrieveStripeTransfer", args);
-    return transferResponse;
+    return retrievedTransferResponse;
   },
   createStripeConnectedAccountV2: async (...args: unknown[]) => {
     record("createStripeConnectedAccountV2", args);
@@ -240,7 +242,7 @@ describe("StripePaymentProvider", () => {
    * up reversals it may not have all seen — so reporting this leg's amount
    * would make a second partial reversal look like the first.
    */
-  test("a reversal reports the cumulative total, not this leg", async () => {
+  test("a reversal reports the cumulative total when Stripe expanded it", async () => {
     transferResponse = {
       id: "trr_1",
       amount: 200,
@@ -257,6 +259,41 @@ describe("StripePaymentProvider", () => {
     });
 
     expect(result.totalReversed).toBe("500");
+    // Nothing was re-read: the expansion already carried the answer.
+    expect(calls.filter((entry) => entry.fn === "retrieveStripeTransfer")).toHaveLength(0);
+  });
+
+  /**
+   * ...and RE-READS the transfer when Stripe did not expand it, which is the
+   * normal case.
+   *
+   * `createReversal` does not expand `transfer`, so the expanded branch above
+   * was the exceptional one and the FALLBACK was the path every real reversal
+   * took. That fallback was `String(reversal.amount)` — this leg. Stored by
+   * `applyTransferReversal` as the cumulative total, and guarded there on the
+   * new total being no SMALLER than the stored one, so reversing 500 and then
+   * 500 again left `amount_reversed` at 500: the transfer never reached
+   * `reversed` and the seller kept half of what had been taken back.
+   *
+   * The test that existed asserted only the expanded branch, so it agreed with
+   * the adapter and could not see the defect.
+   */
+  test("a reversal re-reads the transfer when Stripe did not expand it", async () => {
+    transferResponse = { id: "trr_2", amount: 500, transfer: "tr_2" };
+    retrievedTransferResponse = { id: "tr_2", amount_reversed: 1000 };
+    const provider = new StripePaymentProvider();
+
+    const result = await provider.reverseTransfer({
+      transferId: "tr_gateway_2",
+      transferObjectId: "tr_2",
+      amount: { amount: "500", currency: "EUR" },
+      idempotencyKey: "trr:trr_gateway_2",
+      metadata: {},
+    });
+
+    // 1000, the cumulative figure — NOT the 500 this leg reversed.
+    expect(result.totalReversed).toBe("1000");
+    expect(argsOf("retrieveStripeTransfer")).toEqual(["tr_2"]);
   });
 
   /**

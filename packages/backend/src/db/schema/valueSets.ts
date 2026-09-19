@@ -154,6 +154,24 @@ export const TRANSFER_STATUSES = [
 export const REFUND_STATUSES = ['pending', 'succeeded', 'failed'] as const;
 
 /**
+ * Where one REVERSAL of a transfer stands.
+ *
+ * The same three words as a refund and a different subject, which is why it is
+ * its own tuple rather than a reuse: a refund returns a buyer's money and a
+ * reversal takes a seller's settlement back, and the day one of them grows a
+ * fourth state the other must not inherit it.
+ *
+ * A reversal is a ROW because it needs a durable identity. The service used to
+ * derive its provider idempotency key from `trr:<transfer>:<amount>`, so two
+ * distinct reversals of the same transfer for the same amount — an ordinary
+ * thing, two 500-cent line items refunded separately — presented one key, and
+ * the provider answered the FIRST reversal to the second request. The seller
+ * kept 500 that had been taken back, and nothing recorded which of the two it
+ * was.
+ */
+export const TRANSFER_REVERSAL_STATUSES = ['pending', 'succeeded', 'failed'] as const;
+
+/**
  * Where a dispute stands, in the gateway's own vocabulary.
  *
  * Four states, not the provider's seven. Stripe distinguishes

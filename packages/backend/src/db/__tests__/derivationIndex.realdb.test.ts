@@ -238,6 +238,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'refunds',
       'social_receive_cursors',
       'social_send_attributions',
+      'transfer_reversals',
       'transfers',
       'webhook_deliveries',
     ]);

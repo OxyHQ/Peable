@@ -28,6 +28,9 @@ let createAccountThrows: Error | null = null;
 /** What the authoritative payment read reports. `succeeded` is the normal case. */
 let getStatusStatus = "succeeded";
 let getStatusThrows: Error | null = null;
+let reversalCounter = 0;
+/** The provider's own cumulative `amount_reversed`, per transfer object. */
+const reversedByTransfer = new Map<string, bigint>();
 
 const fakeProvider = {
   id: "stripe" as const,
@@ -73,11 +76,24 @@ const fakeProvider = {
     transferCounter += 1;
     return { providerObjectId: `tr_fake_${String(transferCounter)}`, status: "paid" };
   },
+  /**
+   * ACCUMULATES, because a real provider does.
+   *
+   * This fake used to answer `totalReversed: <this leg's amount>`, which is
+   * precisely the bug the adapter had — so the suite agreed with the defect and
+   * could not see it. Two 500 reversals both reported 500, the stored total
+   * never moved past 500, and the seller kept half of what had been taken back.
+   */
   reverseTransfer: async (request: Record<string, unknown>) => {
     providerCalls.push({ fn: "reverseTransfer", request });
+    const transferObjectId = String(request.transferObjectId);
+    const leg = BigInt((request.amount as { amount: string }).amount);
+    const total = (reversedByTransfer.get(transferObjectId) ?? 0n) + leg;
+    reversedByTransfer.set(transferObjectId, total);
+    reversalCounter += 1;
     return {
-      providerObjectId: `trr_fake_${String(transferCounter)}`,
-      totalReversed: String(request.amount ? (request.amount as { amount: string }).amount : "0"),
+      providerObjectId: `trr_fake_${String(reversalCounter)}`,
+      totalReversed: total.toString(),
     };
   },
   createPayment: async () => {
@@ -161,10 +177,11 @@ async function call(
   method: string,
   path: string,
   body?: unknown,
+  headers: Record<string, string> = {},
 ): Promise<{ status: number; json: Record<string, unknown> }> {
   const response = await fetch(`${baseUrl}${path}`, {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await response.text();
@@ -753,20 +770,106 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
       "POST",
       `/v1/transfers/${String(created.json.id)}/reversals`,
       { amount: "2000" },
+      { "Idempotency-Key": "rev_op_1" },
     );
     expect(reversed.status).toBe(201);
     expect(reversed.json.amountReversed).toBe("2000");
     expect(reversed.json.status).toBe("partially_reversed");
 
     /**
-     * The idempotency key names the LEG, not just the transfer. Two partial
-     * reversals of one transfer are two operations, and a key naming only the
-     * transfer would make the second a replay of the first — silently returning
-     * the first reversal and leaving the money unreturned.
+     * The idempotency key names the REVERSAL's own durable id — not the
+     * transfer, and not the amount.
+     *
+     * It used to be `trr:<transfer>:<amount>`, with a comment arguing that
+     * putting the LEG in the key was what kept two partial reversals distinct.
+     * It does not: two distinct reversals of the same amount are ordinary, and
+     * they presented one key, so the provider answered the first one's object
+     * to the second request.
      */
     const key = providerCalls.find((entry) => entry.fn === "reverseTransfer")?.request
       .idempotencyKey;
-    expect(String(key)).toBe(`trr:${String(created.json.id)}:2000`);
+    const reversal = reversed.json.reversal as Record<string, string>;
+    expect(String(key)).toBe(`trr:${reversal.id ?? ""}`);
+    expect(reversal.externalRef).toBe("rev_op_1");
+    expect(reversal.status).toBe("succeeded");
+  });
+
+  /**
+   * THE case this whole table exists for, and the acceptance criterion issue
+   * #70 §6 states verbatim: reversal A of 500 and reversal B of 500 return
+   * 1000; repeating A adds nothing; a third of 300 makes 1300.
+   *
+   * Under the old key (`trr:<transfer>:<amount>`) B presented A's key, the
+   * provider returned A's object, the stored total stayed at 500 and the seller
+   * kept the other 500. Nothing recorded that B had been asked for.
+   */
+  test("two distinct reversals of the same amount both happen; a replay does not", async () => {
+    await settledCardIntent("pi_two_reversals", "100000");
+    const accountId = await payableAccount("store_two_rev");
+    const created = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_two_reversals",
+      connectedAccountId: accountId,
+      externalRef: "order_two_rev",
+      amount: "2000",
+    });
+    const transferId = String(created.json.id);
+    const reversalPath = `/v1/transfers/${transferId}/reversals`;
+
+    const a = await call("POST", reversalPath, { amount: "500" }, { "Idempotency-Key": "leg_a" });
+    expect(a.status).toBe(201);
+    expect(a.json.amountReversed).toBe("500");
+
+    const b = await call("POST", reversalPath, { amount: "500" }, { "Idempotency-Key": "leg_b" });
+    expect(b.status).toBe(201);
+    expect(b.json.amountReversed).toBe("1000");
+
+    // Repeating A adds nothing, at the provider or here. 200, not 201.
+    const replay = await call(
+      "POST",
+      reversalPath,
+      { amount: "500" },
+      { "Idempotency-Key": "leg_a" },
+    );
+    expect(replay.status).toBe(200);
+    expect((replay.json.reversal as Record<string, string>).id).toBe(
+      (a.json.reversal as Record<string, string>).id,
+    );
+
+    const c = await call("POST", reversalPath, { amount: "300" }, { "Idempotency-Key": "leg_c" });
+    expect(c.json.amountReversed).toBe("1300");
+
+    // Three operations reached the provider, not four: the replay never did.
+    const calls = providerCalls.filter(
+      (entry) =>
+        entry.fn === "reverseTransfer" && String(entry.request.transferId) === transferId,
+    );
+    expect(calls).toHaveLength(3);
+    // ...and each carried its own key.
+    expect(new Set(calls.map((entry) => String(entry.request.idempotencyKey))).size).toBe(3);
+  });
+
+  /**
+   * A reversal with no operation identity is refused rather than given one.
+   *
+   * Inventing a key here would make every retry a second reversal, which is the
+   * failure the table exists to prevent — so the refusal names what is missing.
+   */
+  test("refuses a reversal that carries no operation identity", async () => {
+    const accountId = await payableAccount("store_no_key");
+    const created = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_settled_for_transfers",
+      connectedAccountId: accountId,
+      externalRef: "order_no_key",
+      amount: "1000",
+    });
+
+    const { status, json } = await call(
+      "POST",
+      `/v1/transfers/${String(created.json.id)}/reversals`,
+      { amount: "500" },
+    );
+    expect(status).toBe(400);
+    expect(String((json.error as Record<string, string>).message)).toContain("Idempotency-Key");
   });
 
   test("refuses a reversal larger than the transfer", async () => {
@@ -781,6 +884,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
       "POST",
       `/v1/transfers/${String(created.json.id)}/reversals`,
       { amount: "5001" },
+      { "Idempotency-Key": "rev_over" },
     );
     expect(status).toBe(422);
   });
