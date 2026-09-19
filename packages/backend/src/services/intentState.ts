@@ -115,9 +115,15 @@ const LEGAL_SOURCES: Partial<Record<IntentEvent, readonly PaymentIntentStatus[]>
   // defence in depth rather than the only guard. It is here so that if that
   // lookup ever does go wrong, it is a located error naming the event and the
   // status, instead of a settled chain payment with no transaction behind it.
-  card_requires_action: ['created'],
-  card_processing: ['created', 'requires_action'],
-  card_settled: ['created', 'requires_action', 'processing'],
+  // `failed` is a legal SOURCE for the first three, and that is the card rail's
+  // retry: one declined attempt returns the provider's payment to
+  // `requires_payment_method`, and the payer confirms it again with another
+  // card. Without those sources a later `payment_intent.succeeded` was an
+  // illegal transition, so the drain recorded a processing failure and retried
+  // it forever while a merchant who had been paid was told otherwise.
+  card_requires_action: ['created', 'failed'],
+  card_processing: ['created', 'requires_action', 'failed'],
+  card_settled: ['created', 'requires_action', 'processing', 'failed'],
   card_failed: ['created', 'requires_action', 'processing'],
   card_canceled: ['created', 'requires_action'],
   // Money can only come back if it arrived. `partially_refunded` is a legal

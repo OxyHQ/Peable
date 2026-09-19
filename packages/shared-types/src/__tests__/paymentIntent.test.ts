@@ -1,6 +1,7 @@
 import { test, expect } from 'bun:test';
 import {
   PAYMENT_INTENT_STATUSES,
+  POST_SETTLEMENT_STATUSES,
   canStillBePaid,
   isValidStatusTransition,
   reachesSettlementFromPayer,
@@ -45,6 +46,17 @@ const PAYABLE: Record<PaymentIntentStatus, boolean> = {
   partially_refunded: false,
   refunded: false,
   expired: false,
+  /**
+   * `false`, even though a declined card CAN be retried on the same provider
+   * payment and `failed → settled` is therefore a legal edge.
+   *
+   * This answer drives the hosted checkout's reuse decision, and it has to be
+   * right for both rails from a status alone. On the chain rail `failed` means
+   * `underpaid`: coins arrived and were not enough, and handing that intent
+   * back would show a payer an address that already holds part of their money.
+   * Minting a fresh intent is correct on both rails; reusing one is correct on
+   * only one of them.
+   */
   failed: false,
   rejected: false,
 };
@@ -74,19 +86,33 @@ test('follows the chain path all the way to settled', () => {
 /**
  * The gate that keeps the STATED payable set honest against the table.
  *
- * `canStillBePaid` used to derive its answer by walking `ALLOWED`, and that
- * derivation broke the moment refunds could be undone: `refunded → settled`
- * makes `settled` reachable from `settled` in two steps, so reachability would
- * call a finished payment payable and reintroduce the original bug exactly.
+ * `canStillBePaid` used to derive its answer by walking `ALLOWED`, and every
+ * derivation has eventually been broken by an edge added elsewhere — leaf-ness
+ * by the refund transitions, reachability by `refunded → settled`. So the set
+ * is stated and this checks it, in the one direction that can catch a real
+ * defect: **a status the gateway calls payable must genuinely be able to reach
+ * `settled`**. If someone removes `approved → broadcast`, a payer sitting in
+ * `approved` can no longer pay and this goes red.
  *
- * So the set is stated and this checks it: a payable status must still be able
- * to reach `settled` without passing through a post-settlement status, and a
- * non-payable one must not. The property survives any edge added to the table,
- * which is more than either previous derivation managed.
+ * The converse is NOT asserted, and the reason is `failed`. A declined card
+ * attempt returns the provider's payment to `requires_payment_method`, so
+ * `failed` can reach `settled` — while the hosted checkout must still mint a
+ * FRESH intent rather than reuse it, because on the chain rail the same status
+ * means `underpaid` and reusing it would show a payer an address that already
+ * has part of their money. The two questions genuinely differ there, and
+ * asserting they agree would force one of them to be wrong.
  */
-test('every payable status reaches settlement from the payer, and no other does', () => {
+test('every payable status can genuinely still reach settlement', () => {
   for (const status of PAYMENT_INTENT_STATUSES) {
-    expect([status, reachesSettlementFromPayer(status)]).toEqual([status, PAYABLE[status]]);
+    if (!PAYABLE[status]) continue;
+    expect([status, reachesSettlementFromPayer(status)]).toEqual([status, true]);
+  }
+});
+
+/** ...and nothing past settlement is payable, whatever edges it grows. */
+test('no post-settlement status is payable', () => {
+  for (const status of POST_SETTLEMENT_STATUSES) {
+    expect([status, canStillBePaid(status)]).toEqual([status, false]);
   }
 });
 

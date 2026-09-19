@@ -42,6 +42,7 @@ import { applyTransferReversal, findTransferByProviderObject } from "../../db/tr
 import { refreshConnectedAccount } from "../accounts/connectedAccountService";
 import { getDb } from "../../db/postgres";
 import { applyEvent, type IntentEvent } from "../intentState";
+import { reconcileIntentWithProvider } from "../intentReconciliation";
 import {
   announceIntentChange,
   enqueueDisputeWebhook,
@@ -242,11 +243,50 @@ export async function processProviderEvent(
     }
 
     // Already there. A provider redelivering a `succeeded` for a settled
-    // payment is ordinary and must not look like an error — and `applyEvent`
-    // throws on an illegal transition, so this check comes first rather than
-    // being caught afterwards, where a genuine illegal transition would be
-    // swallowed with it.
-    const target = applyEvent(intent.status, intentEvent);
+    // payment is ordinary and must not look like an error.
+    let target: ReturnType<typeof applyEvent>;
+    try {
+      target = applyEvent(intent.status, intentEvent);
+    } catch {
+      /**
+       * The event cannot legally act from where the row stands, which is not
+       * the same as the event being wrong.
+       *
+       * Out-of-order delivery is ordinary: the provider acknowledges receipt
+       * before processing, so it redelivers; a burst follows an endpoint being
+       * briefly unreachable; a `payment_failed` for an attempt the payer
+       * abandoned can land after the `succeeded` of the attempt they
+       * completed. Applied to the stored status, that last one asks to DEGRADE
+       * a settled payment — refused, correctly, by `applyEvent`.
+       *
+       * What used to happen next was the defect: the throw reached the outer
+       * catch, the row was marked FAILED, and the drain retried it forever. One
+       * stale delivery pinned a row in the queue and read like a broken
+       * handler.
+       *
+       * The event says something changed; only a fresh read says what. So the
+       * provider is asked, and its answer is applied — which for a stale
+       * `payment_failed` is "still succeeded", and the event is handled.
+       */
+      const reconciled = await reconcileIntentWithProvider(intent);
+      if (reconciled.kind === "applied" || reconciled.kind === "agreed") {
+        await markProviderEventProcessed(db, event.id);
+        return reconciled.kind === "applied"
+          ? { kind: "applied", intentId: intent.id, status: reconciled.status }
+          : { kind: "noop", intentId: intent.id };
+      }
+      // The provider's own truth is not reachable from this row either — a
+      // settled payment the provider now calls cancelled, say. Recorded and
+      // left for an operator rather than forced: money is involved and no
+      // transition here can describe what happened.
+      const message =
+        reconciled.kind === "irreconcilable"
+          ? reconciled.error
+          : `a ${event.type} cannot act on an intent that is '${intent.status}'`;
+      await markProviderEventFailed(db, event.id, redactProviderMessage(message));
+      return { kind: "failed", error: message };
+    }
+
     if (target === intent.status) {
       await markProviderEventProcessed(db, event.id);
       return { kind: "noop", intentId: intent.id };

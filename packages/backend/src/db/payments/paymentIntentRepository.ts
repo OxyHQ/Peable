@@ -692,6 +692,48 @@ export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
 ];
 
 /**
+ * The CARD intents whose expiry has passed — READ, not claimed.
+ *
+ * The one place in this file that deliberately does not claim what it returns,
+ * and the reason is that a card intent cannot be expired by a local write
+ * alone: the payment is still confirmable at the acquirer, so it has to be
+ * cancelled THERE first (`services/cardCancellation.ts`), and only then can the
+ * row move. A claim taken before that provider call would hold a row lock
+ * across a network round trip, per row, for the length of the batch.
+ *
+ * Exclusivity moves to the compare-and-swap in `transitionIntent`: two sweepers
+ * may both read the same row and both call cancel — which is idempotent given
+ * the same key — and only one of them wins the write.
+ *
+ * `provider_object_id IS NOT NULL` is deliberately absent. An unlinked card
+ * intent (a create interrupted between the row and the provider call) has
+ * nothing to cancel, which `cancelCardPaymentAtProvider` answers
+ * `nothing_to_cancel` for; excluding it here would leave it unexpirable
+ * forever.
+ */
+export async function findDueCardIntents(
+  db: DatabaseOrTransaction,
+  now: Date,
+  limit: number
+): Promise<PaymentIntentRow[]> {
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.rail, 'card'),
+        inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
+        lt(paymentIntents.expiresAt, now)
+      )
+    )
+    // Oldest first, like the claim below: a stream that expired its newest
+    // arrivals first would starve its own head under a backlog.
+    .orderBy(paymentIntents.expiresAt)
+    .limit(limit);
+  return rows.map(toIntentRow);
+}
+
+/**
  * Claim a BOUNDED batch of intents whose expiry has passed, in ONE statement.
  *
  * The claim and the read are the same `UPDATE … RETURNING`, for the same reason
@@ -722,6 +764,14 @@ export async function expireDueIntents(
     .from(paymentIntents)
     .where(
       and(
+        // CARD intents are excluded and swept separately, one at a time, by
+        // `findDueCardIntents` above: their other half is a PaymentIntent at an
+        // acquirer that stays confirmable, so expiring one with a local write
+        // alone leaves a payment that can complete after the merchant has been
+        // told it expired. The chain rail has no such half — a FairCoin payer
+        // who did not broadcast has nothing anywhere — which is why the fast
+        // set-based claim is still right for it.
+        eq(paymentIntents.rail, 'faircoin'),
         inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
         lt(paymentIntents.expiresAt, now)
       )

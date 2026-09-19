@@ -100,6 +100,26 @@ const ALLOWED: Record<PaymentIntentStatus, readonly PaymentIntentStatus[]> = {
   confirming: ['settled', 'failed'],
   requires_action: ['processing', 'settled', 'failed', 'expired', 'rejected'],
   processing: ['settled', 'failed'],
+  /**
+   * A failed ATTEMPT is not a failed payment, on the card rail.
+   *
+   * `payment_intent.payment_failed` means one authorization attempt was
+   * declined; Stripe returns the PaymentIntent to `requires_payment_method` and
+   * the payer can confirm it again with another card. With `failed` terminal,
+   * the later `payment_intent.succeeded` was an ILLEGAL transition — so the
+   * drain recorded a processing failure and retried it forever, the payment
+   * stayed `failed`, and a merchant who had been paid was told their payment
+   * had been declined.
+   *
+   * On the chain rail `failed` means `underpaid`, which IS terminal — coins
+   * arrived and were not enough. Nothing here opens that door: `underpaid` is
+   * emitted only by the settlement watcher, and `LEGAL_SOURCES` in
+   * `services/intentState.ts` keeps every `card_*` event to card statuses and
+   * the chain's `confirmed` to `confirming`. This table answers "is the edge
+   * legal at all"; which rail may walk it is the separate question those two
+   * guards answer.
+   */
+  failed: ['requires_action', 'processing', 'settled'],
   // Money coming back requires money to have arrived, so both refund states are
   // reachable only from `settled`.
   settled: ['refunded', 'partially_refunded'],
@@ -120,7 +140,6 @@ const ALLOWED: Record<PaymentIntentStatus, readonly PaymentIntentStatus[]> = {
   partially_refunded: ['refunded', 'settled'],
   refunded: ['partially_refunded', 'settled'],
   expired: [],
-  failed: [],
   rejected: [],
 };
 
