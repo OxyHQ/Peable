@@ -92,7 +92,29 @@ export async function resolveClientAction(
     };
   }
 
-  const result = await provider.getStatus(intent.providerObjectId);
+  /**
+   * Never throws, and that matters more than it looks.
+   *
+   * This runs inside a MERCHANT's ordinary `GET /v1/payment_intents/:id` as
+   * well as on the explicit resume route. Letting a provider outage escape
+   * would turn every read of a payable card payment into a 500 — so reading an
+   * intent would fail for a reason that has nothing to do with the intent, and
+   * an integrator polling for a settlement would see their own integration
+   * break while the payment was fine.
+   */
+  let result;
+  try {
+    result = await provider.getStatus(intent.providerObjectId);
+  } catch (error) {
+    return {
+      kind: "unavailable",
+      error:
+        error instanceof Error
+          ? error.message
+          : "the payment could not be read from the provider",
+    };
+  }
+
   if (!result.clientAction) {
     return {
       kind: "unavailable",

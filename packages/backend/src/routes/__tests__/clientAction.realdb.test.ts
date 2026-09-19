@@ -23,13 +23,22 @@ import type { OxyAuthRequest } from "@oxy.so/core/server";
 
 let statusToReport = "created";
 
+/** Set to make the provider unreachable, which must not break a merchant read. */
+let getStatusThrows: Error | null = null;
+
 const fakeProvider = {
   id: "stripe" as const,
-  getStatus: async (providerObjectId: string) => ({
-    providerObjectId,
-    status: statusToReport,
-    clientAction: { kind: "client_secret" as const, value: `${providerObjectId}_secret_live` },
-  }),
+  getStatus: async (providerObjectId: string) => {
+    if (getStatusThrows) throw getStatusThrows;
+    return {
+      providerObjectId,
+      status: statusToReport,
+      clientAction: {
+        kind: "client_secret" as const,
+        value: `${providerObjectId}_secret_live`,
+      },
+    };
+  },
   createPayment: async () => {
     throw new Error("not used");
   },
@@ -165,6 +174,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
 
   beforeEach(() => {
     statusToReport = "created";
+    getStatusThrows = null;
     asMerchant = true;
   });
 
@@ -300,6 +310,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
     const { json } = await request("GET", `/v1/payment_intents/${intent.publicId}`);
 
     expect(json.client_action).toBeUndefined();
+  });
+
+  /**
+   * A provider outage must not break an ordinary merchant READ.
+   *
+   * The client action rides on `GET /v1/payment_intents/:id`, so an escaping
+   * provider error would turn every read of a payable card payment into a 500
+   * — an integrator polling for a settlement would see their own integration
+   * break for a reason that has nothing to do with the payment.
+   */
+  test("still answers the intent when the provider cannot be reached", async () => {
+    const intent = await cardIntent();
+    getStatusThrows = new Error("the acquirer could not be reached");
+
+    const { status, json } = await request("GET", `/v1/payment_intents/${intent.publicId}`);
+
+    expect(status).toBe(200);
+    expect(json.client_action).toBeUndefined();
+  });
+
+  /** ...and the explicit resume operation says so, rather than 500ing. */
+  test("the resume operation reports an unreachable provider as unavailable", async () => {
+    const intent = await cardIntent();
+    getStatusThrows = new Error("the acquirer could not be reached");
+
+    const { status } = await request(
+      "POST",
+      `/v1/payment_intents/${intent.publicId}/client_action`,
+    );
+
+    expect(status).toBe(503);
   });
 
   /**
