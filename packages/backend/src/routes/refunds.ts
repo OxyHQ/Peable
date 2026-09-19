@@ -10,7 +10,11 @@ import { Router } from "express";
 import type { Response, RequestHandler } from "express";
 import { z } from "zod";
 import { oxyClient } from "@oxy.so/core";
-import { isBaseUnitString, type Refund } from "@peable.to/shared-types";
+import {
+  isBaseUnitString,
+  type Refund,
+  type Settlement,
+} from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
 import {
@@ -26,6 +30,7 @@ import {
   remainingRefundable,
 } from "../services/refunds/refundService";
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
+import { reportSettlement } from "../services/settlementReport";
 import { ProviderError } from "../services/providers/provider";
 import { redactProviderMessage } from "../services/providers/redact";
 import {
@@ -225,6 +230,52 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         data: rows.map((row) => toRefundDTO(row, intent.publicId, intent.status)),
         remainingRefundable: await remainingRefundable(intent),
       });
+    }),
+  );
+
+  /**
+   * What this payment actually came to — gross, fee, net.
+   *
+   * On the refund router rather than a new one because it is the same question
+   * a merchant asks in the same breath: how much of this money is really mine.
+   *
+   * **A missing figure is `null` with a `status`, never `0`.** That is the
+   * whole point of the shape: a report rendering a not-yet-known fee as zero is
+   * one a merchant reconciles against and cannot explain, and zero is a number
+   * somebody will subtract.
+   *
+   * It reports what the provider took; it does NOT attribute that cost to an
+   * entity. Which entity bears which fee is a commercial decision that is
+   * still open (#70 §13, and the roadmap), and no read here makes it.
+   */
+  router.get(
+    "/v1/payment_intents/:intentId/settlement",
+    requireMerchant,
+    requireAuthenticated,
+    oxyClient.requireScope("payments:read"),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+
+      const { intentId } = req.params;
+      if (!intentId) {
+        sendError(res, 422, "invalid_request_error", "intentId is required");
+        return;
+      }
+
+      const intent = await findIntentByPublicId(getDb(), intentId);
+      if (!intent || intent.merchantId !== merchant.id) {
+        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        return;
+      }
+
+      const settlement = await reportSettlement(intent);
+      const body: Settlement = {
+        object: "settlement",
+        paymentIntentId: intent.publicId,
+        ...settlement,
+      };
+      res.status(200).json(body);
     }),
   );
 

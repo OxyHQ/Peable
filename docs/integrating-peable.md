@@ -294,6 +294,46 @@ Three things that are easy to get wrong and expensive:
 - **A transfer's `amountReversed` is CUMULATIVE**, from the provider — not the
   sum of the reversals you made, which may not be all of them.
 
+### Responder a una disputa
+
+```ts
+await peable.disputes.submitEvidence(disputeId, {
+  uncategorizedText: 'Collected in person on the 3rd.',
+  shippingTrackingNumber: 'TRACK-1',
+});
+```
+
+**One shot.** Submitting is one-way at the card network, so this cannot be
+revised and a second call answers 200 with the dispute as it stands rather than
+sending a second response. Send everything you have the first time.
+
+Text only — **file attachments are not supported**. An unknown field name is
+refused (422) rather than dropped, so a misspelling is an error now instead of a
+missing argument discovered when the dispute is decided. A response after
+`evidenceDueAt` is refused by the gateway (409), so you learn it was the clock
+and not your request.
+
+Peable stores **none** of the evidence. It is forwarded to the acquirer and
+forgotten; `evidenceSubmittedAt` on the dispute records that you responded and
+when.
+
+### Cuánto quedó realmente — `settlement`
+
+```ts
+const s = await peable.refunds.settlement(paymentIntentId);
+// { status: 'available' | 'pending' | 'unknown', gross, fee, net, currency, availableOn, exchangeRate }
+```
+
+**A missing figure is `null` with a `status`, never `0`.** `unknown` means there
+is nothing to read — an uncaptured payment, a FairCoin one, a provider that
+could not be reached — and treating it as zero is how a reconciliation silently
+gains money that was never there.
+
+It reports what the provider took. It does **not** say which entity bears that
+cost: a fee paid by the operator of a Peable deployment is not automatically
+your expense, and that decision is still open (see the roadmap). Balances,
+payouts and a per-merchant journal are not implemented.
+
 ## Mercaria integration checklist
 
 - [ ] Owner: register Mercaria's Oxy Application + a `payments:read`/`payments:write`

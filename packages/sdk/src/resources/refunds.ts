@@ -1,4 +1,4 @@
-import type { Refund } from '@peable.to/shared-types';
+import type { Refund, Settlement } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 
 /**
@@ -52,6 +52,29 @@ export class RefundsResource {
    */
   create(params: CreateRefundParams): Promise<Refund> {
     return this.client.request<Refund>('POST', '/v1/refunds', { body: params });
+  }
+
+  /**
+   * What this payment actually came to — gross, fee, net.
+   *
+   * On this resource because it is the same question you ask in the same
+   * breath: how much of this money is really mine.
+   *
+   * **A missing figure is `null` with a `status`, never `0`.** `unknown` means
+   * there is nothing to read — an uncaptured payment, a FairCoin one, a
+   * provider that could not be reached — and treating it as zero is how a
+   * reconciliation silently gains money that was never there.
+   *
+   * It reports what the provider took. It does NOT say which entity bears that
+   * cost: a fee paid by the operator of a Peable deployment is not
+   * automatically your expense, and that is a commercial question this API does
+   * not answer.
+   */
+  settlement(paymentIntentId: string): Promise<Settlement> {
+    return this.client.request<Settlement>(
+      'GET',
+      `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/settlement`,
+    );
   }
 
   /**

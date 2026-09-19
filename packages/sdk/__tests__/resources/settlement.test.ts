@@ -227,7 +227,62 @@ describe('RefundsResource', () => {
   });
 });
 
+describe('settlement reporting', () => {
+  /**
+   * `unknown` is a FIGURE-LESS answer, not a zero one.
+   *
+   * The distinction is the whole reason the shape is nullable: a report that
+   * renders a not-yet-known fee as `0` is one a merchant reconciles against and
+   * cannot explain, and zero is a number somebody will subtract.
+   */
+  test('carries nulls with a status rather than zeros', async () => {
+    const { fetch: fetchImpl, requests } = gateway({
+      object: 'settlement',
+      paymentIntentId: 'pi_1',
+      status: 'unknown',
+      gross: null,
+      fee: null,
+      net: null,
+      currency: null,
+      availableOn: null,
+      exchangeRate: null,
+    });
+    const resource = new RefundsResource(buildTestClient(fetchImpl));
+
+    const settlement = await resource.settlement('pi_1');
+
+    expect(settlement.status).toBe('unknown');
+    expect(settlement.fee).toBeNull();
+    expect(settlement.net).toBeNull();
+    expect(callOf(requests)?.url).toBe(
+      `${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/settlement`,
+    );
+  });
+});
+
 describe('MerchantsResource and DisputesResource', () => {
+  /**
+   * Answering a dispute is ONE SHOT — submitting is one-way at the card
+   * network — so everything the merchant has goes in the first call.
+   */
+  test('submits dispute evidence as text, to the dispute itself', async () => {
+    const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' }, 201);
+    const resource = new DisputesResource(buildTestClient(fetchImpl));
+
+    await resource.submitEvidence('dp_1', {
+      uncategorizedText: 'Collected in person.',
+      shippingTrackingNumber: 'TRACK-1',
+    });
+
+    const call = callOf(requests);
+    expect(call?.method).toBe('POST');
+    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/evidence`);
+    expect(JSON.parse(call?.body ?? '{}')).toEqual({
+      uncategorizedText: 'Collected in person.',
+      shippingTrackingNumber: 'TRACK-1',
+    });
+  });
+
   /**
    * A CARD-ONLY merchant registers with no chain fields at all. They used to be
    * required, so a merchant who only wanted a card form had to supply a

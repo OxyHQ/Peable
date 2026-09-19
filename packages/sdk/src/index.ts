@@ -96,6 +96,7 @@ export type {
   CreateConnectedAccountParams,
 } from './resources/connectedAccounts';
 export type {
+  DisputeEvidenceParams,
   DisputeList,
   RegisterMerchantParams,
   UpdateMerchantParams,

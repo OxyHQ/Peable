@@ -12,6 +12,7 @@
  */
 
 import type Stripe from "stripe";
+import type { CurrencyCode } from "@peable.to/shared-types";
 import { config } from "../../../config";
 import {
   cancelStripePaymentIntent,
@@ -24,12 +25,20 @@ import {
   createStripeTransfer,
   createStripeTransferReversal,
   retrieveStripeAccount,
+  retrieveStripeChargeWithBalance,
   retrieveStripePaymentIntent,
   retrieveStripeTransfer,
+  updateStripeDispute,
 } from "./client";
 import {
   ProviderError,
   type AccountHoldingProvider,
+  type DisputeEvidence,
+  type DisputeHandlingProvider,
+  type ProviderDisputeResult,
+  type ProviderSettlement,
+  type SettlementReportingProvider,
+  type SubmitDisputeEvidenceRequest,
   type AccountLinkRequest,
   type CreateAccountRequest,
   type CreatePaymentRequest,
@@ -93,6 +102,54 @@ function readChargeId(
   return undefined;
 }
 
+/** Nothing is known. Every figure `null`, and `status` says why it is not zero. */
+const EMPTY_SETTLEMENT: ProviderSettlement = {
+  status: "unknown",
+  gross: null,
+  fee: null,
+  net: null,
+  currency: null,
+  availableOn: null,
+  exchangeRate: null,
+};
+
+/**
+ * The gateway's evidence fields in Stripe's spelling.
+ *
+ * Written out rather than derived by case conversion, so a field the gateway
+ * names differently from Stripe (or one Stripe renames) is a compile-time edit
+ * here instead of a silently dropped piece of a merchant's defence. An omitted
+ * key is omitted from the request too — sending `undefined` would clear a field
+ * the merchant had already provided.
+ */
+function toStripeEvidence(evidence: DisputeEvidence): Stripe.DisputeUpdateParams.Evidence {
+  const pairs: [keyof Stripe.DisputeUpdateParams.Evidence, string | undefined][] = [
+    ["product_description", evidence.productDescription],
+    ["customer_name", evidence.customerName],
+    ["customer_email_address", evidence.customerEmailAddress],
+    ["customer_purchase_ip", evidence.customerPurchaseIp],
+    ["billing_address", evidence.billingAddress],
+    ["shipping_address", evidence.shippingAddress],
+    ["shipping_carrier", evidence.shippingCarrier],
+    ["shipping_date", evidence.shippingDate],
+    ["shipping_tracking_number", evidence.shippingTrackingNumber],
+    ["service_date", evidence.serviceDate],
+    ["access_activity_log", evidence.accessActivityLog],
+    ["cancellation_policy_disclosure", evidence.cancellationPolicyDisclosure],
+    ["cancellation_rebuttal", evidence.cancellationRebuttal],
+    ["duplicate_charge_explanation", evidence.duplicateChargeExplanation],
+    ["refund_policy_disclosure", evidence.refundPolicyDisclosure],
+    ["refund_refusal_explanation", evidence.refundRefusalExplanation],
+    ["uncategorized_text", evidence.uncategorizedText],
+  ];
+
+  const out: Record<string, string> = {};
+  for (const [key, value] of pairs) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out;
+}
+
 /** Stripe wants a lowercase ISO code; the gateway's set is uppercase. */
 function toStripeCurrency(currency: string): string {
   return currency.toLowerCase();
@@ -115,7 +172,11 @@ function toCapabilityStatus(
 }
 
 export class StripePaymentProvider
-  implements SettlingPaymentProvider, AccountHoldingProvider
+  implements
+    SettlingPaymentProvider,
+    AccountHoldingProvider,
+    DisputeHandlingProvider,
+    SettlementReportingProvider
 {
   readonly id = "stripe" as const;
 
@@ -311,6 +372,77 @@ export class StripePaymentProvider
     return {
       providerObjectId: reversal.id,
       totalReversed: String(transfer.amount_reversed),
+    };
+  }
+
+  // -------------------------------------------------------------------------
+  // Disputes
+  // -------------------------------------------------------------------------
+
+  /**
+   * Submit a merchant's response.
+   *
+   * `submit: true`, always. Stripe's update call doubles as a draft save, and
+   * the draft is one-way once submitted — so a gateway offering both would owe
+   * every draft a durable identity to keep a retry from becoming a second
+   * write. `services/disputeEvidence.ts` records that decision; this is where
+   * it becomes a literal.
+   *
+   * The evidence is CONVERTED here and nowhere else: Stripe's field names are
+   * snake_case and the gateway's are not, and an adapter is exactly the place
+   * that difference belongs.
+   */
+  async submitDisputeEvidence(
+    request: SubmitDisputeEvidenceRequest,
+  ): Promise<ProviderDisputeResult> {
+    const dispute = await updateStripeDispute(
+      request.providerObjectId,
+      { evidence: toStripeEvidence(request.evidence), submit: true },
+      request.idempotencyKey,
+    );
+    return { providerObjectId: dispute.id, status: dispute.status };
+  }
+
+  // -------------------------------------------------------------------------
+  // Settlement
+  // -------------------------------------------------------------------------
+
+  /**
+   * What a charge actually came to.
+   *
+   * Reads the CHARGE with its balance transaction expanded, because the fee
+   * attaches to the charge and not to the payment — and because a second call
+   * to fetch the transaction by id leaves a window in which the charge can be
+   * refunded between the two reads.
+   *
+   * Reports `pending` rather than zeros when Stripe has no balance transaction
+   * yet. It is the whole reason this method exists: a settlement report that
+   * renders an unknown fee as `0` is one a merchant reconciles against and
+   * cannot explain, and zero is a number somebody will subtract.
+   */
+  async getSettlement(chargeObjectId: string): Promise<ProviderSettlement> {
+    const charge = await retrieveStripeChargeWithBalance(chargeObjectId);
+    const balance = charge.balance_transaction;
+
+    if (typeof balance !== "object" || balance === null) {
+      // Either an unexpanded id — which cannot happen, this asked for the
+      // expansion — or no transaction at all, which is an uncaptured or
+      // not-yet-settled charge. Neither is "the fee was nothing".
+      return EMPTY_SETTLEMENT;
+    }
+
+    return {
+      status: balance.status === "available" ? "available" : "pending",
+      gross: String(balance.amount),
+      fee: String(balance.fee),
+      net: String(balance.net),
+      currency: balance.currency.toUpperCase() as CurrencyCode,
+      // Seconds since the epoch, like every Stripe timestamp.
+      availableOn: new Date(balance.available_on * 1000).toISOString(),
+      // Only when the settlement currency differs from the charge's. `null`
+      // rather than `1` for a same-currency settlement: a rate of one is a
+      // conversion that happened, and none happened.
+      exchangeRate: balance.exchange_rate ?? null,
     };
   }
 

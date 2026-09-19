@@ -35,6 +35,7 @@ export {
   type Refund,
   type RefundOrigin,
   type RefundStatus,
+  type Settlement,
   type Transfer,
   type TransferReversal,
   type TransferReversalStatus,

@@ -1,0 +1,23 @@
+-- oxy:deploy-phase=pre
+-- Whether a merchant answered a dispute, and when.
+--
+-- The gateway exposed the DEADLINE and not the response: the provider port had
+-- no way to submit evidence, and a route that accepted a merchant's defence and
+-- did nothing with it would be worse than none — they would believe they had
+-- responded. This column is the record that they did.
+--
+-- The timestamp and NOTHING else. Evidence contains a customer's name, their
+-- email, a billing address and correspondence; `provider_events`' whole
+-- redaction posture exists because this gateway does not keep that class of
+-- data, and a dispute response is the richest example of it this system
+-- handles. It is forwarded to the acquirer and forgotten. What it SAID is
+-- readable there, by someone with their own authorization.
+--
+-- It is also the idempotency: submitting is one-way at the network, so a second
+-- attempt is refused by reading this rather than by asking the provider and
+-- finding out from an error.
+--
+-- `pre`, and inert under the old image: a nullable column with no default that
+-- it never writes, plus a partial index it never uses.
+ALTER TABLE "disputes" ADD COLUMN "evidence_submitted_at" timestamp with time zone;--> statement-breakpoint
+CREATE INDEX "disputes_unanswered_idx" ON "disputes" USING btree ("evidence_due_at") WHERE "disputes"."evidence_submitted_at" is null;

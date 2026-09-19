@@ -89,6 +89,25 @@ export const disputes = pgTable(
     reason: text(),
     /** When the network stops accepting evidence. Absent once closed. */
     evidenceDueAt: timestamptz(),
+    /**
+     * When the merchant's response was SUBMITTED to the network, if it was.
+     *
+     * The timestamp and nothing else. The evidence itself — a customer's name,
+     * their email, a billing address, correspondence — is forwarded to the
+     * provider and never stored: `provider_events`' whole redaction posture
+     * exists because this gateway does not keep that class of data, and a
+     * dispute response is the single richest example of it this system ever
+     * handles.
+     *
+     * What a merchant needs from this table afterwards is whether they
+     * responded and when, which is what an operator asks too. What the response
+     * SAID is at the acquirer, readable by someone with their own authorization
+     * — the same split `redactProviderPayload` makes for everything else.
+     *
+     * Also the idempotency: submitting is one-way at the network, so a second
+     * attempt is refused by reading this rather than by asking the provider.
+     */
+    evidenceSubmittedAt: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -143,5 +162,9 @@ export const disputes = pgTable(
       'disputes_closed_has_no_deadline_check',
       sql`${table.status} not in ('won', 'lost') or ${table.evidenceDueAt} is null`
     ),
+    /** The operator read this exists for: what is still owed a response. */
+    index('disputes_unanswered_idx')
+      .on(table.evidenceDueAt)
+      .where(sql`${table.evidenceSubmittedAt} is null`),
   ]
 );
