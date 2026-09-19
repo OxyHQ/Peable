@@ -220,12 +220,6 @@ export async function createTransfer(
   const provider = requireSettlingProvider(input.intent.provider);
   const db = getDb();
 
-  // The charge, resolved BEFORE the row is written. A payment the provider
-  // cannot report a captured charge for is one no transfer should be recorded
-  // against: writing the row first would leave a `pending` settlement that
-  // every recovery pass retries and that can never succeed.
-  const sourceChargeObjectId = await resolveSourceCharge(input.intent, provider);
-
   /**
    * An existing row for this order is either FINISHED or INTERRUPTED, and the
    * two are answered differently.
@@ -239,6 +233,11 @@ export async function createTransfer(
    * The budget is NOT re-evaluated when resuming. This row was budgeted when it
    * was written and `sumCommittedTransfers` counts it, so charging it again
    * would refuse every resume with "exceeds what this payment can settle".
+   *
+   * Checked BEFORE the charge is resolved, and the order is load-bearing: a
+   * retry of an order that already settled is a question about HISTORY, and
+   * history must not stop being answerable because the provider is unreachable
+   * right now.
    */
   const existing = await findTransferByExternalRef(db, input.merchantId, input.externalRef);
   if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
@@ -246,6 +245,12 @@ export async function createTransfer(
     // asked about again.
     return { transfer: existing, created: false };
   }
+
+  // The charge, resolved BEFORE the row is written. A payment the provider
+  // cannot report a captured charge for is one no transfer should be recorded
+  // against: writing the row first would leave a `pending` settlement that
+  // every recovery pass retries and that can never succeed.
+  const sourceChargeObjectId = await resolveSourceCharge(input.intent, provider);
 
   const inserted =
     existing ??
@@ -304,9 +309,9 @@ export async function createTransfer(
       metadata: { peable_transfer_id: row.publicId },
     });
     const paid = await markTransferPaid(db, row.id, result.providerObjectId);
-    // `created` is about the SETTLEMENT, not about this request: a resumed row
-    // is a settlement this call completed, and a merchant needs to know money
-    // moved. `existing` is what distinguishes it from a fresh one.
+    // `created` is about the SETTLEMENT, not about this request. A resumed row
+    // is a settlement this call completed — money moved — so the merchant gets
+    // the 201 that says so, exactly as a fresh one would.
     return { transfer: paid ?? row, created: true };
   } catch (error) {
     if (error instanceof ProviderError && !error.retryable) {

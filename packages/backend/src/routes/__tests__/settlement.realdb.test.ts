@@ -684,6 +684,39 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
   });
 
   /**
+   * A settled order stays answerable when the provider is unreachable.
+   *
+   * "A retry of an order that already settled is a question about history" is
+   * only true if history can still be read — so the existing-row check runs
+   * BEFORE the charge is resolved, which is the only provider call on this
+   * path.
+   */
+  test("answers a completed settlement from history during a provider outage", async () => {
+    await settledCardIntent("pi_history", "50000");
+    const seller = await payableAccount("store_history");
+    const first = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_history",
+      connectedAccountId: seller,
+      externalRef: "order_history",
+      amount: "1000",
+    });
+    expect(first.status).toBe(201);
+
+    getStatusThrows = new Error("the acquirer could not be reached");
+    createTransferThrows = new Error("the acquirer could not be reached");
+
+    const replay = await call("POST", "/v1/transfers", {
+      paymentIntentId: "pi_history",
+      connectedAccountId: seller,
+      externalRef: "order_history",
+      amount: "1000",
+    });
+
+    expect(replay.status).toBe(200);
+    expect(replay.json.id).toBe(first.json.id);
+  });
+
+  /**
    * A settlement reference naming a DIFFERENT operation is a conflict.
    *
    * `external_ref` is the merchant's own id for what a transfer settles and the
