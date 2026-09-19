@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, isNull } from 'drizzle-orm';
 import { newId } from '../../lib/ids';
 import type { DisputeStatus } from '../schema/valueSets';
 import { disputes } from '../schema';
@@ -18,6 +18,8 @@ export interface DisputeRow {
   readonly providerObjectId: string;
   readonly reason: string | null;
   readonly evidenceDueAt: Date | null;
+  /** When the merchant's response reached the network. `null` if it has not. */
+  readonly evidenceSubmittedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -34,6 +36,7 @@ const DISPUTE_COLUMNS = {
   providerObjectId: disputes.providerObjectId,
   reason: disputes.reason,
   evidenceDueAt: disputes.evidenceDueAt,
+  evidenceSubmittedAt: disputes.evidenceSubmittedAt,
   createdAt: disputes.createdAt,
   updatedAt: disputes.updatedAt,
 } as const;
@@ -131,6 +134,48 @@ export async function upsertDispute(
   // at the precision they are stored at rather than at the one JS would round.
   const created = row.createdAt.getTime() === row.updatedAt.getTime();
   return { dispute: toRow(row), created };
+}
+
+/**
+ * Record that the merchant's response reached the network.
+ *
+ * Guarded on `evidence_submitted_at IS NULL`, so it is a CLAIM rather than a
+ * write: submitting is one-way at the network, and two requests racing must not
+ * both send one. The loser gets `null` and reports that the dispute was already
+ * answered.
+ *
+ * Written AFTER the provider call, which is the opposite of every money
+ * movement here and is right for the same reason those are the other way round:
+ * this row is not the record of an attempt, it is the record of a fact at the
+ * network. Writing it first would claim a merchant had responded when the call
+ * might still fail — and with the deadline running, a false "answered" is worse
+ * than a retry.
+ */
+export async function markDisputeEvidenceSubmitted(
+  db: DatabaseOrTransaction,
+  disputeId: string,
+  at: Date,
+): Promise<DisputeRow | null> {
+  const [row] = await db
+    .update(disputes)
+    .set({ evidenceSubmittedAt: at })
+    .where(and(eq(disputes.id, disputeId), isNull(disputes.evidenceSubmittedAt)))
+    .returning(DISPUTE_COLUMNS);
+  return row ? toRow(row) : null;
+}
+
+/** By `dp_…`, SCOPED TO THE MERCHANT — see `findAccountByPublicId` on why. */
+export async function findDisputeByPublicId(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicId: string,
+): Promise<DisputeRow | null> {
+  const [row] = await db
+    .select(DISPUTE_COLUMNS)
+    .from(disputes)
+    .where(and(eq(disputes.merchantId, merchantId), eq(disputes.publicId, publicId)))
+    .limit(1);
+  return row ? toRow(row) : null;
 }
 
 /** One dispute by the network's own id — the drain's lookup. */

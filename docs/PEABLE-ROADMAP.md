@@ -81,6 +81,8 @@ documents:
 | Refund lifecycle including pending, failed and provider-originated refunds | yes | **no** | no | **no** |
 | Settlement: charge-sourced transfers, per-payment budget, durable reversals | yes | **no** | no | **no** |
 | Disputes: deadline, outcome, atomic notification | yes | **no** | no | **no** |
+| Disputes: submitting a text response (no file attachments) | yes | **no** | no | **no** |
+| Settlement READ: gross, fee, net, with `unknown` distinct from zero | yes | **no** | no | **no** |
 
 The card rail has never been exercised against Stripe's sandbox by a person, and
 no row above may be moved without that. The unit and real-database suites cover
@@ -153,13 +155,19 @@ namespaces are unreleased on this snapshot.
 - [ ] Publish `@peable.to/shared-types` and `@peable.to/sdk`, and confirm each
   consumer resolves the published version — a contract test that runs against
   the workspace copy proves nothing about what an integrator has.
-- [ ] Settle the accounting per entity: which costs Peable's operator bears,
-  what Peable charges, and how settlement detail (gross, fees, net, currency,
-  availability) reaches a merchant. `unknown` must be representable and must
-  never be reported as zero. **Not implemented at all on this snapshot.**
-- [ ] Decide and implement dispute EVIDENCE: either a submission path or a
-  documented, auditable operational process. The gateway exposes the deadline
-  and cannot currently respond.
+- [ ] Settle the accounting PER ENTITY: which costs Peable's operator bears and
+  what Peable charges on top. The FACT is now reported — `GET
+  /v1/payment_intents/:id/settlement` gives gross, fee, net, settlement
+  currency, availability and FX, with `unknown` representable and never zero —
+  but attributing that cost to an entity is a commercial decision and is not
+  made anywhere in the repository. Balances, a per-merchant journal, payouts and
+  reserves remain unimplemented.
+- [ ] File ATTACHMENTS on a dispute response. The text path exists; attachments
+  need the provider's upload API, a size and type policy, and somewhere for the
+  bytes to live on the way through. A merchant whose defence rests on a receipt
+  still cannot submit it here.
+- [ ] Record funds withdrawn and reinstated on a dispute, and the dispute fee,
+  as movements of their own — they are not refunds to the customer.
 
 ### Existing gates
 
@@ -200,8 +208,9 @@ namespaces are unreleased on this snapshot.
 Listed here because a roadmap entry reads as a commitment, and these are things
 a merchant must not be told they can have:
 
-- dispute evidence submission (the deadline is exposed; the response is not);
-- settlement, fee and payout reporting;
+- dispute evidence with FILE ATTACHMENTS (text responses work);
+- balances, payouts, reserves and a per-merchant journal (the per-payment
+  settlement READ works);
 - subscriptions and stored payment methods;
 - any fiat provider other than Stripe;
 - Peable Terminal, NFC and shared pockets.

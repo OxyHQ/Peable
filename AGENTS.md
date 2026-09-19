@@ -255,6 +255,20 @@ Five, and each one exists because its absence was a defect:
   the provider's payment to a confirmable state; `underpaid` on the chain rail
   still is terminal, and `LEGAL_SOURCES` is what keeps the two apart.
 
+**A dispute response is one shot, and none of it is stored.** Submitting is
+one-way at the network, so `submitDisputeEvidence` sends once and a second call
+is refused by reading `disputes.evidence_submitted_at` rather than by asking the
+provider. The evidence itself — a customer's name, email, address,
+correspondence — is forwarded and forgotten: only the timestamp is kept, which
+is the same split `redactProviderPayload` makes everywhere else. File
+attachments are deliberately unsupported.
+
+**A settlement figure is `null` with a status, never `0`.**
+`services/settlementReport.ts` reads gross/fee/net live from the provider and
+answers `unknown` for every reason a figure can be missing. It reports what the
+provider took and attributes that cost to nobody — which entity bears it is a
+commercial decision that is still open, and no code here makes it.
+
 **A webhook delivery does not always name a payment.**
 `webhook_deliveries.payment_intent_id` is nullable since
 `connected_account.updated`, which is about a SELLER — and

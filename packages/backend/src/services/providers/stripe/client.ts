@@ -198,6 +198,48 @@ export function retrieveStripeTransfer(id: string): Promise<Stripe.Transfer> {
 }
 
 // ---------------------------------------------------------------------------
+// Disputes
+// ---------------------------------------------------------------------------
+
+/**
+ * Submit a merchant's response to a dispute.
+ *
+ * `disputes.update` is the same call for saving a draft and for submitting; the
+ * difference is `submit`, and it is one-way. The gateway only ever sends
+ * `submit: true` (`services/disputeEvidence.ts` says why), so this signature
+ * takes the whole body rather than hiding the flag.
+ */
+export function updateStripeDispute(
+  id: string,
+  params: Stripe.DisputeUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Dispute> {
+  return call("dispute", (stripe) => stripe.disputes.update(id, params, { idempotencyKey }));
+}
+
+// ---------------------------------------------------------------------------
+// Settlement
+// ---------------------------------------------------------------------------
+
+/**
+ * A charge with its BALANCE TRANSACTION expanded.
+ *
+ * Expanded rather than fetched separately because the id is on the charge and
+ * the figures are on the transaction: two calls to answer one question, with a
+ * window between them in which the charge could be refunded. The expansion is
+ * one round trip and one consistent view.
+ *
+ * `balance_transaction` is null while Stripe has not created one — a payment
+ * that has not settled. That is a real state and the caller reports it as
+ * `pending`, never as zero fees.
+ */
+export function retrieveStripeChargeWithBalance(id: string): Promise<Stripe.Charge> {
+  return call("getStatus", (stripe) =>
+    stripe.charges.retrieve(id, { expand: ["balance_transaction"] }),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Connected accounts
 // ---------------------------------------------------------------------------
 

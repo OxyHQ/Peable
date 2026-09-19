@@ -75,17 +75,48 @@ export class MerchantsResource {
 }
 
 /**
- * Disputes are READ-ONLY here, and the absence of a write is deliberate.
+ * Evidence — TEXT only, in the gateway's field names.
  *
- * Every other money surface has one because the merchant initiates. A dispute
- * is initiated by the card network, so the only write worth having is
- * submitting EVIDENCE — and offering that before the gateway can actually
- * deliver it would give merchants a route that accepts their evidence and does
- * nothing with it, which is worse for them than no route at all: they would
- * believe they had responded.
+ * Every field is your own words or your own record. They are forwarded to the
+ * card network and **never stored by Peable**: they carry a customer's name,
+ * their email, a billing address and correspondence, and the gateway keeps none
+ * of that. What it records is THAT you responded and when.
  *
- * So the DEADLINE is exposed (`evidenceDueAt`) and the response is not. Respond
- * through the acquirer relationship you hold until that changes.
+ * FILE attachments are not supported. They need the acquirer's upload API and a
+ * policy for the bytes on the way through; offering half of it would let you
+ * submit — finally — a defence missing the receipt it rests on.
+ *
+ * An unknown key is REFUSED rather than dropped, so a misspelled field is a 422
+ * now instead of a missing argument discovered when the dispute is decided.
+ */
+export interface DisputeEvidenceParams {
+  productDescription?: string;
+  customerName?: string;
+  customerEmailAddress?: string;
+  customerPurchaseIp?: string;
+  billingAddress?: string;
+  shippingAddress?: string;
+  shippingCarrier?: string;
+  shippingDate?: string;
+  shippingTrackingNumber?: string;
+  serviceDate?: string;
+  accessActivityLog?: string;
+  cancellationPolicyDisclosure?: string;
+  cancellationRebuttal?: string;
+  duplicateChargeExplanation?: string;
+  refundPolicyDisclosure?: string;
+  refundRefusalExplanation?: string;
+  uncategorizedText?: string;
+}
+
+/**
+ * Disputes: read them, and answer one.
+ *
+ * A dispute is initiated by the card NETWORK, not by you, so there is nothing
+ * to create — the only write is a response. This surface was read-only for a
+ * while, because the gateway had no way to deliver evidence and a route that
+ * accepted it and did nothing would have been worse than none: you would have
+ * believed you had responded.
  */
 export class DisputesResource {
   constructor(private readonly client: RestClient) {}
@@ -94,6 +125,26 @@ export class DisputesResource {
     return this.client.request<DisputeList>(
       'GET',
       `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/disputes`,
+    );
+  }
+
+  /**
+   * Answer a dispute. **One shot.**
+   *
+   * Submitting is one-way at the card network, so this cannot be revised and a
+   * second call does not send a second response — it answers 200 with the
+   * dispute as it stands. Send everything you have the first time.
+   *
+   * Refused (409) when the dispute is already answered, already decided, or
+   * past `evidenceDueAt`. That last one is checked by the gateway rather than
+   * by the acquirer, so you learn it was the clock and not your request — a
+   * late response is the one failure here that no retry fixes.
+   */
+  submitEvidence(disputeId: string, evidence: DisputeEvidenceParams): Promise<Dispute> {
+    return this.client.request<Dispute>(
+      'POST',
+      `/v1/disputes/${encodeURIComponent(disputeId)}/evidence`,
+      { body: evidence },
     );
   }
 }

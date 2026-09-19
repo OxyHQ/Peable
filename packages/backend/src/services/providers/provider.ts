@@ -47,7 +47,12 @@ export type ProviderStage =
   | "transfer"
   | "getStatus"
   | "verifyEvent"
-  | "account";
+  | "account"
+  // Answering a dispute. Its own stage rather than reusing `account`, because
+  // the operator question it raises is different: a failure here means a
+  // merchant's response did not reach the network before a deadline, which is
+  // the one failure on this surface that cannot be retried later.
+  | "dispute";
 
 /**
  * A failure from a payment provider.
@@ -401,6 +406,135 @@ export interface AccountHoldingProvider extends PaymentProvider {
   createAccount(request: CreateAccountRequest): Promise<ProviderAccountSnapshot>;
   accountLink(request: AccountLinkRequest): Promise<{ url: string; expiresAt: Date }>;
   getAccount(providerAccountId: string): Promise<ProviderAccountSnapshot>;
+}
+
+/**
+ * A merchant's response to a dispute — TEXT ONLY, and passed straight through.
+ *
+ * Every field is the merchant's own words or their own record, in the
+ * provider's vocabulary, because these end up in front of a card network that
+ * has its own field names and a gateway paraphrase would be the words the
+ * merchant quotes while the acquirer holds different ones.
+ *
+ * **None of it is stored.** It contains exactly what evidence contains — a
+ * customer's name, their email, a billing address, correspondence — and
+ * `provider_events`' whole redaction posture exists because this gateway does
+ * not keep that. It is forwarded and forgotten; what is recorded is THAT a
+ * response was submitted and when.
+ *
+ * FILE attachments are deliberately absent. They need the provider's upload
+ * API, a size and type policy, and somewhere for the bytes to live on the way
+ * through — a different piece of work, and offering half of it would let a
+ * merchant submit a response missing the receipt it depends on.
+ */
+export interface DisputeEvidence {
+  readonly productDescription?: string;
+  readonly customerName?: string;
+  readonly customerEmailAddress?: string;
+  readonly customerPurchaseIp?: string;
+  readonly billingAddress?: string;
+  readonly shippingAddress?: string;
+  readonly shippingCarrier?: string;
+  readonly shippingDate?: string;
+  readonly shippingTrackingNumber?: string;
+  readonly serviceDate?: string;
+  readonly accessActivityLog?: string;
+  readonly cancellationPolicyDisclosure?: string;
+  readonly cancellationRebuttal?: string;
+  readonly duplicateChargeExplanation?: string;
+  readonly refundPolicyDisclosure?: string;
+  readonly refundRefusalExplanation?: string;
+  readonly uncategorizedText?: string;
+}
+
+export interface SubmitDisputeEvidenceRequest {
+  /** The provider's own id for the dispute. */
+  readonly providerObjectId: string;
+  readonly evidence: DisputeEvidence;
+  readonly idempotencyKey: string;
+}
+
+export interface ProviderDisputeResult {
+  readonly providerObjectId: string;
+  /** What the provider says the dispute is now, in ITS vocabulary. */
+  readonly status: string;
+}
+
+/**
+ * A provider whose disputes can be RESPONDED to.
+ *
+ * Optional, like settling and account-holding, and for the same reason: the
+ * FairCoin rail has no card network behind it and therefore no dispute to
+ * answer. A method every rail had to implement would make that a lie.
+ *
+ * One method and not two. A "save a draft" step exists at the provider, and
+ * exposing it would need a durable identity per draft so a retry does not
+ * become a second one — and the merchant-facing value is small next to the
+ * cost of getting that wrong. Responding is a one-shot act here: it submits.
+ */
+export interface DisputeHandlingProvider extends PaymentProvider {
+  submitDisputeEvidence(
+    request: SubmitDisputeEvidenceRequest,
+  ): Promise<ProviderDisputeResult>;
+}
+
+/** Whether this rail can answer a dispute. */
+export function isDisputeHandlingProvider(
+  provider: PaymentProvider,
+): provider is DisputeHandlingProvider {
+  const candidate = provider as Partial<DisputeHandlingProvider>;
+  return typeof candidate.submitDisputeEvidence === "function";
+}
+
+/**
+ * What a payment's money actually came to, as the PROVIDER reports it.
+ *
+ * Every field is nullable and `status` says why, because the difference between
+ * "the fee was zero" and "the fee is not known yet" is the whole point of this
+ * type. A settlement report that renders an unknown as `0` is a report a
+ * merchant reconciles against and cannot explain — and zero is a number
+ * somebody will subtract.
+ *
+ * `gross` is not the payment's amount: a partial capture, a refund or a
+ * currency conversion all make them differ, which is why it is read rather than
+ * copied from the intent.
+ */
+export interface ProviderSettlement {
+  /**
+   *  - `available` — the provider has settled it and these figures are final.
+   *  - `pending`   — it exists and the figures are not final yet.
+   *  - `unknown`   — the provider has no settlement record at all. Not zero.
+   */
+  readonly status: "available" | "pending" | "unknown";
+  readonly gross: string | null;
+  readonly fee: string | null;
+  readonly net: string | null;
+  /** The currency the figures above are in — the SETTLEMENT currency. */
+  readonly currency: CurrencyCode | null;
+  /** When the funds become available, ISO-8601. */
+  readonly availableOn: string | null;
+  /** Present only when the settlement currency differs from the charge's. */
+  readonly exchangeRate: number | null;
+}
+
+/**
+ * A provider that can report what a payment settled to.
+ *
+ * Optional for the same reason the others are: the FairCoin rail takes no fee
+ * and holds no balance, so there is nothing to report and a method returning
+ * zeros would be inventing an answer.
+ */
+export interface SettlementReportingProvider extends PaymentProvider {
+  /** @param chargeObjectId the CHARGE, not the payment — fees attach to it. */
+  getSettlement(chargeObjectId: string): Promise<ProviderSettlement>;
+}
+
+/** Whether this rail can report a payment's fees and net. */
+export function isSettlementReportingProvider(
+  provider: PaymentProvider,
+): provider is SettlementReportingProvider {
+  const candidate = provider as Partial<SettlementReportingProvider>;
+  return typeof candidate.getSettlement === "function";
 }
 
 /** Whether this rail can settle sub-merchants. Both halves, never one. */

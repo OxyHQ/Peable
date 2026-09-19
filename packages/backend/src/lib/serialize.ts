@@ -245,6 +245,9 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
     status: row.status,
     reason: row.reason,
     evidenceDueAt: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
+    evidenceSubmittedAt: row.evidenceSubmittedAt
+      ? row.evidenceSubmittedAt.toISOString()
+      : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

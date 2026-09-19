@@ -129,6 +129,50 @@ export interface TransferWithReversal extends Transfer {
   reversal: TransferReversal;
 }
 
+/**
+ * What a payment actually came to, as the PROVIDER reports it.
+ *
+ * ## Every figure is nullable, and that is the contract
+ *
+ * The difference between "the fee was zero" and "the fee is not known yet" is
+ * the whole reason this shape exists. A report that renders an unknown as `0`
+ * is one a merchant reconciles against and cannot explain — and zero is a
+ * number somebody will subtract. `status` says which of the three situations
+ * produced the nulls.
+ *
+ * ## What it does NOT say
+ *
+ * It reports what the provider took. It does **not** attribute that cost to an
+ * entity: a fee paid by the operator of a Peable deployment is not
+ * automatically an expense of the marketplace running on it, and that is a
+ * commercial decision no contract can make. Nothing here implies one.
+ *
+ * `gross` is not the payment's `amount`: a partial capture, a refund or a
+ * currency conversion all make them differ, which is why it is reported rather
+ * than assumed.
+ */
+export interface Settlement {
+  object: 'settlement';
+  /** The `pi_…` this describes. */
+  paymentIntentId: string;
+  /**
+   *  - `available` — settled; these figures are final.
+   *  - `pending`   — a settlement record exists and is not final yet.
+   *  - `unknown`   — there is none to read. **Not zero.**
+   */
+  status: 'available' | 'pending' | 'unknown';
+  /** Minor units, as canonical integer strings, in `currency`. */
+  gross: string | null;
+  fee: string | null;
+  net: string | null;
+  /** The SETTLEMENT currency, which may differ from the payment's. */
+  currency: string | null;
+  /** When the funds become available, ISO-8601. */
+  availableOn: string | null;
+  /** Present only when a conversion happened. `null` is not a rate of 1. */
+  exchangeRate: number | null;
+}
+
 /** Where one refund stands — the MONEY's own lifecycle, not the payment's. */
 export type RefundStatus = 'pending' | 'succeeded' | 'failed';
 

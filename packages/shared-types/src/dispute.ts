@@ -56,6 +56,19 @@ export interface Dispute {
    * in front of a merchant that can no longer be given.
    */
   evidenceDueAt: string | null;
+  /**
+   * When the merchant's response reached the network, ISO-8601. `null` while
+   * none has been submitted.
+   *
+   * The timestamp and nothing else: the evidence itself is forwarded to the
+   * acquirer and never stored here. What it SAID is readable there, by someone
+   * with their own authorization — this gateway does not keep a copy of a
+   * customer's name, address and correspondence.
+   *
+   * Together with `evidenceDueAt` it answers the only two questions a merchant
+   * has about a live dispute: whether they still owe a response, and by when.
+   */
+  evidenceSubmittedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
