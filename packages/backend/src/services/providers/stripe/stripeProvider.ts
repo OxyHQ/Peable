@@ -35,8 +35,8 @@ import {
   type AccountHoldingProvider,
   type DisputeEvidence,
   type DisputeHandlingProvider,
-  type ProviderDisputeResult,
   type ProviderSettlement,
+  UNKNOWN_SETTLEMENT,
   type SettlementReportingProvider,
   type SubmitDisputeEvidenceRequest,
   type AccountLinkRequest,
@@ -102,50 +102,50 @@ function readChargeId(
   return undefined;
 }
 
-/** Nothing is known. Every figure `null`, and `status` says why it is not zero. */
-const EMPTY_SETTLEMENT: ProviderSettlement = {
-  status: "unknown",
-  gross: null,
-  fee: null,
-  net: null,
-  currency: null,
-  availableOn: null,
-  exchangeRate: null,
-};
-
 /**
- * The gateway's evidence fields in Stripe's spelling.
+ * The gateway's evidence field names in Stripe's spelling.
  *
  * Written out rather than derived by case conversion, so a field the gateway
  * names differently from Stripe (or one Stripe renames) is a compile-time edit
- * here instead of a silently dropped piece of a merchant's defence. An omitted
- * key is omitted from the request too — sending `undefined` would clear a field
- * the merchant had already provided.
+ * here instead of a silently dropped piece of a merchant's defence.
+ *
+ * TOTAL over `DisputeEvidence` — that is what makes it safe. A field added to
+ * the wire contract and not to this map is a field a merchant sends, the
+ * gateway accepts, and the network never sees; they would find out when the
+ * dispute is decided against them. As a `Record` it fails to compile instead.
+ */
+const STRIPE_EVIDENCE_FIELDS: Record<
+  keyof DisputeEvidence,
+  keyof Stripe.DisputeUpdateParams.Evidence
+> = {
+  productDescription: "product_description",
+  customerName: "customer_name",
+  customerEmailAddress: "customer_email_address",
+  customerPurchaseIp: "customer_purchase_ip",
+  billingAddress: "billing_address",
+  shippingAddress: "shipping_address",
+  shippingCarrier: "shipping_carrier",
+  shippingDate: "shipping_date",
+  shippingTrackingNumber: "shipping_tracking_number",
+  serviceDate: "service_date",
+  accessActivityLog: "access_activity_log",
+  cancellationPolicyDisclosure: "cancellation_policy_disclosure",
+  cancellationRebuttal: "cancellation_rebuttal",
+  duplicateChargeExplanation: "duplicate_charge_explanation",
+  refundPolicyDisclosure: "refund_policy_disclosure",
+  refundRefusalExplanation: "refund_refusal_explanation",
+  uncategorizedText: "uncategorized_text",
+};
+
+/**
+ * An omitted key is omitted from the request too — sending `undefined` would
+ * clear a field the merchant had already provided.
  */
 function toStripeEvidence(evidence: DisputeEvidence): Stripe.DisputeUpdateParams.Evidence {
-  const pairs: [keyof Stripe.DisputeUpdateParams.Evidence, string | undefined][] = [
-    ["product_description", evidence.productDescription],
-    ["customer_name", evidence.customerName],
-    ["customer_email_address", evidence.customerEmailAddress],
-    ["customer_purchase_ip", evidence.customerPurchaseIp],
-    ["billing_address", evidence.billingAddress],
-    ["shipping_address", evidence.shippingAddress],
-    ["shipping_carrier", evidence.shippingCarrier],
-    ["shipping_date", evidence.shippingDate],
-    ["shipping_tracking_number", evidence.shippingTrackingNumber],
-    ["service_date", evidence.serviceDate],
-    ["access_activity_log", evidence.accessActivityLog],
-    ["cancellation_policy_disclosure", evidence.cancellationPolicyDisclosure],
-    ["cancellation_rebuttal", evidence.cancellationRebuttal],
-    ["duplicate_charge_explanation", evidence.duplicateChargeExplanation],
-    ["refund_policy_disclosure", evidence.refundPolicyDisclosure],
-    ["refund_refusal_explanation", evidence.refundRefusalExplanation],
-    ["uncategorized_text", evidence.uncategorizedText],
-  ];
-
   const out: Record<string, string> = {};
-  for (const [key, value] of pairs) {
-    if (value !== undefined) out[key] = value;
+  for (const [ours, theirs] of Object.entries(STRIPE_EVIDENCE_FIELDS)) {
+    const value = evidence[ours as keyof DisputeEvidence];
+    if (value !== undefined) out[theirs] = value;
   }
   return out;
 }
@@ -392,15 +392,12 @@ export class StripePaymentProvider
    * snake_case and the gateway's are not, and an adapter is exactly the place
    * that difference belongs.
    */
-  async submitDisputeEvidence(
-    request: SubmitDisputeEvidenceRequest,
-  ): Promise<ProviderDisputeResult> {
-    const dispute = await updateStripeDispute(
+  async submitDisputeEvidence(request: SubmitDisputeEvidenceRequest): Promise<void> {
+    await updateStripeDispute(
       request.providerObjectId,
       { evidence: toStripeEvidence(request.evidence), submit: true },
       request.idempotencyKey,
     );
-    return { providerObjectId: dispute.id, status: dispute.status };
   }
 
   // -------------------------------------------------------------------------
@@ -428,7 +425,7 @@ export class StripePaymentProvider
       // Either an unexpanded id — which cannot happen, this asked for the
       // expansion — or no transaction at all, which is an uncaptured or
       // not-yet-settled charge. Neither is "the fee was nothing".
-      return EMPTY_SETTLEMENT;
+      return UNKNOWN_SETTLEMENT;
     }
 
     return {

@@ -210,26 +210,72 @@ export const DISPUTE_STATUSES = [
 ] as const;
 export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
 
-/** Stripe-parity dotted webhook event types. */
-export const WEBHOOK_EVENT_TYPES = [
-  'payment_intent.confirming',
-  'payment_intent.settled',
-  'payment_intent.failed',
-  'payment_intent.rejected',
-  'payment_intent.expired',
-  'payment_intent.refunded',
-  'payment_intent.partially_refunded',
-  'payment_intent.disputed',
-  'payment_intent.dispute_closed',
-  // The first event that is not about a payment. Its delivery names no intent,
-  // which is what `webhook_deliveries_intent_event_has_intent_check` allows for
-  // by keying on the `payment_intent.` prefix rather than on a list.
-  'connected_account.updated',
-] as const satisfies readonly WebhookEventType[];
+/**
+ * What each event is ABOUT — and therefore what its delivery must name.
+ *
+ * ## Declared, not inferred from the name
+ *
+ * `webhook_deliveries_intent_event_has_intent_check` used to key on the
+ * `payment_intent.` PREFIX: an event whose type started with it had to carry a
+ * `payment_intent_id`, and one that did not had to carry none. That worked for
+ * the ten events that exist and made the naming convention load-bearing in a
+ * place no reader of the convention would look.
+ *
+ * The cost of that lands in the worst possible spot. A delivery is enqueued
+ * INSIDE the transaction that advances a payment's status (ADR 0001 D7), so a
+ * CHECK this constraint refuses does not fail a webhook — it rolls back the
+ * money transition that was enqueueing it. An intent-scoped event named
+ * something other than `payment_intent.*` (a `charge.*`, a `refund.*`, an
+ * event renamed for Stripe parity) would therefore abort a settlement, and the
+ * reason would be a naming rule nobody was applying on purpose.
+ *
+ * So the scope is stated. `satisfies Record<WebhookEventType, …>` is total in
+ * both directions, which means a new event type does not compile until someone
+ * says which resource it is about — and that answer, not its spelling, is what
+ * the constraint enforces.
+ */
+export const WEBHOOK_EVENT_SCOPES = {
+  'payment_intent.confirming': 'intent',
+  'payment_intent.settled': 'intent',
+  'payment_intent.failed': 'intent',
+  'payment_intent.rejected': 'intent',
+  'payment_intent.expired': 'intent',
+  'payment_intent.refunded': 'intent',
+  'payment_intent.partially_refunded': 'intent',
+  'payment_intent.disputed': 'intent',
+  'payment_intent.dispute_closed': 'intent',
+  // The first event that is not about a payment. It is about a SELLER, so its
+  // delivery names no intent — which is why the column is nullable at all.
+  'connected_account.updated': 'merchant',
+} as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
+
+/**
+ * Totality is asserted over the scope map's KEYS, which is the only list now.
+ *
+ * `WEBHOOK_EVENT_TYPES` below is derived from it rather than written out a
+ * second time: two hand-kept lists of the same ten strings is one of them
+ * silently falling behind, and the one that falls behind here is a CHECK.
+ */
 export type WebhookEventTypesAreComplete = AssertAllListed<
   WebhookEventType,
-  (typeof WEBHOOK_EVENT_TYPES)[number]
+  keyof typeof WEBHOOK_EVENT_SCOPES
 >;
+
+/** Stripe-parity dotted webhook event types. */
+export const WEBHOOK_EVENT_TYPES = Object.keys(
+  WEBHOOK_EVENT_SCOPES
+) as readonly WebhookEventType[];
+
+/**
+ * The events whose delivery names a payment — the CHECK's own list.
+ *
+ * Derived, so adding an intent-scoped event under any name widens the
+ * constraint with it, and adding a seller-scoped one under a `payment_intent.`
+ * name does not.
+ */
+export const INTENT_WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_TYPES.filter(
+  (type) => WEBHOOK_EVENT_SCOPES[type] === 'intent'
+);
 
 /**
  * Where one webhook delivery stands.

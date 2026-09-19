@@ -5,6 +5,36 @@ import {
   EnvironmentModeMismatchError,
   assertEnvironmentMatchesProvider,
 } from "../services/providers/environmentGuard";
+import { ProviderError } from "../services/providers/provider";
+import { redactProviderMessage } from "../services/providers/redact";
+
+/**
+ * Turn a provider failure into an HTTP answer without leaking its text raw.
+ *
+ * **502 for a retryable provider fault, 422 for a permanent refusal.** The
+ * distinction is the merchant's to act on and it is the only thing this
+ * function decides: one means try again, the other means the request as sent
+ * will never work. Getting it backwards tells a merchant to retry something
+ * that cannot succeed, or to give up on an outage that clears in a minute.
+ *
+ * It lives HERE because every route that calls a provider needs exactly this
+ * mapping, and four of them had written it out: `refunds`, `transfers`,
+ * `connectedAccounts` and — inlined a fourth time rather than copied — the
+ * evidence handler in `disputes`. Four copies of a rule about what a status
+ * code means is four places to disagree about it.
+ *
+ * The message is always passed through `redactProviderMessage`: a provider's
+ * error text is written for the integrator holding the credential, not for a
+ * merchant, and it quotes back identifiers and occasionally key prefixes.
+ */
+export function sendProviderError(res: Response, error: ProviderError): void {
+  sendError(
+    res,
+    error.retryable ? 502 : 422,
+    error.retryable ? "api_error" : "invalid_request_error",
+    redactProviderMessage(error.message),
+  );
+}
 
 /** Stripe-ish error envelope: `{ error: { type, message } }`. */
 export function sendError(

@@ -1,4 +1,4 @@
--- oxy:deploy-phase=post
+-- oxy:deploy-phase=pre
 -- `merchants.livemode` becomes TRUE about the merchant it describes.
 --
 -- The column shipped with a `false` default, no writer and no reader: every
@@ -12,11 +12,33 @@
 -- correct. The backfill below is what makes it applicable to rows the old
 -- writer produced.
 --
--- `post`, NOT `pre`, and the order is the reason. During a rolling release the
--- OLD image is still serving and still inserts `livemode = false` for every
--- environment; adding the constraint while it runs would make the registration
--- of a production merchant fail with a constraint violation. Applied after the
--- new image is live, every writer already satisfies it.
+-- ## Why `pre`, when the argument for `post` is the better one in isolation
+--
+-- This was `post`, and for a good reason: during a rolling release the OLD
+-- image is still serving and still inserts `livemode = false` for every
+-- environment, so adding the constraint while it runs makes the registration of
+-- a PRODUCTION merchant fail. Applied after the new image is live, every writer
+-- already satisfies it.
+--
+-- It cannot be `post` here, and the reason is the six `pre` migrations that
+-- follow it in the same release. `planMigrationRun` defers everything from the
+-- first pending `post` onwards, then REFUSES the run if any deferred entry is a
+-- `pre` — because applying a later `pre` would mean jumping over a `post` that
+-- has not run. So a `post` sitting in front of `pre` migrations blocks the
+-- whole release: measured, as `Migrate (pre)` failing on every deploy after
+-- this file merged, with the build green and nothing reaching ECS.
+--
+-- **A `post` migration must be the last pending entry in its release.** This one
+-- was not, and the cheapest correct fix is to move it to the side that can run
+-- first. `db/__tests__/migrationPhaseOrder.test.ts` now fails the build on the
+-- same shape rather than letting it reach a deploy.
+--
+-- What `pre` costs, stated rather than waved away: for the length of the
+-- rollout, the old image registering a merchant with `environment =
+-- 'production'` is refused by this constraint. That is one manual registration,
+-- retryable the moment the rollout finishes, against a release that otherwise
+-- does not ship at all. The backfill below runs first in the same file, so every
+-- row that already exists satisfies the constraint before it is added.
 --
 -- The UPDATE is idempotent (it is a total function of `environment`) and
 -- touches every row, which is safe at this table's size — one row per

@@ -234,7 +234,7 @@ export function updateStripeDispute(
  * `pending`, never as zero fees.
  */
 export function retrieveStripeChargeWithBalance(id: string): Promise<Stripe.Charge> {
-  return call("getStatus", (stripe) =>
+  return call("settlement", (stripe) =>
     stripe.charges.retrieve(id, { expand: ["balance_transaction"] }),
   );
 }

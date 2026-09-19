@@ -1,4 +1,4 @@
-import type { Dispute, Merchant } from '@peable.to/shared-types';
+import type { Dispute, DisputeEvidence, Merchant } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 
 /**
@@ -89,25 +89,15 @@ export class MerchantsResource {
  * An unknown key is REFUSED rather than dropped, so a misspelled field is a 422
  * now instead of a missing argument discovered when the dispute is decided.
  */
-export interface DisputeEvidenceParams {
-  productDescription?: string;
-  customerName?: string;
-  customerEmailAddress?: string;
-  customerPurchaseIp?: string;
-  billingAddress?: string;
-  shippingAddress?: string;
-  shippingCarrier?: string;
-  shippingDate?: string;
-  shippingTrackingNumber?: string;
-  serviceDate?: string;
-  accessActivityLog?: string;
-  cancellationPolicyDisclosure?: string;
-  cancellationRebuttal?: string;
-  duplicateChargeExplanation?: string;
-  refundPolicyDisclosure?: string;
-  refundRefusalExplanation?: string;
-  uncategorizedText?: string;
-}
+/**
+ * The evidence set, re-exported from the wire contract rather than restated.
+ *
+ * It was written out here as well as in the gateway's provider port, its route
+ * schema and its Stripe adapter — four copies of one list. A field added to
+ * three of them is a field you send, the gateway accepts, and the network never
+ * sees; you would find out when the dispute is decided against you.
+ */
+export type DisputeEvidenceParams = DisputeEvidence;
 
 /**
  * Disputes: read them, and answer one.

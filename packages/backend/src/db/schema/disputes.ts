@@ -124,8 +124,6 @@ export const disputes = pgTable(
     unique('disputes_provider_object_key').on(table.provider, table.providerObjectId),
     /** "What is being contested on this payment?" */
     index('disputes_payment_intent_idx').on(table.paymentIntentId),
-    /** The operator read: everything still owed a response, oldest deadline first. */
-    index('disputes_evidence_due_idx').on(table.evidenceDueAt),
     foreignKey({
       name: 'disputes_merchant_id_fkey',
       columns: [table.merchantId],
@@ -162,7 +160,18 @@ export const disputes = pgTable(
       'disputes_closed_has_no_deadline_check',
       sql`${table.status} not in ('won', 'lost') or ${table.evidenceDueAt} is null`
     ),
-    /** The operator read this exists for: what is still owed a response. */
+    /**
+     * The operator read this exists for: what is still owed a response.
+     *
+     * PARTIAL, and it replaced a plain index on the same column. That one was
+     * written for this exact query before `evidence_submitted_at` existed —
+     * with no way to record an answer, "has a deadline" WAS "still owed a
+     * response". Once answering became possible the plain index was strictly
+     * worse for the only query either served: it carries every dispute ever
+     * opened, including the answered and the closed, so the scan reads rows the
+     * predicate then throws away. Keeping both would have meant two indexes
+     * maintained on every dispute write and one of them never chosen.
+     */
     index('disputes_unanswered_idx')
       .on(table.evidenceDueAt)
       .where(sql`${table.evidenceSubmittedAt} is null`),

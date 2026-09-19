@@ -11,7 +11,11 @@ import {
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
-import { WEBHOOK_DELIVERY_STATUSES, WEBHOOK_EVENT_TYPES } from './valueSets';
+import {
+  INTENT_WEBHOOK_EVENT_TYPES,
+  WEBHOOK_DELIVERY_STATUSES,
+  WEBHOOK_EVENT_TYPES,
+} from './valueSets';
 
 /**
  * One webhook delivery — the DURABLE PROMISE that an event will reach a
@@ -190,10 +194,20 @@ export const webhookDeliveries = pgTable(
      * merchant cannot correlate to anything, and one the list join would then
      * have to drop or render with a null `intentId`. The rule is stated here
      * rather than trusted to the one function that writes the rows.
+     *
+     * It keys on `INTENT_WEBHOOK_EVENT_TYPES` — a DECLARED scope per event —
+     * and not on the `payment_intent.` prefix it used to match. The prefix made
+     * a naming convention load-bearing inside a money transaction: an enqueue
+     * happens in the same transaction as the status change (ADR 0001 D7), so a
+     * row this refuses does not fail a webhook, it rolls back the settlement
+     * that was enqueueing it. An intent-scoped event named anything else would
+     * have aborted a payment for a reason nobody had written down.
      */
     check(
       'webhook_deliveries_intent_event_has_intent_check',
-      sql`(${table.eventType} like 'payment_intent.%') = (${table.paymentIntentId} is not null)`
+      sql.raw(
+        `(event_type in (${inList(INTENT_WEBHOOK_EVENT_TYPES)})) = (payment_intent_id is not null)`
+      )
     ),
     /**
      * A row that will be ATTEMPTED carries a real envelope.

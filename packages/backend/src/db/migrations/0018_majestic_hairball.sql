@@ -1,0 +1,49 @@
+-- oxy:deploy-phase=pre
+-- Say which resource an event is about, instead of reading it off the name.
+--
+-- ## The constraint
+--
+-- `webhook_deliveries_intent_event_has_intent_check` keyed on the
+-- `payment_intent.` PREFIX: an event whose type started with it had to carry a
+-- `payment_intent_id`, and one that did not had to carry none. Correct for the
+-- ten events that exist, and it made a naming convention load-bearing in a
+-- place no reader of the convention would think to look.
+--
+-- What that costs lands in the worst place available. A delivery is enqueued
+-- INSIDE the transaction that advances a payment's status (ADR 0001 D7), so a
+-- row this constraint refuses does not fail a webhook — it rolls back the
+-- settlement that was enqueueing it. An intent-scoped event named anything
+-- other than `payment_intent.*` (a `charge.*`, a `refund.*`, one renamed for
+-- Stripe parity) would abort a payment, and the cause would be a naming rule
+-- nobody had written down as a rule.
+--
+-- So the list is stated. `WEBHOOK_EVENT_SCOPES` in `schema/valueSets.ts` is a
+-- total `Record<WebhookEventType, 'intent' | 'merchant'>`, which means a new
+-- event type does not compile until someone says which resource it is about,
+-- and that answer — not its spelling — is what this CHECK now carries.
+--
+-- Semantically a NO-OP today: every event scoped `intent` is spelled
+-- `payment_intent.*` and the one scoped `merchant` is not, so the two
+-- expressions accept exactly the same rows. That is what makes it `pre` and
+-- safe under the old image.
+--
+-- `NOT VALID` plus `VALIDATE CONSTRAINT` for the same reason as 0016:
+-- `webhook_deliveries` is the one unbounded table here, `ADD CONSTRAINT` holds
+-- ACCESS EXCLUSIVE for a full scan, and every enqueue blocking behind that lock
+-- is a settlement blocking behind it.
+--
+-- ## The index
+--
+-- `disputes_evidence_due_idx` was written for "everything still owed a
+-- response, oldest deadline first" BEFORE `evidence_submitted_at` existed —
+-- with no way to record an answer, "has a deadline" was that query. 0017 added
+-- the column and `disputes_unanswered_idx`, a partial index on the same column
+-- with `where evidence_submitted_at is null`, which answers it properly. The
+-- plain one has been strictly worse for the only query either served ever
+-- since: it carries every dispute ever opened, answered and closed included,
+-- so the scan reads rows the predicate throws away. Two indexes maintained on
+-- every dispute write, one of them never chosen.
+ALTER TABLE "webhook_deliveries" DROP CONSTRAINT "webhook_deliveries_intent_event_has_intent_check";--> statement-breakpoint
+DROP INDEX "disputes_evidence_due_idx";--> statement-breakpoint
+ALTER TABLE "webhook_deliveries" ADD CONSTRAINT "webhook_deliveries_intent_event_has_intent_check" CHECK ((event_type in ('payment_intent.confirming', 'payment_intent.settled', 'payment_intent.failed', 'payment_intent.rejected', 'payment_intent.expired', 'payment_intent.refunded', 'payment_intent.partially_refunded', 'payment_intent.disputed', 'payment_intent.dispute_closed')) = (payment_intent_id is not null)) NOT VALID;--> statement-breakpoint
+ALTER TABLE "webhook_deliveries" VALIDATE CONSTRAINT "webhook_deliveries_intent_event_has_intent_check";

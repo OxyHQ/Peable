@@ -15,6 +15,7 @@ import {
   insertConnectedAccount,
   type AccountSnapshot,
   type ConnectedAccountRow,
+  type SnapshotWrittenField,
 } from "../../db/accounts/connectedAccountRepository";
 import { getDb } from "../../db/postgres";
 import { newId } from "../../lib/ids";
@@ -209,44 +210,68 @@ export async function ensureConnectedAccount(
 }
 
 /**
+ * For each field a provider snapshot writes, whether a merchant is told.
+ *
+ * A `Record` over `SnapshotWrittenField` rather than a list of comparisons, and
+ * that is the whole point: it is TOTAL, so a column added to
+ * `applyAccountSnapshot` does not compile until someone decides whether its
+ * changing is news. The list it replaced had already fallen one behind —
+ * `defaultCurrency` was written and never compared, so an account whose payout
+ * currency changed updated silently and the marketplace settling into it would
+ * have found out from a transfer in the wrong currency.
+ *
+ * `lastSyncedAt` is the one deliberate `false`. It moves on every sweep, so
+ * including it would fire on every pass and produce a stream a merchant learns
+ * to ignore — which is the same as no notification at all.
+ *
+ * Everything else is here because it changes a merchant's behaviour: whether
+ * the seller can be paid, what the provider says about each capability, how
+ * much is still owed, why the account is disabled, and what currency they are
+ * paid in. A requirement COUNT rising is worth an event even when payability
+ * did not change — it is the difference between "on track" and "this seller has
+ * to do something".
+ */
+const NOTIFIES_MERCHANT = {
+  payoutsEnabled: true,
+  chargesEnabled: true,
+  transfersCapability: true,
+  cardPaymentsCapability: true,
+  requirementsCurrentlyDue: true,
+  requirementsEventuallyDue: true,
+  requirementsPastDue: true,
+  requirementsPendingVerification: true,
+  disabledReasonCodes: true,
+  defaultCurrency: true,
+  lastSyncedAt: false,
+} satisfies Record<SnapshotWrittenField, boolean>;
+
+/** Whether anything a MERCHANT acts on has changed. */
+function readinessChanged(
+  before: ConnectedAccountRow,
+  after: ConnectedAccountRow,
+): boolean {
+  return Object.entries(NOTIFIES_MERCHANT).some(([field, notifies]) => {
+    if (!notifies) return false;
+    const key = field as SnapshotWrittenField;
+    return !sameValue(before[key], after[key]);
+  });
+}
+
+/** `disabledReasonCodes` is an array; everything else compares by identity. */
+function sameValue(before: unknown, after: unknown): boolean {
+  if (Array.isArray(before) && Array.isArray(after)) {
+    return before.length === after.length && before.every((item, i) => item === after[i]);
+  }
+  return before === after;
+}
+
+/**
  * Re-read an account from the provider and store what it says.
  *
  * The only way readiness fields ever change. Called by the sync sweep, by an
  * `account.updated` event, and by a merchant asking directly — all three land
  * here so there is one definition of "what the provider currently says".
  */
-/**
- * Whether anything a MERCHANT acts on has changed.
- *
- * The fields are chosen, not diffed wholesale, and the two omissions are the
- * decision: `lastSyncedAt` moves on every sweep, and `updatedAt` moves whenever
- * the row is written — so a whole-row comparison would fire on every pass and
- * produce a stream a merchant learns to ignore, which is the same as no
- * notification at all.
- *
- * What is here is what changes a merchant's behaviour: whether the seller can
- * be paid, what the provider says about each capability, how much is still
- * owed, and why the account is disabled. A requirement COUNT rising is worth an
- * event even when payability did not change — it is the difference between "on
- * track" and "this seller has to do something".
- */
-function readinessChanged(
-  before: ConnectedAccountRow,
-  after: ConnectedAccountRow,
-): boolean {
-  return (
-    before.payoutsEnabled !== after.payoutsEnabled ||
-    before.chargesEnabled !== after.chargesEnabled ||
-    before.transfersCapability !== after.transfersCapability ||
-    before.cardPaymentsCapability !== after.cardPaymentsCapability ||
-    before.requirementsCurrentlyDue !== after.requirementsCurrentlyDue ||
-    before.requirementsEventuallyDue !== after.requirementsEventuallyDue ||
-    before.requirementsPastDue !== after.requirementsPastDue ||
-    before.requirementsPendingVerification !== after.requirementsPendingVerification ||
-    before.disabledReasonCodes.join() !== after.disabledReasonCodes.join()
-  );
-}
-
 export async function refreshConnectedAccount(
   account: ConnectedAccountRow,
   environment?: MerchantEnvironment,

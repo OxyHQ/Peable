@@ -112,7 +112,7 @@ export async function redeliverWebhookDelivery(
   // stored `payload` is what makes replaying one honest.
   const enqueuedId = await enqueueWebhook(db, {
     merchantId: merchant.id,
-    ...(intent === null ? {} : { paymentIntentId: intent.id }),
+    paymentIntentId: intent?.id,
     event: delivery.payload as unknown as Parameters<typeof enqueueWebhook>[1]["event"],
     url: target.url,
   });

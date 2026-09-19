@@ -7,7 +7,7 @@
  * converges on the merchant's own refund id rather than erroring.
  */
 import { Router } from "express";
-import type { Response, RequestHandler } from "express";
+import type { RequestHandler } from "express";
 import { z } from "zod";
 import { oxyClient } from "@oxy.so/core";
 import {
@@ -16,7 +16,10 @@ import {
   type Settlement,
 } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
-import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
+import {
+  findIntentByPublicId,
+  findIntentForMerchant,
+} from "../db/payments/paymentIntentRepository";
 import {
   findRefundByExternalRef,
   listRefundsForIntent,
@@ -32,12 +35,12 @@ import {
 import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
 import { reportSettlement } from "../services/settlementReport";
 import { ProviderError } from "../services/providers/provider";
-import { redactProviderMessage } from "../services/providers/redact";
 import {
   requireAuthenticated,
   requireProviderMode,
   sendEnvironmentMismatch,
   sendError,
+  sendProviderError,
   wrap,
 } from "../lib/http";
 import { resolveMerchant } from "./paymentIntents";
@@ -87,15 +90,6 @@ function toRefundDTO(
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
-}
-
-function sendProviderError(res: Response, error: ProviderError): void {
-  sendError(
-    res,
-    error.retryable ? 502 : 422,
-    error.retryable ? "api_error" : "invalid_request_error",
-    redactProviderMessage(error.message),
-  );
 }
 
 export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): Router {
@@ -263,8 +257,11 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         return;
       }
 
-      const intent = await findIntentByPublicId(getDb(), intentId);
-      if (!intent || intent.merchantId !== merchant.id) {
+      // Scoped in the PREDICATE, not compared after the read: a payment that
+      // does not exist and one belonging to another merchant are the same
+      // answer, so neither the row nor its absence can confirm an id.
+      const intent = await findIntentForMerchant(getDb(), intentId, merchant.id);
+      if (!intent) {
         sendError(res, 404, "invalid_request_error", "payment intent not found");
         return;
       }
