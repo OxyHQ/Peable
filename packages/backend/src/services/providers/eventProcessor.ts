@@ -159,8 +159,51 @@ function toRefundStatus(status: unknown): RefundStatus | null {
 const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
   "charge.dispute.created": "needs_response",
   "charge.dispute.updated": "under_review",
-  "charge.dispute.closed": "won",
+  // `charge.dispute.closed` is deliberately ABSENT from the values here and
+  // present as a key with no default — it closes a dispute the merchant may
+  // have WON or LOST, and the two are only distinguishable from the payload's
+  // own `status`. This map used to answer `won` for it, so every close whose
+  // status could not be read told the merchant they had won. That is the wrong
+  // half of a coin flip to land on by default: a merchant told they won a
+  // dispute they lost does not reconcile, does not re-bill, and finds out from
+  // their balance.
+  "charge.dispute.closed": "needs_response",
 };
+
+/**
+ * The PROVIDER's dispute vocabulary, mapped onto the gateway's four states.
+ *
+ * Stripe distinguishes `warning_needs_response` from `needs_response`, and
+ * `warning_closed` from `won`/`lost`, because it is describing an inquiry that
+ * has not become a formal chargeback yet. A merchant on this gateway needs to
+ * know only whether evidence is DUE, whether it is being looked at, and how it
+ * ended — so a warning collapses onto the state it is a warning ABOUT (ADR 0001
+ * D3: the acquirer's vocabulary does not reach the wire).
+ *
+ * `warning_closed` maps to `under_review` rather than to an outcome: an inquiry
+ * closing is not a dispute being won, and calling it one would report a result
+ * the network never gave.
+ *
+ * `null` for anything unrecognised, which the handler treats as "the event type
+ * decides" — a provider adding a state must not silently become an outcome.
+ */
+function toDisputeStatus(status: unknown): DisputeStatus | null {
+  switch (status) {
+    case "warning_needs_response":
+    case "needs_response":
+      return "needs_response";
+    case "warning_under_review":
+    case "under_review":
+    case "warning_closed":
+      return "under_review";
+    case "won":
+      return "won";
+    case "lost":
+      return "lost";
+    default:
+      return null;
+  }
+}
 
 /** Transfer events that carry a cumulative reversed total. */
 const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
@@ -647,34 +690,71 @@ async function handleDisputeEvent(
     return { kind: "failed", error: "the dispute event carries no amount" };
   }
 
-  const status = DISPUTE_STATUS_FOR_EVENT[event.type] ?? "needs_response";
+  /**
+   * The PAYLOAD decides the status; the event type is only the fallback.
+   *
+   * This used to be the other way round, and `charge.dispute.closed` mapped to
+   * `won`. So a close whose status could not be read — a redacted payload, a
+   * status Stripe renamed — told the merchant they had WON a dispute they may
+   * well have lost. That is the wrong half of a coin flip to land on by
+   * default: a merchant told they won does not reconcile, does not re-bill, and
+   * finds out from their balance.
+   */
+  const closing = event.type === "charge.dispute.closed";
+  const status = detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? "needs_response";
+
+  if (closing && status !== "won" && status !== "lost") {
+    // A close with no readable outcome is recorded and left VISIBLE rather than
+    // guessed. The drain retries it, and a redelivery carrying a readable
+    // status resolves it; if none ever comes, an operator has a row naming the
+    // dispute rather than a merchant with a wrong answer.
+    const message = `a ${event.type} carried no recognisable outcome`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: "failed", error: message };
+  }
+
   // A closed dispute has no deadline left to meet, and the CHECK refuses the
   // combination — so the status decides the column rather than the payload.
   const closed = status === "won" || status === "lost";
 
-  const { dispute, created } = await upsertDispute(db, {
-    merchantId: intent.merchantId,
-    paymentIntentId: intent.id,
-    provider,
-    providerObjectId: disputeObjectId,
-    amount: detail.amount,
-    currency: intent.currency,
-    status: closed ? detail.outcome ?? status : status,
-    ...(detail.reason === null ? {} : { reason: detail.reason }),
-    evidenceDueAt: closed ? null : detail.evidenceDueAt,
-  });
+  /**
+   * The row and the merchant's notification commit TOGETHER (ADR 0001 D7).
+   *
+   * They did not. `upsertDispute` ran on `db` and `enqueueDisputeWebhook` ran
+   * on `db` after it, as two statements with no transaction around them — so a
+   * crash between them stored the dispute and lost its first notification
+   * permanently. `created` is false on every redelivery afterwards, which is
+   * exactly the guard that makes a merchant told once stay told once, so
+   * nothing would ever enqueue it again: a merchant would be contesting a
+   * payment they were never told about, with a deadline they never saw.
+   */
+  const { dispute, created } = await db.transaction(async (tx) => {
+    const upserted = await upsertDispute(tx, {
+      merchantId: intent.merchantId,
+      paymentIntentId: intent.id,
+      provider,
+      providerObjectId: disputeObjectId,
+      amount: detail.amount,
+      currency: intent.currency,
+      status,
+      ...(detail.reason === null ? {} : { reason: detail.reason }),
+      evidenceDueAt: closed ? null : detail.evidenceDueAt,
+    });
 
-  if (created || closed) {
-    // The DISPUTE is the payload, not the intent. `disputed` is a deadline, and
-    // a merchant who has to make a second call to learn when evidence is due is
-    // a merchant who can miss it while their integration works as documented.
-    await enqueueDisputeWebhook(
-      db,
-      intent,
-      toDisputeDTO(dispute, intent.publicId),
-      created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
-    );
-  }
+    if (upserted.created || closed) {
+      // The DISPUTE is the payload, not the intent. `disputed` is a deadline,
+      // and a merchant who has to make a second call to learn when evidence is
+      // due is a merchant who can miss it while their integration works as
+      // documented.
+      await enqueueDisputeWebhook(
+        tx,
+        intent,
+        toDisputeDTO(upserted.dispute, intent.publicId),
+        upserted.created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
+      );
+    }
+    return upserted;
+  });
 
   await markProviderEventProcessed(db, event.id);
   return { kind: "applied", intentId: intent.id, status: dispute.status };
@@ -685,8 +765,8 @@ interface DisputeDetail {
   readonly amount: string;
   readonly reason: string | null;
   readonly evidenceDueAt: Date | null;
-  /** `won` or `lost`, when the payload states an outcome. */
-  readonly outcome: DisputeStatus | null;
+  /** The provider's own status, mapped — `null` when it said nothing readable. */
+  readonly status: DisputeStatus | null;
 }
 
 /**
@@ -697,10 +777,16 @@ interface DisputeDetail {
  * refuses a zero), while a missing reason or deadline is a provider that did
  * not send one — common, and not a failure.
  *
- * The outcome is read from `status` rather than from the event type because
+ * The status is read from the PAYLOAD rather than from the event type because
  * `charge.dispute.closed` closes a dispute the merchant may have WON or LOST,
  * and defaulting either way would tell them the opposite of what happened for
  * half of all closed disputes.
+ *
+ * `evidence_details.due_by` is read here and is on the redaction allow-list —
+ * it was not, so it stored as the string `"[redacted]"`, the `typeof by ===
+ * "number"` guard below answered false, and the deadline was silently null on
+ * EVERY dispute. A merchant could be told they were being disputed without
+ * being told when evidence was due, and would discover it by losing.
  */
 function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | null {
   const data = payload.data;
@@ -726,9 +812,14 @@ function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | nu
     }
   }
 
-  const status = fields.status;
-  const outcome: DisputeStatus | null =
-    status === "won" ? "won" : status === "lost" ? "lost" : null;
-
-  return { amount: String(amount), reason, evidenceDueAt, outcome };
+  return {
+    amount: String(amount),
+    reason,
+    evidenceDueAt,
+    // The WHOLE vocabulary, not just the two outcomes. This used to read `won`
+    // and `lost` and nothing else, so `under_review` and the three `warning_*`
+    // states fell through to the event type — which is how a close with no
+    // readable outcome became `won`.
+    status: toDisputeStatus(fields.status),
+  };
 }
