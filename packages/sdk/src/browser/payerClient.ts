@@ -31,6 +31,28 @@ const DEFAULT_GATEWAY_URL = 'https://api.peable.to';
  */
 export type RealtimeConnectionState = 'live' | 'lost';
 
+/**
+ * What the payer's client has to do next — the RESUME capability.
+ *
+ * The payment-intent DTO deliberately carries no confirmation credential, so a
+ * payer who refreshed the page, came back from an SCA challenge in a new tab,
+ * or returned the next day had nothing to pay WITH. This is the one call that
+ * hands one out, bounded to a single payment the caller has proven they may
+ * pay.
+ *
+ * `value` is opaque and provider-specific; `publishableKey` is the provider's
+ * public key, served here rather than compiled into a checkout bundle — that
+ * page is deployed once and serves whichever gateway it is pointed at, so a
+ * baked-in key would be the wrong mode the first time a test deployment used
+ * the same page.
+ */
+export interface PeableClientAction {
+  readonly object: 'client_action';
+  readonly kind: 'client_secret' | 'redirect';
+  readonly value: string;
+  readonly publishableKey?: string;
+}
+
 export interface PeableCheckoutClient {
   /**
    * `GET /v1/payment_intents/:id` — the initial REST snapshot. Sends
@@ -54,6 +76,19 @@ export interface PeableCheckoutClient {
   ): Promise<{ unsubscribe(): void }>;
   /** `POST /v1/payment_intents/:id/submit_tx` — report a broadcast txid. */
   submitTx(id: string, clientSecret: string, txid: string): Promise<PaymentIntent>;
+  /**
+   * `POST /v1/payment_intents/:id/client_action` — what to pay WITH.
+   *
+   * A POST, and not a field on `getPaymentIntent`, because the answer is a
+   * credential: a GET response is cacheable by anything in front of it and its
+   * path lands in access logs, while `getPaymentIntent` is the call a checkout
+   * page POLLS.
+   *
+   * @throws {PeableInvalidRequestError} when the payment can no longer be paid
+   *   — a settled, expired or rejected payment has no next step, and a page
+   *   handed one would render a card form over a finished payment.
+   */
+  getClientAction(id: string, clientSecret: string): Promise<PeableClientAction>;
 }
 
 export interface CreatePeableCheckoutOptions {
@@ -130,6 +165,34 @@ export function createPeableCheckout(
     const body = await readJsonBody(response);
     if (!response.ok) throw errorFromResponse(response.status, body);
     return body as PaymentIntent;
+  }
+
+  async function getClientAction(
+    id: string,
+    clientSecret: string,
+  ): Promise<PeableClientAction> {
+    let response: Response;
+    try {
+      response = await fetch(
+        `${baseUrl}/v1/payment_intents/${encodeURIComponent(id)}/client_action`,
+        {
+          method: 'POST',
+          // The HEADER, never a query param, for the same reason the snapshot
+          // read uses one: a capability token in a URL lands in every access
+          // log between here and the gateway.
+          headers: { 'X-Peable-Client-Secret': clientSecret },
+        },
+      );
+    } catch (cause) {
+      throw new PeableApiError(
+        `Failed to reach the Peable Gateway at ${baseUrl}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+    const body = await readJsonBody(response);
+    if (!response.ok) throw errorFromResponse(response.status, body);
+    return body as PeableClientAction;
   }
 
   /**
@@ -243,5 +306,5 @@ export function createPeableCheckout(
     };
   }
 
-  return { getPaymentIntent, subscribe, submitTx };
+  return { getPaymentIntent, subscribe, submitTx, getClientAction };
 }

@@ -4,7 +4,7 @@
 // published one later is a one-line change here, and tests mock this module
 // instead of the SDK package.
 import { createPeableCheckout } from '@peable.to/sdk/checkout';
-import type { RealtimeConnectionState } from '@peable.to/sdk/checkout';
+import type { PeableClientAction, RealtimeConnectionState } from '@peable.to/sdk/checkout';
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { GATEWAY_URL } from './config';
 
@@ -33,4 +33,19 @@ export async function subscribe(
 
 export function submitTx(id: string, clientSecret: string, txid: string): Promise<PaymentIntent> {
   return client.submitTx(id, clientSecret, txid);
+}
+
+/**
+ * What the payer has to pay WITH — the card rail's next step.
+ *
+ * A separate call rather than a field on the intent, because the answer is a
+ * confirmation credential: `getPaymentIntent` is the read this page POLLS, and
+ * a credential on a polled response is one in a browser cache and in every
+ * intermediary's log.
+ */
+export function getClientAction(
+  id: string,
+  clientSecret: string,
+): Promise<PeableClientAction> {
+  return client.getClientAction(id, clientSecret);
 }

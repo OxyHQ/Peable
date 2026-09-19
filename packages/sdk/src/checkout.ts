@@ -12,6 +12,7 @@ export {
   createPeableCheckout,
   type CreatePeableCheckoutOptions,
   type PeableCheckoutClient,
+  type PeableClientAction,
   type RealtimeConnectionState,
 } from './browser/payerClient';
 
