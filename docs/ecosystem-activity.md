@@ -4,14 +4,18 @@ The backend publishes aggregate traffic and its infrastructure heartbeat to the
 Oxy API, which broadcasts changes to the website dashboard. Collection runs in
 the service process regardless of whether somebody opens the dashboard.
 
-Starts automatically once `AWS_REGION` and a registered Oxy application
-credential (`OXY_SERVICE_API_KEY` and `OXY_SERVICE_API_SECRET`) are present —
-there is no separate enable flag; the credential pair is dedicated to this
-feature, so its presence is the switch. Missing credentials are a no-op, not
-an error; missing or unrecognized `AWS_REGION` still fails at boot once
-credentials are present. Disabled collection emits a warning; it must not be
-interpreted as zero traffic. Provision credentials in the deployment before
-claiming coverage.
+Starts automatically once `AWS_REGION` is set and the process can authenticate
+to Oxy — there is no separate enable flag. On the infrastructure the gateway
+authenticates as ITSELF: an ECS task signs an STS `GetCallerIdentity` request
+with its task role and Oxy mints the service token (oxy ADR 0026), so a
+deployed task needs no credential in its environment. A registered application
+credential (`OXY_SERVICE_API_KEY` and `OXY_SERVICE_API_SECRET`) is still
+accepted and still preferred where one is present.
+
+Neither an attestable workload identity nor a credential — a laptop, a CI box —
+is a no-op, not an error, and emits a warning that must not be interpreted as
+zero traffic. Missing or unrecognized `AWS_REGION` still fails at boot once the
+publisher does start.
 
 HTTP middleware is mounted before body parsers and routers, including public
 routes, webhooks, failures and authenticated internal calls. Outgoing fetch and
