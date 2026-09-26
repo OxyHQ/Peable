@@ -36,6 +36,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
     credentialId: "c",
     ownerAccountId: "owner",
     environment: "development",
+    tier: "external",
   };
   next();
 };
@@ -215,6 +216,7 @@ describe("POST /v1/webhook_deliveries/:id/redeliver", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };

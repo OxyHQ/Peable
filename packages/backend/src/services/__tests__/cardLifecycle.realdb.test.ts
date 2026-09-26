@@ -181,6 +181,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };
