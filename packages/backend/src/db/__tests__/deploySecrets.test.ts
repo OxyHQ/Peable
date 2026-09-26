@@ -144,12 +144,11 @@ describe("the deploy syncs what the config reads", () => {
     }
   });
 
-  it("still syncs the three the service already could not boot without", () => {
+  it("still syncs the two the service already could not boot without", () => {
     const synced = new Set(syncedVariables());
     // A regression floor. `DATABASE_URL` in particular is what `config.ts`
     // refuses to load without, so losing it from the sync is a crash-loop.
     expect(synced.has("DATABASE_URL")).toBe(true);
-    expect(synced.has("OXY_ACCESS_TOKEN_SECRET")).toBe(true);
     expect(synced.has("IP_HASH_SALT")).toBe(true);
   });
 

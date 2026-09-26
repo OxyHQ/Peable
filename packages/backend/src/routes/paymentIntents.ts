@@ -239,10 +239,9 @@ export async function listPaymentIntentsForMerchant(
  *
  * `requireMerchant` and `optionalServiceAuth` are injectable so tests can
  * bypass real Oxy service tokens with stubs that populate `req.serviceApp`;
- * in production callers must pass `oxyClient.serviceAuth({ jwtSecret })` /
- * `oxyClient.auth({ jwtSecret, optional: true })` explicitly (see
- * `server.ts`) — there is no bare default here, since those with no
- * `jwtSecret` reject (or silently drop) every real token. `requireMerchant`
+ * in production `server.ts` passes `oxyClient.serviceAuth()` /
+ * `oxyClient.auth({ optional: true })`, which verify EdDSA service tokens
+ * against Oxy's public JWKS (oxy ADR 0012). `requireMerchant`
  * gates the merchant-only routes; `optionalServiceAuth` gates the dual-auth
  * `GET /:id` route. `submit_tx` is the payer path and is guarded by the
  * intent's `client_secret` instead.

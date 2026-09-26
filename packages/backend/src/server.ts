@@ -63,8 +63,8 @@ const PUBLIC_RATE_LIMIT_MAX = 30;
 
 export interface GatewayDeps {
   /**
-   * Merchant service-auth middleware (default
-   * `oxyClient.serviceAuth({ jwtSecret: config.serviceJwtSecret })`).
+   * Merchant service-auth middleware (default `oxyClient.serviceAuth()`,
+   * which verifies EdDSA service tokens against Oxy's public JWKS).
    */
   requireMerchant?: RequestHandler;
   /** Optional service-auth middleware for the dual-auth payer/merchant GET route. */
@@ -201,11 +201,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     next();
   }) as RequestHandler);
   const requireMerchant: RequestHandler =
-    deps.requireMerchant ??
-    oxyClient.serviceAuth({ jwtSecret: config.serviceJwtSecret });
+    deps.requireMerchant ?? oxyClient.serviceAuth();
   const optionalServiceAuth: RequestHandler =
-    deps.optionalServiceAuth ??
-    oxyClient.auth({ jwtSecret: config.serviceJwtSecret, optional: true });
+    deps.optionalServiceAuth ?? oxyClient.auth({ optional: true });
   const publicRateLimit: RequestHandler =
     deps.publicRateLimit ??
     createOxyRateLimit(oxyClient, {

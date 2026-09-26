@@ -9,18 +9,6 @@ import { loadConfig } from "../config";
  */
 const DB = { DATABASE_URL: "postgres://peable:peable@localhost:5432/peable" };
 
-test("serviceJwtSecret reads OXY_ACCESS_TOKEN_SECRET", () => {
-  expect(loadConfig({ ...DB, OXY_ACCESS_TOKEN_SECRET: "shh" }).serviceJwtSecret).toBe("shh");
-});
-
-test("serviceJwtSecret is undefined when unset (never silently defaults)", () => {
-  expect(loadConfig({ ...DB }).serviceJwtSecret).toBeUndefined();
-});
-
-test("serviceJwtSecret trims to undefined on an empty string", () => {
-  expect(loadConfig({ ...DB, OXY_ACCESS_TOKEN_SECRET: "   " }).serviceJwtSecret).toBeUndefined();
-});
-
 test("oxyApiUrl reads OXY_API_URL", () => {
   expect(loadConfig({ ...DB, OXY_API_URL: "https://oxy-api.internal" }).oxyApiUrl).toBe(
     "https://oxy-api.internal",
