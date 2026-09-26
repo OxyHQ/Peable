@@ -14,11 +14,8 @@ const DEFAULT_PORT = 3001;
 const DEFAULT_NETWORK: NetworkType = "mainnet";
 // The hosted checkout page's host (F2.2/F2.3) — see `2026-07-19-fase2-checkout-links.md`.
 const DEFAULT_CHECKOUT_BASE_URL = "https://checkout.peable.to";
-// The SAME literal fallback the shared `oxyClient` singleton itself is built
-// with (`@oxy.so/core`'s `OXY_API_URL = process.env.OXY_API_URL || 'https://api.oxy.so'`)
-// — not re-exported from that package's public entry, so mirrored here rather
-// than imported, matching the convention every other Oxy backend
-// (`Mention/packages/backend`, `oxy-ship`, …) already uses for the same constant.
+// Oxy's API. The `oxy` client (`src/oxy.ts`) is built from `config.oxyApiUrl`,
+// so it and the direct fetches in `services/appMembership.ts` never drift.
 const DEFAULT_OXY_API_URL = "https://api.oxy.so";
 
 export interface AppConfig {
@@ -76,9 +73,8 @@ export interface AppConfig {
    * Base URL of oxy-api (no trailing slash) — `services/appMembership.ts`
    * forwards the dashboard caller's Oxy bearer here (`GET
    * /applications/:applicationId`) to delegate `/v1/dashboard/*` authorization
-   * to oxy-api's own Application RBAC (zero RBAC duplication). Reads the SAME
-   * `OXY_API_URL` env var (and same `https://api.oxy.so` default) the shared
-   * `oxyClient` singleton itself was constructed with, so the two never drift.
+   * to oxy-api's own Application RBAC (zero RBAC duplication). The `oxy`
+   * client (`src/oxy.ts`) is constructed from this same value.
    */
   oxyApiUrl: string;
   /**

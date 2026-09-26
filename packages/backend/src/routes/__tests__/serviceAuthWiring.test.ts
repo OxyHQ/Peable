@@ -3,7 +3,7 @@ import { createHmac, generateKeyPairSync, sign } from "node:crypto";
 import type { AddressInfo } from "node:net";
 import type { Server } from "node:http";
 import express from "express";
-import { OxyServices } from "@oxy.so/core";
+import { OxyServer } from "@oxy.so/core/server";
 import {
   seedMerchant,
   useGatewayDatabase,
@@ -89,10 +89,10 @@ beforeAll(async () => {
 
   // The same calls `server.ts` makes, with no options: verification is the
   // JWKS at the client's base URL and nothing else. A fresh client rather than
-  // the `oxyClient` singleton, so its key cache is this file's alone.
-  const oxy = new OxyServices({ baseURL: oxyApi });
-  const requireMerchant = oxy.serviceAuth();
-  const optionalServiceAuth = oxy.auth({ optional: true });
+  // the `oxy` client, so its key cache is this file's alone.
+  const oxy = new OxyServer({ baseURL: oxyApi });
+  const requireMerchant = oxy.middleware.service();
+  const optionalServiceAuth = oxy.middleware.auth({ optional: true });
 
   const app = express();
   app.use(express.json());

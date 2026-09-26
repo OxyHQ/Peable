@@ -20,7 +20,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
-    "@oxy.so/telemetry": "^1.1.1"
+    "@oxy.so/telemetry": "^1.2.0"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.11.0",

@@ -50,7 +50,7 @@ test("resolves displayName + avatarUrl + description when all identity fields ar
 
   expect(display).toEqual({
     name: "Mercaria",
-    // The public-CDN builder (`oxyClient.getFileDownloadUrl`) — never a
+    // The public-CDN builder (`oxy.assets.publicUrl`) — never a
     // hand-built `cloud.oxy.so` string — with the ecosystem's 'thumb' variant.
     avatarUrl: "https://cloud.oxy.so/file_mercaria_logo?variant=thumb",
     description: "Marketplace",

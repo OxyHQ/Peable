@@ -9,7 +9,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import {
   isBaseUnitString,
   type Refund,
@@ -100,7 +100,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     "/v1/refunds",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -200,7 +200,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     "/v1/payment_intents/:intentId/refunds",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -246,7 +246,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     "/v1/payment_intents/:intentId/settlement",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

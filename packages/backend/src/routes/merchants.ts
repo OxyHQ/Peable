@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import type { OxyServiceEnvironment } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import {
@@ -215,7 +215,7 @@ export function createMerchantsRouter(deps: {
     "/v1/merchants",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const serviceApp = requireServiceApp(req, res);
       if (!serviceApp) return;
@@ -243,7 +243,7 @@ export function createMerchantsRouter(deps: {
     "/v1/merchants/me",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -255,7 +255,7 @@ export function createMerchantsRouter(deps: {
     "/v1/merchants/me",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

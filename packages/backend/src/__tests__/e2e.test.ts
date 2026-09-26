@@ -72,7 +72,7 @@ const stubOptionalServiceAuth = (
 ): void => next();
 
 // Stub identity verifier for a socket connection that DOES present a
-// handshake token (real prod default is `oxyClient.authSocket()`). Trivially
+// handshake token (real prod default is `oxy.middleware.socket()`). Trivially
 // accepts and attaches a fake identity. `initSocket` always wraps this in
 // `optionalSocketAuth`, so a connection with NO token never reaches this
 // stub at all — it stays anonymous.

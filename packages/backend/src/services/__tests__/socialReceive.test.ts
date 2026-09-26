@@ -1,5 +1,6 @@
 import { test, expect, beforeEach, mock } from "bun:test";
-import { oxyClient as realOxyClient } from "@oxy.so/core";
+import { oxy as realOxy } from "../../oxy";
+import { overrideOxy } from "../../__tests__/helpers/oxyOverrides";
 import type { DidDocument } from "@oxy.so/contracts";
 import {
   resetGatewayTables,
@@ -33,25 +34,10 @@ function didWithKey(userId: string, publicKeyHex: string | null): DidDocument {
 
 const resolveDidMock = mock(async (userId: string) => didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX));
 
-// `mock.module` replaces `@oxy.so/core` process-wide for the rest of this bun
-// test run, including for OTHER test files whose `oxyClient` binding resolves
-// after this one applies. Wrap the REAL `oxyClient` in a `Proxy` that only
-// intercepts `resolveDid` and forwards everything else (`serviceAuth`,
-// `auth`, `getProfileByUsername`, ...) to the real instance, bound to it —
-// other route test files (e.g. `serviceAuthWiring.test.ts`, `merchants.test.ts`,
-// `routes/__tests__/social.test.ts`) call those and must keep working
-// regardless of bun's file execution order (see `routes/__tests__/social.test.ts`
-// for the same pattern).
-const mockedOxyClient = new Proxy(realOxyClient, {
-  get(target, prop, receiver) {
-    if (prop === "resolveDid") return resolveDidMock;
-    const value = Reflect.get(target, prop, receiver);
-    return typeof value === "function" ? value.bind(target) : value;
-  },
-});
-
-mock.module("@oxy.so/core", () => ({
-  oxyClient: mockedOxyClient,
+// `mock.module` is process-wide in bun: only the methods this file needs are
+// replaced; the rest of `oxy` (its middleware included) stays real.
+mock.module("../../oxy", () => ({
+  oxy: overrideOxy(realOxy, { identity: { resolveDid: resolveDidMock } }),
 }));
 
 const {

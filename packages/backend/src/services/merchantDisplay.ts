@@ -1,4 +1,4 @@
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import type { MerchantDisplay } from "@peable.to/shared-types";
 import type { MerchantRow } from "../db/merchants/merchantRepository";
 
@@ -12,7 +12,7 @@ const DEFAULT_MERCHANT_NAME = "Peable merchant";
  * leave the merchant-authed DTO (`toMerchantDTO`).
  *
  * The avatar is resolved through the SDK's canonical media chokepoint
- * (`oxyClient.getFileDownloadUrl`, the same public-CDN URL builder every
+ * (`oxy.assets.publicUrl`, the same public-CDN URL builder every
  * other Oxy app uses for a public avatar — `'thumb'` is the ecosystem-wide
  * variant for this size of identity chip) rather than hand-building a
  * `cloud.oxy.so` string here. It is a synchronous, no-network builder, so
@@ -26,7 +26,7 @@ export async function resolveMerchantDisplay(
   return {
     name: merchant.displayName ?? DEFAULT_MERCHANT_NAME,
     avatarUrl: merchant.avatarFileId
-      ? oxyClient.getFileDownloadUrl(merchant.avatarFileId, "thumb")
+      ? oxy.assets.publicUrl(merchant.avatarFileId, "thumb")
       : null,
     description: merchant.description ?? null,
   };

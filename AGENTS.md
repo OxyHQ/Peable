@@ -317,9 +317,11 @@ predicate and `for update skip locked`.
 
 ## Auth
 
-Backend uses `@oxy.so/core/server`: `createOxyAuthMiddleware` on routes,
-`getRequiredOxyUserId` to read the caller, `authSocket()` for Socket.IO, plus
-`createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
+Backend uses `@oxy.so/core/server`: the one `OxyServer` is `src/oxy.ts`
+(`oxy`), with `createOxyAuthMiddleware(oxy)` on routes, `getRequiredOxyUserId`
+to read the caller, `oxy.middleware.service()` / `.requireScope()` for merchant
+service tokens (EdDSA, verified against Oxy's JWKS), `oxy.middleware.socket()`
+for Socket.IO, plus `createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
 `requireOxyAuth` call site in this repo. Frontend uses `OxyProvider` and `useOxy`
 from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
 

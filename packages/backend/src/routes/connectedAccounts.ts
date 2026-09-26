@@ -9,7 +9,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { getDb } from "../db/postgres";
 import {
   findAccountByExternalRef,
@@ -84,7 +84,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -128,7 +128,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -195,7 +195,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts/by_ref/:externalRef",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -221,7 +221,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts/:accountId",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -253,7 +253,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts/:accountId/refresh",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -304,7 +304,7 @@ export function createConnectedAccountsRouter(deps: {
     "/v1/connected_accounts/:accountId/account_links",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

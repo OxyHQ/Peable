@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { getDb } from "../db/postgres";
 import { findWebhookTarget } from "../db/merchants/merchantRepository";
 import type { MerchantRow } from "../db/merchants/merchantRepository";
@@ -150,7 +150,7 @@ export function createWebhookDeliveriesRouter(deps: {
     "/v1/webhook_deliveries/:id/redeliver",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

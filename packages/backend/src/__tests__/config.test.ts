@@ -15,6 +15,6 @@ test("oxyApiUrl reads OXY_API_URL", () => {
   );
 });
 
-test("oxyApiUrl defaults to https://api.oxy.so when unset — the SAME default the shared oxyClient singleton uses", () => {
+test("oxyApiUrl defaults to https://api.oxy.so when unset — Oxy's production API", () => {
   expect(loadConfig({ ...DB }).oxyApiUrl).toBe("https://api.oxy.so");
 });

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { Request, RequestHandler, Response } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import {
   createOxyAuthMiddleware,
   getRequiredOxyUserId,
@@ -139,7 +139,7 @@ export function createDashboardRouter(deps?: {
   safeFetch?: SafeFetchFn;
 }): Router {
   const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxyClient);
+    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const assertAppMembership = deps?.assertAppMembership ?? realAssertAppMembership;
   const safeFetch = deps?.safeFetch;
   const router = Router();

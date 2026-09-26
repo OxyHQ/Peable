@@ -1,7 +1,7 @@
 import { observeEcosystemSocket } from '../ecosystemActivity';
 import { isIP } from "node:net";
 import type { Server, Socket } from "socket.io";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { verifySecret } from "@oxy.so/core/server";
 import { getDb } from "../db/postgres";
 import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
@@ -23,7 +23,7 @@ export interface SocketDeps {
   /**
    * Override the MANDATORY identity verifier invoked for a connection that
    * DOES present a handshake token (tests inject a stub; prod uses
-   * `oxyClient.authSocket()`). Always wrapped in `optionalSocketAuth` below —
+   * `oxy.middleware.socket()`). Always wrapped in `optionalSocketAuth` below —
    * a connection with no token is let through anonymously without ever
    * calling this verifier.
    */
@@ -265,9 +265,15 @@ export function emitIntentUpdateToActive(intent: PaymentIntentRow): void {
   emitIntentUpdate(activeIo, intent);
 }
 
+/** Oxy's handshake verifier, as a `SocketAuth` (socket.io hands it a real `Socket`). */
+function oxySocketAuth(): SocketAuth {
+  const verify = oxy.middleware.socket();
+  return (socket, next) => verify(socket as Parameters<typeof verify>[0], next);
+}
+
 export function initSocket(io: Server, deps: SocketDeps = {}): void {
   activeIo = io;
-  const identityAuth = deps.socketAuth ?? oxyClient.authSocket();
+  const identityAuth: SocketAuth = deps.socketAuth ?? oxySocketAuth();
   const ipConnectLimiter = new FixedWindowLimiter(IP_CONNECT_WINDOW_MS, IP_CONNECT_MAX);
   const subscribeLimiter = new FixedWindowLimiter(
     SUBSCRIBE_WINDOW_MS,

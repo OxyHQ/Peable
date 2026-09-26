@@ -1,6 +1,8 @@
 import { test, expect, beforeEach, mock } from "bun:test";
 import { eq } from "drizzle-orm";
-import { oxyClient as realOxyClient, type User } from "@oxy.so/core";
+import { type User } from "@oxy.so/core";
+import { oxy as realOxy } from "../../oxy";
+import { overrideOxy } from "../../__tests__/helpers/oxyOverrides";
 import { merchants } from "../../db/schema";
 import {
   gatewayDb,
@@ -34,25 +36,10 @@ const getUsersByIdsMock = mock(async (ids: string[]) =>
     .filter((u): u is User => u !== null),
 );
 
-// `mock.module` replaces `@oxy.so/core` process-wide for the rest of this bun
-// test run, including for OTHER test files whose `oxyClient` binding resolves
-// after this one applies. Wrap the REAL `oxyClient` in a `Proxy` that only
-// intercepts `getUsersByIds` and forwards everything else (`serviceAuth`,
-// `auth`, `getProfileByUsername`, `resolveDid`, ...) to the real instance,
-// bound to it — other route/service test files (`serviceAuthWiring.test.ts`,
-// `merchants.test.ts`, `routes/__tests__/social.test.ts`,
-// `services/__tests__/socialReceive.test.ts`) call those and must keep
-// working regardless of bun's file execution order.
-const mockedOxyClient = new Proxy(realOxyClient, {
-  get(target, prop, receiver) {
-    if (prop === "getUsersByIds") return getUsersByIdsMock;
-    const value = Reflect.get(target, prop, receiver);
-    return typeof value === "function" ? value.bind(target) : value;
-  },
-});
-
-mock.module("@oxy.so/core", () => ({
-  oxyClient: mockedOxyClient,
+// `mock.module` is process-wide in bun: only the methods this file needs are
+// replaced; the rest of `oxy` (its middleware included) stays real.
+mock.module("../../oxy", () => ({
+  oxy: overrideOxy(realOxy, { users: { getMany: getUsersByIdsMock } }),
 }));
 
 const { enrichAddresses, ENRICH_MAX_ADDRESSES } = await import("../enrichment");

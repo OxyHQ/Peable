@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import type { CreatePaymentLinkParams } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findMerchantById } from "../db/merchants/merchantRepository";
@@ -68,7 +68,7 @@ export function createPaymentLinksRouter(deps: {
     "/v1/payment_links",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -138,7 +138,7 @@ export function createPaymentLinksRouter(deps: {
     "/v1/payment_links",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -187,7 +187,7 @@ export function createPaymentLinksRouter(deps: {
     "/v1/payment_links/:id",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -215,7 +215,7 @@ export function createPaymentLinksRouter(deps: {
     "/v1/payment_links/:id",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

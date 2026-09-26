@@ -62,7 +62,7 @@ export interface ResolvedServiceApp {
 
 /**
  * Extract the authenticated service app's identity + environment from
- * `req.serviceApp` (populated by `oxyClient.serviceAuth()` or the optional
+ * `req.serviceApp` (populated by `oxy.middleware.service()` or the optional
  * variant). Returns null AND writes a 401 when absent, so callers just
  * `if (!serviceApp) return`.
  */
@@ -78,7 +78,7 @@ export function requireServiceApp(req: Request, res: Response): ResolvedServiceA
 /**
  * Merchant-route auth gate, shared by every scope-checked merchant-privileged
  * route (`merchants.ts`, `paymentIntents.ts`, `webhookDeliveries.ts`).
- * `oxyClient.requireScope()` answers 403 SERVICE_TOKEN_REQUIRED when
+ * `oxy.middleware.requireScope()` answers 403 SERVICE_TOKEN_REQUIRED when
  * `req.serviceApp` is missing entirely, not 401 — gate on serviceApp
  * presence FIRST so a fully unauthenticated caller gets 401 like every other
  * route in this gateway, and requireScope's 403 is reserved for

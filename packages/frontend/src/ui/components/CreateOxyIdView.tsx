@@ -28,7 +28,7 @@ export function CreateOxyIdView() {
       // to "create" on a network hiccup could generate a fresh key on this
       // device and orphan the real identity that already lives on another
       // device. Fail closed: surface a retry instead of guessing.
-      const { methods } = await oxyServices.listAuthMethods();
+      const { methods } = await oxyServices.identity.authMethods();
       const action = resolveKeylessAction(hasIdentityAuthMethod(methods));
       const canOpen = await Linking.canOpenURL(action.url);
       if (!canOpen) {

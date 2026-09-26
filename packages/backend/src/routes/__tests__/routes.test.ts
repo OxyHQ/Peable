@@ -29,7 +29,7 @@ const FIRST_ADDRESS = "TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3";
 const TEST_APP_ID = "app_test";
 
 // Test stub for the merchant auth middleware: bypass real Oxy service tokens by
-// populating `req.serviceApp` directly (exactly what `oxyClient.serviceAuth()`
+// populating `req.serviceApp` directly (exactly what `oxy.middleware.service()`
 // would do after verifying a token).
 const stubRequireMerchant: RequestHandler = (req, _res, next) => {
   (req as OxyAuthRequest).serviceApp = {
@@ -46,7 +46,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
 
 // Test stub for the dual-auth GET route's optional service-auth middleware:
 // populates `req.serviceApp` ONLY when an `Authorization` header is present
-// (exactly what `oxyClient.auth({ optional: true })` does for a valid
+// (exactly what `oxy.middleware.auth({ optional: true })` does for a valid
 // service token), so both the merchant and payer branches are exercisable.
 // Carries `payments:read` so the merchant branch's manual scope check
 // (`GET /v1/payment_intents/:id`) passes by default; the dedicated

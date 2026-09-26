@@ -8,6 +8,8 @@
  * Peable is a Relying Party; it never mints or imports identities itself.
  */
 
+import type { AuthMethodEntry } from "@oxy.so/contracts";
+
 /**
  * Commons deep link that starts Oxy ID creation
  * (`packages/commons/app/(auth)/create-identity/index.tsx`). Commons'
@@ -30,14 +32,14 @@ export const COMMONS_IMPORT_IDENTITY_URL = "commons://import-identity";
 export type KeylessAction = { kind: "create" | "sync"; url: string };
 
 /**
- * True when the account already has a self-sovereign identity verification
- * method on the server (present on some device), vs. a fully keyless
- * (password-only) account. A `webauthn` (passkey) entry does not count — a
- * passkey-only account stays custodial and still cannot derive a wallet (see
- * `AuthMethodEntry` in `@oxy.so/contracts`, whose `type` union is exactly
- * `'identity' | 'webauthn'`).
+ * True when the account already has a self-sovereign identity key on the
+ * server (present on some device), vs. a keyless account — one that signs in
+ * by email (code or link), password or authenticator. `GET /auth/methods`
+ * lists only the identity key (`AuthMethodEntry.type` is exactly `'identity'`
+ * in `@oxy.so/contracts` 3): the sign-in factors are not verification methods,
+ * so a keyless account answers an empty list.
  */
-export function hasIdentityAuthMethod(methods: readonly { type?: string }[]): boolean {
+export function hasIdentityAuthMethod(methods: readonly AuthMethodEntry[]): boolean {
   return methods.some((m) => m.type === "identity");
 }
 
