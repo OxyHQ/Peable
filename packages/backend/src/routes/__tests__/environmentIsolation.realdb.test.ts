@@ -125,6 +125,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
     credentialId: "c",
     ownerAccountId: "owner",
     environment: "development",
+    tier: "external",
   };
   next();
 };

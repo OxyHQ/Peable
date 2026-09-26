@@ -15,6 +15,12 @@
  * rendered its active item with no pill and an unreadable label.
  */
 @source "../../node_modules/@oxy.so/bloom/lib/**/*.{js,jsx}";
+/*
+ * The SDK's sign-in screens (`OxySignInPanel`, `OxySignUpPanel`, the account
+ * picker) lay out with NativeWind classNames too, so Tailwind scans it the same
+ * way; without this the account dialog's sign-in renders unstyled on the web.
+ */
+@source "../../node_modules/@oxy.so/services/lib/**/*.{js,jsx}";
 
 /*
  * FAIRWallet semantic token contract. The base `--x` variables are injected at

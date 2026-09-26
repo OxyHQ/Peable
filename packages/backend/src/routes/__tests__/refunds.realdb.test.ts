@@ -130,6 +130,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the refund API", () => {
         credentialId: "c",
         ownerAccountId: "acct_refunds",
         environment: "development",
+        tier: "external",
       };
       next();
     };

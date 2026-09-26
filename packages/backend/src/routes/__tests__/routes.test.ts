@@ -39,6 +39,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
     credentialId: "c",
     ownerAccountId: "owner",
     environment: "development",
+    tier: "external",
   };
   next();
 };
@@ -59,6 +60,7 @@ const stubOptionalServiceAuth: RequestHandler = (req, _res, next) => {
       credentialId: "c",
       ownerAccountId: "owner",
       environment: "development",
+      tier: "external",
     };
   }
   next();
@@ -284,6 +286,7 @@ describe("POST /v1/payment_intents", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };
@@ -382,6 +385,7 @@ describe("GET /v1/payment_intents/:id", () => {
           credentialId: "c",
           ownerAccountId: "owner",
           environment: "development",
+          tier: "external",
         };
       }
       next();
@@ -505,6 +509,7 @@ describe("POST /v1/payment_intents/:id/reject", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };

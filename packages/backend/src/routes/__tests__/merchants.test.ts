@@ -52,6 +52,7 @@ function stubRequireMerchant(appId: string, environment: string): RequestHandler
           ? E
           : never
         : never,
+      tier: "external",
     };
     next();
   };
@@ -244,6 +245,7 @@ describe("POST /v1/merchants", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };

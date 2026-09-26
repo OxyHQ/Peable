@@ -138,6 +138,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };

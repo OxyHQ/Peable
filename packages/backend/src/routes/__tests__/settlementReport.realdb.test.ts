@@ -126,6 +126,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("reporting what a payment came to", () 
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };

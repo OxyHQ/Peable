@@ -245,6 +245,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the settlement API", () => {
         credentialId: "c",
         ownerAccountId: "acct_settlement",
         environment: "development",
+        tier: "external",
       };
       next();
     };

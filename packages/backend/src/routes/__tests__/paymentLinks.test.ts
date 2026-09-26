@@ -34,6 +34,7 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
     credentialId: "c",
     ownerAccountId: "owner",
     environment: "development",
+    tier: "external",
   };
   next();
 };
@@ -206,6 +207,7 @@ describe("POST /v1/payment_links", () => {
         credentialId: "c",
         ownerAccountId: "owner",
         environment: "development",
+        tier: "external",
       };
       next();
     };
