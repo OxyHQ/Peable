@@ -15,9 +15,8 @@
 #   docker build -f packages/backend/Dockerfile -t peable-backend .
 #
 # Runtime configuration comes from the environment. ECS injects DATABASE_URL —
-# which the service cannot boot without — and the Oxy service secrets
-# (OXY_ACCESS_TOKEN_SECRET, IP_HASH_SALT,
-# DEVICE_ID_SALT) from SSM `/oxy/peable/*` (+ `/oxy/_shared/*`); non-secret
+# which the service cannot boot without — and the request-hashing salts
+# (IP_HASH_SALT, DEVICE_ID_SALT) from SSM `/oxy/peable/*` (+ `/oxy/_shared/*`); non-secret
 # config (PORT, PEABLE_NETWORK, EXPLORER_BASE_URL, PEABLE_ALLOWED_ORIGINS,
 # OXY_API_URL) is set as plain task-definition env.
 # See .github/workflows/deploy-aws.yml.

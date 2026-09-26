@@ -152,7 +152,6 @@ jobs:
           # drops it from `secrets[]`, which is harmless — an environment
           # variable nothing reads — but it must not be re-added here.
           APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          APP_OXY_ACCESS_TOKEN_SECRET: ${{ secrets.OXY_ACCESS_TOKEN_SECRET }}
           # Read by @oxy.so/core (request hashing).
           APP_IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}
           APP_DEVICE_ID_SALT: ${{ secrets.DEVICE_ID_SALT }}
@@ -191,7 +190,6 @@ jobs:
           }
 
           sync_secret DATABASE_URL "$APP_DATABASE_URL" "/oxy/$APP/DATABASE_URL"
-          sync_secret OXY_ACCESS_TOKEN_SECRET "$APP_OXY_ACCESS_TOKEN_SECRET" "/oxy/$APP/OXY_ACCESS_TOKEN_SECRET"
           sync_secret IP_HASH_SALT "$APP_IP_HASH_SALT" "/oxy/$APP/IP_HASH_SALT"
           sync_secret DEVICE_ID_SALT "$APP_DEVICE_ID_SALT" "/oxy/$APP/DEVICE_ID_SALT"
           sync_secret STRIPE_ENABLED "$APP_STRIPE_ENABLED" "/oxy/$APP/STRIPE_ENABLED"
