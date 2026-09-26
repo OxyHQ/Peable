@@ -24,7 +24,7 @@ import {
   publicKeyFromPrivateKey,
 } from "@fairco.in/core";
 import type { NetworkConfig } from "@fairco.in/core";
-import { KeyManager as IdentityKeyManager } from "@oxy.so/core";
+import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
 
 /**
  * How many unused social-receive addresses stay watched beyond the highest

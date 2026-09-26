@@ -2,7 +2,8 @@ import { Router } from "express";
 import type { Request, RequestHandler } from "express";
 import { z } from "zod";
 import { rateLimit } from "express-rate-limit";
-import { oxyClient, isNotFoundError } from "@oxy.so/core";
+import { isNotFoundError } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxy.so/core/server";
 import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
@@ -129,12 +130,12 @@ interface PairRateLimitedRequest extends Request {
  *
  * `requireOxyUser` is injectable so tests can bypass a real Oxy bearer token
  * with a stub that populates `req.userId`; production defaults to
- * `createOxyAuthMiddleware(oxyClient)` — the PAYER's own signed-in Oxy
+ * `createOxyAuthMiddleware(oxy)` — the PAYER's own signed-in Oxy
  * session, distinct from the merchant service-auth `paymentIntents.ts` uses.
  */
 export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
   const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxyClient);
+    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const router = Router();
 
   // Built once per router (so tests building a fresh router via
@@ -198,7 +199,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       let recipient: { id: string };
       try {
-        recipient = await oxyClient.getProfileByUsername(username);
+        recipient = await oxy.users.byUsername(username);
       } catch (err) {
         if (isNotFoundError(err)) {
           sendError(res, 404, "invalid_request_error", "recipient not found");

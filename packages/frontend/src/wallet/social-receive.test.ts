@@ -1,18 +1,18 @@
 import { describe, test, expect, mock } from "bun:test";
 import { hexToBytes, getNetwork } from "@fairco.in/core";
 
-// Mock @oxy.so/core BEFORE importing the module under test — mirrors
+// Mock @oxy.so/core/crypto BEFORE importing the module under test — mirrors
 // identity-wallet.test.ts's established pattern for wrapping KeyManager,
 // including its spread: `mock.module` is process-wide, so replacing the module
 // with only `KeyManager` would delete every other Oxy export for the rest of
 // the run and break unrelated test files that import them.
-const realOxyCore = { ...(await import("@oxy.so/core")) };
+const realOxyCrypto = { ...(await import("@oxy.so/core/crypto")) };
 let sharedPrivateKeyResult: string | null = "aa".repeat(32);
 let primaryPrivateKeyResult: string | null = null;
 const getSharedPrivateKey = mock(async () => sharedPrivateKeyResult);
 const getPrivateKey = mock(async () => primaryPrivateKeyResult);
-mock.module("@oxy.so/core", () => ({
-  ...realOxyCore,
+mock.module("@oxy.so/core/crypto", () => ({
+  ...realOxyCrypto,
   KeyManager: { getSharedPrivateKey, getPrivateKey },
 }));
 

@@ -10,15 +10,15 @@ import { createSocialRouter } from "../social";
  * `requireOxyUser` so the rest of the suite can stub it with a fixed
  * `req.userId`. That stub is never exercised here — this file wires BOTH
  * routers with NO `deps` at all, so each falls back to its real production
- * default (`createOxyAuthMiddleware(oxyClient)`; see `enrich.ts` / `social.ts`),
+ * default (`createOxyAuthMiddleware(oxy)`; see `enrich.ts` / `social.ts`),
  * proving the default itself actually rejects an unauthenticated caller
  * rather than the test's own stub silently standing in for it. Mirrors
  * `serviceAuthWiring.test.ts`'s approach for the merchant/service-auth path.
  *
- * No bearer token is ever sent, so `oxyClient.auth({ optional: true })`
+ * No bearer token is ever sent, so `oxy.middleware.auth({ optional: true })`
  * returns `next()` with no `req.userId` set without making any network call
  * (see `OxyServices.utility.js`'s `auth()` — a missing token short-circuits
- * before any session lookup) — no MongoMemoryServer or oxyClient mocking is
+ * before any session lookup) — no MongoMemoryServer or `oxy` mocking is
  * needed to observe the resulting 401.
  */
 let server: Server;

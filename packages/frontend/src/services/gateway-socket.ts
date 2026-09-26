@@ -24,7 +24,7 @@ interface ClientToServerEvents {
  *
  * `autoConnect: false` gates dialing the Gateway on being authenticated: the
  * handshake carries the Oxy access token (`handshake.auth.token`, read by the
- * Gateway's `oxyClient.authSocket()`), and a signed-out boot has no token to
+ * Gateway's `oxy.middleware.socket()`), and a signed-out boot has no token to
  * present. `subscribeToIntent` opens the connection only after checking the
  * session. The `auth` callback is re-read on every (re)connect, so a rotated
  * token is always sent fresh rather than captured stale at construction.
@@ -34,7 +34,7 @@ const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
   {
     transports: ['websocket'],
     autoConnect: false,
-    auth: (cb) => cb({ token: oxyServices.getAccessToken() ?? '' }),
+    auth: (cb) => cb({ token: oxyServices.session.accessToken ?? '' }),
   },
 );
 
@@ -57,7 +57,7 @@ export async function subscribeToIntent(
   clientSecret: string,
   onUpdate: (intent: PaymentIntent) => void,
 ): Promise<IntentSubscription> {
-  if (!oxyServices.getAccessToken()) {
+  if (!oxyServices.session.accessToken) {
     throw new Error(
       'Cannot subscribe to a payment intent while signed out of Oxy',
     );

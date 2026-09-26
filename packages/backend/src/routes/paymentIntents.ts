@@ -5,7 +5,7 @@ import type {
   Response,
 } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { verifySecret } from "@oxy.so/core/server";
 import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
 import {
@@ -239,8 +239,8 @@ export async function listPaymentIntentsForMerchant(
  *
  * `requireMerchant` and `optionalServiceAuth` are injectable so tests can
  * bypass real Oxy service tokens with stubs that populate `req.serviceApp`;
- * in production `server.ts` passes `oxyClient.serviceAuth()` /
- * `oxyClient.auth({ optional: true })`, which verify EdDSA service tokens
+ * in production `server.ts` passes `oxy.middleware.service()` /
+ * `oxy.middleware.auth({ optional: true })`, which verify EdDSA service tokens
  * against Oxy's public JWKS (oxy ADR 0012). `requireMerchant`
  * gates the merchant-only routes; `optionalServiceAuth` gates the dual-auth
  * `GET /:id` route. `submit_tx` is the payer path and is guarded by the
@@ -257,7 +257,7 @@ export function createPaymentIntentsRouter(deps: {
     "/v1/payment_intents",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -348,7 +348,7 @@ export function createPaymentIntentsRouter(deps: {
     "/v1/payment_intents",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -393,13 +393,13 @@ export function createPaymentIntentsRouter(deps: {
       if (serviceApp?.appId) {
         // Merchant path — same `payments:read` requirement as the list route
         // (F2.0 gateway-review finding: this branch previously enforced no
-        // scope at all). Can't use `oxyClient.requireScope()` as ordinary
+        // scope at all). Can't use `oxy.requireScope()` as ordinary
         // route middleware here — that would also gate the payer/client_secret
         // branch below, which has no service token to check — so the SAME
         // scope-checking primitive is invoked manually, scoped to just this
         // branch.
         let scopeGranted = false;
-        oxyClient.requireScope("payments:read")(req, res, () => {
+        oxy.middleware.requireScope("payments:read")(req, res, () => {
           scopeGranted = true;
         });
         if (!scopeGranted) return;
@@ -516,7 +516,7 @@ export function createPaymentIntentsRouter(deps: {
 
       if (serviceApp?.appId) {
         let scopeGranted = false;
-        oxyClient.requireScope("payments:read")(req, res, () => {
+        oxy.middleware.requireScope("payments:read")(req, res, () => {
           scopeGranted = true;
         });
         if (!scopeGranted) return;
@@ -584,7 +584,7 @@ export function createPaymentIntentsRouter(deps: {
     "/v1/payment_intents/:id/reject",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

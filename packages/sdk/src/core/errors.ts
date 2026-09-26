@@ -107,7 +107,7 @@ function isFlatGatewayErrorBody(body: unknown): body is FlatGatewayErrorBody {
  * request was rejected:
  * - The Gateway's own route handlers use the Stripe-style nested envelope
  *   `{ error: { type, message } }` (`lib/http.ts`'s `sendError`).
- * - `@oxy.so/core`'s Express auth middleware (`oxyClient.serviceAuth()` /
+ * - `@oxy.so/core`'s Express auth middleware (`oxy.middleware.service()` /
  *   `requireScope()` — rejecting a missing/expired/insufficiently-scoped
  *   service token BEFORE a route handler ever runs) and oxy-api's own
  *   `ApiError.toJSON()` use a FLAT envelope: `{ error: <CODE_STRING>,

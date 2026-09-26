@@ -1,7 +1,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxy.so/core/server";
 import type { EnrichResponse } from "@peable.to/shared-types";
 import { enrichAddresses, ENRICH_MAX_ADDRESSES } from "../services/enrichment";
@@ -18,7 +18,7 @@ const enrichBodySchema = z.object({
  */
 export function createEnrichRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
   const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxyClient);
+    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const router = Router();
 
   router.post(

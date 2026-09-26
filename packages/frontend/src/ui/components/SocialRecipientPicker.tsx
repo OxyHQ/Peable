@@ -83,7 +83,7 @@ export function SocialRecipientPicker({
   const { data, isFetching } = useQuery({
     queryKey: ["oxyUserSearch", debouncedQuery],
     queryFn: async (): Promise<SocialRecipient[]> => {
-      const response = await oxyServices.searchProfiles(debouncedQuery, {
+      const response = await oxyServices.users.search(debouncedQuery, {
         limit: SEARCH_RESULT_LIMIT,
       });
       return response.data.map((user) => ({

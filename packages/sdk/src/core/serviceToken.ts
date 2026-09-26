@@ -1,6 +1,6 @@
 // Mints a short-lived Oxy service token from an `ApplicationCredential`
 // (`{publicKey, secret}`) by presenting it to oxy-api's `POST
-// /auth/service-token` — the exact mechanism `oxyClient.serviceAuth()`
+// /auth/service-token` — the exact mechanism `oxy.middleware.service()`
 // validates at the Gateway. Caches the token until near expiry and re-mints
 // reactively when `RestClient` sees a 401 (see `client.ts`).
 

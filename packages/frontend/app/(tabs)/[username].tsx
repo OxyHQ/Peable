@@ -106,7 +106,7 @@ function ProfileScreen({ handle }: { handle: string }) {
     error,
   } = useQuery({
     queryKey: ["oxyProfileByUsername", handle],
-    queryFn: () => oxyServices.getProfileByUsername(handle),
+    queryFn: () => oxyServices.users.byUsername(handle),
     staleTime: PROFILE_STALE_TIME_MS,
     // A missing handle is an answer, not a transient failure — retrying a 404
     // only delays the not-found state behind another round trip. Everything

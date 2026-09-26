@@ -1,7 +1,7 @@
 /**
  * `optionalSocketAuth` is the ROOT of the capability-based realtime model:
  * it decides whether a connection needs identity at all. These tests pin
- * that decision down in isolation (no real `oxyClient`, no Mongo) so the
+ * that decision down in isolation (no real `oxy`, no Mongo) so the
  * capability semantics can't silently regress underneath the `subscribe`
  * capability check, which is covered end-to-end in `__tests__/e2e.test.ts`.
  *

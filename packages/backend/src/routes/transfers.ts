@@ -12,7 +12,7 @@
 import { Router } from "express";
 import type { RequestHandler } from "express";
 import { z } from "zod";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { isBaseUnitString } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import {
@@ -186,7 +186,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     "/v1/transfers",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -339,7 +339,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     "/v1/transfers/:transferId/reversals",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:write"),
+    oxy.middleware.requireScope("payments:write"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -438,7 +438,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     "/v1/payment_intents/:intentId/transfers",
     requireMerchant,
     requireAuthenticated,
-    oxyClient.requireScope("payments:read"),
+    oxy.middleware.requireScope("payments:read"),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

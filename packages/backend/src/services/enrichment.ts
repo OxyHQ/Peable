@@ -1,4 +1,5 @@
-import { oxyClient, getNormalizedUserHandle } from "@oxy.so/core";
+import { getNormalizedUserHandle } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import type { EnrichmentResult } from "@peable.to/shared-types";
 import { getDb } from "../db/postgres";
 import { findIntentsByAddresses } from "../db/payments/paymentIntentRepository";
@@ -84,7 +85,7 @@ export async function enrichAddresses(
 
     if (counterpartyByAddress.size > 0) {
       const counterpartyIds = [...new Set(counterpartyByAddress.values())];
-      const profiles = await oxyClient.getUsersByIds(counterpartyIds);
+      const profiles = await oxy.users.getMany(counterpartyIds);
       const profileById = new Map(profiles.map((p) => [p.id, p]));
       for (const [address, counterpartyId] of counterpartyByAddress) {
         const profile = profileById.get(counterpartyId);

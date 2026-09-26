@@ -9,7 +9,7 @@
  * derive a different, wrong seed — spec §4.1).
  */
 
-import { KeyManager as IdentityKeyManager } from "@oxy.so/core";
+import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
 import { bytesToHex } from "@fairco.in/core";
 
 /**

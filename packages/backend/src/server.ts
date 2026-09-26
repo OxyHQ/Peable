@@ -13,7 +13,7 @@ import express, {
   type RequestHandler,
 } from "express";
 import { Server as SocketServer } from "socket.io";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "./oxy";
 import { createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
 import { config } from "./config";
 import { connectPostgres, disconnectPostgres, isPostgresReady } from "./db/postgres";
@@ -63,7 +63,7 @@ const PUBLIC_RATE_LIMIT_MAX = 30;
 
 export interface GatewayDeps {
   /**
-   * Merchant service-auth middleware (default `oxyClient.serviceAuth()`,
+   * Merchant service-auth middleware (default `oxy.middleware.service()`,
    * which verifies EdDSA service tokens against Oxy's public JWKS).
    */
   requireMerchant?: RequestHandler;
@@ -76,11 +76,11 @@ export interface GatewayDeps {
    * below so its tighter anonymous budget applies ONLY to those four routes).
    */
   publicRateLimit?: RequestHandler;
-  /** End-user Oxy auth for the social + enrich + dashboard routes (default `createOxyAuthMiddleware(oxyClient)`). */
+  /** End-user Oxy auth for the social + enrich + dashboard routes (default `createOxyAuthMiddleware(oxy)`). */
   requireOxyUser?: RequestHandler;
   /**
    * Identity verifier used ONLY for a socket connection that presents a
-   * handshake token (default `oxyClient.authSocket()`); a connection with no
+   * handshake token (default `oxy.middleware.socket()`); a connection with no
    * token is always let through anonymously — see
    * `realtime/socket.ts`'s `optionalSocketAuth`.
    */
@@ -194,21 +194,21 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // ordering against the real chain so a reorder is a red build.
   app.use(createProviderWebhooksRouter());
 
-  app.use(createOxyRateLimit(oxyClient));
+  app.use(createOxyRateLimit(oxy));
   app.use(express.json());
   app.use(((_req, res, next) => {
     res.setHeader("Peable-Version", PEABLE_VERSION);
     next();
   }) as RequestHandler);
   const requireMerchant: RequestHandler =
-    deps.requireMerchant ?? oxyClient.serviceAuth();
+    deps.requireMerchant ?? oxy.middleware.service();
   const optionalServiceAuth: RequestHandler =
-    deps.optionalServiceAuth ?? oxyClient.auth({ optional: true });
+    deps.optionalServiceAuth ?? oxy.middleware.auth({ optional: true });
   const publicRateLimit: RequestHandler =
     deps.publicRateLimit ??
-    createOxyRateLimit(oxyClient, {
+    createOxyRateLimit(oxy, {
       anonymousMax: PUBLIC_RATE_LIMIT_MAX,
-      // `createOxyRateLimit` resolves `oxy.auth({ optional: true })` BEFORE
+      // `createOxyRateLimit` resolves `oxy.middleware.auth({ optional: true })` BEFORE
       // limiting regardless of route auth, so ANY caller with a valid Oxy
       // session or service token — not just a merchant of THIS gateway —
       // would otherwise get the 5000/window authenticated default on these

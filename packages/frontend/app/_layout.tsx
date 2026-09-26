@@ -340,7 +340,7 @@ export default function RootLayout() {
               }}
             >
               <ImageResolverProvider
-                value={(id, variant) => oxyServices.getFileDownloadUrl(id, variant)}
+                value={(id, variant) => oxyServices.assets.publicUrl(id, variant)}
               >
                 <BottomSheetModalProvider>
                   {/* Inside the theme provider so the fallback screen is themed,

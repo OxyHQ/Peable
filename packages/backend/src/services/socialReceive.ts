@@ -1,6 +1,6 @@
 import { bytesToHex, getNetwork, hexToBytes, deriveSocialReceiveAddress } from "@fairco.in/core";
 import type { NetworkType } from "@fairco.in/core";
-import { oxyClient } from "@oxy.so/core";
+import { oxy } from "../oxy";
 import { getDb } from "../db/postgres";
 import {
   readReservedThrough,
@@ -42,7 +42,7 @@ const ACCOUNT_KEY_FRAGMENT = "#key-1";
 export async function resolveIdentityPublicKey(
   oxyUserId: string,
 ): Promise<Uint8Array | null> {
-  const doc = await oxyClient.resolveDid(oxyUserId);
+  const doc = await oxy.identity.resolveDid(oxyUserId);
   const secp256k1 = doc.verificationMethod.filter(
     (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE && "publicKeyHex" in entry,
   );
