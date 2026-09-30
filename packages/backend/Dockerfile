@@ -82,15 +82,17 @@ COPY --from=builder /app/packages/sdk/package.json packages/sdk/
 COPY --from=builder /app/packages/checkout/package.json packages/checkout/
 COPY --from=builder /app/packages/pay/package.json packages/pay/
 
+# Production dependencies only. --ignore-scripts skips the root postinstall
+# (shared-types is already built, and its dist/ is copied below). It runs from
+# the manifests and lockfile alone, BEFORE the source is copied, so a
+# source-only change reuses this layer from the build cache.
+RUN bun install --frozen-lockfile --production --ignore-scripts
+
 # Compiled shared-types output (imported as dist/index.js) + the backend TS
 # source and its tsconfig (run directly under Bun — no compiled entrypoint).
 COPY --from=builder /app/packages/shared-types/dist/ packages/shared-types/dist/
 COPY --from=builder /app/packages/backend/src/ packages/backend/src/
 COPY --from=builder /app/packages/backend/tsconfig.json packages/backend/
-
-# Production dependencies only. --ignore-scripts skips the root postinstall
-# (shared-types is already built and copied above as dist/).
-RUN bun install --frozen-lockfile --production --ignore-scripts
 
 ENV NODE_ENV=production
 USER appuser
