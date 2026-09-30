@@ -203,12 +203,34 @@ jobs:
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4
+
+      # `--cache-from/--cache-to type=gha` below need the Actions runtime token
+      # and cache URL, which GitHub gives to JavaScript actions and NOT to `run:`
+      # steps; without them buildx skips the cache silently. Only a push to main
+      # or a dispatch runs this workflow, so pull-request code never writes this
+      # cache scope.
+      - name: Expose the Actions cache to buildx
+        uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4
+
+      # Same Dockerfile, context, platform and tags as the plain `docker build`
+      # this replaces, pushed in the same step. --provenance=false keeps the
+      # pushed artefact a single-platform image manifest, as before, rather
+      # than an index with an attestation.
       - name: Build and push (linux/arm64)
         run: |
           IMG=$ECR_REGISTRY/oxy/$APP
-          docker build -f "$DOCKERFILE" -t "$IMG:${{ github.sha }}" -t "$IMG:latest" .
-          docker push "$IMG:${{ github.sha }}"
-          docker push "$IMG:latest"
+          docker buildx build \
+            --platform linux/arm64 \
+            --cache-from type=gha,scope=$APP-backend \
+            --cache-to type=gha,scope=$APP-backend,mode=max \
+            --provenance=false \
+            -f "$DOCKERFILE" \
+            -t "$IMG:${{ github.sha }}" \
+            -t "$IMG:latest" \
+            --push \
+            .
 
       # ── Migrations run as one-shot ECS tasks, around the rollout ─────────────
       #
