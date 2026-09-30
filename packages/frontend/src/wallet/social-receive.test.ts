@@ -1,31 +1,50 @@
 import { describe, test, expect, mock } from "bun:test";
-import { hexToBytes, getNetwork } from "@fairco.in/core";
+import {
+  buildTransaction,
+  createP2PKHScript,
+  decodeAddress,
+  deriveSocialReceiveSpendingKey,
+  getNetwork,
+  hexToBytes,
+  signInput,
+} from "@fairco.in/core";
 
 // Mock @oxy.so/core/crypto BEFORE importing the module under test — mirrors
 // identity-wallet.test.ts's established pattern for wrapping KeyManager,
 // including its spread: `mock.module` is process-wide, so replacing the module
 // with only `KeyManager` would delete every other Oxy export for the rest of
 // the run and break unrelated test files that import them.
+//
+// The fake holder is @oxy.so/core's own pure derivations over a test key: the
+// same functions the iOS SDK runs and Commons' identity host reproduces
+// natively on Android (pinned by the oxy repo's identity-host vectors.json).
 const realOxyCrypto = { ...(await import("@oxy.so/core/crypto")) };
-let sharedPrivateKeyResult: string | null = "aa".repeat(32);
-let primaryPrivateKeyResult: string | null = null;
-const getSharedPrivateKey = mock(async () => sharedPrivateKeyResult);
-const getPrivateKey = mock(async () => primaryPrivateKeyResult);
+const IDENTITY_KEY_A = "aa".repeat(32);
+// vectors.json: the published (uncompressed) public key of IDENTITY_KEY_A.
+const IDENTITY_PUB_A =
+  "046a04ab98d9e4774ad806e302dddeb63bea16b5cb5f223ee77478e861bb583eb336b6fbcb60b5b3d4f1551ac45e5ffc4936466e7d98f6c7c0ec736539f74691a6";
+const IDENTITY_PUB_A_COMPRESSED = "026a04ab98d9e4774ad806e302dddeb63bea16b5cb5f223ee77478e861bb583eb3";
+
+let sharedPublicKeyResult: string | null = IDENTITY_PUB_A;
+let holderKey: string | null = IDENTITY_KEY_A;
+const getSharedPublicKey = mock(async () => sharedPublicKeyResult);
+const signSocialReceive = mock(async (index: number, digest: string) =>
+  holderKey ? realOxyCrypto.signSocialReceiveDigest(holderKey, index, digest) : null,
+);
 mock.module("@oxy.so/core/crypto", () => ({
   ...realOxyCrypto,
-  KeyManager: { getSharedPrivateKey, getPrivateKey },
+  KeyManager: { getSharedPublicKey, signSocialReceive },
 }));
 
 const {
   SOCIAL_RECEIVE_GAP_LIMIT,
-  getIdentityPrivateKeyBytes,
-  identityPublicKeyHex,
+  compressedPublicKeyHex,
+  getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
-  getSocialReceiveSpendingKey,
+  signSocialReceiveInput,
   computeWindowExtension,
 } = await import("./social-receive");
 
-const IDENTITY_PRIV_A = hexToBytes("aa".repeat(32));
 const TESTNET = getNetwork("testnet");
 
 describe("SOCIAL_RECEIVE_GAP_LIMIT", () => {
@@ -34,96 +53,94 @@ describe("SOCIAL_RECEIVE_GAP_LIMIT", () => {
   });
 });
 
-describe("identityPublicKeyHex", () => {
-  // The name this device's social-receive addresses exist under. The backend
-  // derives what payers are sent to from the key the ACCOUNT publishes, so the
-  // two being comparable is the only way to notice they have stopped matching.
-  test("names the key the watch window is derived from", () => {
-    const hex = identityPublicKeyHex(IDENTITY_PRIV_A);
-
-    expect(hex).toMatch(/^[0-9a-f]+$/);
-    // Same key in, same name out: the comparison is only meaningful if it is
-    // stable across launches.
-    expect(identityPublicKeyHex(IDENTITY_PRIV_A)).toBe(hex);
-    // And a different identity is a different name, never a collision.
-    expect(identityPublicKeyHex(hexToBytes("bb".repeat(32)))).not.toBe(hex);
+describe("getIdentityPublicKeyHex", () => {
+  test("is the shared identity's public key, compressed", async () => {
+    sharedPublicKeyResult = IDENTITY_PUB_A;
+    expect(await getIdentityPublicKeyHex()).toBe(IDENTITY_PUB_A_COMPRESSED);
   });
 
-  test("is the key the derived addresses actually came from", () => {
-    const [first] = deriveSocialReceiveWatchWindow(IDENTITY_PRIV_A, 0, 1, TESTNET);
-    const fromOtherKey = deriveSocialReceiveWatchWindow(hexToBytes("bb".repeat(32)), 0, 1, TESTNET);
-
-    // Stated as the property the check relies on: a window derived under a
-    // different key is a different set of addresses, so watching it would be
-    // watching a tree nobody is paying into.
-    expect(first!.address).not.toBe(fromOtherKey[0]!.address);
+  test("is null when no identity holder answers (web, keyless, Commons absent)", async () => {
+    sharedPublicKeyResult = null;
+    expect(await getIdentityPublicKeyHex()).toBeNull();
+    sharedPublicKeyResult = IDENTITY_PUB_A;
   });
 });
 
-describe("getIdentityPrivateKeyBytes", () => {
-  test("prefers the shared identity over the primary one", async () => {
-    sharedPrivateKeyResult = "aa".repeat(32);
-    primaryPrivateKeyResult = "bb".repeat(32);
-    const bytes = await getIdentityPrivateKeyBytes();
-    expect(bytes).toEqual(IDENTITY_PRIV_A);
-  });
-
-  test("falls back to the primary identity when there is no shared one", async () => {
-    sharedPrivateKeyResult = null;
-    primaryPrivateKeyResult = "bb".repeat(32);
-    const bytes = await getIdentityPrivateKeyBytes();
-    expect(bytes).toEqual(hexToBytes("bb".repeat(32)));
-  });
-
-  test("returns null when neither identity is available (web / keyless)", async () => {
-    sharedPrivateKeyResult = null;
-    primaryPrivateKeyResult = null;
-    expect(await getIdentityPrivateKeyBytes()).toBeNull();
-  });
-
-  test("CRITICAL: canonicalizes a short or uppercase hex key before decoding", async () => {
-    // elliptic's getPrivate('hex') strips leading zero bytes ~1-in-256 times,
-    // and legacy imports may be uppercase — both must decode to the exact
-    // same 32 bytes as the fully-padded lowercase form, or the derived
-    // social-receive branch would silently diverge from what the SAME
-    // identity's public path (backend/payer) computes.
-    sharedPrivateKeyResult = "AA".repeat(32); // uppercase, full length
-    primaryPrivateKeyResult = null;
-    const uppercaseBytes = await getIdentityPrivateKeyBytes();
-    expect(uppercaseBytes).toEqual(IDENTITY_PRIV_A);
-
-    sharedPrivateKeyResult = "1".repeat(63); // 63 chars -- needs left-padding to 64
-    const shortBytes = await getIdentityPrivateKeyBytes();
-    expect(shortBytes).toEqual(hexToBytes(`0${"1".repeat(63)}`));
+describe("compressedPublicKeyHex", () => {
+  // The account publishes the uncompressed key and this device names its window
+  // by the compressed one; two encodings of one key must compare equal, or the
+  // cursor check turns social receive off for every account.
+  test("names one key the same whatever its encoding", () => {
+    expect(compressedPublicKeyHex(IDENTITY_PUB_A)).toBe(IDENTITY_PUB_A_COMPRESSED);
+    expect(compressedPublicKeyHex(IDENTITY_PUB_A.toUpperCase())).toBe(IDENTITY_PUB_A_COMPRESSED);
+    expect(compressedPublicKeyHex(IDENTITY_PUB_A_COMPRESSED)).toBe(IDENTITY_PUB_A_COMPRESSED);
+    expect(compressedPublicKeyHex(hexToBytes(IDENTITY_PUB_A))).toBe(IDENTITY_PUB_A_COMPRESSED);
   });
 });
 
 describe("deriveSocialReceiveWatchWindow", () => {
+  // The same addresses the window derived from the private key before Peable
+  // stopped holding it: a wallet's watched addresses do not move.
   test("derives the pinned addr(0..2) starting at 0", () => {
-    const window = deriveSocialReceiveWatchWindow(IDENTITY_PRIV_A, 0, 3, TESTNET);
+    const window = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 0, 3, TESTNET);
     expect(window).toEqual([
       { index: 0, address: "TGW3g56Q5PvpA8UangXnzX6va2MkfaRx5r" },
       { index: 1, address: "TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ" },
       { index: 2, address: "TVsFKn7zkDN1QnMNe1thrJUEXBGiqnu19g" },
     ]);
+    expect(deriveSocialReceiveWatchWindow(IDENTITY_PUB_A_COMPRESSED, 0, 3, TESTNET)).toEqual(window);
   });
 
   test("a window starting mid-range derives the correct offset", () => {
-    const window = deriveSocialReceiveWatchWindow(IDENTITY_PRIV_A, 2, 1, TESTNET);
+    const window = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 2, 1, TESTNET);
     expect(window).toEqual([{ index: 2, address: "TVsFKn7zkDN1QnMNe1thrJUEXBGiqnu19g" }]);
   });
 
   test("count 0 returns an empty window", () => {
-    expect(deriveSocialReceiveWatchWindow(IDENTITY_PRIV_A, 0, 0, TESTNET)).toEqual([]);
+    expect(deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 0, 0, TESTNET)).toEqual([]);
+  });
+
+  test("a different identity is a different set of addresses", () => {
+    const other = realOxyCrypto.deriveSocialReceiveKey("bb".repeat(32), 0).publicKey;
+    const [first] = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 0, 1, TESTNET);
+    expect(deriveSocialReceiveWatchWindow(other, 0, 1, TESTNET)[0]!.address).not.toBe(first!.address);
   });
 });
 
-describe("getSocialReceiveSpendingKey", () => {
-  test("the spending key at index 0 matches the pinned vector", () => {
-    const key = getSocialReceiveSpendingKey(IDENTITY_PRIV_A, 0);
-    expect(Buffer.from(key).toString("hex")).toBe(
-      "42d089c0f361d67b6add7279d67718bc89ddd35d2218696991c24d3902d26c86".slice(0, 64),
-    );
+describe("signSocialReceiveInput", () => {
+  const [{ address: SOCIAL_ADDR_1 }] = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 1, 1, TESTNET);
+  const scriptPubKey = createP2PKHScript(decodeAddress(SOCIAL_ADDR_1!).hash);
+  const tx = buildTransaction({
+    utxos: [{ txid: "11".repeat(32), vout: 0, value: 1_000_000n, scriptPubKey }],
+    recipients: [{ address: "TGW3g56Q5PvpA8UangXnzX6va2MkfaRx5r", value: 400_000n }],
+    changeAddress: "TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ",
+    feePerByte: 10n,
+    network: TESTNET,
+  });
+
+  test("is byte-identical to signing locally with the child key", async () => {
+    holderKey = IDENTITY_KEY_A;
+    const remote = await signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET);
+    const childKey = deriveSocialReceiveSpendingKey(hexToBytes(IDENTITY_KEY_A), 1);
+    expect(remote).toEqual(signInput(tx, 0, scriptPubKey, childKey));
+    // The holder was asked for child 1 over the input's sighash, never for a key.
+    expect(signSocialReceive).toHaveBeenLastCalledWith(1, expect.stringMatching(/^[0-9a-f]{64}$/));
+  });
+
+  test("throws when no identity holder answers", async () => {
+    holderKey = null;
+    await expect(
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET),
+    ).rejects.toThrow(/without the Oxy identity/);
+    holderKey = IDENTITY_KEY_A;
+  });
+
+  test("refuses a signature from a key that does not own the address", async () => {
+    holderKey = "bb".repeat(32);
+    await expect(
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET),
+    ).rejects.toThrow(/does not own/);
+    holderKey = IDENTITY_KEY_A;
   });
 });
 

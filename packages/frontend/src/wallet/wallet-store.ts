@@ -23,6 +23,7 @@ import {
   type NetworkType,
   type NetworkConfig,
   type UTXO as TxUTXO,
+  type Transaction,
 } from "@fairco.in/core";
 import type { ParsedTransaction } from "../p2p/messages";
 import { SPVClient } from "../p2p/spv-client";
@@ -87,10 +88,10 @@ import {
 import { hasIdentityKeystore } from "./keystore";
 import {
   SOCIAL_RECEIVE_GAP_LIMIT,
-  getIdentityPrivateKeyBytes,
-  identityPublicKeyHex,
+  compressedPublicKeyHex,
+  getIdentityPublicKeyHex,
   deriveSocialReceiveWatchWindow,
-  getSocialReceiveSpendingKey,
+  signSocialReceiveInput,
   computeWindowExtension,
 } from "./social-receive";
 import { getSocialReceiveCursor } from "../services/gateway-client";
@@ -356,12 +357,12 @@ let database: Database | null = null;
 let networkConfig: NetworkConfig | null = null;
 let spvClient: SPVClient | null = null;
 /**
- * The on-device identity's raw private key, held ONLY for deriving
- * social-receive spending keys on demand (spec §4.3) — never used for the
- * private spending tree, which goes through `deriveIdentitySeed`'s HKDF
- * instead. `null` until `initializeFromIdentity` sets up social receive.
+ * The identity PUBLIC key (compressed hex) the social-receive window derives
+ * from (spec §4.3). Peable never holds the private key: spending a social
+ * coin asks the key's holder to sign. `null` until `initializeFromIdentity`
+ * sets up social receive.
  */
-let socialReceiveIdentityPrivateKey: Uint8Array | null = null;
+let socialReceiveIdentityPublicKey: string | null = null;
 /** address -> derivation index, for every currently-watched social-receive address (used + unused window). */
 let socialReceiveAddressIndex: Map<string, number> = new Map();
 // Handle of the recurring poll that mirrors peer / sync state from the SPV
@@ -526,20 +527,20 @@ async function setUpSocialReceive(
   networkType: NetworkType,
   set: WalletSet,
 ): Promise<void> {
-  const identityPrivateKey = await getIdentityPrivateKeyBytes();
-  if (!identityPrivateKey) {
-    // Web, or a race where identity was removed between initialize() and
-    // here — initializeFromIdentity() already returned "no-identity" in the
-    // normal case, so this is a defensive no-op, not the expected path.
+  const identityPublicKey = await getIdentityPublicKeyHex();
+  if (!identityPublicKey) {
+    // Web, Commons absent on Android, or a race where identity was removed
+    // between initialize() and here — initializeFromIdentity() already
+    // returned "no-identity" in the normal case, so this is a defensive
+    // no-op, not the expected path.
     return;
   }
-  socialReceiveIdentityPrivateKey = identityPrivateKey;
+  socialReceiveIdentityPublicKey = identityPublicKey;
 
   // Which key this window belongs to. Every address in it is a function of the
   // identity key, so a window derived from a different one watches addresses
   // nobody will ever pay — indistinguishable, from the inside, from not being
   // paid. Re-derive instead of extending it.
-  const identityPublicKey = identityPublicKeyHex(identityPrivateKey);
   const windowKey = await db.getSocialReceiveIdentityKey();
   if (windowKey !== null && windowKey !== identityPublicKey) {
     console.warn(
@@ -551,7 +552,7 @@ async function setUpSocialReceive(
   let persisted = await db.getSocialReceiveAddresses();
   if (persisted.length === 0) {
     const initial = deriveSocialReceiveWatchWindow(
-      identityPrivateKey,
+      identityPublicKey,
       0,
       SOCIAL_RECEIVE_GAP_LIMIT,
       network,
@@ -585,7 +586,10 @@ async function setUpSocialReceive(
     // widening the window only watches more of the wrong tree. Stop, and stop
     // offering `@username` as a way to be paid (below) rather than collecting
     // payments nobody can reach.
-    if (cursor.identityPublicKey !== null && cursor.identityPublicKey !== identityPublicKey) {
+    if (
+      cursor.identityPublicKey !== null &&
+      compressedPublicKeyHex(cursor.identityPublicKey) !== identityPublicKey
+    ) {
       console.warn(
         "[social-receive] this account publishes a different identity key than this device holds; social receive is off",
       );
@@ -620,7 +624,7 @@ async function setUpSocialReceive(
   );
   if (cursorExtension) {
     const fresh = deriveSocialReceiveWatchWindow(
-      identityPrivateKey,
+      identityPublicKey,
       cursorExtension.start,
       cursorExtension.count,
       network,
@@ -643,7 +647,7 @@ async function extendSocialReceiveWindowIfNeeded(
   db: Database,
   network: NetworkConfig,
 ): Promise<boolean> {
-  if (!socialReceiveIdentityPrivateKey) {
+  if (!socialReceiveIdentityPublicKey) {
     return false;
   }
   const highestWatched = Math.max(-1, ...socialReceiveAddressIndex.values());
@@ -653,7 +657,7 @@ async function extendSocialReceiveWindowIfNeeded(
     return false;
   }
   const fresh = deriveSocialReceiveWatchWindow(
-    socialReceiveIdentityPrivateKey,
+    socialReceiveIdentityPublicKey,
     extension.start,
     extension.count,
     network,
@@ -666,31 +670,26 @@ async function extendSocialReceiveWindowIfNeeded(
 }
 
 /**
- * Resolve the signing private key for `address`: the private spending tree
- * first, then the social-receive branch (spec §4.3) if the address isn't in
- * the tree. Throws if neither knows the address, or if a social address is
- * matched but the on-device identity key is unavailable (should not happen —
- * a social address can only be watched while the identity key was present).
+ * The scriptSig for input `inputIndex`, which spends `utxo`: the private
+ * spending tree signs locally; a social-receive address (spec §4.3) is signed
+ * by the identity key's holder, since Peable never has that key. Throws if
+ * neither knows the address.
  */
-async function getSigningKeyForAddress(
+async function signInputForAddress(
   km: KeyManager,
-  address: string,
+  tx: Transaction,
+  inputIndex: number,
+  utxo: { address: string; scriptPubKey: Uint8Array },
+  network: NetworkConfig,
 ): Promise<Uint8Array> {
-  if (km.ownsAddress(address)) {
-    return km.getPrivateKeyForAddress(address);
+  if (km.ownsAddress(utxo.address)) {
+    return signInput(tx, inputIndex, utxo.scriptPubKey, km.getPrivateKeyForAddress(utxo.address));
   }
-  const socialIndex = socialReceiveAddressIndex.get(address);
+  const socialIndex = socialReceiveAddressIndex.get(utxo.address);
   if (socialIndex !== undefined) {
-    const identityPrivateKey =
-      socialReceiveIdentityPrivateKey ?? (await getIdentityPrivateKeyBytes());
-    if (!identityPrivateKey) {
-      throw new Error(
-        "Cannot sign for a social-receive address without the on-device identity key",
-      );
-    }
-    return getSocialReceiveSpendingKey(identityPrivateKey, socialIndex);
+    return signSocialReceiveInput(tx, inputIndex, utxo.scriptPubKey, socialIndex, utxo.address, network);
   }
-  throw new Error(`Address not found in key manager: ${address}`);
+  throw new Error(`Address not found in key manager: ${utxo.address}`);
 }
 
 /**
@@ -1190,7 +1189,7 @@ function resetWalletInternals(): void {
     keyManager.wipe();
   }
   keyManager = null;
-  socialReceiveIdentityPrivateKey = null;
+  socialReceiveIdentityPublicKey = null;
   socialReceiveAddressIndex = new Map();
   utxoSet = null;
   database = null;
@@ -1489,7 +1488,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // re-deriving and persisting the SAME window redundantly into every
       // other Pocket's own (otherwise-unrelated) DB file. Non-identity
       // wallets and non-main Pockets skip it; `resetWalletInternals` already
-      // cleared `socialReceiveIdentityPrivateKey` / `socialReceiveAddressIndex`
+      // cleared `socialReceiveIdentityPublicKey` / `socialReceiveAddressIndex`
       // to their empty defaults for them.
       if (activeId === OXY_IDENTITY_WALLET_ID && resolvedAccount === MAIN_POCKET_ACCOUNT) {
         await setUpSocialReceive(database, networkConfig, state.network, set);
@@ -2052,10 +2051,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           throw new Error(`UTXO not found for input ${input.txid}:${input.vout}`);
         }
 
-        const privateKey = await getSigningKeyForAddress(localKeyManager, utxo.address);
         tx.inputs[i] = {
           ...tx.inputs[i],
-          scriptSig: signInput(tx, i, utxo.scriptPubKey, privateKey),
+          scriptSig: await signInputForAddress(localKeyManager, tx, i, utxo, localNetworkConfig),
         };
       }
 

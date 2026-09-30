@@ -1,29 +1,31 @@
 /**
  * Peable's on-device half of the social-receive scheme (design spec §4.3).
- * Reads the raw identity private key from `@oxy.so/core`'s EXISTING
- * `KeyManager.getSharedPrivateKey()`/`getPrivateKey()` — no `@oxy.so/core`
- * change needed; this mirrors `deriveIdentitySeed`'s own key-source priority
- * (shared ecosystem identity first, then this device's primary identity) but
- * SKIPS the HKDF step: the social-receive branch is, by design, the ONE
- * place the raw identity key is reused directly for money (spec §4.3's
- * key-separation note) — every other on-device use goes through
- * `deriveIdentitySeed`/`deriveScopedSeed`'s domain-separated HKDF instead.
- * Calls the published `@fairco.in/core` derivation primitives
- * (`deriveSocialReceiveAddress`, `deriveSocialReceiveSpendingKey`,
- * `publicKeyFromPrivateKey`) — generic secp256k1 crypto with no Oxy
- * dependency; this file is the ONLY place in the app that supplies it with
- * Oxy-identity-sourced key material. Also owns the gap-limit-extension math
- * as a pure function, kept here (not in `wallet-store.ts`) so it stays
- * directly unit-testable without any SQLite or SPV setup.
+ *
+ * Peable never holds the identity private key. The watch window derives from
+ * the identity PUBLIC key (`KeyManager.getSharedPublicKey()`), exactly as a
+ * payer or the backend derives the same addresses, and spending a
+ * social-receive coin asks the key's holder to sign the input's sighash
+ * (`KeyManager.signSocialReceive(index, sighash)`): Commons over
+ * signature-protected IPC on Android, the keychain-group key on iOS. What comes
+ * back is a DER signature and the child's compressed public key, never a key.
+ *
+ * The address derivation is `@fairco.in/core`'s published primitive
+ * (`deriveSocialReceiveAddress`) — generic secp256k1 crypto with no Oxy
+ * dependency. Also owns the gap-limit-extension math as a pure function, kept
+ * here (not in `wallet-store.ts`) so it stays directly unit-testable without
+ * any SQLite or SPV setup.
  */
 import {
+  SIGHASH_ALL,
   bytesToHex,
   hexToBytes,
+  computeMultisigSigHash,
+  createP2PKHScriptSig,
   deriveSocialReceiveAddress,
-  deriveSocialReceiveSpendingKey,
-  publicKeyFromPrivateKey,
+  publicKeyToAddress,
 } from "@fairco.in/core";
-import type { NetworkConfig } from "@fairco.in/core";
+import type { NetworkConfig, Transaction } from "@fairco.in/core";
+import { Point } from "@noble/secp256k1";
 import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
 
 /**
@@ -34,60 +36,44 @@ import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
 export const SOCIAL_RECEIVE_GAP_LIMIT = 20;
 
 /**
- * Lowercase + left-pad to 64 hex chars. Mirrors `@oxy.so/core`'s internal
- * `KeyManager.canonicalPrivateKey` (private to that package, not exported) —
- * tolerates the 1-in-256 leading-zero-strip `elliptic`'s `getPrivate('hex')`
- * produces and legacy uppercase-stored keys. Every raw private-key hex
- * string read from `KeyManager` MUST be normalized this way before
- * hex-decoding, or a short/uppercase key silently decodes to the WRONG 32
- * bytes and the derived social-receive branch diverges from what the SAME
- * identity's PUBLIC path (backend/payer) computes.
+ * The compressed, lowercase hex form of a secp256k1 public key, whatever
+ * encoding it arrived in. The identity key is published uncompressed (`04…`)
+ * while the social-receive scheme works on the compressed point; comparing two
+ * encodings of one key as strings would call them different keys.
  */
-function canonicalizePrivateKeyHex(hex: string): string {
-  return hex.toLowerCase().padStart(64, "0");
+export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
+  const hex = typeof publicKey === "string" ? publicKey.toLowerCase() : bytesToHex(publicKey);
+  return Point.fromHex(hex).toHex(true);
 }
 
 /**
- * The on-device identity's RAW private key bytes for the social-receive
- * branch ONLY (spec §4.3's key-separation note). `null` on web or a keyless
- * account — both `KeyManager` getters already return `null` in those cases,
- * so no extra platform check is needed here.
- */
-export async function getIdentityPrivateKeyBytes(): Promise<Uint8Array | null> {
-  const hex =
-    (await IdentityKeyManager.getSharedPrivateKey()) ??
-    (await IdentityKeyManager.getPrivateKey());
-  if (!hex) {
-    return null;
-  }
-  return hexToBytes(canonicalizePrivateKeyHex(hex));
-}
-
-/**
- * The identity public key, hex — the name under which this device's
- * social-receive addresses exist.
+ * The identity public key, compressed hex — the name under which this device's
+ * social-receive addresses exist. `null` on web, for a keyless account, or on
+ * Android when Commons is absent: only the key's holder can sign for these
+ * addresses, so without it there is nothing to watch.
  *
  * Both sides of social receive derive from it: this device computes its watch
  * window from it, and the backend derives what payers are sent to from the key
  * the account publishes. Comparing the two is the only way to notice they have
  * stopped being the same key.
  */
-export function identityPublicKeyHex(identityPrivateKey: Uint8Array): string {
-  return bytesToHex(publicKeyFromPrivateKey(identityPrivateKey));
+export async function getIdentityPublicKeyHex(): Promise<string | null> {
+  const publicKey = await IdentityKeyManager.getSharedPublicKey();
+  return publicKey ? compressedPublicKeyHex(publicKey) : null;
 }
 
 /**
  * Compute `count` consecutive social-receive addresses starting at `start`,
- * from the identity PRIVATE key (native-only; the recipient's own device).
- * Address 0 is always the caller's stable default/favourite address.
+ * from the identity PUBLIC key. Address 0 is always the caller's stable
+ * default/favourite address.
  */
 export function deriveSocialReceiveWatchWindow(
-  identityPrivateKey: Uint8Array,
+  identityPublicKeyHex: string,
   start: number,
   count: number,
   network: NetworkConfig,
 ): { index: number; address: string }[] {
-  const identityPublicKey = publicKeyFromPrivateKey(identityPrivateKey);
+  const identityPublicKey = hexToBytes(compressedPublicKeyHex(identityPublicKeyHex));
   const window: { index: number; address: string }[] = [];
   for (let i = start; i < start + count; i++) {
     window.push({
@@ -98,12 +84,45 @@ export function deriveSocialReceiveWatchWindow(
   return window;
 }
 
-/** The spending private key for social-receive child `index` (recipient only). */
-export function getSocialReceiveSpendingKey(
-  identityPrivateKey: Uint8Array,
+/**
+ * The legacy (pre-segwit) SIGHASH_ALL digest of input `inputIndex` with
+ * `scriptCode` substituted in. `@fairco.in/core` exports this algorithm as
+ * `computeMultisigSigHash`, whose scriptCode is a P2SH redeem script; for a
+ * P2PKH input the scriptCode is the previous output's scriptPubKey, and the
+ * digest is byte-identical to what `signInput` signs.
+ */
+export function p2pkhSigHash(tx: Transaction, inputIndex: number, scriptPubKey: Uint8Array): Uint8Array {
+  return computeMultisigSigHash(tx, inputIndex, scriptPubKey, SIGHASH_ALL);
+}
+
+/**
+ * The scriptSig spending social-receive child `index` at `address`, signed by
+ * the identity key's holder. Throws when no holder answers (Commons absent,
+ * keyless, web) or when the key that signed is not the one `address` belongs
+ * to — broadcasting that would be rejected by every node after the bytes left.
+ */
+export async function signSocialReceiveInput(
+  tx: Transaction,
+  inputIndex: number,
+  scriptPubKey: Uint8Array,
   index: number,
-): Uint8Array {
-  return deriveSocialReceiveSpendingKey(identityPrivateKey, index);
+  address: string,
+  network: NetworkConfig,
+): Promise<Uint8Array> {
+  const sighash = bytesToHex(p2pkhSigHash(tx, inputIndex, scriptPubKey));
+  const signed = await IdentityKeyManager.signSocialReceive(index, sighash);
+  if (!signed) {
+    throw new Error("Cannot sign for a social-receive address without the Oxy identity");
+  }
+  const childPublicKey = hexToBytes(signed.publicKey);
+  if (publicKeyToAddress(childPublicKey, network) !== address) {
+    throw new Error("The Oxy identity signed with a key that does not own this social-receive address");
+  }
+  const der = hexToBytes(signed.signature);
+  const signature = new Uint8Array(der.length + 1);
+  signature.set(der, 0);
+  signature[der.length] = SIGHASH_ALL;
+  return createP2PKHScriptSig(signature, childPublicKey);
 }
 
 /**

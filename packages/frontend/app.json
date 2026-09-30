@@ -57,8 +57,7 @@
     "plugins": [
       "expo-router",
       "expo-secure-store",
-      "./plugins/withSharedUserId",
-      "@oxy.so/services/plugins/withSharedIdentityReader",
+      "@oxy.so/services/plugins/withOxySharedPermissions",
       "expo-sqlite",
       "expo-local-authentication",
       "expo-system-ui",

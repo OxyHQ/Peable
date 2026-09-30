@@ -16,10 +16,13 @@ module.exports = ({ config }) => {
   // upgrade path for existing installs. Treat it as frozen after the first
   // release.
   //
-  // The Oxy-family sharing ids do NOT move with it: `so.oxy.shared`
-  // (plugins/withSharedUserId.js) and `group.so.oxy.shared` (app.json
-  // entitlements) are how this app reads the identity every other Oxy app
-  // writes. Renaming either would cut Peable out of the shared sign-in.
+  // The Oxy-family sharing ids do NOT move with it. On iOS the keychain group
+  // `group.so.oxy.shared` (app.json entitlements) is how this app reads the
+  // identity Commons writes. On Android Peable has its own UID and asks Commons
+  // over signature-protected IPC (`so.oxy.permission.IDENTITY`, declared by
+  // `@oxy.so/services/plugins/withOxySharedPermissions`); Commons allow-lists
+  // `to.peable.app` / `to.peable.app.dev` by package name, so renaming either
+  // side cuts Peable out of the shared identity.
   const BASE_ID = 'to.peable.app';
   const APP_ID = IS_DEV ? `${BASE_ID}.dev` : BASE_ID;
   const APP_NAME = IS_DEV ? 'Peable (Dev)' : 'Peable';

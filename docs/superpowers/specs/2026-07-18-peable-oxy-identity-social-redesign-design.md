@@ -13,7 +13,7 @@ Peable is the FairCoin money app of the Oxy ecosystem: **you sign in with your O
 1. **100% self-custody (MiCA legal firewall).** The user's FairCoin private keys are derived and held **only on the user's device**; the backend and Oxy servers NEVER see, hold, or can reconstruct a spending key or custody funds. Only the identity holder can spend. This is the legal basis (avoids CASP licensing) and MUST NOT be weakened.
 2. **Keys never leave the device.** Identity/derived keys live in Keychain/SecureStore (`WHEN_UNLOCKED_THIS_DEVICE_ONLY`, hardware-backed where available). Spending requires device unlock + app PIN/biometric.
 3. **Security review before mainnet.** The derivation scheme (esp. the identity-key-derived social-receive branch) MUST pass a `security-reviewer` audit before any mainnet build ships. No "100% unhackable" claims — standard self-custody threat model applies and is documented in §10.
-4. **Fix upstream, never patch the consumer.** Generic wallet-core work (Pockets) is implemented in **FAIRWallet upstream** and pulled into Peable via `git subtree pull`. Generic identity-key access (identity→seed via `deriveScopedSeed`, raw key via `getPrivateKey`/`getSharedPrivateKey`) lives in `@oxy.so/core` (platform-agnostic, MUST NOT import faircoin). FairCoin-specific crypto (the identity-pubkey→FairCoin social-receive address derivation) lives in **`@fairco.in/core`** (generic secp256k1 inputs, no Oxy dep). Only Oxy-specific product code (onboarding, social send UI, identity wiring, the glue) diverges in Peable.
+4. **Fix upstream, never patch the consumer.** Generic wallet-core work (Pockets) is implemented in **FAIRWallet upstream** and pulled into Peable via `git subtree pull`. Generic identity-key access (identity→seed via `deriveScopedSeed`, the public key via `getSharedPublicKey`, social-receive signatures via `signSocialReceive`; never the raw key) lives in `@oxy.so/core` (platform-agnostic, MUST NOT import faircoin). FairCoin-specific crypto (the identity-pubkey→FairCoin social-receive address derivation) lives in **`@fairco.in/core`** (generic secp256k1 inputs, no Oxy dep). Only Oxy-specific product code (onboarding, social send UI, identity wiring, the glue) diverges in Peable.
 
 ## 3. Scope & decomposition
 
@@ -47,7 +47,7 @@ hd   = KeyManager.fromSeed(seed, network)                         // Peable wall
 - This spending tree is **private**: its addresses are NOT publicly derivable (privacy for the user's own balance/change/pockets).
 
 **Where the identity key comes from (native-only):**
-- Peable reads the identity key from the **shared keychain** `group.so.oxy.shared` (`KeyManager.getSharedPrivateKey()`), the ecosystem SSO mechanism written by Commons. Peable MUST ship the shared-keychain entitlement (iOS `keychain-access-groups` incl. `group.so.oxy.shared`, same Team ID; Android `sharedUserId="so.oxy.shared"` + the shared Oxy release keystore).
+- Peable uses the identity Commons holds and never reads its private key (OxyHQ/oxy#1388 Phase 2). iOS: the shared keychain group `group.so.oxy.shared` (`keychain-access-groups`, same Team ID). Android: Peable has its own UID and asks Commons over signature-protected IPC (`so.oxy.permission.IDENTITY`, declared by `@oxy.so/services/plugins/withOxySharedPermissions`; same signing certificate) for the public key, the `peable/faircoin/v1` scoped seed and social-receive signatures.
 - **Cleaner API (upstream, fix de raíz):** add `KeyManager.deriveScopedSeed(info: string): Promise<Uint8Array>` to `@oxy.so/core` so Peable never handles the raw identity private key — it asks the SDK for a domain-separated 32-byte seed. The SDK does the HKDF internally.
 - On web the identity key is `null` → no wallet (see §9).
 
@@ -137,7 +137,7 @@ Three enrichment sources, each keyed to a transaction (txid) or address:
 
 **`@oxy.so/core` (platform-agnostic — NO FairCoin, NO new WS-S publish):**
 - `KeyManager.deriveScopedSeed(info: string): Promise<Uint8Array>` — HKDF the identity key to a 32-byte, domain-separated seed without exposing the raw key (used by the identity WALLET, WS-F, already published).
-- (Reuse existing) `getPrivateKey()`/`getSharedPrivateKey()` — the raw identity secp256k1 key the recipient's social-receive spending-key derivation needs (already exposed; no change). Plus `resolveDid`, `searchProfiles`, `getProfileByUsername`, `listAuthMethods`, identity-creation/link.
+- `getSharedPublicKey()` (the social-receive watch window) and `signSocialReceive(index, sighash)` (Commons signs a social-receive input with the child key; DER low-S plus the compressed child public key; the key never leaves its holder). Plus `resolveDid`, `searchProfiles`, `getProfileByUsername`, `listAuthMethods`, identity-creation/link.
 
 **`@fairco.in/core` (the social-receive helper lives HERE — FairCoin crypto, generic secp256k1 inputs, no Oxy dep; published):**
 - A shared **identity → FairCoin social-receive** helper — `deriveSocialReceiveAddress(identityPubKeyHex, index, network)` (payer/backend, public) + `deriveSocialReceiveSpendingKey(identityPrivKeyHex, index, network)` (recipient, private) — building `xpub_social`/`xprv_social` + `addr(i)` from a NORMALIZED (compressed) secp256k1 key. One implementation, used identically by payer/recipient/backend. Coordinate the release with the multisig Layer-1 work (same repo/branch).
@@ -172,7 +172,7 @@ Three enrichment sources, each keyed to a transaction (txid) or address:
 
 ## 9. Platform constraint (native-only wallet)
 
-The identity key is unavailable on web (`getPrivateKey`/`getSharedPrivateKey` → `null`). Therefore the **wallet (derive/receive/send/pockets) is native-only**. Web Peable is limited to management/marketing/hosted-checkout surfaces (future), not a spending wallet. This is acceptable: the primary product is the mobile app.
+The identity key is unavailable on web (`deriveScopedSeed`/`signSocialReceive` → `null`). Therefore the **wallet (derive/receive/send/pockets) is native-only**. Web Peable is limited to management/marketing/hosted-checkout surfaces (future), not a spending wallet. This is acceptable: the primary product is the mobile app.
 
 ## 10. Implementation phases (sequencing)
 

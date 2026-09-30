@@ -322,7 +322,7 @@ export default function SettingsScreen() {
           setBiometricsEnabled(enabled && hardwareAvailable && enrolled);
           setAutoLockMinutes(lockTimeout);
           setDisplayCurrency(currency);
-        } catch (_settingsError: unknown) {
+        } catch {
           // Settings load failed — defaults from useState initializers are safe.
         }
       };
@@ -666,8 +666,8 @@ export default function SettingsScreen() {
                 showChevron={false}
                 rightElement={
                   <Switch
-                    value={biometricsEnabled}
-                    onValueChange={handleToggleBiometrics}
+                    checked={biometricsEnabled}
+                    onCheckedChange={handleToggleBiometrics}
                   />
                 }
               />

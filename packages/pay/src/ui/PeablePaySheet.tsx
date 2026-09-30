@@ -409,7 +409,7 @@ function Body({
           ) : null}
 
           <Button
-            variant="primary"
+            appearance="solid" tone="accent"
             disabled={state.entry.kind !== 'ok'}
             onPress={() => dispatch({ type: 'continue' })}
           >
@@ -440,10 +440,10 @@ function Body({
           <BloomText style={[styles.mono, { color: colors.textTertiary }]} numberOfLines={1}>
             {state.reviewed.to}
           </BloomText>
-          <Button variant="primary" onPress={() => dispatch({ type: 'confirm' })}>
+          <Button appearance="solid" tone="accent" onPress={() => dispatch({ type: 'confirm' })}>
             {`Send ${fair(state.reviewed.amountSat)}`}
           </Button>
-          <Button variant="text" onPress={() => dispatch({ type: 'edit' })}>
+          <Button appearance="plain" onPress={() => dispatch({ type: 'edit' })}>
             Change amount
           </Button>
         </View>
@@ -465,7 +465,7 @@ function Body({
           <BloomText style={[styles.mono, { color: colors.textTertiary }]} selectable>
             {state.offer.uri}
           </BloomText>
-          <Button variant="text" onPress={() => dispatch({ type: 'edit' })}>
+          <Button appearance="plain" onPress={() => dispatch({ type: 'edit' })}>
             Change amount
           </Button>
         </View>
@@ -483,7 +483,7 @@ function Body({
           <BloomText style={[styles.mono, { color: colors.textTertiary }]} numberOfLines={1} selectable>
             {state.paid.txid}
           </BloomText>
-          <Button variant="secondary" onPress={() => void Linking.openURL(state.paid.explorerUrl)}>
+          <Button appearance="outline" tone="neutral" onPress={() => void Linking.openURL(state.paid.explorerUrl)}>
             View on the explorer
           </Button>
         </View>
@@ -503,11 +503,11 @@ function Body({
               payment, because a lost response is indistinguishable from a
               rejection and the inputs may already be spent. */}
           {state.recovery === 'edit' ? (
-            <Button variant="primary" onPress={() => dispatch({ type: 'edit' })}>
+            <Button appearance="solid" tone="accent" onPress={() => dispatch({ type: 'edit' })}>
               Try a different amount
             </Button>
           ) : (
-            <Button variant="primary" onPress={() => dispatch({ type: 'restart' })}>
+            <Button appearance="solid" tone="accent" onPress={() => dispatch({ type: 'restart' })}>
               Start over
             </Button>
           )}

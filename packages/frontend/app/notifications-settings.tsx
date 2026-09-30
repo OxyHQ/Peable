@@ -219,8 +219,8 @@ export default function NotificationsSettingsScreen() {
               showChevron={false}
               trailing={
                 <Switch
-                  value={enabled}
-                  onValueChange={handleToggleEnabled}
+                  checked={enabled}
+                  onCheckedChange={handleToggleEnabled}
                 />
               }
               isLast
@@ -298,8 +298,8 @@ export default function NotificationsSettingsScreen() {
                     showChevron={false}
                     trailing={
                       <Switch
-                        value={events.includes(row.event)}
-                        onValueChange={(on) => handleToggleEvent(row.event, on)}
+                        checked={events.includes(row.event)}
+                        onCheckedChange={(on) => handleToggleEvent(row.event, on)}
                       />
                     }
                     isLast={idx === EVENT_ROWS.length - 1}
