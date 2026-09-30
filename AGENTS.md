@@ -331,8 +331,9 @@ do not add an Oxy auth requirement to a payer-facing route.
 ## The web build is read-only, not unsupported
 
 Only SIGNING is native-only, and the reason is narrow: the identity wallet's
-seed derives from a key in the on-device keystore (`@oxy.so/core` keyManager ->
-`expo-secure-store`), and a browser has none. `hasIdentityKeystore()`
+seed derives from the identity key, whose holder is on the device (iOS: the
+keychain group; Android: Commons over signature-protected IPC — Peable never
+holds the key), and a browser has none. `hasIdentityKeystore()`
 (`src/wallet/keystore.ts`, a `Platform.OS` proxy) answers that one question for
 both `wallet-store.ts`'s `initializeFromIdentity` and the shell's capability
 gate, and is the ONLY platform gate in the store — `createNewWallet`, `importWallet`

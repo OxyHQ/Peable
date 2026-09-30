@@ -1,6 +1,8 @@
 import { describe, test, expect, mock } from "bun:test";
 import { getNetwork, hexToBytes } from "@fairco.in/core";
 import { KeyManager as FairKeyManager } from "@peable.to/pay";
+import { hkdf } from "@noble/hashes/hkdf";
+import { sha256 } from "@noble/hashes/sha2";
 
 // Mock @oxy.so/core/crypto BEFORE importing the module under test. `mock.module` is
 // process-wide, so the replacement must KEEP every other export: a factory
@@ -52,5 +54,41 @@ describe("FairCoin derivation from the identity seed", () => {
     const fromRoundTrip = FairKeyManager.fromSeed(back, getNetwork("testnet")).getNextAddress().address;
     const fromDirect = FairKeyManager.fromSeed(seed, getNetwork("testnet")).getNextAddress().address;
     expect(fromRoundTrip).toBe(fromDirect);
+  });
+});
+
+describe("wallet continuity: the identity key derives the SAME wallet as before", () => {
+  // Pinned in the oxy repo's `packages/commons/modules/oxy-identity-host/vectors.json`
+  // (identity key aa×32, `peable/faircoin/v1`): the seed Commons computes over
+  // IPC on Android and `KeyManager.deriveScopedSeed` computes from the
+  // keychain-group key on iOS. Any change here strands every existing wallet.
+  const IDENTITY_KEY = "aa".repeat(32);
+  const PINNED_SEED = "3282e7b8585d3de14fc8856debc352b7b238eccd5c861ec33c92a443857e6040";
+
+  test("the seed is the HKDF this wallet has always used", () => {
+    // Stated independently of @oxy.so/core: HKDF-SHA256(key, salt, info, 32),
+    // the derivation Peable's wallets were created under.
+    const utf8 = (s: string) => new TextEncoder().encode(s);
+    const independent = hkdf(
+      sha256,
+      hexToBytes(IDENTITY_KEY),
+      utf8("oxy-identity-scoped-seed-v1"),
+      utf8(PEABLE_SEED_INFO),
+      32,
+    );
+    expect(Buffer.from(independent).toString("hex")).toBe(PINNED_SEED);
+  });
+
+  test("@oxy.so/core's derivation (what Commons and the iOS SDK run) matches it", () => {
+    const seed = realOxyCrypto.deriveScopedSeedFromKey(IDENTITY_KEY, PEABLE_SEED_INFO);
+    expect(Buffer.from(seed).toString("hex")).toBe(PINNED_SEED);
+  });
+
+  test("the seed's first receive addresses are pinned", () => {
+    const seed = hexToBytes(PINNED_SEED);
+    const mainnet = FairKeyManager.fromSeed(seed, getNetwork("mainnet")).getNextAddress();
+    const testnet = FairKeyManager.fromSeed(seed, getNetwork("testnet")).getNextAddress();
+    expect(mainnet).toMatchObject({ address: "FMPFAXJ7zw9xKttyBLzHaBh5QCu9T6kPjb", path: "m/44'/119'/0'/0/0" });
+    expect(testnet).toMatchObject({ address: "TYeF2LDXgH7JLtPAQCGBhT8277if3mmakP", path: "m/44'/1'/0'/0/0" });
   });
 });

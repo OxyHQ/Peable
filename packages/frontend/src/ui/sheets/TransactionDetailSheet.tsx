@@ -336,7 +336,7 @@ export function TransactionDetailSheet({
         </View>
         <View className="mt-2.5">
           <BloomButton
-            variant="secondary"
+            appearance="outline" tone="neutral"
             size="sm"
             onPress={handleSaveNote}
             style={{ width: "100%" }}
@@ -350,7 +350,7 @@ export function TransactionDetailSheet({
           row above, so no separate copy button here. */}
       <View className="gap-3">
         <BloomButton
-          variant="secondary"
+          appearance="outline" tone="neutral"
           onPress={handleViewExplorer}
           style={{ width: "100%" }}
           icon={
@@ -365,7 +365,7 @@ export function TransactionDetailSheet({
         </BloomButton>
         {!contact && contactChecked ? (
           <BloomButton
-            variant="outline"
+            appearance="outline"
             onPress={handleAddToContacts}
             style={{ width: "100%" }}
             icon={
