@@ -6,7 +6,7 @@
     "packages/backend/src/services/recurring/__tests__/stripeRecurringReader.test.ts": "d219dd49405c74890e039ed30cf41257ec5d4208a0a058100e5557793017a888",
     "packages/backend/src/services/recurring/__tests__/recurringObservation.realdb.test.ts": "64feb5139641087af68d828cf67eae9f84a214428c2ea161bde7fa2c1ce373ff",
     "docs/integrations/i08-payment-contract-review.md": "0d588960220e39a17a44f02813159491f2a94bd432701bd58a594e1d48d3b49a",
-    "docs/audits/2026-10-03-i08-private-reader/README.md": "4149916d6a705d35af9453ad3d6274d75e60f44369d056f22d43f53f06739450"
+    "docs/audits/2026-10-03-i08-private-reader/README.md": "b44d5a88ce7970fad946658aebb82b1b420e5c29bd52b52af863360ef6c6bab7"
   },
   "logs": {
     "period-red.txt": "29961d1c48cfe9f02c93f51d6ef3dc059589159321f1261783127f91bdad2947",

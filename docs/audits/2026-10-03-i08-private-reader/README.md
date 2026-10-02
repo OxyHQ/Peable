@@ -74,7 +74,8 @@ Two setup/fixture corrections preceded final checks: the first server start lack
 a writable Unix-socket directory (fixed with `-k` in task scratch); the new SQL
 fixture initially passed an event ID to routing expecting an event row (corrected
 via repository lookup). Neither was a product failure. The period RED is the
-product regression. No migration or financial sandbox was executed for this tranche.
+product regression. No new migration was authored or applied manually; the local test harness applied
+the existing migrations. No financial sandbox was executed for this tranche.
 
 ## Remaining gates
 
