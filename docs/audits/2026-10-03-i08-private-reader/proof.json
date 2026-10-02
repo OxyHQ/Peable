@@ -1,0 +1,47 @@
+{
+  "base": "72a92c1e4a42498dcd302137989e9a98e098be39",
+  "sources": {
+    "packages/backend/src/services/recurring/contracts.ts": "4f35794c9e7ab7c897c2d003c534eeeb470dd633c704af40072cb9cb1e701df4",
+    "packages/backend/src/services/recurring/stripeRecurringReader.ts": "f12e20755d5fc9702271380f1739d7a8469eb08e2d3b411fb36d324f6948d4d5",
+    "packages/backend/src/services/recurring/__tests__/stripeRecurringReader.test.ts": "d219dd49405c74890e039ed30cf41257ec5d4208a0a058100e5557793017a888",
+    "packages/backend/src/services/recurring/__tests__/recurringObservation.realdb.test.ts": "64feb5139641087af68d828cf67eae9f84a214428c2ea161bde7fa2c1ce373ff",
+    "docs/integrations/i08-payment-contract-review.md": "0d588960220e39a17a44f02813159491f2a94bd432701bd58a594e1d48d3b49a",
+    "docs/audits/2026-10-03-i08-private-reader/README.md": "4149916d6a705d35af9453ad3d6274d75e60f44369d056f22d43f53f06739450"
+  },
+  "logs": {
+    "period-red.txt": "29961d1c48cfe9f02c93f51d6ef3dc059589159321f1261783127f91bdad2947",
+    "reader-observer-focal.txt": "634d7cc4abc4b72c6ec9499c77d75da6191558a4d3828ac81f96950c174410a4",
+    "backend-full.txt": "6fac08944e0f34497d2dde11261f15516d1659037d42b41146ad707d7de0430b",
+    "typecheck.txt": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+    "build.txt": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "biome.txt": "953d45fd4b167607b235486b5963d52621cf988c8ec4484cd3b66a2819ffa3bb",
+    "pg-cleanup.txt": "d3b39356442f5992ef54db788a745b7b8b0eb5b9214a02bcc902f65ecea7ce2e",
+    "install.txt": "aae47e90f1669ba5634cf973a00b316da6881c6079575dadc5066ad262a55792"
+  },
+  "sdk": {
+    "InvoiceLineItems.d.ts": "3c38bd91f0cf5d5d6e62424eaef4598b3383db8ea4ac293e586753617be52687",
+    "Invoices.d.ts": "702f41a016791fe309a5c16128d32d05d3dcf895d7454cce52d2c6180a9881aa",
+    "Subscriptions.d.ts": "12a0353bfeb033209c7eb34b04f54e3d27fdcec6bd2312394516c69b08dad632",
+    "SubscriptionItems.d.ts": "dbfc5367daa8825cbe20e976b07b0767bdc3e6760ebe7a79481ff790438309f6"
+  },
+  "commands": {
+    "install": "bun install --frozen-lockfile --minimum-release-age=0",
+    "red": "packages/backend: DATABASE_URL=<local5573> bun run test --test-name-pattern=\"private recurring reader\"",
+    "focal": "packages/backend: DATABASE_URL=<local5573> TEST_DATABASE_URL=<local5573> bun run test --test-name-pattern=\"private recurring reader|inactive recurring observation\"",
+    "full": "packages/backend: DATABASE_URL=<local5573> TEST_DATABASE_URL=<local5573> bun run test",
+    "types": "packages/backend: bun run typecheck",
+    "build": "packages/backend: bun run build",
+    "lint": "bun x --minimum-release-age=0 @biomejs/biome lint --error-on-warnings packages/backend/src/services/recurring"
+  },
+  "results": {
+    "red": "0pass1fail",
+    "focal": "63pass0fail",
+    "full": "733pass0fail",
+    "typecheck": "pass",
+    "build": "pass",
+    "lint": "5files0diagnostics",
+    "cleanup": "onlypostgres;ownPGstopped"
+  },
+  "published": false,
+  "remoteProviderCalls": false
+}

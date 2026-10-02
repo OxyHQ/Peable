@@ -1,0 +1,21 @@
+bun install v1.4.2 (744846f84)
+
+$ bun run build:shared-types && bun run build:pay
+$ bun run --filter @peable.to/shared-types build
+@peable.to/shared-types build: $ tsc -p tsconfig.cjs.json
+@peable.to/shared-types build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/shared-types build: ESM imports fixed
+@peable.to/shared-types build: $ tsc -p tsconfig.types.json
+@peable.to/shared-types build: Exited with code 0
+$ bun run --filter @peable.to/pay build
+@peable.to/pay build: $ tsc -p tsconfig.cjs.json
+@peable.to/pay build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/pay build: ESM imports fixed
+@peable.to/pay build: $ tsc -p tsconfig.types.json
+@peable.to/pay build: Exited with code 0
+
++ @types/node@20.19.43
++ typescript@5.9.3
++ @oxy.so/core@4.0.0
+
+1053 packages installed [8.69s]

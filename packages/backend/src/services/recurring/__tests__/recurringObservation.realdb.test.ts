@@ -1,3 +1,6 @@
+import type Stripe from 'stripe';
+import { createPrivateStripeRecurringReader } from '../stripeRecurringReader';
+import { STRIPE_API_VERSION } from '../../providers/stripe/client';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
@@ -213,4 +216,43 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
       expect((await findRecurringMirror(gatewayDb(), deployment, 'subscription', 'sub_1', null))?.snapshot).toBeNull();
     });
   }
+  it('persists the private reader invoice projection and outbox through real SQL, replaying unchanged', async () => {
+    const sub = await bind();
+    await bind('invoice', 'in_1', sub.merchantId);
+    const pinned = { ...deployment, apiVersion: STRIPE_API_VERSION };
+    let incomplete = false;
+    const root = { id: 'in_1', object: 'invoice', livemode: false, status: 'paid', currency: 'usd', amount_due: 12, amount_paid: 12, amount_remaining: 0,
+      parent: { type: 'subscription_details', quote_details: null, subscription_details: { subscription: 'sub_1', metadata: null } },
+    } satisfies Pick<Stripe.Invoice, 'id' | 'object' | 'livemode' | 'status' | 'currency' | 'amount_due' | 'amount_paid' | 'amount_remaining' | 'parent'>;
+    const line = { id: 'il_point', object: 'line_item', invoice: 'in_1', livemode: false, subscription: 'sub_1', period: { start: 1000, end: 1000 },
+      parent: { type: 'subscription_item_details', invoice_item_details: null, subscription_item_details: { subscription: 'sub_1', subscription_item: 'si_1', invoice_item: null, proration: false, proration_details: null } },
+    } satisfies Pick<Stripe.InvoiceLineItem, 'id' | 'object' | 'invoice' | 'livemode' | 'subscription' | 'period' | 'parent'>;
+    const reader = createPrivateStripeRecurringReader({
+      async retrieveSubscription() { throw new Error('Unexpected read'); },
+      async listSubscriptionItems() { throw new Error('Unexpected read'); },
+      async retrieveInvoice() { return { ...root, customer_email: 'synthetic@example.invalid' }; },
+      async listInvoiceLines() { return { object: 'list', data: [line], has_more: incomplete }; },
+    }, { deployment: pinned, providerAccountId: null });
+    const observe = { deployment: pinned, reader, timeoutMs: 1000 };
+    const process = async (id: string) => {
+      const row = await findProviderEventById(gatewayDb(), id);
+      if (!row) throw new Error('Missing fixture event');
+      return processProviderEvent(row, observe);
+    };
+    const id = await event('invoice', 'in_1', { apiVersion: STRIPE_API_VERSION });
+    expect(await process(id)).toMatchObject({ kind: 'observed', revision: 1 });
+    const stored = await findRecurringMirror(gatewayDb(), pinned, 'invoice', 'in_1', null);
+    expect(stored?.snapshot).toMatchObject({ amountDue: '12', amountPaid: '12', periods: [{ itemRef: 'il_point', start: new Date(1000000).toISOString(), end: new Date(1000000).toISOString() }] });
+    expect(stored?.snapshot).not.toHaveProperty('customer_email');
+    expect(stored?.snapshot).toEqual((await rows())[0]?.snapshot ?? null);
+    expect((await findProviderEventById(gatewayDb(), id))?.processedAt).toBeInstanceOf(Date);
+    expect(await process(await event('invoice', 'in_1', { apiVersion: STRIPE_API_VERSION }))).toMatchObject({ kind: 'unchanged' });
+    incomplete = true;
+    const rejected = await event('invoice', 'in_1', { apiVersion: STRIPE_API_VERSION });
+    expect(await process(rejected)).toMatchObject({ kind: 'failed' });
+    expect((await findProviderEventById(gatewayDb(), rejected))?.processedAt).toBeNull();
+    expect((await findRecurringMirror(gatewayDb(), pinned, 'invoice', 'in_1', null))?.revision).toBe(1);
+    expect(await rows()).toHaveLength(1);
+  });
+
 });

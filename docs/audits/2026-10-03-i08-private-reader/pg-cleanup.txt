@@ -1,0 +1,6 @@
+waiting for server to start.... done
+server started
+postgres
+waiting for server to shut down.... done
+server stopped
+pg_ctl: no server running

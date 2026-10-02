@@ -4,11 +4,11 @@ import { environmentMatchesMode } from '../providers/environmentGuard';
 
 export const recurringReferenceSchema = z.string().min(1).max(128).regex(/^[A-Za-z0-9_.:-]+$/);
 const reference = recurringReferenceSchema;
-const period = z.object({
+const period = (inclusive: boolean) => z.object({
   itemRef: reference,
   start: z.string().datetime(),
   end: z.string().datetime(),
-}).strict().refine((value) => Date.parse(value.end) > Date.parse(value.start), 'Invalid period');
+}).strict().refine((value) => inclusive ? Date.parse(value.end) >= Date.parse(value.start) : Date.parse(value.end) > Date.parse(value.start), 'Invalid period');
 const identity = {
   schemaVersion: z.literal(1),
   provider: z.literal('stripe'),
@@ -18,7 +18,7 @@ const identity = {
   objectRef: reference,
   apiVersion: reference,
 };
-const periods = z.array(period).max(1000).refine(
+const periods = (inclusive: boolean) => z.array(period(inclusive)).max(1000).refine(
   (values) => new Set(values.map((value) => value.itemRef)).size === values.length,
   'Duplicate period item',
 );
@@ -31,7 +31,7 @@ export const recurringSnapshotSchema = z.discriminatedUnion('kind', [
     kind: z.literal('subscription'),
     status: z.enum(['incomplete', 'incomplete_expired', 'trialing', 'active', 'past_due', 'canceled', 'unpaid', 'paused']),
     cancelAtPeriodEnd: z.boolean(),
-    periods,
+    periods: periods(false),
     // The trusted reader must exhaust pagination before returning. This checks
     // its declared contract; it cannot prove remote completeness cryptographically.
     hasMorePeriods: z.literal(false),
@@ -45,7 +45,7 @@ export const recurringSnapshotSchema = z.discriminatedUnion('kind', [
     amountDue: amount,
     amountPaid: amount,
     amountRemaining: amount,
-    periods,
+    periods: periods(true),
     hasMorePeriods: z.literal(false),
   }).strict(),
 ]);

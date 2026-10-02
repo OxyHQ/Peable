@@ -57,3 +57,13 @@ not proof of historical ingress attribution or live provider pagination. Those
 contracts and historical no_mapping/backfill handling require review before any
 activation. ADR0009, recurring lifecycle, commercial/MoR approval, SDK publication,
 consumer adoption and controlled migration remain pending; #87 stays open.
+
+A subsequent [private reader candidate](../audits/2026-10-03-i08-private-reader/README.md)
+normalizes Stripe22.4 subscription/items and a narrow explicit-subscription invoice
+shape using an injected read-only client. Local bounded pagination, identity checks,
+abort/deadline and real-SQL observer composition are covered (63 focal;733 backend).
+It accepts inclusive invoice point periods while retaining positive subscription
+periods. It is not wired to a real SDK client or boot. Root rereading detects only
+observable root changes, not atomic consistency across remote pages. Expanded refs,
+proration/adjustment lines and unsupported shapes fail closed. Existing activation,
+commercial and release gates above remain open.
