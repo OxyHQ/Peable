@@ -82,6 +82,7 @@ export type { PeableErrorType, PeableErrorDetails } from './core/errors';
 export type { RestClient, RestClientRequestOptions } from './core/client';
 export type { ServiceTokenProvider } from './core/serviceToken';
 
+export type { CreateCheckoutSessionOptions } from './resources/checkoutSessions';
 export type {
   CreatePaymentIntentOptions,
   PaymentIntentClientAction,
