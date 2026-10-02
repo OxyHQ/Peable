@@ -194,7 +194,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.1.1",
+      "version": "0.2.0",
       "dependencies": {
         "@peable.to/shared-types": "workspace:^",
         "qrcode-generator": "^2.0.4",
