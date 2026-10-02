@@ -1,0 +1,15 @@
+checkout_sessions
+connected_accounts
+disputes
+merchants
+payment_intents
+payment_links
+provider_events
+recurring_mirrors
+recurring_observation_outbox
+refunds
+social_receive_cursors
+social_send_attributions
+transfer_reversals
+transfers
+webhook_deliveries

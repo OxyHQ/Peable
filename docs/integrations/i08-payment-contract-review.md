@@ -41,3 +41,19 @@ simulate network responses; no money or provider calls. These tests do not prove
 recurring behavior, a published SDK version or production reachability.
 
 `packages/backend: TEST_DATABASE_URL=postgres://oxy@127.0.0.1:5549/postgres DATABASE_URL=postgres://oxy@127.0.0.1:5549/postgres bun run test`: 670 pass, zero failures, 70 files, 2026-10-02. This includes actual signature verification integration fixtures and durable intent-event tests against disposable local DBs; it does not include a recurring subscription engine.
+
+## Inactive observation candidate — 2026-10-03
+
+A separate [local mirror milestone](../audits/2026-10-03-i08-recurring-observation/README.md)
+adds two SQL tables and an internal opt-in projection of already stored events.
+Explicit merchant/application/environment/provider-account bindings, strict
+subscription/invoice-period snapshots and state+internal-outbox+processedAt are
+transactional. There is no remote reader, dispatcher or default activation.
+Local provider-stub coverage: 20/20 focal, backend690/690, build/typecheck/lint;
+genesis/repeat migrations and cleanup verified. This is projection evidence only.
+
+Platform-account identity and snapshot completeness are trusted internal inputs,
+not proof of historical ingress attribution or live provider pagination. Those
+contracts and historical no_mapping/backfill handling require review before any
+activation. ADR0009, recurring lifecycle, commercial/MoR approval, SDK publication,
+consumer adoption and controlled migration remain pending; #87 stays open.

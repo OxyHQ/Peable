@@ -1,0 +1,174 @@
+$ bun test src "--test-name-pattern=inactive recurring observation"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+src/db/__tests__/deployWorkflow.test.ts:
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+src/db/__tests__/rail.realdb.test.ts:
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+Applying 20 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Applied 20 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk
+(pass) inactive recurring observation / real PostgreSQL > keeps explicit binding insert-only, including concurrent repeats and conflicting merchants/environments [42.92ms]
+(pass) inactive recurring observation / real PostgreSQL > observes subscription and invoice periods with the same merchant binding and atomic outbox [35.53ms]
+(pass) inactive recurring observation / real PostgreSQL > rejects invoice attribution to another merchant subscription [20.15ms]
+(pass) inactive recurring observation / real PostgreSQL > absorbs concurrent replay and post-commit replay without another read or outbox [21.21ms]
+(pass) inactive recurring observation / real PostgreSQL > reads current snapshots for reversed/equal event times, without ordering state by event id [28.64ms]
+(pass) inactive recurring observation / real PostgreSQL > leaves an unknown object pending without attribution, read, or outbox [13.59ms]
+(pass) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once [24.57ms]
+(pass) inactive recurring observation / real PostgreSQL > times out a stalled reader and releases locks without processing or changing state [42.75ms]
+(pass) inactive recurring observation / real PostgreSQL > keeps default routing inactive; opt-in unknown does not stop a later bound object [24.74ms]
+(pass) inactive recurring observation / real PostgreSQL > serializes distinct event reads under the binding lock and timestamps after reading [44.76ms]
+(pass) inactive recurring observation / real PostgreSQL > enforces merchant/application/environment ownership in the database [13.90ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses stored event scope/mode/version mismatches before the reader [21.84ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot pii without state, event completion or outbox [16.53ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot partial without state, event completion or outbox [19.46ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongAccount without state, event completion or outbox [16.52ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongScope without state, event completion or outbox [15.51ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongMode without state, event completion or outbox [14.98ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongObject without state, event completion or outbox [15.70ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongVersion without state, event completion or outbox [15.70ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot duplicateItems without state, event completion or outbox [15.46ms]
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+ 20 pass
+ 670 filtered out
+ 0 fail
+ 109 expect() calls
+Ran 20 tests across 71 files. [860.00ms]

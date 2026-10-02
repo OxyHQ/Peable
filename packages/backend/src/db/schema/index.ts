@@ -20,3 +20,5 @@ export { connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
 export { disputes } from './disputes';
+
+export { recurringMirrors, recurringObservationOutbox } from './recurring';

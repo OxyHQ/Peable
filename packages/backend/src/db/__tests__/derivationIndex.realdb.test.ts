@@ -235,6 +235,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'payment_intents',
       'payment_links',
       'provider_events',
+      'recurring_mirrors',
+      'recurring_observation_outbox',
       'refunds',
       'social_receive_cursors',
       'social_send_attributions',
