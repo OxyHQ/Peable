@@ -1,0 +1,37 @@
+{
+  "run": 37071706517,
+  "url": "https://github.com/OxyHQ/Peable/actions/runs/37071706517",
+  "headSha": "fdada04ac32d24f8b5914394b170af665d6aaef1",
+  "checkoutMergeSha": "b8150183aab2ed1af0f0c5bdeb8a4546f645312e",
+  "conclusion": "success",
+  "jobs": [
+    "test",
+    "image"
+  ],
+  "testPassCounts": {
+    "shared-types": 34,
+    "sdk": 115,
+    "checkout": 34,
+    "pay": 130,
+    "frontend": 388,
+    "backend": 690
+  },
+  "totalPassed": 1391,
+  "failures": 0,
+  "image": {
+    "migrationsApplied": 20,
+    "readinessSeconds": 2,
+    "health": "ok",
+    "deployment": false
+  },
+  "review": "All 3671 log lines scanned; step results and negative-fixture errors reviewed. Root independently reviewed head proof 12 sources/12 logs and this CI run.",
+  "sha256": {
+    "ci-full.txt": "ec4db706e774eb7e1a3220f3104b41cd5b2978bad01fe6da7b38ab5916ffacb2",
+    "ci-run.json": "24cf3a8cc8b0dd125fd69d452aa419ef3a06ace15cb771950ccc9800b43a9829"
+  },
+  "limits": [
+    "provider stub only",
+    "trusted deployment identity and reader completeness, not provider proof",
+    "inactive observer; no financial lifecycle, publication, adoption or deployment"
+  ]
+}
