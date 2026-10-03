@@ -1,0 +1,25 @@
+{
+  "source": "3282a9917ce8cb9bd479ef86439dbe65c9760e52",
+  "sources": [
+    {
+      "path": "packages/backend/src/routes/__tests__/serviceAuthWiring.test.ts",
+      "sha256": "1a4d4fb3caa865daacee46d0d1ed93a299c923d8ad91d5e832726bed28c8897c"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-04-service-fixture-lifetime/service-auth-final.log",
+      "sha256": "70ce0dc390a1af578df50376c81fab27bc82dbf4664831a9bc412265d74e165c"
+    },
+    {
+      "path": "docs/audits/2026-10-04-service-fixture-lifetime/service-owned-pg.py",
+      "sha256": "05d6a56993803b501938cafddd701bbff56f54fbe84c2e87a7039aca7bc507ac"
+    }
+  ],
+  "cause": "CI37162175266 had 779 PASS/1 FAIL: obsolete signed fixture exp-iat3600 rejected by published core4.2. No product verifier change.",
+  "validation": "5 signed service-auth controls PASS; own PG stopped and PID absent. Signed300 positive, signed301 negative, stranger key, HS256 and missing header retained.",
+  "limits": [
+    "Prior three user-default tests did not cover this service-positive fixture.",
+    "Required full CI is pending follow-up; no deployment claim."
+  ]
+}
