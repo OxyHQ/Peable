@@ -1,0 +1,364 @@
+[
+  {
+    "run": "a3",
+    "manifestSha256": "70502f060284957909999e6ec296ce0672e63b3e1181df687bcce9ed491640f6",
+    "accountMode": "same-reviewed-platform/test-only",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-customer-idempotent-store-binding",
+        "ok": true
+      },
+      {
+        "stage": "real-provider-success-http-response-loss-same-key-recovery",
+        "ok": true
+      },
+      {
+        "stage": "real-checkout-and-portal-created",
+        "ok": true
+      },
+      {
+        "stage": "isolated-browser-checkout",
+        "ok": false
+      }
+    ],
+    "diagnostics": [
+      {
+        "stage": "provider-checkout-shape",
+        "urlType": "string",
+        "urlLength": 443
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "name": "PeableApiError",
+        "type": "api_error",
+        "code": "invalid_response",
+        "httpStatus": 200,
+        "responseWasDestroyed": true
+      },
+      {
+        "stage": "checkout-response-loss-observation",
+        "initialCheckoutCallResolved": false,
+        "responseWasDestroyed": true,
+        "lostResponse": true
+      },
+      {
+        "stage": "isolated-browser-checkout",
+        "name": "TimeoutError"
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "checkout",
+        "ok": true,
+        "readback": "expired"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "retainedPortalConfiguration",
+        "ok": true,
+        "readback": "default-active-zero-mutating-features"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropTestDatabase-completed"
+      }
+    ]
+  },
+  {
+    "run": "a4",
+    "manifestSha256": "e394ffb9119cad1839e252ca98ff71b4fd9c6f385b9cf70fe0d1458841be161d",
+    "accountMode": "same-reviewed-platform/test-only",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-customer-idempotent-store-binding",
+        "ok": true
+      },
+      {
+        "stage": "real-provider-success-http-response-loss-same-key-recovery",
+        "ok": true
+      },
+      {
+        "stage": "real-checkout-and-portal-created",
+        "ok": true
+      },
+      {
+        "stage": "browser-submit-checkout",
+        "ok": false
+      }
+    ],
+    "diagnostics": [
+      {
+        "stage": "provider-checkout-shape",
+        "urlType": "string",
+        "urlLength": 443
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "name": "PeableApiError",
+        "type": "api_error",
+        "code": "invalid_response",
+        "httpStatus": 200,
+        "responseWasDestroyed": true
+      },
+      {
+        "stage": "checkout-response-loss-observation",
+        "initialCheckoutCallResolved": false,
+        "responseWasDestroyed": true,
+        "lostResponse": true
+      },
+      {
+        "stage": "browser-request-failed",
+        "code": "net::ERR_ABORTED",
+        "resourceType": "fetch"
+      },
+      {
+        "stage": "browser-request-failed",
+        "code": "net::ERR_ABORTED",
+        "resourceType": "fetch"
+      },
+      {
+        "stage": "browser-submit-checkout",
+        "controls": [
+          {
+            "tag": "BUTTON",
+            "type": "button"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "button"
+          },
+          {
+            "tag": "INPUT",
+            "id": "email",
+            "name": "email",
+            "type": "text"
+          },
+          {
+            "tag": "INPUT",
+            "id": "cardNumber",
+            "name": "cardNumber",
+            "type": "text"
+          },
+          {
+            "tag": "INPUT",
+            "id": "cardExpiry",
+            "name": "cardExpiry",
+            "type": "text"
+          },
+          {
+            "tag": "INPUT",
+            "id": "cardCvc",
+            "name": "cardCvc",
+            "type": "text"
+          },
+          {
+            "tag": "INPUT",
+            "id": "billingName",
+            "name": "billingName",
+            "type": "text"
+          },
+          {
+            "tag": "SELECT",
+            "id": "billingCountry",
+            "name": "billingCountry"
+          },
+          {
+            "tag": "INPUT",
+            "id": "billingPostalCode",
+            "name": "billingPostalCode",
+            "type": "text"
+          },
+          {
+            "tag": "INPUT",
+            "id": "enableStripePass",
+            "name": "enableStripePass",
+            "type": "checkbox"
+          },
+          {
+            "tag": "BUTTON",
+            "type": "submit"
+          },
+          {
+            "tag": "INPUT",
+            "type": "checkbox"
+          },
+          {
+            "tag": "BUTTON",
+            "name": "pay_with_link_arrow",
+            "type": "button"
+          }
+        ],
+        "name": "TimeoutError"
+      },
+      {
+        "stage": "browser-submit-checkout",
+        "name": "TimeoutError"
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "checkout",
+        "ok": true,
+        "readback": "expired"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "retainedPortalConfiguration",
+        "ok": true,
+        "readback": "default-active-zero-mutating-features"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropTestDatabase-completed"
+      }
+    ]
+  },
+  {
+    "run": "a5",
+    "manifestSha256": "ea4ade3554296fbcf9890edc279a3b1ff041300ffc82bdfe2f621511742d2909",
+    "accountMode": "same-reviewed-platform/test-only",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-customer-idempotent-store-binding",
+        "ok": true
+      },
+      {
+        "stage": "real-provider-success-http-response-loss-same-key-recovery",
+        "ok": true
+      },
+      {
+        "stage": "real-checkout-and-portal-created",
+        "ok": true
+      },
+      {
+        "stage": "real-hosted-checkout-to-verified-local-binding",
+        "ok": true
+      },
+      {
+        "stage": "real-cancel-at-period-end",
+        "ok": true
+      }
+    ],
+    "diagnostics": [
+      {
+        "stage": "provider-checkout-shape",
+        "urlType": "string",
+        "urlLength": 443
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "name": "PeableApiError",
+        "type": "api_error",
+        "code": "invalid_response",
+        "httpStatus": 200,
+        "responseWasDestroyed": true
+      },
+      {
+        "stage": "checkout-response-loss-observation",
+        "initialCheckoutCallResolved": false,
+        "responseWasDestroyed": true,
+        "lostResponse": true
+      },
+      {
+        "stage": "browser-submit-control",
+        "count": 1,
+        "enabled": true,
+        "visible": true
+      },
+      {
+        "stage": "browser-request-failed",
+        "code": "net::ERR_ABORTED",
+        "resourceType": "fetch"
+      },
+      {
+        "stage": "browser-request-failed",
+        "code": "net::ERR_ABORTED",
+        "resourceType": "fetch"
+      },
+      {
+        "stage": "browser-request-failed",
+        "code": "net::ERR_NAME_NOT_RESOLVED",
+        "resourceType": "document"
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "checkout",
+        "ok": true,
+        "readback": "complete"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "subscription",
+        "ok": true,
+        "readback": "canceled-by-test-customer-deletion"
+      },
+      {
+        "kind": "retainedPortalConfiguration",
+        "ok": true,
+        "readback": "default-active-zero-mutating-features"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropTestDatabase-completed"
+      }
+    ]
+  }
+]
