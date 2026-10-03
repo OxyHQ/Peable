@@ -85,3 +85,21 @@ during rollout, definition cleanup and live-reference retention, zero capacity,
 migration image/exit checks, owned timeout stop/readback, foreign-task rejection,
 main-only/exact-CI gates and the existing pre/post workflow contract. These are
 release-control tests, not evidence of an AWS rollout or production availability.
+
+## Owned migration authority followup
+
+The live deploy-role inventory did not permit stopping a Peable migrator. The
+coordinated infra policy adds creation-only tagging and tag/cluster-scoped stop
+authority; it is separate from runtime/execution roles. RunTask receives exactly
+`OxyOperation=PeableMigration`, `OxyTaskFamily=oxy-peable`, and
+`OxyRunId=<GitHub run>-<attempt>`. The helper additionally verifies this exact
+run, returned ARN, captured definition and `startedBy` before cleanup. IAM itself
+requires a nonempty run tag; it does not compare a GitHub nonce to the caller.
+Creation-only TagResource cannot retag an existing serving task. No speculative
+ListTagsForResource permission is added. Registration can preserve existing
+Peable definition tags; the current live definition's tags were empty.
+
+This followup changes only workflow authority/fixtures, not packaged runtime.
+The final owned-migration focal has 26 passing tests plus typecheck. Real IAM
+application, deployment and task cleanup remain unexecuted by this agent. Root
+must review/apply the saved infra plan before this workflow can use that grant.

@@ -38,9 +38,9 @@ cleanup_task() {
   if [ -n "$TASK_ARN" ] && [ "$TASK_ARN" != None ] && [ "$TASK_STOPPED" != true ]; then
     # Only the task ARN returned by this invocation is eligible. Validate its
     # definition and startedBy again before stopping it; never list/stop peers.
-    details=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --output json) || exit 1
-    if ! jq -e --arg arn "$TASK_ARN" --arg td "$TASK_DEFINITION" --arg owner "deploy-$PHASE-migration" \
-      '((.failures // []) | length) == 0 and (.tasks | length) == 1 and .tasks[0].taskArn == $arn and .tasks[0].taskDefinitionArn == $td and .tasks[0].startedBy == $owner' <<< "$details" >/dev/null; then
+    details=$(aws ecs describe-tasks --cluster "$CLUSTER" --tasks "$TASK_ARN" --include TAGS --output json) || exit 1
+    if ! jq -e --arg arn "$TASK_ARN" --arg td "$TASK_DEFINITION" --arg owner "$MIGRATION_OWNER" --arg run "$RELEASE_RUN_ID" \
+      '((.failures // []) | length) == 0 and (.tasks | length) == 1 and .tasks[0].taskArn == $arn and .tasks[0].taskDefinitionArn == $td and .tasks[0].startedBy == $owner and ((.tasks[0].tags | map({key:.key,value:.value}) | from_entries) as $tags | $tags.OxyOperation == "PeableMigration" and $tags.OxyTaskFamily == "oxy-peable" and $tags.OxyRunId == $run)' <<< "$details" >/dev/null; then
       echo '::error::migration cleanup ownership could not be verified'
       exit 1
     fi
@@ -79,6 +79,17 @@ esac
 : "${CONTAINER_NAME:?CONTAINER_NAME is required}"
 : "${NETWORK_CONFIGURATION:?NETWORK_CONFIGURATION is required}"
 : "${EXPECTED_IMAGE:?EXPECTED_IMAGE is required}"
+: "${RELEASE_RUN_ID:?RELEASE_RUN_ID is required}"
+if ! [[ "$RELEASE_RUN_ID" =~ ^[0-9]+-[0-9]+$ ]] || [ "${#RELEASE_RUN_ID}" -gt 64 ]; then
+  echo '::error::release run identity must be a bounded numeric run-attempt pair'
+  exit 1
+fi
+MIGRATION_OWNER="peable-${RELEASE_RUN_ID}-${PHASE}"
+MIGRATION_TAGS=$(jq -nc --arg run "$RELEASE_RUN_ID" '[
+  {key:"OxyOperation",value:"PeableMigration"},
+  {key:"OxyTaskFamily",value:"oxy-peable"},
+  {key:"OxyRunId",value:$run}
+]')
 [[ "$EXPECTED_IMAGE" =~ @sha256:[a-f0-9]{64}$ ]]
 
 # `bun` on the TypeScript SOURCE, not `node` on a compiled entrypoint. This
@@ -108,7 +119,8 @@ TASK_ARN=$(aws ecs run-task \
   --count 1 \
   --network-configuration "$NETWORK_CONFIGURATION" \
   --overrides "$OVERRIDES" \
-  --started-by "deploy-$PHASE-migration" \
+  --started-by "$MIGRATION_OWNER" \
+  --tags "$MIGRATION_TAGS" \
   --query 'tasks[0].taskArn' --output text)
 
 if [ -z "$TASK_ARN" ] || [ "$TASK_ARN" = "None" ]; then

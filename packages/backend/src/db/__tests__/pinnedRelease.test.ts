@@ -161,14 +161,14 @@ describe('pinned ECS release', () => {
     expect(JSON.parse(readFileSync(join(f.directory, 'receipts/running.json'), 'utf8')).runtimeVerified).toBe(false);
   } finally { f.remove(); } });
 
-  for (const scenario of ['success', 'wrong-digest', 'failed-migration', 'wait-timeout', 'foreign-task']) {
+  for (const scenario of ['success', 'wrong-digest', 'failed-migration', 'wait-timeout', 'foreign-task', 'foreign-run']) {
     test(`candidate migrator validates both image and exit: ${scenario}`, () => {
       const directory = mkdtempSync(join(tmpdir(), 'peable-migration-pin-'));
       try {
         const script = `#!/usr/bin/env bash
 case "$2" in
-run-task) echo arn:own-migration ;;
-wait) if [ '${scenario}' = wait-timeout ] || [ '${scenario}' = foreign-task ]; then [ -f '${directory}/stopped' ]; else exit 0; fi ;;
+run-task) echo "$*" > '${directory}/launched'; echo arn:own-migration ;;
+wait) if [ '${scenario}' = wait-timeout ] || [ '${scenario}' = foreign-task ] || [ '${scenario}' = foreign-run ]; then [ -f '${directory}/stopped' ]; else exit 0; fi ;;
 stop-task) echo "$*" > '${directory}/stopped' ;;
 
 describe-tasks)
@@ -177,18 +177,20 @@ case "$*" in
 *exitCode*) echo '${scenario === 'failed-migration' ? '1' : '0'}' ;;
 *stoppedReason*) echo EssentialContainerExited ;;
 *lastStatus*) echo STOPPED ;;
-*) echo '{"tasks":[{"taskArn":"arn:own-migration","taskDefinitionArn":"${scenario === 'foreign-task' ? 'arn:td:foreign' : 'arn:td:candidate'}","startedBy":"deploy-pre-migration","lastStatus":"RUNNING"}]}' ;;
+*) echo '{"tasks":[{"taskArn":"arn:own-migration","taskDefinitionArn":"${scenario === 'foreign-task' ? 'arn:td:foreign' : 'arn:td:candidate'}","startedBy":"peable-123-1-pre","lastStatus":"RUNNING","tags":[{"key":"OxyOperation","value":"PeableMigration"},{"key":"OxyTaskFamily","value":"oxy-peable"},{"key":"OxyRunId","value":"${scenario === 'foreign-run' ? '456-2' : '123-1'}"}]}]}' ;;
 esac ;;
 esac
 `;
         writeFileSync(join(directory, 'aws'), script); chmodSync(join(directory, 'aws'), 0o700);
-        const result = Bun.spawnSync(['bash', '.github/scripts/run-migration-task.sh', 'pre'], { cwd: ROOT, env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, CLUSTER: 'synthetic', APP: 'peable', PG_DATABASE: 'synthetic_owned', TASK_DEFINITION: 'arn:td:candidate', CONTAINER_NAME: 'peable', NETWORK_CONFIGURATION: '{}', EXPECTED_IMAGE: `${repository}@${nextDigest}` }, stdout: 'pipe', stderr: 'pipe' });
+        const result = Bun.spawnSync(['bash', '.github/scripts/run-migration-task.sh', 'pre'], { cwd: ROOT, env: { ...process.env, PATH: `${directory}:${process.env.PATH}`, CLUSTER: 'synthetic', APP: 'peable', PG_DATABASE: 'synthetic_owned', RELEASE_RUN_ID: '123-1', TASK_DEFINITION: 'arn:td:candidate', CONTAINER_NAME: 'peable', NETWORK_CONFIGURATION: '{}', EXPECTED_IMAGE: `${repository}@${nextDigest}` }, stdout: 'pipe', stderr: 'pipe' });
         expect(result.exitCode).toBe(scenario === 'success' ? 0 : 1);
         if (scenario === 'wait-timeout') {
           expect(readFileSync(join(directory, 'stopped'), 'utf8')).toContain('--task arn:own-migration');
           expect(result.stdout.toString()).toContain('cleanup confirmed STOPPED');
         }
-        if (scenario === 'foreign-task') expect(existsSync(join(directory, 'stopped'))).toBe(false);
+        expect(readFileSync(join(directory, 'launched'), 'utf8')).toContain('PeableMigration');
+        expect(readFileSync(join(directory, 'launched'), 'utf8')).toContain('peable-123-1-pre');
+        if (scenario === 'foreign-task' || scenario === 'foreign-run') expect(existsSync(join(directory, 'stopped'))).toBe(false);
       } finally { rmSync(directory, { recursive: true, force: true }); }
     });
   }
