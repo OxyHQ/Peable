@@ -1,0 +1,41 @@
+{
+  "sourceCommit": "93f3d3e9b83b4d7b63521080326a8433d9adab68",
+  "sources": [
+    {
+      "path": ".github/scripts/ecs-release.py",
+      "sha256": "3f4b75784502ddb5ebb5edb9912b779d6a321113be43f53fd93bc91681b9ee94"
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/pinnedRelease.test.ts",
+      "sha256": "063e6492173fe68f493dda7038594ca2334bd345794d42ef17520b3c0591f7f5"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-diagnostics/green.log",
+      "sha256": "3e682d9896aa706dc5653b4db2bcd7c128f51e865ee40ad447bc1b5df85be81f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-diagnostics/red-focal.log",
+      "sha256": "ce83397f379056b1ac78384570f13f293c0c2998831cf4837b8eed019055c9fd"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-diagnostics/red-scoped.log",
+      "sha256": "73a940967411dd09c2aa2b86a90512a68d5f3137d9699bd2a4137034d4980012"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-diagnostics/red.log",
+      "sha256": "5987626b0e666cd2519dba6f32b36c576bbe04d3881f2fea0f7127792f2e5682"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-diagnostics/typecheck.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    }
+  ],
+  "checks": {
+    "red": "26 pass / 3 expected failures",
+    "green": "29 pass / 0 fail",
+    "typescript": "pass",
+    "aws": "executable fixtures only"
+  }
+}
