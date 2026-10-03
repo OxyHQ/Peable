@@ -22,7 +22,7 @@
   "records": [
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/README.md",
-      "sha256": "a90fe13b3120c7d6953d978eaa54fae9e2e639dc094369a60677575edbe26c5c"
+      "sha256": "31461dfe4431c9f948b66bba0c7e91c3e7938a1020e81b463d563a08f99946b2"
     },
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/backend-root-receipt.json",
@@ -63,6 +63,18 @@
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/shared-types-registry.json",
       "sha256": "3053d955c154894bbde4bab59e73d9d1b5f8f1d163ee7fdf0f40ab00ab485fa3"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/root-frontends-http.json",
+      "sha256": "62e39139684b4ee76a925f18db672eb096216a51b4ab659e085e859dd13faaf3"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/root-frontends-assets.json",
+      "sha256": "d20170fca2531cab1d1b0aed5f8900c0417f1aafa8bec7d8bb634a697d6f7c5c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/root-published-verified.json",
+      "sha256": "01143e07aaf744888cba822c91fb0c91c928e5a98be6eaf5451e8cd7cc597ef6"
     }
   ],
   "privateTarballs": [
