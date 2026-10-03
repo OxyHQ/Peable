@@ -24,7 +24,7 @@ assert.equal((await stat(dirname(manifestPath))).mode & 0o777, 0o700);
 await (await open(manifestPath, 'wx', 0o600)).close();
 const runId = `i08-clock-${randomUUID()}`;
 type OwnedKind = 'clock' | 'customer' | 'product' | 'price' | 'subscription' | 'paymentMethod' | 'invoice' | 'paymentIntent' | 'refund';
-const owned: Array<{ kind: OwnedKind; id: string }> = [];
+const owned: Array<{ kind: OwnedKind; id: string; customerId?: string }> = [];
 const observations: Array<{ stage: string; ok: boolean }> = [];
 const diagnostics: Array<Record<string, unknown>> = [];
 const cleanup: Array<{ kind: string; id: string; ok: boolean; readback?: string }> = [];
@@ -37,11 +37,11 @@ function safeError(error: unknown) {
 }
 async function save() {
   const filePath = `${manifestPath}.${randomUUID()}.tmp`; const file = await open(filePath, 'wx', 0o600);
-  try { await file.writeFile(JSON.stringify({ runId, phase: 'test-clock-import-fixtures', account: EXPECTED_ACCOUNT, livemode: false, databaseName, owned, observations, diagnostics, cleanup }, null, 2)); await file.sync(); }
+  try { await file.writeFile(JSON.stringify({ runId, phase: process.argv.includes('--failure-sca') ? 'test-clock-failure-sca-only' : 'test-clock-import-fixtures', account: EXPECTED_ACCOUNT, livemode: false, databaseName, owned, observations, diagnostics, cleanup }, null, 2)); await file.sync(); }
   finally { await file.close(); }
   await rename(filePath, manifestPath!);
 }
-async function record(kind: OwnedKind, id: string) { assert(/^[A-Za-z0-9_]+$/.test(id)); if (!owned.some((v) => v.kind === kind && v.id === id)) owned.push({ kind, id }); await save(); }
+async function record(kind: OwnedKind, id: string, customerId?: string) { assert(/^[A-Za-z0-9_]+$/.test(id)); if (!owned.some((v) => v.kind === kind && v.id === id)) owned.push({ kind, id, ...(customerId ? { customerId } : {}) }); await save(); }
 function requireOwned(kind: OwnedKind, id: string) { assert(owned.some((v) => v.kind === kind && v.id === id)); }
 async function passed(label: string) { observations.push({ stage: label, ok: true }); await save(); console.log(`${label}: PASS`); }
 try {
@@ -110,10 +110,10 @@ try {
       assert.equal(value.livemode, false); assert.equal(value.test_clock, clock.id); await record('customer', value.id);
       await bindings.importCustomer(owner, { providerCustomerId: value.id, storeId: `${runId}:${label}`, evidenceRef: runId }); return value;
     }
-    async function paymentMethod(customerId: string, fixture: 'pm_card_visa' | 'pm_card_chargeDeclined' | 'pm_card_authenticationRequired') {
+    async function paymentMethod(customerId: string, fixture: 'pm_card_visa' | 'pm_card_chargeCustomerFail' | 'pm_card_authenticationRequired') {
       requireOwned('customer', customerId);
       const value = await mutate('attach-owned-test-payment-method', () => stripe.paymentMethods.attach(fixture, { customer: customerId }, { ...requestOptions, idempotencyKey: `${runId}:${customerId}:${fixture}` }));
-      assert.equal(value.livemode, false); assert.equal(value.customer, customerId); await record('paymentMethod', value.id); return value.id;
+      assert.equal(value.livemode, false); assert.equal(value.customer, customerId); await record('paymentMethod', value.id, customerId); return value.id;
     }
     async function subscription(customerId: string, method: string, label: string, trialDays: number) {
       requireOwned('customer', customerId); requireOwned('paymentMethod', method); requireOwned('price', price.id);
@@ -142,6 +142,7 @@ try {
       await advance(end + 1); await advance(end + 7201); // Observe invoice creation, then its automatic finalization window.
       return sdk.billing.retrieveSubscription(subscriptionId);
     }
+    if (!process.argv.includes('--failure-sca')) {
     const goodCustomer = await customer('happy'); const visa = await paymentMethod(goodCustomer.id, 'pm_card_visa');
     const good = await subscription(goodCustomer.id, visa, 'happy', 3);
     assert.equal((await sdk.billing.retrieveSubscription(good.id)).status, 'trialing'); await passed('real-test-clock-trial-projection');
@@ -158,9 +159,11 @@ try {
     const cancelEnd = Date.parse(cancelled.currentPeriodEnd) / 1000; await advance(cancelEnd + 1);
     assert.equal((await sdk.billing.retrieveSubscription(good.id)).status, 'canceled'); await passed('real-period-end-cancellation-observed');
 
+    }
+
     const failedCustomer = await customer('failure'); const goodMethod = await paymentMethod(failedCustomer.id, 'pm_card_visa');
     const failing = await subscription(failedCustomer.id, goodMethod, 'failure', 0); assert.equal(failing.status, 'active');
-    const declined = await paymentMethod(failedCustomer.id, 'pm_card_chargeDeclined');
+    const declined = await paymentMethod(failedCustomer.id, 'pm_card_chargeCustomerFail');
     await mutate('set-owned-declining-method', () => stripe.subscriptions.update(failing.id, { default_payment_method: declined }, requestOptions));
     const pastDue = await throughPeriod(failing.id); assert.equal(pastDue.status, 'past_due');
     const failedInvoice = await latestInvoice(failing.id, failedCustomer.id); assert.equal(failedInvoice.status, 'open'); assert.equal(failedInvoice.amount_paid, 0);
@@ -186,7 +189,15 @@ try {
       catch (error) { cleanup.push({ ...value, ok: false }); diagnostics.push({ stage: 'cleanup-subscription', ...safeError(error) }); process.exitCode = 1; }
     }
     for (const value of owned.filter((v) => v.kind === 'paymentMethod')) {
-      try { const after = await stripe.paymentMethods.retrieve(value.id, {}, requestOptions); assert.equal(after.customer, null); cleanup.push({ ...value, ok: true, readback: 'detached-after-customer-deletion' }); }
+      try {
+        const before = await stripe.paymentMethods.retrieve(value.id, {}, requestOptions); assert.equal(before.livemode, false);
+        if (before.customer !== null) {
+          assert(value.customerId); requireOwned('customer', value.customerId); assert.equal(before.customer, value.customerId);
+          await mutate('cleanup-own-payment-method', () => stripe.paymentMethods.detach(value.id, {}, requestOptions));
+        }
+        const after = await stripe.paymentMethods.retrieve(value.id, {}, requestOptions); assert.equal(after.customer, null);
+        cleanup.push({ kind: value.kind, id: value.id, ok: true, readback: 'detached-readback-null' });
+      }
       catch (error) { cleanup.push({ ...value, ok: false }); diagnostics.push({ stage: 'cleanup-payment-method', ...safeError(error) }); process.exitCode = 1; }
     }
     for (const value of [...owned].reverse().filter((v) => ['clock', 'price', 'product'].includes(v.kind))) {
