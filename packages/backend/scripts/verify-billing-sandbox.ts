@@ -4,7 +4,7 @@
  */
 import { createReadStream } from 'node:fs';
 import { createInterface } from 'node:readline';
-import { mkdir, open, access, stat, realpath, rename } from 'node:fs/promises';
+import { mkdir, open, access, stat, realpath, rename, readFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
@@ -67,11 +67,23 @@ const runId = `i08-${randomUUID()}`;
 type Owned = { kind: 'product' | 'price' | 'portalConfiguration' | 'customer' | 'checkout' | 'subscription'; id: string };
 const owned: Owned[] = [];
 const observations: Array<{ stage: string; ok: boolean }> = [];
+const diagnostics: Array<Record<string, unknown>> = [];
+const retained: Array<{ kind: 'portalConfiguration'; id: string; sourceManifest: string }> = [];
+function safeError(error: unknown) {
+  const e = error as { name?: unknown; type?: unknown; code?: unknown; param?: unknown; statusCode?: unknown; status?: unknown; issues?: unknown };
+  const safe = (v: unknown) => typeof v === 'string' && /^[A-Za-z0-9_.:-]{1,100}$/.test(v) ? v : undefined;
+  return { name: safe(e.name), type: safe(e.type), code: safe(e.code), param: safe(e.param),
+    httpStatus: typeof e.statusCode === 'number' ? e.statusCode : typeof e.status === 'number' ? e.status : undefined,
+    issues: Array.isArray(e.issues) ? e.issues.slice(0, 20).map((issue) => ({ code: safe(issue.code), path: Array.isArray(issue.path) ? issue.path.map(safe).filter(Boolean) : [] })) : undefined };
+}
+async function diagnosed<T>(label: string, effect: () => Promise<T>): Promise<T> {
+  try { return await effect(); } catch (error) { diagnostics.push({ stage: label, ...safeError(error) }); await save(); throw error; }
+}
 const cleanup: Array<{ kind: string; id: string; ok: boolean; readback?: string }> = [];
 let databaseName: string | undefined;
 let stage = 'preflight';
 async function save() {
-  const data = JSON.stringify({ schemaVersion: 1, runId, account: EXPECTED_ACCOUNT, livemode: false, phase: 'real-checkout', databaseName, owned, observations, cleanup }, null, 2);
+  const data = JSON.stringify({ schemaVersion: 1, runId, account: EXPECTED_ACCOUNT, livemode: false, phase: 'real-checkout', databaseName, owned, retained, observations, diagnostics, cleanup }, null, 2);
   const temporary = `${manifestPath}.${randomUUID()}.tmp`;
   const file = await open(temporary, 'wx', 0o600);
   try { await file.writeFile(data); await file.sync(); } finally { await file.close(); }
@@ -102,20 +114,42 @@ try {
   const owner = { merchantId: merchant.id, oxyAppId: merchant.oxyAppId, environment: merchant.environment };
   const deployment = { provider: 'stripe' as const, platformAccountId: EXPECTED_ACCOUNT, livemode: false };
   const cohorts = [{ ...owner, ...deployment, evidenceRef: runId }];
+  // Reuse only the retained default created by the reviewed a1 run. No new defaults.
+  const priorPath = process.env.I08_RETAINED_PORTAL_MANIFEST;
+  assert.equal(priorPath, '/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/sandbox-checkout-20261003-a1/manifest.json');
+  const prior = JSON.parse(await readFile(priorPath, 'utf8'));
+  assert.equal(prior.account, EXPECTED_ACCOUNT); assert.equal(prior.livemode, false);
+  const priorPortals = prior.owned.filter((value: Owned) => value.kind === 'portalConfiguration');
+  assert.equal(priorPortals.length, 1); assert.equal(priorPortals[0].id, 'bpc_1UMJzbQWiCE02OnUPVAzh1TI');
+  const portal = await stripe.billingPortal.configurations.retrieve(priorPortals[0].id, {}, requestOptions);
+  assert.equal(portal.active, true); assert.equal(portal.is_default, true); assert.equal(portal.livemode, false);
+  assert.equal(portal.features.payment_method_update.enabled, false);
+  assert.equal(portal.features.subscription_update.enabled, false); assert.equal(portal.features.subscription_cancel.enabled, false);
+  retained.push({ kind: 'portalConfiguration', id: portal.id, sourceManifest: priorPath }); await save();
   const product = await mutate('create-owned-test-product', () => stripe.products.create({ name: `Synthetic I08 ${runId}`, metadata: { rehearsal: runId } }, { ...requestOptions, idempotencyKey: `${runId}:product` }));
   assert.equal(product.livemode, false); await record('product', product.id);
   const price = await mutate('create-owned-test-price', () => stripe.prices.create({ product: product.id, currency: 'usd', unit_amount: 100, recurring: { interval: 'month' }, metadata: { rehearsal: runId } }, { ...requestOptions, idempotencyKey: `${runId}:price` }));
   assert.equal(price.livemode, false); await record('price', price.id);
-  const portal = await mutate('create-owned-test-portal-configuration', () => stripe.billingPortal.configurations.create({
-    business_profile: { headline: 'Synthetic I08 test billing', privacy_policy_url: 'https://example.invalid/privacy', terms_of_service_url: 'https://example.invalid/terms' },
-    features: { payment_method_update: { enabled: true }, subscription_update: { enabled: false }, subscription_cancel: { enabled: true, mode: 'at_period_end' } },
-    metadata: { rehearsal: runId },
-  }, { ...requestOptions, idempotencyKey: `${runId}:portal-config` }));
-  assert.equal(portal.livemode, false); await record('portalConfiguration', portal.id);
   const client = stripeBillingClient();
+  const originalCheckout = client.createCheckout.bind(client);
+  client.createCheckout = async (params, key) => {
+    const raw = await diagnosed('provider-create-checkout', () => originalCheckout(params, key));
+    const response = raw as { id?: unknown; customer?: unknown; mode?: unknown; livemode?: unknown; url?: unknown };
+    assert(typeof response.id === 'string' && /^cs_test_[A-Za-z0-9]+$/.test(response.id));
+    assert.equal(response.customer, params.customer); assert.equal(response.mode, 'subscription'); assert.equal(response.livemode, false);
+    await record('checkout', response.id); // Before adapter parsing; cleanup can recover an accepted effect.
+    diagnostics.push({ stage: 'provider-checkout-shape', urlType: typeof response.url, urlLength: typeof response.url === 'string' ? response.url.length : null }); await save();
+    return raw;
+  };
   const provider = createStripeBillingProvider(deployment, client, { portalConfigurationRef: portal.id });
+  const originalNormalizeCheckout = provider.createCheckoutSession.bind(provider);
+  provider.createCheckoutSession = (input, key) => diagnosed('adapter-create-checkout', () => originalNormalizeCheckout(input, key));
+  const originalPortal = provider.createPortalSession.bind(provider);
+  provider.createPortalSession = (input, key) => diagnosed('adapter-create-portal', () => originalPortal(input, key));
   const verifiedBindings = createVerifiedBillingBindings({ db: db.db, client, deployment, cohorts });
   const service = createBillingService({ db: db.db, provider, cohorts, verifiedBindings });
+  const originalServiceCheckout = service.createCheckoutSession.bind(service);
+  service.createCheckoutSession = (owner, input, key) => diagnosed('service-create-checkout', () => originalServiceCheckout(owner, input, key));
   const token = `synthetic-${randomUUID()}`; const secret = randomUUID();
   const app = express(); app.use(express.json());
   app.post('/auth/service-token', (req, res) => {
@@ -146,8 +180,9 @@ try {
   await passed('real-customer-idempotent-store-binding');
   await verifiedBindings.importPrice(owner, { providerPriceId: price.id, planId: `${runId}:plan`, evidenceRef: runId });
   const checkoutInput = { providerCustomerId: customer.providerCustomerId, providerPriceId: price.id, trialDays: 0, returnUrl: 'https://example.invalid/i08', storeId: runId, planId: `${runId}:plan` };
-  let lostResponse = false;
-  try { await mutate('sdk-checkout-response-loss', () => sdk.billing.createCheckoutSession(checkoutInput, { idempotencyKey: `${runId}:checkout` })); } catch { lostResponse = !loseFirstCheckoutResponse; }
+  let lostResponse = false; let initialCheckoutCallResolved = false;
+  try { await mutate('sdk-checkout-response-loss', () => sdk.billing.createCheckoutSession(checkoutInput, { idempotencyKey: `${runId}:checkout` })); initialCheckoutCallResolved = true; } catch (error) { lostResponse = !loseFirstCheckoutResponse; diagnostics.push({ stage: 'sdk-checkout-response-loss', ...safeError(error), responseWasDestroyed: !loseFirstCheckoutResponse }); await save(); }
+  diagnostics.push({ stage: 'checkout-response-loss-observation', initialCheckoutCallResolved, responseWasDestroyed: !loseFirstCheckoutResponse, lostResponse }); await save();
   assert(lostResponse, 'Expected a lost HTTP response only after committed real Checkout success');
   const checkout = await mutate('sdk-checkout-retry', () => sdk.billing.createCheckoutSession(checkoutInput, { idempotencyKey: `${runId}:checkout` }));
   await passed('real-provider-success-http-response-loss-same-key-recovery');
@@ -155,7 +190,7 @@ try {
   // URL is retained only in memory. Do not print it or browser diagnostics.
   const sessions = await stripe.checkout.sessions.list({ customer: customer.providerCustomerId, limit: 2 }, requestOptions);
   assert.equal(sessions.has_more, false); assert.equal(sessions.data.length, 1); const session = sessions.data[0]!;
-  assert.equal(session.livemode, false); assert.equal(session.mode, 'subscription'); await record('checkout', session.id);
+  assert.equal(session.livemode, false); assert.equal(session.mode, 'subscription'); assert(owned.some((value) => value.kind === 'checkout' && value.id === session.id));
   const portalSession = await mutate('sdk-portal', () => sdk.billing.createPortalSession({ providerCustomerId: customer.providerCustomerId, returnUrl: checkoutInput.returnUrl }, { idempotencyKey: `${runId}:portal` }));
   assert(new URL(portalSession.url).protocol === 'https:'); await passed('real-checkout-and-portal-created');
   stage = 'isolated-browser-checkout';
@@ -182,7 +217,8 @@ try {
   await passed('real-hosted-checkout-to-verified-local-binding');
   const cancelled = await mutate('sdk-cancel-at-period-end', () => sdk.billing.cancelAtPeriodEnd(subscriptionId!, { idempotencyKey: `${runId}:cancel` }));
   assert.equal(cancelled.cancelAtPeriodEnd, true); await passed('real-cancel-at-period-end');
-} catch {
+} catch (error) {
+  diagnostics.push({ stage, ...safeError(error) });
   observations.push({ stage, ok: false }); await save(); console.log(`${stage}: FAIL (details intentionally not logged)`); process.exitCode = 1;
  } finally {
   // Each cleanup is independent: a browser failure cannot skip provider or DB teardown.
@@ -190,6 +226,17 @@ try {
   try {
     if (http) await new Promise<void>((resolve) => { http!.close(() => resolve()); http!.closeAllConnections(); });
   } catch { cleanup.push({ kind: 'http', id: 'owned-loopback-server', ok: false }); process.exitCode = 1; }
+  // Discover only sessions of this run's customer BEFORE deleting that customer.
+  for (const customer of owned.filter((value) => value.kind === 'customer')) {
+    try {
+      const sessions = await stripe.checkout.sessions.list({ customer: customer.id, limit: 10 }, requestOptions);
+      assert.equal(sessions.has_more, false);
+      for (const session of sessions.data) {
+        assert.equal(session.customer, customer.id); assert.equal(session.livemode, false); assert.equal(session.mode, 'subscription');
+        if (!owned.some((value) => value.kind === 'checkout' && value.id === session.id)) await record('checkout', session.id);
+      }
+    } catch (error) { diagnostics.push({ stage: 'cleanup-discover-own-checkout', ...safeError(error) }); process.exitCode = 1; }
+  }
   for (const value of [...owned].reverse()) {
     requireOwned(value.kind, value.id);
     if (value.kind === 'subscription') continue; // Checked after the owning test customer is deleted.
@@ -207,10 +254,6 @@ try {
         await mutate('cleanup-test-customer', () => stripe.customers.del(value.id, {}, requestOptions));
         const valueAfter = await stripe.customers.retrieve(value.id, {}, requestOptions); assert('deleted' in valueAfter && valueAfter.deleted); readback = 'deleted';
       }
-      if (value.kind === 'portalConfiguration') {
-        await mutate('cleanup-test-portal', () => stripe.billingPortal.configurations.update(value.id, { active: false }, requestOptions));
-        assert.equal((await stripe.billingPortal.configurations.retrieve(value.id, {}, requestOptions)).active, false); readback = 'inactive';
-      }
       if (value.kind === 'price') {
         await mutate('cleanup-test-price', () => stripe.prices.update(value.id, { active: false }, requestOptions));
         assert.equal((await stripe.prices.retrieve(value.id, {}, requestOptions)).active, false); readback = 'inactive';
@@ -226,6 +269,14 @@ try {
   for (const value of owned.filter((value) => value.kind === 'subscription')) {
     try { const after = await stripe.subscriptions.retrieve(value.id, {}, requestOptions); assert.equal(after.status, 'canceled'); cleanup.push({ kind: value.kind, id: value.id, ok: true, readback: 'canceled-by-test-customer-deletion' }); }
     catch { cleanup.push({ kind: value.kind, id: value.id, ok: false }); process.exitCode = 1; }
+  }
+  for (const value of retained) {
+    try {
+      const after = await stripe.billingPortal.configurations.retrieve(value.id, {}, requestOptions);
+      assert.equal(after.active, true); assert.equal(after.is_default, true); assert.equal(after.livemode, false);
+      assert.equal(after.features.payment_method_update.enabled, false); assert.equal(after.features.subscription_update.enabled, false); assert.equal(after.features.subscription_cancel.enabled, false);
+      cleanup.push({ kind: 'retainedPortalConfiguration', id: value.id, ok: true, readback: 'default-active-zero-mutating-features' });
+    } catch (error) { diagnostics.push({ stage: 'retained-portal-readback', ...safeError(error) }); process.exitCode = 1; }
   }
   try { await dropSuiteDatabase(db); cleanup.push({ kind: 'database', id: databaseName!, ok: true, readback: 'dropTestDatabase-completed' }); }
   catch { cleanup.push({ kind: 'database', id: databaseName!, ok: false }); process.exitCode = 1; }
