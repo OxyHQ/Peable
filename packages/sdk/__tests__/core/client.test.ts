@@ -196,8 +196,8 @@ describe('createRestClient real HTTP response integrity', () => {
     try {
       const { provider } = fakeTokenProvider(['synthetic-token']);
       const client = createRestClient({ baseURL: `http://127.0.0.1:${server.port}` }, provider);
-      expect(await client.request('GET', '/valid')).toEqual({ id: 'synthetic-result' });
-      expect(await client.request('DELETE', '/empty')).toBeUndefined();
+      expect(await client.request<{ id: string }>('GET', '/valid')).toEqual({ id: 'synthetic-result' });
+      expect(await client.request<void>('DELETE', '/empty')).toBeUndefined();
       await expect(client.request('GET', '/failure')).rejects.toMatchObject({ name: 'PeableApiError', statusCode: 503 });
     } finally { await server.stop(true); }
   });
