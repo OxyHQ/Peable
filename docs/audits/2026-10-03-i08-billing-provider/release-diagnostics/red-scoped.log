@@ -1,0 +1,929 @@
+$ bun test src --test-name-pattern "pinned ECS release|the deploy workflow and the migrator agree"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+(skip) the gateway test harness > gives the suite a live, migrated database
+(skip) the gateway test harness > seeds a whole gateway graph from defaults alone
+(skip) the gateway test harness > produces distinct rows when called repeatedly with no arguments
+(skip) the gateway test harness > honours supplied values exactly
+(skip) the gateway test harness > defaults an intent to its merchant's network
+(skip) the gateway test harness > applies the non-custody firewall to seeded merchants
+(skip) the gateway test harness > empties every table on reset
+(skip) the gateway test harness > still seeds after a reset
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+(skip) the expiry sweeper > expires an intent nobody paid
+(skip) the expiry sweeper > leaves an intent whose time has not come
+(skip) the expiry sweeper > never expires an intent that has been broadcast
+(skip) the expiry sweeper > never expires an intent that already settled
+(skip) the expiry sweeper > enqueues payment_intent.expired for a merchant with an endpoint
+(skip) the expiry sweeper > is idempotent — a second sweep finds nothing left
+
+src/services/__tests__/disputes.realdb.test.ts:
+(skip) disputes > creates the dispute row it has never seen, rather than waiting for one
+(skip) disputes > tells the merchant once, however many times the creation is redelivered
+(skip) disputes > reads won and lost from the payload, and clears the deadline
+(skip) disputes > reads a win as a win
+(skip) disputes > refuses to call a close a win when the outcome cannot be read
+(skip) disputes > maps a provider warning state without inventing an outcome
+(skip) disputes > leaves a dispute for an unlinked payment unprocessed, to retry
+(skip) disputes > never moves the payment's own status
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+(skip) a transition from a status the intent has left > refuses to write over a row the expiry sweeper already claimed
+(skip) a transition from a status the intent has left > enqueues exactly the expiry event, and nothing for the refused write
+(skip) a transition from a status the intent has left > tells a row that moved apart from a row that is not there
+(skip) a transition from a status the intent has left > still applies a transition from the status the row actually holds
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+(skip) settlement events and the sync sweep > an account event re-reads the account from the provider
+(skip) settlement events and the sync sweep > tells the merchant when a seller's readiness changes
+(skip) settlement events and the sync sweep > says nothing when a refresh changes nothing
+(skip) settlement events and the sync sweep > a capability event refreshes the account the same way
+(skip) settlement events and the sync sweep > leaves an event for an unknown account unprocessed
+(skip) settlement events and the sync sweep > applies a reversal reported by the provider
+(skip) settlement events and the sync sweep > a full reversal reported by the provider closes the transfer
+(skip) settlement events and the sync sweep > refuses a redacted or non-integer total instead of writing an amount
+(skip) settlement events and the sync sweep > leaves an event for a transfer this gateway never made unprocessed
+(skip) settlement events and the sync sweep > refreshes a never-synced account with no event at all
+(skip) settlement events and the sync sweep > visits a never-synced account before one synced long ago
+(skip) settlement events and the sync sweep > keeps going past an account the provider will not read
+(skip) settlement events and the sync sweep > does nothing, without error, when there is nothing to sync
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+(skip) the provider event drain > settles a card payment and enqueues the merchant's event
+(skip) the provider event drain > fails a declined payment and tells the merchant
+(skip) the provider event drain > treats a provider cancellation as a rejection
+(skip) the provider event drain > moves the intent to processing without enqueueing an event
+(skip) the provider event drain > absorbs a redelivery without moving the intent or duplicating the event
+(skip) the provider event drain > leaves an event for an unlinked payment unprocessed, and applies it once the link lands
+(skip) the provider event drain > marks an unmapped event handled rather than retrying it forever
+(skip) the provider event drain > records a failure on a mapped event that names no payment
+(skip) the provider event drain > keeps going past a failure and applies the events behind it
+(skip) the provider event drain > applies two events about one payment in the order they arrived
+(skip) the provider event drain > cannot reach a faircoin intent
+
+src/services/__tests__/refunds.realdb.test.ts:
+(skip) refunds > refunds part of a payment and moves it to partially_refunded
+(skip) refunds > a refund exhausting the payment moves it to refunded
+(skip) refunds > two partial refunds reach refunded, from the sum rather than a counter
+(skip) refunds > a repeated refund converges and does not send money twice
+(skip) refunds > refuses more than the payment has left
+(skip) refunds > a failed refund does not consume the payment's remaining balance
+(skip) refunds > rethrows a retryable provider failure and leaves the refund pending
+(skip) refunds > a pending refund is stored pending and does not move the payment
+(skip) refunds > a provider-reported failure is stored failed, with its reason
+(skip) refunds > finishes an interrupted refund on the retry, under the same provider key
+(skip) refunds > a completed refund is answered from history, with no second call
+(skip) refunds > refuses to refund a payment that never settled
+(skip) refunds > derives the provider idempotency key from the gateway's refund id
+(skip) refunds > compares a refund against the remaining balance without rounding
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+(skip) minting a card intent > writes the row, then creates at the provider, then links the two
+(skip) minting a card intent > derives the provider idempotency key from the intent's own id
+(skip) minting a card intent > does not forward the merchant's metadata to the provider
+(skip) minting a card intent > finishes an interrupted create on the retry, under the same provider key
+(skip) minting a card intent > refuses an Idempotency-Key replayed with a different amount
+(skip) minting a card intent > re-reads the client action from the provider on an idempotent replay
+(skip) minting a card intent > refuses a card intent, with nothing written, when the rail is not configured
+(skip) minting a card intent > mints a faircoin intent with no provider and no provider call
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+(skip) the webhook outbox > a 2xx settles the delivery and unschedules it
+(skip) the webhook outbox > a failing endpoint leaves the event queued rather than losing it
+(skip) the webhook outbox > a 4xx is terminal — no retry is scheduled for a payload the target refuses
+(skip) the webhook outbox > a row scheduled for the future is not claimed
+(skip) the webhook outbox > a leased row is not handed to a later dispatcher
+(skip) the webhook outbox > an expired lease makes the row claimable again
+(skip) the webhook outbox > two dispatchers claiming concurrently share the row out exactly once
+(skip) the webhook outbox > a merchant who removed their endpoint terminates the delivery instead of looping
+(skip) the webhook outbox > a transition enqueues the merchant event in the same commit
+(skip) the webhook outbox > a transition for a merchant with no endpoint enqueues nothing
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+(skip) ending a card payment > cancels at the provider BEFORE announcing a rejection
+(skip) ending a card payment > derives the cancellation key from the intent's own id
+(skip) ending a card payment > reconciles to the truth when the payer pays during the rejection
+(skip) ending a card payment > refuses to reject when the provider cannot be reached
+(skip) ending a card payment > the sweeper cancels a due card payment before expiring it
+(skip) ending a card payment > does not expire a payment the payer completed during the sweep
+(skip) ending a card payment > leaves a due payment alone when the provider cannot be reached
+(skip) ending a card payment > expires a FairCoin intent without calling any provider
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+(skip) refund events > a refund.failed moves the row and the payment back
+(skip) refund events > a refund.updated carrying succeeded settles the pending row
+(skip) refund events > a stale pending arriving after the success changes nothing
+(skip) refund events > imports a refund created at the provider, with no merchant reference
+(skip) refund events > a redelivered import converges on the row it already made
+(skip) refund events > imports a refund that names only the charge
+(skip) refund events > leaves a refund for an unknown payment unmatched
+
+src/db/__tests__/settlement.realdb.test.ts:
+(skip) connected accounts and transfers > converges when the same seller is onboarded twice
+(skip) connected accounts and transfers > lets exactly one of two concurrent onboardings win
+(skip) connected accounts and transfers > clears a requirement that the provider no longer reports
+(skip) connected accounts and transfers > drops a blank disabled-reason code rather than failing the sync
+(skip) connected accounts and transfers > refuses a capability value no provider reports
+(skip) connected accounts and transfers > finds an account by the merchant address and by the provider address
+(skip) connected accounts and transfers > syncs never-synced accounts before ones it has already read
+(skip) connected accounts and transfers > converges when the same order is settled twice
+(skip) connected accounts and transfers > links the provider object once and refuses to repoint it
+(skip) connected accounts and transfers > accepts a reversal that a text comparison would refuse
+(skip) connected accounts and transfers > refuses a reversal larger than the transfer, and names the reason
+(skip) connected accounts and transfers > compares totals beyond the safe-integer range without rounding
+(skip) connected accounts and transfers > follows a transfer through two partial reversals to full
+(skip) connected accounts and transfers > ignores a reversal total smaller than the one already recorded
+(skip) connected accounts and transfers > records a provider refusal without a provider object
+(skip) connected accounts and transfers > lists every transfer a payment funded
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+(skip) payment intent repository > mints an intent with server-decided initial state
+(skip) payment intent repository > refuses a duplicate idempotency key for the same merchant
+(skip) payment intent repository > scopes the idempotency key to the merchant
+(skip) payment intent repository > never returns another merchant's intent from the scoped read
+(skip) payment intent repository > refuses an intent whose network disagrees with its merchant
+(skip) payment intent repository > refuses a non-canonical amount
+(skip) payment intent repository > refuses a broadcast state with no transaction id
+(skip) payment intent repository > pages without repeating or skipping a row, whatever the ids are
+(skip) payment intent repository > returns newest-first for rows created in distinct milliseconds
+(skip) payment intent repository > filters a page by status and excludes other merchants
+(skip) payment intent repository > resolves intents by address, and answers an empty input without a query
+(skip) payment intent repository > selects only in-flight intents that carry a transaction id
+(skip) payment intent repository > resolves an intent by its internal id, and never by its public id
+(skip) payment intent repository > never returns another merchant's intent from the by-id scoped read
+(skip) payment intent repository > returns null for an unknown intent rather than throwing
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+(skip) provider_events > stores a delivery and reads it back whole
+(skip) provider_events > converges on a retry of a PLATFORM-scope delivery, which carries no account
+(skip) provider_events > converges on a retry of a CONNECT-scope delivery
+(skip) provider_events > keeps deliveries to different scopes apart even when the event id matches
+(skip) provider_events > lets exactly one of two CONCURRENT inserts win
+(skip) provider_events > finds a platform-scope event by its identity, NULL account and all
+(skip) provider_events > refuses a provider the closed set does not name
+(skip) provider_events > refuses a payload that is not a JSON object
+(skip) provider_events > serves the drain unprocessed rows oldest first, and drops them once handled
+(skip) provider_events > records a failure without removing the event from the drain, and clears it on success
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+(skip) payment link and checkout session repositories > creates a link with its merchant identity
+(skip) payment link and checkout session repositories > refuses a link whose claimed application does not belong to its merchant
+(skip) payment link and checkout session repositories > refuses a link whose network disagrees with its merchant
+(skip) payment link and checkout session repositories > refuses a non-canonical link amount
+(skip) payment link and checkout session repositories > scopes the merchant link read but not the public one
+(skip) payment link and checkout session repositories > never lets one merchant patch another merchant's link
+(skip) payment link and checkout session repositories > filters a link page by active and excludes other merchants
+(skip) payment link and checkout session repositories > creates a session around an intent
+(skip) payment link and checkout session repositories > refuses a second session around the same intent
+(skip) payment link and checkout session repositories > refuses a session pointing at an intent that does not exist
+(skip) payment link and checkout session repositories > scopes the merchant session read but not the public one
+(skip) payment link and checkout session repositories > lists only the caller's sessions
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+(skip) merchant derivation-index reservation > returns the PRE-increment index and advances the counter
+(skip) merchant derivation-index reservation > hands out consecutive indices as NUMBERS, never strings
+(skip) merchant derivation-index reservation > never hands the same index to two concurrent callers
+(skip) merchant derivation-index reservation > reserves nothing and returns null for an unknown merchant
+(skip) merchant derivation-index reservation > refuses to advance past the int4 ceiling instead of wrapping
+(skip) merchant derivation-index reservation > refuses a negative counter
+(skip) merchant derivation-index reservation > refuses a second merchant for the same app and environment
+(skip) merchant derivation-index reservation > restamps updated_at
+(skip) merchant derivation-index reservation > runs against the migrated schema, not an empty database
+
+src/db/__tests__/deployWorkflow.test.ts:
+(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.02ms]
+(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.08ms]
+(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.10ms]
+(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.20ms]
+(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.03ms]
+(pass) the deploy workflow and the migrator agree > runs every migration step with no DATABASE_URL preflight to skip it [0.04ms]
+(pass) the deploy workflow and the migrator agree > orders the phases around the rollout [0.04ms]
+
+src/db/__tests__/providerLink.realdb.test.ts:
+(skip) the provider link on payment_intents > mints a card intent unlinked, then links it once
+(skip) the provider link on payment_intents > refuses to repoint an intent that is already linked, and says so
+(skip) the provider link on payment_intents > lets exactly one of two concurrent links win
+(skip) the provider link on payment_intents > refuses to let a second intent claim the same provider object
+(skip) the provider link on payment_intents > lets many unlinked card intents coexist
+(skip) the provider link on payment_intents > refuses a card intent with no provider
+(skip) the provider link on payment_intents > refuses a faircoin intent that names a provider
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+(skip) merchant repository > registers a merchant and reads it back by app and environment
+(skip) merchant repository > refuses a private extended key, and stores nothing
+(skip) merchant repository > converges on the unique index rather than reading first
+(skip) merchant repository > allows one merchant per environment for the same application
+(skip) merchant repository > patches only the mutable fields and leaves the rest alone
+(skip) merchant repository > clears a webhook with an explicit null, and ignores an absent field
+(skip) merchant repository > treats an empty patch as a no-op read rather than a failed update
+(skip) merchant repository > loads the webhook secret only through the delivery-path read
+(skip) merchant repository > reports no webhook target when only one half is configured
+(skip) merchant repository > reads several merchants in one query, and no others
+(skip) merchant repository > returns null for an unknown merchant rather than throwing
+
+src/db/__tests__/rail.realdb.test.ts:
+(skip) the card rail > a card intent stores no chain fields and keeps its own currency
+(skip) the card rail > a card intent reaches settled with no txid
+(skip) the card rail > a card intent cannot name a merchant that does not exist
+(skip) the card rail > the FairCoin network firewall still refuses a mismatched network
+(skip) the card rail > a card intent carrying an address is refused
+(skip) the card rail > a card intent denominated in FAIR is refused
+(skip) the card rail > a FairCoin intent denominated in a fiat currency is refused
+(skip) the card rail > a card intent cannot reach a chain status
+(skip) the card rail > a FairCoin intent cannot reach a card status
+(skip) the card rail > creating a card intent does not move the merchant derivation counter
+(skip) the card rail > the watchable query never returns a card intent
+(skip) the card rail > an existing FairCoin row keeps working with no rail supplied
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+(skip) social receive cursor reservation > agrees with the service on the first fresh index
+(skip) social receive cursor reservation > creates the cursor on first use and hands out the first fresh index
+(skip) social receive cursor reservation > hands out consecutive indices as NUMBERS across the create and update branches
+(skip) social receive cursor reservation > never hands the same index to two concurrent first payments
+(skip) social receive cursor reservation > keeps a separate counter per network
+(skip) social receive cursor reservation > reads back the highest index reserved, without reserving another
+(skip) social receive cursor reservation > refuses a second cursor for the same user and network
+(skip) social receive cursor reservation > refuses a cursor below the first fresh index
+(skip) social receive cursor reservation > refuses a network outside the closed set
+(skip) social receive cursor reservation > records the identity key the addresses were derived from
+(skip) social receive cursor reservation > follows the key the latest reservation used
+(skip) social receive cursor reservation > reports no key for a user who has never had an address reserved
+
+src/db/__tests__/pinnedRelease.test.ts:
+(pass) pinned ECS release > restricts manual and push promotion to main, exact CI, with post and cleanup still reachable [0.19ms]
+81 |     expect(steps.find(step => step.name?.includes('Clean up unused'))?.if).toBe('always()');
+82 |     expect(steps.find(step => step.name?.startsWith('Migrate (post)'))?.if).not.toContain('desiredCount');
+83 |   });
+84 |   test('omits empty tags from the actual untagged deployment shape', () => {
+85 |     const f = fixture('empty-tags'); try {
+86 |       expect(f.run('prepare').exitCode).toBe(0);
+                                             ^
+error: expect(received).toBe(expected)
+
+Expected: 0
+Received: 1
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:86:41)
+(fail) pinned ECS release > omits empty tags from the actual untagged deployment shape [90.21ms]
+92 |     test(`reports only safe error code and CLI exit for ${scenario}`, () => {
+93 |       const f = fixture(scenario); try {
+94 |         const result = f.run('prepare');
+95 |         expect(result.exitCode).toBe(1);
+96 |         const output = result.stdout.toString() + result.stderr.toString();
+97 |         expect(output).toContain(scenario === 'aws-error' ? 'code=AccessDeniedException' : 'code=unknown');
+                            ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "code=AccessDeniedException"
+Received: "::error::AWS command failed: ecs register-task-definition\n"
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:97:24)
+(fail) pinned ECS release > reports only safe error code and CLI exit for aws-error [90.03ms]
+92 |     test(`reports only safe error code and CLI exit for ${scenario}`, () => {
+93 |       const f = fixture(scenario); try {
+94 |         const result = f.run('prepare');
+95 |         expect(result.exitCode).toBe(1);
+96 |         const output = result.stdout.toString() + result.stderr.toString();
+97 |         expect(output).toContain(scenario === 'aws-error' ? 'code=AccessDeniedException' : 'code=unknown');
+                            ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "code=unknown"
+Received: "::error::AWS command failed: ecs register-task-definition\n"
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:97:24)
+(fail) pinned ECS release > reports only safe error code and CLI exit for local-error [91.40ms]
+(pass) pinned ECS release > copies configuration, pins both revisions, then verifies the running candidate [244.20ms]
+(pass) pinned ECS release > refuses mixed-digest during prepare [76.09ms]
+(pass) pinned ECS release > refuses mixed-revision during prepare [74.96ms]
+(pass) pinned ECS release > refuses tamper during prepare [103.35ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after rollout-failure [304.26ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after wrong-running-digest [331.68ms]
+(pass) pinned ECS release > refuses a changed revision or configuration after pre-migration without overwriting it [338.45ms]
+(pass) pinned ECS release > does not roll back over an external deployment arriving during rollout [2225.01ms]
+(pass) pinned ECS release > cleans unused copies after pre failure, including failed readback registration [495.29ms]
+(pass) pinned ECS release > retains serving and rollback definitions after promotion [390.97ms]
+(pass) pinned ECS release > retains an unused candidate while a running task still references it [276.82ms]
+(pass) pinned ECS release > zero capacity repoints a known pinned revision without a runtime claim [206.89ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: success [15.77ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wrong-digest [11.13ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: failed-migration [15.61ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wait-timeout [20.87ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-task [12.57ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-run [13.03ms]
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+(skip) the migrated database > satisfies every schema-wide invariant
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+(skip) webhook delivery and social attribution repositories > enqueues a pending delivery with no attempts and a schedule
+(skip) webhook delivery and social attribution repositories > derives last_status from delivered, both ways
+(skip) webhook delivery and social attribution repositories > ties the schedule to the status in both directions
+(skip) webhook delivery and social attribution repositories > refuses a pending delivery with no schedule
+(skip) webhook delivery and social attribution repositories > refuses a delivery for an intent that does not exist
+(skip) webhook delivery and social attribution repositories > never returns another merchant's delivery
+(skip) webhook delivery and social attribution repositories > pages a merchant's log and tolerates a cursor of any shape
+(skip) webhook delivery and social attribution repositories > yields each delivery's own intent public id
+(skip) webhook delivery and social attribution repositories > attributes an address to one payment relationship, once
+(skip) webhook delivery and social attribution repositories > round-trips the paying app's context, and stores nothing when none was named
+(skip) webhook delivery and social attribution repositories > refuses a source ref that names no app
+(skip) webhook delivery and social attribution repositories > refuses a source ref longer than the published bound
+(skip) webhook delivery and social attribution repositories > refuses a source app longer than the published bound
+(skip) webhook delivery and social attribution repositories > refuses an attribution at the recipient's default index
+(skip) webhook delivery and social attribution repositories > shows an attribution to both parties and to nobody else
+(skip) webhook delivery and social attribution repositories > answers an empty address list without a query
+(skip) webhook delivery and social attribution repositories > lists what the viewer sent AND received, and nothing of a stranger
+(skip) webhook delivery and social attribution repositories > scopes the viewer listing to one network
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+(skip) the settlement API > opens an account for a seller and returns 201
+(skip) the settlement API > never puts the provider's account id or name on the wire
+(skip) the settlement API > a repeated create converges on the same account and answers 200
+(skip) the settlement API > derives the provider idempotency key from the merchant and the seller ref
+(skip) the settlement API > refreshing an account stores what the provider now says
+(skip) the settlement API > mints a short-lived onboarding link and never stores it
+(skip) the settlement API > does not return another merchant's account
+(skip) the settlement API > acts on a seller through the provider their account records
+(skip) the settlement API > pages through sellers with a cursor and says when there are more
+(skip) the settlement API > refuses a cursor from another merchant without confirming it
+(skip) the settlement API > settles a seller and reports the public ids only
+(skip) the settlement API > names the source CHARGE, not the payment, and the payment's own group
+(skip) the settlement API > resolves the charge once and reuses it for the next seller
+(skip) the settlement API > refuses to settle more than the payment brought in
+(skip) the settlement API > finishes an interrupted settlement on the retry
+(skip) the settlement API > answers a completed settlement from history during a provider outage
+(skip) the settlement API > refuses a settlement reference reused for another amount
+(skip) the settlement API > refuses to settle when the provider reports no captured charge
+(skip) the settlement API > a repeated settlement of one order converges and does not pay twice
+(skip) the settlement API > answers a retry even after the seller stops being payable
+(skip) the settlement API > refuses to settle to a seller who cannot receive one
+(skip) the settlement API > names the seller by the merchant's own ref as well as by ca_…
+(skip) the settlement API > refuses a body naming the seller twice or not at all
+(skip) the settlement API > refuses an amount that is not a canonical base-unit integer
+(skip) the settlement API > reverses a settlement and reports the cumulative total
+(skip) the settlement API > two distinct reversals of the same amount both happen; a replay does not
+(skip) the settlement API > refuses a reversal that carries no operation identity
+(skip) the settlement API > refuses a reversal larger than the transfer
+(skip) the settlement API > does not settle, read or reverse across merchants
+(skip) the settlement API > lists what one payment settled
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+(skip) the refund API > refunds a payment and reports the public ids only
+(skip) the refund API > a repeated refund answers 200 and calls the provider once
+(skip) the refund API > answers a retry even though the balance no longer accommodates it
+(skip) the refund API > refuses a zero refund, which the amount predicate alone would accept
+(skip) the refund API > refuses an amount that is not a canonical base-unit integer
+(skip) the refund API > refuses more than the payment has left
+(skip) the refund API > lists the refunds and what is still refundable
+(skip) the refund API > does not refund, read or list across merchants
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+(skip) a development credential on a live deployment > cannot create a card payment intent
+(skip) a development credential on a live deployment > cannot create a card checkout session
+(skip) a development credential on a live deployment > cannot open a connected account
+(skip) a development credential on a live deployment > cannot refund
+(skip) a development credential on a live deployment > cannot settle a seller out of a payment
+(skip) a development credential on a live deployment > but a FairCoin intent still mints
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+(skip) reporting what a payment came to > reports gross, fee and net when the provider has settled it
+(skip) reporting what a payment came to > says pending rather than final when the provider has not settled it
+(skip) reporting what a payment came to > says unknown, not zero, when there is nothing to report
+(skip) reporting what a payment came to > says unknown for a rail that has no settlement
+(skip) reporting what a payment came to > says unknown rather than failing when the provider is unreachable
+(skip) reporting what a payment came to > does not report another merchant's payment
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+(skip) provider webhook ingress, real chain > the rail is configured, so these cases test signatures and not a missing secret
+(skip) provider webhook ingress, real chain > a correctly signed platform delivery is accepted and stored
+(skip) provider webhook ingress, real chain > the SAME delivery verifies through the real chain and fails behind express.json()
+(skip) provider webhook ingress, real chain > a redelivery is a duplicate, still 200, and stores nothing new
+(skip) provider webhook ingress, real chain > the connect endpoint refuses a platform signature, and accepts its own
+(skip) provider webhook ingress, real chain > the platform endpoint refuses a connect signature
+(skip) provider webhook ingress, real chain > a forged body with a valid-looking signature is refused and stores nothing
+(skip) provider webhook ingress, real chain > a delivery with no signature header at all is refused before any work
+(skip) provider webhook ingress, real chain > a replayed delivery outside the tolerance window is refused
+(skip) provider webhook ingress, real chain > an authentic event from the wrong livemode is ignored, not stored, and still 200
+(skip) provider webhook ingress, real chain > what lands in the table is redacted, not the bytes Stripe sent
+(skip) provider webhook ingress, real chain > a burst of deliveries is not rate-limited
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+(skip) answering a dispute > forwards the merchant's response and records that it was given
+(skip) answering a dispute > submits once, however many times it is asked
+(skip) answering a dispute > keeps none of the evidence, only the fact that it was submitted
+(skip) answering a dispute > refuses a response after the deadline, without calling the provider
+(skip) answering a dispute > refuses a response to a dispute that is already closed
+(skip) answering a dispute > refuses a response with nothing in it
+(skip) answering a dispute > refuses a field name the network would not recognise
+(skip) answering a dispute > does not answer across merchants
+(skip) answering a dispute > does not record a submission the provider refused
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+(skip) resuming a card payment > the merchant asks, and is handed the provider's credential
+(skip) resuming a card payment > the payer asks with the intent's client_secret
+(skip) resuming a card payment > a wrong client_secret is refused, and a missing one is unauthenticated
+(skip) resuming a card payment > refuses to hand out a credential for a payment that is over
+(skip) resuming a card payment > refuses the operation on a rail that has no client action
+(skip) resuming a card payment > a merchant's single read carries the client action
+(skip) resuming a card payment > a merchant's read of a finished payment carries none
+(skip) resuming a card payment > still answers the intent when the provider cannot be reached
+(skip) resuming a card payment > the resume operation reports an unreachable provider as unavailable
+(skip) resuming a card payment > the payer's polled read never carries the client action
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/billing/__tests__/billingHttp.realdb.test.ts:
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > executes five SDK methods with store/receipt references and no Connect or financial decisions
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > reuses customer for renamed store and new key without another provider effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > denies other cohort, missing scopes and missing auth before provider effects
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > rejects unknown price, foreign store and invented owner/payer fields before checkout
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > replays checkout while fresh and refuses expired URL without another effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > checks platform account before the first effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > refuses portal configuration drift on the next call and immediate cancellation
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > retains indeterminate result after timeout and retries same remote idempotency key
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > binds exact completed checkout concurrently after URL expiry, ignoring arbitrary metadata
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > uniformly refuses unknown, ambiguous, incomplete or mismatched checkout correlation
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > does not adopt a completed checkout whose durable intent belongs to another merchant
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > imports explicit evidence only within approved cohort and preserves store instead of metadata
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > keeps absent boot configuration inactive and rejects another platform or unsafe portal at boot
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > SDK refreshes once after 401 and preserves the mutation key
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+(skip) inactive recurring observation / real PostgreSQL > keeps explicit binding insert-only, including concurrent repeats and conflicting merchants/environments
+(skip) inactive recurring observation / real PostgreSQL > observes subscription and invoice periods with the same merchant binding and atomic outbox
+(skip) inactive recurring observation / real PostgreSQL > rejects invoice attribution to another merchant subscription
+(skip) inactive recurring observation / real PostgreSQL > absorbs concurrent replay and post-commit replay without another read or outbox
+(skip) inactive recurring observation / real PostgreSQL > reads current snapshots for reversed/equal event times, without ordering state by event id
+(skip) inactive recurring observation / real PostgreSQL > leaves an unknown object pending without attribution, read, or outbox
+(skip) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once
+(skip) inactive recurring observation / real PostgreSQL > times out a stalled reader and releases locks without processing or changing state
+(skip) inactive recurring observation / real PostgreSQL > keeps default routing inactive; opt-in unknown does not stop a later bound object
+(skip) inactive recurring observation / real PostgreSQL > serializes distinct event reads under the binding lock and timestamps after reading
+(skip) inactive recurring observation / real PostgreSQL > enforces merchant/application/environment ownership in the database
+(skip) inactive recurring observation / real PostgreSQL > refuses stored event scope/mode/version mismatches before the reader
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot pii without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot partial without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongAccount without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongScope without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongMode without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongObject without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongVersion without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot duplicateItems without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > persists the private reader invoice projection and outbox through real SQL, replaying unchanged
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+(skip) billing ownership and durable claims / real PostgreSQL > converges verified binding and refuses different owner or environment
+(skip) billing ownership and durable claims / real PostgreSQL > requires subscription customer and price of exact same owner and store/plan
+(skip) billing ownership and durable claims / real PostgreSQL > does not read foreign or unknown refs or create a second customer per store
+(skip) billing ownership and durable claims / real PostgreSQL > claims once under concurrency and returns without holding a provider transaction
+(skip) billing ownership and durable claims / real PostgreSQL > globally refuses same key from another merchant, operation or payload
+(skip) billing ownership and durable claims / real PostgreSQL > refuses second key creating customer after unknown first result
+(skip) billing ownership and durable claims / real PostgreSQL > replays owner result but rejects an expired hosted URL
+(skip) billing ownership and durable claims / real PostgreSQL > recovers expired lease with same remote key and fences stale completion
+(skip) billing ownership and durable claims / real PostgreSQL > does not blindly retry beyond bounded recovery window
+(skip) billing ownership and durable claims / real PostgreSQL > rolls back binding and result together on local crash
+(skip) billing ownership and durable claims / real PostgreSQL > binds checkout claim to exact owned customer and price, including replay
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+347 tests skipped:
+(skip) the gateway test harness > gives the suite a live, migrated database
+(skip) the gateway test harness > seeds a whole gateway graph from defaults alone
+(skip) the gateway test harness > produces distinct rows when called repeatedly with no arguments
+(skip) the gateway test harness > honours supplied values exactly
+(skip) the gateway test harness > defaults an intent to its merchant's network
+(skip) the gateway test harness > applies the non-custody firewall to seeded merchants
+(skip) the gateway test harness > empties every table on reset
+(skip) the gateway test harness > still seeds after a reset
+(skip) the expiry sweeper > expires an intent nobody paid
+(skip) the expiry sweeper > leaves an intent whose time has not come
+(skip) the expiry sweeper > never expires an intent that has been broadcast
+(skip) the expiry sweeper > never expires an intent that already settled
+(skip) the expiry sweeper > enqueues payment_intent.expired for a merchant with an endpoint
+(skip) the expiry sweeper > is idempotent — a second sweep finds nothing left
+(skip) disputes > creates the dispute row it has never seen, rather than waiting for one
+(skip) disputes > tells the merchant once, however many times the creation is redelivered
+(skip) disputes > reads won and lost from the payload, and clears the deadline
+(skip) disputes > reads a win as a win
+(skip) disputes > refuses to call a close a win when the outcome cannot be read
+(skip) disputes > maps a provider warning state without inventing an outcome
+(skip) disputes > leaves a dispute for an unlinked payment unprocessed, to retry
+(skip) disputes > never moves the payment's own status
+(skip) a transition from a status the intent has left > refuses to write over a row the expiry sweeper already claimed
+(skip) a transition from a status the intent has left > enqueues exactly the expiry event, and nothing for the refused write
+(skip) a transition from a status the intent has left > tells a row that moved apart from a row that is not there
+(skip) a transition from a status the intent has left > still applies a transition from the status the row actually holds
+(skip) settlement events and the sync sweep > an account event re-reads the account from the provider
+(skip) settlement events and the sync sweep > tells the merchant when a seller's readiness changes
+(skip) settlement events and the sync sweep > says nothing when a refresh changes nothing
+(skip) settlement events and the sync sweep > a capability event refreshes the account the same way
+(skip) settlement events and the sync sweep > leaves an event for an unknown account unprocessed
+(skip) settlement events and the sync sweep > applies a reversal reported by the provider
+(skip) settlement events and the sync sweep > a full reversal reported by the provider closes the transfer
+(skip) settlement events and the sync sweep > refuses a redacted or non-integer total instead of writing an amount
+(skip) settlement events and the sync sweep > leaves an event for a transfer this gateway never made unprocessed
+(skip) settlement events and the sync sweep > refreshes a never-synced account with no event at all
+(skip) settlement events and the sync sweep > visits a never-synced account before one synced long ago
+(skip) settlement events and the sync sweep > keeps going past an account the provider will not read
+(skip) settlement events and the sync sweep > does nothing, without error, when there is nothing to sync
+(skip) the provider event drain > settles a card payment and enqueues the merchant's event
+(skip) the provider event drain > fails a declined payment and tells the merchant
+(skip) the provider event drain > treats a provider cancellation as a rejection
+(skip) the provider event drain > moves the intent to processing without enqueueing an event
+(skip) the provider event drain > absorbs a redelivery without moving the intent or duplicating the event
+(skip) the provider event drain > leaves an event for an unlinked payment unprocessed, and applies it once the link lands
+(skip) the provider event drain > marks an unmapped event handled rather than retrying it forever
+(skip) the provider event drain > records a failure on a mapped event that names no payment
+(skip) the provider event drain > keeps going past a failure and applies the events behind it
+(skip) the provider event drain > applies two events about one payment in the order they arrived
+(skip) the provider event drain > cannot reach a faircoin intent
+(skip) refunds > refunds part of a payment and moves it to partially_refunded
+(skip) refunds > a refund exhausting the payment moves it to refunded
+(skip) refunds > two partial refunds reach refunded, from the sum rather than a counter
+(skip) refunds > a repeated refund converges and does not send money twice
+(skip) refunds > refuses more than the payment has left
+(skip) refunds > a failed refund does not consume the payment's remaining balance
+(skip) refunds > rethrows a retryable provider failure and leaves the refund pending
+(skip) refunds > a pending refund is stored pending and does not move the payment
+(skip) refunds > a provider-reported failure is stored failed, with its reason
+(skip) refunds > finishes an interrupted refund on the retry, under the same provider key
+(skip) refunds > a completed refund is answered from history, with no second call
+(skip) refunds > refuses to refund a payment that never settled
+(skip) refunds > derives the provider idempotency key from the gateway's refund id
+(skip) refunds > compares a refund against the remaining balance without rounding
+(skip) minting a card intent > writes the row, then creates at the provider, then links the two
+(skip) minting a card intent > derives the provider idempotency key from the intent's own id
+(skip) minting a card intent > does not forward the merchant's metadata to the provider
+(skip) minting a card intent > finishes an interrupted create on the retry, under the same provider key
+(skip) minting a card intent > refuses an Idempotency-Key replayed with a different amount
+(skip) minting a card intent > re-reads the client action from the provider on an idempotent replay
+(skip) minting a card intent > refuses a card intent, with nothing written, when the rail is not configured
+(skip) minting a card intent > mints a faircoin intent with no provider and no provider call
+(skip) the webhook outbox > a 2xx settles the delivery and unschedules it
+(skip) the webhook outbox > a failing endpoint leaves the event queued rather than losing it
+(skip) the webhook outbox > a 4xx is terminal — no retry is scheduled for a payload the target refuses
+(skip) the webhook outbox > a row scheduled for the future is not claimed
+(skip) the webhook outbox > a leased row is not handed to a later dispatcher
+(skip) the webhook outbox > an expired lease makes the row claimable again
+(skip) the webhook outbox > two dispatchers claiming concurrently share the row out exactly once
+(skip) the webhook outbox > a merchant who removed their endpoint terminates the delivery instead of looping
+(skip) the webhook outbox > a transition enqueues the merchant event in the same commit
+(skip) the webhook outbox > a transition for a merchant with no endpoint enqueues nothing
+(skip) ending a card payment > cancels at the provider BEFORE announcing a rejection
+(skip) ending a card payment > derives the cancellation key from the intent's own id
+(skip) ending a card payment > reconciles to the truth when the payer pays during the rejection
+(skip) ending a card payment > refuses to reject when the provider cannot be reached
+(skip) ending a card payment > the sweeper cancels a due card payment before expiring it
+(skip) ending a card payment > does not expire a payment the payer completed during the sweep
+(skip) ending a card payment > leaves a due payment alone when the provider cannot be reached
+(skip) ending a card payment > expires a FairCoin intent without calling any provider
+(skip) refund events > a refund.failed moves the row and the payment back
+(skip) refund events > a refund.updated carrying succeeded settles the pending row
+(skip) refund events > a stale pending arriving after the success changes nothing
+(skip) refund events > imports a refund created at the provider, with no merchant reference
+(skip) refund events > a redelivered import converges on the row it already made
+(skip) refund events > imports a refund that names only the charge
+(skip) refund events > leaves a refund for an unknown payment unmatched
+(skip) connected accounts and transfers > converges when the same seller is onboarded twice
+(skip) connected accounts and transfers > lets exactly one of two concurrent onboardings win
+(skip) connected accounts and transfers > clears a requirement that the provider no longer reports
+(skip) connected accounts and transfers > drops a blank disabled-reason code rather than failing the sync
+(skip) connected accounts and transfers > refuses a capability value no provider reports
+(skip) connected accounts and transfers > finds an account by the merchant address and by the provider address
+(skip) connected accounts and transfers > syncs never-synced accounts before ones it has already read
+(skip) connected accounts and transfers > converges when the same order is settled twice
+(skip) connected accounts and transfers > links the provider object once and refuses to repoint it
+(skip) connected accounts and transfers > accepts a reversal that a text comparison would refuse
+(skip) connected accounts and transfers > refuses a reversal larger than the transfer, and names the reason
+(skip) connected accounts and transfers > compares totals beyond the safe-integer range without rounding
+(skip) connected accounts and transfers > follows a transfer through two partial reversals to full
+(skip) connected accounts and transfers > ignores a reversal total smaller than the one already recorded
+(skip) connected accounts and transfers > records a provider refusal without a provider object
+(skip) connected accounts and transfers > lists every transfer a payment funded
+(skip) payment intent repository > mints an intent with server-decided initial state
+(skip) payment intent repository > refuses a duplicate idempotency key for the same merchant
+(skip) payment intent repository > scopes the idempotency key to the merchant
+(skip) payment intent repository > never returns another merchant's intent from the scoped read
+(skip) payment intent repository > refuses an intent whose network disagrees with its merchant
+(skip) payment intent repository > refuses a non-canonical amount
+(skip) payment intent repository > refuses a broadcast state with no transaction id
+(skip) payment intent repository > pages without repeating or skipping a row, whatever the ids are
+(skip) payment intent repository > returns newest-first for rows created in distinct milliseconds
+(skip) payment intent repository > filters a page by status and excludes other merchants
+(skip) payment intent repository > resolves intents by address, and answers an empty input without a query
+(skip) payment intent repository > selects only in-flight intents that carry a transaction id
+(skip) payment intent repository > resolves an intent by its internal id, and never by its public id
+(skip) payment intent repository > never returns another merchant's intent from the by-id scoped read
+(skip) payment intent repository > returns null for an unknown intent rather than throwing
+(skip) provider_events > stores a delivery and reads it back whole
+(skip) provider_events > converges on a retry of a PLATFORM-scope delivery, which carries no account
+(skip) provider_events > converges on a retry of a CONNECT-scope delivery
+(skip) provider_events > keeps deliveries to different scopes apart even when the event id matches
+(skip) provider_events > lets exactly one of two CONCURRENT inserts win
+(skip) provider_events > finds a platform-scope event by its identity, NULL account and all
+(skip) provider_events > refuses a provider the closed set does not name
+(skip) provider_events > refuses a payload that is not a JSON object
+(skip) provider_events > serves the drain unprocessed rows oldest first, and drops them once handled
+(skip) provider_events > records a failure without removing the event from the drain, and clears it on success
+(skip) payment link and checkout session repositories > creates a link with its merchant identity
+(skip) payment link and checkout session repositories > refuses a link whose claimed application does not belong to its merchant
+(skip) payment link and checkout session repositories > refuses a link whose network disagrees with its merchant
+(skip) payment link and checkout session repositories > refuses a non-canonical link amount
+(skip) payment link and checkout session repositories > scopes the merchant link read but not the public one
+(skip) payment link and checkout session repositories > never lets one merchant patch another merchant's link
+(skip) payment link and checkout session repositories > filters a link page by active and excludes other merchants
+(skip) payment link and checkout session repositories > creates a session around an intent
+(skip) payment link and checkout session repositories > refuses a second session around the same intent
+(skip) payment link and checkout session repositories > refuses a session pointing at an intent that does not exist
+(skip) payment link and checkout session repositories > scopes the merchant session read but not the public one
+(skip) payment link and checkout session repositories > lists only the caller's sessions
+(skip) merchant derivation-index reservation > returns the PRE-increment index and advances the counter
+(skip) merchant derivation-index reservation > hands out consecutive indices as NUMBERS, never strings
+(skip) merchant derivation-index reservation > never hands the same index to two concurrent callers
+(skip) merchant derivation-index reservation > reserves nothing and returns null for an unknown merchant
+(skip) merchant derivation-index reservation > refuses to advance past the int4 ceiling instead of wrapping
+(skip) merchant derivation-index reservation > refuses a negative counter
+(skip) merchant derivation-index reservation > refuses a second merchant for the same app and environment
+(skip) merchant derivation-index reservation > restamps updated_at
+(skip) merchant derivation-index reservation > runs against the migrated schema, not an empty database
+(skip) the provider link on payment_intents > mints a card intent unlinked, then links it once
+(skip) the provider link on payment_intents > refuses to repoint an intent that is already linked, and says so
+(skip) the provider link on payment_intents > lets exactly one of two concurrent links win
+(skip) the provider link on payment_intents > refuses to let a second intent claim the same provider object
+(skip) the provider link on payment_intents > lets many unlinked card intents coexist
+(skip) the provider link on payment_intents > refuses a card intent with no provider
+(skip) the provider link on payment_intents > refuses a faircoin intent that names a provider
+(skip) merchant repository > registers a merchant and reads it back by app and environment
+(skip) merchant repository > refuses a private extended key, and stores nothing
+(skip) merchant repository > converges on the unique index rather than reading first
+(skip) merchant repository > allows one merchant per environment for the same application
+(skip) merchant repository > patches only the mutable fields and leaves the rest alone
+(skip) merchant repository > clears a webhook with an explicit null, and ignores an absent field
+(skip) merchant repository > treats an empty patch as a no-op read rather than a failed update
+(skip) merchant repository > loads the webhook secret only through the delivery-path read
+(skip) merchant repository > reports no webhook target when only one half is configured
+(skip) merchant repository > reads several merchants in one query, and no others
+(skip) merchant repository > returns null for an unknown merchant rather than throwing
+(skip) the card rail > a card intent stores no chain fields and keeps its own currency
+(skip) the card rail > a card intent reaches settled with no txid
+(skip) the card rail > a card intent cannot name a merchant that does not exist
+(skip) the card rail > the FairCoin network firewall still refuses a mismatched network
+(skip) the card rail > a card intent carrying an address is refused
+(skip) the card rail > a card intent denominated in FAIR is refused
+(skip) the card rail > a FairCoin intent denominated in a fiat currency is refused
+(skip) the card rail > a card intent cannot reach a chain status
+(skip) the card rail > a FairCoin intent cannot reach a card status
+(skip) the card rail > creating a card intent does not move the merchant derivation counter
+(skip) the card rail > the watchable query never returns a card intent
+(skip) the card rail > an existing FairCoin row keeps working with no rail supplied
+(skip) social receive cursor reservation > agrees with the service on the first fresh index
+(skip) social receive cursor reservation > creates the cursor on first use and hands out the first fresh index
+(skip) social receive cursor reservation > hands out consecutive indices as NUMBERS across the create and update branches
+(skip) social receive cursor reservation > never hands the same index to two concurrent first payments
+(skip) social receive cursor reservation > keeps a separate counter per network
+(skip) social receive cursor reservation > reads back the highest index reserved, without reserving another
+(skip) social receive cursor reservation > refuses a second cursor for the same user and network
+(skip) social receive cursor reservation > refuses a cursor below the first fresh index
+(skip) social receive cursor reservation > refuses a network outside the closed set
+(skip) social receive cursor reservation > records the identity key the addresses were derived from
+(skip) social receive cursor reservation > follows the key the latest reservation used
+(skip) social receive cursor reservation > reports no key for a user who has never had an address reserved
+(skip) the migrated database > satisfies every schema-wide invariant
+(skip) webhook delivery and social attribution repositories > enqueues a pending delivery with no attempts and a schedule
+(skip) webhook delivery and social attribution repositories > derives last_status from delivered, both ways
+(skip) webhook delivery and social attribution repositories > ties the schedule to the status in both directions
+(skip) webhook delivery and social attribution repositories > refuses a pending delivery with no schedule
+(skip) webhook delivery and social attribution repositories > refuses a delivery for an intent that does not exist
+(skip) webhook delivery and social attribution repositories > never returns another merchant's delivery
+(skip) webhook delivery and social attribution repositories > pages a merchant's log and tolerates a cursor of any shape
+(skip) webhook delivery and social attribution repositories > yields each delivery's own intent public id
+(skip) webhook delivery and social attribution repositories > attributes an address to one payment relationship, once
+(skip) webhook delivery and social attribution repositories > round-trips the paying app's context, and stores nothing when none was named
+(skip) webhook delivery and social attribution repositories > refuses a source ref that names no app
+(skip) webhook delivery and social attribution repositories > refuses a source ref longer than the published bound
+(skip) webhook delivery and social attribution repositories > refuses a source app longer than the published bound
+(skip) webhook delivery and social attribution repositories > refuses an attribution at the recipient's default index
+(skip) webhook delivery and social attribution repositories > shows an attribution to both parties and to nobody else
+(skip) webhook delivery and social attribution repositories > answers an empty address list without a query
+(skip) webhook delivery and social attribution repositories > lists what the viewer sent AND received, and nothing of a stranger
+(skip) webhook delivery and social attribution repositories > scopes the viewer listing to one network
+(skip) the settlement API > opens an account for a seller and returns 201
+(skip) the settlement API > never puts the provider's account id or name on the wire
+(skip) the settlement API > a repeated create converges on the same account and answers 200
+(skip) the settlement API > derives the provider idempotency key from the merchant and the seller ref
+(skip) the settlement API > refreshing an account stores what the provider now says
+(skip) the settlement API > mints a short-lived onboarding link and never stores it
+(skip) the settlement API > does not return another merchant's account
+(skip) the settlement API > acts on a seller through the provider their account records
+(skip) the settlement API > pages through sellers with a cursor and says when there are more
+(skip) the settlement API > refuses a cursor from another merchant without confirming it
+(skip) the settlement API > settles a seller and reports the public ids only
+(skip) the settlement API > names the source CHARGE, not the payment, and the payment's own group
+(skip) the settlement API > resolves the charge once and reuses it for the next seller
+(skip) the settlement API > refuses to settle more than the payment brought in
+(skip) the settlement API > finishes an interrupted settlement on the retry
+(skip) the settlement API > answers a completed settlement from history during a provider outage
+(skip) the settlement API > refuses a settlement reference reused for another amount
+(skip) the settlement API > refuses to settle when the provider reports no captured charge
+(skip) the settlement API > a repeated settlement of one order converges and does not pay twice
+(skip) the settlement API > answers a retry even after the seller stops being payable
+(skip) the settlement API > refuses to settle to a seller who cannot receive one
+(skip) the settlement API > names the seller by the merchant's own ref as well as by ca_…
+(skip) the settlement API > refuses a body naming the seller twice or not at all
+(skip) the settlement API > refuses an amount that is not a canonical base-unit integer
+(skip) the settlement API > reverses a settlement and reports the cumulative total
+(skip) the settlement API > two distinct reversals of the same amount both happen; a replay does not
+(skip) the settlement API > refuses a reversal that carries no operation identity
+(skip) the settlement API > refuses a reversal larger than the transfer
+(skip) the settlement API > does not settle, read or reverse across merchants
+(skip) the settlement API > lists what one payment settled
+(skip) the refund API > refunds a payment and reports the public ids only
+(skip) the refund API > a repeated refund answers 200 and calls the provider once
+(skip) the refund API > answers a retry even though the balance no longer accommodates it
+(skip) the refund API > refuses a zero refund, which the amount predicate alone would accept
+(skip) the refund API > refuses an amount that is not a canonical base-unit integer
+(skip) the refund API > refuses more than the payment has left
+(skip) the refund API > lists the refunds and what is still refundable
+(skip) the refund API > does not refund, read or list across merchants
+(skip) a development credential on a live deployment > cannot create a card payment intent
+(skip) a development credential on a live deployment > cannot create a card checkout session
+(skip) a development credential on a live deployment > cannot open a connected account
+(skip) a development credential on a live deployment > cannot refund
+(skip) a development credential on a live deployment > cannot settle a seller out of a payment
+(skip) a development credential on a live deployment > but a FairCoin intent still mints
+(skip) reporting what a payment came to > reports gross, fee and net when the provider has settled it
+(skip) reporting what a payment came to > says pending rather than final when the provider has not settled it
+(skip) reporting what a payment came to > says unknown, not zero, when there is nothing to report
+(skip) reporting what a payment came to > says unknown for a rail that has no settlement
+(skip) reporting what a payment came to > says unknown rather than failing when the provider is unreachable
+(skip) reporting what a payment came to > does not report another merchant's payment
+(skip) provider webhook ingress, real chain > the rail is configured, so these cases test signatures and not a missing secret
+(skip) provider webhook ingress, real chain > a correctly signed platform delivery is accepted and stored
+(skip) provider webhook ingress, real chain > the SAME delivery verifies through the real chain and fails behind express.json()
+(skip) provider webhook ingress, real chain > a redelivery is a duplicate, still 200, and stores nothing new
+(skip) provider webhook ingress, real chain > the connect endpoint refuses a platform signature, and accepts its own
+(skip) provider webhook ingress, real chain > the platform endpoint refuses a connect signature
+(skip) provider webhook ingress, real chain > a forged body with a valid-looking signature is refused and stores nothing
+(skip) provider webhook ingress, real chain > a delivery with no signature header at all is refused before any work
+(skip) provider webhook ingress, real chain > a replayed delivery outside the tolerance window is refused
+(skip) provider webhook ingress, real chain > an authentic event from the wrong livemode is ignored, not stored, and still 200
+(skip) provider webhook ingress, real chain > what lands in the table is redacted, not the bytes Stripe sent
+(skip) provider webhook ingress, real chain > a burst of deliveries is not rate-limited
+(skip) answering a dispute > forwards the merchant's response and records that it was given
+(skip) answering a dispute > submits once, however many times it is asked
+(skip) answering a dispute > keeps none of the evidence, only the fact that it was submitted
+(skip) answering a dispute > refuses a response after the deadline, without calling the provider
+(skip) answering a dispute > refuses a response to a dispute that is already closed
+(skip) answering a dispute > refuses a response with nothing in it
+(skip) answering a dispute > refuses a field name the network would not recognise
+(skip) answering a dispute > does not answer across merchants
+(skip) answering a dispute > does not record a submission the provider refused
+(skip) resuming a card payment > the merchant asks, and is handed the provider's credential
+(skip) resuming a card payment > the payer asks with the intent's client_secret
+(skip) resuming a card payment > a wrong client_secret is refused, and a missing one is unauthenticated
+(skip) resuming a card payment > refuses to hand out a credential for a payment that is over
+(skip) resuming a card payment > refuses the operation on a rail that has no client action
+(skip) resuming a card payment > a merchant's single read carries the client action
+(skip) resuming a card payment > a merchant's read of a finished payment carries none
+(skip) resuming a card payment > still answers the intent when the provider cannot be reached
+(skip) resuming a card payment > the resume operation reports an unreachable provider as unavailable
+(skip) resuming a card payment > the payer's polled read never carries the client action
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > executes five SDK methods with store/receipt references and no Connect or financial decisions
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > reuses customer for renamed store and new key without another provider effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > denies other cohort, missing scopes and missing auth before provider effects
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > rejects unknown price, foreign store and invented owner/payer fields before checkout
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > replays checkout while fresh and refuses expired URL without another effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > checks platform account before the first effect
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > refuses portal configuration drift on the next call and immediate cancellation
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > retains indeterminate result after timeout and retries same remote idempotency key
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > binds exact completed checkout concurrently after URL expiry, ignoring arbitrary metadata
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > uniformly refuses unknown, ambiguous, incomplete or mismatched checkout correlation
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > does not adopt a completed checkout whose durable intent belongs to another merchant
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > imports explicit evidence only within approved cohort and preserves store instead of metadata
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > keeps absent boot configuration inactive and rejects another platform or unsafe portal at boot
+(skip) I08 billing HTTP SDK platform adapter / real PostgreSQL > SDK refreshes once after 401 and preserves the mutation key
+(skip) inactive recurring observation / real PostgreSQL > keeps explicit binding insert-only, including concurrent repeats and conflicting merchants/environments
+(skip) inactive recurring observation / real PostgreSQL > observes subscription and invoice periods with the same merchant binding and atomic outbox
+(skip) inactive recurring observation / real PostgreSQL > rejects invoice attribution to another merchant subscription
+(skip) inactive recurring observation / real PostgreSQL > absorbs concurrent replay and post-commit replay without another read or outbox
+(skip) inactive recurring observation / real PostgreSQL > reads current snapshots for reversed/equal event times, without ordering state by event id
+(skip) inactive recurring observation / real PostgreSQL > leaves an unknown object pending without attribution, read, or outbox
+(skip) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once
+(skip) inactive recurring observation / real PostgreSQL > times out a stalled reader and releases locks without processing or changing state
+(skip) inactive recurring observation / real PostgreSQL > keeps default routing inactive; opt-in unknown does not stop a later bound object
+(skip) inactive recurring observation / real PostgreSQL > serializes distinct event reads under the binding lock and timestamps after reading
+(skip) inactive recurring observation / real PostgreSQL > enforces merchant/application/environment ownership in the database
+(skip) inactive recurring observation / real PostgreSQL > refuses stored event scope/mode/version mismatches before the reader
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot pii without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot partial without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongAccount without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongScope without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongMode without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongObject without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongVersion without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > refuses invalid snapshot duplicateItems without state, event completion or outbox
+(skip) inactive recurring observation / real PostgreSQL > persists the private reader invoice projection and outbox through real SQL, replaying unchanged
+(skip) billing ownership and durable claims / real PostgreSQL > converges verified binding and refuses different owner or environment
+(skip) billing ownership and durable claims / real PostgreSQL > requires subscription customer and price of exact same owner and store/plan
+(skip) billing ownership and durable claims / real PostgreSQL > does not read foreign or unknown refs or create a second customer per store
+(skip) billing ownership and durable claims / real PostgreSQL > claims once under concurrency and returns without holding a provider transaction
+(skip) billing ownership and durable claims / real PostgreSQL > globally refuses same key from another merchant, operation or payload
+(skip) billing ownership and durable claims / real PostgreSQL > refuses second key creating customer after unknown first result
+(skip) billing ownership and durable claims / real PostgreSQL > replays owner result but rejects an expired hosted URL
+(skip) billing ownership and durable claims / real PostgreSQL > recovers expired lease with same remote key and fences stale completion
+(skip) billing ownership and durable claims / real PostgreSQL > does not blindly retry beyond bounded recovery window
+(skip) billing ownership and durable claims / real PostgreSQL > rolls back binding and result together on local crash
+(skip) billing ownership and durable claims / real PostgreSQL > binds checkout claim to exact owned customer and price, including replay
+
+
+3 tests failed:
+(fail) pinned ECS release > omits empty tags from the actual untagged deployment shape [90.21ms]
+(fail) pinned ECS release > reports only safe error code and CLI exit for aws-error [90.03ms]
+(fail) pinned ECS release > reports only safe error code and CLI exit for local-error [91.40ms]
+
+ 26 pass
+ 347 skip
+ 3 fail
+ 136 expect() calls
+Ran 376 tests across 75 files. [5.64s]
+error: script "test" exited with code 1
