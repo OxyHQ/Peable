@@ -100,6 +100,15 @@ export function createRestClient(
     if (!response.ok) {
       throw errorFromResponse(response.status, body);
     }
+    // Only explicit No Content can satisfy a void response. A missing or
+    // malformed JSON success is indeterminate, not a typed resource. Do not
+    // retry a mutation automatically: callers retain the original intent key.
+    if (body === undefined && response.status !== 204) {
+      throw new PeableApiError('The Peable Gateway returned an invalid JSON response', {
+        statusCode: response.status,
+        code: 'invalid_response',
+      });
+    }
     return body as T;
   }
 
