@@ -1,0 +1,188 @@
+[
+  {
+    "run": "c1",
+    "phase": "test-clock-import-fixtures",
+    "privateManifestSha256": "4fa37204ceb3713d5d6dd1e5b40e9b69c701acc28471d700b704b32654526d7e",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-test-clock-trial-projection",
+        "ok": true
+      },
+      {
+        "stage": "real-trial-to-paid-invoice",
+        "ok": true
+      },
+      {
+        "stage": "real-renewal-paid-new-invoice",
+        "ok": true
+      },
+      {
+        "stage": "real-own-invoice-refund-same-key",
+        "ok": true
+      },
+      {
+        "stage": "real-period-end-cancellation-observed",
+        "ok": true
+      },
+      {
+        "stage": "attach-owned-test-payment-method",
+        "ok": false
+      }
+    ],
+    "diagnostics": [
+      {
+        "stage": "attach-owned-test-payment-method",
+        "name": "Error",
+        "type": "StripeCardError",
+        "code": "card_declined",
+        "httpStatus": 402
+      },
+      {
+        "stage": "cleanup-payment-method",
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION"
+      },
+      {
+        "stage": "cleanup-payment-method",
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION"
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "subscription",
+        "ok": true,
+        "readback": "canceled"
+      },
+      {
+        "kind": "subscription",
+        "ok": true,
+        "readback": "canceled"
+      },
+      {
+        "kind": "paymentMethod",
+        "ok": false
+      },
+      {
+        "kind": "paymentMethod",
+        "ok": false
+      },
+      {
+        "kind": "clock",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropped"
+      }
+    ],
+    "residualCleanup": {
+      "receiptSha256": "7a5ad4838c8a5aac5478c409909e0c4418c0189a660e364866450aba121d3721",
+      "ownedMethodsDetached": 2,
+      "nullCustomerReadbacks": 2
+    }
+  },
+  {
+    "run": "c2",
+    "phase": "test-clock-failure-sca-only",
+    "privateManifestSha256": "c727b766d2ac1e116a863e6444fb9e36dfb9d41b26c9ab415064d50a683a2e93",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-renewal-payment-failure-projected",
+        "ok": true
+      },
+      {
+        "stage": "real-sca-required-incomplete-projected",
+        "ok": true
+      }
+    ],
+    "diagnostics": [],
+    "cleanup": [
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "subscription",
+        "ok": true,
+        "readback": "canceled"
+      },
+      {
+        "kind": "subscription",
+        "ok": true,
+        "readback": "canceled"
+      },
+      {
+        "kind": "paymentMethod",
+        "ok": true,
+        "readback": "detached-readback-null"
+      },
+      {
+        "kind": "paymentMethod",
+        "ok": true,
+        "readback": "detached-readback-null"
+      },
+      {
+        "kind": "paymentMethod",
+        "ok": true,
+        "readback": "detached-readback-null"
+      },
+      {
+        "kind": "clock",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropped"
+      }
+    ]
+  }
+]
