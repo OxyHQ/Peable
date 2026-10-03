@@ -1,0 +1,46 @@
+{
+  "sourceCommit": "6ade41845b1fec91e1b734f0fae3a22cfbccc18b",
+  "sources": [
+    {
+      "path": ".github/scripts/run-migration-task.sh",
+      "sha256": "037e1c9ad17943e373f59b24232012db74c01f93c93fd4c7a7fe2e3ce74d57fc"
+    },
+    {
+      "path": ".github/workflows/deploy-aws.yml",
+      "sha256": "65cb8c800f9c216582ac6ca9658fd7bd920fe7ecd34174aa59ba5bbbc8fe804b"
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/pinnedRelease.test.ts",
+      "sha256": "46596012dc288bc504a9c43a331ebf055dd96c2ca2bed69c9f8fe48f784ae899"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/README.md",
+      "sha256": "7d794f4303608a6ac1305173ba21692e1c4b53195d20f59cd5fab99bea611207"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-owned-focal.log",
+      "sha256": "90e601e6843f378c72daa909654d82d219c9778df834430aeb2e819350efac89"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-owned-typecheck.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    }
+  ],
+  "checks": {
+    "focal": "26 PASS / 0 FAIL",
+    "typecheck": "PASS",
+    "bashSyntax": "PASS"
+  },
+  "infra": {
+    "source": "13d8f65",
+    "proof": "b90be65",
+    "appliedByThisAgent": false
+  },
+  "limits": [
+    "No AWS task executed by this agent",
+    "IAM nonce is nonempty only; exact current run/definition additionally enforced by helper",
+    "Runtime package artifacts unchanged from ec7380a"
+  ]
+}
