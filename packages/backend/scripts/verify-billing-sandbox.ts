@@ -195,15 +195,31 @@ try {
   assert(new URL(portalSession.url).protocol === 'https:'); await passed('real-checkout-and-portal-created');
   stage = 'isolated-browser-checkout';
   const context = await (browser as any).newContext(); const page = await context.newPage();
-  await page.goto(checkout.url, { waitUntil: 'domcontentloaded', timeout: 45_000 });
-  await page.locator('#email').fill(`i08-${randomUUID()}@example.invalid`);
-  await page.locator('#cardNumber').fill('4242424242424242');
-  await page.locator('#cardExpiry').fill('1235'); await page.locator('#cardCvc').fill('123');
+  page.on('requestfailed', (request: { failure(): { errorText?: string } | null; resourceType(): string }) => {
+    const code = request.failure()?.errorText?.match(/(?:net::)?ERR_[A-Z_]+/)?.[0];
+    if (code && diagnostics.length < 100) diagnostics.push({ stage: 'browser-request-failed', code, resourceType: request.resourceType() });
+  });
+  async function browserStep(label: string, action: () => Promise<unknown>) {
+    stage = label;
+    try { await action(); } catch (error) {
+      const controls: Array<Record<string, unknown>> = [];
+      for (const frame of page.frames().slice(0, 10)) {
+        controls.push(...await frame.locator('input,button,select').evaluateAll((elements: Element[]) => elements.slice(0, 40).map((element) => ({ tag: element.tagName, id: element.id, name: element.getAttribute('name'), type: element.getAttribute('type') }))).catch(() => []));
+      }
+      const safeIdentifier = (value: unknown) => typeof value === 'string' && /^[A-Za-z0-9_:-]{1,80}$/.test(value) ? value : undefined;
+      diagnostics.push({ stage: label, controls: controls.map((value: Record<string, unknown>) => Object.fromEntries(Object.entries(value).map(([key, value]) => [key, safeIdentifier(value)]))), ...safeError(error) }); await save(); throw error;
+    }
+  }
+  await browserStep('browser-goto-checkout', () => page.goto(checkout.url, { waitUntil: 'domcontentloaded', timeout: 45_000 }));
+  await browserStep('browser-fill-email', () => page.locator('#email').fill(`i08-${randomUUID()}@example.invalid`));
+  await browserStep('browser-fill-card', () => page.locator('#cardNumber').fill('4242424242424242'));
+  await browserStep('browser-fill-expiry', () => page.locator('#cardExpiry').fill('1235')); await browserStep('browser-fill-cvc', () => page.locator('#cardCvc').fill('123'));
   if (await page.locator('#billingName').count()) await page.locator('#billingName').fill('Synthetic I08');
   if (await page.locator('#billingCountry').count()) await page.locator('#billingCountry').selectOption('US');
   if (await page.locator('#billingPostalCode').count()) await page.locator('#billingPostalCode').fill('42424');
   await assertPlatform();
-  await page.getByRole('button', { name: /Subscribe|Pay \$/ }).last().click();
+  await browserStep('browser-submit-checkout', () => page.getByRole('button', { name: /Subscribe|Pay \$/ }).last().click());
+  stage = 'observe-checkout-completion';
   let subscriptionId: string | undefined;
   for (let attempt = 0; attempt < 30; attempt++) {
     const value = await stripe.checkout.sessions.retrieve(session.id, {}, requestOptions);
