@@ -1,0 +1,24 @@
+{
+  "sourceCommit": "d72cc05",
+  "sources": [
+    {
+      "path": "packages/sdk/__tests__/core/client.test.ts",
+      "sha256": "2e08e1cc7d44aab62cdf842d32b957710beec9737a3321276b14f1469318c3e0"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-typecheck-final.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-tests-final.log",
+      "sha256": "9f4279373f2709c99678d952f4f8bbbff7c9771d29267626ac0bcd56969c9015"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/ci-37095769904-failed.log",
+      "sha256": "580161be69fc3fc279d747c2ce7edc52bccd865dd52e94836af20d1474aceb18"
+    }
+  ],
+  "description": "CI3727344 caught missing generic type on HTTP test control. Build excludes tests; SDK package typecheck includes them. Explicit request<{id:string}> and request<void> fix only test typing; runtime remains251b760. Final typecheck and120tests pass."
+}
