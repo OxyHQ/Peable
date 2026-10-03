@@ -30,10 +30,11 @@ function b64url(input: Buffer | string): string {
 }
 
 function servicePayload(claims: Record<string, unknown>): string {
+  const issuedAt = Math.floor(Date.now() / 1000);
   return b64url(
     JSON.stringify({
-      iat: Math.floor(Date.now() / 1000),
-      exp: Math.floor(Date.now() / 1000) + 3600,
+      iat: issuedAt,
+      exp: issuedAt + 300,
       type: "service",
       iss: "oxy-auth",
       aud: "oxy-api",
@@ -161,6 +162,18 @@ test("no Authorization header at all is rejected (401), the endpoint is not sile
   const res = await fetch(`${baseUrl}/v1/payment_intents`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Idempotency-Key": "wiring-3" },
+    body: JSON.stringify({ amount: "1000000", network: "testnet" }),
+  });
+  expect(res.status).toBe(401);
+});
+
+// The published receiver rejects a signed credential beyond the issuer's five-minute bound.
+test("a correctly signed service token with a 301-second lifetime is rejected", async () => {
+  const iat = Math.floor(Date.now() / 1000);
+  const token = signServiceToken({ appId: APP_ID, scopes: ["payments:write"], iat, exp: iat + 301 });
+  const res = await fetch(`${baseUrl}/v1/payment_intents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Idempotency-Key": "wiring-overlong", Authorization: `Bearer ${token}` },
     body: JSON.stringify({ amount: "1000000", network: "testnet" }),
   });
   expect(res.status).toBe(401);

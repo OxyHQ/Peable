@@ -1,7 +1,7 @@
 {
-  "name": "@peable.to/pay",
+  "name": "i04-peable-pay-bloom621-fixture",
   "version": "0.1.0",
-  "description": "Peable Pay — the self-custodial FairCoin payment client an Oxy app embeds. Derives the wallet from the device's Oxy identity, reads the chain over the Explorer HTTP API, and builds, signs and broadcasts a payment without an SPV node.",
+  "description": "Peable Pay \u2014 the self-custodial FairCoin payment client an Oxy app embeds. Derives the wallet from the device's Oxy identity, reads the chain over the Explorer HTTP API, and builds, signs and broadcasts a payment without an SPV node.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
@@ -72,7 +72,7 @@
   },
   "peerDependencies": {
     "@fairco.in/core": ">=0.5.0 <0.6.0",
-    "@oxy.so/bloom": ">=6.2.1 <7.0.0",
+    "@oxy.so/bloom": ">=6.2.1 <6.3.0",
     "react": ">=19.0.0 <20.0.0",
     "react-native": ">=0.86.0 <1.0.0",
     "react-native-qrcode-svg": ">=6.3.0 <7.0.0"
@@ -99,5 +99,10 @@
     "react-native": "0.86.0",
     "react-native-qrcode-svg": "^6.3.21",
     "typescript": "~5.9.2"
+  },
+  "private": true,
+  "workspaces": [],
+  "overrides": {
+    "@oxy.so/bloom": "6.2.1"
   }
 }

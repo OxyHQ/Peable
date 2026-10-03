@@ -1,0 +1,18 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [474]
+Saved lockfile
+
++ @fairco.in/core@0.5.0
++ @oxy.so/bloom@6.2.1
++ @types/bun@1.4.2
++ @types/react@19.3.0
++ react-native@0.86.0
++ react-native-qrcode-svg@6.3.26
++ typescript@5.9.3 (v7.0.2 available)
++ @noble/hashes@1.8.0 (v2.4.0 available)
++ @scure/bip32@1.7.0 (v2.4.0 available)
++ @scure/bip39@1.6.0 (v2.4.0 available)
++ react@19.3.0
+
+571 packages installed [4.08s]

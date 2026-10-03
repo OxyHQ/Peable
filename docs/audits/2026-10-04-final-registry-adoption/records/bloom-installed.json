@@ -1,0 +1,17 @@
+{
+  "archiveSha256": "edf4cfe3d8597e4bf86f997bceacf332f7fce4a8f92c541b3cd375decbce3a0a",
+  "importers": [
+    {
+      "importer": "packages/frontend",
+      "version": "6.2.1",
+      "files": 20940,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/pay",
+      "version": "6.2.1",
+      "files": 20940,
+      "allFilesEqual": true
+    }
+  ]
+}

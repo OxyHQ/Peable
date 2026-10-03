@@ -2,7 +2,7 @@
   "name": "@peable.to/checkout",
   "version": "0.1.0",
   "private": true,
-  "description": "Peable hosted checkout \u2014 the anonymous payer-facing web app served at checkout.peable.to (payment sessions, links, and intents).",
+  "description": "Peable hosted checkout — the anonymous payer-facing web app served at checkout.peable.to (payment sessions, links, and intents).",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -20,7 +20,7 @@
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-router-dom": "^7.18.1",
-    "@oxy.so/telemetry": "^1.2.0"
+    "@oxy.so/telemetry": "1.2.0"
   },
   "devDependencies": {
     "@happy-dom/global-registrator": "^20.11.0",

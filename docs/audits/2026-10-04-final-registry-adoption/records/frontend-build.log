@@ -1,0 +1,164 @@
+$ bun run --filter @peable.to/frontend build
+@peable.to/frontend build: Expo Autolinking module resolution enabled
+@peable.to/frontend build: Starting Metro Bundler
+@peable.to/frontend build: 
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build:  WARN  Attempted to import the module "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@noble/hashes/crypto.js" which is not listed in the "exports" of "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@noble/hashes" under the requested subpath "./crypto.js". Falling back to file-based resolution. Consider updating the call site or asking the package maintainer(s) to expose this API.
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: | (node:210898) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+@peable.to/frontend build: | (Use `node --trace-warnings ...` to show where the warning was created)
+@peable.to/frontend build: Web Bundled 2470ms node_modules/expo-router/entry.js (3271 modules)
+@peable.to/frontend build: 
+@peable.to/frontend build: › Assets (41):
+@peable.to/frontend build: ../../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.6e435534bd35da5fef04168860a9b8fa.ttf (1.3MB)
+@peable.to/frontend build: ../../node_modules/@maplibre/maplibre-react-native/lib/module/assets/heading.c67f0bc2f11343174905ab2c15343392.png (3 variations | 450B)
+@peable.to/frontend build: ../../node_modules/@oxy.so/bloom/lib/module/fonts/assets/BlomusModernus-Bold.c8e4c906b137ccc90f9aa1fbccbe85b2.woff2 (78KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/bloom/lib/module/fonts/assets/BlomusModernus-Regular.6a898c26aeb50e6f31189d06dd2bf3e9.woff2 (78KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/bloom/lib/module/fonts/assets/InterVariable.260c81a4759baf163c025001c4f27872.woff2 (48KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/bloom/lib/module/fonts/assets/JetBrainsMono-Variable.b058178d7f309414f8f856b99fd80d9b.woff2 (40KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/fonts/icons/OxyServicesIonicons.48b1d8ee549a265d0c1aa67fed7fbca2.ttf (43KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/fonts/icons/OxyServicesMaterialCommunityIcons.88d575089a17d9d10e08c411fd7105ba.ttf (29KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/signIn/slide-1.b29a38b76e9e9e426cc152c3a1a56a73.jpg (102KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/signIn/slide-2.045f767e731a6b2801ce1ea8dbda92f5.jpg (88KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/signIn/slide-3.32a001447e68adf690be104bddcce0ef.jpg (59KB)
+@peable.to/frontend build: ../../node_modules/@oxy.so/services/lib/module/assets/signIn/slide-4.1de81f0781c3c99c5615d0ec8eb5dee6.jpg (47KB)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/arrow_down.017bc6ba3fc25503e5eb5e53826d48a8.png (9.5KB)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/error.d1ea1496f9057eb392d5bbf3732a61b7.png (469B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/file.19eeb73b9593a38f8e9f418337fc7d10.png (138B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/forward.d8b800c443b8972542883e0b9de2bdc6.png (188B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/pkg.ab19f4cbc543357183a20571f68380a3.png (364B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/react-navigation/elements/back-icon-mask.0a328cd9c1afd0afe8e3b1ec5165b1b4.png (653B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/react-navigation/elements/back-icon.35ba0eaec5a4f5ed12ca16fabeae451d.png (207B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/react-navigation/elements/clear-icon.c94f6478e7ae0cdd9f15de1fcb9e5e55.png (4 variations | 425B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/react-navigation/elements/close-icon.808e1b1b9b53114ec2838071a7e6daa7.png (4 variations | 235B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/react-navigation/elements/search-icon.286d67d3f74808a60a78d3ebf1a5fb57.png (928B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/sitemap.412dd9275b6b48ad28f5e3d81bb1f626.png (465B)
+@peable.to/frontend build: ../../node_modules/expo-router/assets/unmatched.20e71bdf79e3a97bf55fd9e164041578.png (4.8KB)
+@peable.to/frontend build: ../../node_modules/expo-sqlite/web/wa-sqlite/wa-sqlite.7ca566fbbc2ec2a172c5aefa63a20f4b.wasm (621KB)
+@peable.to/frontend build: assets/fonts/Phudu-Black.debf37edc683ac517d6d8a1a667becd7.ttf (65KB)
+@peable.to/frontend build: assets/fonts/Phudu-Bold.16f6ddf7770c9a1cfa12a31d3034b401.ttf (65KB)
+@peable.to/frontend build: assets/fonts/Phudu-Light.bf38e5583072b337727e46d178a2b871.ttf (65KB)
+@peable.to/frontend build: assets/fonts/Phudu-Regular.e54117d2f3ee3a6824379aae2e33ed10.ttf (65KB)
+@peable.to/frontend build: assets/icon.f7ffbe2265fbd9e94a1adac25b043b60.png (48KB)
+@peable.to/frontend build: assets/sounds/received.91da15843c6f9663a79d72339051135a.mp3 (13KB)
+@peable.to/frontend build: assets/sounds/sent.2fbce01616867b7d3db67bc0d570b678.mp3 (23KB)
+@peable.to/frontend build: assets/sounds/unlocked.56b938b0b3b5857358a4e640c2ebf70b.mp3 (5.9KB)
+@peable.to/frontend build: 
+@peable.to/frontend build: › web bundles (74):
+@peable.to/frontend build: _expo/static/css/global-25d85eb477289b49355bbedd5e3b86ed.css (64KB)
+@peable.to/frontend build: _expo/static/js/web/__common-23edc2d362af36d23c314fbc54b2c526.js (75KB)
+@peable.to/frontend build: _expo/static/js/web/__expo-metro-runtime-1f8f5d3ca6b7f58204d51e14506d73fb.js (3.8KB)
+@peable.to/frontend build: _expo/static/js/web/AccountMembersScreen-5db96d5b3b5143c2ea72694345e12b41.js (10KB)
+@peable.to/frontend build: _expo/static/js/web/AccountSettingsScreen-45101ba875faec3bf04a0b892935ffe2.js (6KB)
+@peable.to/frontend build: _expo/static/js/web/AccountVerificationScreen-a186277e479c9d7782b87e350536a565.js (7.3KB)
+@peable.to/frontend build: _expo/static/js/web/AppInfoScreen-be440be3a0741f67b0cec124d2378042.js (12KB)
+@peable.to/frontend build: _expo/static/js/web/ar-86743a366600e38057dc676932da1232.js (178KB)
+@peable.to/frontend build: _expo/static/js/web/ar-SA-2c294664b9b1bf00277bfb4202ecd4d6.js (35KB)
+@peable.to/frontend build: _expo/static/js/web/AvatarCropScreen-66c44a1061b498e3c87eb683ba6a50cc.js (21KB)
+@peable.to/frontend build: _expo/static/js/web/bn-505074b5ef7ba682549d7632ef7c5824.js (173KB)
+@peable.to/frontend build: _expo/static/js/web/ca-80d0e1b022d976218f1981eaf83d1472.js (67KB)
+@peable.to/frontend build: _expo/static/js/web/ca-ES-edf653c7b38dca425441e633b475c59c.js (13KB)
+@peable.to/frontend build: _expo/static/js/web/ChangeAvatarScreen-39565f227505c467b20cd01f691861ff.js (4.3KB)
+@peable.to/frontend build: _expo/static/js/web/ConnectedAppsScreen-1a0fed45eb8ba5404db0eb0cdab359d7.js (3.1KB)
+@peable.to/frontend build: _expo/static/js/web/CreateAccountScreen-61896f8639f179bb353f1bf2ba72c7c3.js (7.5KB)
+@peable.to/frontend build: _expo/static/js/web/de-8e11dd2cd25531ab74ec4c2643e8ce7c.js (66KB)
+@peable.to/frontend build: _expo/static/js/web/de-DE-4da3ab0c1bae62dec735a434bf996c44.js (14KB)
+@peable.to/frontend build: _expo/static/js/web/DeleteAccountScreen-2bc42375c5ed3b13b06f77ba8b5915fa.js (352B)
+@peable.to/frontend build: _expo/static/js/web/DomainsScreen-c2dcafe7a84d808f5a49d1871a6d9adb.js (4.4KB)
+@peable.to/frontend build: _expo/static/js/web/EditProfileFieldScreen-4e17fedc58b5c4160ba3fdc579efc7eb.js (31KB)
+@peable.to/frontend build: _expo/static/js/web/EditProfileScreen-042afddce4bfe6d33496fb39e9e2fab4.js (3.5KB)
+@peable.to/frontend build: _expo/static/js/web/entry-c6948aa6716c0fc7a6ab3cde4849454a.js (6.6MB)
+@peable.to/frontend build: _expo/static/js/web/es-baa9e15a3bc63c4b3edad9059c8c6468.js (67KB)
+@peable.to/frontend build: _expo/static/js/web/es-ES-32e0645c92ab689477384e6a84620de0.js (67KB)
+@peable.to/frontend build: _expo/static/js/web/FileManagementScreen-1982543552dccc785a3578499f8098c2.js (65KB)
+@peable.to/frontend build: _expo/static/js/web/FollowersListScreen-fd69759911fc94678374865900023224.js (301B)
+@peable.to/frontend build: _expo/static/js/web/FollowingListScreen-344dd5224e573d4bd8c0c243400f65ae.js (301B)
+@peable.to/frontend build: _expo/static/js/web/fr-7d8f8aed8c6696fee5dc66add41b3a19.js (70KB)
+@peable.to/frontend build: _expo/static/js/web/fr-FR-fb079eb24d27b08e97ccf7ca4412bf82.js (14KB)
+@peable.to/frontend build: _expo/static/js/web/HelpSupportScreen-479cdcff035f2c153588484ee6bc5103.js (2.9KB)
+@peable.to/frontend build: _expo/static/js/web/hi-b6e7aeb8c0fc93de30166febca06af64.js (168KB)
+@peable.to/frontend build: _expo/static/js/web/HistoryViewScreen-1aa04c42a49b4bce163bbda0bf11c5b7.js (3.9KB)
+@peable.to/frontend build: _expo/static/js/web/id-c3b45d7e7799f34bd856e6d586303eb5.js (61KB)
+@peable.to/frontend build: _expo/static/js/web/index-17983fc7bdcb0f4a672e114770a0e0ba.js (4KB)
+@peable.to/frontend build: _expo/static/js/web/index-1d544a5bcc539290ee3973388c007fa6.js (45KB)
+@peable.to/frontend build: _expo/static/js/web/index-4d7bdf5ee18576a1cd763ba645ff7772.js (13KB)
+@peable.to/frontend build: _expo/static/js/web/index-e6753d48b00a12cee62a1212c4f1443e.js (12KB)
+@peable.to/frontend build: _expo/static/js/web/internal-c4d1bc8723baca778fd83bc5f0d67132.js (2.4KB)
+@peable.to/frontend build: _expo/static/js/web/it-5ccb488bcdc42cb28b2ba55ba6220380.js (65KB)
+@peable.to/frontend build: _expo/static/js/web/it-IT-26c33e3339a79dc750f0f2ec7274feea.js (13KB)
+@peable.to/frontend build: _expo/static/js/web/ja-954ebf0e309b20e812e07da14455a46d.js (104KB)
+@peable.to/frontend build: _expo/static/js/web/ja-JP-bdf010fe71661c75a66f4dcf059d1aaa.js (26KB)
+@peable.to/frontend build: _expo/static/js/web/ko-KR-2541899e1c1c065e783694b32722b4d1.js (21KB)
+@peable.to/frontend build: _expo/static/js/web/LanguageSelectorScreen-b907db3ec1cf1261eb83aed44de1c0a4.js (3.6KB)
+@peable.to/frontend build: _expo/static/js/web/LearnMoreUsernamesScreen-24bc0384fe2a8615d08f09e8f7c44f14.js (4.7KB)
+@peable.to/frontend build: _expo/static/js/web/LegalDocumentsScreen-0d30208cd6dc3e85ca6d38c54864a3bc.js (4.4KB)
+@peable.to/frontend build: _expo/static/js/web/LinkCommonsScreen-c0cb2f52ca60163cbe9be3b332f7d910.js (317B)
+@peable.to/frontend build: _expo/static/js/web/ManageAccountScreen-6b4647982612a469381cac398d159b5c.js (22KB)
+@peable.to/frontend build: _expo/static/js/web/NotificationsScreen-b95b5a3d06a37d7fbd251c238083f36e.js (3.2KB)
+@peable.to/frontend build: _expo/static/js/web/OxyAccountDialogScreen-e08558fbeac1905d72e37e089beb69f0.js (43KB)
+@peable.to/frontend build: _expo/static/js/web/PaymentGatewayScreen-b112f06b4158fd81a786627d233e32ed.js (29KB)
+@peable.to/frontend build: _expo/static/js/web/PreferencesScreen-3fa3578bc0cd6810c15003ca59fd97cb.js (3.4KB)
+@peable.to/frontend build: _expo/static/js/web/PrivacySettingsScreen-6a682f326dc08026ca223fd4c4a174b7.js (12KB)
+@peable.to/frontend build: _expo/static/js/web/ProfileScreen-3a99bc087a066833c99bb354969ccf84.js (8.3KB)
+@peable.to/frontend build: _expo/static/js/web/pt-04b9d9aa3a3f18d694443050041700e6.js (67KB)
+@peable.to/frontend build: _expo/static/js/web/pt-PT-e0127382b37dd778988f9ff8962acc08.js (14KB)
+@peable.to/frontend build: _expo/static/js/web/ru-d032a874ed3685dc536a49e6823b05dd.js (199KB)
+@peable.to/frontend build: _expo/static/js/web/SearchSettingsScreen-f9fbf08ac6f425a4fd8b33a45e96db49.js (2.5KB)
+@peable.to/frontend build: _expo/static/js/web/SecureStore-e6641fad9aa7c6281ce1dde6555dd838.js (2.4KB)
+@peable.to/frontend build: _expo/static/js/web/SignInAuthenticatorScreen-d629576e2b048061433def0213487524.js (319B)
+@peable.to/frontend build: _expo/static/js/web/SignInPasswordScreen-35f4655e5ea1b5a3812caccc18f7207f.js (359B)
+@peable.to/frontend build: _expo/static/js/web/tr-2f3a602d6e904a27a581177a3a9ec8f9.js (71KB)
+@peable.to/frontend build: _expo/static/js/web/TrustAboutScreen-586d498cd89fe58f264fa1362ae9b5cb.js (4.9KB)
+@peable.to/frontend build: _expo/static/js/web/TrustCenterScreen-2a70845a1ed8271266c63dbdfff4e22f.js (4.4KB)
+@peable.to/frontend build: _expo/static/js/web/TrustFAQScreen-5330d4cd117827a01a30fe77c36d866d.js (1.8KB)
+@peable.to/frontend build: _expo/static/js/web/TrustLeaderboardScreen-da25020ce171c8f696afa7f18f6525d4.js (4.3KB)
+@peable.to/frontend build: _expo/static/js/web/TrustRewardsScreen-08045e76fc05d6d6189e5f594314b50e.js (9.4KB)
+@peable.to/frontend build: _expo/static/js/web/TrustRulesScreen-779ef34829d5620ad5857930220610de.js (2.2KB)
+@peable.to/frontend build: _expo/static/js/web/UserLinksScreen-0d98492179d31bc9b24e3116edf132d1.js (1.1KB)
+@peable.to/frontend build: _expo/static/js/web/WelcomeNewUserScreen-1a4d53d4d1338d4457fbc3103b0050f1.js (8.7KB)
+@peable.to/frontend build: _expo/static/js/web/worker-524edac2127aad16b7d3f2dcd9f1084e.js (133KB)
+@peable.to/frontend build: _expo/static/js/web/zh-02103f4037c493f200c3538f80e1a6d6.js (81KB)
+@peable.to/frontend build: _expo/static/js/web/zh-CN-22c2486b0c6517123e288e4ee2402dd2.js (18KB)
+@peable.to/frontend build: 
+@peable.to/frontend build: › Files (3):
+@peable.to/frontend build: favicon.ico (15KB)
+@peable.to/frontend build: index.html (1.6KB)
+@peable.to/frontend build: metadata.json (49B)
+@peable.to/frontend build: 
+@peable.to/frontend build: Exported: dist
+@peable.to/frontend build: $ bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js
+@peable.to/frontend build: Bundled 4 modules in 5ms
+@peable.to/frontend build: 
+@peable.to/frontend build:   _worker.js  6.88 KB  (entry point)
+@peable.to/frontend build: 
+@peable.to/frontend build: Exited with code 0
