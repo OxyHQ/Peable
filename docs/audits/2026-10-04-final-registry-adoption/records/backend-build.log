@@ -1,0 +1,2 @@
+$ bun run --filter @peable.to/backend build
+@peable.to/backend build: Exited with code 0

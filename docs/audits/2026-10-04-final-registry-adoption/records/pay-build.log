@@ -1,0 +1,6 @@
+$ bun run --filter @peable.to/pay build
+@peable.to/pay build: $ tsc -p tsconfig.cjs.json
+@peable.to/pay build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/pay build: ESM imports fixed
+@peable.to/pay build: $ tsc -p tsconfig.types.json
+@peable.to/pay build: Exited with code 0

@@ -1,0 +1,118 @@
+{
+  "repository": "OxyHQ/Peable",
+  "lockSha256": "f5db0b689e2e41f9c457162d416e777ba565c8507ada01ad4ecf82222f390438",
+  "installed": true,
+  "installedMembers": [
+    {
+      "importer": "package.json",
+      "name": "@oxy.so/core",
+      "version": "4.2.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/core",
+      "files": 581,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/backend/package.json",
+      "name": "@oxy.so/contracts",
+      "version": "4.9.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/contracts",
+      "files": 198,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/backend/package.json",
+      "name": "@oxy.so/core",
+      "version": "4.2.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/core",
+      "files": 581,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/frontend/package.json",
+      "name": "@oxy.so/contracts",
+      "version": "4.9.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/contracts",
+      "files": 198,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/frontend/package.json",
+      "name": "@oxy.so/core",
+      "version": "4.2.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/core",
+      "files": 581,
+      "allFilesEqual": true
+    },
+    {
+      "importer": "packages/frontend/package.json",
+      "name": "@oxy.so/services",
+      "version": "11.1.0",
+      "root": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/node_modules/@oxy.so/services",
+      "files": 2418,
+      "allFilesEqual": true
+    }
+  ],
+  "acceptanceChecksPending": [
+    {
+      "package": "@peable.to/backend",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/backend",
+      "scripts": {
+        "build": "tsc",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test src",
+        "lint": "tsc --noEmit"
+      }
+    },
+    {
+      "package": "@peable.to/checkout",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/checkout",
+      "scripts": {
+        "build": "vite build && bun run build:edge",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test src"
+      }
+    },
+    {
+      "package": "@peable.to/frontend",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/frontend",
+      "scripts": {
+        "build": "expo export --platform web && bun run build:edge",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test src",
+        "lint": "expo lint"
+      }
+    },
+    {
+      "package": "@peable.to/pay",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/pay",
+      "scripts": {
+        "build": "bun run build:cjs && bun run build:esm && bun run build:types",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test",
+        "lint": "tsc --noEmit"
+      }
+    },
+    {
+      "package": "@peable.to/sdk",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/sdk",
+      "scripts": {
+        "build": "bun run build:cjs && bun run build:esm && bun run build:types",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test",
+        "lint": "tsc --noEmit"
+      }
+    },
+    {
+      "package": "@peable.to/shared-types",
+      "cwd": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/shared-types",
+      "scripts": {
+        "build": "bun run build:cjs && bun run build:esm && bun run build:types",
+        "typecheck": "tsc --noEmit",
+        "test": "bun test",
+        "lint": "tsc --noEmit"
+      }
+    }
+  ],
+  "merged": false,
+  "deployed": false
+}

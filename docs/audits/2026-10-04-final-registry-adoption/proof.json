@@ -1,0 +1,167 @@
+{
+  "source": "9ec8d2e1123aaf26895018aad2c9e6d6311e9395",
+  "registryPublished": true,
+  "installedFromRegistry": true,
+  "validation": {
+    "frontendTests": 388,
+    "payTests": 130,
+    "authBoundaryTests": 3,
+    "failedTests": 0,
+    "filteredBackendTests": 777,
+    "typesAndBuilds": "PASS"
+  },
+  "sources": [
+    {
+      "path": "bun.lock",
+      "sha256": "f5db0b689e2e41f9c457162d416e777ba565c8507ada01ad4ecf82222f390438"
+    },
+    {
+      "path": "package.json",
+      "sha256": "7e74951f5bb578adcde3347d629bd0c4701ca000f61dec66fedb0daff62e5faf"
+    },
+    {
+      "path": "packages/backend/package.json",
+      "sha256": "f644f57fcaab3c1af02c5f87b0a6a5ded72e645031873e31d0cb18f1f5629ba6"
+    },
+    {
+      "path": "packages/checkout/package.json",
+      "sha256": "e997b12708b22b9190677dde511f61bd2fb6c56a2804b222dd960068ff0b664c"
+    },
+    {
+      "path": "packages/frontend/package.json",
+      "sha256": "5640e01a84c07532379848c489a694816b3b8b9379f400d5680e80a395ea0ba0"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Peable-frozen.log",
+      "sha256": "bb6040184d86dcbf0213a60fe994a2c92ee4edff009b1533a500361410c1bcf7",
+      "bytes": 813
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Peable-installed.json",
+      "sha256": "0d47eef7799eb3a545283394c203c1708f4473119dafd55ac52a90929fe7c377",
+      "bytes": 3944
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/Peable-resolve.log",
+      "sha256": "0d1a2911365b04a8325aaa5a3c30f1e52f77c491e587d2c2497f48098da1b43b",
+      "bytes": 879
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-auth-final.log",
+      "sha256": "90bcf1c259e87029e4f9e03597e4509977a181225acdf7e41a83361ea4084a0c",
+      "bytes": 4596
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-auth-owned-pg.log",
+      "sha256": "d89e187567acf69b158c2cb4bf7151a906bcc444b9cf6e6a0610aab502a2c080",
+      "bytes": 6112
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-auth.log",
+      "sha256": "41abffbc40e96e76369e1c8ca6c8d5133b3680a28222ba28e94d2ca90b7300e2",
+      "bytes": 57194
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-build.log",
+      "sha256": "9d94178d797dae1bb1d7e429b7bbe9713fa27461dafbd1dea1b2bcb3a4094f8c",
+      "bytes": 89
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/backend-types.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "bytes": 15
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/bloom-installed.json",
+      "sha256": "18b33568f14f0786c5d2b7bf29f299dc3f55cba6caf2240b37b409628d62b40a",
+      "bytes": 362
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/build-sdk-prerequisite.log",
+      "sha256": "695f50101e34dac736b6634e67c94a15056bf1082d2ab15b59d3243f99dbc552",
+      "bytes": 266
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/contracts-registry.json",
+      "sha256": "fb1ded2797bdbd0ca31460f3cba087f078a86dc201365c923da9fcc23b07ed7b",
+      "bytes": 380
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/core-registry.json",
+      "sha256": "99b7f8a1cc87cf46ff54b3113a1911a938f39b4f086537e0a4138ee38dd035b7",
+      "bytes": 375
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/first-checks.json",
+      "sha256": "96c15418653ccde8d3f2f7171f37661067211115cfdc8a78563cbe21bc41145b",
+      "bytes": 1141
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/frontend-build.log",
+      "sha256": "acffd9446d74582044d3ee837cb0a278d577d0f99f04de7f15acef5eda02e5d7",
+      "bytes": 17255
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/frontend-tests.log",
+      "sha256": "a927f2e5dbd04207fde5a32efd4390aa1111a1493c0996d20b43b7337d798c20",
+      "bytes": 36999
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/frontend-types.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "bytes": 15
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/intent.json",
+      "sha256": "c2ac14eff46b67ce3afdb52c014cdc39a3d7a994c6f84040e30e1968dc66b2c3",
+      "bytes": 150
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/mcp-registry.json",
+      "sha256": "cc279f4f5b1ca68041f6f0d3583e4d9dc218bd7c0b77846207aa3b981086d7ac",
+      "bytes": 373
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/owned-pg.py",
+      "sha256": "1aac4734f8abf2debedfb25eafe49ec6db45c761484324052b76bbcce47aef5e",
+      "bytes": 3159
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/pay-build.log",
+      "sha256": "4a3374ed1a59fbc2e3c451b10b32e62402ccf94fd54b365321550b0c59486263",
+      "bytes": 306
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/pay-tests.log",
+      "sha256": "54fb69d6cf044fc7ab0eefc7160e10520c0a9fcdb05fc33b186fb4b12a4947aa",
+      "bytes": 13130
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/preflight.json",
+      "sha256": "d90d0ee0c38e2d625f67c9240a0ebba97056c6e749a5adfa626095592c02f7e9",
+      "bytes": 251
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/protocol-registry.json",
+      "sha256": "cc0b427dca92d55ea5e1debe7e76580618a26f997b2c888b8484537b64b70bbd",
+      "bytes": 379
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/registry.json",
+      "sha256": "a39da224fafeec388f0ac27e08ea13cf666427a0177b67f7b077c65cadb59df0",
+      "bytes": 415373
+    },
+    {
+      "path": "docs/audits/2026-10-04-final-registry-adoption/records/services-registry.json",
+      "sha256": "444599f0eb56d104d64c288ed3a6544163e54430c0f275c2feec219d5f624611",
+      "bytes": 381
+    }
+  ],
+  "limits": [
+    "Backend auth focal imports all test files; initial missing DATABASE_URL and missing workspace SDK dist were setup failures, retained separately. Final owned PostgreSQL stopped with PID absent.",
+    "No repeated Stripe sandbox; no native runtime, remote CI, image, deployment or cohort activation claim.",
+    "Root publisher receipt supplies final registry provenance; runner independently verified all five public archives and each importing workspace."
+  ]
+}

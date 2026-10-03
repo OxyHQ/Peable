@@ -1,0 +1,189 @@
+waiting for server to start.... done
+server started
+{"verifiedOwnPostgresPid": 202703, "dataDirectory": "/home/nate/Oxy/.agent-evidence/peable-registry-pg-j68p69f5/data", "port": 5614, "liveAccess": false}
+$ bun test src --test-name-pattern "under the real requireOxyUser default"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+src/db/__tests__/deployWorkflow.test.ts:
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+src/db/__tests__/rail.realdb.test.ts:
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+src/db/__tests__/pinnedRelease.test.ts:
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+(pass) POST /v1/enrich with no Authorization header is rejected (401) under the real requireOxyUser default [23.62ms]
+(pass) POST /v1/social/:username/next_address with no Authorization header is rejected (401) under the real requireOxyUser default [2.03ms]
+(pass) GET /v1/social/me/cursor with no Authorization header is rejected (401) under the real requireOxyUser default [3.87ms]
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/billing/__tests__/billingHttp.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+error: Cannot find module '@peable.to/sdk' from '/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/packages/backend/src/services/billing/__tests__/billingHttp.realdb.test.ts'
+-------------------------------
+
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+ 3 pass
+ 763 filtered out
+ 1 fail
+ 1 error
+ 3 expect() calls
+Ran 4 tests across 75 files. [773.00ms]
+error: script "test" exited with code 1
+waiting for server to shut down.... done
+server stopped
+{"ownedPostgresStopped": true, "pidAbsent": true, "record": "/home/nate/Oxy/.agent-evidence/peable-registry-pg-j68p69f5"}
+Traceback (most recent call last):
+  File "/home/nate/Oxy/.agent-evidence/i04-consumer-final-prs/registry-Peable-20261004/owned-pg.py", line 59, in <module>
+    main()
+    ~~~~^^
+  File "/home/nate/Oxy/.agent-evidence/i04-consumer-final-prs/registry-Peable-20261004/owned-pg.py", line 50, in main
+    run(['bun', 'run', 'test', '--test-name-pattern', 'under the real requireOxyUser default'], cwd=ROOT / 'packages/backend')
+    ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/nate/Oxy/.agent-evidence/i04-consumer-final-prs/registry-Peable-20261004/owned-pg.py", line 22, in run
+    return subprocess.run([str(x) for x in argv], env=env, text=True, check=True, **kw)
+           ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.13/subprocess.py", line 577, in run
+    raise CalledProcessError(retcode, process.args,
+                             output=stdout, stderr=stderr)
+subprocess.CalledProcessError: Command '['bun', 'run', 'test', '--test-name-pattern', 'under the real requireOxyUser default']' returned non-zero exit status 1.

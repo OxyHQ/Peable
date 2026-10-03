@@ -1,0 +1,74 @@
+[
+  {
+    "name": "frontend-tests",
+    "cwd": "packages/frontend",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "test"
+    ],
+    "exitCode": 0,
+    "seconds": 1.067
+  },
+  {
+    "name": "pay-tests",
+    "cwd": "packages/pay",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "test"
+    ],
+    "exitCode": 0,
+    "seconds": 1.318
+  },
+  {
+    "name": "backend-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "build:backend"
+    ],
+    "exitCode": 0,
+    "seconds": 3.723
+  },
+  {
+    "name": "backend-types",
+    "cwd": "packages/backend",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "typecheck"
+    ],
+    "exitCode": 0,
+    "seconds": 1.117
+  },
+  {
+    "name": "frontend-types",
+    "cwd": "packages/frontend",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "typecheck"
+    ],
+    "exitCode": 0,
+    "seconds": 4.777
+  },
+  {
+    "name": "pay-build",
+    "cwd": ".",
+    "argv": [
+      "bun",
+      "--no-env-file",
+      "run",
+      "build:pay"
+    ],
+    "exitCode": 0,
+    "seconds": 2.469
+  }
+]

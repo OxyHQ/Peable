@@ -1,0 +1,5 @@
+@peable.to/sdk build: $ tsc -p tsconfig.cjs.json
+@peable.to/sdk build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/sdk build: ESM imports fixed
+@peable.to/sdk build: $ tsc -p tsconfig.types.json
+@peable.to/sdk build: Exited with code 0
