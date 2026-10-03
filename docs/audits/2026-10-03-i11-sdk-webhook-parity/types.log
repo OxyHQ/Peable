@@ -1,0 +1,12 @@
+$ tsc --noEmit
+__tests__/resources/webhooks.test.ts(159,97): error TS2769: No overload matches this call.
+  Overload 1 of 2, '(expected: WebhookEvent): void', gave the following error.
+    Argument of type '{ id: string; object: string; type: WebhookEventType; created: string; data: { object: PaymentIntent | ConnectedAccount | Dispute | { ...; }; }; }' is not assignable to parameter of type 'WebhookEvent'.
+      Type '{ id: string; object: string; type: WebhookEventType; created: string; data: { object: PaymentIntent | ConnectedAccount | Dispute | { ...; }; }; }' is not assignable to type '{ id: string; object: "event"; type: "connected_account.updated"; created: string; data: { object: ConnectedAccount; }; }'.
+        Types of property 'object' are incompatible.
+          Type 'string' is not assignable to type '"event"'.
+  Overload 2 of 2, '(expected: NoInfer<WebhookEvent>): void', gave the following error.
+    Argument of type '{ id: string; object: string; type: WebhookEventType; created: string; data: { object: PaymentIntent | ConnectedAccount | Dispute | { ...; }; }; }' is not assignable to parameter of type 'WebhookEvent'.
+      Type '{ id: string; object: string; type: WebhookEventType; created: string; data: { object: PaymentIntent | ConnectedAccount | Dispute | { ...; }; }; }' is not assignable to type '{ id: string; object: "event"; type: "connected_account.updated"; created: string; data: { object: ConnectedAccount; }; }'.
+        Types of property 'object' are incompatible.
+          Type 'string' is not assignable to type '"event"'.

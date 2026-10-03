@@ -12,13 +12,21 @@ export interface ConstructEventOptions {
   toleranceSec?: number;
 }
 
-const WEBHOOK_EVENT_TYPES: readonly WebhookEventType[] = [
-  'payment_intent.confirming',
-  'payment_intent.settled',
-  'payment_intent.failed',
-  'payment_intent.rejected',
-  'payment_intent.expired',
-];
+// Exhaustive against the published union: adding a backend event makes this
+// fail compilation until the SDK accepts it. Own-key lookup excludes prototype
+// names supplied by an untrusted, even correctly signed, payload.
+const WEBHOOK_EVENT_TYPES = {
+  'payment_intent.confirming': true,
+  'payment_intent.settled': true,
+  'payment_intent.failed': true,
+  'payment_intent.rejected': true,
+  'payment_intent.expired': true,
+  'payment_intent.refunded': true,
+  'payment_intent.partially_refunded': true,
+  'payment_intent.disputed': true,
+  'payment_intent.dispute_closed': true,
+  'connected_account.updated': true,
+} satisfies Record<WebhookEventType, true>;
 
 /**
  * Structural guard for the parsed payload — the signature already proves the
@@ -33,7 +41,7 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     typeof candidate.id === 'string' &&
     candidate.object === 'event' &&
     typeof candidate.type === 'string' &&
-    WEBHOOK_EVENT_TYPES.includes(candidate.type as WebhookEventType) &&
+    Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
     typeof candidate.created === 'string' &&
     typeof candidate.data === 'object' &&
     candidate.data !== null &&

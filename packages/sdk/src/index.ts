@@ -118,5 +118,5 @@ export type {
   PaymentLinkList,
   UpdatePaymentLinkParams,
 } from './resources/paymentLinks';
-export { WEBHOOK_SIGNATURE_HEADER } from './resources/webhooks';
+export { WEBHOOK_SIGNATURE_HEADER, WebhooksResource } from './resources/webhooks';
 export type { ConstructEventOptions } from './resources/webhooks';

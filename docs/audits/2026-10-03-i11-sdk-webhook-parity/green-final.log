@@ -1,0 +1,179 @@
+$ bun test
+bun test v1.4.2 (744846f84)
+
+__tests__/index.test.ts:
+(pass) Peable > wires paymentIntents/paymentLinks/checkout.sessions/webhooks [0.21ms]
+(pass) Peable > throws when publicKey is missing (delegates to resolveConfig) [0.09ms]
+(pass) Peable > throws when secret is missing [0.03ms]
+
+__tests__/checkout.test.ts:
+(pass) "./checkout" entry > re-exports createPeableCheckout from browser/payerClient [0.07ms]
+
+__tests__/resources/paymentIntents.test.ts:
+(pass) PaymentIntentsResource > create() POSTs /v1/payment_intents with body + Idempotency-Key + bearer, returns the DTO [0.74ms]
+(pass) PaymentIntentsResource > retrieve() GETs /v1/payment_intents/:id [0.09ms]
+(pass) PaymentIntentsResource > list() GETs /v1/payment_intents with status/limit/starting_after query params [0.15ms]
+(pass) PaymentIntentsResource > reject() POSTs /v1/payment_intents/:id/reject [0.09ms]
+(pass) PaymentIntentsResource > propagates a mapped PeableError on a non-2xx Gateway response [0.13ms]
+
+__tests__/resources/settlement.test.ts:
+(pass) ConnectedAccountsResource > creates a seller account by the merchant's own reference [0.15ms]
+(pass) ConnectedAccountsResource > pages with a cursor [0.09ms]
+(pass) ConnectedAccountsResource > reads a seller back by the reference the merchant chose [0.18ms]
+(pass) TransfersResource > settles a seller out of a payment [0.20ms]
+(pass) TransfersResource > refuses to reverse without an operation identity [0.07ms]
+(pass) TransfersResource > accepts the identity as an idempotency key or as an explicit ref [0.15ms]
+(pass) RefundsResource > refunds a payment and reports where the payment now stands [0.09ms]
+(pass) RefundsResource > lists refunds with what is still refundable [0.08ms]
+(pass) settlement reporting > carries nulls with a status rather than zeros [0.09ms]
+(pass) MerchantsResource and DisputesResource > submits dispute evidence as text, to the dispute itself [0.09ms]
+(pass) MerchantsResource and DisputesResource > registers a card-only merchant with an empty body [0.07ms]
+(pass) MerchantsResource and DisputesResource > disputes are read-only and scoped to one payment [0.17ms]
+
+__tests__/resources/webhooks.test.ts:
+(pass) WebhooksResource.constructEvent > verifies a payload signed by shared-types signWebhook and returns the typed event [0.33ms]
+(pass) WebhooksResource.constructEvent > rejects a tampered body [0.06ms]
+(pass) WebhooksResource.constructEvent > rejects a signature produced with the wrong secret [0.03ms]
+(pass) WebhooksResource.constructEvent > rejects a stale timestamp beyond the default tolerance [0.02ms]
+(pass) WebhooksResource.constructEvent > respects a custom toleranceSec [0.05ms]
+(pass) WebhooksResource.constructEvent > rejects a signature-valid but non-JSON body [0.04ms]
+(pass) WebhooksResource.constructEvent > rejects a signature-valid JSON body that does not match the event shape [0.02ms]
+(pass) WebhooksResource.constructEvent > rejects a malformed signature header [0.04ms]
+(pass) published event family parity > accepts signed payment_intent.confirming without replacing its resource [0.08ms]
+(pass) published event family parity > accepts signed payment_intent.settled without replacing its resource [0.03ms]
+(pass) published event family parity > accepts signed payment_intent.failed without replacing its resource [0.03ms]
+(pass) published event family parity > accepts signed payment_intent.rejected without replacing its resource [0.09ms]
+(pass) published event family parity > accepts signed payment_intent.expired without replacing its resource [0.04ms]
+(pass) published event family parity > accepts signed payment_intent.refunded without replacing its resource [0.05ms]
+(pass) published event family parity > accepts signed payment_intent.partially_refunded without replacing its resource [0.06ms]
+(pass) published event family parity > accepts signed payment_intent.disputed without replacing its resource [0.02ms]
+(pass) published event family parity > accepts signed payment_intent.dispute_closed without replacing its resource [0.05ms]
+(pass) published event family parity > accepts signed connected_account.updated without replacing its resource [0.04ms]
+(pass) published event family parity > rejects signed unknown type unknown.event [0.05ms]
+(pass) published event family parity > rejects signed unknown type transfer.created [0.01ms]
+(pass) published event family parity > rejects signed unknown type toString
+(pass) published event family parity > rejects signed unknown type __proto__
+
+__tests__/resources/paymentLinks.test.ts:
+(pass) PaymentLinksResource > create() POSTs /v1/payment_links with the params body (no idempotency key) [0.15ms]
+(pass) PaymentLinksResource > retrieve() GETs /v1/payment_links/:id [0.08ms]
+(pass) PaymentLinksResource > list() GETs /v1/payment_links with limit/starting_after [0.09ms]
+(pass) PaymentLinksResource > update() PATCHes /v1/payment_links/:id with only the whitelisted fields given [0.09ms]
+
+__tests__/resources/checkoutSessions.test.ts:
+(pass) CheckoutResource.sessions > create() POSTs /v1/checkout_sessions and returns the CheckoutSession DTO [0.13ms]
+(pass) CheckoutResource.sessions > create() sends options.idempotencyKey as the Idempotency-Key header [0.06ms]
+(pass) CheckoutResource.sessions > a retry after a lost response reuses the key and gets the same session [0.24ms]
+(pass) CheckoutResource.sessions > a key replayed with different parameters surfaces the 409 as an invalid request [0.09ms]
+(pass) CheckoutResource.sessions > retrieve() GETs /v1/checkout_sessions/:id [0.06ms]
+
+__tests__/browser/payerClient.test.ts:
+(pass) getPaymentIntent > GETs /v1/payment_intents/:id with client_secret as the X-Peable-Client-Secret header and returns the DTO [0.18ms]
+(pass) getPaymentIntent > URL-encodes the id and never puts client_secret in the URL [0.07ms]
+(pass) getPaymentIntent > defaults gatewayUrl to https://api.peable.to when not given [0.04ms]
+(pass) getPaymentIntent > maps a 403 invalid client_secret response to PeablePermissionError [0.06ms]
+(pass) getPaymentIntent > maps a 404 not-found response to PeableInvalidRequestError [0.04ms]
+(pass) getPaymentIntent > wraps a network-level fetch failure as PeableApiError [0.05ms]
+(pass) submitTx > POSTs /v1/payment_intents/:id/submit_tx with {client_secret, txid} and returns the DTO [0.13ms]
+(pass) submitTx > maps a 409 illegal state transition response to PeableInvalidRequestError [0.07ms]
+(pass) submitTx > wraps a network-level fetch failure as PeableApiError [0.05ms]
+(pass) subscribe > connects anonymously (no auth option) and emits subscribe with {intentId, clientSecret} [0.20ms]
+(pass) subscribe > calls onUpdate only for intent.updated events matching this intent id [0.07ms]
+(pass) subscribe > unsubscribe removes the listener, removes the reconnect handler, and disconnects the socket [0.06ms]
+(pass) subscribe > on Manager reconnect, re-emits subscribe with the same {intentId, clientSecret} without duplicating the intent.updated listener [0.12ms]
+(pass) subscribe > a failed resubscribe on reconnect is swallowed (no unhandled rejection, no throw) [0.07ms]
+(pass) subscribe > a rejected ack (ok: false) disconnects the socket and throws PeableInvalidRequestError [0.04ms]
+(pass) subscribe > an emitWithAck failure disconnects the socket and throws PeableApiError [0.04ms]
+(pass) subscribe > reports a drop after subscribe resolved [0.08ms]
+(pass) subscribe > reports live only after the room is rejoined [0.06ms]
+(pass) subscribe > stays lost when the rejoin is refused [0.04ms]
+(pass) subscribe > unsubscribing does not report a lost connection [0.05ms]
+(pass) subscribe > a subscriber that wants no connection reports still works [0.05ms]
+
+__tests__/browser/mount.test.ts:
+(pass) deriveIntentId > derives the id from clientSecret when intentId is omitted [0.08ms]
+(pass) deriveIntentId > accepts an explicit intentId that matches the clientSecret
+(pass) deriveIntentId > throws PeableInvalidRequestError when clientSecret has no derivable pi_ id [0.05ms]
+(pass) deriveIntentId > throws when an explicit intentId does not match the pi_ id shape [0.01ms]
+(pass) deriveIntentId > throws when clientSecret does not belong to the given/derived intentId [0.01ms]
+(pass) deriveIntentId > throws for an empty clientSecret
+(pass) buildPayDeepLink > produces the exact peable://pay param contract [0.06ms]
+(pass) buildPayDeepLink > round-trips through the wallet's real parsePaymentRequest byte-for-byte [0.27ms]
+(pass) buildPayDeepLink > percent-encodes values and still round-trips (raw decodeURIComponent, not form-urlencoded) [0.05ms]
+(pass) isMobileUserAgent > recognizes a mobile user agent: Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) [0.02ms]
+(pass) isMobileUserAgent > recognizes a mobile user agent: Mozilla/5.0 (Linux; Android 14; Pixel 8)
+(pass) isMobileUserAgent > recognizes a mobile user agent: Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)
+(pass) isMobileUserAgent > recognizes a mobile user agent: Mozilla/5.0 (iPod touch; CPU iPhone OS 17_0 like Mac OS X)
+(pass) isMobileUserAgent > does not flag a desktop user agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36
+(pass) isMobileUserAgent > does not flag a desktop user agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36
+(pass) isMobileUserAgent > does not flag a desktop user agent: Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36
+(pass) createEmitter > invokes a registered handler with the emitted payload [0.07ms]
+(pass) createEmitter > multiple handlers on the same event all fire [0.02ms]
+(pass) createEmitter > a handler registered for a different event never fires [0.02ms]
+(pass) createEmitter > emitting an event with no registered handlers does not throw [0.02ms]
+(pass) createEmitter > removeAll tears down every handler for every event [0.03ms]
+(pass) payDeepLinkFor > refuses an intent that is not a chain payment [0.05ms]
+(pass) payDeepLinkFor > builds the same link as buildPayDeepLink for a faircoin intent [0.02ms]
+(pass) payDeepLinkFor > refuses a faircoin intent with no address [0.01ms]
+
+__tests__/core/config.test.ts:
+(pass) resolveConfig > applies default baseURL and oxyApiUrl when omitted [0.02ms]
+(pass) resolveConfig > strips a trailing slash from custom URLs [0.02ms]
+(pass) resolveConfig > throws when publicKey is missing [0.01ms]
+(pass) resolveConfig > throws when secret is missing
+(pass) optional HTTP deadline preserves the existing default and refuses invalid explicit values [0.08ms]
+
+__tests__/core/client.test.ts:
+(pass) createRestClient > attaches the bearer token and omits Content-Type/Idempotency-Key when absent [0.19ms]
+(pass) createRestClient > serializes a JSON body and sets Content-Type [0.07ms]
+(pass) createRestClient > sets the Idempotency-Key header when given [0.04ms]
+(pass) createRestClient > serializes query params and skips undefined values [0.07ms]
+(pass) createRestClient > returns the parsed JSON body on 2xx [0.05ms]
+(pass) createRestClient > maps a non-2xx nested-envelope response to a typed PeableError [0.13ms]
+(pass) createRestClient > on 401, invalidates the token and retries once with a fresh token [0.15ms]
+(pass) createRestClient > a second consecutive 401 is NOT retried again — throws the mapped auth error [0.13ms]
+(pass) createRestClient > wraps a network-level fetch failure as PeableApiError [0.06ms]
+(pass) createRestClient real HTTP response integrity > rejects missing or malformed JSON on 200: 0 bytes [3.78ms]
+(pass) createRestClient real HTTP response integrity > rejects missing or malformed JSON on 201: 0 bytes [20.07ms]
+(pass) createRestClient real HTTP response integrity > rejects missing or malformed JSON on 200: 11 bytes [22.09ms]
+(pass) createRestClient real HTTP response integrity > rejects missing or malformed JSON on 201: 21 bytes [22.09ms]
+(pass) createRestClient real HTTP response integrity > preserves valid JSON, explicit 204 and malformed non-success status mapping [22.17ms]
+(pass) createRestClient interrupted HTTP body > keeps status 200, one POST, and the original key for explicit recovery [58.76ms]
+(pass) createRestClient interrupted HTTP body > keeps status 201, one POST, and the original key for explicit recovery [35.26ms]
+(pass) createRestClient interrupted HTTP body > keeps status 503, one POST, and the original key for explicit recovery [34.80ms]
+
+__tests__/core/deadlines.real-http.test.ts:
+(pass) HTTP deadline and existing intent propagation > bounds mint-headers without automatically repeating a POST [103.14ms]
+(pass) HTTP deadline and existing intent propagation > bounds mint-body without automatically repeating a POST [102.45ms]
+(pass) HTTP deadline and existing intent propagation > bounds gateway-headers without automatically repeating a POST [104.66ms]
+(pass) HTTP deadline and existing intent propagation > bounds gateway-body without automatically repeating a POST [105.96ms]
+(pass) HTTP deadline and existing intent propagation > a timed-out accepted effect recovers only on explicit retry of the same key [106.17ms]
+(pass) HTTP deadline and existing intent propagation > preserves supplied keys on reject/refund/transfer without changing durable body identity [5.59ms]
+
+__tests__/core/serviceToken.test.ts:
+(pass) createServiceTokenProvider > mints a token via POST {oxyApiUrl}/auth/service-token with {apiKey, apiSecret} [0.18ms]
+(pass) createServiceTokenProvider > caches the token — a second getToken() before expiry does not re-mint [0.11ms]
+(pass) createServiceTokenProvider > concurrent getToken() calls dedupe into a single in-flight mint [0.11ms]
+(pass) createServiceTokenProvider > re-mints proactively once the cached token is within the refresh margin of expiry [0.10ms]
+(pass) createServiceTokenProvider > invalidate() forces the next getToken() to re-mint [0.07ms]
+(pass) createServiceTokenProvider > maps a non-2xx mint response (flat oxy-api envelope) to a typed PeableError [0.06ms]
+(pass) createServiceTokenProvider > throws PeableApiError when the mint response data envelope is missing token/expiresIn [0.07ms]
+(pass) createServiceTokenProvider > throws PeableApiError when the mint response has no `data` envelope at all [0.05ms]
+(pass) createServiceTokenProvider > wraps a network-level fetch failure as PeableApiError [0.05ms]
+
+__tests__/core/errors.test.ts:
+(pass) errorFromResponse > maps a nested Gateway envelope (sendError shape) using error.type/message [0.03ms]
+(pass) errorFromResponse > 401 nested envelope maps to PeableAuthenticationError [0.01ms]
+(pass) errorFromResponse > 403 nested envelope maps to PeablePermissionError [0.01ms]
+(pass) errorFromResponse > 5xx nested envelope maps to PeableApiError
+(pass) errorFromResponse > 502 (webhook-style api_error) maps to PeableApiError
+(pass) errorFromResponse > flat envelope (requireScope 403 INSUFFICIENT_SCOPE) maps to PeablePermissionError [0.01ms]
+(pass) errorFromResponse > flat envelope (serviceAuth 401 TOKEN_EXPIRED) maps to PeableAuthenticationError
+(pass) errorFromResponse > flat envelope (oxy-api ApiError.toJSON) maps to PeableInvalidRequestError on 400
+(pass) errorFromResponse > an unparseable/empty body still maps by status with a generic message [0.01ms]
+(pass) errorFromResponse > PeableError subclasses are also instanceof Error
+
+ 144 pass
+ 0 fail
+ 347 expect() calls
+Ran 144 tests across 14 files. [795.00ms]

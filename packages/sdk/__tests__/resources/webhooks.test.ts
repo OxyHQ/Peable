@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { signWebhook, type WebhookEvent } from '@peable.to/shared-types';
+import { signWebhook, type WebhookEvent, type WebhookEventPayload, type WebhookEventType, type Dispute, type ConnectedAccount } from '@peable.to/shared-types';
 import { WebhooksResource } from '../../src/resources/webhooks';
 import { PeableSignatureVerificationError } from '../../src/core/errors';
 
@@ -118,5 +118,53 @@ describe('WebhooksResource.constructEvent', () => {
     expect(() => resource.constructEvent(RAW_BODY, 'not-a-signature', SECRET)).toThrow(
       PeableSignatureVerificationError,
     );
+  });
+});
+
+
+// Full published payloads, matching backend intentTransition's three producers.
+const dispute: Dispute = {
+  id: 'dp_fixture', object: 'dispute', paymentIntentId: 'pi_1', amount: '100',
+  currency: 'EUR', status: 'needs_response', reason: null, evidenceDueAt: null,
+  evidenceSubmittedAt: null, createdAt: EVENT.created, updatedAt: EVENT.created,
+};
+const account: ConnectedAccount = {
+  id: 'ca_fixture', object: 'connected_account', externalRef: 'store_fixture',
+  country: 'ES', defaultCurrency: 'EUR', payable: false, payoutsEnabled: false,
+  chargesEnabled: false, transfersCapability: 'pending', cardPaymentsCapability: null,
+  requirements: { currentlyDue: 1, eventuallyDue: 1, pastDue: 0, pendingVerification: 0 },
+  disabledReasonCodes: [], lastSyncedAt: null, createdAt: EVENT.created, updatedAt: EVENT.created,
+};
+const payloads = {
+  'payment_intent.confirming': EVENT.data.object,
+  'payment_intent.settled': EVENT.data.object,
+  'payment_intent.failed': EVENT.data.object,
+  'payment_intent.rejected': EVENT.data.object,
+  'payment_intent.expired': EVENT.data.object,
+  'payment_intent.refunded': EVENT.data.object,
+  'payment_intent.partially_refunded': EVENT.data.object,
+  'payment_intent.disputed': dispute,
+  'payment_intent.dispute_closed': { ...dispute, status: 'won' },
+  'connected_account.updated': account,
+} satisfies WebhookEventPayload;
+
+describe('published event family parity', () => {
+  for (const type of Object.keys(payloads) as WebhookEventType[]) {
+    test(`accepts signed ${type} without replacing its resource`, () => {
+      const expected = { id: `evt_${type}`, object: 'event', type, created: EVENT.created,
+        data: { object: payloads[type] } };
+      const raw = JSON.stringify(expected);
+      const timestamp = Math.floor(Date.now() / 1000);
+      const resource = new WebhooksResource();
+      expect(JSON.stringify(resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET))).toBe(raw);
+      expect(() => resource.constructEvent(raw, signWebhook('wrong', raw, timestamp), SECRET)).toThrow(PeableSignatureVerificationError);
+      expect(() => resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp - 301), SECRET)).toThrow(PeableSignatureVerificationError);
+      expect(() => resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp + 301), SECRET)).toThrow(PeableSignatureVerificationError);
+    });
+  }
+  test.each(['unknown.event', 'transfer.created', 'toString', '__proto__'])('rejects signed unknown type %s', type => {
+    const raw = JSON.stringify({ ...EVENT, type });
+    const timestamp = Math.floor(Date.now() / 1000);
+    expect(() => new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET)).toThrow(PeableSignatureVerificationError);
   });
 });
