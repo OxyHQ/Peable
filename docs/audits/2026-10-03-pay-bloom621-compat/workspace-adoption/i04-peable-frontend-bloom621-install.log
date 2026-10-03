@@ -1,0 +1,10 @@
+bun install v1.4.2 (744846f84)
+Resolving dependencies
+Resolved, downloaded and extracted [22]
+Saved lockfile
+
++ @types/node@20.19.43 (v26.6.4 available)
++ typescript@5.9.3 (v7.0.2 available)
++ @oxy.so/core@4.0.0 (v4.1.0 available)
+
+1053 packages installed [2.26s]

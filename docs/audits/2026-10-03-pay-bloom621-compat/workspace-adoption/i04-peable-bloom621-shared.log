@@ -1,0 +1,6 @@
+$ bun run --filter @peable.to/shared-types build
+@peable.to/shared-types build: $ tsc -p tsconfig.cjs.json
+@peable.to/shared-types build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/shared-types build: ESM imports fixed
+@peable.to/shared-types build: $ tsc -p tsconfig.types.json
+@peable.to/shared-types build: Exited with code 0

@@ -1,0 +1,489 @@
+$ bun test src
+bun test v1.4.2 (744846f84)
+
+src/pay/payment-request.test.ts:
+(pass) parses a well-formed peable://pay request [0.40ms]
+(pass) rejects malformed requests [0.22ms]
+
+src/pay/scanned-code.test.ts:
+(pass) reads the QR that checkout.peable.to actually renders [0.24ms]
+(pass) a faircoin: URI keeps its amount [0.16ms]
+(pass) a bare faircoin: URI carries no amount [0.02ms]
+(pass) a raw address is still an address, mainnet and testnet [0.01ms]
+(pass) surrounding whitespace is tolerated
+(pass) a malformed payment request is not silently downgraded to an address [0.02ms]
+(pass) unrelated codes are rejected
+
+src/pay/social-network.test.ts:
+(pass) the constant is the network social payments actually run on [0.01ms]
+(pass) the pay gate reads the constant rather than a literal [0.38ms]
+(pass) the read-only history reads the constant, not the wallet store [0.13ms]
+
+src/pay/profile-route.test.ts:
+(pass) reads the handle out of an @-prefixed segment [0.92ms]
+(pass) rejects every single-segment path that is not an @handle [0.24ms]
+(pass) rejects handles Oxy itself could never issue [0.30ms]
+(pass) handles a missing or repeated segment [0.05ms]
+(pass) offers the send action only when every precondition holds [0.04ms]
+(pass) web never reaches the send action, signed in or not [0.01ms]
+(pass) never offers to pay yourself — the gateway rejects it with a 422 [0.01ms]
+(pass) a signed-out viewer is never 'self', whatever the id comparison says
+(pass) waits for Oxy auth to resolve before showing a CTA
+(pass) asks a signed-out native payer to sign in
+(pass) reports a signed-in payer with no derived wallet
+(pass) blocks the send action on mainnet (finding F-1)
+(pass) permits sending on exactly the network the read-only history asks about [0.01ms]
+(pass) a signed-out mainnet wallet still reads as sign-in, not a network warning
+(pass) builds the shareable profile link from the bare handle [0.02ms]
+(pass) round-trips with parseProfileHandle [0.04ms]
+
+src/wallet/social-receive.test.ts:
+(pass) SOCIAL_RECEIVE_GAP_LIMIT > is 20 [0.01ms]
+(pass) getIdentityPublicKeyHex > is the shared identity's public key, compressed [0.22ms]
+(pass) getIdentityPublicKeyHex > is null when no identity holder answers (web, keyless, Commons absent) [0.03ms]
+(pass) compressedPublicKeyHex > names one key the same whatever its encoding [0.33ms]
+(pass) deriveSocialReceiveWatchWindow > derives the pinned addr(0..2) starting at 0 [5.07ms]
+(pass) deriveSocialReceiveWatchWindow > a window starting mid-range derives the correct offset [1.54ms]
+(pass) deriveSocialReceiveWatchWindow > count 0 returns an empty window [0.13ms]
+(pass) deriveSocialReceiveWatchWindow > a different identity is a different set of addresses [2.78ms]
+(pass) signSocialReceiveInput > is byte-identical to signing locally with the child key [15.07ms]
+(pass) signSocialReceiveInput > throws when no identity holder answers [0.26ms]
+(pass) signSocialReceiveInput > refuses a signature from a key that does not own the address [1.12ms]
+(pass) computeWindowExtension > no extension needed when the watched window already covers the gap limit [0.05ms]
+(pass) computeWindowExtension > extends when the highest used index approaches the edge of the watched window [0.03ms]
+(pass) computeWindowExtension > extends from an empty window (first boot) [0.03ms]
+(pass) computeWindowExtension > extends by exactly the amount needed to restore the full gap limit
+
+src/wallet/entry-route.test.ts:
+(pass) decideEntryRoute > waits while auth is unresolved [0.05ms]
+(pass) decideEntryRoute > signed out → sign in with Oxy
+(pass) decideEntryRoute > signed in, identity init pending → loading
+(pass) decideEntryRoute > signed in with no keystore → the read-only surface
+(pass) decideEntryRoute > the retired platform-shaped name no longer routes anywhere
+(pass) decideEntryRoute > signed in, keyless account → create Oxy ID
+(pass) decideEntryRoute > wallet ready, PIN state unknown → loading
+(pass) decideEntryRoute > wallet ready, no PIN yet → needs PIN setup [0.01ms]
+(pass) decideEntryRoute > wallet ready, PIN set → ready
+
+src/wallet/identity-wallet.test.ts:
+(pass) deriveIdentitySeed > passes the Peable FairCoin domain info and returns the seed [0.11ms]
+(pass) deriveIdentitySeed > returns null when core has no identity key (web / keyless) [0.02ms]
+(pass) FairCoin derivation from the identity seed > is deterministic and uses coin type 1 on testnet [27.92ms]
+(pass) FairCoin derivation from the identity seed > buildSeedSecret round-trips losslessly through hexToBytes [18.62ms]
+(pass) wallet continuity: the identity key derives the SAME wallet as before > the seed is the HKDF this wallet has always used [0.68ms]
+(pass) wallet continuity: the identity key derives the SAME wallet as before > @oxy.so/core's derivation (what Commons and the iOS SDK run) matches it [0.15ms]
+(pass) wallet continuity: the identity key derives the SAME wallet as before > the seed's first receive addresses are pinned [17.68ms]
+
+src/wallet/pockets.test.ts:
+(pass) Pockets registry (pure) > normalizePockets always includes the main Pocket [0.11ms]
+(pass) Pockets registry (pure) > normalizePockets sorts by account and dedupes [0.10ms]
+(pass) Pockets registry (pure) > normalizePockets defaults color and drops the legacy emoji field [0.04ms]
+(pass) Pockets registry (pure) > normalizePockets defaults no image (initial fallback is a render concern) [0.01ms]
+(pass) Pockets registry (pure) > normalizePockets preserves image/color/goal already present [0.10ms]
+(pass) Pockets registry (pure) > nextAccountIndex is max(account) + 1 [0.02ms]
+(pass) Pockets registry (pure) > addPocket appends at the next account index with the given image/color/goal [0.02ms]
+(pass) Pockets registry (pure) > addPocket without an image or a goal omits both [0.01ms]
+(pass) Pockets registry (pure) > renamePocket updates only the name, preserving image/color/goal [0.05ms]
+(pass) Pockets registry (pure) > updatePocketMeta updates only the fields provided [0.05ms]
+(pass) Pockets registry (pure) > updatePocketMeta with an image URI sets it [0.02ms]
+(pass) Pockets registry (pure) > updatePocketMeta with image: null clears an existing image [0.02ms]
+(pass) Pockets registry (pure) > updatePocketMeta with goal: null clears an existing goal [0.01ms]
+(pass) Pockets registry (pure) > updatePocketMeta with goal: number sets a new goal [0.01ms]
+(pass) Pockets registry (pure) > updatePocketMeta leaves other Pockets untouched [0.02ms]
+(pass) Pockets registry (pure) > removePocket drops the target but keeps the main Pocket [0.04ms]
+(pass) Pockets registry (pure) > canDeletePocket refuses the main Pocket and unknown accounts [0.02ms]
+
+src/wallet/resolve-wallet-seed.test.ts:
+(pass) resolveWalletSeed — identity wallet > resolves via deriveIdentitySeed, never touching secure-store [0.14ms]
+(pass) resolveWalletSeed — identity wallet > throws a clear error when the identity is unavailable (web / keyless) [0.09ms]
+(pass) resolveWalletSeed — BIP39 wallet > returns the cached seed without fetching the mnemonic [0.06ms]
+(pass) resolveWalletSeed — BIP39 wallet > derives from the mnemonic and caches it when the cache is empty [0.10ms]
+(pass) resolveWalletSeed — BIP39 wallet > throws when no mnemonic is stored for the wallet id [0.05ms]
+(pass) resolveWalletSeed — watch-only wallet > throws a clear error instead of deriving a spending key [0.07ms]
+(pass) getOrDeriveBip39Seed > reuses the cached seed when present [0.07ms]
+(pass) getOrDeriveBip39Seed > derives and caches on a cache miss [0.03ms]
+
+src/wallet/send-validation.test.ts:
+(pass) M3: send address validation > accepts a valid mainnet address [0.07ms]
+(pass) M3: send address validation > rejects a checksum-broken address that passes the old prefix check [0.03ms]
+(pass) M3: send address validation > rejects a Bitcoin address (wrong network/version byte) [0.02ms]
+(pass) M3: send address validation > rejects a valid mainnet address when the wallet is on testnet [0.02ms]
+(pass) M3: send address validation > rejects empty and clearly-partial input without throwing [0.02ms]
+
+src/wallet/reorg-rewind.test.ts:
+(pass) computeReorgRewind > removes outputs created in orphaned blocks [0.16ms]
+(pass) computeReorgRewind > restores outputs whose spending tx was orphaned [0.03ms]
+(pass) computeReorgRewind > does NOT restore a spend that is still in the active chain [0.01ms]
+(pass) computeReorgRewind > a confirmed unspent output below the fork is untouched [0.02ms]
+(pass) computeReorgRewind > combined scenario keeps the balance correct end-to-end [0.04ms]
+(pass) computeReorgRewind > an output created AND spent above the fork nets to nothing [0.02ms]
+
+src/wallet/network-status-i18n.test.ts:
+(pass) U-2: P2P network status i18n > every status key has an English and a Spanish translation [0.44ms]
+(pass) U-2: P2P network status i18n > English and Spanish translations are distinct for at least one key [0.11ms]
+(pass) U-2: P2P network status i18n > placeholder keys keep their interpolation placeholders in both languages [0.08ms]
+
+src/wallet/buy-history.test.ts:
+(pass) isTerminalBuyStatus > the bridge never moves away from these [0.02ms]
+(pass) isTerminalBuyStatus > everything in flight stays refreshable [0.02ms]
+(pass) isTerminalBuyStatus > exactly these statuses are terminal, checked against the API union [0.02ms]
+(pass) needsStatusRefresh > an order awaiting payment is polled [0.02ms]
+(pass) needsStatusRefresh > an order mid-flight is polled — the user is waiting on money [0.01ms]
+(pass) needsStatusRefresh > a finished order is never polled again [0.01ms]
+
+src/wallet/move-address.test.ts:
+(pass) resolveMoveDestinationAddress > derives the destination account's external address at the given index [22.20ms]
+(pass) resolveMoveDestinationAddress > respects a non-zero next-unused index [18.15ms]
+(pass) resolveMoveDestinationAddress > destination address belongs to the destination Pocket, not the source [20.81ms]
+
+src/wallet/utxo-reservation.test.ts:
+(pass) UtxoReservation > a fresh reservation holds nothing [0.06ms]
+(pass) UtxoReservation > reserve() locks the outpoints and reports them held [0.07ms]
+(pass) UtxoReservation > a second send cannot reserve a coin the first holds (no double-spend) [0.02ms]
+(pass) UtxoReservation > a refused reserve() is atomic — it locks NONE of its outpoints [0.02ms]
+(pass) UtxoReservation > disjoint sends reserve independently [0.02ms]
+(pass) UtxoReservation > release() returns coins to the pool so a later send can reuse them [0.05ms]
+(pass) UtxoReservation > release() of an unheld outpoint is a no-op [0.02ms]
+(pass) UtxoReservation > the same txid with different vouts are distinct outpoints [0.02ms]
+(pass) UtxoReservation > clear() drops every reservation (wallet reset/lock/switch) [0.02ms]
+
+src/wallet/multisig.test.ts:
+(pass) buildMultisigSendDraft > produces the exact real unsigned draft [0.41ms]
+(pass) buildMultisigSendDraft > rejects a draft spanning more than one multisig UTXO [0.08ms]
+(pass) decodeMultisigSpend (anti-blind-signing) > decodes every recipient/change output and the fee for confirmation [0.49ms]
+(pass) decodeMultisigSpend (anti-blind-signing) > rejects a mismatched out-of-band input-value count [0.15ms]
+(pass) decodeMultisigSpend (anti-blind-signing) > rejects a request whose outputs exceed the provided input value [0.17ms]
+(pass) exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend > two independent cosigner devices produce the exact real finalized transaction [2.92ms]
+(pass) exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend > the serialized signing request carries no private key material [0.13ms]
+(pass) finalizeMultisigSend verifies partial signatures at combine time > rejects a partial signature mislabeled with the wrong cosigner pubkey [6.37ms]
+(pass) finalizeMultisigSend verifies partial signatures at combine time > rejects a corrupted partial signature [2.40ms]
+(pass) finalizeMultisigSend rejects a non-single-input draft (audit M1) > throws instead of silently dropping inputs 1..n from the finalized tx [2.04ms]
+
+src/wallet/lock-store.test.ts:
+(pass) lock gate: default state > starts LOCKED and unresolved so nothing authenticated can render [0.11ms]
+(pass) lock gate: transitions > unlock() opens the gate and marks it resolved [0.03ms]
+(pass) lock gate: transitions > lock() re-closes the gate (auto-lock / manual lock) [0.02ms]
+(pass) lock gate: transitions > markNoPinUnlocked() opens the gate for PIN-less wallets [0.01ms]
+(pass) lock gate: boot decision tracks PIN existence > a wallet WITH a PIN stays locked after resolveInitialLock(true) [0.02ms]
+(pass) lock gate: boot decision tracks PIN existence > a wallet WITHOUT a PIN unlocks after resolveInitialLock(false)
+(pass) N-10: deep-link queue while locked > queueDeepLink stashes the URL and a capture timestamp [0.03ms]
+(pass) N-10: deep-link queue while locked > consumePendingDeepLink returns and clears the URL [0.05ms]
+(pass) N-10: deep-link queue while locked > consumePendingDeepLink drops URLs older than the freshness window [0.02ms]
+(pass) N-10: deep-link queue while locked > a second queued URL supersedes the first (latest wins) [0.01ms]
+(pass) N-10: deep-link queue while locked > consumePendingDeepLink honours a caller-supplied maxAgeMs [0.01ms]
+
+src/wallet/rescan-discovery.test.ts:
+(pass) historical rescan discovers a pre-filter payment > a restored wallet finds the 10 FAIR sent to FAHUJ… and credits it once [0.65ms]
+
+src/wallet/buy-delivery.test.ts:
+(pass) C5: buy delivery to a chain-0 address is credited > a tx paying the wallet's receive address adds the UTXO [15.68ms]
+(pass) C5: buy delivery to a chain-0 address is credited > the old chain-2 buy address is NOT owned (would have been rejected) [22.63ms]
+
+src/wallet/reconstruct-transaction.test.ts:
+(pass) reconstructWalletTransaction > a persisted receive row rebuilds the exact receive WalletTransaction [0.18ms]
+(pass) reconstructWalletTransaction > a persisted send row nets negative and reports the spent address [0.09ms]
+(pass) reconstructWalletTransaction > a self-send (change back + owned input) nets the amount that left [0.09ms]
+(pass) reconstructWalletTransaction > a Bloom false positive (no owned in/out) reconstructs to null [0.11ms]
+(pass) reconstructWalletTransaction > an unconfirmed (mempool) receive row reports zero confirmations [0.11ms]
+
+src/wallet/receive.test.ts:
+(pass) real mainnet tx fixture > computes the canonical display txid [0.06ms]
+(pass) real mainnet tx fixture > output #1 pays 10 FAIR to the receive address [0.03ms]
+(pass) real mainnet tx fixture > input #0 spends the expected previous outpoint [0.02ms]
+(pass) receive: incoming output is credited to the UTXO set > balance increases by exactly 10 FAIR and the UTXO is added [0.17ms]
+(pass) receive: incoming output is credited to the UTXO set > a wallet that owns no outputs is untouched (filter false positive) [0.05ms]
+(pass) receive: incoming output is credited to the UTXO set > unconfirmed (mempool) receive lands in the unconfirmed balance [0.06ms]
+(pass) receive: incoming output is credited to the UTXO set > replaying the same confirmed tx does not double-count [0.07ms]
+(pass) receive: incoming output is credited to the UTXO set > a later mempool copy never downgrades a confirmed UTXO [0.10ms]
+(pass) spend: an input consuming our UTXO debits the balance > spending the received 10 FAIR UTXO returns the balance to zero [0.13ms]
+(pass) spend: an input consuming our UTXO debits the balance > an input that spends an outpoint we don't hold is ignored [0.03ms]
+
+src/wallet/capability.test.ts:
+(pass) decideWalletCapability > an initialized wallet is full, on any host [0.04ms]
+(pass) decideWalletCapability > signed in with no keystore → read-only
+(pass) decideWalletCapability > a keystore host with no wallet yet is none, even when signed in
+(pass) decideWalletCapability > keyless and signed out → none
+(pass) decideWalletCapability > keyless with auth unresolved → pending
+
+src/wallet/keyless.test.ts:
+(pass) hasIdentityAuthMethod > true when the account holds an identity key [0.03ms]
+(pass) hasIdentityAuthMethod > false for a keyless (email / password / authenticator) account: /auth/methods is empty
+(pass) a keyless email account > lands on creating its Oxy ID in Commons [0.03ms]
+(pass) resolveKeylessAction > no server identity → create in Commons [0.01ms]
+(pass) resolveKeylessAction > server has identity (exists on another device) → open Commons to import it
+
+src/storage/db-name.test.ts:
+(pass) databaseFileName > no walletId, account 0 → legacy default name [0.02ms]
+(pass) databaseFileName > walletId, account 0 → legacy per-wallet name (backward compatible)
+(pass) databaseFileName > walletId, account > 0 → suffixed per-pocket name
+(pass) databaseFileName > no walletId, account > 0 → suffixed default name
+
+src/storage/header-integrity.test.ts:
+(pass) headerMatchesItsHash > accepts a header that hashes to its recorded id [2.22ms]
+(pass) headerMatchesItsHash > rejects one written by the regressed implementation [1.98ms]
+(pass) planHeaderRepair > does nothing once the store is at the current version [0.06ms]
+(pass) planHeaderRepair > wipes an out-of-date store whose tip does not verify [1.94ms]
+(pass) planHeaderRepair > keeps an out-of-date store whose tip verifies [1.50ms]
+(pass) planHeaderRepair > keeps an empty store — there is nothing to judge [0.03ms]
+(pass) planHeaderRepair > keeps a genesis-only store: genesis is seeded, never hashed
+
+src/storage/pin-attempts.test.ts:
+(pass) N-3: PIN attempt back-off math > no lockout under the threshold [0.04ms]
+(pass) N-3: PIN attempt back-off math > the first lockout uses the base duration [0.01ms]
+(pass) N-3: PIN attempt back-off math > each subsequent triggered lockout doubles the wait [0.02ms]
+(pass) N-3: PIN attempt back-off math > back-off is capped at PIN_MAX_LOCKOUT_SECONDS [0.02ms]
+(pass) N-3: PIN attempt state transitions > an attempt below the threshold only increments the counter [0.03ms]
+(pass) N-3: PIN attempt state transitions > crossing the threshold sets lockedUntil = NOW + base * 1000 [0.02ms]
+(pass) N-3: PIN attempt state transitions > an additional failure after the first lockout uses the doubled back-off [0.01ms]
+(pass) N-3: PIN attempt state transitions > a sustained loop of 'wait → fail again' produces exponential back-off (brute-force resistance) [0.04ms]
+
+src/storage/pin-kdf.test.ts:
+(pass) M2: salted-scrypt PIN records > a correct PIN verifies against its scrypt record [17.12ms]
+(pass) M2: salted-scrypt PIN records > a wrong PIN is rejected [11.70ms]
+(pass) M2: salted-scrypt PIN records > the record is NOT the old unsalted SHA-256 of the PIN [4.51ms]
+(pass) M2: salted-scrypt PIN records > two records for the same PIN differ (per-record random salt) [16.33ms]
+(pass) M2: salted-scrypt PIN records > a malformed scrypt record fails closed without throwing [0.34ms]
+(pass) M2: salted-scrypt PIN records > a new record embeds its scrypt cost params (self-describing) [4.26ms]
+(pass) scrypt cost migration (legacy fixed-cost → self-describing) > a legacy N=2^15 record verifies and upgrades to the current cost [304.60ms]
+(pass) scrypt cost migration (legacy fixed-cost → self-describing) > a wrong PIN against a legacy fixed-cost record fails with no upgrade [273.51ms]
+(pass) M2: legacy record verification + migration > a legacy SHA-256 record verifies and yields a scrypt upgrade [14.29ms]
+(pass) M2: legacy record verification + migration > a wrong PIN against a legacy record fails with no upgrade [0.17ms]
+
+src/storage/header-blob-migration.test.ts:
+(pass) needsHeaderBlobMigration > a legacy TEXT column needs migrating [0.03ms]
+(pass) needsHeaderBlobMigration > an already-converted BLOB column does not [0.01ms]
+(pass) needsHeaderBlobMigration > an absent table does not (fresh wallet)
+(pass) HEADER_BLOB_MIGRATION_SQL > converts hex text to the exact 32 raw bytes [2.79ms]
+(pass) HEADER_BLOB_MIGRATION_SQL > preserves every row and keeps height as the primary key [0.83ms]
+(pass) HEADER_BLOB_MIGRATION_SQL > lookup by raw-byte hash finds the row [0.34ms]
+(pass) HEADER_BLOB_MIGRATION_SQL > is a no-op on an empty table [0.22ms]
+
+src/services/gateway-client.test.ts:
+(pass) reserveNextSocialAddress > returns the reserved address and index [0.13ms]
+(pass) reserveNextSocialAddress > URL-encodes the username [0.04ms]
+(pass) reserveNextSocialAddress > wraps a 409 response into KeylessRecipientError [0.09ms]
+(pass) reserveNextSocialAddress > re-throws a non-409 error unchanged [0.04ms]
+(pass) enrichAddresses > posts the batch and returns the data map [0.06ms]
+(pass) getSocialReceiveCursor > returns the cursor directly (no {data} double-unwrap) and sends network as a query param [0.05ms]
+(pass) getSocialReceiveCursor > carries the identity key the backend derived those addresses from [0.03ms]
+(pass) getSocialReceiveCursor > returns reservedThrough: 0 and no key for a caller with no reservation cursor yet [0.03ms]
+
+src/services/explorer-address.test.ts:
+(pass) sums the balances of every address it is given [0.37ms]
+(pass) counts an address the explorer does not know as zero, not an error [0.05ms]
+(pass) makes no request at all for an empty address list [0.14ms]
+(pass) asks the explorer for the requested network [0.07ms]
+(pass) throws on a rate limit rather than reporting a zero balance [0.10ms]
+(pass) throws on an explorer outage rather than reporting a zero balance [0.18ms]
+(pass) throws on a successful response with no usable balanceSat [0.08ms]
+(pass) throws rather than reporting a balance JSON.parse has already rounded [0.06ms]
+(pass) still answers zero for the one case that means zero [0.06ms]
+
+src/services/market.test.ts:
+(pass) fetchPriceHistory > parses and normalizes samples oldest→newest [1.76ms]
+(pass) fetchPriceHistory > drops samples with an unparseable timestamp [0.09ms]
+(pass) fetchPriceHistory > throws on a non-OK response [0.05ms]
+(pass) fetchPriceHistory > throws when a sample fails the schema [0.41ms]
+(pass) fetchNetworkStats > parses the three rendered fields and ignores extras [0.54ms]
+(pass) fetchNetworkStats > throws on a non-OK response [0.05ms]
+(pass) fetchNetworkStats > throws when a required field is missing [0.07ms]
+
+src/services/notification-server.test.ts:
+(pass) registerForPush > POSTs the exact wire-contract body and returns the subscriptionId [0.30ms]
+(pass) registerForPush > the body carries NO private-key material [0.12ms]
+(pass) registerForPush > normalizes a trailing slash in the server URL [0.04ms]
+(pass) registerForPush > throws on a non-2xx response [0.05ms]
+(pass) registerForPush > throws when the response omits a subscriptionId [0.04ms]
+(pass) unregisterFromPush > DELETEs { subscriptionId } to the register endpoint [0.08ms]
+(pass) unregisterFromPush > throws on a non-2xx response [0.04ms]
+(pass) normalizeServerUrl > strips trailing slashes and trims [0.01ms]
+
+src/services/explorer-events.test.ts:
+(pass) parseTipUpdate > extracts the height from a new-block frame [0.42ms]
+(pass) parseTipUpdate > extracts the height from a block-count frame [0.02ms]
+(pass) parseTipUpdate > returns null for non-tip event types [0.17ms]
+(pass) parseTipUpdate > returns null for malformed / non-object input [0.07ms]
+(pass) parseServerError > extracts a server error frame [0.41ms]
+(pass) parseServerError > returns null for non-error frames [0.06ms]
+
+src/services/push-handler.test.ts:
+(pass) createPushHandler.handleIncomingPush > incoming_confirmed paying us posts a received notification with the synced amount [0.43ms]
+(pass) createPushHandler.handleIncomingPush > a txid that doesn't pay us posts nothing [0.06ms]
+(pass) createPushHandler.handleIncomingPush > outgoing_confirmed posts the amount that LEFT the wallet (spent minus change) [0.06ms]
+(pass) createPushHandler.handleIncomingPush > posts nothing when the transaction can't be fetched [0.03ms]
+(pass) createPushHandler.handleIncomingPush > posts nothing while locked (no watched addresses) [0.06ms]
+(pass) createPushHandler.handleIncomingPush > incoming_pending is treated like a received event [0.04ms]
+
+src/services/push-registration.test.ts:
+(pass) createPushRegistration reconcile > registers once with the wallet xpub + device token when enabled [0.49ms]
+(pass) createPushRegistration reconcile > registration uses ONLY the watch-only xpub, no private key (locked-safe) [0.08ms]
+(pass) createPushRegistration reconcile > is idempotent — a second reconcile with the same state does not re-POST [0.04ms]
+(pass) createPushRegistration reconcile > unregisters when the master toggle is flipped off [0.06ms]
+(pass) createPushRegistration reconcile > re-registers when the confirmation depth changes [0.06ms]
+(pass) createPushRegistration reconcile > does not register without a device token (web/electron guard) [0.03ms]
+(pass) createPushRegistration reconcile > does not register when no wallet is up (locked / none) [0.02ms]
+(pass) createPushRegistration reconcile > does not register with zero events selected (server rejects an empty set) [0.02ms]
+(pass) createPushRegistration reconcile > unregisters when the last event is toggled off [0.09ms]
+(pass) createPushRegistration start() > reconciles immediately and re-reconciles on a prefs change [0.13ms]
+
+src/services/crash-policy.test.ts:
+(pass) redactSecrets > removes a 12-word BIP39 mnemonic [0.10ms]
+(pass) redactSecrets > removes a 24-word mnemonic [0.01ms]
+(pass) redactSecrets > removes 64+ char hex (raw keys and seeds) [0.02ms]
+(pass) redactSecrets > removes extended private keys
+(pass) redactSecrets > removes WIF-length base58 strings
+(pass) redactSecrets > keeps ordinary error prose intact
+(pass) redactSecrets > keeps a FairCoin address intact (too short to be a WIF)
+(pass) toCrashEntry > captures name, message and stack, redacted [0.08ms]
+(pass) toCrashEntry > handles a thrown non-Error value [0.02ms]
+(pass) appendCrashEntry > appends in order [0.08ms]
+(pass) appendCrashEntry > drops the oldest past the cap [0.08ms]
+
+src/p2p/peer-bloom-gate.test.ts:
+(pass) NB-1: NODE_BLOOM gate on the version handshake > peer advertising only NODE_NETWORK is disconnected, never reaches ready [1.10ms]
+(pass) NB-1: NODE_BLOOM gate on the version handshake > peer advertising NODE_NETWORK + NODE_BLOOM transitions to ready [0.19ms]
+(pass) NB-1: NODE_BLOOM gate on the version handshake > peer advertising no services at all is disconnected [0.07ms]
+
+src/p2p/sync-anchor.test.ts:
+(pass) mainnet sync anchor > exists [0.01ms]
+(pass) mainnet sync anchor > re-hashes to its own recorded id [3.91ms]
+(pass) mainnet sync anchor > matches the published checkpoint at the same height [0.17ms]
+(pass) mainnet sync anchor > sits above the proof-of-work era, so it is a PoS header [0.11ms]
+(pass) mainnet sync anchor > hashes are 32 bytes [0.02ms]
+(pass) testnet sync anchor > is absent — no verified testnet chain data
+
+src/p2p/header-validation.test.ts:
+(pass) compactToTarget > decodes the genesis bits to the expected target [0.03ms]
+(pass) compactToTarget > flags negative when the sign bit is set (with a non-zero mantissa)
+(pass) compactToTarget > flags overflow for an oversized exponent
+(pass) compactToTarget > zero mantissa is neither negative nor overflowing [0.01ms]
+(pass) isValidTargetBits > accepts the genesis bits [0.02ms]
+(pass) isValidTargetBits > rejects zero target
+(pass) isValidTargetBits > rejects a negative target
+(pass) isValidTargetBits > rejects a target above the proof-of-work limit
+(pass) validateHeaderChain — linkage > accepts a correctly linked batch and assigns heights [0.16ms]
+(pass) validateHeaderChain — linkage > rejects a batch whose first header does not build on the anchor [0.09ms]
+(pass) validateHeaderChain — linkage > rejects a non-continuous header in the middle of the batch [0.07ms]
+(pass) validateHeaderChain — linkage > rejects a header with out-of-range difficulty bits [0.03ms]
+(pass) validateHeaderChain — genesis & checkpoints > first batch with no anchor must start at the known genesis [0.07ms]
+(pass) validateHeaderChain — genesis & checkpoints > rejects a first batch whose genesis hash is wrong [0.03ms]
+(pass) validateHeaderChain — genesis & checkpoints > rejects a header that violates a checkpoint at its height [0.04ms]
+(pass) validateHeaderChain — genesis & checkpoints > accepts a header that matches its checkpoint [0.10ms]
+(pass) planChainUpdate > extends when the batch builds directly on the tip [0.04ms]
+(pass) planChainUpdate > extends from an empty store
+(pass) planChainUpdate > reorgs to a strictly longer competing chain within max depth [0.01ms]
+(pass) planChainUpdate > ignores a competing chain that is not longer (ties keep active chain)
+(pass) planChainUpdate > ignores a fork deeper than the maximum reorg depth
+(pass) planChainUpdate > reorgs at exactly the maximum reorg depth
+
+src/p2p/bloom-filter.test.ts:
+(pass) flag constants > update modes are 0 / 1 / 2 [0.01ms]
+(pass) BloomFilter (manual size) > contains an inserted element [0.14ms]
+(pass) BloomFilter (manual size) > contains does not false-negative on any inserted element [1.34ms]
+(pass) BloomFilter (manual size) > toBytes returns a copy, not the underlying buffer [0.07ms]
+(pass) BloomFilter (manual size) > accessors return the constructor arguments [0.02ms]
+(pass) BloomFilter (manual size) > filter size is clamped to 36000 bytes [0.06ms]
+(pass) BloomFilter (manual size) > numHashFuncs is clamped to 50
+(pass) BloomFilter.forAddresses > empty address list returns a minimal placeholder filter that matches nothing [0.13ms]
+(pass) BloomFilter.forAddresses > a manually constructed 0-hash-func filter matches nothing [0.01ms]
+(pass) BloomFilter.forAddresses > all inserted elements match [0.14ms]
+(pass) BloomFilter.forAddresses > false positive rate stays close to the target [3.52ms]
+(pass) BloomFilter determinism > inserting in different orders gives the same filter bytes [0.10ms]
+(pass) BloomFilter determinism > different tweak produces different bit positions [0.20ms]
+
+src/p2p/rescan.test.ts:
+(pass) Rescanner > scans every block in the range across windows [0.47ms]
+(pass) Rescanner > persists progress after each window for resumability [0.15ms]
+(pass) Rescanner > resumes from a persisted next-height and does not re-request earlier blocks [0.05ms]
+(pass) Rescanner > stops and persists without completing when no peer is available [0.06ms]
+(pass) Rescanner > an empty range completes immediately [0.04ms]
+(pass) Rescanner > refuses to run two scans concurrently [0.13ms]
+(pass) planRescan > starts from the birthday when nothing is persisted [0.03ms]
+(pass) planRescan > resumes an incomplete scan and extends to the new tip [0.01ms]
+(pass) planRescan > does nothing when a completed scan already covers the tip
+(pass) planRescan > catches up only the new range after a completed scan
+(pass) planRescan > returns null when the tip is below the birthday
+
+src/p2p/proof-of-work.test.ts:
+(pass) Quark header hash matches mainnet > height 4999 [4.42ms]
+(pass) Quark header hash matches mainnet > height 5000 [1.98ms]
+(pass) Quark header hash matches mainnet > height 10000 [1.63ms]
+(pass) Quark header hash matches mainnet > height 10001 [2.16ms]
+(pass) Quark header hash matches mainnet > height 50000 [1.87ms]
+(pass) meetsProofOfWork > PoW-era headers satisfy their target [8.08ms]
+(pass) meetsProofOfWork > PoS headers do NOT satisfy the target (so the check must be bounded) [3.83ms]
+(pass) meetsProofOfWork > mutating the nonce breaks the work [2.29ms]
+(pass) lastPowBlock > mirrors chainparams.cpp nLastPOWBlock [0.08ms]
+(pass) validateHeaderChain enforces PoW only in the PoW range > accepts a real PoW header at height 5000 [2.44ms]
+(pass) validateHeaderChain enforces PoW only in the PoW range > rejects a tampered header inside the PoW range [1.96ms]
+(pass) validateHeaderChain enforces PoW only in the PoW range > accepts the first PoS header, which cannot meet a PoW target [2.18ms]
+(pass) validateHeaderChain enforces PoW only in the PoW range > would reject the whole PoS chain if the bound were removed [2.80ms]
+
+src/p2p/peer-cache.test.ts:
+(pass) known-peer cache feed > a peer that reaches ready is reported once with host/port/services [0.69ms]
+(pass) known-peer cache feed > services survive the bigint → number conversion the DB column uses [0.13ms]
+(pass) known-peer cache feed > a peer rejected by the NODE_BLOOM gate is never cached [0.23ms]
+
+src/p2p/messages.test.ts:
+(pass) constants > HEADER_SIZE is 24 bytes
+(pass) constants > INV types use the Bitcoin-compatible numeric ids
+(pass) ipv4ToMappedIPv6 > embeds octets in the last 4 bytes of an IPv6 address [0.02ms]
+(pass) ipv4ToMappedIPv6 > handles the loopback address [0.01ms]
+(pass) ipv4ToMappedIPv6 > throws on malformed input [0.03ms]
+(pass) serializeHeader / parseHeader > round trip a small payload [0.04ms]
+(pass) serializeHeader / parseHeader > checksum is the first 4 bytes of double-sha256(payload) [0.02ms]
+(pass) serializeHeader / parseHeader > magic bytes occupy the first 4 header bytes [0.09ms]
+(pass) serializeHeader / parseHeader > command is null-padded to 12 bytes [0.03ms]
+(pass) serializeHeader / parseHeader > long commands are truncated to 12 bytes [0.02ms]
+(pass) serializeHeader / parseHeader > throws on a truncated header [0.01ms]
+(pass) buildMessage > prepends the header to the payload [0.02ms]
+(pass) serializeVersion / parseVersion > round trip [0.07ms]
+(pass) serializeVersion / parseVersion > port is encoded big-endian [0.01ms]
+(pass) serializeVersion / parseVersion > relay=false round trips [0.02ms]
+(pass) serializeGetHeaders > length matches expected: 4 + varint + n*32 + 32 [0.05ms]
+(pass) serializeGetHeaders > embeds the FairCoin protocol version 71000 LE [0.01ms]
+(pass) serializeGetBlocks > wire format is identical to getheaders (only the command differs) [0.02ms]
+(pass) serializeGetBlocks > length matches 4 + varint + n*32 + 32 [0.01ms]
+(pass) parseHeaders > parses an empty headers payload [0.04ms]
+(pass) parseHeaders > parses a single synthesized header [0.03ms]
+(pass) parseHeaders > throws on truncated headers payload [0.01ms]
+(pass) serializeGetData / parseInv > round trip via serializeGetData and parseInv [0.07ms]
+(pass) serializeGetData / parseInv > empty list
+(pass) serializeFilterLoad > length matches expected: varint + filter + 4 + 4 + 1 [0.04ms]
+(pass) parseMerkleBlock > parses a minimal merkleblock (0 hashes, 1 flag byte) [0.09ms]
+(pass) parseTx > parses a simple 1-in / 1-out transaction [0.05ms]
+(pass) serializePing / parsePong > round trip a 64-bit nonce [0.05ms]
+(pass) serializePing / parsePong > parsePong throws on too-short input [0.02ms]
+(pass) parseAddr > parses an empty addr message [0.03ms]
+(pass) parseAddr > parses a single entry [0.03ms]
+
+src/p2p/merkle-proof.test.ts:
+(pass) validateMerkleProof — valid proofs > single transaction block [0.21ms]
+(pass) validateMerkleProof — valid proofs > matches one tx out of seven (unbalanced tree) [0.17ms]
+(pass) validateMerkleProof — valid proofs > matches several txs [0.17ms]
+(pass) validateMerkleProof — valid proofs > empty tree (0 transactions) returns no matches [0.02ms]
+(pass) validateMerkleProof — rejects malformed proofs > rejects a proof padded with an extra trailing flag byte [0.15ms]
+(pass) validateMerkleProof — rejects malformed proofs > rejects a proof with a set padding bit in the final flag byte [0.13ms]
+(pass) validateMerkleProof — rejects malformed proofs > rejects a proof carrying an unused extra hash [0.12ms]
+(pass) validateMerkleProof — rejects malformed proofs > rejects a proof whose root does not match the header merkleRoot [0.10ms]
+(pass) validateMerkleProof — rejects malformed proofs > rejects a proof that references more hashes than it provides [0.06ms]
+
+src/p2p/send-target.test.ts:
+(pass) selectSendTarget > returns undefined when no peer is ready [0.11ms]
+(pass) selectSendTarget > skips a peer that is behind the requested height [0.03ms]
+(pass) selectSendTarget > never returns a stale peer, whatever the cursor [0.03ms]
+(pass) selectSendTarget > rotates across eligible peers instead of pinning the first [0.20ms]
+(pass) selectSendTarget > falls back to any ready peer when none are ahead [0.05ms]
+(pass) selectSendTarget > ignores peers that are not ready when rotating [0.02ms]
+
+src/p2p/broadcast.test.ts:
+(pass) H-1: broadcastTransactionToPeers reports real delivery count > zero peers → peerCount = 0 (do NOT mark UTXOs spent) [0.08ms]
+(pass) H-1: broadcastTransactionToPeers reports real delivery count > N healthy peers → peerCount = N and every peer received 'tx' [0.07ms]
+(pass) H-1: broadcastTransactionToPeers reports real delivery count > a failing peer does not count toward peerCount [0.05ms]
+(pass) H-1: broadcastTransactionToPeers reports real delivery count > all peers failing → peerCount = 0 (must be treated as not-sent) [0.02ms]
+(pass) H-1: broadcastTransactionToPeers reports real delivery count > returned txid matches the canonical reversed double-SHA256 [0.02ms]
+
+ 388 pass
+ 0 fail
+ 1309 expect() calls
+Ran 388 tests across 47 files. [1102.00ms]
