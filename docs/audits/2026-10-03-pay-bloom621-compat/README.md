@@ -20,7 +20,7 @@ bun run build
 bun run test
 ```
 
-No production package manifest or lock changed. This establishes that pay's
+At that fixture checkpoint, no production package manifest or lock changed. This establishes that pay's
 current APIs do not require Bloom 6.3 at the type/build boundary. It does not
 establish rendered native UI behavior: the existing tests cover payment logic,
 pure UI state, and optional-peer barrel isolation without a React Native renderer.
@@ -31,3 +31,5 @@ while retaining compatible 6.3 consumers, pin its development dependency and
 Peable frontend to 6.2.1, and regenerate the real workspace lock. A Services 11.1
 host must additionally honor Services' `>=6.2.1 <6.3.0` peer. Final frontend
 compilation/tests and any pay package release remain separate reviewed steps.
+
+The subsequent [workspace adoption](workspace-adoption/README.md) records the real manifest/lock change and frontend validation.

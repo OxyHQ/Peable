@@ -1,0 +1,85 @@
+{
+  "sourceCommit": "cfc220a1b399349b3a7d24e0286752e0187b9fef",
+  "sources": [
+    {
+      "path": "bun.lock",
+      "sha256": "a523299dbfe04a2c9b5e885cc3625a8b6dd3861399c5763362fdda8e9bee7bbc",
+      "bytes": 347486
+    },
+    {
+      "path": "packages/pay/package.json",
+      "sha256": "832845d952eb4a78eb49882286f31dc2f08da2c43610449ae749c47ae8e2f935",
+      "bytes": 2765
+    },
+    {
+      "path": "packages/frontend/package.json",
+      "sha256": "600efb7623abb51057acaa372067944f216323a6519e4773c87969ec3afd1e14",
+      "bytes": 4301
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-frontend-bloom621-install.log",
+      "sha256": "5e0fb9bd5aba825e8c4845f24bf1f255f7e7767bf90f9640cc66aa5abee2b803",
+      "bytes": 264
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-shared.log",
+      "sha256": "f5eb76536ae11fec2556e9a694354816870a1085e60005b868d54f606763717e",
+      "bytes": 360
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-pay-build.log",
+      "sha256": "4a3374ed1a59fbc2e3c451b10b32e62402ccf94fd54b365321550b0c59486263",
+      "bytes": 306
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-frontend-types.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "bytes": 15
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-frontend-tests.log",
+      "sha256": "8fbd948db94391678d039a380f278992c16b66682402b9237d9ea8d57d4a5209",
+      "bytes": 37072
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-frontend-build.log",
+      "sha256": "dfc1d409f5d8de971881ce2b01409ed41111591a6029cf7234ce6c726f8ab695",
+      "bytes": 17273
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-frozen.log",
+      "sha256": "a8ff03eef0f9f5106eb587e756df2ebb4c6ee7eb18185fcdb16a01c5d56b6440",
+      "bytes": 98
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/workspace-adoption/i04-peable-bloom621-pay-tests.log",
+      "sha256": "4138852530650cb7dc63fbfb597450cfa29d1756a9116c8d2be801031d568954",
+      "bytes": 13121
+    }
+  ],
+  "commands": [
+    "bun install --minimum-release-age=0 --ignore-scripts",
+    "bun run --cwd packages/shared-types build",
+    "bun run --cwd packages/pay build",
+    "bun run --cwd packages/frontend typecheck",
+    "bun run --cwd packages/frontend test",
+    "bun run --cwd packages/frontend build",
+    "bun install --frozen-lockfile --minimum-release-age=0 --ignore-scripts",
+    "bun run --cwd packages/pay test"
+  ],
+  "result": {
+    "frontendTests": 388,
+    "payTests": 130,
+    "failedTests": 0,
+    "types": 0,
+    "builds": 0
+  },
+  "limits": [
+    "Published Bloom 6.2.1; Oxy SDK versions remain existing baseline.",
+    "No native render or provider/chain calls.",
+    "No deployment or package publication.",
+    "Final Oxy adoption and coordinated frontend promotion remain pending."
+  ]
+}
