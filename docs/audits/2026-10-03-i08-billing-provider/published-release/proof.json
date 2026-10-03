@@ -1,0 +1,78 @@
+{
+  "releaseSource": "77e7409511966d01780c7727f615213ce6c7627e",
+  "verifierSource": "bac8cd7e1b8345a39b853331e63536fd960413a1",
+  "sources": [
+    {
+      "path": "packages/shared-types/package.json",
+      "sha256": "a50225b55d452b9601884eb6638fa06c0ed4462dc6180b77a9a30609342751c0"
+    },
+    {
+      "path": "packages/sdk/package.json",
+      "sha256": "0c20dc15ec9480b779bd6916c4d2e5d3aace4189e6f6817e63497f8d579d0de5"
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "9057905a90068d7057285a7d21f914448a8e060c507834e78dff970ed27f69da"
+    },
+    {
+      "path": "packages/sdk/scripts/verify-billing-published.mjs",
+      "sha256": "b62fe1498a189b83a55f2fe243445c00ae55322c65e2f4ddb639866c3294ba79"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/README.md",
+      "sha256": "a90fe13b3120c7d6953d978eaa54fae9e2e639dc094369a60677575edbe26c5c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/backend-root-receipt.json",
+      "sha256": "685a24afe6a01d8af8d77d05fbdeaeac5fee35141f619b8c4e459e9797b91e1e"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/consumer.log",
+      "sha256": "c30d153256b11cc85a9d9032752026365fd771d4657246bc3088785d23f1d28e"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/install.log",
+      "sha256": "26e3ece6a8f5b76088175765c418ac2aaaeec0360df200f9c5b20d46cad7c24c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/installed-byte-comparison.json",
+      "sha256": "d41998c7024b4403cfa3145e492104221a9c582134dad9173be919ada7db5214"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/preflight.json",
+      "sha256": "8b7ad224c5da48ad81b365c813ea5c54d5dad5fb74fea134175ee51c28102e0d"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/sdk-publish.log",
+      "sha256": "8d357a209db0d3841f50b286be34a49ba6ee12fe8fb7315cf55a539135d9c778"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/sdk-registry.json",
+      "sha256": "4ee32fe49e41e954bf0526254545dc4e9f8f45db4532ccf2bdafb8a5e72d1ea3"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/shared-attempt1.log",
+      "sha256": "9d713bde5ca592cf5d51d634f4cb99cf88cc081275871ecf5c28f5f4545de612"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/shared-publish.log",
+      "sha256": "73236b036c7105aca87109cf92611fdb3ee4b8a43b3ffbf83e69e8ddb72a63b7"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/published-release/shared-types-registry.json",
+      "sha256": "3053d955c154894bbde4bab59e73d9d1b5f8f1d163ee7fdf0f40ab00ab485fa3"
+    }
+  ],
+  "privateTarballs": [
+    {
+      "path": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/registry-release/shared-types-registry.tgz",
+      "sha256": "475f2defa68df1a1f846a50ccc5368f8666bd81ac4620b5372b62dd07010ee16"
+    },
+    {
+      "path": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/registry-release/sdk-registry.tgz",
+      "sha256": "0bb40a650abbf42cabfac0145683092f82e2666867074420350d80335e2e437e"
+    }
+  ]
+}

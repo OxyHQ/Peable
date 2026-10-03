@@ -1,0 +1,25 @@
+{
+  "package": "@peable.to/shared-types",
+  "version": "0.3.0",
+  "publishedAt": "2026-10-03T06:09:33.668Z",
+  "dist": {
+    "shasum": "27c289d2108245add04941dccc913d890f553731",
+    "tarball": "https://registry.npmjs.org/@peable.to/shared-types/-/shared-types-0.3.0.tgz",
+    "fileCount": 46,
+    "integrity": "sha512-SczFYX93BkY1OghT95oKemixSFsbWI98jeV6gwXBqWtBAuXS6mit2fk0hLyoFQVvSpul1Rq3RCjsBEobygZOaw==",
+    "signatures": [
+      {
+        "sig": "MEUCIFCgI7mVYX5xI6otk7wWw3tcjIZ/N7XA2Pkh7aOcTYSTAiEA9N1eYdVd9obVdE/MyobGP5yAWrDLEcArl3qHaHwfajE=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEYCIQC/48Ba59JsGZQL+OfaLBo2ySO81B+Cu/u9LyZ6zWMyTwIhAJIxolcus4D9M6blKlEce3ZwPz/tX1B2772/uAinUs0X"
+      }
+    ],
+    "unpackedSize": 83410
+  },
+  "dependencies": {},
+  "sha256": "475f2defa68df1a1f846a50ccc5368f8666bd81ac4620b5372b62dd07010ee16",
+  "matchesFreshTarball": true
+}
