@@ -25,6 +25,8 @@ assert(adminUrl, 'Explicit own PostgreSQL required');
 const parsedAdmin = new URL(adminUrl);
 assert.equal(parsedAdmin.hostname, '127.0.0.1'); assert.equal(parsedAdmin.port, '5574'); assert.equal(parsedAdmin.username, 'oxy_i01'); assert.equal(parsedAdmin.pathname, '/postgres');
 process.env.DATABASE_URL = adminUrl;
+// Never enable browser protocol logging in a rehearsal handling hosted URLs.
+delete process.env.DEBUG; delete process.env.PWDEBUG;
 const manifestDirectory = dirname(manifestPath);
 await mkdir(manifestDirectory, { recursive: true, mode: 0o700 });
 assert.equal((await stat(manifestDirectory)).mode & 0o777, 0o700, 'Manifest directory must be private (0700)');
@@ -229,6 +231,9 @@ try {
   catch { cleanup.push({ kind: 'database', id: databaseName!, ok: false }); process.exitCode = 1; }
   await save().catch(() => { process.exitCode = 1; });
 }
+} catch {
+  console.log('sandbox-preflight-or-cleanup: FAIL (details intentionally not logged)');
+  process.exitCode = 1;
 } finally {
   // This encloses preflight, dynamic imports, DB creation and every cleanup.
   delete process.env.STRIPE_SECRET_KEY; testKey = undefined;
