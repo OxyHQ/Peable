@@ -1,0 +1,79 @@
+{
+  "releaseSource": "6f671437b7e7c28c646c03afa9e47483ba04333a",
+  "sources": [
+    {
+      "path": "packages/sdk/package.json",
+      "sha256": "25749946fe1e95194047da5b75c73ce98ee3676e3574a7526fa78c4015f66766"
+    },
+    {
+      "path": "packages/shared-types/package.json",
+      "sha256": "a50225b55d452b9601884eb6638fa06c0ed4462dc6180b77a9a30609342751c0"
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "40673951bdb26d59d83b794341062724dc1a8535166cf72a4ddffd4ab8c4224a"
+    },
+    {
+      "path": "packages/sdk/scripts/verify-webhook-published.mjs",
+      "sha256": "08a991147b9b9659058dea52deddb35344a9ccddcab2f305cdb1a11bbff59ebd"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/README.md",
+      "sha256": "fe9487d5ce6eb126a46a80d302e575aa186b56371371308a012f792e355e3a77"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/ci-summary.json",
+      "sha256": "b8bec350a8b0722e7b85afaedffcb07777ebec4cc9d056a2ea650e6c16f68a36"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/consumer.log",
+      "sha256": "9afb4aaaf89d1ea6e9596516c7d4ac477421288724087e10147b56a41dc948f1"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/install.log",
+      "sha256": "ec89692dd594cdaad8ccbabc71bcfef12c90a62cb859e15109840d13f1a98607"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/installed-byte-comparison.json",
+      "sha256": "06493db9fbffb8b92e87794ffefda6326b9e0d994ad60db51da37b31cb5205a0"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/preflight.json",
+      "sha256": "c27ae952e151ee906ef28084fb721ca8f4098c282aafb50143e5398d7361e3e5"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/propagation.json",
+      "sha256": "563880d910676f7599324cc982c2dc9c60b734d6893f03127e913aa16e040eb7"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/publish.log",
+      "sha256": "416d72f7193e811f87e2dad9815f3fff6e6803a3ce5f516a06d058d6b729984f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-webhook-parity/published/registry.json",
+      "sha256": "99cd5196f1b0f77215b08c80e0311184dd2b38ad1f0912ea1a08e134fb6ba1b7"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/sdk-0.2.2-published/registry-sdk-0.2.2.tgz",
+      "sha256": "68687dabc8caddcdb3f60d846d720f5103d29c4d2a0eacb774ebc08ca37f4494"
+    },
+    {
+      "path": "/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk022-registry-20261003/packages/sdk/peable.to-sdk-0.2.2.tgz",
+      "sha256": "68687dabc8caddcdb3f60d846d720f5103d29c4d2a0eacb774ebc08ca37f4494"
+    }
+  ],
+  "privateEvidence": [
+    {
+      "path": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/sdk-webhook-parity/ci.json",
+      "sha256": "90d098dad9394ab26ae22eceb4d9941918310f87648dffb2b0643a7b4e3a8d9c"
+    },
+    {
+      "path": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003/sdk-webhook-parity/ci.log",
+      "sha256": "4ba692c7a781402891567672c2b05acaa439d5e2ccff076d6c517d9e2b07250b"
+    }
+  ]
+}
