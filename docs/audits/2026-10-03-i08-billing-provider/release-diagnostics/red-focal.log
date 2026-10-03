@@ -1,0 +1,1245 @@
+$ bun test src --path-ignore-patterns "**/!(*pinnedRelease*).test.ts"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/__tests__/config.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/__tests__/ecosystemActivity.test.ts:
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > missing credentials allow the anonymous checkout request to continue [0.18ms]
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > a credential missing only its pair is a no-op, not a crash [0.05ms]
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > blank credentials are treated as absent [0.05ms]
+(pass) ecosystem activity configuration > an attestable workload with no key pair at all may publish [0.01ms]
+(pass) ecosystem activity configuration > a key pair still admits a process that cannot attest anything [0.01ms]
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/__tests__/e2e.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/realtime/__tests__/socket.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/realtime/__tests__/throttle.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+      at /home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:316:23
+-------------------------------
+
+
+src/services/__tests__/derivation.test.ts:
+(pass) derives deterministic external receive addresses from the xpub [13.60ms]
+(pass) distinct indexes yield distinct addresses [2.21ms]
+(pass) rejects a private xprv (non-custody guard) [20.85ms]
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/expirySweeper.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/environmentGuard.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/reserveAddress.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/enrichment.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/appMembership.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/intentState.test.ts:
+(pass) applyEvent('created', 'deliver') -> 'awaiting_approval' [0.08ms]
+(pass) applyEvent('awaiting_approval', 'approve') -> 'approved'
+(pass) applyEvent('awaiting_approval', 'reject') -> 'rejected'
+(pass) applyEvent('approved', 'broadcast') -> 'broadcast'
+(pass) applyEvent('broadcast', 'mempool_seen') -> 'confirming'
+(pass) applyEvent('confirming', 'confirmed') -> 'settled'
+(pass) applyEvent('broadcast', 'underpaid') -> 'failed'
+(pass) applyEvent('confirming', 'underpaid') -> 'failed'
+(pass) applyEvent('created', 'expire') -> 'expired'
+(pass) applyEvent('awaiting_approval', 'expire') -> 'expired'
+(pass) applyEvent('settled', 'approve') throws [0.01ms]
+(pass) applyEvent('created', 'confirmed') throws
+(pass) applyEvent('rejected', 'approve') throws
+(pass) applyEvent('failed', 'broadcast') throws
+(pass) applyEvent('created', 'reorg_below_threshold') throws
+(pass) reorg_below_threshold rewinds settled -> confirming (documented exception)
+(pass) mempool_seen on confirming is an idempotent re-poll -> confirming
+(pass) confirmed on an already-settled intent is an idempotent re-poll -> settled
+
+src/services/__tests__/explorer.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/socialReceive.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/resolveRail.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/webhookDispatcher.test.ts:
+(pass) delivers a correctly-signed webhook and destroys the response on 2xx [1.10ms]
+(pass) makes exactly one request, whatever the response [0.26ms]
+(pass) classifies a 5xx as retryable and a 4xx as refused [0.12ms]
+(node:3541723) Warning: Peable webhook target refused as SSRF-unsafe: https://merchant.example/peable/webhook (blocked)
+(Use `bun --trace-warnings ...` to show where the warning was created)
+(pass) an SsrfRejection is refused, not retried [0.49ms]
+(pass) an unrecognised error is retryable [0.08ms]
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+(pass) migration deploy phases > every migration declares a phase, and it is pre or post [0.43ms]
+(pass) migration deploy phases > no pre migration is queued behind a post one [0.44ms]
+(pass) migration deploy phases > a post migration is the last entry in the journal [0.17ms]
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/dockerfile.test.ts:
+(pass) the backend image carries the whole workspace manifest set > finds the workspace members it is supposed to check [0.01ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/backend/package.json into the builder stage [0.04ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/backend/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/backend/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/checkout/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/checkout/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/checkout/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/frontend/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/frontend/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/frontend/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/pay/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/pay/package.json into the runtime stage [0.02ms]
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/pay/package.json [0.03ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/sdk/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/sdk/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/sdk/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/shared-types/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/shared-types/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/shared-types/package.json
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/deployWorkflow.test.ts:
+(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.02ms]
+(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.07ms]
+(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.11ms]
+(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.14ms]
+(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.04ms]
+(pass) the deploy workflow and the migrator agree > runs every migration step with no DATABASE_URL preflight to skip it [0.06ms]
+(pass) the deploy workflow and the migrator agree > orders the phases around the rollout [0.06ms]
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/rail.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/pinnedRelease.test.ts:
+(pass) pinned ECS release > restricts manual and push promotion to main, exact CI, with post and cleanup still reachable [0.19ms]
+81 |     expect(steps.find(step => step.name?.includes('Clean up unused'))?.if).toBe('always()');
+82 |     expect(steps.find(step => step.name?.startsWith('Migrate (post)'))?.if).not.toContain('desiredCount');
+83 |   });
+84 |   test('omits empty tags from the actual untagged deployment shape', () => {
+85 |     const f = fixture('empty-tags'); try {
+86 |       expect(f.run('prepare').exitCode).toBe(0);
+                                             ^
+error: expect(received).toBe(expected)
+
+Expected: 0
+Received: 1
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:86:41)
+(fail) pinned ECS release > omits empty tags from the actual untagged deployment shape [90.08ms]
+92 |     test(`reports only safe error code and CLI exit for ${scenario}`, () => {
+93 |       const f = fixture(scenario); try {
+94 |         const result = f.run('prepare');
+95 |         expect(result.exitCode).toBe(1);
+96 |         const output = result.stdout.toString() + result.stderr.toString();
+97 |         expect(output).toContain(scenario === 'aws-error' ? 'code=AccessDeniedException' : 'code=unknown');
+                            ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "code=AccessDeniedException"
+Received: "::error::AWS command failed: ecs register-task-definition\n"
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:97:24)
+(fail) pinned ECS release > reports only safe error code and CLI exit for aws-error [93.04ms]
+92 |     test(`reports only safe error code and CLI exit for ${scenario}`, () => {
+93 |       const f = fixture(scenario); try {
+94 |         const result = f.run('prepare');
+95 |         expect(result.exitCode).toBe(1);
+96 |         const output = result.stdout.toString() + result.stderr.toString();
+97 |         expect(output).toContain(scenario === 'aws-error' ? 'code=AccessDeniedException' : 'code=unknown');
+                            ^
+error: expect(received).toContain(expected)
+
+Expected to contain: "code=unknown"
+Received: "::error::AWS command failed: ecs register-task-definition\n"
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/db/__tests__/pinnedRelease.test.ts:97:24)
+(fail) pinned ECS release > reports only safe error code and CLI exit for local-error [95.47ms]
+(pass) pinned ECS release > copies configuration, pins both revisions, then verifies the running candidate [256.41ms]
+(pass) pinned ECS release > refuses mixed-digest during prepare [77.84ms]
+(pass) pinned ECS release > refuses mixed-revision during prepare [77.15ms]
+(pass) pinned ECS release > refuses tamper during prepare [104.49ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after rollout-failure [292.46ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after wrong-running-digest [318.97ms]
+(pass) pinned ECS release > refuses a changed revision or configuration after pre-migration without overwriting it [349.98ms]
+(pass) pinned ECS release > does not roll back over an external deployment arriving during rollout [2240.67ms]
+(pass) pinned ECS release > cleans unused copies after pre failure, including failed readback registration [494.26ms]
+(pass) pinned ECS release > retains serving and rollback definitions after promotion [381.19ms]
+(pass) pinned ECS release > retains an unused candidate while a running task still references it [280.42ms]
+(pass) pinned ECS release > zero capacity repoints a known pinned revision without a runtime claim [212.63ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: success [16.37ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wrong-digest [11.38ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: failed-migration [15.72ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wait-timeout [23.07ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-task [13.26ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-run [13.21ms]
+
+src/db/__tests__/deploySecrets.test.ts:
+(pass) the deploy syncs what the config reads > leaves no variable both unsynced and undeclared [0.38ms]
+(pass) the deploy syncs what the config reads > syncs every Stripe secret the card rail cannot work without [0.05ms]
+(pass) the deploy syncs what the config reads > still syncs the two the service already could not boot without [0.03ms]
+(pass) the deploy syncs what the config reads > is not vacuously satisfied by parsers that match nothing [0.11ms]
+(pass) the deploy syncs what the config reads > declares a reason for every variable it exempts [0.03ms]
+(pass) the deploy syncs what the config reads > exempts nothing that is not actually read [0.09ms]
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/__tests__/derivationIndexBound.test.ts:
+(pass) the derivation index bound > is exactly int4's ceiling [0.01ms]
+(pass) the derivation index bound > agrees with the social-receive scheme, which enforces its own bound
+(pass) the derivation index bound > refuses a hardened index on the social path [1.18ms]
+(pass) the derivation index bound > cannot derive a hardened child from a watch-only node [0.64ms]
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/merchants.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/enrich.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/routes.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/social.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/dashboard.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/lib/__tests__/money.test.ts:
+(pass) toBaseUnits / fromBaseUnits round-trip canonical integer strings [0.09ms]
+(pass) toBaseUnits rejects a fractional amount [0.02ms]
+(pass) fromBaseUnits rejects a negative amount
+
+src/lib/__tests__/ids.test.ts:
+(pass) newId("pi") matches the pi_ prefixed hex format [0.04ms]
+(pass) newId("evt") matches the evt_ prefixed hex format [0.02ms]
+(pass) two successive newId("pi") values differ [0.01ms]
+(pass) newId("merch") matches the merch_ prefixed hex format [0.01ms]
+(pass) newId("link") matches the link_ prefixed hex format [0.01ms]
+(pass) newId("cs") matches the cs_ prefixed hex format
+(pass) clientSecretFor prefixes the id and appends a 32-hex secret [0.04ms]
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/providers/__tests__/redact.test.ts:
+(pass) redactProviderPayload > keeps the ids, amounts, currencies and statuses reconciliation needs [0.02ms]
+(pass) redactProviderPayload > keeps the gateway's own correlation key out of provider metadata
+(pass) redactProviderPayload > drops the email, the phone, the address and the card details [0.02ms]
+(pass) redactProviderPayload > drops a NEW sensitive field nobody enumerated [0.03ms]
+(pass) redactProviderPayload > leaves a marker where a value was dropped, rather than deleting the key [0.01ms]
+(pass) redactProviderPayload > truncates a long allowed string and bounds a long array [0.16ms]
+(pass) redactProviderPayload > stops at a depth bound rather than recursing forever [0.05ms]
+(pass) redactProviderPayload > returns an object for a payload that is not one [0.02ms]
+(pass) redactProviderMessage > scrubs an email a provider quoted back [0.05ms]
+(pass) redactProviderMessage > scrubs a long digit run [0.01ms]
+(pass) redactProviderMessage > leaves an ordinary message and a short number alone
+(pass) redactProviderMessage > truncates a very long message [0.06ms]
+
+src/services/billing/__tests__/billingHttp.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/db/schema/__tests__/valueSets.test.ts:
+(pass) closed value sets > lists exactly the statuses the shared transition table defines [0.02ms]
+(pass) closed value sets > renders the provider CHECK into the migrations from this tuple [0.20ms]
+(pass) closed value sets > lists both networks [0.01ms]
+(pass) closed value sets > lists the ten webhook event types
+(pass) closed value sets > splits into payment events and the one that is about a seller [0.02ms]
+(pass) the base-unit amount pattern > accepts and refuses exactly what the application does [0.04ms]
+(pass) the base-unit amount pattern > reaches the migrations verbatim [0.15ms]
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+# Unhandled error between tests
+-------------------------------
+266 | }
+267 | 
+268 | function readRequired(raw: string | undefined, name: string): string {
+269 |   const value = raw?.trim();
+270 |   if (!value) {
+271 |     throw new Error(
+                    ^
+error: DATABASE_URL is required and was not set. The backend is Postgres-native: every route reads it and the pool is opened at boot. For local development start the server with `docker compose -f docker-compose.postgres.yml up -d`.
+      at readRequired (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:271:15)
+      at loadConfig (/home/nate/Oxy/Peable/.worktrees/1519-i08-release-diagnostics-20261003/packages/backend/src/config.ts:291:18)
+-------------------------------
+
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+(pass) mapPaymentIntentStatus > maps every status Stripe can report [0.03ms]
+(pass) mapPaymentIntentStatus > requires_capture is processing, never succeeded
+(pass) mapPaymentIntentStatus > requires_payment_method is created, never failed
+(pass) mapPaymentIntentStatus > succeeded and canceled carry across unchanged
+(pass) toProviderEventEnvelope > carries the ids, the mode and the mapped payment status [0.08ms]
+(pass) toProviderEventEnvelope > an event about something other than a payment carries no payment status [0.02ms]
+(pass) toProviderEventEnvelope > a connect-scope event carries the account it is about [0.01ms]
+(pass) stripeObjectIds > picks up a referenced payment intent as well as the object's own id [0.01ms]
+(pass) stripeObjectIds > ignores an expanded reference rather than stringifying it [0.01ms]
+(pass) isExpectedLivemode > refuses an event from the other mode, in both directions [0.02ms]
+
+63 tests failed:
+(fail) pinned ECS release > omits empty tags from the actual untagged deployment shape [90.08ms]
+(fail) pinned ECS release > reports only safe error code and CLI exit for aws-error [93.04ms]
+(fail) pinned ECS release > reports only safe error code and CLI exit for local-error [95.47ms]
+
+ 128 pass
+ 63 fail
+ 60 errors
+ 446 expect() calls
+Ran 191 tests across 75 files. [5.66s]
+error: script "test" exited with code 1

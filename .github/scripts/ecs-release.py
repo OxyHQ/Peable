@@ -21,7 +21,11 @@ def aws(*args):
     except subprocess.TimeoutExpired:
         raise RuntimeError('AWS command deadline exceeded: ' + ' '.join(args[:2])) from None
     if result.returncode:
-        raise RuntimeError('AWS command failed: ' + ' '.join(args[:2]))
+        # CLI errors can include request configuration and credentials. Retain
+        # only the bounded AWS discriminator; local/validation errors are unknown.
+        match = re.search(r'An error occurred \(([A-Za-z0-9._-]{1,80})\) when calling ', result.stderr)
+        code = match.group(1) if match else 'unknown'
+        raise RuntimeError('AWS command failed: ' + ' '.join(args[:2]) + ' code=' + code + ' exit=' + str(result.returncode))
     return json.loads(result.stdout)
 
 
@@ -71,7 +75,9 @@ def definition_payload(response, container, pinned):
     matches = [c for c in td['containerDefinitions'] if c['name'] == container]
     check(len(matches) == 1, 'App container must be unique')
     matches[0]['image'] = image(pinned)
-    td['tags'] = response.get('tags', [])
+    # ECS rejects explicit [] (ClientException), although Describe returns it.
+    if response.get('tags'):
+        td['tags'] = response['tags']
     return td
 
 
