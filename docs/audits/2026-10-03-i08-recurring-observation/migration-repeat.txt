@@ -1,0 +1,2 @@
+$ bun src/db/migrate.ts "--target-database=i08_mirror_20261003" "--phase=all"
+No migrations to apply (phase=all, journal entries=20)

@@ -134,6 +134,20 @@
       "when": 1789817410943,
       "tag": "0018_majestic_hairball",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1790976439889,
+      "tag": "0019_familiar_darkhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1790997692974,
+      "tag": "0020_thick_boom_boom",
+      "breakpoints": true
     }
   ]
 }

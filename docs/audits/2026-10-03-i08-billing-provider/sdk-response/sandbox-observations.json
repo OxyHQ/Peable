@@ -1,0 +1,126 @@
+[
+  {
+    "run": "sandbox-checkout-20261003-a1",
+    "manifestSha256": "a08832026446841928864e4d0abb00f892d681b7b265b4928a98989981fe7da6",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-customer-idempotent-store-binding",
+        "ok": true
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "ok": false
+      }
+    ],
+    "diagnostics": [],
+    "cleanup": [
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "portalConfiguration",
+        "ok": false,
+        "readback": null
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropTestDatabase-completed"
+      }
+    ],
+    "recovery": {
+      "evidenceSha256": "5d3207a5404c135aa34fffdb7ac67c50f1b876ae5a90736b827061f6c9cc3e6d",
+      "checkoutReadback": "expired",
+      "portalResidual": {
+        "active": true,
+        "isDefault": true,
+        "livemode": false,
+        "mutatingFeaturesEnabled": 0
+      }
+    }
+  },
+  {
+    "run": "sandbox-checkout-20261003-a2",
+    "manifestSha256": "88a5e84379d7be33aa0e9224c8104c92c4c04361855e136053692941e4af58e8",
+    "observations": [
+      {
+        "stage": "test-key-and-platform-account",
+        "ok": true
+      },
+      {
+        "stage": "real-customer-idempotent-store-binding",
+        "ok": true
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "ok": false
+      }
+    ],
+    "diagnostics": [
+      {
+        "stage": "provider-checkout-shape",
+        "urlType": "string",
+        "urlLength": 443
+      },
+      {
+        "stage": "checkout-response-loss-observation",
+        "initialCheckoutCallResolved": true,
+        "responseWasDestroyed": true,
+        "lostResponse": false
+      },
+      {
+        "stage": "sdk-checkout-response-loss",
+        "name": "AssertionError",
+        "code": "ERR_ASSERTION"
+      }
+    ],
+    "cleanup": [
+      {
+        "kind": "checkout",
+        "ok": true,
+        "readback": "expired"
+      },
+      {
+        "kind": "customer",
+        "ok": true,
+        "readback": "deleted"
+      },
+      {
+        "kind": "price",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "product",
+        "ok": true,
+        "readback": "inactive"
+      },
+      {
+        "kind": "retainedPortalConfiguration",
+        "ok": true,
+        "readback": "default-active-zero-mutating-features"
+      },
+      {
+        "kind": "database",
+        "ok": true,
+        "readback": "dropTestDatabase-completed"
+      }
+    ]
+  }
+]

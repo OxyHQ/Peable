@@ -330,3 +330,25 @@ export async function constructStripeEvent(
     code: "invalid_signature",
   });
 }
+
+/** Recurring billing shares the one configured SDK/version/key. Platform scope
+ * is fixed here: no request can supply stripeAccount or a merchant secret. */
+export function stripeBillingClient() {
+  const requestOptions = { timeout: 10_000, maxNetworkRetries: 0 } as const;
+  return {
+    scope: 'platform' as const,
+    apiVersion: STRIPE_API_VERSION,
+    livemode: config.stripe.livemode,
+    account: () => getStripeClient().accounts.retrieve(null, {}, requestOptions),
+    createCustomer: (params: Stripe.CustomerCreateParams, key: string) => getStripeClient().customers.create(params, { ...requestOptions, idempotencyKey: key }),
+    createCheckout: (params: Stripe.Checkout.SessionCreateParams, key: string) => getStripeClient().checkout.sessions.create(params, { ...requestOptions, idempotencyKey: key }),
+    createPortal: (params: Stripe.BillingPortal.SessionCreateParams, key: string) => getStripeClient().billingPortal.sessions.create(params, { ...requestOptions, idempotencyKey: key }),
+    retrieveSubscription: (ref: string) => getStripeClient().subscriptions.retrieve(ref, {}, requestOptions),
+    updateSubscription: (ref: string, params: Stripe.SubscriptionUpdateParams, key: string) => getStripeClient().subscriptions.update(ref, params, { ...requestOptions, idempotencyKey: key }),
+    retrieveCustomer: (ref: string) => getStripeClient().customers.retrieve(ref, {}, requestOptions),
+    retrievePrice: (ref: string) => getStripeClient().prices.retrieve(ref, {}, requestOptions),
+    listCheckoutsForSubscription: (ref: string) => getStripeClient().checkout.sessions.list({ subscription: ref, limit: 2 }, requestOptions),
+    retrieveCheckout: (ref: string) => getStripeClient().checkout.sessions.retrieve(ref, {}, requestOptions),
+    retrievePortalConfiguration: (ref: string) => getStripeClient().billingPortal.configurations.retrieve(ref, {}, requestOptions),
+  };
+}

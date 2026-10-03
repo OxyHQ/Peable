@@ -10,6 +10,8 @@ import {
 import { phaseMarkerLine } from '@oxy.so/db/migrate';
 import { PROTECTED_COLUMNS } from '../protectedColumns';
 import {
+  billingObjectBindings,
+  billingOperations,
   checkoutSessions,
   connectedAccounts,
   merchants,
@@ -40,6 +42,8 @@ const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MIGRATIONS_DIR = join(BACKEND_ROOT, 'db', 'migrations');
 
 const ALL_TABLES = [
+  billingObjectBindings,
+  billingOperations,
   checkoutSessions,
   connectedAccounts,
   merchants,
@@ -87,6 +91,8 @@ describe('id-column classification', () => {
       tables: ALL_TABLES,
       deferred: [],
       withoutForeignKey: [
+        { column: 'billing_object_bindings.platform_account_id', reason: 'Verified Stripe platform account identity; external provider namespace' },
+        { column: 'billing_operations.platform_account_id', reason: 'Verified Stripe platform account identity; external provider namespace' },
         // The four public ids are this row's OWN external identifier, not a
         // reference to another row. They end in `_id` and are caught by the
         // scan for that reason alone.

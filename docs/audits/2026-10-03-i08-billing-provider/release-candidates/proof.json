@@ -1,0 +1,110 @@
+{
+  "sourceCommit": "c40cb971a2972e93032fc9c1a81eca20bb793623",
+  "sources": [
+    {
+      "path": "packages/shared-types/package.json",
+      "sha256": "a50225b55d452b9601884eb6638fa06c0ed4462dc6180b77a9a30609342751c0"
+    },
+    {
+      "path": "packages/sdk/package.json",
+      "sha256": "0c20dc15ec9480b779bd6916c4d2e5d3aace4189e6f6817e63497f8d579d0de5"
+    },
+    {
+      "path": "bun.lock",
+      "sha256": "9057905a90068d7057285a7d21f914448a8e060c507834e78dff970ed27f69da"
+    },
+    {
+      "path": "packages/sdk/scripts/verify-billing-packed.mjs",
+      "sha256": "8a35b0a08d28f51b8941e17626327077c06ea6e6ddb6684d37939911ae73ee79"
+    },
+    {
+      "path": "packages/sdk/src/core/client.ts",
+      "sha256": "e9c06335ff3d932d4bb655792a2cf0f7ec8eb8a6875bf420dd975f0f3d5dec82"
+    },
+    {
+      "path": "packages/sdk/src/index.ts",
+      "sha256": "ce611f93711a278398ebb3a3604a13de9910c5a3a22e24499890deea6055bc7d"
+    },
+    {
+      "path": "packages/sdk/src/resources/billing.ts",
+      "sha256": "00397db9a364850e6f3d7dbd4ced29f44e774e81a2b8a7676a26aac9194cdb58"
+    },
+    {
+      "path": "packages/shared-types/src/billing.ts",
+      "sha256": "d9b8bda9130b38d18023b9cfc3f838ebba4c68cd4ce3fa727bce51aa96fd427b"
+    },
+    {
+      "path": "packages/shared-types/src/index.ts",
+      "sha256": "370f2fbadd365e9264f9c27cd0d56b4e74c2c30a902efd64060bb8b4078911df"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-candidates/release-shared-pack.log",
+      "sha256": "3f33a5dca019f93b78ee5300449b24b2a95f3b6655e1873ecc6251203fb5f42e"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-candidates/release-sdk-pack.log",
+      "sha256": "cd0aa51fa8dd2f703e16b20345193bc55fbfb8dc62f7fee62ef4aa5a72b36c80"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-candidates/release-packed-consumer.log",
+      "sha256": "0da43bbe702d0d0923f7be07a0b8e097a14cfb0857c3af0ba04f1410d6ce7820"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/release-candidates/shared-types-published-compat.diff",
+      "sha256": "a230f6f8b55e4dcca7e87e2103ac691bb333630f7279e9821ee0b0fbf51ccf5f"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "packages/shared-types/peable.to-shared-types-0.3.0.tgz",
+      "sha256": "475f2defa68df1a1f846a50ccc5368f8666bd81ac4620b5372b62dd07010ee16",
+      "name": "@peable.to/shared-types",
+      "version": "0.3.0",
+      "dependencies": {},
+      "published": false
+    },
+    {
+      "path": "packages/sdk/peable.to-sdk-0.2.0.tgz",
+      "sha256": "0bb40a650abbf42cabfac0145683092f82e2666867074420350d80335e2e437e",
+      "name": "@peable.to/sdk",
+      "version": "0.2.0",
+      "dependencies": {
+        "@peable.to/shared-types": "^0.3.0",
+        "qrcode-generator": "^2.0.4",
+        "socket.io-client": "^4.8.3"
+      },
+      "published": false
+    }
+  ],
+  "consumer": {
+    "fixture": "/home/nate/Oxy/Peable/.worktrees/i08-packed-TuvBXZ",
+    "node": "v24.21.0",
+    "packages": [
+      {
+        "path": "/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/shared-types/peable.to-shared-types-0.3.0.tgz",
+        "sha256": "475f2defa68df1a1f846a50ccc5368f8666bd81ac4620b5372b62dd07010ee16"
+      },
+      {
+        "path": "/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/sdk/peable.to-sdk-0.2.0.tgz",
+        "sha256": "0bb40a650abbf42cabfac0145683092f82e2666867074420350d80335e2e437e"
+      }
+    ],
+    "checks": [
+      "Node CJS load and five billing methods",
+      "Node ESM load and five billing methods",
+      "TypeScript strict NodeNext public declarations",
+      "SDK minimum shared-types dependency ^0.3.0"
+    ],
+    "published": false,
+    "resolution": "Fixture-only shared-types tarball override because 0.3.0 is unpublished; packed SDK range independently asserted",
+    "network": "Registry dependency installation only; no Oxy/Peable/Stripe requests"
+  },
+  "commands": [
+    "cd packages/shared-types && bun run build && bun pm pack",
+    "cd packages/sdk && bun run build && bun pm pack",
+    "node packages/sdk/scripts/verify-billing-packed.mjs packages/shared-types/peable.to-shared-types-0.3.0.tgz packages/sdk/peable.to-sdk-0.2.0.tgz /home/nate/Oxy/Peable/.worktrees"
+  ],
+  "releaseState": "Unpublished candidates; coordinated backend readiness before SDK publication/adoption"
+}

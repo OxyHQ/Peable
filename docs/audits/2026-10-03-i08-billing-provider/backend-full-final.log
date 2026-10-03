@@ -1,0 +1,1376 @@
+$ bun test src
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the outbox row exists before onIntentChange runs, not because of it [23.15ms]
+(pass) announcing an intent whose merchant has no webhook does not throw [4.42ms]
+
+src/__tests__/config.test.ts:
+(pass) oxyApiUrl reads OXY_API_URL [0.04ms]
+(pass) oxyApiUrl defaults to https://api.oxy.so when unset — Oxy's production API
+
+src/__tests__/ecosystemActivity.test.ts:
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > missing credentials allow the anonymous checkout request to continue [0.17ms]
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > a credential missing only its pair is a no-op, not a crash [0.05ms]
+Ecosystem activity is disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest
+(pass) ecosystem activity configuration > blank credentials are treated as absent [0.03ms]
+(pass) ecosystem activity configuration > an attestable workload with no key pair at all may publish [0.01ms]
+(pass) ecosystem activity configuration > a key pair still admits a process that cannot attest anything [0.01ms]
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+(pass) the derived test xpub > reproduces the canonical testnet vector
+(pass) the derived test xpub > derives a DIFFERENT key for mainnet [7.70ms]
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the gateway test harness > gives the suite a live, migrated database [5.73ms]
+(pass) the gateway test harness > seeds a whole gateway graph from defaults alone [11.61ms]
+(pass) the gateway test harness > produces distinct rows when called repeatedly with no arguments [7.50ms]
+(pass) the gateway test harness > honours supplied values exactly [2.23ms]
+(pass) the gateway test harness > defaults an intent to its merchant's network [2.78ms]
+(pass) the gateway test harness > applies the non-custody firewall to seeded merchants [0.21ms]
+(pass) the gateway test harness > empties every table on reset [17.52ms]
+(pass) the gateway test harness > still seeds after a reset [10.68ms]
+
+src/__tests__/e2e.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) GET /health is an unauthenticated 200 liveness probe [4.60ms]
+(pass) atomic flow: create -> submit_tx -> watcher settles -> socket + webhook [50.33ms]
+(pass) subscribe is capability-scoped by client_secret — a wrong secret joins nothing, and an authed identity does not substitute for the capability (no leak) [7.75ms]
+
+src/realtime/__tests__/socket.test.ts:
+(pass) optionalSocketAuth: no handshake token connects anonymously without invoking the identity verifier [0.10ms]
+(pass) optionalSocketAuth: an empty-string token is treated the same as no token (anonymous, verifier not invoked) [0.05ms]
+(pass) optionalSocketAuth: a non-string token is treated as absent (anonymous, verifier not invoked) [0.04ms]
+(pass) optionalSocketAuth: a present token is verified by the wrapped identity middleware and accepted through [0.04ms]
+(pass) optionalSocketAuth: a present but INVALID token is rejected outright — never silently downgraded to anonymous [0.04ms]
+(pass) resolveClientIp: no X-Forwarded-For header falls back to the raw transport address [0.02ms]
+(pass) resolveClientIp: a single-entry X-Forwarded-For header is used as-is [0.02ms]
+(pass) resolveClientIp: a multi-hop X-Forwarded-For header uses the RIGHTMOST entry — the one the ALB itself appended — matching Express's trust-proxy-1 `req.ip` [0.01ms]
+(pass) resolveClientIp: a client-forged LEFT prefix claiming to be another address is ignored — never trusted over the ALB-appended rightmost entry
+(pass) resolveClientIp: an array-valued header (duplicate header case) uses the rightmost entry, same as a single joined header [0.01ms]
+(pass) resolveClientIp: an empty trailing entry falls back to the raw transport address [0.01ms]
+(pass) resolveClientIp: a rightmost entry that isn't a valid IP falls back to the raw transport address
+(pass) FixedWindowLimiter: allows exactly `max` hits per key within a window, then rejects [0.02ms]
+(pass) FixedWindowLimiter: distinct keys have independent budgets
+(pass) FixedWindowLimiter: the budget resets once the window elapses
+(pass) FixedWindowLimiter.sweep: drops only entries whose window has expired [0.05ms]
+(pass) ipConnectionThrottle: within budget calls next() with no error [0.02ms]
+(pass) ipConnectionThrottle: over budget rejects the connection via next(error) without throwing [0.03ms]
+
+src/realtime/__tests__/throttle.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) normal flow: a single connection and a single subscribe succeed [6.99ms]
+(pass) authed flow: a connection presenting a valid identity token still connects and subscribes [2.88ms]
+(pass) per-IP throttle: connections up to IP_CONNECT_MAX succeed, the next one from the same IP is rejected [28.25ms]
+(pass) per-IP throttle: a forged X-Forwarded-For prefix claiming to be another IP never consumes that IP's budget [29.90ms]
+(pass) per-socket subscribe throttle: exceeding the cap rejects further subscribes but keeps the socket connected and earlier room joins intact [25.68ms]
+
+src/services/__tests__/derivation.test.ts:
+(pass) derives deterministic external receive addresses from the xpub [2.29ms]
+(pass) distinct indexes yield distinct addresses [1.20ms]
+(pass) rejects a private xprv (non-custody guard) [7.07ms]
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the expiry sweeper > expires an intent nobody paid [22.48ms]
+(pass) the expiry sweeper > leaves an intent whose time has not come [13.84ms]
+(pass) the expiry sweeper > never expires an intent that has been broadcast [14.11ms]
+(pass) the expiry sweeper > never expires an intent that already settled [14.32ms]
+(pass) the expiry sweeper > enqueues payment_intent.expired for a merchant with an endpoint [14.45ms]
+(pass) the expiry sweeper > is idempotent — a second sweep finds nothing left [14.41ms]
+
+src/services/__tests__/disputes.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) disputes > creates the dispute row it has never seen, rather than waiting for one [18.09ms]
+(pass) disputes > tells the merchant once, however many times the creation is redelivered [14.78ms]
+(pass) disputes > reads won and lost from the payload, and clears the deadline [14.26ms]
+(pass) disputes > reads a win as a win [7.22ms]
+(pass) disputes > refuses to call a close a win when the outcome cannot be read [11.23ms]
+(pass) disputes > maps a provider warning state without inventing an outcome [9.32ms]
+(pass) disputes > leaves a dispute for an unlinked payment unprocessed, to retry [3.55ms]
+(pass) disputes > never moves the payment's own status [9.44ms]
+
+src/services/__tests__/expirySweeper.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) EXPIRABLE_STATUSES agrees with the transition table > the constant is exactly the set of statuses that may expire [0.07ms]
+(pass) EXPIRABLE_STATUSES agrees with the transition table > in-flight statuses are never expirable [0.02ms]
+(pass) expireDueIntents > expires a due intent and leaves a not-yet-due one alone [13.19ms]
+(pass) expireDueIntents > never expires an intent with money in flight, however overdue [5.46ms]
+(pass) expireDueIntents > two concurrent sweepers never claim the same intent twice [10.57ms]
+(pass) runExpirySweep > expires every intent it claimed, and nothing else [8.76ms]
+(pass) runExpirySweep > a second sweep claims nothing, since the rows are already terminal [7.94ms]
+(pass) runExpirySweep > the injected clock decides what is due [10.53ms]
+(pass) runExpirySweep > honours its batch size, so a backlog drains rather than landing at once [7.18ms]
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) a transition from a status the intent has left > refuses to write over a row the expiry sweeper already claimed [12.43ms]
+(pass) a transition from a status the intent has left > enqueues exactly the expiry event, and nothing for the refused write [8.08ms]
+(pass) a transition from a status the intent has left > tells a row that moved apart from a row that is not there [6.23ms]
+(pass) a transition from a status the intent has left > still applies a transition from the status the row actually holds [6.08ms]
+
+src/services/__tests__/environmentGuard.test.ts:
+(pass) classifying a Stripe secret key > reads a RESTRICTED live key as live [0.02ms]
+(pass) classifying a Stripe secret key > reads both test forms as test
+(pass) classifying a Stripe secret key > refuses to guess a mode it does not recognise [0.02ms]
+(pass) a rail whose key mode cannot be read stays off > a recognised key turns it on [0.07ms]
+(pass) a rail whose key mode cannot be read stays off > a restricted live key turns it on IN LIVE MODE [0.03ms]
+(node:3461378) Warning: [Stripe] STRIPE_SECRET_KEY is not a recognised sk_live_/rk_live_/sk_test_/rk_test_ key, so its mode cannot be classified; staying OFF rather than guessing.
+(Use `bun --trace-warnings ...` to show where the warning was created)
+(pass) a rail whose key mode cannot be read stays off > an unclassifiable key leaves it off [0.20ms]
+(pass) an environment may only act on its own mode > production is the ONLY environment that may act live [0.04ms]
+(pass) an environment may only act on its own mode > the guard is silent when they agree [0.03ms]
+(pass) an environment may only act on its own mode > and names both sides when they do not [0.08ms]
+
+src/services/__tests__/settlementWatcher.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) advances a paid intent broadcast → confirming → settled as confirmations climb [30.54ms]
+(pass) marks an under-value payment as failed [17.66ms]
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) settlement events and the sync sweep > an account event re-reads the account from the provider [10.80ms]
+(pass) settlement events and the sync sweep > tells the merchant when a seller's readiness changes [7.39ms]
+(pass) settlement events and the sync sweep > says nothing when a refresh changes nothing [11.79ms]
+(pass) settlement events and the sync sweep > a capability event refreshes the account the same way [6.32ms]
+(pass) settlement events and the sync sweep > leaves an event for an unknown account unprocessed [2.56ms]
+(pass) settlement events and the sync sweep > applies a reversal reported by the provider [9.57ms]
+(pass) settlement events and the sync sweep > a full reversal reported by the provider closes the transfer [7.77ms]
+(pass) settlement events and the sync sweep > refuses a redacted or non-integer total instead of writing an amount [6.32ms]
+(pass) settlement events and the sync sweep > leaves an event for a transfer this gateway never made unprocessed [3.96ms]
+(pass) settlement events and the sync sweep > refreshes a never-synced account with no event at all [18.17ms]
+(pass) settlement events and the sync sweep > visits a never-synced account before one synced long ago [5.95ms]
+(node:3461378) Warning: Peable account sync failed for ca_01a0ffd2-33b9-77be-8d8d-dd145a50e44d: provider refused
+(pass) settlement events and the sync sweep > keeps going past an account the provider will not read [19.93ms]
+(pass) settlement events and the sync sweep > does nothing, without error, when there is nothing to sync [0.83ms]
+
+src/services/__tests__/reserveAddress.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) reserveNextAddress claims monotonically increasing indexes with distinct addresses [11.58ms]
+
+src/services/__tests__/merchantDisplay.test.ts:
+(pass) resolves displayName + avatarUrl + description when all identity fields are set [0.21ms]
+(pass) falls back to a neutral name and null avatar/description when unset [0.03ms]
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the provider event drain > settles a card payment and enqueues the merchant's event [10.01ms]
+(pass) the provider event drain > fails a declined payment and tells the merchant [7.92ms]
+(pass) the provider event drain > treats a provider cancellation as a rejection [7.14ms]
+(pass) the provider event drain > moves the intent to processing without enqueueing an event [6.94ms]
+(pass) the provider event drain > absorbs a redelivery without moving the intent or duplicating the event [10.72ms]
+(pass) the provider event drain > leaves an event for an unlinked payment unprocessed, and applies it once the link lands [9.89ms]
+(pass) the provider event drain > marks an unmapped event handled rather than retrying it forever [3.61ms]
+(pass) the provider event drain > records a failure on a mapped event that names no payment [2.14ms]
+(pass) the provider event drain > keeps going past a failure and applies the events behind it [9.12ms]
+(pass) the provider event drain > applies two events about one payment in the order they arrived [12.26ms]
+(pass) the provider event drain > cannot reach a faircoin intent [4.66ms]
+
+src/services/__tests__/refunds.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) refunds > refunds part of a payment and moves it to partially_refunded [14.69ms]
+(pass) refunds > a refund exhausting the payment moves it to refunded [9.97ms]
+(pass) refunds > two partial refunds reach refunded, from the sum rather than a counter [17.02ms]
+(pass) refunds > a repeated refund converges and does not send money twice [7.74ms]
+(pass) refunds > refuses more than the payment has left [10.05ms]
+(pass) refunds > a failed refund does not consume the payment's remaining balance [6.71ms]
+(pass) refunds > rethrows a retryable provider failure and leaves the refund pending [5.77ms]
+(pass) refunds > a pending refund is stored pending and does not move the payment [6.44ms]
+(pass) refunds > a provider-reported failure is stored failed, with its reason [4.83ms]
+(pass) refunds > finishes an interrupted refund on the retry, under the same provider key [9.93ms]
+(pass) refunds > a completed refund is answered from history, with no second call [10.12ms]
+(pass) refunds > refuses to refund a payment that never settled [1.40ms]
+(pass) refunds > derives the provider idempotency key from the gateway's refund id [8.73ms]
+(pass) refunds > compares a refund against the remaining balance without rounding [3.44ms]
+
+src/services/__tests__/enrichment.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) ENRICH_MAX_ADDRESSES is 50 [12.25ms]
+(pass) an address with no PaymentIntent or attribution resolves to unknown [8.55ms]
+(pass) a merchant PaymentIntent address resolves to kind: merchant with the Merchant's display fields [11.17ms]
+(pass) an outgoing social send resolves to kind: user with the RECIPIENT's identity, from the sender's view [9.35ms]
+(pass) an incoming social receive resolves to kind: user with the SENDER's identity, from the recipient's view [9.04ms]
+(pass) an attribution the viewer was NOT party to resolves to unknown (no counterparty leak) [8.86ms]
+(pass) a batch mixes merchant, social, and unknown results correctly [12.98ms]
+(pass) degrades to unknown when getUsersByIds cannot resolve the counterparty profile [10.01ms]
+(pass) an empty address list resolves to an empty result without calling getUsersByIds [6.38ms]
+(pass) a display name falls back to the normalized handle when the profile has no name.displayName [10.07ms]
+
+src/services/__tests__/appMembership.test.ts:
+(pass) assertAppMembership > a non-null callerMembership -> allowed: true [1.09ms]
+(pass) assertAppMembership > a null callerMembership -> allowed: false [0.31ms]
+(pass) assertAppMembership > a 403 from oxy-api -> allowed: false [0.10ms]
+(pass) assertAppMembership > a 404 from oxy-api -> allowed: false [0.09ms]
+(pass) assertAppMembership > forwards the caller's bearer as Authorization and hits the right URL [0.17ms]
+(pass) assertAppMembership > a malformed (non-JSON) body -> allowed: false, never throws [0.19ms]
+(pass) assertAppMembership > safeFetch throwing SsrfRejection -> allowed: false, never throws [0.11ms]
+(node:3461378) Warning: Peable dashboard membership check failed for application app_1: network unreachable
+(pass) assertAppMembership > safeFetch throwing an unexpected error -> allowed: false, never throws [0.08ms]
+(pass) assertAppMembership > a cache hit avoids a second upstream call [0.20ms]
+(pass) assertAppMembership > TTL expiry re-checks against oxy-api instead of serving a stale cache entry [25.57ms]
+(pass) assertAppMembership > the cache is keyed per (userId, applicationId) — a different user against the same application is checked independently [0.47ms]
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) minting a card intent > writes the row, then creates at the provider, then links the two [4.97ms]
+(pass) minting a card intent > derives the provider idempotency key from the intent's own id [2.55ms]
+(pass) minting a card intent > does not forward the merchant's metadata to the provider [2.29ms]
+(pass) minting a card intent > finishes an interrupted create on the retry, under the same provider key [8.52ms]
+(pass) minting a card intent > refuses an Idempotency-Key replayed with a different amount [3.51ms]
+(pass) minting a card intent > re-reads the client action from the provider on an idempotent replay [3.03ms]
+(pass) minting a card intent > refuses a card intent, with nothing written, when the rail is not configured [0.71ms]
+(pass) minting a card intent > mints a faircoin intent with no provider and no provider call [3.01ms]
+
+src/services/__tests__/intentState.test.ts:
+(pass) applyEvent('created', 'deliver') -> 'awaiting_approval' [0.03ms]
+(pass) applyEvent('awaiting_approval', 'approve') -> 'approved'
+(pass) applyEvent('awaiting_approval', 'reject') -> 'rejected' [0.02ms]
+(pass) applyEvent('approved', 'broadcast') -> 'broadcast'
+(pass) applyEvent('broadcast', 'mempool_seen') -> 'confirming'
+(pass) applyEvent('confirming', 'confirmed') -> 'settled'
+(pass) applyEvent('broadcast', 'underpaid') -> 'failed'
+(pass) applyEvent('confirming', 'underpaid') -> 'failed'
+(pass) applyEvent('created', 'expire') -> 'expired'
+(pass) applyEvent('awaiting_approval', 'expire') -> 'expired'
+(pass) applyEvent('settled', 'approve') throws [0.03ms]
+(pass) applyEvent('created', 'confirmed') throws
+(pass) applyEvent('rejected', 'approve') throws [0.01ms]
+(pass) applyEvent('failed', 'broadcast') throws
+(pass) applyEvent('created', 'reorg_below_threshold') throws
+(pass) reorg_below_threshold rewinds settled -> confirming (documented exception)
+(pass) mempool_seen on confirming is an idempotent re-poll -> confirming
+(pass) confirmed on an already-settled intent is an idempotent re-poll -> settled
+
+src/services/__tests__/explorer.test.ts:
+(pass) getTip parses stats.blockHeight [0.40ms]
+(pass) getTransaction maps the standard output and skips the addressless vout [0.59ms]
+(pass) getTransaction returns null when the body carries no transaction [0.08ms]
+(pass) getTransaction returns null on a non-200 response [0.04ms]
+(pass) verifyPayment: paid when an output matches the address and value >= expected [0.02ms]
+(pass) verifyPayment: not paid when the matching output underpays [0.01ms]
+(pass) verifyPayment: not paid when no output pays the address
+(pass) getTip returns a positive tip from the live mainnet explorer [344.16ms]
+
+src/services/__tests__/socialReceive.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) SOCIAL_RECEIVE_FIRST_FRESH_INDEX is 1 [13.15ms]
+(pass) resolveIdentityPublicKey returns the decoded secp256k1 key for a self-sovereign user [6.18ms]
+(pass) resolveIdentityPublicKey returns null for a keyless (custodial) user [6.37ms]
+(pass) resolveIdentityPublicKey takes the account's own #key-1, not whichever key is listed first [6.50ms]
+(pass) resolveIdentityPublicKey returns null when the document lists no account key [6.37ms]
+(pass) the cursor records the identity key its addresses came from [8.95ms]
+(pass) reserveNextSocialAddress claims index 1, 2, 3 in order with distinct addresses (index 0 never handed out) [10.80ms]
+(pass) reserveNextSocialAddress returns null for a keyless recipient (spec §4.5 invite path) [6.44ms]
+(pass) concurrent first-time reservations for the same user never collide on an index [13.48ms]
+(pass) getReservedThrough returns 0 for a user with no cursor yet [7.74ms]
+(pass) getReservedThrough tracks the highest index reserveNextSocialAddress has EVER handed out, without reserving another one [12.91ms]
+(pass) getReservedThrough is scoped per network [9.58ms]
+
+src/services/__tests__/resolveRail.test.ts:
+(pass) resolveRail > defaults to the faircoin rail, so a pre-rail caller is unchanged [0.03ms]
+(pass) resolveRail > a card intent keeps its fiat currency and carries no network [0.01ms]
+(pass) resolveRail > the card rail requires an explicit currency [0.07ms]
+(pass) resolveRail > the card rail cannot settle in FAIR [0.02ms]
+(pass) resolveRail > the faircoin rail cannot settle in a fiat currency [0.01ms]
+(pass) resolveRail > the faircoin rail requires a network [0.01ms]
+(pass) resolveRail > the card rail refuses a network rather than ignoring it
+(pass) resolveRail > a faircoin caller naming the wrong chain gets the network error, not the rail one [0.02ms]
+
+src/services/__tests__/webhookDispatcher.test.ts:
+(pass) delivers a correctly-signed webhook and destroys the response on 2xx [0.30ms]
+(pass) makes exactly one request, whatever the response [0.16ms]
+(pass) classifies a 5xx as retryable and a 4xx as refused [0.10ms]
+(node:3461378) Warning: Peable webhook target refused as SSRF-unsafe: https://merchant.example/peable/webhook (blocked)
+(pass) an SsrfRejection is refused, not retried [0.13ms]
+(pass) an unrecognised error is retryable [0.06ms]
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the webhook outbox > a 2xx settles the delivery and unschedules it [20.74ms]
+(pass) the webhook outbox > a failing endpoint leaves the event queued rather than losing it [15.57ms]
+(pass) the webhook outbox > a 4xx is terminal — no retry is scheduled for a payload the target refuses [12.78ms]
+(pass) the webhook outbox > a row scheduled for the future is not claimed [13.25ms]
+(pass) the webhook outbox > a leased row is not handed to a later dispatcher [11.55ms]
+(pass) the webhook outbox > an expired lease makes the row claimable again [12.31ms]
+(pass) the webhook outbox > two dispatchers claiming concurrently share the row out exactly once [162.85ms]
+(pass) the webhook outbox > a merchant who removed their endpoint terminates the delivery instead of looping [16.29ms]
+(pass) the webhook outbox > a transition enqueues the merchant event in the same commit [12.88ms]
+(pass) the webhook outbox > a transition for a merchant with no endpoint enqueues nothing [12.46ms]
+(pass) the backoff schedule > grows, and ends [0.09ms]
+(pass) the backoff schedule > jitters within ±20% and never goes negative [0.03ms]
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) ending a card payment > cancels at the provider BEFORE announcing a rejection [9.78ms]
+(pass) ending a card payment > derives the cancellation key from the intent's own id [5.56ms]
+(pass) ending a card payment > reconciles to the truth when the payer pays during the rejection [7.30ms]
+(pass) ending a card payment > refuses to reject when the provider cannot be reached [4.42ms]
+(pass) ending a card payment > the sweeper cancels a due card payment before expiring it [7.28ms]
+(pass) ending a card payment > does not expire a payment the payer completed during the sweep [8.48ms]
+(pass) ending a card payment > leaves a due payment alone when the provider cannot be reached [4.12ms]
+(pass) ending a card payment > expires a FairCoin intent without calling any provider [8.01ms]
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) refund events > a refund.failed moves the row and the payment back [17.60ms]
+(pass) refund events > a refund.updated carrying succeeded settles the pending row [10.43ms]
+(pass) refund events > a stale pending arriving after the success changes nothing [10.60ms]
+(pass) refund events > imports a refund created at the provider, with no merchant reference [10.16ms]
+(pass) refund events > a redelivered import converges on the row it already made [14.41ms]
+(pass) refund events > imports a refund that names only the charge [10.23ms]
+(pass) refund events > leaves a refund for an unknown payment unmatched [2.64ms]
+
+src/db/__tests__/settlement.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) connected accounts and transfers > converges when the same seller is onboarded twice [3.16ms]
+(pass) connected accounts and transfers > lets exactly one of two concurrent onboardings win [5.90ms]
+(pass) connected accounts and transfers > clears a requirement that the provider no longer reports [4.21ms]
+(pass) connected accounts and transfers > drops a blank disabled-reason code rather than failing the sync [2.01ms]
+(pass) connected accounts and transfers > refuses a capability value no provider reports [2.08ms]
+(pass) connected accounts and transfers > finds an account by the merchant address and by the provider address [2.89ms]
+(pass) connected accounts and transfers > syncs never-synced accounts before ones it has already read [3.35ms]
+(pass) connected accounts and transfers > converges when the same order is settled twice [4.65ms]
+(pass) connected accounts and transfers > links the provider object once and refuses to repoint it [3.86ms]
+(pass) connected accounts and transfers > accepts a reversal that a text comparison would refuse [4.33ms]
+(pass) connected accounts and transfers > refuses a reversal larger than the transfer, and names the reason [3.90ms]
+(pass) connected accounts and transfers > compares totals beyond the safe-integer range without rounding [4.21ms]
+(pass) connected accounts and transfers > follows a transfer through two partial reversals to full [6.15ms]
+(pass) connected accounts and transfers > ignores a reversal total smaller than the one already recorded [5.39ms]
+(pass) connected accounts and transfers > records a provider refusal without a provider object [2.41ms]
+(pass) connected accounts and transfers > lists every transfer a payment funded [3.27ms]
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) payment intent repository > mints an intent with server-decided initial state [9.16ms]
+(pass) payment intent repository > refuses a duplicate idempotency key for the same merchant [4.10ms]
+(pass) payment intent repository > scopes the idempotency key to the merchant [4.36ms]
+(pass) payment intent repository > never returns another merchant's intent from the scoped read [5.15ms]
+(pass) payment intent repository > refuses an intent whose network disagrees with its merchant [2.16ms]
+(pass) payment intent repository > refuses a non-canonical amount [4.46ms]
+(pass) payment intent repository > refuses a broadcast state with no transaction id [3.78ms]
+(pass) payment intent repository > pages without repeating or skipping a row, whatever the ids are [8.00ms]
+(pass) payment intent repository > returns newest-first for rows created in distinct milliseconds [17.20ms]
+(pass) payment intent repository > filters a page by status and excludes other merchants [6.64ms]
+(pass) payment intent repository > resolves intents by address, and answers an empty input without a query [3.39ms]
+(pass) payment intent repository > selects only in-flight intents that carry a transaction id [11.11ms]
+(pass) payment intent repository > resolves an intent by its internal id, and never by its public id [3.60ms]
+(pass) payment intent repository > never returns another merchant's intent from the by-id scoped read [5.92ms]
+(pass) payment intent repository > returns null for an unknown intent rather than throwing [2.05ms]
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+(pass) migration deploy phases > every migration declares a phase, and it is pre or post [0.36ms]
+(pass) migration deploy phases > no pre migration is queued behind a post one [0.37ms]
+(pass) migration deploy phases > a post migration is the last entry in the journal [0.21ms]
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) provider_events > stores a delivery and reads it back whole [6.74ms]
+(pass) provider_events > converges on a retry of a PLATFORM-scope delivery, which carries no account [2.22ms]
+(pass) provider_events > converges on a retry of a CONNECT-scope delivery [1.39ms]
+(pass) provider_events > keeps deliveries to different scopes apart even when the event id matches [1.93ms]
+(pass) provider_events > lets exactly one of two CONCURRENT inserts win [6.04ms]
+(pass) provider_events > finds a platform-scope event by its identity, NULL account and all [2.28ms]
+(pass) provider_events > refuses a provider the closed set does not name [0.91ms]
+(pass) provider_events > refuses a payload that is not a JSON object [1.15ms]
+(pass) provider_events > serves the drain unprocessed rows oldest first, and drops them once handled [3.84ms]
+(pass) provider_events > records a failure without removing the event from the drain, and clears it on success [3.58ms]
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) payment link and checkout session repositories > creates a link with its merchant identity [8.42ms]
+(pass) payment link and checkout session repositories > refuses a link whose claimed application does not belong to its merchant [3.58ms]
+(pass) payment link and checkout session repositories > refuses a link whose network disagrees with its merchant [2.28ms]
+(pass) payment link and checkout session repositories > refuses a non-canonical link amount [2.18ms]
+(pass) payment link and checkout session repositories > scopes the merchant link read but not the public one [5.66ms]
+(pass) payment link and checkout session repositories > never lets one merchant patch another merchant's link [5.63ms]
+(pass) payment link and checkout session repositories > filters a link page by active and excludes other merchants [6.60ms]
+(pass) payment link and checkout session repositories > creates a session around an intent [3.70ms]
+(pass) payment link and checkout session repositories > refuses a second session around the same intent [3.47ms]
+(pass) payment link and checkout session repositories > refuses a session pointing at an intent that does not exist [2.01ms]
+(pass) payment link and checkout session repositories > scopes the merchant session read but not the public one [7.24ms]
+(pass) payment link and checkout session repositories > lists only the caller's sessions [8.62ms]
+
+src/db/__tests__/dockerfile.test.ts:
+(pass) the backend image carries the whole workspace manifest set > finds the workspace members it is supposed to check [0.02ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/backend/package.json into the builder stage [0.04ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/backend/package.json into the runtime stage [0.01ms]
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/backend/package.json [0.01ms]
+(pass) the backend image carries the whole workspace manifest set > copies packages/checkout/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/checkout/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/checkout/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/frontend/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/frontend/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/frontend/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/pay/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/pay/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/pay/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/sdk/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/sdk/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/sdk/package.json
+(pass) the backend image carries the whole workspace manifest set > copies packages/shared-types/package.json into the builder stage
+(pass) the backend image carries the whole workspace manifest set > copies packages/shared-types/package.json into the runtime stage
+(pass) the backend image carries the whole workspace manifest set > does not let .dockerignore hide packages/shared-types/package.json
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) merchant derivation-index reservation > returns the PRE-increment index and advances the counter [10.51ms]
+(pass) merchant derivation-index reservation > hands out consecutive indices as NUMBERS, never strings [2.37ms]
+(pass) merchant derivation-index reservation > never hands the same index to two concurrent callers [8.36ms]
+(pass) merchant derivation-index reservation > reserves nothing and returns null for an unknown merchant [0.64ms]
+(pass) merchant derivation-index reservation > refuses to advance past the int4 ceiling instead of wrapping [1.98ms]
+(pass) merchant derivation-index reservation > refuses a negative counter [0.73ms]
+(pass) merchant derivation-index reservation > refuses a second merchant for the same app and environment [1.35ms]
+(pass) merchant derivation-index reservation > restamps updated_at [7.38ms]
+(pass) merchant derivation-index reservation > runs against the migrated schema, not an empty database [1.49ms]
+
+src/db/__tests__/deployWorkflow.test.ts:
+(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.03ms]
+(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.08ms]
+(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.09ms]
+(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.18ms]
+(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.04ms]
+(pass) the deploy workflow and the migrator agree > runs every migration step with no DATABASE_URL preflight to skip it [0.04ms]
+(pass) the deploy workflow and the migrator agree > orders the phases around the rollout [0.06ms]
+
+src/db/__tests__/providerLink.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the provider link on payment_intents > mints a card intent unlinked, then links it once [3.12ms]
+(pass) the provider link on payment_intents > refuses to repoint an intent that is already linked, and says so [3.27ms]
+(pass) the provider link on payment_intents > lets exactly one of two concurrent links win [6.36ms]
+(pass) the provider link on payment_intents > refuses to let a second intent claim the same provider object [4.20ms]
+(pass) the provider link on payment_intents > lets many unlinked card intents coexist [6.56ms]
+(pass) the provider link on payment_intents > refuses a card intent with no provider [1.24ms]
+(pass) the provider link on payment_intents > refuses a faircoin intent that names a provider [1.27ms]
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) merchant repository > registers a merchant and reads it back by app and environment [7.74ms]
+(pass) merchant repository > refuses a private extended key, and stores nothing [8.06ms]
+(pass) merchant repository > converges on the unique index rather than reading first [3.02ms]
+(pass) merchant repository > allows one merchant per environment for the same application [2.53ms]
+(pass) merchant repository > patches only the mutable fields and leaves the rest alone [2.03ms]
+(pass) merchant repository > clears a webhook with an explicit null, and ignores an absent field [2.09ms]
+(pass) merchant repository > treats an empty patch as a no-op read rather than a failed update [1.57ms]
+(pass) merchant repository > loads the webhook secret only through the delivery-path read [2.00ms]
+(pass) merchant repository > reports no webhook target when only one half is configured [3.04ms]
+(pass) merchant repository > reads several merchants in one query, and no others [3.96ms]
+(pass) merchant repository > returns null for an unknown merchant rather than throwing [1.50ms]
+
+src/db/__tests__/rail.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the card rail > a card intent stores no chain fields and keeps its own currency [16.97ms]
+(pass) the card rail > a card intent reaches settled with no txid [9.55ms]
+(pass) the card rail > a card intent cannot name a merchant that does not exist [7.11ms]
+(pass) the card rail > the FairCoin network firewall still refuses a mismatched network [8.64ms]
+(pass) the card rail > a card intent carrying an address is refused [8.67ms]
+(pass) the card rail > a card intent denominated in FAIR is refused [9.72ms]
+(pass) the card rail > a FairCoin intent denominated in a fiat currency is refused [8.93ms]
+(pass) the card rail > a card intent cannot reach a chain status [9.69ms]
+(pass) the card rail > a FairCoin intent cannot reach a card status [13.50ms]
+(pass) the card rail > creating a card intent does not move the merchant derivation counter [11.25ms]
+(pass) the card rail > the watchable query never returns a card intent [12.24ms]
+(pass) the card rail > an existing FairCoin row keeps working with no rail supplied [9.58ms]
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) social receive cursor reservation > agrees with the service on the first fresh index [0.07ms]
+(pass) social receive cursor reservation > creates the cursor on first use and hands out the first fresh index [6.04ms]
+(pass) social receive cursor reservation > hands out consecutive indices as NUMBERS across the create and update branches [1.73ms]
+(pass) social receive cursor reservation > never hands the same index to two concurrent first payments [6.50ms]
+(pass) social receive cursor reservation > keeps a separate counter per network [2.02ms]
+(pass) social receive cursor reservation > reads back the highest index reserved, without reserving another [3.55ms]
+(pass) social receive cursor reservation > refuses a second cursor for the same user and network [1.34ms]
+(pass) social receive cursor reservation > refuses a cursor below the first fresh index [0.68ms]
+(pass) social receive cursor reservation > refuses a network outside the closed set [0.65ms]
+(pass) social receive cursor reservation > records the identity key the addresses were derived from [1.66ms]
+(pass) social receive cursor reservation > follows the key the latest reservation used [1.67ms]
+(pass) social receive cursor reservation > reports no key for a user who has never had an address reserved [0.53ms]
+
+src/db/__tests__/deploySecrets.test.ts:
+(pass) the deploy syncs what the config reads > leaves no variable both unsynced and undeclared [0.33ms]
+(pass) the deploy syncs what the config reads > syncs every Stripe secret the card rail cannot work without [0.06ms]
+(pass) the deploy syncs what the config reads > still syncs the two the service already could not boot without [0.04ms]
+(pass) the deploy syncs what the config reads > is not vacuously satisfied by parsers that match nothing [0.10ms]
+(pass) the deploy syncs what the config reads > declares a reason for every variable it exempts [0.03ms]
+(pass) the deploy syncs what the config reads > exempts nothing that is not actually read [0.06ms]
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+(pass) the real-database suites > are not silently skipped in CI [0.02ms]
+(pass) id-column classification > accounts for every id-shaped column [4.32ms]
+(pass) protected columns > has no implicit whole-row reads [30.04ms]
+(pass) migration files > declares a deploy phase on every migration [1.48ms]
+(pass) migration files > contains no bound parameters [1.47ms]
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the migrated database > satisfies every schema-wide invariant [19.84ms]
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) webhook delivery and social attribution repositories > enqueues a pending delivery with no attempts and a schedule [9.32ms]
+(pass) webhook delivery and social attribution repositories > derives last_status from delivered, both ways [9.02ms]
+(pass) webhook delivery and social attribution repositories > ties the schedule to the status in both directions [4.72ms]
+(pass) webhook delivery and social attribution repositories > refuses a pending delivery with no schedule [3.17ms]
+(pass) webhook delivery and social attribution repositories > refuses a delivery for an intent that does not exist [1.93ms]
+(pass) webhook delivery and social attribution repositories > never returns another merchant's delivery [5.62ms]
+(pass) webhook delivery and social attribution repositories > pages a merchant's log and tolerates a cursor of any shape [8.22ms]
+(pass) webhook delivery and social attribution repositories > yields each delivery's own intent public id [12.01ms]
+(pass) webhook delivery and social attribution repositories > attributes an address to one payment relationship, once [1.52ms]
+(pass) webhook delivery and social attribution repositories > round-trips the paying app's context, and stores nothing when none was named [1.84ms]
+(pass) webhook delivery and social attribution repositories > refuses a source ref that names no app [0.75ms]
+(pass) webhook delivery and social attribution repositories > refuses a source ref longer than the published bound [0.74ms]
+(pass) webhook delivery and social attribution repositories > refuses a source app longer than the published bound [0.68ms]
+(pass) webhook delivery and social attribution repositories > refuses an attribution at the recipient's default index [0.66ms]
+(pass) webhook delivery and social attribution repositories > shows an attribution to both parties and to nobody else [2.34ms]
+(pass) webhook delivery and social attribution repositories > answers an empty address list without a query [0.06ms]
+(pass) webhook delivery and social attribution repositories > lists what the viewer sent AND received, and nothing of a stranger [2.61ms]
+(pass) webhook delivery and social attribution repositories > scopes the viewer listing to one network [1.74ms]
+
+src/db/__tests__/derivationIndexBound.test.ts:
+(pass) the derivation index bound > is exactly int4's ceiling [0.01ms]
+(pass) the derivation index bound > agrees with the social-receive scheme, which enforces its own bound [0.01ms]
+(pass) the derivation index bound > refuses a hardened index on the social path [0.66ms]
+(pass) the derivation index bound > cannot derive a hardened child from a watch-only node [0.36ms]
+
+src/routes/__tests__/settlement.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the settlement API > opens an account for a seller and returns 201 [7.69ms]
+(pass) the settlement API > never puts the provider's account id or name on the wire [11.13ms]
+(pass) the settlement API > a repeated create converges on the same account and answers 200 [7.30ms]
+(pass) the settlement API > derives the provider idempotency key from the merchant and the seller ref [3.69ms]
+(pass) the settlement API > refreshing an account stores what the provider now says [8.05ms]
+(pass) the settlement API > mints a short-lived onboarding link and never stores it [8.87ms]
+(pass) the settlement API > does not return another merchant's account [10.53ms]
+(pass) the settlement API > acts on a seller through the provider their account records [14.20ms]
+(pass) the settlement API > pages through sellers with a cursor and says when there are more [16.62ms]
+(pass) the settlement API > refuses a cursor from another merchant without confirming it [7.66ms]
+(pass) the settlement API > settles a seller and reports the public ids only [16.42ms]
+(pass) the settlement API > names the source CHARGE, not the payment, and the payment's own group [13.58ms]
+(pass) the settlement API > resolves the charge once and reuses it for the next seller [37.35ms]
+(pass) the settlement API > refuses to settle more than the payment brought in [39.71ms]
+(pass) the settlement API > finishes an interrupted settlement on the retry [23.71ms]
+(pass) the settlement API > answers a completed settlement from history during a provider outage [18.16ms]
+(pass) the settlement API > refuses a settlement reference reused for another amount [25.07ms]
+(pass) the settlement API > refuses to settle when the provider reports no captured charge [12.10ms]
+(pass) the settlement API > a repeated settlement of one order converges and does not pay twice [16.14ms]
+(pass) the settlement API > answers a retry even after the seller stops being payable [18.91ms]
+(pass) the settlement API > refuses to settle to a seller who cannot receive one [6.86ms]
+(pass) the settlement API > names the seller by the merchant's own ref as well as by ca_… [12.32ms]
+(pass) the settlement API > refuses a body naming the seller twice or not at all [2.70ms]
+(pass) the settlement API > refuses an amount that is not a canonical base-unit integer [11.08ms]
+(pass) the settlement API > reverses a settlement and reports the cumulative total [18.17ms]
+(pass) the settlement API > two distinct reversals of the same amount both happen; a replay does not [36.99ms]
+(pass) the settlement API > refuses a reversal that carries no operation identity [18.46ms]
+(pass) the settlement API > refuses a reversal larger than the transfer [14.43ms]
+(pass) the settlement API > does not settle, read or reverse across merchants [15.31ms]
+(pass) the settlement API > lists what one payment settled [19.49ms]
+
+src/routes/__tests__/merchants.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/merchants > a production credential registers a mainnet merchant (201) [35.71ms]
+(pass) POST /v1/merchants > a development credential CANNOT register a mainnet merchant (422) — test/live firewall [50.96ms]
+(pass) POST /v1/merchants > a development credential registers a testnet merchant (201) [32.48ms]
+(pass) POST /v1/merchants > a private xprv is rejected by the same non-custody firewall the model enforces (422 or 500-free rejection) [28.17ms]
+(pass) POST /v1/merchants > registering twice for the same app+environment collides (409) [32.97ms]
+(pass) POST /v1/merchants > no service app credentials at all -> 401 [26.99ms]
+2026-10-03T03:32:46.599Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_merch_dev",
+  required: "payments:write",
+}
+(pass) POST /v1/merchants > a credential without payments:write is rejected (403 INSUFFICIENT_SCOPE) [31.23ms]
+(pass) GET /v1/merchants/me > returns the caller's own merchant [34.70ms]
+(pass) GET /v1/merchants/me > no merchant registered for this app+environment yet -> 403 [29.19ms]
+(pass) GET /v1/merchants/me > no service app credentials at all -> 401 [30.30ms]
+(pass) PATCH /v1/merchants/me > updates webhookUrl and requiredConfirmations [46.43ms]
+(pass) PATCH /v1/merchants/me > xpub is not a field this route accepts — an attempted xpub change is silently ignored [30.23ms]
+(pass) PATCH /v1/merchants/me > no service app credentials at all -> 401 [21.99ms]
+(pass) merchant branding > registration persists the branding fields and returns them [33.29ms]
+(pass) merchant branding > the payer-facing display resolves to the merchant's own name [31.05ms]
+(pass) merchant branding > PATCH updates branding, and an explicit null clears it [33.60ms]
+(pass) merchant branding > an absent branding field leaves the stored value alone [30.67ms]
+(pass) merchant branding > an over-long displayName is refused (422) [27.29ms]
+(pass) card-only registration > registers with no network and no xpub (201) [33.42ms]
+(pass) card-only registration > refuses a network with no xpub, and an xpub with no network (422) [40.22ms]
+
+src/routes/__tests__/enrich.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/enrich > returns unknown for addresses with no matching record [18.65ms]
+(pass) POST /v1/enrich > 422s on an empty addresses array [8.45ms]
+(pass) POST /v1/enrich > 422s when the batch exceeds the max size [7.87ms]
+(pass) POST /v1/enrich > 422s on a missing addresses field [7.81ms]
+
+src/routes/__tests__/refunds.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) the refund API > refunds a payment and reports the public ids only [15.69ms]
+(pass) the refund API > a repeated refund answers 200 and calls the provider once [11.21ms]
+(pass) the refund API > answers a retry even though the balance no longer accommodates it [10.25ms]
+(pass) the refund API > refuses a zero refund, which the amount predicate alone would accept [3.17ms]
+(pass) the refund API > refuses an amount that is not a canonical base-unit integer [6.94ms]
+(pass) the refund API > refuses more than the payment has left [5.45ms]
+(pass) the refund API > lists the refunds and what is still refundable [12.18ms]
+(pass) the refund API > does not refund, read or list across merchants [5.67ms]
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) a development credential on a live deployment > cannot create a card payment intent [6.22ms]
+(pass) a development credential on a live deployment > cannot create a card checkout session [1.62ms]
+(pass) a development credential on a live deployment > cannot open a connected account [1.03ms]
+(pass) a development credential on a live deployment > cannot refund [1.23ms]
+(pass) a development credential on a live deployment > cannot settle a seller out of a payment [1.08ms]
+(pass) a development credential on a live deployment > but a FairCoin intent still mints [3.82ms]
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/webhook_deliveries/:id/redeliver > redelivers and persists a NEW delivery row [10.39ms]
+(pass) POST /v1/webhook_deliveries/:id/redeliver > unknown delivery id -> 404 [1.67ms]
+(pass) POST /v1/webhook_deliveries/:id/redeliver > malformed id (not an ObjectId) -> 404, no CastError 500 [1.26ms]
+(pass) POST /v1/webhook_deliveries/:id/redeliver > a delivery belonging to a different merchant -> 404 (never leaks cross-tenant) [5.15ms]
+(pass) POST /v1/webhook_deliveries/:id/redeliver > no service app credentials at all -> 401 [14.85ms]
+2026-10-03T03:32:47.789Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_redeliver",
+  required: "payments:write",
+}
+(pass) POST /v1/webhook_deliveries/:id/redeliver > a credential without payments:write is rejected (403) [30.16ms]
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) reporting what a payment came to > reports gross, fee and net when the provider has settled it [9.46ms]
+(pass) reporting what a payment came to > says pending rather than final when the provider has not settled it [4.57ms]
+(pass) reporting what a payment came to > says unknown, not zero, when there is nothing to report [2.60ms]
+(pass) reporting what a payment came to > says unknown for a rail that has no settlement [2.20ms]
+(pass) reporting what a payment came to > says unknown rather than failing when the provider is unreachable [3.20ms]
+(pass) reporting what a payment came to > does not report another merchant's payment [3.76ms]
+
+src/routes/__tests__/routes.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/payment_intents > creates an intent (201) with a pi_ id, derived address and client_secret [7.50ms]
+(pass) POST /v1/payment_intents > replaying the same Idempotency-Key returns the SAME intent, not a new one [7.75ms]
+(pass) POST /v1/payment_intents > missing Idempotency-Key → 400 [1.27ms]
+(pass) POST /v1/payment_intents > a non-integer amount → 422 [1.24ms]
+(pass) POST /v1/payment_intents > network mismatched against the merchant's own network -> 422, no address ever derived [1.70ms]
+(pass) POST /v1/payment_intents > no service app credentials at all -> 401 [15.49ms]
+2026-10-03T03:32:48.157Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_test",
+  required: "payments:write",
+}
+(pass) POST /v1/payment_intents > a credential without payments:write is rejected (403) [31.12ms]
+(pass) GET /v1/payment_intents/:id > returns the merchant's own intent (merchant-authed) [6.40ms]
+(pass) GET /v1/payment_intents/:id > merchant-authed, unknown id -> 404 [1.68ms]
+(pass) GET /v1/payment_intents/:id > payer-authed via ?client_secret= query param (no Authorization header) [4.95ms]
+(pass) GET /v1/payment_intents/:id > payer-authed via X-Peable-Client-Secret header (no Authorization header) [4.29ms]
+(pass) GET /v1/payment_intents/:id > payer path, wrong client_secret -> 403 [5.21ms]
+(pass) GET /v1/payment_intents/:id > no Authorization header and no client_secret -> 401 [3.71ms]
+2026-10-03T03:32:48.202Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_test",
+  required: "payments:read",
+}
+(pass) GET /v1/payment_intents/:id > merchant-authed WITHOUT payments:read -> 403 (F2.0 gateway-review finding) [18.49ms]
+(pass) POST /v1/payment_intents/:id/submit_tx (payer path) > the right client_secret sets txid and moves to broadcast [6.05ms]
+(pass) POST /v1/payment_intents/:id/submit_tx (payer path) > a wrong client_secret → 403 and does not mutate the intent [4.82ms]
+(pass) POST /v1/payment_intents/:id/reject > moves the intent to rejected [6.98ms]
+(pass) POST /v1/payment_intents/:id/reject > no service app credentials at all -> 401 [19.12ms]
+2026-10-03T03:32:48.269Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_test",
+  required: "payments:write",
+}
+(pass) POST /v1/payment_intents/:id/reject > a credential without payments:write is rejected (403) [31.49ms]
+(pass) GET /v1/payment_intents (list) > lists the merchant's own intents, newest first, respecting limit [13.61ms]
+(pass) GET /v1/payment_intents (list) > filters by status [10.56ms]
+(pass) GET /v1/payment_intents (list) > paginates via starting_after [11.94ms]
+(pass) GET /v1/payment_intents (list) > an unknown starting_after -> 422 [1.76ms]
+(pass) GET /v1/payment_intents (list) > no service app credentials at all -> 401 [17.44ms]
+
+src/routes/__tests__/social.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/social/:username/next_address > reserves a fresh address and records the attribution [21.48ms]
+(pass) POST /v1/social/:username/next_address > second call for the same recipient reserves the next index [12.84ms]
+(pass) POST /v1/social/:username/next_address > 404s for an unknown username [8.65ms]
+(pass) POST /v1/social/:username/next_address > 409s with type keyless_recipient for a keyless recipient [8.43ms]
+(pass) POST /v1/social/:username/next_address > 403s on a network this deployment has not enabled for social pay [7.93ms]
+(pass) POST /v1/social/:username/next_address > 422s on a malformed network field [8.51ms]
+(pass) POST /v1/social/:username/next_address > records the paying app's context on the attribution [12.56ms]
+(pass) POST /v1/social/:username/next_address > accepts an app that names no single thing, storing a null ref [11.96ms]
+(pass) POST /v1/social/:username/next_address > leaves both context columns null when the payer names none [13.24ms]
+(pass) POST /v1/social/:username/next_address > the context changes neither the index reserved nor the address derived [14.62ms]
+(pass) POST /v1/social/:username/next_address > 422s on a source.ref longer than the published bound [9.30ms]
+(pass) POST /v1/social/:username/next_address > 422s on a source.app longer than the published bound [18.84ms]
+(pass) POST /v1/social/:username/next_address > 422s on a source that names a ref but no app [9.10ms]
+(pass) POST /v1/social/:username/next_address > 422s on an unknown key inside source rather than silently dropping it [8.23ms]
+(pass) POST /v1/social/:username/next_address > 422s on a source.ref carrying whitespace-separated prose [7.89ms]
+(node:3461378) Warning: Peable social-send profile lookup failed for @flaky: network timeout
+(pass) POST /v1/social/:username/next_address > 502s with type api_error (not 404) when the profile lookup fails upstream [8.78ms]
+(pass) POST /v1/social/:username/next_address — per-(sender,recipient) anti-grief rate limit > the 7th reservation against the same recipient from the same sender is rate-limited [21.97ms]
+(pass) POST /v1/social/:username/next_address — per-(sender,recipient) anti-grief rate limit > the limit is keyed per (sender, recipient) pair — a different sender against the same recipient is unaffected [24.98ms]
+(pass) GET /v1/social/me/cursor > returns reservedThrough: 0 for a caller with no cursor yet [11.60ms]
+(pass) GET /v1/social/me/cursor > returns the highest index ever reserved for the authenticated caller (recipient), not the sender [13.82ms]
+(pass) GET /v1/social/me/cursor > is scoped per network — a testnet reservation does not surface under mainnet [10.20ms]
+(pass) GET /v1/social/me/cursor > 422s on a missing network query param [7.36ms]
+(pass) GET /v1/social/me/payments > returns what the caller sent and received, each with its direction [12.21ms]
+(pass) GET /v1/social/me/payments > never returns a payment the caller is not party to [8.07ms]
+(pass) GET /v1/social/me/payments > rejects an unknown network rather than guessing one [7.12ms]
+(pass) GET /v1/social/me/payments > carries the context on the payment that has one, and omits it on the one that does not [10.35ms]
+(pass) GET /v1/social/me/payments > the context does not affect the address, direction or counterparty [10.71ms]
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+(pass) POST /v1/enrich with no Authorization header is rejected (401) under the real requireOxyUser default [5.00ms]
+(pass) POST /v1/social/:username/next_address with no Authorization header is rejected (401) under the real requireOxyUser default [0.64ms]
+(pass) GET /v1/social/me/cursor with no Authorization header is rejected (401) under the real requireOxyUser default [0.53ms]
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) provider webhook ingress, real chain > the rail is configured, so these cases test signatures and not a missing secret [0.07ms]
+(pass) provider webhook ingress, real chain > a correctly signed platform delivery is accepted and stored [12.52ms]
+(pass) provider webhook ingress, real chain > the SAME delivery verifies through the real chain and fails behind express.json() [3.24ms]
+(pass) provider webhook ingress, real chain > a redelivery is a duplicate, still 200, and stores nothing new [3.59ms]
+(pass) provider webhook ingress, real chain > the connect endpoint refuses a platform signature, and accepts its own [2.38ms]
+(pass) provider webhook ingress, real chain > the platform endpoint refuses a connect signature [0.68ms]
+(pass) provider webhook ingress, real chain > a forged body with a valid-looking signature is refused and stores nothing [1.14ms]
+(pass) provider webhook ingress, real chain > a delivery with no signature header at all is refused before any work [0.50ms]
+(pass) provider webhook ingress, real chain > a replayed delivery outside the tolerance window is refused [0.70ms]
+(pass) provider webhook ingress, real chain > an authentic event from the wrong livemode is ignored, not stored, and still 200 [1.21ms]
+(pass) provider webhook ingress, real chain > what lands in the table is redacted, not the bytes Stripe sent [1.89ms]
+(pass) provider webhook ingress, real chain > a burst of deliveries is not rate-limited [15.75ms]
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) answering a dispute > forwards the merchant's response and records that it was given [8.49ms]
+(pass) answering a dispute > submits once, however many times it is asked [6.97ms]
+(pass) answering a dispute > keeps none of the evidence, only the fact that it was submitted [5.26ms]
+(pass) answering a dispute > refuses a response after the deadline, without calling the provider [3.80ms]
+(pass) answering a dispute > refuses a response to a dispute that is already closed [4.23ms]
+(pass) answering a dispute > refuses a response with nothing in it [4.11ms]
+(pass) answering a dispute > refuses a field name the network would not recognise [3.01ms]
+(pass) answering a dispute > does not answer across merchants [5.38ms]
+(pass) answering a dispute > does not record a submission the provider refused [4.56ms]
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) resuming a card payment > the merchant asks, and is handed the provider's credential [11.05ms]
+(pass) resuming a card payment > the payer asks with the intent's client_secret [3.23ms]
+(pass) resuming a card payment > a wrong client_secret is refused, and a missing one is unauthenticated [4.39ms]
+(pass) resuming a card payment > refuses to hand out a credential for a payment that is over [5.35ms]
+(pass) resuming a card payment > refuses the operation on a rail that has no client action [4.18ms]
+(pass) resuming a card payment > a merchant's single read carries the client action [6.26ms]
+(pass) resuming a card payment > a merchant's read of a finished payment carries none [4.79ms]
+(pass) resuming a card payment > still answers the intent when the provider cannot be reached [3.40ms]
+(pass) resuming a card payment > the resume operation reports an unreachable provider as unavailable [3.34ms]
+(pass) resuming a card payment > the payer's polled read never carries the client action [2.88ms]
+
+src/routes/__tests__/paymentLinks.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/payment_links > creates a link (201) with a link_ id and a checkout.peable.to URL [7.61ms]
+(pass) POST /v1/payment_links > a network that doesn't match the merchant's configured network -> 422 [1.44ms]
+(pass) POST /v1/payment_links > no service app credentials -> 401 [25.66ms]
+2026-10-03T03:32:49.605Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_paylinks",
+  required: "payments:write",
+}
+(pass) POST /v1/payment_links > a credential without payments:write -> 403 [30.13ms]
+(pass) GET/PATCH /v1/payment_links (merchant CRUD) > list -> retrieve -> patch round trip [9.62ms]
+(pass) GET/PATCH /v1/payment_links (merchant CRUD) > PATCH ignores amount/network even if sent (whitelist, not just unvalidated passthrough) [4.07ms]
+(pass) GET/PATCH /v1/payment_links (merchant CRUD) > unknown id -> 404 [1.74ms]
+(pass) GET/PATCH /v1/payment_links (merchant CRUD) > a link belonging to a different merchant -> 404 (never leaks cross-tenant) [3.67ms]
+(pass) GET /v1/payment_links/:id/public > returns merchant display, never metadata/successUrl/internal ids [2.61ms]
+(pass) GET /v1/payment_links/:id/public > an inactive link still resolves (200, active:false) so the page can show a disabled state [3.35ms]
+(pass) GET /v1/payment_links/:id/public > unknown link id -> 404 [1.29ms]
+(pass) POST /v1/payment_links/:id/payment_intent > mints a fresh intent bound to the link's merchant + amount + network, ignoring any caller override [6.83ms]
+(pass) POST /v1/payment_links/:id/payment_intent > each mint call creates a DISTINCT intent (server always mints fresh; reuse-if-open is a page-layer concern) [8.28ms]
+(pass) POST /v1/payment_links/:id/payment_intent > an inactive link -> 422, mints nothing [4.34ms]
+(pass) POST /v1/payment_links/:id/payment_intent > unknown link id -> 404 [1.20ms]
+
+src/routes/__tests__/dashboard.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > a member reads their development merchant [3.39ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > the SAME app+member reads a DIFFERENT merchant under production — environment scoping [1.81ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > staging has no merchant registered -> 404 [1.58ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > a non-member is denied (403), regardless of the merchant existing [0.56ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > a non-member of THIS app is still denied even for an app that doesn't exist — never leaks which (404 vs 403) [0.57ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > missing environment query param -> 422 [0.60ms]
+(pass) GET /v1/dashboard/applications/:applicationId/merchant > an invalid environment value -> 422 [0.49ms]
+(pass) POST /v1/dashboard/applications/:applicationId/merchant > a development session cannot register a mainnet merchant (422) — test/live firewall [1.80ms]
+(pass) POST /v1/dashboard/applications/:applicationId/merchant > a development session registers a testnet merchant (201) [2.34ms]
+(pass) POST /v1/dashboard/applications/:applicationId/merchant > registering twice for the same application+environment collides (409) [4.32ms]
+(pass) POST /v1/dashboard/applications/:applicationId/merchant > a non-member cannot register a merchant (403), before any firewall/create logic runs [1.37ms]
+(pass) PATCH /v1/dashboard/applications/:applicationId/merchant > updates webhookUrl and requiredConfirmations, never xpub [2.49ms]
+(pass) GET /v1/dashboard/applications/:applicationId/payment_intents > lists only the environment-scoped merchant's intents [7.02ms]
+(pass) GET /v1/dashboard/applications/:applicationId/payment_intents > a non-member is denied (403) [0.65ms]
+(pass) GET /v1/dashboard/applications/:applicationId/payment_intents/:id > returns the single intent scoped to the resolved merchant [3.66ms]
+(pass) GET /v1/dashboard/applications/:applicationId/payment_intents/:id > unknown id -> 404 [2.12ms]
+(pass) GET /v1/dashboard/applications/:applicationId/webhook_deliveries + redeliver > lists deliveries and redelivers one [16.29ms]
+(pass) GET /v1/dashboard/applications/:applicationId/webhook_deliveries + redeliver > redelivering an unknown delivery id -> 404 [2.07ms]
+(pass) no service app credentials at all > real requireOxyUser default rejects an unauthenticated caller (401) [15.94ms]
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) an EdDSA service token signed by a key in Oxy's JWKS is accepted [10.87ms]
+2026-10-03T03:32:50.089Z WARN [oxy.auth] refused INVALID_SERVICE_TOKEN: ServiceTokenSignatureError: Service token signature is invalid {
+  component: "auth",
+  method: "auth",
+  code: "INVALID_SERVICE_TOKEN",
+  stage: "service-token",
+  reason: "ServiceTokenSignatureError: Service token signature is invalid",
+  status: 401,
+  optional: false,
+  path: "/v1/payment_intents",
+}
+(pass) a token signed by a key NOT in the JWKS is rejected (401) — proves verification is really wired, not bypassed [1.81ms]
+2026-10-03T03:32:50.090Z WARN [oxy.auth] refused INVALID_SERVICE_TOKEN: ServiceTokenStructureError: Service token JOSE header is not supported {
+  component: "auth",
+  method: "auth",
+  code: "INVALID_SERVICE_TOKEN",
+  stage: "service-token",
+  reason: "ServiceTokenStructureError: Service token JOSE header is not supported",
+  status: 401,
+  optional: false,
+  path: "/v1/payment_intents",
+}
+(pass) a retired HS256 service token is refused, whatever secret signed it [1.31ms]
+(pass) no Authorization header at all is rejected (401), the endpoint is not silently open [0.74ms]
+
+src/routes/__tests__/checkoutSessions.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) POST /v1/checkout_sessions > wraps a real intent and returns its client_secret [10.95ms]
+(pass) POST /v1/checkout_sessions > a network that doesn't match the merchant's configured network -> 422, no intent minted [2.52ms]
+(pass) POST /v1/checkout_sessions > no service app credentials -> 401 [21.58ms]
+(pass) GET /v1/checkout_sessions/:id (merchant retrieve) > retrieves a created session with its client_secret [9.24ms]
+(pass) GET /v1/checkout_sessions/:id (merchant retrieve) > unknown id -> 404 [1.95ms]
+(pass) GET /v1/checkout_sessions/:id (merchant retrieve) > a session belonging to a different merchant -> 404 (never leaks cross-tenant) [4.97ms]
+(pass) GET /v1/checkout_sessions/:id/public > without a client_secret -> 401, never leaks merchant/intent [5.91ms]
+(pass) GET /v1/checkout_sessions/:id/public > with the WRONG client_secret -> 403 [5.84ms]
+(pass) GET /v1/checkout_sessions/:id/public > with the RIGHT client_secret -> 200, returns merchant display + the intent snapshot [6.97ms]
+(pass) GET /v1/checkout_sessions/:id/public > accepts the client_secret via the X-Peable-Client-Secret header too [6.23ms]
+(pass) GET /v1/checkout_sessions/:id/public > unknown session id -> 404 even with a well-formed secret param [1.41ms]
+(pass) POST /v1/checkout_sessions with an Idempotency-Key > a retry converges on the same session and mints no second intent [8.17ms]
+(pass) POST /v1/checkout_sessions with an Idempotency-Key > refuses a key replayed with a different amount [6.40ms]
+(pass) POST /v1/checkout_sessions with an Idempotency-Key > mints a fresh session for every keyless create [7.94ms]
+
+src/lib/__tests__/money.test.ts:
+(pass) toBaseUnits / fromBaseUnits round-trip canonical integer strings [0.06ms]
+(pass) toBaseUnits rejects a fractional amount [0.02ms]
+(pass) fromBaseUnits rejects a negative amount [0.01ms]
+
+src/lib/__tests__/ids.test.ts:
+(pass) newId("pi") matches the pi_ prefixed hex format [0.02ms]
+(pass) newId("evt") matches the evt_ prefixed hex format [0.04ms]
+(pass) two successive newId("pi") values differ [0.01ms]
+(pass) newId("merch") matches the merch_ prefixed hex format [0.01ms]
+(pass) newId("link") matches the link_ prefixed hex format [0.01ms]
+(pass) newId("cs") matches the cs_ prefixed hex format [0.01ms]
+(pass) clientSecretFor prefixes the id and appends a 32-hex secret [0.03ms]
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+(pass) toSocialPaymentSource > omits the context entirely for a plain person-to-person payment [0.02ms]
+(pass) toSocialPaymentSource > carries the app and the ref back exactly as they were stored [0.01ms]
+(pass) toSocialPaymentSource > keeps the context of an app that named no single thing [0.02ms]
+
+src/services/providers/__tests__/redact.test.ts:
+(pass) redactProviderPayload > keeps the ids, amounts, currencies and statuses reconciliation needs [0.02ms]
+(pass) redactProviderPayload > keeps the gateway's own correlation key out of provider metadata
+(pass) redactProviderPayload > drops the email, the phone, the address and the card details [0.04ms]
+(pass) redactProviderPayload > drops a NEW sensitive field nobody enumerated [0.04ms]
+(pass) redactProviderPayload > leaves a marker where a value was dropped, rather than deleting the key [0.01ms]
+(pass) redactProviderPayload > truncates a long allowed string and bounds a long array [0.12ms]
+(pass) redactProviderPayload > stops at a depth bound rather than recursing forever [0.06ms]
+(pass) redactProviderPayload > returns an object for a payload that is not one [0.02ms]
+(pass) redactProviderMessage > scrubs an email a provider quoted back [0.01ms]
+(pass) redactProviderMessage > scrubs a long digit run
+(pass) redactProviderMessage > leaves an ordinary message and a short number alone
+(pass) redactProviderMessage > truncates a very long message [0.06ms]
+
+src/services/billing/__tests__/billingHttp.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > executes five SDK methods with store/receipt references and no Connect or financial decisions [71.70ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > reuses customer for renamed store and new key without another provider effect [37.97ms]
+2026-10-03T03:32:50.605Z WARN [oxy.auth] Service token missing required scope {
+  component: "auth",
+  method: "requireScope",
+  appId: "app_01a0ffd2-5923-772a-bbb3-381a97a33bc5",
+  required: "payments:write",
+}
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > denies other cohort, missing scopes and missing auth before provider effects [16.73ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > rejects unknown price, foreign store and invented owner/payer fields before checkout [33.84ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > replays checkout while fresh and refuses expired URL without another effect [42.59ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > checks platform account before the first effect [20.66ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > refuses portal configuration drift on the next call and immediate cancellation [38.11ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > retains indeterminate result after timeout and retries same remote idempotency key [33.45ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > binds exact completed checkout concurrently after URL expiry, ignoring arbitrary metadata [59.76ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > uniformly refuses unknown, ambiguous, incomplete or mismatched checkout correlation [64.69ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > does not adopt a completed checkout whose durable intent belongs to another merchant [34.81ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > imports explicit evidence only within approved cohort and preserves store instead of metadata [27.94ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > keeps absent boot configuration inactive and rejects another platform or unsafe portal at boot [27.00ms]
+(pass) I08 billing HTTP SDK platform adapter / real PostgreSQL > SDK refreshes once after 401 and preserves the mutation key [34.19ms]
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+(pass) private recurring reader > invoice permits an inclusive point period, subscription still requires positive duration [0.33ms]
+(pass) private recurring reader > normalizes complete subscription pages, orders ordinally and strips previews/PII [1.15ms]
+(pass) private recurring reader > normalizes invoice point periods and observed amounts without calculating [0.38ms]
+(pass) private recurring reader > rejects configured platformAccountId mismatch before requesting [0.10ms]
+(pass) private recurring reader > rejects configured apiVersion mismatch before requesting [0.02ms]
+(pass) private recurring reader > rejects configured livemode mismatch before requesting [0.04ms]
+(pass) private recurring reader > rejects configured environment mismatch before requesting [0.01ms]
+(pass) private recurring reader > rejects configured providerAccountId mismatch before requesting [0.01ms]
+(pass) private recurring reader > rejects an unsupported configured API version at construction [0.04ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.18ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.08ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.08ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.07ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.17ms]
+(pass) private recurring reader > rejects the page cap without request 21 [0.48ms]
+(pass) private recurring reader > rejects more than 1000 periods without a partial snapshot [3.32ms]
+(pass) private recurring reader > accepts the exact 1000-item boundary when exhausted [6.42ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.25ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.06ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.24ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.20ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.10ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.09ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.04ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.20ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.07ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.03ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.05ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.05ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.06ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.04ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.15ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.06ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.07ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.07ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.08ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.06ms]
+(pass) private recurring reader > root recheck rejects an observed change during pagination [0.13ms]
+(pass) private recurring reader > already aborted request never calls the client [0.10ms]
+(pass) private recurring reader > abort interrupts a client that ignores the signal and prevents later pages [1.42ms]
+(pass) private recurring reader > one global deadline bounds an uncooperative client without an upstream abort [2002.45ms]
+(pass) private recurring reader > provider errors are sanitized [0.38ms]
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) inactive recurring observation / real PostgreSQL > keeps explicit binding insert-only, including concurrent repeats and conflicting merchants/environments [32.40ms]
+(pass) inactive recurring observation / real PostgreSQL > observes subscription and invoice periods with the same merchant binding and atomic outbox [24.27ms]
+(pass) inactive recurring observation / real PostgreSQL > rejects invoice attribution to another merchant subscription [16.04ms]
+(pass) inactive recurring observation / real PostgreSQL > absorbs concurrent replay and post-commit replay without another read or outbox [15.84ms]
+(pass) inactive recurring observation / real PostgreSQL > reads current snapshots for reversed/equal event times, without ordering state by event id [22.98ms]
+(pass) inactive recurring observation / real PostgreSQL > leaves an unknown object pending without attribution, read, or outbox [10.29ms]
+(pass) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once [20.28ms]
+(pass) inactive recurring observation / real PostgreSQL > times out a stalled reader and releases locks without processing or changing state [37.81ms]
+(pass) inactive recurring observation / real PostgreSQL > keeps default routing inactive; opt-in unknown does not stop a later bound object [20.57ms]
+(pass) inactive recurring observation / real PostgreSQL > serializes distinct event reads under the binding lock and timestamps after reading [42.12ms]
+(pass) inactive recurring observation / real PostgreSQL > enforces merchant/application/environment ownership in the database [12.28ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses stored event scope/mode/version mismatches before the reader [17.53ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot pii without state, event completion or outbox [14.60ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot partial without state, event completion or outbox [13.77ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongAccount without state, event completion or outbox [13.52ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongScope without state, event completion or outbox [13.92ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongMode without state, event completion or outbox [13.80ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongObject without state, event completion or outbox [13.20ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongVersion without state, event completion or outbox [15.65ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot duplicateItems without state, event completion or outbox [13.14ms]
+(pass) inactive recurring observation / real PostgreSQL > persists the private reader invoice projection and outbox through real SQL, replaying unchanged [28.27ms]
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Postgres notice: identifier "billing_operations_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_customer_binding_id_billing_object_bindings_"
+Postgres notice: identifier "billing_operations_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_operations_price_binding_id_billing_object_bindings_id_"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom
+(pass) billing ownership and durable claims / real PostgreSQL > converges verified binding and refuses different owner or environment [24.08ms]
+(pass) billing ownership and durable claims / real PostgreSQL > requires subscription customer and price of exact same owner and store/plan [24.63ms]
+(pass) billing ownership and durable claims / real PostgreSQL > does not read foreign or unknown refs or create a second customer per store [16.68ms]
+(pass) billing ownership and durable claims / real PostgreSQL > claims once under concurrency and returns without holding a provider transaction [16.48ms]
+(pass) billing ownership and durable claims / real PostgreSQL > globally refuses same key from another merchant, operation or payload [19.30ms]
+(pass) billing ownership and durable claims / real PostgreSQL > refuses second key creating customer after unknown first result [16.58ms]
+(pass) billing ownership and durable claims / real PostgreSQL > replays owner result but rejects an expired hosted URL [18.45ms]
+(pass) billing ownership and durable claims / real PostgreSQL > recovers expired lease with same remote key and fences stale completion [16.14ms]
+(pass) billing ownership and durable claims / real PostgreSQL > does not blindly retry beyond bounded recovery window [14.41ms]
+(pass) billing ownership and durable claims / real PostgreSQL > rolls back binding and result together on local crash [15.25ms]
+(pass) billing ownership and durable claims / real PostgreSQL > binds checkout claim to exact owned customer and price, including replay [29.87ms]
+
+src/db/schema/__tests__/valueSets.test.ts:
+(pass) closed value sets > lists exactly the statuses the shared transition table defines [0.03ms]
+(pass) closed value sets > renders the provider CHECK into the migrations from this tuple [0.45ms]
+(pass) closed value sets > lists both networks [0.02ms]
+(pass) closed value sets > lists the ten webhook event types
+(pass) closed value sets > splits into payment events and the one that is about a seller [0.04ms]
+(pass) the base-unit amount pattern > accepts and refuses exactly what the application does [0.08ms]
+(pass) the base-unit amount pattern > reaches the migrations verbatim [0.20ms]
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+(pass) StripePaymentProvider > creates a payment with the gateway's intent id in metadata and transfer_group [0.28ms]
+(pass) StripePaymentProvider > refuses an amount that cannot survive the conversion to a Stripe amount [0.07ms]
+(pass) StripePaymentProvider > capture reads back rather than re-capturing an already captured payment [0.08ms]
+(pass) StripePaymentProvider > capture does capture when the payment is genuinely awaiting it [0.04ms]
+(pass) StripePaymentProvider > a transfer names its source transaction and its group [0.10ms]
+(pass) StripePaymentProvider > a reversal reports the cumulative total when Stripe expanded it [0.15ms]
+(pass) StripePaymentProvider > a reversal re-reads the transfer when Stripe did not expand it [0.06ms]
+(pass) StripePaymentProvider > account creation requests card_payments alongside transfers [0.20ms]
+(pass) StripePaymentProvider > account creation reads the account back through the v1 API [0.04ms]
+(pass) StripePaymentProvider > an onboarding link collects eventually-due requirements [0.10ms]
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+(pass) mapPaymentIntentStatus > maps every status Stripe can report [0.02ms]
+(pass) mapPaymentIntentStatus > requires_capture is processing, never succeeded
+(pass) mapPaymentIntentStatus > requires_payment_method is created, never failed
+(pass) mapPaymentIntentStatus > succeeded and canceled carry across unchanged [0.01ms]
+(pass) toProviderEventEnvelope > carries the ids, the mode and the mapped payment status [0.07ms]
+(pass) toProviderEventEnvelope > an event about something other than a payment carries no payment status [0.08ms]
+(pass) toProviderEventEnvelope > a connect-scope event carries the account it is about [0.02ms]
+(pass) stripeObjectIds > picks up a referenced payment intent as well as the object's own id [0.02ms]
+(pass) stripeObjectIds > ignores an expanded reference rather than stringifying it [0.01ms]
+(pass) isExpectedLivemode > refuses an event from the other mode, in both directions [0.02ms]
+
+ 758 pass
+ 0 fail
+ 2135 expect() calls
+Ran 758 tests across 74 files. [15.28s]

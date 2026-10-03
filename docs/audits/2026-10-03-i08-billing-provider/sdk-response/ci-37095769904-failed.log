@@ -1,0 +1,19 @@
+test	Typecheck every package	﻿2026-10-03T04:13:24.8971629Z ##[group]Run bun run --filter '*' typecheck
+test	Typecheck every package	2026-10-03T04:13:24.8972067Z [36;1mbun run --filter '*' typecheck[0m
+test	Typecheck every package	2026-10-03T04:13:24.9041621Z shell: /usr/bin/bash -e {0}
+test	Typecheck every package	2026-10-03T04:13:24.9041951Z env:
+test	Typecheck every package	2026-10-03T04:13:24.9042491Z   TEST_DATABASE_URL: ***localhost:5432/postgres
+test	Typecheck every package	2026-10-03T04:13:24.9042994Z   DATABASE_URL: ***localhost:5432/peable
+test	Typecheck every package	2026-10-03T04:13:24.9043316Z ##[endgroup]
+test	Typecheck every package	2026-10-03T04:13:26.8751532Z @peable.to/shared-types typecheck: Exited with code 0
+test	Typecheck every package	2026-10-03T04:13:28.9754969Z @peable.to/pay typecheck: Exited with code 0
+test	Typecheck every package	2026-10-03T04:13:30.9234983Z @peable.to/sdk typecheck: __tests__/core/client.test.ts(199,61): error TS2769: No overload matches this call.
+test	Typecheck every package	2026-10-03T04:13:30.9261534Z @peable.to/sdk typecheck:   Overload 1 of 2, '(expected: undefined): void', gave the following error.
+test	Typecheck every package	2026-10-03T04:13:30.9291543Z @peable.to/sdk typecheck:     Argument of type '{ id: string; }' is not assignable to parameter of type 'undefined'.
+test	Typecheck every package	2026-10-03T04:13:30.9321597Z @peable.to/sdk typecheck:   Overload 2 of 2, '(expected: undefined): void', gave the following error.
+test	Typecheck every package	2026-10-03T04:13:30.9351644Z @peable.to/sdk typecheck:     Argument of type '{ id: string; }' is not assignable to parameter of type 'undefined'.
+test	Typecheck every package	2026-10-03T04:13:30.9765898Z @peable.to/sdk typecheck: Exited with code 2
+test	Typecheck every package	2026-10-03T04:13:35.8122168Z @peable.to/checkout typecheck: Exited with code 0
+test	Typecheck every package	2026-10-03T04:13:40.9813278Z @peable.to/backend typecheck: Exited with code 0
+test	Typecheck every package	2026-10-03T04:13:45.9556028Z @peable.to/frontend typecheck: Exited with code 0
+test	Typecheck every package	2026-10-03T04:13:45.9581577Z ##[error]Process completed with exit code 2.

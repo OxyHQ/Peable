@@ -3,9 +3,8 @@
 # Adapted from the canonical Mention backend workflow. Builds a native arm64
 # image on an arm64 runner, pushes it to ECR, and rolls the ECS service. The
 # ECR repo (oxy/peable) and the ECS service (peable on cluster oxy-cluster,
-# port 3001) are provisioned in terraform (~/Oxy/oxy-infra); the deploy step
-# no-ops gracefully until the service exists, so the first push can run before
-# the service is created (the image still lands in ECR).
+# port 3001) are provisioned in terraform (~/Oxy/oxy-infra). Promotion requires
+# an existing steady service and a provable pinned rollback image.
 name: Deploy to AWS
 
 on:
@@ -16,12 +15,19 @@ on:
     paths:
       - 'packages/backend/**'
       - 'packages/shared-types/**'
+      - 'packages/sdk/**'
+      - '.github/scripts/**'
       - 'package.json'
       - 'bun.lock'
       - 'bunfig.toml'
       - '.github/workflows/deploy-aws.yml'
   workflow_dispatch:
     inputs:
+      sync_secrets:
+        description: 'Opt in only after reviewing GitHub secret changes. Readiness promotion preserves SSM.'
+        required: false
+        default: false
+        type: boolean
       migration_phase:
         description: 'Migration run. Leave as pre-post for a normal release; `all` is the from-zero genesis / cutover only.'
         required: false
@@ -38,6 +44,9 @@ env:
   ECR_REGISTRY: 237343248947.dkr.ecr.us-west-2.amazonaws.com
   APP: peable
   CLUSTER: oxy-cluster
+  TASK_FAMILY: oxy-peable
+  MIGRATION_WAIT_TIMEOUT_SECONDS: 660
+  RELEASE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
   DOCKERFILE: packages/backend/Dockerfile
   # The database the migrator is allowed to write DDL to. Checked against
   # `current_database()` by `--target-database`, so a task whose DATABASE_URL
@@ -74,6 +83,7 @@ jobs:
   # filter — a push touching only the frontend still must not deploy the
   # backend, and `workflow_run` carries no path filtering at all.
   gate:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -86,10 +96,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          # `workflow_dispatch` can name a commit CI never ran for (a manual
-          # re-deploy of an older sha, a redeploy after an infra change). That is
-          # a deliberate operator action, so it is allowed through with a notice
-          # rather than blocked by a wait that could never finish.
+          # Manual dispatch is subject to the same exact-source CI gate.
           deadline=$(( SECONDS + 1800 ))
           while [ "$SECONDS" -lt "$deadline" ]; do
             run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1"               --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' || echo "none none")
@@ -105,10 +112,6 @@ jobs:
                 exit 1
                 ;;
               none|null)
-                if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-                  echo "::notice::no CI run for $SHA and this is a manual dispatch — proceeding"
-                  exit 0
-                fi
                 echo "waiting for CI to start for $SHA"
                 ;;
               *)
@@ -121,6 +124,7 @@ jobs:
           exit 1
 
   deploy:
+    if: github.ref == 'refs/heads/main'
     needs: [gate]
     runs-on: ubuntu-24.04-arm
     steps:
@@ -147,6 +151,7 @@ jobs:
       # The list is the secrets the `peable` task definition actually consumes.
       # Adding a new one means adding it here, or it never reaches SSM.
       - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
+        if: github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true
         env:
           # The Postgres connection string, and the one the service cannot boot
           # without: `config.ts` refuses to load without it and `server.ts`
@@ -226,7 +231,9 @@ jobs:
       # pushed artefact a single-platform image manifest, as before, rather
       # than an index with an attestation.
       - name: Build and push (linux/arm64)
+        id: image
         run: |
+          set -euo pipefail
           IMG=$ECR_REGISTRY/oxy/$APP
           docker buildx build \
             --platform linux/arm64 \
@@ -235,9 +242,12 @@ jobs:
             --provenance=false \
             -f "$DOCKERFILE" \
             -t "$IMG:${{ github.sha }}" \
-            -t "$IMG:latest" \
+            --metadata-file image-metadata.json \
             --push \
             .
+          DIGEST=$(jq -er '."containerimage.digest"' image-metadata.json)
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          echo "image=$IMG@$DIGEST" >> "$GITHUB_OUTPUT"
 
       # ── Migrations run as one-shot ECS tasks, around the rollout ─────────────
       #
@@ -248,53 +258,18 @@ jobs:
       # declares its own side and the migrator refuses to guess for one that does
       # not.
       #
-      # The task REUSES the service's live task definition and network
-      # configuration rather than registering its own, which is what gives the
-      # migrator the same DATABASE_URL secret, subnets and security groups the
-      # service has. Only the command is overridden. That also means it runs the
-      # image the task definition points at — the `:latest` tag this workflow
-      # just pushed — so `run-task` gets the NEW image without a second revision.
-      # If the task definition is ever pinned to an immutable tag, this step must
-      # register a revision instead, or it will migrate using the OLD image.
+      # Preserve the deployed configuration and pin both candidate and rollback.
+      # No :latest tag is updated and mixed running revisions/digests fail closed.
       - name: Resolve the ECS one-shot shape
         id: ecs
         env:
-          # Absent on a `push` trigger, where only the default is ever right.
           REQUESTED_PHASE: ${{ github.event.inputs.migration_phase }}
+          CANDIDATE_IMAGE: ${{ steps.image.outputs.image }}
+          RELEASE_RECEIPT_DIR: ${{ runner.temp }}/peable-release
         run: |
           set -euo pipefail
           echo "phase_mode=${REQUESTED_PHASE:-pre-post}" >> "$GITHUB_OUTPUT"
-
-          STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].status' --output text 2>/dev/null || echo NONE)
-          echo "status=$STATUS" >> "$GITHUB_OUTPUT"
-          if [ "$STATUS" != "ACTIVE" ]; then
-            echo "ECS service $APP not created yet — nothing to migrate or deploy against"
-            exit 0
-          fi
-
-          TD=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].taskDefinition' --output text)
-          NET=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].networkConfiguration' --output json)
-          CONTAINER=$(aws ecs describe-task-definition --task-definition "$TD" --query 'taskDefinition.containerDefinitions[0].name' --output text)
-          echo "task_definition=$TD" >> "$GITHUB_OUTPUT"
-          echo "container=$CONTAINER" >> "$GITHUB_OUTPUT"
-          # JSON on one line: a GITHUB_OUTPUT value cannot span lines unhelped.
-          echo "network=$(echo "$NET" | jq -c .)" >> "$GITHUB_OUTPUT"
-
-          # There is deliberately NO `DATABASE_URL` preflight here.
-          #
-          # It existed while no route read Postgres: a task definition without
-          # the variable served fine, so skipping migrations was harmless and
-          # better than a confusing "Refusing to migrate" failure. That is no
-          # longer the state of the world — `config.ts` refuses to load without
-          # `DATABASE_URL` and `server.ts` opens the pool before listening, so
-          # a task definition missing it crash-loops instead of serving. The
-          # condition the probe tested for is now unreachable in any deployment
-          # that works at all.
-          #
-          # Keeping it would be worse than useless: it would answer a missing
-          # variable by SKIPPING the migrations and letting the rollout proceed
-          # to a service that cannot boot, turning a loud configuration error
-          # into a silent one plus a crash-loop with no migrations applied.
+          python3 .github/scripts/ecs-release.py prepare
 
       # Does this release contain a post-rollout migration at all? Grepped with
       # the pattern @oxy.so/db EXPORTS (`POST_PHASE_GREP_PATTERN`), never a copy —
@@ -326,6 +301,7 @@ jobs:
         env:
           TASK_DEFINITION: ${{ steps.ecs.outputs.task_definition }}
           CONTAINER_NAME: ${{ steps.ecs.outputs.container }}
+          EXPECTED_IMAGE: ${{ steps.image.outputs.image }}
           NETWORK_CONFIGURATION: ${{ steps.ecs.outputs.network }}
 
       - name: Migrate (pre) — before the rollout
@@ -334,59 +310,17 @@ jobs:
         env:
           TASK_DEFINITION: ${{ steps.ecs.outputs.task_definition }}
           CONTAINER_NAME: ${{ steps.ecs.outputs.container }}
+          EXPECTED_IMAGE: ${{ steps.image.outputs.image }}
           NETWORK_CONFIGURATION: ${{ steps.ecs.outputs.network }}
 
-      - name: Deploy to ECS (rolling; skipped until the service exists)
-        run: |
-          set -euo pipefail
-
-          # Poll the PRIMARY deployment's rolloutState instead of the fixed
-          # `aws ecs wait services-stable` waiter (which caps at 10 min and
-          # false-fails on a longer rollout + ALB drain).
-          MAX_WAIT_SECS=1200   # 20 min hard cap before we call it a real timeout
-          POLL_INTERVAL=15     # seconds between describe-services polls
-
-          STATUS=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0].status' --output text 2>/dev/null || echo NONE)
-          if [ "$STATUS" != "ACTIVE" ]; then
-            echo "ECS service $APP not created yet — image is in ECR, skipping deploy"
-            exit 0
-          fi
-
-          aws ecs update-service --cluster "$CLUSTER" --service "$APP" --force-new-deployment >/dev/null
-          echo "Triggered new deployment for $APP; polling rolloutState (timeout ${MAX_WAIT_SECS}s)..."
-
-          elapsed=0
-          while [ "$elapsed" -lt "$MAX_WAIT_SECS" ]; do
-            # describe-services must not abort the loop on a transient error (set -e safe).
-            DESC=$(aws ecs describe-services \
-              --cluster "$CLUSTER" --services "$APP" \
-              --query 'services[0].deployments[?status==`PRIMARY`]|[0].[rolloutState,runningCount,desiredCount]' \
-              --output text 2>/dev/null) || DESC=""
-
-            if [ -z "$DESC" ] || [ "$DESC" = "None" ]; then
-              echo "  ($elapsed s) no PRIMARY deployment info yet, retrying..."
-            else
-              ROLLOUT_STATE=$(echo "$DESC" | awk '{print $1}')
-              RUNNING=$(echo "$DESC" | awk '{print $2}')
-              DESIRED=$(echo "$DESC" | awk '{print $3}')
-              echo "  ($elapsed s) rolloutState=$ROLLOUT_STATE running=$RUNNING desired=$DESIRED"
-
-              if [ "$ROLLOUT_STATE" = "COMPLETED" ] && [ "$RUNNING" = "$DESIRED" ]; then
-                echo "deployed $APP — rollout COMPLETED ($RUNNING/$DESIRED tasks running)"
-                exit 0
-              fi
-              if [ "$ROLLOUT_STATE" = "FAILED" ]; then
-                echo "::error::ECS rollout for $APP FAILED — see service events in the AWS console"
-                exit 1
-              fi
-            fi
-
-            sleep "$POLL_INTERVAL"
-            elapsed=$((elapsed + POLL_INTERVAL))
-          done
-
-          echo "::error::ECS rollout for $APP did not reach COMPLETED within ${MAX_WAIT_SECS}s (genuine timeout)"
-          exit 1
+      - name: Deploy to ECS (pinned rollout with verified rollback)
+        env:
+          TASK_DEFINITION: ${{ steps.ecs.outputs.task_definition }}
+          ROLLBACK_TASK_DEFINITION: ${{ steps.ecs.outputs.rollback_task_definition }}
+          CANDIDATE_IMAGE: ${{ steps.image.outputs.image }}
+          PREVIOUS_IMAGE: ${{ steps.ecs.outputs.previous_image }}
+          RELEASE_RECEIPT_DIR: ${{ runner.temp }}/peable-release
+        run: python3 .github/scripts/ecs-release.py rollout
 
       # Only when the release actually has one. Skipping the task entirely is not
       # an optimisation — a `post` run against a database with a pending `pre`
@@ -396,32 +330,9 @@ jobs:
       # these, so a `post` here would find nothing — and running it would only
       # add a way for a green cutover to end on a red step.
       #
-      # ── READ THIS BEFORE UNIFYING THIS WORKFLOW WITH THE SHARED SCRIPT ──
-      #
-      # The condition below gates on the SERVICE'S STATUS and `has_post`. It
-      # deliberately does NOT gate on the rollout having actually moved, and that
-      # distinction is load-bearing rather than incidental.
-      #
-      # Six sibling repos — Alia, Allo, CrowdSource, Homiio, Mention and Syra —
-      # share `deploy-ecs-image.sh`, which returned early at `desiredCount=0` and
-      # exited 0 ABOVE its post-migration step. Peable has never carried it. Here,
-      # at zero capacity the polling loop above reads `rolloutState=COMPLETED
-      # running=0 desired=0`, matches `RUNNING == DESIRED`, exits 0 — and `post`
-      # still runs. So the phase is never stranded.
-      #
-      # Why stranding is not merely a delay: `@oxy.so/db`'s migration ledger is a
-      # HIGH-WATER MARK. An unapplied `post` is not deferred, it DEADLOCKS — every
-      # later `pre` is refused, so every subsequent deploy fails at its migration
-      # step. Measured in Alia as four consecutive merges deploying red while
-      # every PR was green.
-      #
-      # The same fact has a second edge, and both must survive together. That
-      # polling loop treats a zero-task steady state as a HEALTHY rollout, which
-      # also means a deploy at zero capacity reports success without releasing
-      # anything to users. That is a real wart. But it is the same line that keeps
-      # `post` reachable, so "fixing" the loop to reject zero-task steady states
-      # would reintroduce the deadlock above. If you change either, change both,
-      # and say what replaces this property.
+      # At desiredCount=0 the helper repoints the pinned revision, records that
+      # no runtime was verified, and keeps post reachable. A mutable previous
+      # image at zero capacity is refused because its rollback cannot be proven.
       - name: Migrate (post) — after the new image is live
         if: >-
           steps.ecs.outputs.status == 'ACTIVE'
@@ -431,4 +342,20 @@ jobs:
         env:
           TASK_DEFINITION: ${{ steps.ecs.outputs.task_definition }}
           CONTAINER_NAME: ${{ steps.ecs.outputs.container }}
+          EXPECTED_IMAGE: ${{ steps.image.outputs.image }}
           NETWORK_CONFIGURATION: ${{ steps.ecs.outputs.network }}
+
+      - name: Clean up unused task definitions
+        if: always()
+        env:
+          RELEASE_RECEIPT_DIR: ${{ runner.temp }}/peable-release
+        run: python3 .github/scripts/ecs-release.py cleanup
+
+      - name: Retain release receipts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: peable-release-${{ github.sha }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/peable-release
+          if-no-files-found: ignore
+          retention-days: 14

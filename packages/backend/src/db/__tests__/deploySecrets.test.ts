@@ -56,6 +56,7 @@ const CONFIG = readFileSync(
  * this list nor the workflow is the bug.
  */
 const NOT_SYNCED: Readonly<Record<string, string>> = {
+  PEABLE_BILLING_COHORT: "reviewed merchant/app/environment/platform-account cohort and Portal configuration; no credentials; absent by default and set only for the coordinated cohort activation",
   // Public chain infrastructure. `@fairco.in/core` supplies the default and an
   // override is an operational choice, not a credential.
   EXPLORER_BASE_URL: "a public Explorer URL, defaulted from @fairco.in/core",

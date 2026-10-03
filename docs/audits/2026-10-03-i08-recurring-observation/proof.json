@@ -1,0 +1,107 @@
+{
+  "base": "d77782b730e6d7657cfe4892ae1f8956b4074cbb",
+  "createdAtUtc": "2026-10-02T22:16:12.113066+00:00",
+  "scope": "inactive internal observations only; provider reader and platform identity are trusted fixture seams",
+  "sourceSha256": {
+    "docs/integrations/i08-payment-contract-review.md": "7c865b7eb27ec88353b152539815d0601d99f419b6864ce8904d1ef387846228",
+    "packages/backend/src/db/__tests__/derivationIndex.realdb.test.ts": "439198fb1def8868f2cb8f154cac1173c727c4896a81294e0e8f2142ae607216",
+    "packages/backend/src/db/migrations/0019_familiar_darkhawk.sql": "a51a56c6d118ff7ed14d2be3c5ab690ed1b90caf4368088f506992e3b796cb26",
+    "packages/backend/src/db/migrations/meta/0019_snapshot.json": "7ebf6651741167f4266ef43cdaa046807d5f9cbdf05777e83796f6e4ae62fae7",
+    "packages/backend/src/db/migrations/meta/_journal.json": "0feb6ab5d5c02af45bb7723c92b82e2b6752c6617f77ba6310ea47022db5dc9e",
+    "packages/backend/src/db/recurring/recurringMirrorRepository.ts": "a57604b899ea6c3136ba60085f78f8ace0320cd8f8e476fbafd31a9b6ab9c70c",
+    "packages/backend/src/db/schema/index.ts": "06ea9a818343657843666eaaf3a3c18964a7d95270ef86410d846faf6ac4cf69",
+    "packages/backend/src/db/schema/recurring.ts": "f50134e41a43d6c42ec9ad55811cc6c77945c578e5cea237e5b0e1864d86249f",
+    "packages/backend/src/services/providers/eventProcessor.ts": "f8dec318848f0afa052253325342cc49074b482bc625a0bda84ea451c696566f",
+    "packages/backend/src/services/recurring/__tests__/recurringObservation.realdb.test.ts": "dea92efac1171c65eeaa303aadccb2efb46e31ead4df69ef497ef7f34bc840cd",
+    "packages/backend/src/services/recurring/contracts.ts": "a23dd6e32b3b8cc1127a3b4ee2965f03624b701a3166b10c1ab3786aa452025a",
+    "packages/backend/src/services/recurring/recurringObservation.ts": "c9a10d7893acc0d0768d568be0c391c1a4731abb53f44e60f7e536f957069211"
+  },
+  "logsSha256": {
+    "backend-full.txt": "9c5d43e16914c128434a15005f39fa47d8ab6b7ed99e0588eb1d23794697a8a3",
+    "migration-repeat.txt": "68a50569cf6ba60fba7005271de02f802cd5e8ed9a622d95e1bacd0599e8084d",
+    "typescript.txt": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+    "migration-generate.txt": "7d3393ddd25642d4ceb7bed3bb43e83f2beb061d3153028d12bdba0ac11f3362",
+    "schema-census.txt": "952e945fd1b98c2c5ac5633efe240cdd51b50a792d65d143ca9c141676143606",
+    "cleanup.txt": "6195bfdf4c40e383dcaefd4703097406b9413f7f83d80404d417004d70ba8863",
+    "build.txt": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+    "focal-final.txt": "50a4b1958f60f6db7ed06881eebda7a4086e31e99ee1a0f16ead25ef375e7146",
+    "red.txt": "5957572daf1c9cbf80010e4c1851014261bbe42f246eebd10ebdac99bd55e35b",
+    "biome.txt": "ae4a3667534db6ee7abbbf6d889af79362b4c27bce1411febed1f7038b30e463",
+    "migration-full.txt": "0023947ecd587230886804f7aed54cd78d671c48d894e35380e55ee81b69595f",
+    "jsonb-red.txt": "070ede3608eefc054c0b38419f6f951d4b7018cf485e09d3ecd11516713653b1"
+  },
+  "commands": [
+    {
+      "cwd": "packages/backend",
+      "command": "DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres TEST_DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres bun run test src/services/recurring/__tests__/recurringObservation.realdb.test.ts",
+      "exitCode": 1,
+      "pass": 671,
+      "fail": 15,
+      "phase": "RED new observer stub plus exact table census"
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres TEST_DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres bun run test --test-name-pattern='inactive recurring observation'",
+      "exitCode": 0,
+      "pass": 20,
+      "fail": 0
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres TEST_DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres bun run test",
+      "exitCode": 0,
+      "pass": 690,
+      "fail": 0,
+      "files": 71
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "bun run build",
+      "exitCode": 0
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "bun run typecheck",
+      "exitCode": 0
+    },
+    {
+      "cwd": ".",
+      "command": "bun x --minimum-release-age=0 @biomejs/biome lint --error-on-warnings packages/backend/src/services/recurring packages/backend/src/db/recurring packages/backend/src/db/schema/recurring.ts",
+      "exitCode": 0
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/postgres bun run db:generate",
+      "exitCode": 0
+    },
+    {
+      "cwd": "packages/backend",
+      "command": "DATABASE_URL=postgres://peable_i08@127.0.0.1:5573/i08_mirror_20261003 bun run db:migrate -- --target-database=i08_mirror_20261003 --phase=all",
+      "exitCode": 0,
+      "runs": 2,
+      "applied": [
+        20,
+        0
+      ]
+    }
+  ],
+  "cleanup": {
+    "serverOwnedBy": "i04_handoff I08",
+    "host": "127.0.0.1",
+    "port": 5573,
+    "role": "peable_i08",
+    "dataDirectory": "/tmp/inference-1519/i04-handoff-peable/pgdata",
+    "remainingNonTemplateDatabases": [
+      "postgres"
+    ],
+    "serverStopped": true,
+    "pgCtlStatusExitCode": 3
+  },
+  "pending": [
+    "live reader/complete pagination proof",
+    "authenticated platform identity on ingress and binding importer authorization",
+    "historical no_mapping/backfill and exclusive routing activation",
+    "commercial/MoR and full recurring contract",
+    "sandbox financial parity, SDK publication, adoption, deployment"
+  ]
+}

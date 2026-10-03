@@ -1,0 +1,76 @@
+test	The lockfile check can still fail	﻿2026-10-03T04:26:53.0550478Z ##[group]Run bun run test:validate-lockfile
+test	The lockfile check can still fail	2026-10-03T04:26:53.0550922Z [36;1mbun run test:validate-lockfile[0m
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.4582479Z @peable.to/shared-types test: (pass) lets a failed refund return the payment to where the money actually is [0.07ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.4820138Z @peable.to/shared-types test:  34 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.4820674Z @peable.to/shared-types test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.4821936Z @peable.to/shared-types test: Ran 34 tests across 6 files. [44.00ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6077581Z @peable.to/sdk test: (pass) getPaymentIntent > wraps a network-level fetch failure as PeableApiError [0.20ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6198178Z @peable.to/sdk test: (pass) submitTx > wraps a network-level fetch failure as PeableApiError [0.16ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6262501Z @peable.to/sdk test: (pass) subscribe > a failed resubscribe on reconnect is swallowed (no unhandled rejection, no throw) [0.13ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6265581Z @peable.to/sdk test: (pass) subscribe > an emitWithAck failure disconnects the socket and throws PeableApiError [0.09ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6541454Z @peable.to/sdk test: (pass) createRestClient > wraps a network-level fetch failure as PeableApiError [0.25ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.6888469Z @peable.to/sdk test: (pass) createServiceTokenProvider > wraps a network-level fetch failure as PeableApiError [2.43ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.7272072Z @peable.to/sdk test:  120 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.7272551Z @peable.to/sdk test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:24.7273673Z @peable.to/sdk test: Ran 120 tests across 13 files. [226.00ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.2296411Z @peable.to/pay test: (pass) sendPayment > insufficient funds fails before anything is signed or broadcast [60.34ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.4018411Z @peable.to/checkout test: (pass) a failed recovery read keeps polling [17.98ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.4588908Z @peable.to/pay test: (pass) sendPayment > no rate given and none fetchable fails rather than guessing one [0.30ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.4764113Z @peable.to/checkout test: (pass) a failed subscribe starts polling and the payer sees the settlement [18.69ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.5092074Z @peable.to/checkout test: (pass) a failed poll is retried on the next tick, not given up on [15.78ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.5801737Z @peable.to/pay test: (pass) sendPayment > a destination that is not an address fails before broadcast [63.06ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.5836185Z @peable.to/checkout test: (pass) a failed request throws an Error whose message never contains a client_secret or a query string [0.21ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.5837934Z @peable.to/checkout test: (pass) a failed POST throws an Error identifying the path and status [0.14ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.6539529Z @peable.to/checkout test:  34 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.6539860Z @peable.to/checkout test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:25.6540689Z @peable.to/checkout test: Ran 34 tests across 11 files. [923.00ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2700691Z @peable.to/pay test: (pass) isKeylessRecipient > does not claim unrelated failures [0.04ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2708088Z @peable.to/pay test: (pass) classifyPayFailure > a transport failure is separated from a rejection [0.03ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2710834Z @peable.to/pay test: (pass) recoveryFor > a failure after broadcast never resumes the same payment [0.05ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2804724Z @peable.to/pay test: (pass) a superseded attempt decides nothing > a failure from an abandoned attempt does not replace the screen [0.07ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2808100Z @peable.to/pay test: (pass) recovery after a failure > a failure before anything was signed goes back to the typed amount [0.12ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2809037Z @peable.to/pay test: (pass) recovery after a failure > a failure after broadcast refuses to be walked back into [0.09ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2810060Z @peable.to/pay test: (pass) recovery after a failure > a payment in flight cannot be edited out from under itself [0.06ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2810940Z @peable.to/pay test: (pass) recovery after a failure > a receipt is not editable [0.05ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2833976Z @peable.to/pay test:  130 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2834231Z @peable.to/pay test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.2834790Z @peable.to/pay test: Ran 130 tests across 10 files. [2.85s]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.3129019Z @peable.to/frontend test: (pass) hasIdentityAuthMethod > false for a keyless (email / password / authenticator) account: /auth/methods is empty [0.02ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.4064656Z @peable.to/frontend test: (pass) deriveIdentitySeed > passes the Peable FairCoin domain info and returns the seed [0.18ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.8347714Z @peable.to/frontend test: (pass) M3: send address validation > rejects a checksum-broken address that passes the old prefix check [0.13ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.9204947Z @peable.to/frontend test: (pass) M2: salted-scrypt PIN records > a malformed scrypt record fails closed without throwing [0.26ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:27.9948302Z @peable.to/backend test: (pass) the provider event drain > fails a declined payment and tells the merchant [117.68ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.0747002Z @peable.to/backend test: (pass) the provider event drain > records a failure on a mapped event that names no payment [3.70ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.0892430Z @peable.to/backend test: (pass) the provider event drain > keeps going past a failure and applies the events behind it [14.48ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.5424510Z @peable.to/backend test: Warning: Peable dashboard membership check failed for application app_1: network unreachable
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.8510374Z @peable.to/frontend test: (pass) scrypt cost migration (legacy fixed-cost → self-describing) > a wrong PIN against a legacy fixed-cost record fails with no upgrade [417.07ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.8752706Z @peable.to/frontend test: (pass) M2: legacy record verification + migration > a wrong PIN against a legacy record fails with no upgrade [0.23ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.8780125Z @peable.to/frontend test: (pass) N-3: PIN attempt state transitions > an additional failure after the first lockout uses the doubled back-off [0.22ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.8781358Z @peable.to/frontend test: (pass) N-3: PIN attempt state transitions > a sustained loop of 'wait → fail again' produces exponential back-off (brute-force resistance) [0.09ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.9528368Z @peable.to/frontend test: (pass) fetchPriceHistory > throws when a sample fails the schema [0.23ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.9979537Z @peable.to/frontend test: (pass) H-1: broadcastTransactionToPeers reports real delivery count > a failing peer does not count toward peerCount [0.14ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:28.9980728Z @peable.to/frontend test: (pass) H-1: broadcastTransactionToPeers reports real delivery count > all peers failing → peerCount = 0 (must be treated as not-sent) [0.06ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:29.0839369Z @peable.to/frontend test:  388 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:29.0839624Z @peable.to/frontend test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:29.0840220Z @peable.to/frontend test: Ran 388 tests across 47 files. [1.79s]
+test	Run bun run --filter '*' test	2026-10-03T04:27:31.1238046Z @peable.to/backend test: Warning: Peable account sync failed for ca_01a10004-67ae-7282-80f5-4ab2b15e4972: provider refused
+test	Run bun run --filter '*' test	2026-10-03T04:27:32.4962828Z @peable.to/backend test: (pass) the webhook outbox > a failing endpoint leaves the event queued rather than losing it [47.78ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:33.3913036Z @peable.to/backend test: (pass) refunds > a failed refund does not consume the payment's remaining balance [9.49ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:33.3982380Z @peable.to/backend test: (pass) refunds > rethrows a retryable provider failure and leaves the refund pending [6.92ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:33.4162330Z @peable.to/backend test: (pass) refunds > a provider-reported failure is stored failed, with its reason [8.16ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:35.3553445Z @peable.to/backend test: (pass) marks an under-value payment as failed [45.34ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:35.6502990Z @peable.to/backend test: (pass) reporting what a payment came to > says unknown rather than failing when the provider is unreachable [5.56ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:36.9219663Z @peable.to/backend test: Warning: Peable social-send profile lookup failed for @flaky: network timeout
+test	Run bun run --filter '*' test	2026-10-03T04:27:36.9222406Z @peable.to/backend test: (pass) POST /v1/social/:username/next_address > 502s with type api_error (not 404) when the profile lookup fails upstream [34.32ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:40.6961350Z @peable.to/backend test: (pass) provider webhook ingress, real chain > the SAME delivery verifies through the real chain and fails behind express.json() [2.83ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:43.1905445Z @peable.to/backend test: (pass) GET/PATCH /v1/payment_links (merchant CRUD) > PATCH ignores amount/network even if sent (whitelist, not just unvalidated passthrough) [4.57ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:43.9066795Z @peable.to/backend test: (pass) connected accounts and transfers > drops a blank disabled-reason code rather than failing the sync [4.23ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:45.2145031Z @peable.to/backend test: (pass) provider_events > records a failure without removing the event from the drain, and clears it on success [4.28ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:46.9401429Z @peable.to/backend test: (pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.34ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:47.2087552Z @peable.to/backend test: (pass) merchant repository > treats an empty patch as a no-op read rather than a failed update [2.96ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:50.3024782Z @peable.to/backend test: (pass) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once [56.19ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:53.1536617Z @peable.to/backend test: (pass) mapPaymentIntentStatus > requires_payment_method is created, never failed [0.03ms]
+test	Run bun run --filter '*' test	2026-10-03T04:27:53.1542981Z @peable.to/backend test:  758 pass
+test	Run bun run --filter '*' test	2026-10-03T04:27:53.1543241Z @peable.to/backend test:  0 fail
+test	Run bun run --filter '*' test	2026-10-03T04:27:53.1543827Z @peable.to/backend test: Ran 758 tests across 74 files. [28.67s]
+image	Apply migrations with the image's own migrator	2026-10-03T04:27:30.2235590Z Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_thick_boom_boom

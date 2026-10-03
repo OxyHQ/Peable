@@ -1,0 +1,68 @@
+{
+  "sourceCommit": "251b7606561b3031dd645f5289a4307c649a1cb0",
+  "sources": [
+    {
+      "path": "packages/backend/scripts/verify-billing-sandbox.ts",
+      "sha256": "63968672c76de9ced06cb3bdc0ecad31d933b64c9877ec1e123f29e7a2b3b8c4"
+    },
+    {
+      "path": "packages/sdk/src/core/client.ts",
+      "sha256": "b48f12c1f2aa3f8a87f68e657aa5ebf655c7dbb417a26d8775f5942f790b67ba"
+    },
+    {
+      "path": "packages/sdk/__tests__/core/client.test.ts",
+      "sha256": "1ad2f4fd439b387c3db35151fad2d56eca485f3ecbc0c8232adb227d056f226c"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-red.log",
+      "sha256": "6e810046e3891b5c67105de7bdf23da24fbecc7ed0b86934e80fcdc2a143b1af"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-green.log",
+      "sha256": "b26db2f8980aee4a019c91d60f782f71e6e14b73ee2eb2d974626c410b343028"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-build.log",
+      "sha256": "39efb0fb26de68b505ff61bdd579c979be621c9b5cd36dc11974fa221f1e4fce"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sdk-response-void-inventory.log",
+      "sha256": "8794a00503ef5d14c3a6ac81702c08eb91f64ee3c88f5bb5d38d5771a0219866"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/http-loss-local.log",
+      "sha256": "70d6432aec79dedf8ed10171ee84b472061602bdc595e720b788d65989265729"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/http-loss-local-green.log",
+      "sha256": "987bb56b5fbbbc325d5189e5082b66e43a8739d4e60217c27c60fb02dd914ab4"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sandbox-a2-dry-run.log",
+      "sha256": "c6e723a0734526fed746e67273919ad2daea180566bc9be836c4f3373c4bd902"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-response/sandbox-observations.json",
+      "sha256": "0b61d96157f3364eb03839601685759bca6ce13fcec6a39a26f46542defc9ef3"
+    }
+  ],
+  "ciBeforeSdkFix": {
+    "run": "37093944465",
+    "head": "7a21141099f1f339b4e3517724001161362b1ea0",
+    "conclusion": "success",
+    "testCounts": {
+      "sharedTypes": 34,
+      "sdk": 115,
+      "checkout": 34,
+      "pay": 130,
+      "frontend": 388,
+      "backend": 758
+    },
+    "total": 1459,
+    "failures": 0,
+    "imageMigrationCount": 21,
+    "privateFullLogSha256": "84abaacee848a33944676ad43875a6c0123515c6362b4d75d86b7f361fa38ebb"
+  }
+}

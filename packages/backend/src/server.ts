@@ -1,3 +1,6 @@
+import { configureBilling } from './services/billing/configuredBilling';
+import { createBillingRouter } from './routes/billing';
+import type { BillingService } from './services/billing/billingService';
 import { startEcosystemActivity, stopEcosystemActivity, ecosystemActivityMiddleware } from './ecosystemActivity';
 /**
  * Peable Gateway — backend entry point.
@@ -62,6 +65,8 @@ const PUBLIC_RATE_LIMIT_WINDOW_MS = 15 * 60 * 1000;
 const PUBLIC_RATE_LIMIT_MAX = 30;
 
 export interface GatewayDeps {
+  /** Explicitly composed, cohort-limited recurrent service. Absent by default. */
+  billingService?: BillingService;
   /**
    * Merchant service-auth middleware (default `oxy.middleware.service()`,
    * which verifies EdDSA service tokens against Oxy's public JWKS).
@@ -232,6 +237,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   );
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
   app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit }));
+  app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
   app.use(
     createDashboardRouter({ requireOxyUser: deps.requireOxyUser, safeFetch: deps.safeFetch }),
   );
@@ -284,8 +290,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
 export async function start(): Promise<void> {
-  await connectPostgres();
-  const gateway = createGateway();
+  const database = await connectPostgres();
+  const billingService = await configureBilling(database);
+  const gateway = createGateway({ billingService });
   startEcosystemActivity(() => gateway.httpServer.listening);
   let stopping = false;
   const stop = () => {

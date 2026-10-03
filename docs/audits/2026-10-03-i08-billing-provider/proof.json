@@ -1,0 +1,248 @@
+{
+  "sourceCommit": "efbe3c822185d8cf1eb0abed80be7a38c4525364",
+  "base": "beb2f70833141f826a5d0e2743676da61363b499",
+  "sources": [
+    {
+      "path": "bun.lock",
+      "sha256": "bb458a2f16c141445bd183634f840cacfda3700e4731ccd3825a253304967cdc",
+      "bytes": 347486
+    },
+    {
+      "path": "docs/integrations/i08-approved-recurring-cohort.md",
+      "sha256": "fb44b9a4e56a72b4d8fc238b4b18eef045f115ad81c9e9a7bb0200dbb452d279",
+      "bytes": 3867
+    },
+    {
+      "path": "packages/backend/Dockerfile",
+      "sha256": "ce92f2eb1e5859dcbc9b8117c0b2cb3b63d7bbad79421f0c9af3f79cc05ce58d",
+      "bytes": 6391
+    },
+    {
+      "path": "packages/backend/package.json",
+      "sha256": "4b52c7a725f49e34cb623f7a9d0c3d4f0287b553291dc13dc469880ef9042435",
+      "bytes": 1083
+    },
+    {
+      "path": "packages/backend/src/config.ts",
+      "sha256": "0d9c9695cbbda2b12ba4e2f57190f12f00a652630862d447fcbb8a329758c3bc",
+      "bytes": 14544
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/deploySecrets.test.ts",
+      "sha256": "a7742a9e9028fdd5b9b9abb1046ea400a47e0f4ed1f7d153653ec5cd8d4d5410",
+      "bytes": 7887
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/derivationIndex.realdb.test.ts",
+      "sha256": "d265b0eaf090546161e5cc1a5c20e16692740db56b58521ab280b5c25f77fe62",
+      "bytes": 9570
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/schemaGates.realdb.test.ts",
+      "sha256": "8256923e9f6ab403052c18db61339a2129717b8cc924e34e99c64ca0db2409be",
+      "bytes": 11228
+    },
+    {
+      "path": "packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts",
+      "sha256": "291723a95e3fa8200ca7cdb2db0b40a84092da132c23a51f27029bb4626eaffc",
+      "bytes": 9507
+    },
+    {
+      "path": "packages/backend/src/db/billing/billingRepository.ts",
+      "sha256": "de6b21598beecc4952551876c62186e0a112ed66995a479e5160b8035ff2c788",
+      "bytes": 14219
+    },
+    {
+      "path": "packages/backend/src/db/migrations/0020_thick_boom_boom.sql",
+      "sha256": "3c8627ac3cb98bf826bc043e8248521c3de44339b7f54ff8b3f74ed6e93cc42c",
+      "bytes": 7415
+    },
+    {
+      "path": "packages/backend/src/db/migrations/meta/0020_snapshot.json",
+      "sha256": "bd901dece82c02859e182020f5fa5b56621eb320ac912018354b4f481d239e6c",
+      "bytes": 108076
+    },
+    {
+      "path": "packages/backend/src/db/migrations/meta/_journal.json",
+      "sha256": "399ab1a2166553a6fd3b94676232d4ffe9a8ea1613672275b42c2e9813399b63",
+      "bytes": 3074
+    },
+    {
+      "path": "packages/backend/src/db/schema/billing.ts",
+      "sha256": "2be88c0902a12c23ce5093e26056b658f2ff455603c6c6e8807d5ab4f4096cae",
+      "bytes": 6511
+    },
+    {
+      "path": "packages/backend/src/db/schema/index.ts",
+      "sha256": "d5ebd6e3054699c77790209d52ee1780c1850776dd9b2de78f15f48e837013e5",
+      "bytes": 1057
+    },
+    {
+      "path": "packages/backend/src/routes/billing.ts",
+      "sha256": "04b89ffa6def1ad7e366f433145ad2f22f02b7a00702bdca6f0d7480f2a272e3",
+      "bytes": 2929
+    },
+    {
+      "path": "packages/backend/src/server.ts",
+      "sha256": "fc07545a0e0ef8be8e747ba2b64bc0c52f7a0ee14866936d67e7127cfd5fb7aa",
+      "bytes": 15753
+    },
+    {
+      "path": "packages/backend/src/services/billing/__tests__/billingHttp.realdb.test.ts",
+      "sha256": "a4d4f260ac2a95070b4e5e7ea9d2b07dfef11d8246da18e4caf1f1f41a46505b",
+      "bytes": 19991
+    },
+    {
+      "path": "packages/backend/src/services/billing/billingService.ts",
+      "sha256": "75b13a1512e7050ddc542ef4f1879ce416b127db9a22cc5366e168b4ff9cae25",
+      "bytes": 9998
+    },
+    {
+      "path": "packages/backend/src/services/billing/configuredBilling.ts",
+      "sha256": "98e4a85d48b7e784bfa81a9f1cf06bf31e192865108a21058a9c21245f06d785",
+      "bytes": 2163
+    },
+    {
+      "path": "packages/backend/src/services/billing/contracts.ts",
+      "sha256": "14521be76a26a74588ee9677ca94a3a2af38def6c7c11579cde3c09fc894239f",
+      "bytes": 4053
+    },
+    {
+      "path": "packages/backend/src/services/billing/provider.ts",
+      "sha256": "2cdf946d67b426d31628a2fa7d19bc8756f8b4ff31830961c69cc0fd9ad4e3cb",
+      "bytes": 1355
+    },
+    {
+      "path": "packages/backend/src/services/billing/stripeBillingProvider.ts",
+      "sha256": "28494ea10eca47fdb196e0ac36bb2dcbf635a4c2688b70a6960286c5cb54274f",
+      "bytes": 7305
+    },
+    {
+      "path": "packages/backend/src/services/billing/verifiedBindings.ts",
+      "sha256": "62987ce226829b6cdacb15a8278a238b46c36887766dc730e3316743f00afb07",
+      "bytes": 7158
+    },
+    {
+      "path": "packages/backend/src/services/providers/stripe/client.ts",
+      "sha256": "dc0ecd5f190684e8a59522b15da322b36e1f6c42d9a80729b03a2397057bd8d2",
+      "bytes": 15032
+    },
+    {
+      "path": "packages/sdk/src/index.ts",
+      "sha256": "ce611f93711a278398ebb3a3604a13de9910c5a3a22e24499890deea6055bc7d",
+      "bytes": 5227
+    },
+    {
+      "path": "packages/sdk/src/resources/billing.ts",
+      "sha256": "00397db9a364850e6f3d7dbd4ced29f44e774e81a2b8a7676a26aac9194cdb58",
+      "bytes": 1678
+    },
+    {
+      "path": "packages/shared-types/src/billing.ts",
+      "sha256": "d9b8bda9130b38d18023b9cfc3f838ebba4c68cd4ce3fa727bce51aa96fd427b",
+      "bytes": 1499
+    },
+    {
+      "path": "packages/shared-types/src/index.ts",
+      "sha256": "370f2fbadd365e9264f9c27cd0d56b4e74c2c30a902efd64060bb8b4078911df",
+      "bytes": 2323
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/repository-red.log",
+      "sha256": "359b6c63c736e3f2a3eb85ad7d7c2afbf20d98971478e740610b4663a8867bf4",
+      "bytes": 21016
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-wire-red.log",
+      "sha256": "3426ecb6aa57c22e270f6a70ac2579a26064ba4b0bbea17fb18864cb3c24451f",
+      "bytes": 8961
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/backend-full.log",
+      "sha256": "6f9288124f000a57a7391bc74a81930b2fd4a5a6263cf0edaff5782b52f8022b",
+      "bytes": 190505
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/backend-full-final.log",
+      "sha256": "d8b44491520b6874e6b2ae06b7dd638871a7104faa80449035ab15a82935d4d4",
+      "bytes": 188470
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-tests.log",
+      "sha256": "664934693d10e53dc18e891f53fd6948db6e51c75b5bf6592ad8fd6d105b5c91",
+      "bytes": 11980
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-build.log",
+      "sha256": "39efb0fb26de68b505ff61bdd579c979be621c9b5cd36dc11974fa221f1e4fce",
+      "bytes": 201
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/backend-build.log",
+      "sha256": "5ac71a99decf5b92dbfe798066cbe8ea317395f8f764f5a8879fd3511ca99454",
+      "bytes": 6
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/backend-lint.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "bytes": 15
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/generate.log",
+      "sha256": "d7af534ebb2464c609000a7bbc5c477353967f71934a48373f10621cdb298bc1",
+      "bytes": 1053
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/generate-repeat.log",
+      "sha256": "bcc4c64870fb6fd7af9ea8aa03992612205b512749eda0b93516fdea5c42c480",
+      "bytes": 1014
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/migration-fresh-repeat.log",
+      "sha256": "1db682edb51e95fc2adcca93679dacb80fdac218cb2e2892fffd9686eb51e9c7",
+      "bytes": 2351
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/database-teardown.log",
+      "sha256": "ebc3adfc8bf77f2db96740534de14599c19a5237cf2c1f4891bfd4ccc7de08a5",
+      "bytes": 58
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/interrupted-harness-cleanup.log",
+      "sha256": "be49c8ca275e8526f17f4290c35831a6a2ad05d5e5c7459eb38c569b492961b3",
+      "bytes": 121
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/dockerfile-focal.log",
+      "sha256": "74d1f9c8394b94838235cdc3f07db0a16042d58e1a7c0cf57e5821c9bbd10fec",
+      "bytes": 6230
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/typecheck-importer.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92",
+      "bytes": 15
+    }
+  ],
+  "results": {
+    "backend": {
+      "pass": 758,
+      "fail": 0,
+      "files": 74
+    },
+    "sdk": {
+      "pass": 115,
+      "fail": 0
+    },
+    "newCases": 25,
+    "migrationFresh": 21,
+    "migrationRepeat": 0
+  },
+  "boundaries": [
+    "Oxy mint/auth synthetic; real OxyServer scope guard",
+    "Stripe client synthetic; no provider network",
+    "Real SDK built output, HTTP, domain and PostgreSQL",
+    "Not sandbox, release, adoption, image CI or production acceptance"
+  ]
+}

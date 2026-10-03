@@ -1,0 +1,219 @@
+$ bun test src "--test-name-pattern=private recurring reader|inactive recurring observation"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+src/db/__tests__/deployWorkflow.test.ts:
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+src/db/__tests__/rail.realdb.test.ts:
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+(pass) private recurring reader > invoice permits an inclusive point period, subscription still requires positive duration [1.28ms]
+(pass) private recurring reader > normalizes complete subscription pages, orders ordinally and strips previews/PII [1.42ms]
+(pass) private recurring reader > normalizes invoice point periods and observed amounts without calculating [0.69ms]
+(pass) private recurring reader > rejects configured platformAccountId mismatch before requesting [0.14ms]
+(pass) private recurring reader > rejects configured apiVersion mismatch before requesting [0.06ms]
+(pass) private recurring reader > rejects configured livemode mismatch before requesting [0.10ms]
+(pass) private recurring reader > rejects configured environment mismatch before requesting [0.06ms]
+(pass) private recurring reader > rejects configured providerAccountId mismatch before requesting [0.08ms]
+(pass) private recurring reader > rejects an unsupported configured API version at construction [0.09ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.26ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.18ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.09ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.29ms]
+(pass) private recurring reader > rejects malformed, duplicate or repeated-cursor pages without a snapshot [0.17ms]
+(pass) private recurring reader > rejects the page cap without request 21 [0.55ms]
+(pass) private recurring reader > rejects more than 1000 periods without a partial snapshot [3.66ms]
+(pass) private recurring reader > accepts the exact 1000-item boundary when exhausted [10.41ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.33ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.04ms]
+(pass) private recurring reader > rejects inconsistent subscription identity/mode/status [0.26ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.33ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.26ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.11ms]
+(pass) private recurring reader > rejects inconsistent subscription items and invalid timestamps [0.06ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.28ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.09ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.05ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.08ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.08ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.08ms]
+(pass) private recurring reader > rejects invoice lines without consistent explicit subscription attribution [0.04ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.14ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.05ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.07ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.10ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.09ms]
+(pass) private recurring reader > rejects unsupported invoice roots and unsafe quantities [0.07ms]
+(pass) private recurring reader > root recheck rejects an observed change during pagination [0.15ms]
+(pass) private recurring reader > already aborted request never calls the client [0.14ms]
+(pass) private recurring reader > abort interrupts a client that ignores the signal and prevents later pages [1.47ms]
+(pass) private recurring reader > one global deadline bounds an uncooperative client without an upstream abort [2002.94ms]
+(pass) private recurring reader > provider errors are sanitized [0.52ms]
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+Applying 20 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Applied 20 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk
+(pass) inactive recurring observation / real PostgreSQL > keeps explicit binding insert-only, including concurrent repeats and conflicting merchants/environments [48.54ms]
+(pass) inactive recurring observation / real PostgreSQL > observes subscription and invoice periods with the same merchant binding and atomic outbox [36.66ms]
+(pass) inactive recurring observation / real PostgreSQL > rejects invoice attribution to another merchant subscription [24.92ms]
+(pass) inactive recurring observation / real PostgreSQL > absorbs concurrent replay and post-commit replay without another read or outbox [24.20ms]
+(pass) inactive recurring observation / real PostgreSQL > reads current snapshots for reversed/equal event times, without ordering state by event id [33.52ms]
+(pass) inactive recurring observation / real PostgreSQL > leaves an unknown object pending without attribution, read, or outbox [14.75ms]
+(pass) inactive recurring observation / real PostgreSQL > rolls back snapshot/revision/processedAt when outbox insertion fails, then retries once [37.82ms]
+(pass) inactive recurring observation / real PostgreSQL > times out a stalled reader and releases locks without processing or changing state [48.73ms]
+(pass) inactive recurring observation / real PostgreSQL > keeps default routing inactive; opt-in unknown does not stop a later bound object [34.93ms]
+(pass) inactive recurring observation / real PostgreSQL > serializes distinct event reads under the binding lock and timestamps after reading [51.01ms]
+(pass) inactive recurring observation / real PostgreSQL > enforces merchant/application/environment ownership in the database [15.62ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses stored event scope/mode/version mismatches before the reader [29.42ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot pii without state, event completion or outbox [19.39ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot partial without state, event completion or outbox [21.67ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongAccount without state, event completion or outbox [24.15ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongScope without state, event completion or outbox [19.29ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongMode without state, event completion or outbox [17.90ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongObject without state, event completion or outbox [21.09ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot wrongVersion without state, event completion or outbox [18.42ms]
+(pass) inactive recurring observation / real PostgreSQL > refuses invalid snapshot duplicateItems without state, event completion or outbox [18.72ms]
+(pass) inactive recurring observation / real PostgreSQL > persists the private reader invoice projection and outbox through real SQL, replaying unchanged [42.89ms]
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+ 63 pass
+ 670 filtered out
+ 0 fail
+ 231 expect() calls
+Ran 63 tests across 72 files. [3.05s]

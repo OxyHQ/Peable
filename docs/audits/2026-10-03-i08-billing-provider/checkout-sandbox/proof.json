@@ -1,0 +1,41 @@
+{
+  "sourceCommit": "acece5eced8d78215c34b13a6934c916f6ac56d4",
+  "sources": [
+    {
+      "path": "packages/backend/scripts/verify-billing-sandbox.ts",
+      "sha256": "45e3446f395e169b60845de8e009afaf9ba2b3e35ce0b97fa6a12bc5362802b5"
+    },
+    {
+      "path": "packages/sdk/src/core/client.ts",
+      "sha256": "b48f12c1f2aa3f8a87f68e657aa5ebf655c7dbb417a26d8775f5942f790b67ba"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-sandbox/sandbox-checkout-a3.log",
+      "sha256": "5bc23387f74c8b1787b948ca0aefa0aa48ad91d12fa200027b275f896512c7d1"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-sandbox/sandbox-checkout-a4.log",
+      "sha256": "ac873d7af7b1c44731b7bb46e2232069d30435a9e8762d2d6e1983dc079ee112"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-sandbox/sandbox-checkout-a5.log",
+      "sha256": "a0d5da4bfdee92cdd0e07648ec5e4b4fd9b85cc09dfe2445a2a83969779a3890"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-sandbox/observations.json",
+      "sha256": "6220c95d04532b0113fe31b5f372e858afa16601fc8a32089189298c1816e732"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/checkout-sandbox/owned-databases-absence.log",
+      "sha256": "444cccd83969a3fae5b08c03e85ffd10d2d7c142708d735db17df480478fb1ed"
+    }
+  ],
+  "commands": [
+    "bun --no-env-file packages/backend/scripts/verify-billing-sandbox.ts --execute --checkout"
+  ],
+  "privateManifestRoot": "/home/nate/Oxy/.agent-evidence/i04-handoff-i08-20261003",
+  "testBoundary": "Oxy mint/auth synthetic; Stripe test-mode, SDK/HTTP/domain/SQL real; isolated Chromium own context; no production effects",
+  "residual": "Owned initial default Portal configuration active with three mutating features disabled; rechecked on a2-a5; no foreign settings changed"
+}

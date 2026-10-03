@@ -1,0 +1,67 @@
+$ bun run build:cjs && bun run build:esm && bun run build:types
+$ tsc -p tsconfig.cjs.json
+$ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+ESM imports fixed
+$ tsc -p tsconfig.types.json
+bun pack v1.4.2 (744846f84)
+
+packed 2.43KB package.json
+packed 15.45KB dist/cjs/browser/mount.js
+packed 9.29KB dist/cjs/browser/payerClient.js
+packed 1.96KB dist/cjs/checkout.js
+packed 4.26KB dist/cjs/core/client.js
+packed 1.78KB dist/cjs/core/config.js
+packed 4.87KB dist/cjs/core/errors.js
+packed 3.20KB dist/cjs/core/serviceToken.js
+packed 4.65KB dist/cjs/index.js
+packed 1.22KB dist/cjs/resources/billing.js
+packed 1.1KB dist/cjs/resources/checkoutSessions.js
+packed 2.59KB dist/cjs/resources/connectedAccounts.js
+packed 2.1KB dist/cjs/resources/merchants.js
+packed 2.40KB dist/cjs/resources/paymentIntents.js
+packed 0.82KB dist/cjs/resources/paymentLinks.js
+packed 2.39KB dist/cjs/resources/refunds.js
+packed 2.21KB dist/cjs/resources/transfers.js
+packed 3.0KB dist/cjs/resources/webhooks.js
+packed 14.87KB dist/esm/browser/mount.js
+packed 9.1KB dist/esm/browser/payerClient.js
+packed 1.14KB dist/esm/checkout.js
+packed 4.13KB dist/esm/core/client.js
+packed 1.59KB dist/esm/core/config.js
+packed 4.26KB dist/esm/core/errors.js
+packed 3.0KB dist/esm/core/serviceToken.js
+packed 3.1KB dist/esm/index.js
+packed 1.1KB dist/esm/resources/billing.js
+packed 0.83KB dist/esm/resources/checkoutSessions.js
+packed 2.42KB dist/esm/resources/connectedAccounts.js
+packed 1.84KB dist/esm/resources/merchants.js
+packed 2.23KB dist/esm/resources/paymentIntents.js
+packed 0.66KB dist/esm/resources/paymentLinks.js
+packed 2.25KB dist/esm/resources/refunds.js
+packed 2.1KB dist/esm/resources/transfers.js
+packed 2.83KB dist/esm/resources/webhooks.js
+packed 4.88KB dist/types/browser/mount.d.ts
+packed 3.60KB dist/types/browser/payerClient.d.ts
+packed 442B dist/types/checkout.d.ts
+packed 0.65KB dist/types/core/client.d.ts
+packed 1.39KB dist/types/core/config.d.ts
+packed 2.65KB dist/types/core/errors.d.ts
+packed 487B dist/types/core/serviceToken.d.ts
+packed 3.94KB dist/types/index.d.ts
+packed 1.0KB dist/types/resources/billing.d.ts
+packed 1.47KB dist/types/resources/checkoutSessions.d.ts
+packed 3.52KB dist/types/resources/connectedAccounts.d.ts
+packed 4.93KB dist/types/resources/merchants.d.ts
+packed 3.21KB dist/types/resources/paymentIntents.d.ts
+packed 1.1KB dist/types/resources/paymentLinks.d.ts
+packed 3.31KB dist/types/resources/refunds.d.ts
+packed 3.23KB dist/types/resources/transfers.d.ts
+packed 0.95KB dist/types/resources/webhooks.d.ts
+
+peable.to-sdk-0.2.0.tgz
+
+Total files: 52
+Shasum: f34bc2bb9de00aa5e7b631893a8cfb9e9a6c62aa
+Integrity: sha512-hG3LW2DKYc7Cg[...]R182obt6LGvrg==
+Unpacked size: 163.83KB
+Packed size: 47.94KB

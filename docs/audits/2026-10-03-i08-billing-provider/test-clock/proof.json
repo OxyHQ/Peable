@@ -1,0 +1,64 @@
+{
+  "sourceCommit": "84b54a643d70809a4438b90314dd4980c062fdfe",
+  "sources": [
+    {
+      "path": "packages/backend/scripts/verify-billing-test-clock.ts",
+      "sha256": "ade187e6f201c7dcea426079665b35643eef65bd2587257f77d6ed71a5911deb"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/sandbox-clock-c1.log",
+      "sha256": "452d4904f67e09456fbbab0ae9076a664dbe91bd782b54ea891d9b9084c43b43"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/sandbox-clock-c2.log",
+      "sha256": "40ef1743e387bee5a5174014b087c2541162505f4fff881ff14af0135b308717"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/test-clock-typecheck-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/test-clock-dry-run.log",
+      "sha256": "b8c59a0812dacdeaca22daa2e6ef09e0ae083cd0d6b88c97b967b118ef27d70f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/test-clock-c2-typecheck.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/test-clock-c2-dry-run.log",
+      "sha256": "b8c59a0812dacdeaca22daa2e6ef09e0ae083cd0d6b88c97b967b118ef27d70f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/observations.json",
+      "sha256": "55302eab07f9eff111b7426ba6166c00c4a8ba94861a96298ef7664922ae7c9b"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/database-absence.log",
+      "sha256": "7e90771e308923386496714f0519861608848f9337b130b069d362dd5902a10a"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/test-clock/ci-37096529545-excerpt.log",
+      "sha256": "7cd3aa9c7b2914dcf7dd13f696ee3e20d611a7604d11e58bee1e7fe9df3e4e0c"
+    }
+  ],
+  "commands": [
+    "bun --no-env-file packages/backend/scripts/verify-billing-test-clock.ts --execute",
+    "bun --no-env-file packages/backend/scripts/verify-billing-test-clock.ts --execute --failure-sca"
+  ],
+  "primaryFixtureSource": {
+    "url": "https://docs.stripe.com/testing",
+    "privateHtmlSha256": "5890bca89ecc9ceb0089d98764b68a2eda1e27ccd8e48a10f93278cf0b2705eb"
+  },
+  "ci": {
+    "run": "37096529545",
+    "head": "feb15cc",
+    "conclusion": "success",
+    "totalPass": 1464,
+    "fail": 0,
+    "imageMigrations": 21,
+    "privateFullLogSha256": "24c81f13f5867d85654eb24758652c074817d220444eea281b367841b25d4f84"
+  }
+}

@@ -1,0 +1,21 @@
+$ drizzle-kit generate
+No config path provided, using default 'drizzle.config.ts'
+Reading config file '/home/nate/Oxy/Peable/.worktrees/i08-recurring-mirror-20261003/packages/backend/drizzle.config.ts'
+15 tables
+checkout_sessions 15 columns 4 indexes 3 fks
+connected_accounts 20 columns 1 indexes 1 fks
+disputes 14 columns 2 indexes 2 fks
+merchants 16 columns 2 indexes 0 fks
+payment_intents 20 columns 5 indexes 2 fks
+payment_links 14 columns 3 indexes 2 fks
+provider_events 12 columns 1 indexes 0 fks
+recurring_mirrors 15 columns 0 indexes 1 fks
+recurring_observation_outbox 6 columns 0 indexes 2 fks
+refunds 14 columns 2 indexes 2 fks
+social_receive_cursors 7 columns 1 indexes 0 fks
+social_send_attributions 10 columns 1 indexes 0 fks
+transfer_reversals 13 columns 1 indexes 2 fks
+transfers 16 columns 2 indexes 3 fks
+webhook_deliveries 16 columns 2 indexes 2 fks
+
+[✓] Your SQL migration file ➜ src/db/migrations/0019_familiar_darkhawk.sql 🚀
