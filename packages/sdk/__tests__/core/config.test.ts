@@ -33,3 +33,10 @@ describe('resolveConfig', () => {
     expect(() => resolveConfig({ publicKey: 'oxy_dk_x', secret: '' })).toThrow(/secret/);
   });
 });
+
+test('optional HTTP deadline preserves the existing default and refuses invalid explicit values', () => {
+  expect(resolveConfig({ publicKey: 'fixture', secret: 'fixture' }).requestTimeoutMs).toBeUndefined();
+  for (const requestTimeoutMs of [0, -1, Infinity, NaN, 1.5, 2147483648]) {
+    expect(() => resolveConfig({ publicKey: 'fixture', secret: 'fixture', requestTimeoutMs })).toThrow(/requestTimeoutMs/);
+  }
+});

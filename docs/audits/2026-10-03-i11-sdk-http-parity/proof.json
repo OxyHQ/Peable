@@ -1,0 +1,105 @@
+{
+  "sourceCommit": "cd9174f0e96812a31ffb101f89ef16130e1c0149",
+  "sources": [
+    {
+      "path": "bun.lock",
+      "sha256": "1d9736eec1fa068cca77fc2f9df03b10676ca71d9c56449e1c1e3b7228b17cb1"
+    },
+    {
+      "path": "packages/sdk/README.md",
+      "sha256": "f4125276c893a5fd04dfc7efb3923533843df6e564c241d67f75856ce1d429b8"
+    },
+    {
+      "path": "packages/sdk/__tests__/core/config.test.ts",
+      "sha256": "35d0ceea671676056172cb5729500b7fdc0d1ecaa0f44f5048529ff56de18ca7"
+    },
+    {
+      "path": "packages/sdk/__tests__/core/deadlines.real-http.test.ts",
+      "sha256": "360d709aca60513af9987e18d86ea3c1c5e4d8d9b8628e1937a6bdb31cf99093"
+    },
+    {
+      "path": "packages/sdk/package.json",
+      "sha256": "639dcd64a8579b7c9199c52189299f457b5e39d8fc83374c765f8ddbf20913f2"
+    },
+    {
+      "path": "packages/sdk/scripts/verify-http-parity-packed.mjs",
+      "sha256": "9f8119474dedde6ead6446b1a86fd8dbce78cbc80ea6f51681d8af727bd0c44c"
+    },
+    {
+      "path": "packages/sdk/src/core/client.ts",
+      "sha256": "7dd35f627c57c5c4514015424f3462353a2129e4a159df380eb6fc2436c498f2"
+    },
+    {
+      "path": "packages/sdk/src/core/config.ts",
+      "sha256": "22376887392898697bd70963cb9ad2098702e4ef2bf1bdc0829697cafae31aeb"
+    },
+    {
+      "path": "packages/sdk/src/core/serviceToken.ts",
+      "sha256": "13354504e910b2859a1f101831454ffa497eec173463c6384b18edcb4c87ca70"
+    },
+    {
+      "path": "packages/sdk/src/index.ts",
+      "sha256": "86cda0e6c2bc820d408653bd4f61051b409eec546d99349a650c34e7dbb2c7ee"
+    },
+    {
+      "path": "packages/sdk/src/resources/paymentIntents.ts",
+      "sha256": "3c8453ad6b7822a1bdae949898b445e6b649af0f13ced0d6223f9008cec60141"
+    },
+    {
+      "path": "packages/sdk/src/resources/refunds.ts",
+      "sha256": "beb8d10f80a6ae06e2bcd68fbcd8e6bc6f275ebdcdc7e62b8abf1aaf64e17381"
+    },
+    {
+      "path": "packages/sdk/src/resources/transfers.ts",
+      "sha256": "fcb22ebacfbc8370fa019bc8318e8b24781360a169896c6a03d37ff304e41db7"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/README.md",
+      "sha256": "4ba99915187f6a9631f0748733aca54a40917ef58a44c68e8fc90f858c525e7c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/build-pack-final.log",
+      "sha256": "52e29d2ba2d17b65907c2e07de6b7d679f440cfe68ad918d42ac1bb92d8b5da8"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/green-attempt1.log",
+      "sha256": "f6f69623842f6d55d9daafccd40f8ffd9926c38b6b437ecf98d3ca9f90a1823c"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/green-release.log",
+      "sha256": "10941b3c4a3ad3345f05f812d9aad486e7f451843fa7c64fa61ef88e834b7fee"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/install-version.log",
+      "sha256": "af2a005c2b5cbdfacc95e437a67da016d4d27b6b271196db54058fc1028a29e9"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/packed-consumer-final.log",
+      "sha256": "263c5a50269ad857add0999696b809c92d550618ccff1ee9430656630dfc0222"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/red.log",
+      "sha256": "22f013454ccc6ba47de4e2cc87e0a6dc5f627850bb4bd4d9f0d30ab6fc6adf03"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/types-final2.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i11-sdk-http-parity/types-release.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "privateArtifacts": [
+    {
+      "path": "/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/peable.to-sdk-0.2.1.tgz",
+      "sha256": "b4b61f66d888d9274c2ed1e585bdaa7115bb04beb7d2c552f7cf5df4f8467ff3"
+    },
+    {
+      "path": "/home/nate/Oxy/Peable/.worktrees/i11-sdk-packed-2o6vrZ/evidence.json",
+      "sha256": "338e2f3acb32cd9bf07d7d6e623b122378087b53ac382c8c08f958ea2ed53ed1"
+    }
+  ]
+}

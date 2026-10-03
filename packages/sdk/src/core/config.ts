@@ -21,6 +21,8 @@ export interface PeableConfig {
   baseURL?: string;
   /** oxy-api host used to mint the service token. Default `https://api.oxy.so`. */
   oxyApiUrl?: string;
+  /** Optional deadline per HTTP attempt, including body consumption. */
+  requestTimeoutMs?: number;
 }
 
 /** `PeableConfig` with every optional field defaulted and normalized. */
@@ -29,6 +31,16 @@ export interface ResolvedPeableConfig {
   secret: string;
   baseURL: string;
   oxyApiUrl: string;
+  requestTimeoutMs?: number;
+}
+
+export function resolveRequestTimeout(value: number | undefined): number | undefined {
+  if (value === undefined) return undefined;
+  const timeout = value;
+  if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) {
+    throw new Error('Peable: requestTimeoutMs must be a positive32-bit integer');
+  }
+  return timeout;
 }
 
 function stripTrailingSlash(url: string): string {
@@ -49,6 +61,7 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
     throw new Error('Peable: `secret` is required');
   }
   return {
+    requestTimeoutMs: resolveRequestTimeout(config.requestTimeoutMs),
     publicKey: config.publicKey,
     secret: config.secret,
     baseURL: stripTrailingSlash(config.baseURL ?? DEFAULT_GATEWAY_BASE_URL),
