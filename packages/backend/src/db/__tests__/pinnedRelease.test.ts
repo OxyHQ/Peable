@@ -23,7 +23,13 @@ if op=='describe-task-definition':emit(s['definitions'][arg('--task-definition')
 if op=='deregister-task-definition':
  s['definitions'][arg('--task-definition')]['taskDefinition']['status']='INACTIVE';emit(s['definitions'][arg('--task-definition')])
 if op=='register-task-definition':
- payload=json.loads(Path(arg('--cli-input-json')[7:]).read_text());arn='arn:td:'+str(len(s['definitions'])+1)
+ payload=json.loads(Path(arg('--cli-input-json')[7:]).read_text())
+ if payload.get('tags')==[]:
+  p.write_text(json.dumps(s));print('An error occurred (ClientException) when calling the RegisterTaskDefinition operation: Tags can not be empty.',file=sys.stderr);sys.exit(254)
+ if s['scenario'] in ['aws-error','local-error']:
+  p.write_text(json.dumps(s));prefix='An error occurred (AccessDeniedException) when calling the RegisterTaskDefinition operation: ' if s['scenario']=='aws-error' else 'Parameter validation failed: '
+  print(prefix+'SECRET_CANARY token=https://private.invalid/?token=DO_NOT_PRINT',file=sys.stderr);sys.exit(252)
+ arn='arn:td:'+str(len(s['definitions'])+1)
  if s['scenario']=='tamper':payload['containerDefinitions'][0]['environment'].append({'name':'UNREQUESTED','value':'bad'})
  result={'taskDefinition':dict(payload,taskDefinitionArn=arn,revision=len(s['definitions'])+1,status='ACTIVE'),'tags':payload.pop('tags',[])}
  result['taskDefinition'].pop('tags',None);s['definitions'][arn]=result;emit(result)
@@ -48,7 +54,7 @@ function fixture(scenario = 'success', zero = false) {
   if (scenario === 'mixed-digest') tasks.push({ ...task, taskArn: 'arn:task:two', containers: [{ name: 'peable', imageDigest: nextDigest }] });
   if (scenario === 'mixed-revision') tasks.push({ ...task, taskArn: 'arn:task:two', taskDefinitionArn: 'arn:td:other' });
   const service = { status: 'ACTIVE', taskDefinition: 'arn:td:old', desiredCount: tasks.length, networkConfiguration: { awsvpcConfiguration: { subnets: ['subnet-own'], securityGroups: ['sg-own'], assignPublicIp: 'DISABLED' } }, deployments: [{ status: 'PRIMARY', taskDefinition: 'arn:td:old', rolloutState: 'COMPLETED', runningCount: tasks.length }] };
-  writeFileSync(statePath, JSON.stringify({ scenario, service, tasks, definitions: { 'arn:td:old': { taskDefinition: td, tags: [{ key: 'app', value: 'peable' }] } }, calls: [] }));
+  writeFileSync(statePath, JSON.stringify({ scenario, service, tasks, definitions: { 'arn:td:old': { taskDefinition: td, tags: scenario === 'empty-tags' ? [] : [{ key: 'app', value: 'peable' }] } }, calls: [] }));
   writeFileSync(join(directory, 'aws'), fakeAws); chmodSync(join(directory, 'aws'), 0o700);
   const env = { ...process.env, PATH: `${directory}:${process.env.PATH}`, FAKE_STATE: statePath, APP: 'peable', CLUSTER: 'synthetic-cluster', TASK_FAMILY: 'oxy-peable', ECR_REGISTRY: 'registry.example', CANDIDATE_IMAGE: `${repository}@${nextDigest}`, GITHUB_OUTPUT: output, RELEASE_RECEIPT_DIR: join(directory, 'receipts'), ROLLOUT_TIMEOUT_SECONDS: '2', ROLLOUT_POLL_SECONDS: '0.01' };
   return {
@@ -75,12 +81,35 @@ describe('pinned ECS release', () => {
     expect(steps.find(step => step.name?.includes('Clean up unused'))?.if).toBe('always()');
     expect(steps.find(step => step.name?.startsWith('Migrate (post)'))?.if).not.toContain('desiredCount');
   });
+  test('omits empty tags from the actual untagged deployment shape', () => {
+    const f = fixture('empty-tags'); try {
+      expect(f.run('prepare').exitCode).toBe(0);
+      expect(f.state().calls.filter((op: string) => op === 'register-task-definition')).toHaveLength(2);
+      expect(f.run('cleanup').exitCode).toBe(0);
+    } finally { f.remove(); }
+  });
+  for (const scenario of ['aws-error', 'local-error']) {
+    test(`reports only safe error code and CLI exit for ${scenario}`, () => {
+      const f = fixture(scenario); try {
+        const result = f.run('prepare');
+        expect(result.exitCode).toBe(1);
+        const output = result.stdout.toString() + result.stderr.toString();
+        expect(output).toContain(scenario === 'aws-error' ? 'code=AccessDeniedException' : 'code=unknown');
+        expect(output).toContain('exit=252');
+        for (const forbidden of ['SECRET_CANARY', 'private.invalid', 'DO_NOT_PRINT', 'token=']) expect(output).not.toContain(forbidden);
+        expect(f.state().calls.filter((op: string) => op === 'register-task-definition')).toHaveLength(1);
+        expect(f.run('cleanup').exitCode).toBe(0);
+        expect(f.state().calls).not.toContain('deregister-task-definition');
+      } finally { f.remove(); }
+    });
+  }
   test('copies configuration, pins both revisions, then verifies the running candidate', () => {
     const f = fixture(); try {
       expect(f.run('prepare').exitCode).toBe(0); const out = f.outputs(); const state = f.state();
       const original = state.definitions['arn:td:old'].taskDefinition;
       for (const arn of [out.task_definition, out.rollback_task_definition]) {
         const copied = state.definitions[arn!].taskDefinition;
+        expect(state.definitions[arn!].tags).toEqual([{ key: 'app', value: 'peable' }]);
         expect(copied.executionRoleArn).toBe(original.executionRoleArn); expect(copied.taskRoleArn).toBe(original.taskRoleArn);
         expect(copied.containerDefinitions[0].secrets).toEqual(original.containerDefinitions[0].secrets);
         expect(copied.containerDefinitions[0].environment).toEqual(original.containerDefinitions[0].environment);
