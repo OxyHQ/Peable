@@ -1,0 +1,601 @@
+--- published0.2.0/dist/types/checkoutSession.d.ts
++++ candidate0.3.0/dist/types/checkoutSession.d.ts
+@@ -1,6 +1,7 @@
++import type { CurrencyCode } from './money';
+ import type { NetworkType } from './network';
+ import type { MerchantDisplay } from './merchantDisplay';
+-import type { PaymentIntent } from './paymentIntent';
++import type { PaymentIntent, PaymentIntentRail } from './paymentIntent';
+ /** The merchant/SDK-facing DTO — returned on create and by merchant retrieve. */
+ export interface CheckoutSession {
+     id: string;
+@@ -9,7 +10,10 @@
+     /** The wrapped intent's `client_secret`, returned to the merchant on create. */
+     clientSecret: string;
+     amount: string;
+-    network: NetworkType;
++    currency: CurrencyCode;
++    rail: PaymentIntentRail;
++    /** FairCoin rail only; `null` on a card session. */
++    network: NetworkType | null;
+     metadata: Record<string, string>;
+     successUrl?: string;
+     cancelUrl?: string;
+@@ -34,7 +38,12 @@
+ }
+ export interface CreateCheckoutSessionParams {
+     amount: string;
+-    network: NetworkType;
++    /** Defaults to `'faircoin'`, so pre-ADR-0001 integrations keep working. */
++    rail?: PaymentIntentRail;
++    /** Required on the faircoin rail; refused on the card rail. */
++    network?: NetworkType;
++    /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
++    currency?: CurrencyCode;
+     metadata?: Record<string, string>;
+     successUrl?: string;
+     cancelUrl?: string;
+--- published0.2.0/dist/types/event.d.ts
++++ candidate0.3.0/dist/types/event.d.ts
+@@ -1,11 +1,115 @@
++import type { Dispute } from './dispute';
+ import type { PaymentIntent } from './paymentIntent';
+-export type WebhookEventType = 'payment_intent.confirming' | 'payment_intent.settled' | 'payment_intent.failed' | 'payment_intent.rejected' | 'payment_intent.expired';
+-export interface WebhookEvent<T = PaymentIntent> {
+-    id: string;
+-    object: 'event';
+-    type: WebhookEventType;
+-    created: string;
+-    data: {
+-        object: T;
++import type { ConnectedAccount } from './settlement';
++export type WebhookEventType = 'payment_intent.confirming' | 'payment_intent.settled' | 'payment_intent.failed' | 'payment_intent.rejected' | 'payment_intent.expired'
++/**
++ * Money went back to the payer.
++ *
++ * Both of these exist for the refund a merchant did NOT initiate — one made
++ * from the provider's own dashboard, or a dispute the network resolved
++ * against the merchant. A merchant who only ever learned about their own
++ * refunds would reconcile to a balance that disagrees with the provider's,
++ * with nothing to explain the difference.
++ *
++ * Additive to a published contract: an existing consumer that switches on
++ * this union keeps compiling and simply never matches them.
++ */
++ | 'payment_intent.refunded' | 'payment_intent.partially_refunded'
++/**
++ * The network is holding this payment's money while a cardholder contests it.
++ *
++ * Two events and not one because the two moments demand different things of a
++ * merchant. `disputed` is a DEADLINE — evidence is due, and a merchant who
++ * learns about it late has already lost. `dispute_closed` carries the outcome,
++ * which is when the money is finally theirs or finally gone.
++ *
++ * Neither is a payment-intent STATUS. A dispute is the network's process, not
++ * a stage of the payment's lifecycle — the payment stayed `settled` throughout
++ * and may end there. That is also how Stripe models it: a charge is
++ * `disputed`, a PaymentIntent has no such status.
++ *
++ * These two carry a {@link Dispute} as their `data.object`, NOT the payment
++ * intent — see {@link WebhookEventPayload}. The `paymentIntentId` on it is
++ * how a consumer gets back to the payment.
++ *
++ * Additive to a published contract: an existing consumer that switches on
++ * this union keeps compiling and simply never matches them.
++ */
++ | 'payment_intent.disputed' | 'payment_intent.dispute_closed'
++/**
++ * A seller's account changed — their READINESS, in practice.
++ *
++ * The first event here that is not about a payment, and it exists because
++ * readiness is the one fact about a seller a marketplace cannot act without
++ * and could not learn: the gateway refreshed the account row from the
++ * provider and told the merchant nothing, so the only ways to find out a
++ * seller had finished onboarding were to poll `GET /v1/connected_accounts`
++ * or to attempt a settlement and read the refusal.
++ *
++ * Emitted when the fields a merchant ACTS on change — payability, the two
++ * capabilities, the requirement counts, the disabled reasons — and not on
++ * every refresh. A periodic sync sweep re-reads every account whether or not
++ * anything moved, and an event per sweep would be a stream a merchant learns
++ * to ignore.
++ *
++ * It carries a {@link ConnectedAccount} and its delivery names NO payment
++ * intent, which is why `WebhookDelivery.intentId` is nullable.
++ *
++ * Additive to a published contract: an existing consumer that switches on
++ * this union keeps compiling and simply never matches it.
++ */
++ | 'connected_account.updated';
++/**
++ * Which resource each event type carries under `data.object`.
++ *
++ * TOTAL over `WebhookEventType`, so a new event type cannot be added without
++ * saying what it delivers. That matters more here than anywhere else in this
++ * contract: `data.object` is the whole payload, and an event type added with
++ * the default would silently ship a PaymentIntent to a consumer expecting
++ * something else — which typechecks on both sides and fails only in production.
++ */
++export interface WebhookEventPayload {
++    'payment_intent.confirming': PaymentIntent;
++    'payment_intent.settled': PaymentIntent;
++    'payment_intent.failed': PaymentIntent;
++    'payment_intent.rejected': PaymentIntent;
++    'payment_intent.expired': PaymentIntent;
++    'payment_intent.refunded': PaymentIntent;
++    'payment_intent.partially_refunded': PaymentIntent;
++    'payment_intent.disputed': Dispute;
++    'payment_intent.dispute_closed': Dispute;
++    'connected_account.updated': ConnectedAccount;
++}
++/**
++ * One delivered event.
++ *
++ * A DISCRIMINATED union over every event type, so `data.object` is narrowed by
++ * a switch on `type` with no cast:
++ *
++ * ```ts
++ * if (event.type === 'payment_intent.disputed') {
++ *   event.data.object.evidenceDueAt; // Dispute, not PaymentIntent
++ * }
++ * ```
++ *
++ * That correlation is the whole point of building it this way rather than as
++ * `{ type: WebhookEventType; data: { object: PaymentIntent | Dispute } }`,
++ * which typechecks identically at the boundary and then lets a consumer read a
++ * `Dispute`'s fields off a settlement.
++ *
++ * The parameter narrows to a subset of event types — `WebhookEvent<'payment_intent.disputed'>`
++ * is the dispute event alone. It takes an event TYPE and not a payload type,
++ * because the payload is derivable from the event and the reverse is not: two
++ * event types share `Dispute`.
++ */
++export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
++    [T in K]: {
++        id: string;
++        object: 'event';
++        type: T;
++        created: string;
++        data: {
++            object: WebhookEventPayload[T];
++        };
+     };
+-}
++}[K];
+--- published0.2.0/dist/types/index.d.ts
++++ candidate0.3.0/dist/types/index.d.ts
+@@ -1,11 +1,14 @@
+-export { UNITS_PER_COIN, isBaseUnitString } from './money';
++export { UNITS_PER_COIN, isBaseUnitString, type CurrencyCode, CURRENCY_CODES, CURRENCY_DECIMALS, decimalsFor, isCurrencyCode, } from './money';
+ export { type NetworkType } from './network';
+-export { type PaymentIntentStatus, type PaymentIntent, type CreatePaymentIntentParams, isValidStatusTransition, PAYMENT_INTENT_STATUSES, } from './paymentIntent';
+-export { type WebhookEventType, type WebhookEvent } from './event';
+-export { type WebhookDelivery } from './webhookDelivery';
++export { type PaymentIntentStatus, type PaymentIntentRail, type PaymentIntent, type CreatePaymentIntentParams, isValidStatusTransition, canStillBePaid, reachesSettlementFromPayer, POST_SETTLEMENT_STATUSES, PAYMENT_INTENT_STATUSES, PAYMENT_INTENT_RAILS, CHAIN_ONLY_STATUSES, CARD_ONLY_STATUSES, } from './paymentIntent';
++export { type WebhookEventType, type WebhookEvent, type WebhookEventPayload, } from './event';
++export { type Dispute, type DisputeEvidence, type DisputeStatus } from './dispute';
++export { type CapabilityStatus, type ConnectedAccount, type Refund, type RefundOrigin, type RefundStatus, type Settlement, type Transfer, type TransferReversal, type TransferReversalStatus, type TransferStatus, type TransferWithReversal, } from './settlement';
++export { type WebhookDelivery, type WebhookDeliveryStatus, } from './webhookDelivery';
+ export { signWebhook, verifyWebhook } from './webhookSigner';
+ export { type MerchantEnvironment, type Merchant, MERCHANT_ENVIRONMENTS, } from './merchant';
+ export { type MerchantDisplay } from './merchantDisplay';
+ export { type PaymentLink, type PublicPaymentLink, type CreatePaymentLinkParams, } from './paymentLink';
+ export { type CheckoutSession, type CheckoutSessionPublic, type CreateCheckoutSessionParams, } from './checkoutSession';
+-export { type SocialNextAddressResponse, type SocialReceiveCursorResponse, type EnrichmentKind, type EnrichmentResult, type EnrichRequest, type EnrichResponse, } from './social';
++export { SOCIAL_SOURCE_APP_MAX_LENGTH, SOCIAL_SOURCE_REF_MAX_LENGTH, type SocialPaymentSource, type SocialNextAddressRequest, type SocialNextAddressResponse, type SocialReceiveCursorResponse, type SocialPaymentDirection, type SocialPayment, type SocialPaymentsResponse, type EnrichmentKind, type EnrichmentResult, type EnrichRequest, type EnrichResponse, } from './social';
++export { BILLING_SUBSCRIPTION_STATUSES, type BillingSubscriptionStatus, type BillingCustomer, type EnsureBillingCustomerParams, type CreateBillingCheckoutParams, type CreateBillingPortalParams, type BillingHostedSession, type BillingSubscription, } from './billing';
+--- published0.2.0/dist/types/merchant.d.ts
++++ candidate0.3.0/dist/types/merchant.d.ts
+@@ -6,10 +6,29 @@
+     object: 'merchant';
+     oxyAppId: string;
+     environment: MerchantEnvironment;
+-    network: NetworkType;
+-    xpub: string;
++    /**
++     * The FairCoin chain this merchant accepts on — `null` on a CARD-ONLY
++     * merchant.
++     *
++     * Nullable TOGETHER with `xpub`: they are two halves of one capability, and
++     * the gateway refuses a registration carrying only one. Registration used to
++     * demand both unconditionally, so a merchant who only wanted to take cards
++     * had to supply a watch-only key for a chain they never intended to use.
++     */
++    network: NetworkType | null;
++    /** `null` on a card-only merchant. Nullable together with `network`. */
++    xpub: string | null;
+     webhookUrl?: string;
+     requiredConfirmations: number;
++    /**
++     * Payer-facing branding. Absent when unset — `MerchantDisplay` is what a
++     * payer surface renders, and it substitutes a neutral fallback; these are
++     * the raw values the merchant owns.
++     */
++    displayName?: string;
++    /** Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it. */
++    avatarFileId?: string;
++    description?: string;
+     createdAt: string;
+     updatedAt: string;
+ }
+--- published0.2.0/dist/types/money.d.ts
++++ candidate0.3.0/dist/types/money.d.ts
+@@ -1,7 +1,35 @@
++/**
++ * The currencies this gateway can denominate a payment in.
++ *
++ * A closed set, and the database mirrors it as a CHECK
++ * (`db/schema/valueSets.ts`). ADR 0001 D4: the scale of an amount is a property
++ * of its currency and is NOT implied by the field's type, which is why
++ * {@link CURRENCY_DECIMALS} exists and why {@link UNITS_PER_COIN} must never be
++ * used to interpret a fiat amount.
++ */
++export declare const CURRENCY_CODES: readonly ["FAIR", "EUR", "USD"];
++export type CurrencyCode = (typeof CURRENCY_CODES)[number];
++/** Whether an arbitrary string is a currency this gateway knows. */
++export declare function isCurrencyCode(value: string): value is CurrencyCode;
++/**
++ * How many decimal places each currency's smallest unit represents — i.e. an
++ * amount of `1` means `10^-decimals` of one whole unit.
++ *
++ * FairCoin's 8 is a consensus constant and is pinned against
++ * {@link UNITS_PER_COIN} by this package's own tests, so the two spellings of
++ * one fact cannot drift.
++ */
++export declare const CURRENCY_DECIMALS: Readonly<Record<CurrencyCode, number>>;
++/** The decimal places of `currency`'s smallest unit. */
++export declare function decimalsFor(currency: CurrencyCode): number;
+ export declare const UNITS_PER_COIN = 100000000n;
+ /**
+- * True only for a canonical non-negative integer string in base units:
+- * one or more decimal digits, no sign, no decimal point, no leading zeros
+- * (except the literal "0"). Floats and negatives are rejected.
++ * True only for a canonical non-negative integer string in the currency's
++ * smallest unit: one or more decimal digits, no sign, no decimal point, no
++ * leading zeros (except the literal "0"). Floats and negatives are rejected.
++ *
++ * Currency-agnostic on purpose — the pattern is about the SPELLING of an
++ * amount, not its scale, and the same one is restated as a CHECK in the
++ * database (`BASE_UNIT_STRING_PATTERN`), byte-identical.
+  */
+ export declare function isBaseUnitString(s: string): boolean;
+--- published0.2.0/dist/types/paymentIntent.d.ts
++++ candidate0.3.0/dist/types/paymentIntent.d.ts
+@@ -1,21 +1,80 @@
++import type { CurrencyCode } from './money';
+ import type { NetworkType } from './network';
+-export type PaymentIntentStatus = 'created' | 'awaiting_approval' | 'approved' | 'broadcast' | 'confirming' | 'settled' | 'expired' | 'failed' | 'rejected';
++/**
++ * Which rail moves the money (ADR 0001 D1).
++ *
++ * On the INTENT, not on the merchant: one merchant takes both, and a merchant's
++ * capabilities are a different question from what this particular payment is.
++ * The rail decides which of the fields below mean anything.
++ */
++export type PaymentIntentRail = 'faircoin' | 'card';
++/** {@link PaymentIntentRail} as the tuple the database CHECK reads. */
++export declare const PAYMENT_INTENT_RAILS: readonly PaymentIntentRail[];
++export type PaymentIntentStatus = 'created' | 'awaiting_approval' | 'approved' | 'broadcast' | 'confirming' | 'requires_action' | 'processing' | 'settled' | 'refunded' | 'partially_refunded' | 'expired' | 'failed' | 'rejected';
++/**
++ * Which statuses belong to which rail (ADR 0001 D5).
++ *
++ * The four chain states describe a transaction on a blockchain and the four
++ * card states describe an authorization at a card acquirer; neither set is
++ * expressible on the other rail. Mapping a card authorization onto `broadcast`
++ * would be cheaper and would be a lie — nothing was broadcast, there is no
++ * transaction, and `payment_intents_broadcast_requires_txid_check` would then
++ * be demanding a txid from a payment that can never have one.
++ *
++ * `db/schema/payments.ts` renders these two sets into CHECK constraints, so the
++ * restriction holds against a write that skipped the application.
++ */
++export declare const CHAIN_ONLY_STATUSES: readonly PaymentIntentStatus[];
++export declare const CARD_ONLY_STATUSES: readonly PaymentIntentStatus[];
+ export declare function isValidStatusTransition(from: PaymentIntentStatus, to: PaymentIntentStatus): boolean;
+ /** Every legal `PaymentIntentStatus`, derived from `ALLOWED`'s keys — the
+  * single source of truth consumed by the Gateway's list-route status filter. */
+ export declare const PAYMENT_INTENT_STATUSES: readonly PaymentIntentStatus[];
++/**
++ * Whether a payer can still complete a payment against an intent in this
++ * status.
++ *
++ * `settled` answers `false`: it is where paying ENDS. `partially_refunded`
++ * answers `false` too — money can still move, but not from the payer.
++ */
++export declare function canStillBePaid(status: PaymentIntentStatus): boolean;
++/**
++ * The statuses a payment reaches only AFTER the payer has finished.
++ *
++ * Exported for the gate below rather than for production use: the property that
++ * makes `PAYABLE_STATUSES` checkable is that a payable status reaches `settled`
++ * without going through one of these.
++ */
++export declare const POST_SETTLEMENT_STATUSES: readonly PaymentIntentStatus[];
++/**
++ * Whether `settled` is reachable from `status` without passing through a
++ * post-settlement status. The derivation `canStillBePaid` used to BE, kept as
++ * the thing that checks it rather than as the thing that answers it.
++ */
++export declare function reachesSettlementFromPayer(status: PaymentIntentStatus): boolean;
+ export interface PaymentIntent {
+     id: string;
+     object: 'payment_intent';
+     status: PaymentIntentStatus;
+-    /** Amount in base units (m⊜) as a canonical integer string. Never a float. */
++    /** Which rail moves this payment. Decides which fields below are populated. */
++    rail: PaymentIntentRail;
++    /**
++     * Amount in the currency's SMALLEST unit as a canonical integer string.
++     * Never a float, and never interpretable without `currency`: m⊜ (10^-8 FAIR)
++     * on the faircoin rail, cents on a fiat one.
++     */
+     amount: string;
+-    currency: 'FAIR';
+-    network: NetworkType;
+-    /** Watch-only receive address derived per-intent from the merchant xpub. */
+-    address: string;
++    currency: CurrencyCode;
++    /** FairCoin rail only. `null` on a card payment, which has no network. */
++    network: NetworkType | null;
++    /**
++     * Watch-only receive address derived per-intent from the merchant xpub.
++     * FairCoin rail only; `null` on a card payment, which reserves no address.
++     */
++    address: string | null;
+     merchantId: string;
+     txid: string | null;
++    /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
+     confirmations: number;
+     clientSecret: string;
+     metadata: Record<string, string>;
+@@ -24,9 +83,17 @@
+     updatedAt: string;
+ }
+ export interface CreatePaymentIntentParams {
+-    /** Amount in base units (m⊜) as a canonical integer string. */
++    /** Amount in the currency's smallest unit, as a canonical integer string. */
+     amount: string;
+-    network: NetworkType;
++    /**
++     * Defaults to `'faircoin'` — the rail this gateway shipped with, so every
++     * integration written before ADR 0001 keeps working unchanged.
++     */
++    rail?: PaymentIntentRail;
++    /** Required on the faircoin rail; refused on the card rail, which has none. */
++    network?: NetworkType;
++    /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
++    currency?: CurrencyCode;
+     metadata?: Record<string, string>;
+     expiresInSeconds?: number;
+ }
+--- published0.2.0/dist/types/paymentLink.d.ts
++++ candidate0.3.0/dist/types/paymentLink.d.ts
+@@ -1,12 +1,20 @@
++import type { CurrencyCode } from './money';
+ import type { NetworkType } from './network';
+ import type { MerchantDisplay } from './merchantDisplay';
++import type { PaymentIntentRail } from './paymentIntent';
+ /** The merchant-facing DTO — returned by the merchant-authed CRUD routes. */
+ export interface PaymentLink {
+     id: string;
+     object: 'payment_link';
+-    /** Amount in base units (m⊜) as a canonical integer string. Never a float. */
++    /**
++     * Amount in the currency's smallest unit, as a canonical integer string.
++     * Never a float, and never interpretable without `currency`.
++     */
+     amount: string;
+-    network: NetworkType;
++    currency: CurrencyCode;
++    rail: PaymentIntentRail;
++    /** FairCoin rail only; `null` on a card link. */
++    network: NetworkType | null;
+     active: boolean;
+     metadata: Record<string, string>;
+     /** Optional post-payment redirect target for the checkout page. */
+@@ -21,13 +29,20 @@
+     id: string;
+     object: 'payment_link';
+     amount: string;
+-    network: NetworkType;
++    currency: CurrencyCode;
++    rail: PaymentIntentRail;
++    network: NetworkType | null;
+     active: boolean;
+     merchant: MerchantDisplay;
+ }
+ export interface CreatePaymentLinkParams {
+     amount: string;
+-    network: NetworkType;
++    /** Defaults to `'faircoin'`, so pre-ADR-0001 integrations keep working. */
++    rail?: PaymentIntentRail;
++    /** Required on the faircoin rail; refused on the card rail. */
++    network?: NetworkType;
++    /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
++    currency?: CurrencyCode;
+     metadata?: Record<string, string>;
+     successUrl?: string;
+ }
+--- published0.2.0/dist/types/social.d.ts
++++ candidate0.3.0/dist/types/social.d.ts
+@@ -1,3 +1,59 @@
++import type { NetworkType } from './network';
++/**
++ * Longest `SocialPaymentSource.app` the gateway accepts. An app slug, not a
++ * label — 32 characters is more than any Oxy app id needs and short enough that
++ * the column can never become a place to put prose.
++ *
++ * Published with the contract because it is what a request is REFUSED for: a
++ * caller that cannot read the bound from the types finds it out with a 422.
++ */
++export declare const SOCIAL_SOURCE_APP_MAX_LENGTH = 32;
++/**
++ * Longest `SocialPaymentSource.ref` the gateway accepts.
++ *
++ * The bound is the whole defence here, because the value is opaque: Peable
++ * never parses, resolves or links a `ref`, so nothing downstream would notice
++ * it growing. 128 characters holds any id an app mints (a uuid, a snowflake, a
++ * base64 hash) and refuses a payload.
++ */
++export declare const SOCIAL_SOURCE_REF_MAX_LENGTH = 128;
++/**
++ * Display-only context for one social payment: which app the payer was in, and
++ * that app's own id for what the payment was for (a Mention post, say).
++ *
++ * **Opaque to Peable, by design.** `ref` is never parsed, resolved, joined or
++ * shown to anyone but the two parties — the gateway stores a string and hands
++ * the same string back. That is what keeps "tip a post" from widening what the
++ * payment gateway knows about a user: it learns that an id exists, not what it
++ * names. The app that minted the `ref` is the only thing that can resolve it,
++ * and it already knows.
++ *
++ * It affects NOTHING about the money. The address a payer is shown comes from
++ * the recipient's identity key and the reservation cursor, neither of which
++ * this is an input to; a request carrying a source and one carrying none
++ * reserve the same index.
++ */
++export interface SocialPaymentSource {
++    /** The calling app, e.g. `'mention'`. At most {@link SOCIAL_SOURCE_APP_MAX_LENGTH} characters. */
++    app: string;
++    /**
++     * That app's own opaque id for what the payment was for, e.g. a post id. At
++     * most {@link SOCIAL_SOURCE_REF_MAX_LENGTH} characters. Absent when the app
++     * has no single thing to name.
++     */
++    ref?: string;
++}
++/**
++ * Body of `POST /v1/social/:username/next_address` (spec §4.4 step 3).
++ *
++ * `source` is OPTIONAL and stays that way: a plain person-to-person payment is
++ * for nothing in particular, and a required field would make every caller
++ * invent an answer.
++ */
++export interface SocialNextAddressRequest {
++    network: NetworkType;
++    source?: SocialPaymentSource;
++}
+ /** Response of `POST /v1/social/:username/next_address` (spec §4.4 step 3). */
+ export interface SocialNextAddressResponse {
+     address: string;
+@@ -23,6 +79,16 @@
+      * caller's stable default address and is never reserved through this flow.
+      */
+     reservedThrough: number;
++    /**
++     * The identity public key (hex) those addresses were derived from, as the
++     * backend saw it. A device compares it with the key it derives from itself:
++     * if they differ, its watch window is in the wrong tree and widening it only
++     * watches more addresses nobody is paying into.
++     *
++     * `null` means exactly one thing: this caller has no cursor, so no address
++     * has ever been reserved for them. Every cursor that exists names its key.
++     */
++    identityPublicKey: string | null;
+ }
+ /** Where a transaction's counterparty identity came from (spec §4.8). */
+ export type EnrichmentKind = 'merchant' | 'user' | 'unknown';
+@@ -48,3 +114,47 @@
+ export interface EnrichResponse {
+     data: Record<string, EnrichmentResult>;
+ }
++/** Which side of a social payment the caller was on. */
++export type SocialPaymentDirection = 'sent' | 'received';
++/**
++ * One social payment as the CALLER saw it, for `GET /v1/social/me/payments`.
++ *
++ * The address-free view, and the only payment history a surface without a key
++ * can ask for: deriving addresses needs a seed, so a browser cannot use the
++ * address-list endpoints (`POST /v1/enrich`, the cursor) at all. `direction` is
++ * the field that cannot be recovered from the address alone — the backend knows
++ * it because the attribution names both parties, and resolving it here is what
++ * keeps the caller from having to learn its own user id to compare against.
++ *
++ * Carries NO amount. An attribution records which address was minted for a
++ * payment relationship, not what was paid; the amount lives on-chain, and the
++ * client reads it from the Explorer against `address`.
++ */
++export interface SocialPayment {
++    /** The single-use social-receive address minted for this payment. */
++    address: string;
++    direction: SocialPaymentDirection;
++    /**
++     * The other party. Reuses the enrichment contract, including its degradation:
++     * a failed identity lookup answers `{ kind: 'unknown' }` rather than dropping
++     * the payment, so a history never silently loses rows to an Oxy outage.
++     */
++    counterparty: EnrichmentResult;
++    /**
++     * What the payment was for, as the paying app named it at reservation time.
++     * Absent for a plain person-to-person payment, which is most of them —
++     * present only when the payer's app sent one, and never invented here.
++     *
++     * Display-only, exactly like `counterparty`: rendering it is all a client may
++     * do with it, and a client that cannot resolve `source.ref` (because it is
++     * not the app that minted it) shows the payment without the context rather
++     * than dropping the payment.
++     */
++    source?: SocialPaymentSource;
++    /** ISO-8601. When the address was minted, which is when the payment was set up. */
++    createdAt: string;
++}
++/** Response of `GET /v1/social/me/payments`, newest first. */
++export interface SocialPaymentsResponse {
++    payments: SocialPayment[];
++}
+--- published0.2.0/dist/types/webhookDelivery.d.ts
++++ candidate0.3.0/dist/types/webhookDelivery.d.ts
+@@ -1,15 +1,51 @@
+ import type { WebhookEventType } from './event';
++/**
++ * Where one webhook delivery stands (ADR 0001 D7).
++ *
++ * Was `'delivered' | 'failed'` — the two outcomes an inline, best-effort
++ * delivery could report once it had already given up. Delivery is now a durable
++ * outbox, so a delivery exists BEFORE any attempt and this set has to say so.
++ *
++ *  - `pending`   — enqueued and will be attempted. `nextAttemptAt` says when.
++ *  - `delivered` — terminal success.
++ *  - `failed`    — the endpoint REFUSED it (a 4xx, a blocked address). No retry
++ *                  can fix that, so none is made.
++ *  - `dead`      — every attempt failed transiently and the budget ran out. The
++ *                  envelope is kept and can be redelivered by hand.
++ *
++ * ⚠️ Widening a published union is a breaking change for a consumer that
++ * switches exhaustively on it. It is the honest shape: the previous one could
++ * not describe a delivery that had not been attempted yet, which is now the
++ * state every delivery starts in.
++ */
++export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
+ export interface WebhookDelivery {
+     id: string;
+     object: 'webhook_delivery';
+     merchantId: string;
+-    intentId: string;
++    /**
++     * The `pi_…` this delivery is about — `null` when the event is not about a
++     * payment.
++     *
++     * Nullable since `connected_account.updated`, which is about a SELLER. The
++     * alternative was to name an unrelated payment to keep the field a string,
++     * which is worse than a null: a consumer correlating on it would attach a
++     * seller's readiness change to a payment that has nothing to do with it.
++     */
++    intentId: string | null;
+     eventId: string;
+     eventType: WebhookEventType;
+     url: string;
+     attempts: number;
+     delivered: boolean;
+-    lastStatus: 'delivered' | 'failed';
++    lastStatus: WebhookDeliveryStatus;
++    /**
++     * Why the last attempt did not succeed — operator-facing, never a secret.
++     * Absent while pending with no attempts, and after a success.
++     */
++    lastError?: string;
++    /** When the next attempt is due, ISO-8601. Absent once the delivery is terminal. */
++    nextAttemptAt?: string;
+     createdAt: string;
+     updatedAt: string;
+ }

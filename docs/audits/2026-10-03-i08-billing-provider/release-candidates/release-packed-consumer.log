@@ -1,0 +1,23 @@
+{
+  "fixture": "/home/nate/Oxy/Peable/.worktrees/i08-packed-TuvBXZ",
+  "node": "v24.21.0",
+  "packages": [
+    {
+      "path": "/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/shared-types/peable.to-shared-types-0.3.0.tgz",
+      "sha256": "475f2defa68df1a1f846a50ccc5368f8666bd81ac4620b5372b62dd07010ee16"
+    },
+    {
+      "path": "/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/sdk/peable.to-sdk-0.2.0.tgz",
+      "sha256": "0bb40a650abbf42cabfac0145683092f82e2666867074420350d80335e2e437e"
+    }
+  ],
+  "checks": [
+    "Node CJS load and five billing methods",
+    "Node ESM load and five billing methods",
+    "TypeScript strict NodeNext public declarations",
+    "SDK minimum shared-types dependency ^0.3.0"
+  ],
+  "published": false,
+  "resolution": "Fixture-only shared-types tarball override because 0.3.0 is unpublished; packed SDK range independently asserted",
+  "network": "Registry dependency installation only; no Oxy/Peable/Stripe requests"
+}
