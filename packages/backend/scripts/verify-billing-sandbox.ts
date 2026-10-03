@@ -218,7 +218,17 @@ try {
   if (await page.locator('#billingCountry').count()) await page.locator('#billingCountry').selectOption('US');
   if (await page.locator('#billingPostalCode').count()) await page.locator('#billingPostalCode').fill('42424');
   await assertPlatform();
-  await browserStep('browser-submit-checkout', () => page.getByRole('button', { name: /Subscribe|Pay \$/ }).last().click());
+  await browserStep('browser-submit-checkout', async () => {
+    const submit = page.locator('button[type="submit"]');
+    const count = await submit.count();
+    const enabled = count === 1 && await submit.isEnabled();
+    const visible = count === 1 && await submit.isVisible();
+    diagnostics.push({ stage: 'browser-submit-control', count, enabled, visible }); await save();
+    assert.equal(count, 1, 'Expected exactly one normal submit control');
+    assert.equal(visible, true, 'Submit control must be visible');
+    assert.equal(enabled, true, 'Submit requires intervention; do not force or bypass');
+    await submit.click();
+  });
   stage = 'observe-checkout-completion';
   let subscriptionId: string | undefined;
   for (let attempt = 0; attempt < 30; attempt++) {
