@@ -1,0 +1,277 @@
+$ bun test src --test-name-pattern "billing ownership and durable claims"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+src/db/__tests__/deployWorkflow.test.ts:
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+src/db/__tests__/rail.realdb.test.ts:
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+Applying 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_cooing_roulette
+Postgres notice: identifier "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_id_oxy_app_id_environment_fk" will be truncated to "recurring_mirrors_merchant_id_oxy_app_id_environment_merchants_"
+Postgres notice: identifier "recurring_observation_outbox_source_event_id_provider_events_id_fk" will be truncated to "recurring_observation_outbox_source_event_id_provider_events_id"
+Postgres notice: identifier "billing_object_bindings_customer_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_customer_binding_id_billing_object_bind"
+Postgres notice: identifier "billing_object_bindings_price_binding_id_billing_object_bindings_id_fk" will be truncated to "billing_object_bindings_price_binding_id_billing_object_binding"
+Applied 21 migration(s): 0000_whole_master_mold, 0001_certain_skin, 0002_misty_demogoblin, 0003_cooing_skin, 0004_low_franklin_storm, 0005_chunky_cable, 0006_cloudy_pandemic, 0007_slippery_miek, 0008_yummy_gwen_stacy, 0009_fuzzy_misty_knight, 0010_fancy_garia, 0011_magical_cyclops, 0012_stormy_valkyrie, 0013_fixed_lionheart, 0014_amused_surge, 0015_safe_reptil, 0016_far_excalibur, 0017_married_iron_patriot, 0018_majestic_hairball, 0019_familiar_darkhawk, 0020_cooing_roulette
+10 | export interface ClaimBillingInput {
+11 |   operation: BillingOperationKind; idempotencyKey: string; requestDigest: string; subjectClaimRef?: string;
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+                                                                                                                                                                                              ^
+error: Not implemented: billing binding
+      at bindBillingObject (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:15:186)
+      at binding (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:11:10)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:20:75)
+(fail) billing ownership and durable claims / real PostgreSQL > converges verified binding and refuses different owner or environment [25.05ms]
+10 | export interface ClaimBillingInput {
+11 |   operation: BillingOperationKind; idempotencyKey: string; requestDigest: string; subjectClaimRef?: string;
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+                                                                                                                                                                                              ^
+error: Not implemented: billing binding
+      at bindBillingObject (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:15:186)
+      at binding (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:11:10)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:27:71)
+(fail) billing ownership and durable claims / real PostgreSQL > requires subscription customer and price of exact same owner and store/plan [13.74ms]
+10 | export interface ClaimBillingInput {
+11 |   operation: BillingOperationKind; idempotencyKey: string; requestDigest: string; subjectClaimRef?: string;
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+                                                                                                                                                                                              ^
+error: Not implemented: billing binding
+      at bindBillingObject (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:15:186)
+      at binding (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:11:10)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:36:61)
+(fail) billing ownership and durable claims / real PostgreSQL > does not read foreign or unknown refs or create a second customer per store [16.07ms]
+38 |     await expect(requireBillingBinding(gatewayDb(), deployment, a, 'subscription', 'sub_unknown')).rejects.toThrow('not_found');
+39 |     await expect(binding(a, 'customer', 'cus_two')).rejects.toThrow('identity_conflict');
+40 |   });
+41 |   it('claims once under concurrency and returns without holding a provider transaction', async () => {
+42 |     const a = await owner(); const results = await Promise.allSettled([claimBillingOperation(gatewayDb(), deployment, a, input, now), claimBillingOperation(gatewayDb(), deployment, a, input, now)]);
+43 |     expect(results.filter((x) => x.status === 'fulfilled')).toHaveLength(1);
+                                                                 ^
+error: expect(received).toHaveLength(expected)
+
+Expected length: 1
+Received length: 0
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:43:61)
+(fail) billing ownership and durable claims / real PostgreSQL > claims once under concurrency and returns without holding a provider transaction [11.87ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:48:61)
+(fail) billing ownership and durable claims / real PostgreSQL > globally refuses same key from another merchant, operation or payload [14.22ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:55:11)
+(fail) billing ownership and durable claims / real PostgreSQL > refuses second key creating customer after unknown first result [11.83ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:60:58)
+(fail) billing ownership and durable claims / real PostgreSQL > replays owner result but rejects an expired hosted URL [11.99ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:66:58)
+(fail) billing ownership and durable claims / real PostgreSQL > recovers expired lease with same remote key and fences stale completion [12.51ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:73:58)
+(fail) billing ownership and durable claims / real PostgreSQL > does not blindly retry beyond bounded recovery window [10.70ms]
+12 | }
+13 | export type BillingClaim = { kind: 'claimed'; operation: BillingOperation; leaseToken: string }
+14 |   | { kind: 'replay'; operation: BillingOperation; result: BillingOperationResult };
+15 | export async function bindBillingObject(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _input: BindBillingInput): Promise<BillingBinding> { throw new Error('Not implemented: billing binding'); }
+16 | export async function requireBillingBinding(_db: DatabaseOrTransaction, _deployment: BillingDeployment, _owner: BillingOwner, _kind: BillingBinding['kind'], _ref: string): Promise<BillingBinding> { throw new Error('Not implemented: billing binding lookup'); }
+17 | export async function claimBillingOperation(_db: Database, _deployment: BillingDeployment, _owner: BillingOwner, _input: ClaimBillingInput, _now = new Date()): Promise<BillingClaim> { throw new Error('Not implemented: billing operation claim'); }
+                                                                                                                                                                                                       ^
+error: Not implemented: billing operation claim
+      at claimBillingOperation (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/billingRepository.ts:17:195)
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i08-billing-provider-20261003/packages/backend/src/db/billing/__tests__/billingRepository.realdb.test.ts:78:58)
+(fail) billing ownership and durable claims / real PostgreSQL > rolls back binding and result together on local crash [10.73ms]
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+ 0 pass
+ 733 filtered out
+ 10 fail
+ 1 expect() calls
+Ran 10 tests across 73 files. [551.00ms]
+error: script "test" exited with code 1
