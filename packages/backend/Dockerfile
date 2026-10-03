@@ -57,11 +57,14 @@ RUN bun install --frozen-lockfile --ignore-scripts
 # Copy the source for the packages this image builds/runs.
 COPY packages/shared-types/ packages/shared-types/
 COPY packages/backend/ packages/backend/
+# Backend contract tests typecheck against the built public SDK.
+COPY packages/sdk/ packages/sdk/
 
 # Build shared-types (its dist/index.js is what the backend imports at runtime),
 # then compile the backend as a type-safety gate. The backend's emitted dist is
 # intentionally discarded — the runtime stage runs the TS source under Bun.
 RUN cd packages/shared-types && bun run build
+RUN cd packages/sdk && bun run build
 RUN cd packages/backend && bun run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────
