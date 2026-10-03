@@ -1,0 +1,89 @@
+$ bun test __tests__/core/deadlines.real-http.test.ts
+bun test v1.4.2 (744846f84)
+
+__tests__/core/deadlines.real-http.test.ts:
+24 |       const result = mint ? { data: { token: 'synthetic', expiresIn: 300 } } : { id: 'effect-once' };
+25 |       const blocked = mode.startsWith(mint ? 'mint-' : 'gateway-');
+26 |       if (blocked && mode.endsWith('body')) { response.writeHead(200, { 'Content-Type': 'application/json' }); response.flushHeaders(); }
+27 |       setTimeout(() => { if (!response.destroyed) { if (!response.headersSent) response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(result)); } }, blocked ? 250 : 0);
+28 |     });
+29 |     await expect(sdk(url).paymentIntents.create({ amount: '100', currency: 'usd', rail: 'card' }, { idempotencyKey: 'owned-stable-key' })).rejects.toMatchObject({ name: 'PeableApiError' });
+                                                                                                                                                        ^
+error: expect(received).rejects.toMatchObject(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/__tests__/core/deadlines.real-http.test.ts:29:148)
+(fail) HTTP deadline and existing intent propagation > bounds mint-headers without automatically repeating a POST [261.49ms]
+24 |       const result = mint ? { data: { token: 'synthetic', expiresIn: 300 } } : { id: 'effect-once' };
+25 |       const blocked = mode.startsWith(mint ? 'mint-' : 'gateway-');
+26 |       if (blocked && mode.endsWith('body')) { response.writeHead(200, { 'Content-Type': 'application/json' }); response.flushHeaders(); }
+27 |       setTimeout(() => { if (!response.destroyed) { if (!response.headersSent) response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(result)); } }, blocked ? 250 : 0);
+28 |     });
+29 |     await expect(sdk(url).paymentIntents.create({ amount: '100', currency: 'usd', rail: 'card' }, { idempotencyKey: 'owned-stable-key' })).rejects.toMatchObject({ name: 'PeableApiError' });
+                                                                                                                                                        ^
+error: expect(received).rejects.toMatchObject(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/__tests__/core/deadlines.real-http.test.ts:29:148)
+(fail) HTTP deadline and existing intent propagation > bounds mint-body without automatically repeating a POST [256.40ms]
+24 |       const result = mint ? { data: { token: 'synthetic', expiresIn: 300 } } : { id: 'effect-once' };
+25 |       const blocked = mode.startsWith(mint ? 'mint-' : 'gateway-');
+26 |       if (blocked && mode.endsWith('body')) { response.writeHead(200, { 'Content-Type': 'application/json' }); response.flushHeaders(); }
+27 |       setTimeout(() => { if (!response.destroyed) { if (!response.headersSent) response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(result)); } }, blocked ? 250 : 0);
+28 |     });
+29 |     await expect(sdk(url).paymentIntents.create({ amount: '100', currency: 'usd', rail: 'card' }, { idempotencyKey: 'owned-stable-key' })).rejects.toMatchObject({ name: 'PeableApiError' });
+                                                                                                                                                        ^
+error: expect(received).rejects.toMatchObject(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/__tests__/core/deadlines.real-http.test.ts:29:148)
+(fail) HTTP deadline and existing intent propagation > bounds gateway-headers without automatically repeating a POST [255.66ms]
+24 |       const result = mint ? { data: { token: 'synthetic', expiresIn: 300 } } : { id: 'effect-once' };
+25 |       const blocked = mode.startsWith(mint ? 'mint-' : 'gateway-');
+26 |       if (blocked && mode.endsWith('body')) { response.writeHead(200, { 'Content-Type': 'application/json' }); response.flushHeaders(); }
+27 |       setTimeout(() => { if (!response.destroyed) { if (!response.headersSent) response.writeHead(200, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(result)); } }, blocked ? 250 : 0);
+28 |     });
+29 |     await expect(sdk(url).paymentIntents.create({ amount: '100', currency: 'usd', rail: 'card' }, { idempotencyKey: 'owned-stable-key' })).rejects.toMatchObject({ name: 'PeableApiError' });
+                                                                                                                                                        ^
+error: expect(received).rejects.toMatchObject(expected)
+
+Expected promise that rejects
+Received promise that resolved: Promise { <resolved> }
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/__tests__/core/deadlines.real-http.test.ts:29:148)
+(fail) HTTP deadline and existing intent propagation > bounds gateway-body without automatically repeating a POST [257.79ms]
+40 |     });
+41 |     const client = sdk(url);
+42 |     await client.paymentIntents.reject('pi_owned', { idempotencyKey: 'reject-intent' });
+43 |     await client.refunds.create({ paymentIntentId: 'pi_owned', externalRef: 'refund-owned', amount: '10' }, { idempotencyKey: 'refund-intent' });
+44 |     await client.transfers.create({ paymentIntentId: 'pi_owned', connectedAccountId: 'ca_owned', externalRef: 'order-owned', amount: '90' }, { idempotencyKey: 'transfer-intent' });
+45 |     expect(seen.map(x => x.key)).toEqual(['reject-intent', 'refund-intent', 'transfer-intent']);
+                                      ^
+error: expect(received).toEqual(expected)
+
+  [
+-   "reject-intent",
+-   "refund-intent",
+-   "transfer-intent",
++   undefined,
++   undefined,
++   undefined,
+  ]
+
+- Expected  - 3
++ Received  + 3
+
+      at <anonymous> (/home/nate/Oxy/Peable/.worktrees/1519-i11-sdk-http-parity-20261003/packages/sdk/__tests__/core/deadlines.real-http.test.ts:45:34)
+(fail) HTTP deadline and existing intent propagation > preserves supplied keys on reject/refund/transfer without changing durable body identity [7.27ms]
+
+ 0 pass
+ 5 fail
+ 1 expect() calls
+Ran 5 tests across 1 file. [1050.00ms]
+error: script "test" exited with code 1
