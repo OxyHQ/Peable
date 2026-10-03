@@ -76,11 +76,11 @@ src/db/__tests__/dockerfile.test.ts:
 src/db/__tests__/derivationIndex.realdb.test.ts:
 
 src/db/__tests__/deployWorkflow.test.ts:
-(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.02ms]
-(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.08ms]
-(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.10ms]
-(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.21ms]
-(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.03ms]
+(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.03ms]
+(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.09ms]
+(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.11ms]
+(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.23ms]
+(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.04ms]
 (pass) the deploy workflow and the migrator agree > runs every migration step with no DATABASE_URL preflight to skip it [0.04ms]
 (pass) the deploy workflow and the migrator agree > orders the phases around the rollout [0.04ms]
 
@@ -93,24 +93,24 @@ src/db/__tests__/rail.realdb.test.ts:
 src/db/__tests__/socialReceiveCursor.realdb.test.ts:
 
 src/db/__tests__/pinnedRelease.test.ts:
-(pass) pinned ECS release > restricts manual and push promotion to main, exact CI, with post and cleanup still reachable [0.17ms]
-(pass) pinned ECS release > copies configuration, pins both revisions, then verifies the running candidate [260.82ms]
-(pass) pinned ECS release > refuses mixed-digest during prepare [76.67ms]
-(pass) pinned ECS release > refuses mixed-revision during prepare [80.00ms]
-(pass) pinned ECS release > refuses tamper during prepare [106.24ms]
-(pass) pinned ECS release > rolls back to the actual previous digest after rollout-failure [289.20ms]
-(pass) pinned ECS release > rolls back to the actual previous digest after wrong-running-digest [317.59ms]
-(pass) pinned ECS release > refuses a changed revision or configuration after pre-migration without overwriting it [356.73ms]
-(pass) pinned ECS release > does not roll back over an external deployment arriving during rollout [2241.06ms]
-(pass) pinned ECS release > cleans unused copies after pre failure, including failed readback registration [495.02ms]
-(pass) pinned ECS release > retains serving and rollback definitions after promotion [383.72ms]
-(pass) pinned ECS release > retains an unused candidate while a running task still references it [272.89ms]
-(pass) pinned ECS release > zero capacity repoints a known pinned revision without a runtime claim [214.11ms]
-(pass) pinned ECS release > candidate migrator validates both image and exit: success [14.29ms]
-(pass) pinned ECS release > candidate migrator validates both image and exit: wrong-digest [9.48ms]
-(pass) pinned ECS release > candidate migrator validates both image and exit: failed-migration [13.57ms]
-(pass) pinned ECS release > candidate migrator validates both image and exit: wait-timeout [20.11ms]
-(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-task [11.31ms]
+(pass) pinned ECS release > restricts manual and push promotion to main, exact CI, with post and cleanup still reachable [0.19ms]
+(pass) pinned ECS release > copies configuration, pins both revisions, then verifies the running candidate [270.99ms]
+(pass) pinned ECS release > refuses mixed-digest during prepare [77.89ms]
+(pass) pinned ECS release > refuses mixed-revision during prepare [80.68ms]
+(pass) pinned ECS release > refuses tamper during prepare [110.14ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after rollout-failure [300.45ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after wrong-running-digest [326.51ms]
+(pass) pinned ECS release > refuses a changed revision or configuration after pre-migration without overwriting it [341.88ms]
+(pass) pinned ECS release > does not roll back over an external deployment arriving during rollout [2240.47ms]
+(pass) pinned ECS release > cleans unused copies after pre failure, including failed readback registration [494.89ms]
+(pass) pinned ECS release > retains serving and rollback definitions after promotion [384.55ms]
+(pass) pinned ECS release > retains an unused candidate while a running task still references it [276.22ms]
+(pass) pinned ECS release > zero capacity repoints a known pinned revision without a runtime claim [209.31ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: success [14.84ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wrong-digest [9.62ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: failed-migration [14.25ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wait-timeout [19.22ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-task [11.05ms]
 
 src/db/__tests__/deploySecrets.test.ts:
 
@@ -179,5 +179,5 @@ src/services/providers/stripe/__tests__/verify.test.ts:
  25 pass
  751 filtered out
  0 fail
- 113 expect() calls
-Ran 25 tests across 75 files. [5.38s]
+ 115 expect() calls
+Ran 25 tests across 75 files. [5.41s]

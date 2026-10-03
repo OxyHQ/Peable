@@ -1,5 +1,5 @@
 {
-  "sourceCommit": "363e4f806273a501665e077abec76aed6f77077e",
+  "sourceCommit": "b4b903b570940b7c0a2615667102737324781ec1",
   "sources": [
     {
       "path": ".github/scripts/ecs-release.py",
@@ -7,25 +7,25 @@
     },
     {
       "path": ".github/scripts/run-migration-task.sh",
-      "sha256": "3a29914c000d1e4d558bc4f73eaa120dc5c6a505ed582685ebc9b85889d2d6b9"
+      "sha256": "037045994595351e67b46ab8e18b7ef7230ba8c54471446c8d9ec03efaa4018f"
     },
     {
       "path": ".github/workflows/deploy-aws.yml",
-      "sha256": "88fa0be3124c8614bb9a33abe5095bba11004e3ae747e2d21026612629efeb60"
+      "sha256": "138cf547e7acefc605e076d6f82132346c4610b57f6276a3f018d4421279d2f9"
     },
     {
       "path": "packages/backend/src/db/__tests__/pinnedRelease.test.ts",
-      "sha256": "e65f9179fdd7788b084802a361ab081ac95e488b7e9202c7fb7d0b1821ad2f50"
+      "sha256": "850a0e493ab40c9e4f6dbbfd420908f0ed42e166465c7d7072de1b4bb74a39da"
     },
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/README.md",
-      "sha256": "b68bd5b09e8310a5399244479747d175ff97fee1cc4b8730d4fac98137a2184e"
+      "sha256": "34c8ea8537c0116643985532b6da66831d08e02b354f64b3ad3fa8fe3430254a"
     }
   ],
   "records": [
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-focal.log",
-      "sha256": "753a5ac88dbaeff53a2d6940fbbe7f3ebddb19660af4135343835aa01daaf04d"
+      "sha256": "bf66b8342601e65ad2d060f8371af922720c47e90d1ac0861531d0f29a0fe2c0"
     },
     {
       "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-typecheck.log",
