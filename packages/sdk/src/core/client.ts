@@ -96,7 +96,18 @@ export function createRestClient(
     // The Gateway echoes a date-based `Peable-Version` response header
     // (Stripe parity). No SDK behavior depends on it yet, so it is
     // deliberately not read here — nothing to do with it today.
-    const body = await readJsonBody(response);
+    let body: unknown;
+    try {
+      body = await readJsonBody(response);
+    } catch {
+      // Headers can arrive before the connection fails during body consumption.
+      // Preserve the known status, but do not infer whether a mutation committed
+      // or retry it automatically. Recovery keeps the caller's original key.
+      throw new PeableApiError('The Peable Gateway response body could not be read; remote outcome is unknown', {
+        statusCode: response.status,
+        code: 'invalid_response',
+      });
+    }
     if (!response.ok) {
       throw errorFromResponse(response.status, body);
     }
