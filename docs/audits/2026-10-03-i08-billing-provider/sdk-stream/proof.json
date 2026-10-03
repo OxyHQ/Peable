@@ -1,0 +1,37 @@
+{
+  "sourceCommit": "2b1c6457fb570fe19ba80689015a4ac9c2cfdeab",
+  "sources": [
+    {
+      "path": "packages/sdk/src/core/client.ts",
+      "sha256": "e9c06335ff3d932d4bb655792a2cf0f7ec8eb8a6875bf420dd975f0f3d5dec82"
+    },
+    {
+      "path": "packages/sdk/__tests__/core/client.test.ts",
+      "sha256": "bb15f5f4569da82717c8e09be87e005aeef0e16acd3a8a989cf7682b52639c17"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-stream/sdk-stream-fixture-cleanup-failure.log",
+      "sha256": "72197c488a503762992b13bd83fe62d988df01795f1accc0053e996e0ef7a287"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-stream/sdk-stream-red.log",
+      "sha256": "e636913b3fc3c77f0b326f0d61646e9d0cdb622c3b028fd44cbb9a39e3bb8ded"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-stream/sdk-stream-green.log",
+      "sha256": "e2f849008e3e377458ad2506aca45f697e9d4f5672560d3ca11ee0dae60c254f"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/sdk-stream/sdk-stream-typecheck.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    }
+  ],
+  "result": {
+    "red": "120 PASS / 3 FAIL: raw TypeError after HTTP headers",
+    "green": "123 PASS / 0 FAIL",
+    "typecheck": "exit 0"
+  },
+  "boundary": "Local HTTP server and real fetch; synthetic token and effect record. No Oxy authority, Stripe or money."
+}
