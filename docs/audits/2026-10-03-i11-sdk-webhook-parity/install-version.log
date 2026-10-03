@@ -1,0 +1,18 @@
+bun install v1.4.2 (744846f84)
+Saved lockfile
+
+$ bun run build:shared-types && bun run build:pay
+$ bun run --filter @peable.to/shared-types build
+@peable.to/shared-types build: $ tsc -p tsconfig.cjs.json
+@peable.to/shared-types build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/shared-types build: ESM imports fixed
+@peable.to/shared-types build: $ tsc -p tsconfig.types.json
+@peable.to/shared-types build: Exited with code 0
+$ bun run --filter @peable.to/pay build
+@peable.to/pay build: $ tsc -p tsconfig.cjs.json
+@peable.to/pay build: $ tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs
+@peable.to/pay build: ESM imports fixed
+@peable.to/pay build: $ tsc -p tsconfig.types.json
+@peable.to/pay build: Exited with code 0
+
+Checked 1182 installs across 1185 packages (no changes) [4.32s]
