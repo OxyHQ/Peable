@@ -1,0 +1,30 @@
+{
+  "checkedAt": "2026-10-03T07:28:57.121106+00:00",
+  "version": "0.2.1",
+  "publishedAt": "2026-10-03T07:28:34.219Z",
+  "dependencies": {
+    "qrcode-generator": "^2.0.4",
+    "socket.io-client": "^4.8.3",
+    "@peable.to/shared-types": "^0.3.0"
+  },
+  "dist": {
+    "shasum": "d314b22ce042a17dddb43db08d071a9dffd7e236",
+    "tarball": "https://registry.npmjs.org/@peable.to/sdk/-/sdk-0.2.1.tgz",
+    "fileCount": 53,
+    "integrity": "sha512-uza6xW5a7fDkPSA+SDIjNqjDld4XizDGfeUK0iCn1GXiY1OminDjgZ6Y3nBjK98UdUUVl8FgINRTrERDdMAFtA==",
+    "signatures": [
+      {
+        "sig": "MEUCIQD6IwoDqDMqi4eV3SomYAVboLcvrvdVkTTssD7nH5pXIQIgIFUGQnaLPUCsrfguQJllA3WupQksmRdVMNc8TmAZkDg=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEUCIQDTG6U6eUQygI5ykccOXCEDdmAFZkcx0MUQDFahHlImLwIgPKFukCKsZJNM2vs406j98XNWhiklgXqhksFDspCekrA="
+      }
+    ],
+    "unpackedSize": 167534
+  },
+  "sha256": "b4b61f66d888d9274c2ed1e585bdaa7115bb04beb7d2c552f7cf5df4f8467ff3",
+  "localBytesEqual": true,
+  "releaseSource": "87c62dac93195edd7d588681f393f0d6d39d75de"
+}
