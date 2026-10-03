@@ -62,8 +62,8 @@ export class TransfersResource {
    * would come from the platform's general balance, which is other merchants'
    * money in flight.
    */
-  create(params: CreateTransferParams): Promise<Transfer> {
-    return this.client.request<Transfer>('POST', '/v1/transfers', { body: params });
+  create(params: CreateTransferParams, options: { idempotencyKey?: string } = {}): Promise<Transfer> {
+    return this.client.request<Transfer>('POST', '/v1/transfers', { body: params, idempotencyKey: options.idempotencyKey });
   }
 
   /**

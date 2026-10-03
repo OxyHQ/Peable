@@ -66,6 +66,7 @@ export function createServiceTokenProvider(
     try {
       response = await fetchImpl(`${resolved.oxyApiUrl}${SERVICE_TOKEN_PATH}`, {
         method: 'POST',
+        ...(resolved.requestTimeoutMs === undefined ? {} : { signal: AbortSignal.timeout(resolved.requestTimeoutMs) }),
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ apiKey: resolved.publicKey, apiSecret: resolved.secret }),
       });
@@ -77,7 +78,12 @@ export function createServiceTokenProvider(
       );
     }
 
-    const body = await readJsonBody(response);
+    let body: unknown;
+    try { body = await readJsonBody(response); } catch {
+      throw new PeableApiError('The Oxy service-token response body could not be read', {
+        statusCode: response.status, code: 'invalid_response',
+      });
+    }
     if (!response.ok) {
       throw errorFromResponse(response.status, body);
     }

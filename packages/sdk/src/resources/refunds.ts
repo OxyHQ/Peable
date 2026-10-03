@@ -50,8 +50,8 @@ export class RefundsResource {
    * caller does not need a second read whose answer can move on before it
    * arrives.
    */
-  create(params: CreateRefundParams): Promise<Refund> {
-    return this.client.request<Refund>('POST', '/v1/refunds', { body: params });
+  create(params: CreateRefundParams, options: { idempotencyKey?: string } = {}): Promise<Refund> {
+    return this.client.request<Refund>('POST', '/v1/refunds', { body: params, idempotencyKey: options.idempotencyKey });
   }
 
   /**

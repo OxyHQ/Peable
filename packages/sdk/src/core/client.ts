@@ -3,6 +3,7 @@
 // `Idempotency-Key` when given, serializes query params, parses JSON, and
 // maps every non-2xx response via `errors.ts`.
 
+import { resolveRequestTimeout } from './config';
 import { errorFromResponse, PeableApiError } from './errors';
 import type { ServiceTokenProvider } from './serviceToken';
 
@@ -22,6 +23,7 @@ export interface RestClient {
 export interface RestClientConfig {
   /** Gateway base URL, already stripped of a trailing slash. */
   baseURL: string;
+  requestTimeoutMs?: number;
 }
 
 function buildUrl(
@@ -56,6 +58,7 @@ export function createRestClient(
   deps: { fetch?: typeof fetch } = {},
 ): RestClient {
   const fetchImpl = deps.fetch ?? fetch;
+  const timeout = resolveRequestTimeout(config.requestTimeoutMs);
 
   async function performRequest<T>(
     method: string,
@@ -74,6 +77,7 @@ export function createRestClient(
       response = await fetchImpl(buildUrl(config.baseURL, path, opts.query), {
         method,
         headers,
+        ...(timeout === undefined ? {} : { signal: AbortSignal.timeout(timeout) }),
         body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
       });
     } catch (cause) {

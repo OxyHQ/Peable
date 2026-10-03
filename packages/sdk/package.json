@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/sdk",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Peable SDK — a Stripe-ergonomics TypeScript client over the Peable Gateway REST + realtime contract. Server entry (`@peable.to/sdk`) mints Oxy service tokens from an ApplicationCredential and exposes paymentIntents/paymentLinks/checkout.sessions/webhooks; browser entry (`@peable.to/sdk/checkout`) is the anonymous payer-side client core.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",

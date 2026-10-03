@@ -56,7 +56,7 @@ export class Peable {
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
     const tokenProvider = createServiceTokenProvider(config);
-    const client = createRestClient({ baseURL: resolved.baseURL }, tokenProvider);
+    const client = createRestClient({ baseURL: resolved.baseURL, requestTimeoutMs: resolved.requestTimeoutMs }, tokenProvider);
 
     this.billing = new BillingResource(client);
     this.paymentIntents = new PaymentIntentsResource(client);

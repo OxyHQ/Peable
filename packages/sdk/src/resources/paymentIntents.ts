@@ -85,10 +85,11 @@ export class PaymentIntentsResource {
    * and nothing was decided. Neither is a failure of the request — both are
    * facts about a payment that is still live.
    */
-  reject(id: string): Promise<PaymentIntent> {
+  reject(id: string, options: { idempotencyKey?: string } = {}): Promise<PaymentIntent> {
     return this.client.request<PaymentIntent>(
       'POST',
       `/v1/payment_intents/${encodeURIComponent(id)}/reject`,
+      { idempotencyKey: options.idempotencyKey },
     );
   }
 
