@@ -209,7 +209,7 @@
     },
     "packages/shared-types": {
       "name": "@peable.to/shared-types",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "devDependencies": {
         "@types/bun": "latest",
         "@types/node": "^20.0.0",
