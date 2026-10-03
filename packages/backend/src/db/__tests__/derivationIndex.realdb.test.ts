@@ -228,6 +228,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     );
     const names = rows.map((row) => String(row.table_name)).sort();
     expect(names).toEqual([
+      'billing_object_bindings',
+      'billing_operations',
       'checkout_sessions',
       'connected_accounts',
       'disputes',

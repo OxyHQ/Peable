@@ -22,3 +22,4 @@ export { refunds } from './refunds';
 export { disputes } from './disputes';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
+export { billingObjectBindings, billingOperations } from './billing';

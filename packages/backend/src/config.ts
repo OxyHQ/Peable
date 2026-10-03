@@ -91,6 +91,8 @@ export interface AppConfig {
    * implied by the secret key, and connected-account ids live only in rows.
    */
   stripe: StripeConfig;
+  /** Explicit reviewed recurring cohort JSON; absent keeps all recurring routes closed. */
+  billingCohortConfig?: string;
 }
 
 export interface StripeConfig {
@@ -291,6 +293,7 @@ export function loadConfig(
     allowedOrigins: readOrigins(env.PEABLE_ALLOWED_ORIGINS),
     checkoutBaseUrl: readNonEmpty(env.PEABLE_CHECKOUT_BASE_URL, DEFAULT_CHECKOUT_BASE_URL),
     oxyApiUrl: readNonEmpty(env.OXY_API_URL, DEFAULT_OXY_API_URL),
+    ...(readOptional(env.PEABLE_BILLING_COHORT) ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) } : {}),
     stripe: {
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
