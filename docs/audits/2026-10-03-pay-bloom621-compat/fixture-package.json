@@ -1,0 +1,108 @@
+{
+  "name": "i04-peable-pay-bloom621-fixture",
+  "version": "0.1.0",
+  "description": "Peable Pay \u2014 the self-custodial FairCoin payment client an Oxy app embeds. Derives the wallet from the device's Oxy identity, reads the chain over the Explorer HTTP API, and builds, signs and broadcasts a payment without an SPV node.",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "source": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "exports": {
+    ".": {
+      "react-native": "./dist/esm/index.js",
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      },
+      "default": "./dist/esm/index.js"
+    },
+    "./ui": {
+      "react-native": "./dist/esm/ui/index.js",
+      "import": {
+        "types": "./dist/types/ui/index.d.ts",
+        "default": "./dist/esm/ui/index.js"
+      },
+      "default": "./dist/esm/ui/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "peable",
+    "oxy",
+    "faircoin",
+    "wallet",
+    "payments"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OxyHQ/Peable.git",
+    "directory": "packages/pay"
+  },
+  "author": "Peable",
+  "license": "MIT",
+  "homepage": "https://peable.to",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "bun run build:cjs && bun run build:esm && bun run build:types",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs",
+    "build:types": "tsc -p tsconfig.types.json",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "dependencies": {
+    "@noble/hashes": "1.8.0",
+    "@scure/bip32": "1.7.0",
+    "@scure/bip39": "1.6.0"
+  },
+  "peerDependencies": {
+    "@fairco.in/core": ">=0.5.0 <0.6.0",
+    "@oxy.so/bloom": ">=6.2.1 <6.3.0",
+    "react": ">=19.0.0 <20.0.0",
+    "react-native": ">=0.86.0 <1.0.0",
+    "react-native-qrcode-svg": ">=6.3.0 <7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@oxy.so/bloom": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "react-native": {
+      "optional": true
+    },
+    "react-native-qrcode-svg": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@fairco.in/core": "0.5.0",
+    "@oxy.so/bloom": "6.2.1",
+    "@types/bun": "latest",
+    "@types/react": "^19.2.17",
+    "react-native": "0.86.0",
+    "react-native-qrcode-svg": "^6.3.21",
+    "typescript": "~5.9.2"
+  },
+  "private": true,
+  "workspaces": [],
+  "overrides": {
+    "@oxy.so/bloom": "6.2.1"
+  }
+}

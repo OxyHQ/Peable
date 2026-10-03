@@ -1,0 +1,235 @@
+{
+  "base": "6f671437b7e7c28c646c03afa9e47483ba04333a",
+  "worktree": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003",
+  "fixture": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621",
+  "sourceFiles": [
+    {
+      "path": "packages/pay/scripts/fix-esm-imports.mjs",
+      "sha256": "564919a3b20e2ee20c09257998b1690df4655f34987b2a0284197bf16f220b41",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/scripts/fix-esm-imports.mjs",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/address.test.ts",
+      "sha256": "c4d0e24488cb95c412fbc44b57cfe20f985c22621f481d6c35899848f76d3e94",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/address.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/address.ts",
+      "sha256": "66865e5f34fa12cb89e0d4d007994080f88dfef986eba910f8216cc2d431fc90",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/address.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/broadcast.test.ts",
+      "sha256": "71faf5cbb2f1966b52aed4fc62001277e0ed4570c5d324004fd3232b0408ac5b",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/broadcast.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/broadcast.ts",
+      "sha256": "328a477ba364bbec9f369ed398796a0583b2e7b227fb80939c7982a1552e2fc8",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/broadcast.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/chain-tip.ts",
+      "sha256": "1daa8f1fdb466cfd5535727dbb450ee8219d7fef73da4884d75519a0c791ac5c",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/chain-tip.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/discovery.test.ts",
+      "sha256": "52e07b8c9c4ae9db88a6f48ce1362f83b7a24c3cc62227169566e380bf8a342e",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/discovery.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/explorer/discovery.ts",
+      "sha256": "64c264bbaec17a2b220c9bc95268e9d9c056d08682f62a012ce33aa4637f2f8d",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/explorer/discovery.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/index.ts",
+      "sha256": "480fa5a8440ab793e57195a0becb0f68354c315961ef5189a9f7d3dd9412260f",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/index.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/payment.test.ts",
+      "sha256": "2c24cd20c4ca95c081f2e7eb34e083d57c7db203939b960b281a54cf1cca33d7",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/payment.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/payment.ts",
+      "sha256": "f23efbd8ebf407bd1f3ec5186dbd6abe3f5a9991d514f5b9049ecbe8ff5bf422",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/payment.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/PayQrCode.tsx",
+      "sha256": "f3b397f101e8fcf74ed193589dd504558bdad8467c06d621bf0ba495ebca1adc",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/PayQrCode.tsx",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/PeablePaySheet.tsx",
+      "sha256": "e9f1a9712672ee822707a8242944211d357c29bcfefd604c20f4a084b04dc946",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/PeablePaySheet.tsx",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/amount.test.ts",
+      "sha256": "f9651947b1f5b5dcfff5cb5c802a2915e52a6df61d910d45a3446f73df138bb7",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/amount.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/amount.ts",
+      "sha256": "d941ecf13823e3e04e7f6fd0e01f05a00bced3298911eb2f0c35ac762639bef1",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/amount.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/barrelIsolation.test.ts",
+      "sha256": "2162902a564fd0e2a19ca8b787a62699626f515b5f3a6ac71c26cc2220f4a379",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/barrelIsolation.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/failure.test.ts",
+      "sha256": "e33e6320481b802356c3b7233744dcf6727cb9ddd48164f7ab17322defb179eb",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/failure.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/failure.ts",
+      "sha256": "9414c18f88df2956b0cb6727b5cbcb9a7f4d3ced7175194ff64ec88d0d183d1c",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/failure.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/index.ts",
+      "sha256": "027df366b568e50ab38fac549cb35f7e819080c8feed2bc17d47dbd28d67edee",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/index.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/machine.test.ts",
+      "sha256": "2a2e8b29923bd2e624330a4ec9ba16284d69a879c3ec94579d163976232229a0",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/machine.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/ui/machine.ts",
+      "sha256": "9f807929324d07b4f7b08d15c74454343b7caa8cce2342306d33d343e5a47ef9",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/ui/machine.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/wallet/coin-selection.test.ts",
+      "sha256": "83926c59bcaf569b3b697635ed00c43d0ebf6a0ccc55c02f6f0b867aaf2d085e",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/wallet/coin-selection.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/wallet/coin-selection.ts",
+      "sha256": "e6748e7ee0627f29ea234fe5f1f299de15e16daebe0e81d6263747d9ecacb3d6",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/wallet/coin-selection.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/wallet/key-manager.test.ts",
+      "sha256": "a32c6921f98080ae1be860e2c5f3c66524406d2cd947d96eaad5cdda9ccca416",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/wallet/key-manager.test.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/wallet/key-manager.ts",
+      "sha256": "d9fe37df4fbc8818fcd8d3318b89c675b43b3ddea167678457a33f00ed9b93bd",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/wallet/key-manager.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/src/wallet/utxo-set.ts",
+      "sha256": "5c0dd1dcf6df96cddf0221c5ff2575424250cce622e1b16710896c94f520ee4a",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/src/wallet/utxo-set.ts",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/tsconfig.cjs.json",
+      "sha256": "01fd79fb8eaa095b7fef4a36cfadf80b779d5b81cb8125e015f54377f1bae428",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/tsconfig.cjs.json",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/tsconfig.esm.json",
+      "sha256": "308faa44d20839a2fde86ffeade3c22cc6b4b6bf843d841c63173f3650cc63f4",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/tsconfig.esm.json",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/tsconfig.json",
+      "sha256": "dd7ea7ddd1ac7f90ddebaba7100e42f648e4c08399b2135305d1e1cd483e2dff",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/tsconfig.json",
+      "equal": true
+    },
+    {
+      "path": "packages/pay/tsconfig.types.json",
+      "sha256": "d1bd98fc3f6f446ce855d2cd7e9b6d0586cee08653943546481b57d4b2a4fa4e",
+      "fixturePath": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/tsconfig.types.json",
+      "equal": true
+    }
+  ],
+  "registry": {
+    "name": "@oxy.so/bloom",
+    "version": "6.2.1",
+    "tarball": "/home/nate/Oxy/.agent-evidence/i04-bloom621-registry.tgz",
+    "sha256": "edf4cfe3d8597e4bf86f997bceacf332f7fce4a8f92c541b3cd375decbce3a0a",
+    "installedRoot": "/home/nate/Oxy/Peable/.worktrees/1519-pay-bloom621-compat-20261003/.integration-evidence/pay-bloom621/node_modules/@oxy.so/bloom",
+    "comparedFiles": 20940,
+    "allBytesEqual": true
+  },
+  "results": {
+    "typecheck": 0,
+    "buildCjsEsmTypes": 0,
+    "testsPassed": 130,
+    "testsFailed": 0,
+    "testFiles": 10
+  },
+  "limits": [
+    "Peable source untouched; only private fixture package pins/peer changed.",
+    "Typecheck includes real TSX Bloom named exports and props, with project skipLibCheck:true.",
+    "Existing tests exercise pure payment/UI state and barrel isolation, not a native renderer.",
+    "No provider or chain effect and no SDK publication."
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/i04-peable-pay-bloom621-install.log",
+      "sha256": "00a4d4864a3262a9147e5fbdf48e63e66003659122d09ce1506b508b1eaaff32"
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/i04-peable-pay-bloom621-types.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/i04-peable-pay-bloom621-build.log",
+      "sha256": "39efb0fb26de68b505ff61bdd579c979be621c9b5cd36dc11974fa221f1e4fce"
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/i04-peable-pay-bloom621-tests.log",
+      "sha256": "d6e2dbd5d9576f1eddae3ad0427c5e00436ce04703be4b46cc581ed1b0ff2edc"
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/fixture-package.json",
+      "sha256": "6d94b8da71b6b18ee10acf098eea9a5c654954f882f45f5827c190b8cdbe1932"
+    },
+    {
+      "path": "docs/audits/2026-10-03-pay-bloom621-compat/fixture-bun.lock",
+      "sha256": "3e92387902f637015e0e1ffd5f9c71755916dba54856f7dd8884b9e461b5c80c"
+    }
+  ]
+}
