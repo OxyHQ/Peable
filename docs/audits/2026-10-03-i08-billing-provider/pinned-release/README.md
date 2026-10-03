@@ -10,7 +10,9 @@ The workflow captures live state again rather than trusting that dated inventory
 ## Promotion and recovery
 
 Both jobs require `refs/heads/main`, including manual dispatch. Successful CI on
-the exact source SHA is required. The ARM build pushes the source-SHA tag and
+the exact source SHA is required. GitHub-to-SSM synchronization defaults off for
+both push and dispatch; only a reviewed manual `sync_secrets=true` opt-in runs it.
+Readiness uses the default and leaves existing SSM values untouched. The ARM build pushes the source-SHA tag and
 uses BuildKit's image digest; it never moves `latest`.
 
 Preparation requires a steady service, its exact running revision, desired
@@ -34,7 +36,10 @@ previous revision, with the same configuration. An external deployment causes
 refusal rather than overwriting it. No automatic rollback runs after a `post`
 migration failure.
 
-AWS CLI subprocesses and rollout polling are bounded. A migration wait failure
+AWS CLI subprocesses are bounded to 60 seconds. The migration waiter has an
+explicit `MIGRATION_WAIT_TIMEOUT_SECONDS=660` outer deadline (configurable
+1–1800 seconds), allowing the CLI waiter's normal 600-second polling budget;
+rollout polling is bounded to 1200 seconds. A migration wait failure
 checks the exact returned task ARN, definition and `startedBy`, stops only that
 owned task if necessary, and verifies STOPPED. Definition cleanup runs even if
 preparation or migration failed. It retains definitions referenced by the service,

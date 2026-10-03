@@ -19,7 +19,17 @@
 set -euo pipefail
 
 # Bound the complete CLI process as well as individual socket operations.
-aws() { timeout 180s "$(type -P aws)" "$@" --cli-connect-timeout 10 --cli-read-timeout 30; }
+aws() {
+  local deadline=60
+  if [ "${1:-}" = ecs ] && [ "${2:-}" = wait ]; then
+    deadline="${MIGRATION_WAIT_TIMEOUT_SECONDS:-660}"
+    if ! [[ "$deadline" =~ ^[0-9]+$ ]] || [ "$deadline" -lt 1 ] || [ "$deadline" -gt 1800 ]; then
+      echo '::error::migration wait deadline must be 1..1800 seconds' >&2
+      return 1
+    fi
+  fi
+  timeout "${deadline}s" "$(type -P aws)" "$@" --cli-connect-timeout 10 --cli-read-timeout 30
+}
 TASK_ARN=''
 TASK_STOPPED=false
 cleanup_task() {

@@ -23,6 +23,11 @@ on:
       - '.github/workflows/deploy-aws.yml'
   workflow_dispatch:
     inputs:
+      sync_secrets:
+        description: 'Opt in only after reviewing GitHub secret changes. Readiness promotion preserves SSM.'
+        required: false
+        default: false
+        type: boolean
       migration_phase:
         description: 'Migration run. Leave as pre-post for a normal release; `all` is the from-zero genesis / cutover only.'
         required: false
@@ -40,6 +45,7 @@ env:
   APP: peable
   CLUSTER: oxy-cluster
   TASK_FAMILY: oxy-peable
+  MIGRATION_WAIT_TIMEOUT_SECONDS: 660
   DOCKERFILE: packages/backend/Dockerfile
   # The database the migrator is allowed to write DDL to. Checked against
   # `current_database()` by `--target-database`, so a task whose DATABASE_URL
@@ -144,6 +150,7 @@ jobs:
       # The list is the secrets the `peable` task definition actually consumes.
       # Adding a new one means adding it here, or it never reaches SSM.
       - name: Sync GitHub secrets -> SSM (GitHub is the source of truth)
+        if: github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true
         env:
           # The Postgres connection string, and the one the service cannot boot
           # without: `config.ts` refuses to load without it and `server.ts`

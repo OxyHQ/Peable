@@ -63,13 +63,15 @@ function rolloutEnv(outputs: Record<string, string>) {
 }
 describe('pinned ECS release', () => {
   test('restricts manual and push promotion to main, exact CI, with post and cleanup still reachable', () => {
-    const workflow = Bun.YAML.parse(readFileSync(join(ROOT, '.github/workflows/deploy-aws.yml'), 'utf8')) as { jobs: Record<string, { if: string; steps: { name?: string; if?: string; run?: string }[] }> };
+    const workflow = Bun.YAML.parse(readFileSync(join(ROOT, '.github/workflows/deploy-aws.yml'), 'utf8')) as { on: { workflow_dispatch: { inputs: { sync_secrets: { default: boolean } } } }; jobs: Record<string, { if: string; steps: { name?: string; if?: string; run?: string }[] }> };
     expect(workflow.jobs.gate!.if).toBe("github.ref == 'refs/heads/main'");
     expect(workflow.jobs.deploy!.if).toBe("github.ref == 'refs/heads/main'");
     const gate = workflow.jobs.gate!.steps[0]!.run!;
     expect(gate).toContain('head_sha=$SHA');
     expect(gate).not.toContain('EVENT');
     const steps = workflow.jobs.deploy!.steps;
+    expect(workflow.on.workflow_dispatch.inputs.sync_secrets.default).toBe(false);
+    expect(steps.find(step => step.name?.startsWith('Sync GitHub secrets'))?.if).toBe("github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true");
     expect(steps.find(step => step.name?.includes('Clean up unused'))?.if).toBe('always()');
     expect(steps.find(step => step.name?.startsWith('Migrate (post)'))?.if).not.toContain('desiredCount');
   });
