@@ -1,0 +1,183 @@
+$ bun test src --test-name-pattern "pinned ECS release|the deploy workflow and the migrator agree"
+bun test v1.4.2 (744846f84)
+
+src/__tests__/onIntentChange.test.ts:
+
+src/__tests__/config.test.ts:
+
+src/__tests__/ecosystemActivity.test.ts:
+
+src/__tests__/gatewayTestDatabase.realdb.test.ts:
+
+src/__tests__/e2e.test.ts:
+
+src/realtime/__tests__/socket.test.ts:
+
+src/realtime/__tests__/throttle.test.ts:
+
+src/services/__tests__/derivation.test.ts:
+
+src/services/__tests__/expirySweeper.realdb.test.ts:
+
+src/services/__tests__/disputes.realdb.test.ts:
+
+src/services/__tests__/expirySweeper.test.ts:
+
+src/services/__tests__/staleTransition.realdb.test.ts:
+
+src/services/__tests__/environmentGuard.test.ts:
+
+src/services/__tests__/settlementWatcher.test.ts:
+
+src/services/__tests__/settlementEvents.realdb.test.ts:
+
+src/services/__tests__/reserveAddress.test.ts:
+
+src/services/__tests__/merchantDisplay.test.ts:
+
+src/services/__tests__/providerEventDrain.realdb.test.ts:
+
+src/services/__tests__/refunds.realdb.test.ts:
+
+src/services/__tests__/enrichment.test.ts:
+
+src/services/__tests__/appMembership.test.ts:
+
+src/services/__tests__/cardCreate.realdb.test.ts:
+
+src/services/__tests__/intentState.test.ts:
+
+src/services/__tests__/explorer.test.ts:
+
+src/services/__tests__/socialReceive.test.ts:
+
+src/services/__tests__/resolveRail.test.ts:
+
+src/services/__tests__/webhookDispatcher.test.ts:
+
+src/services/__tests__/webhookOutbox.realdb.test.ts:
+
+src/services/__tests__/cardLifecycle.realdb.test.ts:
+
+src/services/__tests__/refundEvents.realdb.test.ts:
+
+src/db/__tests__/settlement.realdb.test.ts:
+
+src/db/__tests__/paymentIntentRepository.realdb.test.ts:
+
+src/db/__tests__/migrationPhaseOrder.test.ts:
+
+src/db/__tests__/providerEvents.realdb.test.ts:
+
+src/db/__tests__/linkAndSessionRepository.realdb.test.ts:
+
+src/db/__tests__/dockerfile.test.ts:
+
+src/db/__tests__/derivationIndex.realdb.test.ts:
+
+src/db/__tests__/deployWorkflow.test.ts:
+(pass) the deploy workflow and the migrator agree > greps migrations with the pattern @oxy.so/db exports, not a copy of it [0.02ms]
+(pass) the deploy workflow and the migrator agree > greps the directory the migrator actually reads [0.08ms]
+(pass) the deploy workflow and the migrator agree > invokes an entrypoint that exists, with bun and not node [0.10ms]
+(pass) the deploy workflow and the migrator agree > passes only phases the migrator accepts [0.21ms]
+(pass) the deploy workflow and the migrator agree > keeps the cutover path off the push trigger [0.03ms]
+(pass) the deploy workflow and the migrator agree > runs every migration step with no DATABASE_URL preflight to skip it [0.04ms]
+(pass) the deploy workflow and the migrator agree > orders the phases around the rollout [0.04ms]
+
+src/db/__tests__/providerLink.realdb.test.ts:
+
+src/db/__tests__/merchantRepository.realdb.test.ts:
+
+src/db/__tests__/rail.realdb.test.ts:
+
+src/db/__tests__/socialReceiveCursor.realdb.test.ts:
+
+src/db/__tests__/pinnedRelease.test.ts:
+(pass) pinned ECS release > restricts manual and push promotion to main, exact CI, with post and cleanup still reachable [0.17ms]
+(pass) pinned ECS release > copies configuration, pins both revisions, then verifies the running candidate [260.82ms]
+(pass) pinned ECS release > refuses mixed-digest during prepare [76.67ms]
+(pass) pinned ECS release > refuses mixed-revision during prepare [80.00ms]
+(pass) pinned ECS release > refuses tamper during prepare [106.24ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after rollout-failure [289.20ms]
+(pass) pinned ECS release > rolls back to the actual previous digest after wrong-running-digest [317.59ms]
+(pass) pinned ECS release > refuses a changed revision or configuration after pre-migration without overwriting it [356.73ms]
+(pass) pinned ECS release > does not roll back over an external deployment arriving during rollout [2241.06ms]
+(pass) pinned ECS release > cleans unused copies after pre failure, including failed readback registration [495.02ms]
+(pass) pinned ECS release > retains serving and rollback definitions after promotion [383.72ms]
+(pass) pinned ECS release > retains an unused candidate while a running task still references it [272.89ms]
+(pass) pinned ECS release > zero capacity repoints a known pinned revision without a runtime claim [214.11ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: success [14.29ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wrong-digest [9.48ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: failed-migration [13.57ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: wait-timeout [20.11ms]
+(pass) pinned ECS release > candidate migrator validates both image and exit: foreign-task [11.31ms]
+
+src/db/__tests__/deploySecrets.test.ts:
+
+src/db/__tests__/schemaGates.realdb.test.ts:
+
+src/db/__tests__/webhookAndAttributionRepository.realdb.test.ts:
+
+src/db/__tests__/derivationIndexBound.test.ts:
+
+src/routes/__tests__/settlement.realdb.test.ts:
+
+src/routes/__tests__/merchants.test.ts:
+
+src/routes/__tests__/enrich.test.ts:
+
+src/routes/__tests__/refunds.realdb.test.ts:
+
+src/routes/__tests__/environmentIsolation.realdb.test.ts:
+
+src/routes/__tests__/webhookDeliveries.test.ts:
+
+src/routes/__tests__/settlementReport.realdb.test.ts:
+
+src/routes/__tests__/routes.test.ts:
+
+src/routes/__tests__/social.test.ts:
+
+src/routes/__tests__/oxyAuthWiring.test.ts:
+
+src/routes/__tests__/providerWebhooks.integration.test.ts:
+
+src/routes/__tests__/disputeEvidence.realdb.test.ts:
+
+src/routes/__tests__/clientAction.realdb.test.ts:
+
+src/routes/__tests__/paymentLinks.test.ts:
+
+src/routes/__tests__/dashboard.test.ts:
+
+src/routes/__tests__/serviceAuthWiring.test.ts:
+
+src/routes/__tests__/checkoutSessions.test.ts:
+
+src/lib/__tests__/money.test.ts:
+
+src/lib/__tests__/ids.test.ts:
+
+src/lib/__tests__/socialPaymentSource.test.ts:
+
+src/services/providers/__tests__/redact.test.ts:
+
+src/services/billing/__tests__/billingHttp.realdb.test.ts:
+
+src/services/recurring/__tests__/stripeRecurringReader.test.ts:
+
+src/services/recurring/__tests__/recurringObservation.realdb.test.ts:
+
+src/db/billing/__tests__/billingRepository.realdb.test.ts:
+
+src/db/schema/__tests__/valueSets.test.ts:
+
+src/services/providers/stripe/__tests__/stripeProvider.test.ts:
+
+src/services/providers/stripe/__tests__/verify.test.ts:
+
+ 25 pass
+ 751 filtered out
+ 0 fail
+ 113 expect() calls
+Ran 25 tests across 75 files. [5.38s]

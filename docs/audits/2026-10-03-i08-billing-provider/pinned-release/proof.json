@@ -1,0 +1,45 @@
+{
+  "sourceCommit": "363e4f806273a501665e077abec76aed6f77077e",
+  "sources": [
+    {
+      "path": ".github/scripts/ecs-release.py",
+      "sha256": "d58f46e208a7656b7177fdea65c2ba5caa6d1efb6a2ca313bcf3888fd918f304"
+    },
+    {
+      "path": ".github/scripts/run-migration-task.sh",
+      "sha256": "3a29914c000d1e4d558bc4f73eaa120dc5c6a505ed582685ebc9b85889d2d6b9"
+    },
+    {
+      "path": ".github/workflows/deploy-aws.yml",
+      "sha256": "88fa0be3124c8614bb9a33abe5095bba11004e3ae747e2d21026612629efeb60"
+    },
+    {
+      "path": "packages/backend/src/db/__tests__/pinnedRelease.test.ts",
+      "sha256": "e65f9179fdd7788b084802a361ab081ac95e488b7e9202c7fb7d0b1821ad2f50"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/README.md",
+      "sha256": "b68bd5b09e8310a5399244479747d175ff97fee1cc4b8730d4fac98137a2184e"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-focal.log",
+      "sha256": "753a5ac88dbaeff53a2d6940fbbe7f3ebddb19660af4135343835aa01daaf04d"
+    },
+    {
+      "path": "docs/audits/2026-10-03-i08-billing-provider/pinned-release/pinned-release-typecheck.log",
+      "sha256": "8366207267355d3e3d5bf3bf6e8c94c5f93f6078c34f08973fa2b38cdda6cc92"
+    }
+  ],
+  "checks": {
+    "focal": "25 PASS / 0 FAIL; 75 files discovered, 751 unrelated tests filtered",
+    "typecheck": "bun run --cwd packages/backend typecheck, exit 0",
+    "syntax": "Python ast.parse and bash -n, exit 0",
+    "diff": "git diff --check, exit 0"
+  },
+  "boundaries": [
+    "AWS CLI executable fixture only; no real AWS calls",
+    "No deployment, publication, cohort activation or IAM changes"
+  ]
+}
