@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-03T06:06:05.876976+00:00",
+  "deployRun": 37101502264,
+  "main": "77e7409511966d01780c7727f615213ce6c7627e",
+  "image": "237343248947.dkr.ecr.us-west-2.amazonaws.com/oxy/peable@sha256:a1d8885047280bca60d0ee52ced2f3ad653c0c5b6dc00e29b9c84248afd0c5ca",
+  "taskDefinition": "arn:aws:ecs:us-west-2:237343248947:task-definition/oxy-peable:7",
+  "rollback": "arn:aws:ecs:us-west-2:237343248947:task-definition/oxy-peable:6",
+  "previousImage": "237343248947.dkr.ecr.us-west-2.amazonaws.com/oxy/peable@sha256:37c93d07e91cfa174eeae9d2ad699719e1da2f9a8a565795514203d9614ef0f8",
+  "configurationPreserved": true,
+  "httpStatuses": {
+    "/health": 200,
+    "/ready": 200,
+    "/v1/billing/subscriptions/sub_readiness_probe": 401
+  },
+  "billingCohortActivated": false
+}

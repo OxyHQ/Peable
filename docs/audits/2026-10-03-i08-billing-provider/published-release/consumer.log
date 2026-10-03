@@ -1,0 +1,25 @@
+{
+  "fixture": "/home/nate/Oxy/Peable/.worktrees/i08-registry-VL0Rfm",
+  "node": "v24.21.0",
+  "manifests": [
+    {
+      "name": "sdk",
+      "sha256": "1978dc6cdf257705f8ebf9eddc5140cda9aec75306d6061c1f94b7c79e617aa9",
+      "version": "0.2.0"
+    },
+    {
+      "name": "shared-types",
+      "sha256": "a50225b55d452b9601884eb6638fa06c0ed4462dc6180b77a9a30609342751c0",
+      "version": "0.3.0"
+    }
+  ],
+  "checks": [
+    "Node CJS load and five billing methods",
+    "Node ESM load and five billing methods",
+    "TypeScript strict NodeNext with skipLibCheck public consumer",
+    "SDK minimum shared-types dependency ^0.3.0"
+  ],
+  "published": true,
+  "resolution": "npm registry SDK0.2.0 only; transitive shared-types0.3.0, no tarball/file/workspace overrides",
+  "network": "Registry installation only; no Oxy/Peable/Stripe requests"
+}
