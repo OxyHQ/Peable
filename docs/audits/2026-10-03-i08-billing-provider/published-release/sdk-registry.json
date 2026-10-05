@@ -1,0 +1,29 @@
+{
+  "package": "@peable.to/sdk",
+  "version": "0.2.0",
+  "publishedAt": "2026-10-03T06:10:20.577Z",
+  "dist": {
+    "shasum": "f34bc2bb9de00aa5e7b631893a8cfb9e9a6c62aa",
+    "tarball": "https://registry.npmjs.org/@peable.to/sdk/-/sdk-0.2.0.tgz",
+    "fileCount": 52,
+    "integrity": "sha512-hG3LW2DKYc7CgAAqReWcVsZ55c7e3uOATKGSekue75tKZ63jZn5Xku1VOEhD7JFNWGBa7JqmBR182obt6LGvrg==",
+    "signatures": [
+      {
+        "sig": "MEUCIQC2s2swRH4XVsOGnYT2BzQIneRS+ep0mW6fPLGcpdATOQIgId5eNBbnyqYlYWe9+IL0LlgEXfMZ3pzVIE3jfQtAcLI=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEYCIQCj6HFTUVBW34NgTllgKME4KvVm9qcOFMO5jpm1lxtpFQIhAKd1tQR++zOKWYgtUJkcqLWt3chcPLH9ky5XKGoQwG8O"
+      }
+    ],
+    "unpackedSize": 163833
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4",
+    "socket.io-client": "^4.8.3",
+    "@peable.to/shared-types": "^0.3.0"
+  },
+  "sha256": "0bb40a650abbf42cabfac0145683092f82e2666867074420350d80335e2e437e",
+  "matchesFreshTarball": true
+}

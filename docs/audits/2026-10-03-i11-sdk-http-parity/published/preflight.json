@@ -1,0 +1,9 @@
+{
+  "checkedAt": "2026-10-03T07:26:13.431253+00:00",
+  "sdk021Absent": true,
+  "sdkLatest": {
+    "latest": "0.2.0"
+  },
+  "shared030Present": true,
+  "releaseSource": "87c62dac93195edd7d588681f393f0d6d39d75de"
+}
