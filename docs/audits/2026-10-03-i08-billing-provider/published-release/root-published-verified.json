@@ -1,0 +1,14 @@
+[
+  {
+    "package": "sdk",
+    "version": "0.2.0",
+    "registryIntegrity": true,
+    "isolatedAndMercariaFiles": 52
+  },
+  {
+    "package": "shared-types",
+    "version": "0.3.0",
+    "registryIntegrity": true,
+    "isolatedAndMercariaFiles": 46
+  }
+]
