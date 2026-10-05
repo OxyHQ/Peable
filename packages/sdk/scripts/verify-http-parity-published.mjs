@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { resolve } from 'node:path';
 const [archiveInput, parentInput] = process.argv.slice(2);
-if (!archiveInput || !parentInput) throw new Error('usage: verify-http-parity-packed.mjs <sdk.tgz> <fixture-parent>');
+if (!archiveInput || !parentInput) throw new Error('usage: node verify-http-parity-published.mjs <sdk.tgz> <fixture-parent>');
 const archive = resolve(archiveInput);
 const fixture = mkdtempSync(resolve(parentInput, 'i11-sdk-registry-'));
 writeFileSync(resolve(fixture, 'package.json'), JSON.stringify({ private: true, dependencies: { '@peable.to/sdk': '0.2.1' } }));
