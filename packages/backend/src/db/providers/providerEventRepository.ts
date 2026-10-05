@@ -134,7 +134,9 @@ export async function findProviderEventByIdentity(
 }
 
 /**
- * The drain's batch: unprocessed, oldest first.
+ * The drain's batch: unprocessed, oldest first for the legacy drain.
+ * Explicit recurring passes order by next attempt time, then stable ID: once
+ * deferred work becomes due it must not regain priority over untouched work.
  *
  * Ordered by `created_at` and served by the partial index of the same name, so
  * the scan is over the unprocessed rows alone rather than over the whole history
@@ -150,7 +152,10 @@ export async function findUnprocessedProviderEvents(
     .select(EVENT_COLUMNS)
     .from(providerEvents)
     .where(and(isNull(providerEvents.processedAt),options?or(isNull(providerEvents.retryAfter),lte(providerEvents.retryAfter,options.dueAt)):undefined))
-    .orderBy(asc(providerEvents.createdAt))
+    .orderBy(
+      options ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`) : asc(providerEvents.createdAt),
+      asc(providerEvents.id)
+    )
     .limit(limit);
   return rows as readonly ProviderEventRow[];
 }

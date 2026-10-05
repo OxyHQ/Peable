@@ -42,6 +42,25 @@ export interface DrainPassResult {
   readonly failed: number;
 }
 
+/** Payment effects may already be committed when retry scheduling fails.
+ * Callers must retry this pending deferral before starting another pass. */
+export class ProviderEventDeferralError extends Error {
+  constructor(
+    readonly progress: DrainPassResult,
+    readonly pendingEventIds: readonly string[],
+    cause: unknown,
+  ) {
+    super(`Provider event retry scheduling failed after committed progress: examined=${progress.examined}, applied=${progress.applied}, pending=${pendingEventIds.length}`, {cause});
+    this.name = 'ProviderEventDeferralError';
+  }
+}
+
+/** Retry only scheduling; completed rows are excluded by the repository write.
+ * Start the backoff at retry completion time, never at the old failed attempt. */
+export async function retryProviderEventDrainDeferral(failure: ProviderEventDeferralError, options: Pick<DrainPassOptions, 'now'> = {}): Promise<void> {
+  await deferProviderEvents(getDb(), failure.pendingEventIds, new Date((options.now ?? (() => new Date()))().getTime() + 60_000));
+}
+
 /**
  * One pass over the unprocessed events, oldest first.
  *
@@ -93,8 +112,12 @@ export async function runProviderEventDrainPass(
     }
   }
 
-  if(options.recurring&&deferred.length)await deferProviderEvents(getDb(),deferred,new Date((options.now??(()=>new Date()))().getTime()+60_000));
-  return { examined: events.length, applied, noop, skipped, unmatched, failed };
+  const progress = { examined: events.length, applied, noop, skipped, unmatched, failed };
+  if(options.recurring&&deferred.length) {
+    try { await deferProviderEvents(getDb(),deferred,new Date((options.now??(()=>new Date()))().getTime()+60_000)); }
+    catch(cause) { throw new ProviderEventDeferralError(progress, [...deferred], cause); }
+  }
+  return progress;
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;
@@ -105,14 +128,25 @@ export interface StartDrainOptions extends DrainPassOptions {
 
 export function startProviderEventDrain(options: StartDrainOptions = {}): void {
   if (timer !== null) return;
+  let pendingDeferral: ProviderEventDeferralError | null = null;
+  let running = false;
   timer = setInterval(() => {
-    void runProviderEventDrainPass(options).catch((error: unknown) => {
+    if (running) return;
+    running = true;
+    void (async () => {
+      if (pendingDeferral) {
+        await retryProviderEventDrainDeferral(pendingDeferral, options);
+        pendingDeferral = null;
+      }
+      await runProviderEventDrainPass(options);
+    })().catch((error: unknown) => {
+      if (error instanceof ProviderEventDeferralError) pendingDeferral = error;
       process.emitWarning(
         `Peable provider event drain tick failed: ${
           error instanceof Error ? error.message : String(error)
         }`,
       );
-    });
+    }).finally(() => { running = false; });
   }, options.intervalMs ?? DEFAULT_POLL_INTERVAL_MS);
   // Same as the settlement watcher's and the outbox's: the loop must never be
   // the reason a process or a test run refuses to exit.
