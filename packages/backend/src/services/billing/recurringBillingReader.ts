@@ -13,15 +13,16 @@ export function createOwnedBillingRecurringReader(options:{db:Database;bindings:
   if(request.signal.aborted)throw new Error('Observation aborted');
   const [mirror]=await options.db.select().from(recurringMirrors).where(mirrorIdentity(request.deployment,request.kind,request.objectRef,request.providerAccountId));
   if(!mirror)throw new Error('Unknown owned recurring object');
+  const billingDeployment={provider:request.deployment.provider,platformAccountId:request.deployment.platformAccountId,livemode:request.deployment.livemode};
   const owner={merchantId:mirror.merchantId,oxyAppId:mirror.oxyAppId,environment:mirror.environment as 'development'|'staging'|'production'};
   const identity={schemaVersion:1,provider:request.deployment.provider,platformAccountId:request.deployment.platformAccountId,providerAccountId:request.providerAccountId,livemode:request.deployment.livemode,apiVersion:request.deployment.apiVersion,objectRef:request.objectRef};
   if(request.kind==='subscription'){
-   const binding=await requireBillingBinding(options.db,request.deployment,owner,'subscription',request.objectRef);
+   const binding=await requireBillingBinding(options.db,billingDeployment,owner,'subscription',request.objectRef);
    if(!binding.customerBindingId||!binding.priceBindingId)throw new Error('Subscription mapping differs');
    // Gateway bindings reverify customer/price/store separately through retrieveInvoiceState.
    const sub=normalizeBillingSubscription(await options.client.retrieveSubscription(request.objectRef));
    if(sub.providerSubscriptionId!==request.objectRef||sub.livemode!==request.deployment.livemode)throw new Error('Subscription identity differs');
-   const customer=await requireBillingBinding(options.db,request.deployment,owner,'customer',sub.providerCustomerId);const price=await requireBillingBinding(options.db,request.deployment,owner,'price',sub.providerPriceId);
+   const customer=await requireBillingBinding(options.db,billingDeployment,owner,'customer',sub.providerCustomerId);const price=await requireBillingBinding(options.db,billingDeployment,owner,'price',sub.providerPriceId);
    if(customer.id!==binding.customerBindingId||price.id!==binding.priceBindingId||customer.externalSubjectRef!==binding.externalSubjectRef||price.planRef!==binding.planRef)throw new Error('Subscription ownership differs');
    return {...identity,kind:'subscription',status:sub.status,cancelAtPeriodEnd:sub.cancelAtPeriodEnd,periods:[{itemRef:'owned_subscription',start:sub.currentPeriodStart,end:sub.currentPeriodEnd}],hasMorePeriods:false};
   }

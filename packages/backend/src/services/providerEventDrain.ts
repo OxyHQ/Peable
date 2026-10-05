@@ -17,7 +17,7 @@ import type {RecurringObservationOptions} from './recurring/contracts';
  * would add a way for a killed process to hold rows.
  */
 import { getDb } from "../db/postgres";
-import { findUnprocessedProviderEvents } from "../db/providers/providerEventRepository";
+import { findUnprocessedProviderEvents,deferProviderEvents } from "../db/providers/providerEventRepository";
 import { processProviderEvent } from "./providers/eventProcessor";
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -27,6 +27,7 @@ export interface DrainPassOptions {
   readonly batchSize?: number;
   /** Explicit operator-approved composition only; server boot supplies none. */
   readonly recurring?:RecurringObservationOptions;
+  readonly now?:()=>Date;
 }
 
 export interface DrainPassResult {
@@ -52,11 +53,15 @@ export interface DrainPassResult {
 export async function runProviderEventDrainPass(
   options: DrainPassOptions = {},
 ): Promise<DrainPassResult> {
+  const batchSize=options.batchSize??DEFAULT_BATCH_SIZE;
+  if(options.recurring&&(!Number.isSafeInteger(batchSize)||batchSize<1||batchSize>100))throw new Error('Invalid recurring drain batch size');
   const events = await findUnprocessedProviderEvents(
     getDb(),
-    options.batchSize ?? DEFAULT_BATCH_SIZE,
+    batchSize,
+    options.recurring?{dueAt:(options.now??(()=>new Date()))()}:undefined,
   );
 
+  const deferred:string[]=[];
   let applied = 0;
   let noop = 0;
   let skipped = 0;
@@ -65,6 +70,7 @@ export async function runProviderEventDrainPass(
 
   for (const event of events) {
     const outcome = await (options.recurring?processProviderEvent(event,options.recurring):processProviderEvent(event));
+    if(options.recurring&&(outcome.kind==='failed'||outcome.kind==='unmatched'))deferred.push(event.id);
     switch (outcome.kind) {
       case "observed":
       case "applied":
@@ -87,6 +93,7 @@ export async function runProviderEventDrainPass(
     }
   }
 
+  if(options.recurring&&deferred.length)await deferProviderEvents(getDb(),deferred,new Date((options.now??(()=>new Date()))().getTime()+60_000));
   return { examined: events.length, applied, noop, skipped, unmatched, failed };
 }
 

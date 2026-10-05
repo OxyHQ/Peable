@@ -25,7 +25,7 @@ export async function readOwnedInvoiceState(client:StripeBillingClient,expected:
  let cursor:string|undefined;let refundTotal=0;const seen=new Set<string>();let complete=false;
  for(let pageIndex=0;pageIndex<20;pageIndex++){
   checkAbort();
-  const refunds=z.object({has_more:z.boolean(),data:z.array(z.object({id:ref,charge:z.literal(intent.latest_charge.id),payment_intent:z.literal(intent.id),livemode:z.literal(expected.livemode),currency:z.literal(invoice.currency),amount,status:z.enum(['succeeded','failed','canceled'])})).max(100)}).parse(await client.listChargeRefunds(intent.latest_charge.id,cursor));
+  const refunds=z.object({has_more:z.boolean(),data:z.array(z.object({id:ref,charge:z.literal(intent.latest_charge.id),payment_intent:z.literal(intent.id),currency:z.literal(invoice.currency),amount,status:z.enum(['succeeded','failed','canceled'])})).max(100)}).parse(await client.listChargeRefunds(intent.latest_charge.id,cursor));
   for(const receipt of refunds.data){if(seen.has(receipt.id))throw new BillingError('invalid_provider_response',502);seen.add(receipt.id);if(receipt.status==='succeeded'){refundTotal+=receipt.amount;if(!Number.isSafeInteger(refundTotal))throw new BillingError('invalid_provider_response',502);}}
   if(!refunds.has_more){complete=true;break;}const last=refunds.data.at(-1);if(!last)throw new BillingError('invalid_provider_response',502);cursor=last.id;
  }
