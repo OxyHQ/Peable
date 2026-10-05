@@ -213,12 +213,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
   it('serves paid-period evidence via scoped SDK with exact merchant isolation',async()=>{
     await bindSubscription();
     const invoice={id:'in_one',customer:'cus_one',livemode:false,status:'paid',pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,currency:'usd',total:2999,amount_paid:2999,amount_due:2999,amount_remaining:0,total_excluding_tax:2500,parent:{type:'subscription_details',subscription_details:{subscription:'sub_one'}}};
+    client.listChargeRefunds=async()=>({has_more:false,data:[]});
     client.retrieveInvoice=async()=>invoice;
     client.listInvoiceLines=async()=>({has_more:false,data:[{id:'il_one',invoice:'in_one',livemode:false,subscription:'sub_one',quantity:1,amount:2500,parent:{type:'subscription_item_details',subscription_item_details:{subscription:'sub_one',proration:false}},pricing:{price_details:{price:'price_one'}},period:{start:1791028800,end:1793707200}}]});
     client.listInvoicePayments=async()=>({has_more:false,data:[{id:'inpay_one',invoice:'in_one',livemode:false,currency:'usd',status:'paid',amount_paid:2999,payment:{type:'payment_intent',payment_intent:'pi_one'},status_transitions:{paid_at:1791028800}}]});
     client.retrievePaidPaymentIntent=async()=>({id:'pi_one',customer:'cus_one',livemode:false,currency:'usd',status:'succeeded',amount_received:2999,latest_charge:{id:'ch_one',payment_intent:'pi_one',customer:'cus_one',currency:'usd',livemode:false,paid:true,captured:true,amount_captured:2999,amount_refunded:0,refunded:false,disputed:false}});
     expect(await sdk().retrievePaidInvoice('sub_one','in_one')).toMatchObject({invoiceId:'in_one',storeId:'store:one',planId:'plan:one',amountPaid:'2999',netAmount:'2500',taxAmount:'499'});
     expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','noScope')).status).toBe(403);
+    expect(await sdk().retrieveInvoiceState('sub_one','in_one')).toMatchObject({state:'paid',amountRefunded:'0'});
+    expect((await request('/v1/billing/subscriptions/sub_one/invoice_states/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/invoice_states/in_one','noScope')).status).toBe(403);
     invoice.amount_paid=1;expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one')).status).not.toBe(200);
   });
 

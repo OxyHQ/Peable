@@ -45,6 +45,7 @@ export const recurringSnapshotSchema = z.discriminatedUnion('kind', [
     amountDue: amount,
     amountPaid: amount,
     amountRemaining: amount,
+    paymentIntentRef: reference.optional(),chargeRef:reference.optional(),amountRefunded:amount.optional(),
     periods: periods(true),
     hasMorePeriods: z.literal(false),
   }).strict(),
@@ -77,5 +78,7 @@ export interface RecurringReader {
 export interface RecurringObservationOptions {
   readonly deployment: DeploymentIdentity;
   readonly reader: RecurringReader;
+  /** Optional trusted resolver: exact provider invoice → existing owned subscription; never metadata. */
+  readonly bindOwnedInvoice?:(request:RecurringReadRequest)=>Promise<void>;
   readonly timeoutMs?: number;
 }

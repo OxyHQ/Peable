@@ -1,4 +1,4 @@
-import type { BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingCheckoutObservation, BillingPaidInvoice, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
+import type { BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingCheckoutObservation, BillingPaidInvoice, BillingInvoiceState, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 export interface BillingRequestOptions { idempotencyKey: string; }
 /** Recurring billing is separate from one-off checkout and marketplace transfers. */
@@ -15,6 +15,7 @@ export class BillingResource {
   }
   retrieveCheckout(ref:string):Promise<BillingCheckoutObservation>{return this.client.request('GET',`/v1/billing/checkout_sessions/${encodeURIComponent(ref)}`);}
   retrievePaidInvoice(subscriptionRef:string,invoiceRef:string):Promise<BillingPaidInvoice>{return this.client.request('GET',`/v1/billing/subscriptions/${encodeURIComponent(subscriptionRef)}/paid_invoices/${encodeURIComponent(invoiceRef)}`);}
+  retrieveInvoiceState(subscriptionRef:string,invoiceRef:string):Promise<BillingInvoiceState>{return this.client.request('GET',`/v1/billing/subscriptions/${encodeURIComponent(subscriptionRef)}/invoice_states/${encodeURIComponent(invoiceRef)}`);}
   retrieveSubscription(ref: string): Promise<BillingSubscription> {
     return this.client.request('GET', `/v1/billing/subscriptions/${encodeURIComponent(ref)}`);
   }

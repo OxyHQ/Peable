@@ -30,6 +30,7 @@ export function createBillingRouter(deps: { requireMerchant: RequestHandler; ser
   router.post('/v1/billing/checkout_sessions', ...write, handle((service, owner, req) => service.createCheckoutSession(owner, checkoutSchema.parse(req.body), key(req))));
   router.post('/v1/billing/portal_sessions', ...write, handle((service, owner, req) => service.createPortalSession(owner, portalSchema.parse(req.body), key(req))));
   router.get('/v1/billing/checkout_sessions/:id',...read,handle((service,owner,req)=>service.retrieveCheckout(owner,req.params.id??'')));
+  router.get('/v1/billing/subscriptions/:id/invoice_states/:invoiceId',...read,handle((service,owner,req)=>service.retrieveInvoiceState(owner,req.params.id??'',req.params.invoiceId??'')));
   router.get('/v1/billing/subscriptions/:id/paid_invoices/:invoiceId',...read,handle((service,owner,req)=>service.retrievePaidInvoice(owner,req.params.id??'',req.params.invoiceId??'')));
   router.get('/v1/billing/subscriptions/:id', ...read, handle((service, owner, req) => service.retrieveSubscription(owner, req.params.id ?? '')));
   router.post('/v1/billing/subscriptions/:id/cancel_at_period_end', ...write, handle((service, owner, req) => {

@@ -4,6 +4,7 @@ import { createdAt, generatedId, timestamptz } from '@oxy.so/db';
 import type { RecurringSnapshot } from '../../services/recurring/contracts';
 import { merchants } from './merchants';
 import { providerEvents } from './providerEvents';
+import { webhookDeliveries } from './webhooks';
 
 /** No public creator. Identity is insert-only; the repository updates observations only. */
 export const recurringMirrors = pgTable('recurring_mirrors', {
@@ -41,6 +42,7 @@ export const recurringObservationOutbox = pgTable('recurring_observation_outbox'
   id: generatedId(),
   mirrorId: text().notNull().references(() => recurringMirrors.id, { onDelete: 'restrict' }),
   revision: integer().notNull(),
+  deliveryId: text().references(() => webhookDeliveries.id, {onDelete:'restrict'}),
   sourceEventId: text().notNull().references(() => providerEvents.id, { onDelete: 'restrict' }),
   snapshot: jsonb().$type<RecurringSnapshot>().notNull(),
   observedAt: timestamptz().notNull(),

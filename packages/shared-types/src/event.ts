@@ -68,7 +68,8 @@ export type WebhookEventType =
    * Additive to a published contract: an existing consumer that switches on
    * this union keeps compiling and simply never matches it.
    */
-  | 'connected_account.updated';
+  | 'connected_account.updated'
+  | 'billing.observation.updated';
 
 /**
  * Which resource each event type carries under `data.object`.
@@ -79,7 +80,10 @@ export type WebhookEventType =
  * the default would silently ship a PaymentIntent to a consumer expecting
  * something else — which typechecks on both sides and fails only in production.
  */
+/** Wake-up only. Re-read the owner-bound SDK resource; this is never paid or grant authority. */
+export interface BillingObservation { object:'billing_observation';resourceKind:'subscription'|'invoice';resourceId:string;revision:number;observedAt:string; }
 export interface WebhookEventPayload {
+  'billing.observation.updated': BillingObservation;
   'payment_intent.confirming': PaymentIntent;
   'payment_intent.settled': PaymentIntent;
   'payment_intent.failed': PaymentIntent;

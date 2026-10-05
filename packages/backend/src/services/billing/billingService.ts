@@ -8,7 +8,7 @@ import type { VerifiedBillingBindings } from './verifiedBindings';
 
 /** Trusted deployment composition, never a request field. No cohort means no access. */
 export interface BillingCohort extends BillingOwner, BillingDeployment { evidenceRef: string; }
-export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'|'retrieveCheckout'|'retrievePaidInvoice'>; }
+export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'|'retrieveCheckout'|'retrievePaidInvoice'|'retrieveInvoiceState'>; }
 /** The five-method recurring transport; no entitlement or settlement decisions. */
 export function createBillingService(options: BillingServiceOptions) {
   const { db, provider } = options; const now = options.now ?? (() => new Date());
@@ -104,7 +104,7 @@ export function createBillingService(options: BillingServiceOptions) {
       });
     },
     async retrieveCheckout(owner:BillingOwner,ref:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);return options.verifiedBindings.retrieveCheckout(owner,ref);},
-    async retrievePaidInvoice(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrievePaidInvoice(owner,subRef,invoiceRef);},
+    async retrieveInvoiceState(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrieveInvoiceState(owner,subRef,invoiceRef);},    async retrievePaidInvoice(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrievePaidInvoice(owner,subRef,invoiceRef);},
     async retrieveSubscription(owner: BillingOwner, ref: string): Promise<BillingSubscription> {
       const binding = await ownedSubscription(owner, ref);
       await provider.verifyDeployment();

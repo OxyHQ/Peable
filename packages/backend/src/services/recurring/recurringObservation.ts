@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq,sql } from 'drizzle-orm';
 import { getDb } from '../../db/postgres';
 import { providerEvents, recurringMirrors } from '../../db/schema';
 import { markProviderEventProcessed } from '../../db/providers/providerEventRepository';
@@ -25,18 +25,18 @@ function canonicalJson(value: unknown): string {
 
 export function recurringEventKind(type: string): RecurringKind | undefined {
   if (type.startsWith('customer.subscription.')) return 'subscription';
-  if (type.startsWith('invoice.')) return 'invoice';
+  if (type.startsWith('invoice.')||type==='charge.refunded'||type.startsWith('refund.')) return 'invoice';
   return undefined;
 }
 
-async function readBounded(options: RecurringObservationOptions, request: Omit<RecurringReadRequest, 'signal'>): Promise<unknown> {
+async function readBounded(options: RecurringObservationOptions, request: Omit<RecurringReadRequest, 'signal'>,read?:(signal:AbortSignal)=>Promise<unknown>): Promise<unknown> {
   const timeoutMs = options.timeoutMs ?? 2000;
   if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 10000) throw new Error('Invalid observation timeout');
   const controller = new AbortController();
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
-      options.reader.readSnapshot({ ...request, signal: controller.signal }),
+      read?read(controller.signal):options.reader.readSnapshot({ ...request, signal: controller.signal }),
       new Promise<never>((_resolve, reject) => {
         timer = setTimeout(() => { controller.abort(); reject(new Error('Observation timeout')); }, timeoutMs);
       }),
@@ -63,12 +63,25 @@ export async function observeRecurringEvent(eventId: string, options: RecurringO
       if (!kind) return { kind: 'unmatched' };
       if (event.provider !== deployment.provider || event.livemode !== deployment.livemode
         || event.apiVersion !== deployment.apiVersion) throw new Error('Observation event identity mismatch');
-      const objectRef = event.objectIds[kind];
+      const refundEvent=event.type==='charge.refunded'||event.type.startsWith('refund.');
+      let objectRef = event.objectIds[kind];
+      if(refundEvent){
+        // Refund wake-ups may name only a charge/PI. Adopt nothing: use only an
+        // already owned, previously proven cash invoice's stored payment lineage.
+        const charge=event.objectIds.charge;const intent=event.objectIds.payment_intent;
+        if(!charge&&!intent)return {kind:'unmatched'};
+        const matches=await tx.select().from(recurringMirrors).where(and(eq(recurringMirrors.provider,deployment.provider),eq(recurringMirrors.platformAccountId,deployment.platformAccountId),eq(recurringMirrors.livemode,deployment.livemode),eq(recurringMirrors.environment,deployment.environment),eq(recurringMirrors.kind,'invoice'),sql`${recurringMirrors.providerAccountId} is not distinct from ${event.providerAccountId}`,charge?sql`${recurringMirrors.snapshot}->>'chargeRef' = ${charge}`:undefined,intent?sql`${recurringMirrors.snapshot}->>'paymentIntentRef' = ${intent}`:undefined)).limit(2);
+        if(matches.length!==1)return {kind:'unmatched'};objectRef=matches[0]!.objectRef;
+      }
       if (!objectRef) return { kind: 'unmatched' };
-      const [mirror] = await tx.select().from(recurringMirrors).where(and(
+      let [mirror] = await tx.select().from(recurringMirrors).where(and(
         mirrorIdentity(deployment, kind, objectRef, event.providerAccountId),
         eq(recurringMirrors.environment, deployment.environment),
       )).for('update');
+      if(!mirror&&kind==='invoice'&&!refundEvent&&options.bindOwnedInvoice){
+        await readBounded(options,{deployment,providerAccountId:event.providerAccountId,kind,objectRef},signal=>options.bindOwnedInvoice!({deployment,providerAccountId:event.providerAccountId,kind,objectRef:objectRef!,signal}));
+        [mirror]=await tx.select().from(recurringMirrors).where(and(mirrorIdentity(deployment,kind,objectRef,event.providerAccountId),eq(recurringMirrors.environment,deployment.environment))).for('update');
+      }
       if (!mirror) return { kind: 'unmatched' };
 
       // Serialize reads too: a later event cannot overwrite a newer read with
@@ -83,6 +96,7 @@ export async function observeRecurringEvent(eventId: string, options: RecurringO
         throw new Error('Observation snapshot identity mismatch');
       }
       if (snapshot.kind === 'invoice') {
+        if(refundEvent&&((event.objectIds.charge&&snapshot.chargeRef!==event.objectIds.charge)||(event.objectIds.payment_intent&&snapshot.paymentIntentRef!==event.objectIds.payment_intent)))throw new Error('Refund payment lineage differs');
         const parent = await findRecurringMirror(tx, deployment, 'subscription', snapshot.subscriptionRef, event.providerAccountId);
         if (!parent || parent.merchantId !== mirror.merchantId || parent.oxyAppId !== mirror.oxyAppId
           || parent.environment !== mirror.environment) throw new Error('Observation subscription ownership mismatch');

@@ -18,9 +18,12 @@ export interface StripeBillingClient {
   retrievePrice(ref: string): Promise<unknown>;
   retrieveCheckout(ref: string): Promise<unknown>;
   listCheckoutsForSubscription(ref: string): Promise<unknown>;
+  retrieveTaxSettings?():Promise<unknown>;
+  listTaxRegistrations?(startingAfter?:string):Promise<unknown>;
   retrieveInvoice?(ref:string):Promise<unknown>;
   listInvoiceLines?(ref:string):Promise<unknown>;
   listInvoicePayments?(ref:string):Promise<unknown>;
+  listChargeRefunds?(chargeRef:string,startingAfter?:string):Promise<unknown>;
   retrievePaidPaymentIntent?(ref:string):Promise<unknown>;
   retrievePortalConfiguration(ref: string): Promise<unknown>;
 }

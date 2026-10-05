@@ -25,6 +25,7 @@ const WEBHOOK_EVENT_TYPES = {
   'payment_intent.partially_refunded': true,
   'payment_intent.disputed': true,
   'payment_intent.dispute_closed': true,
+  'billing.observation.updated': true,
   'connected_account.updated': true,
 } satisfies Record<WebhookEventType, true>;
 
@@ -37,7 +38,7 @@ const WEBHOOK_EVENT_TYPES = {
 function isWebhookEventShape(value: unknown): value is WebhookEvent {
   if (typeof value !== 'object' || value === null) return false;
   const candidate = value as Partial<WebhookEvent>;
-  return (
+  const valid=(
     typeof candidate.id === 'string' &&
     candidate.object === 'event' &&
     typeof candidate.type === 'string' &&
@@ -47,6 +48,13 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     candidate.data !== null &&
     'object' in candidate.data
   );
+  if(!valid)return false;
+  if(candidate.type==='billing.observation.updated'){
+    const data=candidate.data?.object;if(!data||typeof data!=='object')return false;
+    const v=data as unknown as Record<string,unknown>;
+    return v.object==='billing_observation'&&(v.resourceKind==='subscription'||v.resourceKind==='invoice')&&typeof v.resourceId==='string'&&v.resourceId.length>0&&typeof v.revision==='number'&&Number.isSafeInteger(v.revision)&&v.revision>0&&typeof v.observedAt==='string'&&Number.isFinite(Date.parse(v.observedAt))&&Object.keys(v).every(k=>['object','resourceKind','resourceId','revision','observedAt'].includes(k));
+  }
+  return true;
 }
 
 export class WebhooksResource {

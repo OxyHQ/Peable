@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import {readOwnedPaidInvoice} from './paidInvoice';
+import {readOwnedPaidInvoice,readOwnedInvoiceState} from './paidInvoice';
 import type { Database } from '../../db/postgres';
 import { bindBillingObject, findBillingCheckoutOperation, requireBillingBinding, requireBillingBindingById } from '../../db/billing/billingRepository';
 import { bindRecurringObject } from '../../db/recurring/recurringMirrorRepository';
@@ -10,7 +10,7 @@ import { STRIPE_API_VERSION } from '../providers/stripe/client';
 
 /** Internal composition/import only: no HTTP route accepts these inputs. Cohort
  * and evidence are operator-approved inputs, not claims discovered in metadata. */
-export function createVerifiedBillingBindings(options: { db: Database; client: StripeBillingClient; deployment: BillingDeployment; cohorts: readonly BillingCohort[] }) {
+export function createVerifiedBillingBindings(options: { db: Database; client: StripeBillingClient; deployment: BillingDeployment; cohorts: readonly BillingCohort[];now?:()=>Date }) {
   const { db, client, deployment } = options;
   const cohorts = options.cohorts.map((value) => ({ ...value }));
   async function authorize(owner: BillingOwner) {
@@ -50,15 +50,19 @@ export function createVerifiedBillingBindings(options: { db: Database; client: S
   }
   return {
     retrieveCheckout,
-    async retrievePaidInvoice(owner:BillingOwner,subscriptionRef:string,invoiceRef:string){
+    async retrieveInvoiceState(owner:BillingOwner,subscriptionRef:string,invoiceRef:string,bindMirror=true,signal?:AbortSignal){
       await authorize(owner);z.string().regex(/^in_[A-Za-z0-9]+$/).max(128).parse(invoiceRef);
       const subscription=await requireBillingBinding(db,deployment,owner,'subscription',subscriptionRef);
       if(!subscription.customerBindingId||!subscription.priceBindingId||!subscription.externalSubjectRef||!subscription.planRef)throw new BillingError('identity_conflict');
       const customer=await requireBillingBindingById(db,deployment,owner,'customer',subscription.customerBindingId);
       const price=await requireBillingBindingById(db,deployment,owner,'price',subscription.priceBindingId);
       if(customer.externalSubjectRef!==subscription.externalSubjectRef||price.planRef!==subscription.planRef)throw new BillingError('identity_conflict');
-      return readOwnedPaidInvoice(client,{invoiceId:invoiceRef,subscriptionId:subscriptionRef,customerId:customer.providerRef,priceId:price.providerRef,storeId:subscription.externalSubjectRef,planId:subscription.planRef,livemode:deployment.livemode});
+      const value=await readOwnedInvoiceState(client,{invoiceId:invoiceRef,subscriptionId:subscriptionRef,customerId:customer.providerRef,priceId:price.providerRef,storeId:subscription.externalSubjectRef,planId:subscription.planRef,livemode:deployment.livemode},options.now,signal);
+      if(signal?.aborted)throw new BillingError('provider_unavailable',503);
+      if(bindMirror)await bindRecurringObject(db,{...deployment,environment:owner.environment,apiVersion:STRIPE_API_VERSION},{merchantId:owner.merchantId,providerAccountId:null,kind:'invoice',objectRef:invoiceRef,bindingEvidenceRef:subscription.bindingEvidenceRef});
+      return value;
     },
+    async retrievePaidInvoice(owner:BillingOwner,subscriptionRef:string,invoiceRef:string){const {state,chargeId,amountRefunded,...paid}=await this.retrieveInvoiceState(owner,subscriptionRef,invoiceRef);if(state!=='paid')throw new BillingError('reconciliation_required');return paid;},
     async importCustomer(owner: BillingOwner, input: { providerCustomerId: string; storeId: string; evidenceRef: string }) {
       await authorize(owner); const evidence = billingReference.parse(input.evidenceRef);
       const value = z.object({ id: z.string().regex(/^cus_[A-Za-z0-9]+$/), livemode: z.boolean(), deleted: z.literal(false).optional() }).parse(await client.retrieveCustomer(input.providerCustomerId));

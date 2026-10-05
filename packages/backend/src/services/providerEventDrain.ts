@@ -1,3 +1,4 @@
+import type {RecurringObservationOptions} from './recurring/contracts';
 /**
  * The drain: stored provider events become payment state.
  *
@@ -24,6 +25,8 @@ const DEFAULT_BATCH_SIZE = 50;
 
 export interface DrainPassOptions {
   readonly batchSize?: number;
+  /** Explicit operator-approved composition only; server boot supplies none. */
+  readonly recurring?:RecurringObservationOptions;
 }
 
 export interface DrainPassResult {
@@ -61,11 +64,14 @@ export async function runProviderEventDrainPass(
   let failed = 0;
 
   for (const event of events) {
-    const outcome = await processProviderEvent(event);
+    const outcome = await (options.recurring?processProviderEvent(event,options.recurring):processProviderEvent(event));
     switch (outcome.kind) {
+      case "observed":
       case "applied":
         applied += 1;
         break;
+      case "unchanged":
+      case "already_processed":
       case "noop":
         noop += 1;
         break;

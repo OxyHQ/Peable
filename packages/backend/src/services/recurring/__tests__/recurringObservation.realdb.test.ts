@@ -1,14 +1,17 @@
+import {relayRecurringObservations} from '../recurringDelivery';
+import {Peable} from '@peable.to/sdk';
+import {signWebhook} from '@peable.to/shared-types';
 import type Stripe from 'stripe';
 import { createPrivateStripeRecurringReader } from '../stripeRecurringReader';
 import { STRIPE_API_VERSION } from '../../providers/stripe/client';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
 import { randomUUID } from 'node:crypto';
-import { eq } from 'drizzle-orm';
+import { eq,sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { gatewayDb, POSTGRES_TESTS_ENABLED, resetGatewayTables, seedMerchant, useGatewayDatabase } from '../../../__tests__/helpers/gatewayTestDatabase';
 import { bindRecurringObject, findRecurringMirror } from '../../../db/recurring/recurringMirrorRepository';
 import { findProviderEventById, insertProviderEvent } from '../../../db/providers/providerEventRepository';
-import { recurringMirrors, recurringObservationOutbox } from '../../../db/schema';
+import { recurringMirrors, recurringObservationOutbox,merchants,webhookDeliveries } from '../../../db/schema';
 import type { DeploymentIdentity, RecurringSnapshot } from '../contracts';
 import { processProviderEvent } from '../../providers/eventProcessor';
 import { observeRecurringEvent } from '../recurringObservation';
@@ -253,6 +256,41 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
     expect((await findProviderEventById(gatewayDb(), rejected))?.processedAt).toBeNull();
     expect((await findRecurringMirror(gatewayDb(), pinned, 'invoice', 'in_1', null))?.revision).toBe(1);
     expect(await rows()).toHaveLength(1);
+  });
+
+  it('defaults relay off before DB, fences cohorts, atomically enqueues once under concurrent replay, and verifies SDK signature',async()=>{
+    expect(await relayRecurringObservations({db:undefined as never,cohorts:[]})).toEqual({kind:'disabled',enqueued:0});
+    const sub=await bind();await gatewayDb().update(merchants).set({webhookUrl:'https://example.invalid/fixture',webhookSecret:'synthetic-only'}).where(eq(merchants.id,sub.merchantId));
+    await observeRecurringEvent(await event(),options);
+    const cohort={...deployment,merchantId:sub.merchantId,oxyAppId:sub.oxyAppId,evidenceRef:'fixture-approved'};
+    expect((await relayRecurringObservations({db:gatewayDb(),enabled:true,cohorts:[{...cohort,oxyAppId:'other'}]})).enqueued).toBe(0);
+    const results=await Promise.all([relayRecurringObservations({db:gatewayDb(),enabled:true,cohorts:[cohort]}),relayRecurringObservations({db:gatewayDb(),enabled:true,cohorts:[cohort]})]);expect(results.reduce((n,v)=>n+v.enqueued,0)).toBe(1);
+    const [delivery]=await gatewayDb().select().from(webhookDeliveries);const [privateRow]=await rows();expect(privateRow!.deliveryId).toBe(delivery!.id);
+    const sdk=new Peable({publicKey:'synthetic',secret:'synthetic'});const raw=JSON.stringify(delivery!.payload),timestamp=Math.floor(Date.now()/1000),signature=signWebhook('synthetic-only',raw,timestamp);
+    expect(sdk.webhooks.constructEvent(raw,signature,'synthetic-only')).toMatchObject({type:'billing.observation.updated',data:{object:{resourceKind:'subscription',resourceId:'sub_1',revision:1}}});
+    expect(()=>sdk.webhooks.constructEvent(raw,signature,'other-secret')).toThrow();
+  });
+  it('refund wake-ups follow previously proven lineage and delayed paid events cannot rewind current refunds',async()=>{
+    const sub=await bind();await bind('invoice','in_1',sub.merchantId);
+    const paid={...invoice(),paymentIntentRef:'pi_owned',chargeRef:'ch_owned',amountRefunded:'0'};readSnapshot.mockResolvedValue(paid);await observeRecurringEvent(await event('invoice','in_1'),options);
+    const full={...paid,amountRefunded:'100'};readSnapshot.mockResolvedValue(full);
+    const refund=await event('invoice','in_1',{type:'charge.refunded',objectIds:{charge:'ch_owned',payment_intent:'pi_owned'}});expect(await observeRecurringEvent(refund,options)).toMatchObject({kind:'observed',revision:2});
+    expect(await observeRecurringEvent(await event('invoice','in_1',{type:'invoice.paid',payload:{created:0}}),options)).toMatchObject({kind:'unchanged'});
+    expect(await observeRecurringEvent(await event('invoice','in_1',{type:'charge.refunded',objectIds:{charge:'ch_foreign'}}),options)).toMatchObject({kind:'unmatched'});
+    expect(await rows()).toHaveLength(2);
+  });
+
+  it('rolls back public enqueue and pointer together after a SQL failure, then retries once',async()=>{
+    const sub=await bind();await gatewayDb().update(merchants).set({webhookUrl:'https://example.invalid/fixture',webhookSecret:'synthetic-only'}).where(eq(merchants.id,sub.merchantId));await observeRecurringEvent(await event(),options);
+    const cohort={...deployment,merchantId:sub.merchantId,oxyAppId:sub.oxyAppId,evidenceRef:'fixture-approved'};
+    await gatewayDb().execute(sql`CREATE FUNCTION fixture_relay_reject() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic relay failure'; END $$`);
+    await gatewayDb().execute(sql`CREATE TRIGGER fixture_relay_reject BEFORE UPDATE ON recurring_observation_outbox FOR EACH ROW EXECUTE FUNCTION fixture_relay_reject()`);
+    try{await expect(relayRecurringObservations({db:gatewayDb(),cohorts:[cohort],enabled:true})).rejects.toThrow();expect(await gatewayDb().select().from(webhookDeliveries)).toHaveLength(0);expect((await rows())[0]!.deliveryId).toBeNull();}finally{await gatewayDb().execute(sql`DROP TRIGGER fixture_relay_reject ON recurring_observation_outbox`);await gatewayDb().execute(sql`DROP FUNCTION fixture_relay_reject()`);}
+    expect((await relayRecurringObservations({db:gatewayDb(),cohorts:[cohort],enabled:true})).enqueued).toBe(1);
+  });
+
+  it('bounds invoice discovery too and leaves the stored event pending after timeout',async()=>{
+    const id=await event('invoice','in_unknown');const result=await observeRecurringEvent(id,{...options,timeoutMs:10,bindOwnedInvoice:async()=>new Promise<void>(()=>{})});expect(result).toMatchObject({kind:'failed'});expect((await findProviderEventById(gatewayDb(),id))?.processedAt).toBeNull();expect(await rows()).toHaveLength(0);
   });
 
 });
