@@ -17,9 +17,9 @@ execFileSync('bun', ['install', '--minimum-release-age=0'], { cwd: fixture, stdi
 const expectedSdkVersion=JSON.parse(readFileSync(resolve(root,'packages/sdk/package.json'),'utf8')).version;
 const body = `
 assert.equal(shared.BILLING_SUBSCRIPTION_STATUSES.includes('active'), true);
-assert.equal(sharedManifest.version, '0.3.0');
+assert.equal(sharedManifest.version, '0.3.1-oxy-one.0');
 assert.equal(sdkManifest.version, ${JSON.stringify(expectedSdkVersion)});
-assert.equal(sdkManifest.dependencies['@peable.to/shared-types'], '^0.3.0');
+assert.equal(sdkManifest.dependencies['@peable.to/shared-types'], '0.3.1-oxy-one.0');
 const peable = new sdk.Peable({ publicKey: 'synthetic-public', secret: 'synthetic-secret', baseURL: 'http://127.0.0.1:1', oxyApiUrl: 'http://127.0.0.1:1' });
 for (const method of ['ensureCustomer', 'createCheckoutSession', 'createPortalSession', 'retrieveSubscription', 'cancelAtPeriodEnd', 'retrieveCheckout', 'retrievePaidInvoice', 'retrieveInvoiceState']) assert.equal(typeof peable.billing[method], 'function');
 `;
@@ -41,6 +41,6 @@ void subscription; void event;
 `);
 execFileSync('node', [resolve(root, 'node_modules/typescript/bin/tsc'), '--noEmit', '--strict', '--skipLibCheck', '--target', 'ES2022', '--module', 'NodeNext', '--moduleResolution', 'NodeNext', 'check.ts'], { cwd: fixture, stdio: 'pipe' });
 const hash = path => createHash('sha256').update(readFileSync(path)).digest('hex');
-const proof = { fixture, node: process.version, packages: [shared, sdk].map(path => ({ path, sha256: hash(path) })), checks: ['Node CJS load and eight billing methods', 'Node ESM load and eight billing methods', 'TypeScript strict NodeNext public declarations', 'SDK minimum shared-types dependency ^0.3.0'], published: false, resolution: 'Fixture-only shared-types tarball override because these additions are unpublished; packed SDK range independently asserted', network: 'Registry dependency installation only; no Oxy/Peable/Stripe requests' };
+const proof = { fixture, node: process.version, packages: [shared, sdk].map(path => ({ path, sha256: hash(path) })), checks: ['Node CJS load and eight billing methods', 'Node ESM load and eight billing methods', 'TypeScript strict NodeNext public declarations', 'SDK exact candidate shared-types dependency 0.3.1-oxy-one.0'], published: false, resolution: 'Fixture-only shared-types tarball override because these additions are unpublished; packed SDK range independently asserted', network: 'Registry dependency installation only; no Oxy/Peable/Stripe requests' };
 writeFileSync(resolve(fixture, 'evidence.json'), JSON.stringify(proof, null, 2) + '\n');
 console.log(JSON.stringify(proof, null, 2));
