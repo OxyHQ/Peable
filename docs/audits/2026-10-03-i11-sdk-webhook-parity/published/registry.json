@@ -1,0 +1,29 @@
+{
+  "publishedAt": "2026-10-03T07:53:58.982Z",
+  "version": "0.2.2",
+  "dependencies": {
+    "qrcode-generator": "^2.0.4",
+    "socket.io-client": "^4.8.3",
+    "@peable.to/shared-types": "^0.3.0"
+  },
+  "dist": {
+    "shasum": "530ed430838016082721209c70348a3f75496b54",
+    "tarball": "https://registry.npmjs.org/@peable.to/sdk/-/sdk-0.2.2.tgz",
+    "fileCount": 53,
+    "integrity": "sha512-U1i6gGK2yGXvsIIjHBMga+RzuvgSl9+74N0+ENFLinv7vD56syP5lfrD+Jmuw208E5H9tLars61ucq7HW00a9A==",
+    "signatures": [
+      {
+        "sig": "MEUCIQDwxEdycCCR794AEBrX2eGc/wxPs9XSjEmqvU18C4ewtwIgV9xmHZRWE+8hpx5UPCK5PcMgnSu7UVZMAwfXHKGcZHg=",
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U"
+      },
+      {
+        "keyid": "SHA256:DhQ8wR5APBvFHLF/+Tc+AYvPOdTpcIDqOhxsBHRwC7U",
+        "sig": "MEYCIQDS0qvCarj5gLp/5wGxOoi3BaBI2v5q4l3b0m4GQwK86wIhALPmii47qNQuCJHW/GVkldXP7Af8kLHFccvaNxhEMQ3k"
+      }
+    ],
+    "unpackedSize": 168701
+  },
+  "sha256": "68687dabc8caddcdb3f60d846d720f5103d29c4d2a0eacb774ebc08ca37f4494",
+  "localBytesEqual": true,
+  "source": "6f671437b7e7c28c646c03afa9e47483ba04333a"
+}
