@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {readOwnedPaidInvoice} from './paidInvoice';
 import type { Database } from '../../db/postgres';
 import { bindBillingObject, findBillingCheckoutOperation, requireBillingBinding, requireBillingBindingById } from '../../db/billing/billingRepository';
 import { bindRecurringObject } from '../../db/recurring/recurringMirrorRepository';
@@ -34,7 +35,30 @@ export function createVerifiedBillingBindings(options: { db: Database; client: S
       return binding;
     });
   }
+  async function retrieveCheckout(owner:BillingOwner,checkoutRef:string){
+    await authorize(owner);z.string().regex(/^cs_(test|live)_[A-Za-z0-9]+$/).max(128).parse(checkoutRef);
+    const operation=await findBillingCheckoutOperation(db,deployment,checkoutRef);
+    if(!operation||operation.merchantId!==owner.merchantId||operation.oxyAppId!==owner.oxyAppId||operation.environment!==owner.environment||!operation.customerBindingId||!operation.priceBindingId)throw new BillingError('not_found',404);
+    const customer=await requireBillingBindingById(db,deployment,owner,'customer',operation.customerBindingId);
+    const price=await requireBillingBindingById(db,deployment,owner,'price',operation.priceBindingId);
+    const value=z.object({id:z.literal(checkoutRef),customer:z.literal(customer.providerRef),mode:z.literal('subscription'),livemode:z.literal(deployment.livemode),status:z.enum(['open','complete','expired']),subscription:z.string().regex(/^sub_[A-Za-z0-9]+$/).nullable()}).parse(await client.retrieveCheckout(checkoutRef));
+    if(!customer.externalSubjectRef||!price.planRef||(value.status==='complete')!==(value.subscription!==null))throw new BillingError('identity_conflict');
+    const binding=value.subscription?await persistSubscription(owner,value.subscription,customer.providerRef,price.providerRef,operation.id):null;
+    const snapshot=binding?normalizeBillingSubscription(await client.retrieveSubscription(binding.providerRef)):null;
+    if(snapshot&&(snapshot.providerSubscriptionId!==binding?.providerRef||snapshot.providerCustomerId!==customer.providerRef||snapshot.providerPriceId!==price.providerRef||snapshot.livemode!==deployment.livemode))throw new BillingError('identity_conflict');
+    return {id:checkoutRef,status:value.status,storeId:customer.externalSubjectRef,planId:price.planRef,providerCustomerId:customer.providerRef,providerPriceId:price.providerRef,subscription:snapshot?{...snapshot,storeId:customer.externalSubjectRef,planId:price.planRef}:null};
+  }
   return {
+    retrieveCheckout,
+    async retrievePaidInvoice(owner:BillingOwner,subscriptionRef:string,invoiceRef:string){
+      await authorize(owner);z.string().regex(/^in_[A-Za-z0-9]+$/).max(128).parse(invoiceRef);
+      const subscription=await requireBillingBinding(db,deployment,owner,'subscription',subscriptionRef);
+      if(!subscription.customerBindingId||!subscription.priceBindingId||!subscription.externalSubjectRef||!subscription.planRef)throw new BillingError('identity_conflict');
+      const customer=await requireBillingBindingById(db,deployment,owner,'customer',subscription.customerBindingId);
+      const price=await requireBillingBindingById(db,deployment,owner,'price',subscription.priceBindingId);
+      if(customer.externalSubjectRef!==subscription.externalSubjectRef||price.planRef!==subscription.planRef)throw new BillingError('identity_conflict');
+      return readOwnedPaidInvoice(client,{invoiceId:invoiceRef,subscriptionId:subscriptionRef,customerId:customer.providerRef,priceId:price.providerRef,storeId:subscription.externalSubjectRef,planId:subscription.planRef,livemode:deployment.livemode});
+    },
     async importCustomer(owner: BillingOwner, input: { providerCustomerId: string; storeId: string; evidenceRef: string }) {
       await authorize(owner); const evidence = billingReference.parse(input.evidenceRef);
       const value = z.object({ id: z.string().regex(/^cus_[A-Za-z0-9]+$/), livemode: z.boolean(), deleted: z.literal(false).optional() }).parse(await client.retrieveCustomer(input.providerCustomerId));

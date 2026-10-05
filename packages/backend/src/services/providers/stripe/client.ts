@@ -349,6 +349,10 @@ export function stripeBillingClient() {
     retrievePrice: (ref: string) => getStripeClient().prices.retrieve(ref, {}, requestOptions),
     listCheckoutsForSubscription: (ref: string) => getStripeClient().checkout.sessions.list({ subscription: ref, limit: 2 }, requestOptions),
     retrieveCheckout: (ref: string) => getStripeClient().checkout.sessions.retrieve(ref, {}, requestOptions),
+    retrieveInvoice:(ref:string)=>getStripeClient().invoices.retrieve(ref,{},requestOptions),
+    listInvoiceLines:(ref:string)=>getStripeClient().invoices.listLineItems(ref,{limit:2},requestOptions),
+    listInvoicePayments:(ref:string)=>getStripeClient().invoicePayments.list({invoice:ref,limit:2},requestOptions),
+    retrievePaidPaymentIntent:(ref:string)=>getStripeClient().paymentIntents.retrieve(ref,{expand:["latest_charge"]},requestOptions),
     retrievePortalConfiguration: (ref: string) => getStripeClient().billingPortal.configurations.retrieve(ref, {}, requestOptions),
   };
 }

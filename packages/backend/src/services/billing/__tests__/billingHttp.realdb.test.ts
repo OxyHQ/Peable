@@ -34,6 +34,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
   let owner: BillingOwner; let other: BillingOwner; let server: Server; let base: string;
   let calls: Array<{ method: string; params?: unknown; key?: string }>;
   let portalUpdate: boolean; let portalImmediate: boolean; let accountId: string; let failCustomer: boolean;
+  let cancelled:boolean;
   let time: Date; let client: StripeBillingClient;
   let verified: ReturnType<typeof createVerifiedBillingBindings>; let hasCheckout: boolean; let hasMore: boolean;
   let checkoutCustomer: string; let subscriptionPrice: string; let checkoutStatus: string; let duplicateCheckout: boolean; let retry401: boolean;
@@ -48,7 +49,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     await bindBillingObject(gatewayDb(), deployment, owner, { kind: 'subscription', providerRef: 'sub_one', externalSubjectRef: 'store:one', planRef: 'plan:one', customerBindingId: c.id, priceBindingId: p.id, bindingEvidenceRef: 'fixture:verified-import' });
   }
   beforeEach(async () => {
-    await resetGatewayTables(); calls = []; portalUpdate = false; portalImmediate = false; accountId = deployment.platformAccountId; failCustomer = false; time = new Date(now); hasCheckout = false; hasMore = false; duplicateCheckout = false; retry401 = false; checkoutCustomer = 'cus_one'; subscriptionPrice = 'price_one'; checkoutStatus = 'complete';
+    await resetGatewayTables(); cancelled=false; calls = []; portalUpdate = false; portalImmediate = false; accountId = deployment.platformAccountId; failCustomer = false; time = new Date(now); hasCheckout = false; hasMore = false; duplicateCheckout = false; retry401 = false; checkoutCustomer = 'cus_one'; subscriptionPrice = 'price_one'; checkoutStatus = 'complete';
     const a = await seedMerchant(); const b = await seedMerchant();
     owner = { merchantId: a.id, oxyAppId: a.oxyAppId, environment: a.environment }; other = { merchantId: b.id, oxyAppId: b.oxyAppId, environment: b.environment };
     client = {
@@ -58,8 +59,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
       async createCheckout(params, key) { calls.push({ method: 'checkout', params, key }); return { id: 'cs_test_a11fixture', customer: 'cus_one', mode: 'subscription', livemode: false, url: 'https://checkout.stripe.com/c/synthetic', expires_at: 1791032400 }; },
       async createPortal(params, key) { calls.push({ method: 'portal', params, key }); return { id: 'bps_one', customer: 'cus_one', configuration: 'bpc_one', on_behalf_of: null, livemode: false, url: 'https://billing.stripe.com/synthetic' }; },
       async retrievePortalConfiguration() { calls.push({ method: 'portalConfig' }); return { id: 'bpc_one', active: true, livemode: false, features: { subscription_update: { enabled: portalUpdate }, subscription_cancel: { enabled: true, mode: portalImmediate ? 'immediately' : 'at_period_end' } } }; },
-      async retrieveSubscription() { calls.push({ method: 'retrieve' }); const snapshot = stripeSubscription(); snapshot.items.data[0]!.price.id = subscriptionPrice; return snapshot; },
-      async updateSubscription(ref, params, key) { calls.push({ method: 'cancel', params: { ref, ...params }, key }); return stripeSubscription(true); },
+      async retrieveSubscription() { calls.push({ method: 'retrieve' }); const snapshot = stripeSubscription(cancelled); snapshot.items.data[0]!.price.id = subscriptionPrice; return snapshot; },
+      async updateSubscription(ref, params, key) { calls.push({ method: 'cancel', params: { ref, ...params }, key }); cancelled=true; return stripeSubscription(true); },
       async retrieveCustomer(id) { calls.push({ method: 'readCustomer' }); return { id, livemode: false, metadata: { storeId: 'forged' } }; },
       async retrievePrice(id) { calls.push({ method: 'readPrice' }); return { id, livemode: false, active: true, recurring: { interval: 'month', interval_count: 1 }, metadata: { planId: 'forged' } }; },
       async listCheckoutsForSubscription() { calls.push({ method: 'listCheckout' }); return { has_more: hasMore, data: !hasCheckout ? [] : duplicateCheckout ? [{ id: 'cs_test_a11fixture' }, { id: 'cs_test_other' }] : [{ id: 'cs_test_a11fixture' }] }; },
@@ -188,6 +189,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     expect(await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' })).toEqual({ providerCustomerId: 'cus_one' });
     expect(calls.filter((value) => value.method === 'customer')).toHaveLength(1);
     expect((await gatewayDb().select().from(billingOperations))[0]?.idempotencyKey).toBe('customer:one');
+  });
+
+  it('exposes exact durable checkout correlation and rejects another merchant',async()=>{
+    await sdk().ensureCustomer(customerInput,{idempotencyKey:'customer:correlation'});
+    await bindBillingObject(gatewayDb(),deployment,owner,{kind:'price',providerRef:'price_one',planRef:'plan:one',bindingEvidenceRef:'fixture:price'});
+    const hosted=await sdk().createCheckoutSession(checkout,{idempotencyKey:'checkout:correlation'});
+    expect(hosted.id).toBe('cs_test_a11fixture');
+    const observed=await sdk().retrieveCheckout(hosted.id);expect(observed).toMatchObject({id:hosted.id,status:'complete',storeId:'store:one',planId:'plan:one',subscription:{providerSubscriptionId:'sub_one'}});
+    expect((await request(`/v1/billing/checkout_sessions/${hosted.id}`,'other')).status).toBe(404);
+  });
+  it('reconciles same cancellation intent and allows a new action after external resume',async()=>{
+    await bindSubscription();await sdk().cancelAtPeriodEnd('sub_one',{idempotencyKey:'cancel:action1'});
+    await sdk().cancelAtPeriodEnd('sub_one',{idempotencyKey:'cancel:action1'});
+    expect(calls.filter(c=>c.method==='cancel')).toHaveLength(1);
+    cancelled=false;
+    expect((await request('/v1/billing/subscriptions/sub_one/cancel_at_period_end','owner',{},'cancel:action1')).status).toBe(409);
+    expect(calls.filter(c=>c.method==='cancel')).toHaveLength(1);
+    await sdk().cancelAtPeriodEnd('sub_one',{idempotencyKey:'cancel:action2'});
+    expect(cancelled).toBe(true);expect(calls.filter(c=>c.method==='cancel')).toHaveLength(2);
+  });
+
+  it('serves paid-period evidence via scoped SDK with exact merchant isolation',async()=>{
+    await bindSubscription();
+    const invoice={id:'in_one',customer:'cus_one',livemode:false,status:'paid',pre_payment_credit_notes_amount:0,post_payment_credit_notes_amount:0,currency:'usd',total:2999,amount_paid:2999,amount_due:2999,amount_remaining:0,total_excluding_tax:2500,parent:{type:'subscription_details',subscription_details:{subscription:'sub_one'}}};
+    client.retrieveInvoice=async()=>invoice;
+    client.listInvoiceLines=async()=>({has_more:false,data:[{id:'il_one',invoice:'in_one',livemode:false,subscription:'sub_one',quantity:1,amount:2500,parent:{type:'subscription_item_details',subscription_item_details:{subscription:'sub_one',proration:false}},pricing:{price_details:{price:'price_one'}},period:{start:1791028800,end:1793707200}}]});
+    client.listInvoicePayments=async()=>({has_more:false,data:[{id:'inpay_one',invoice:'in_one',livemode:false,currency:'usd',status:'paid',amount_paid:2999,payment:{type:'payment_intent',payment_intent:'pi_one'},status_transitions:{paid_at:1791028800}}]});
+    client.retrievePaidPaymentIntent=async()=>({id:'pi_one',customer:'cus_one',livemode:false,currency:'usd',status:'succeeded',amount_received:2999,latest_charge:{id:'ch_one',payment_intent:'pi_one',customer:'cus_one',currency:'usd',livemode:false,paid:true,captured:true,amount_captured:2999,amount_refunded:0,refunded:false,disputed:false}});
+    expect(await sdk().retrievePaidInvoice('sub_one','in_one')).toMatchObject({invoiceId:'in_one',storeId:'store:one',planId:'plan:one',amountPaid:'2999',netAmount:'2500',taxAmount:'499'});
+    expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','noScope')).status).toBe(403);
+    invoice.amount_paid=1;expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one')).status).not.toBe(200);
   });
 
 });

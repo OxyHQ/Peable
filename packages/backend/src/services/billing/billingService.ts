@@ -1,14 +1,14 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { BillingCustomer, BillingHostedSession, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
+import type { BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
 import type { Database, Transaction } from '../../db/postgres';
 import { findBillingCustomerForStore, bindBillingObject, claimBillingOperation, completeBillingOperation, markBillingOperationIndeterminate, requireBillingBinding, type BillingOperation, type BillingBinding } from '../../db/billing/billingRepository';
-import { BillingError, billingCustomerSchema, billingHostedSessionSchema, billingSubscriptionSchema, billingOwnerSchema, billingDeploymentSchema, ensureCustomerSchema, checkoutSchema, portalSchema, type BillingOwner, type BillingOperationKind, type BillingDeployment } from './contracts';
+import { BillingError, billingCustomerSchema, billingHostedSessionSchema, billingCheckoutSessionSchema, billingSubscriptionSchema, billingOwnerSchema, billingDeploymentSchema, ensureCustomerSchema, checkoutSchema, portalSchema, type BillingOwner, type BillingOperationKind, type BillingDeployment } from './contracts';
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
 import type { VerifiedBillingBindings } from './verifiedBindings';
 
 /** Trusted deployment composition, never a request field. No cohort means no access. */
 export interface BillingCohort extends BillingOwner, BillingDeployment { evidenceRef: string; }
-export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'>; }
+export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'|'retrieveCheckout'|'retrievePaidInvoice'>; }
 /** The five-method recurring transport; no entitlement or settlement decisions. */
 export function createBillingService(options: BillingServiceOptions) {
   const { db, provider } = options; const now = options.now ?? (() => new Date());
@@ -25,7 +25,7 @@ export function createBillingService(options: BillingServiceOptions) {
     authorize(owner);
     const requestDigest = createHash('sha256').update(JSON.stringify(input)).digest('hex');
     const claim = await claimBillingOperation(db, deployment, owner, { operation, idempotencyKey, requestDigest, ...(subjectClaimRef === undefined ? {} : { subjectClaimRef }), ...checkoutBindings }, now());
-    if (claim.kind === 'replay') return claim.result as T;
+    if (claim.kind === 'replay') return (operation === 'checkout' ? billingCheckoutSessionSchema.parse({...claim.result,id:claim.operation.providerObjectRef}) : claim.result) as T;
     try {
       await provider.verifyDeployment();
       const value = await effect(claim.operation.remoteIdempotencyKey);
@@ -80,7 +80,7 @@ export function createBillingService(options: BillingServiceOptions) {
           externalSubjectRef: input.storeId, bindingEvidenceRef: op.id });
       }, input.storeId);
     },
-    async createCheckoutSession(owner: BillingOwner, params: CreateBillingCheckoutParams, idempotencyKey: string): Promise<BillingHostedSession> {
+    async createCheckoutSession(owner: BillingOwner, params: CreateBillingCheckoutParams, idempotencyKey: string): Promise<BillingCheckoutSession> {
       authorize(owner); const input = checkoutSchema.parse(params);
       const customer = await requireBillingBinding(db, deployment, owner, 'customer', input.providerCustomerId);
       const price = await requireBillingBinding(db, deployment, owner, 'price', input.providerPriceId);
@@ -88,7 +88,7 @@ export function createBillingService(options: BillingServiceOptions) {
       return perform(owner, 'checkout', idempotencyKey, input, async (key) => {
         const value = await provider.createCheckoutSession(input, key);
         if (value.livemode !== deployment.livemode || value.providerCustomerId !== customer.providerRef) throw new BillingError('identity_conflict');
-        return { result: billingHostedSessionSchema.parse({ url: value.url, expiresAt: value.expiresAt }), objectRef: value.providerObjectRef };
+        return { result: billingCheckoutSessionSchema.parse({ id:value.providerObjectRef,url: value.url, expiresAt: value.expiresAt }), objectRef: value.providerObjectRef };
       }, undefined, undefined, { customerBindingId: customer.id, priceBindingId: price.id });
     },
     async createPortalSession(owner: BillingOwner, params: CreateBillingPortalParams, idempotencyKey = `portal:${randomUUID()}`): Promise<BillingHostedSession> {
@@ -103,6 +103,8 @@ export function createBillingService(options: BillingServiceOptions) {
         return { result: billingHostedSessionSchema.parse({ url: value.url, expiresAt: value.expiresAt }), objectRef: value.providerObjectRef };
       });
     },
+    async retrieveCheckout(owner:BillingOwner,ref:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);return options.verifiedBindings.retrieveCheckout(owner,ref);},
+    async retrievePaidInvoice(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrievePaidInvoice(owner,subRef,invoiceRef);},
     async retrieveSubscription(owner: BillingOwner, ref: string): Promise<BillingSubscription> {
       const binding = await ownedSubscription(owner, ref);
       await provider.verifyDeployment();
@@ -110,11 +112,17 @@ export function createBillingService(options: BillingServiceOptions) {
     },
     async cancelAtPeriodEnd(owner: BillingOwner, ref: string, idempotencyKey = `cancel:${randomUUID()}`): Promise<BillingSubscription> {
       const binding = await ownedSubscription(owner, ref);
-      return perform(owner, 'cancel_at_period_end', idempotencyKey, { ref }, async (key) => {
-        const result = await project(owner, binding, await provider.cancelAtPeriodEnd(ref, key));
-        if (!result.cancelAtPeriodEnd) throw new BillingError('invalid_provider_response', 502);
+      const result = await perform(owner, 'cancel_at_period_end', idempotencyKey, { ref }, async (key) => {
+        const current=await project(owner,binding,await provider.retrieveSubscription(ref));
+        const result=current.cancelAtPeriodEnd?current:await project(owner, binding, await provider.cancelAtPeriodEnd(ref, key));
+        if (!result.cancelAtPeriodEnd || result.currentPeriodStart!==current.currentPeriodStart || result.currentPeriodEnd!==current.currentPeriodEnd) throw new BillingError('invalid_provider_response', 502);
         return { result, objectRef: ref };
       });
+      // A succeeded durable operation is historical evidence. External resume may
+      // make it stale: same-action retry must reconcile, never report cached success.
+      const fresh=await project(owner,binding,await provider.retrieveSubscription(ref));
+      if(!fresh.cancelAtPeriodEnd||fresh.currentPeriodStart!==result.currentPeriodStart||fresh.currentPeriodEnd!==result.currentPeriodEnd)throw new BillingError('reconciliation_required');
+      return fresh;
     },
   };
 }

@@ -81,7 +81,7 @@ export {
 export {
   BILLING_SUBSCRIPTION_STATUSES,
   type BillingSubscriptionStatus,
-  type BillingCustomer,
+  type BillingCheckoutSession, type BillingCheckoutObservation, type BillingPaidInvoice, type BillingCustomer,
   type EnsureBillingCustomerParams,
   type CreateBillingCheckoutParams,
   type CreateBillingPortalParams,

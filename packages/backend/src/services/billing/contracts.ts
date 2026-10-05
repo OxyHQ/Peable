@@ -19,8 +19,9 @@ export const checkoutSchema = z.object({ providerCustomerId: customerRef, provid
 export const portalSchema = z.object({ providerCustomerId: customerRef, returnUrl: billingReturnUrl }).strict();
 export const billingCustomerSchema = z.object({ providerCustomerId: customerRef }).strict();
 export const billingHostedSessionSchema = z.object({ url: billingReturnUrl, expiresAt: z.string().datetime() }).strict();
+export const billingCheckoutSessionSchema=billingHostedSessionSchema.extend({id:z.string().regex(/^cs_(test|live)_[A-Za-z0-9]+$/).max(128)}).strict();
 export const billingSubscriptionSchema = z.object({
-  providerSubscriptionId: subscriptionRef, providerCustomerId: customerRef, providerPriceId: priceRef,
+  providerSubscriptionId: subscriptionRef, latestInvoiceId:z.string().regex(/^in_[A-Za-z0-9]+$/).nullable().optional(), providerCustomerId: customerRef, providerPriceId: priceRef,
   storeId: billingReference, planId: billingReference, livemode: z.boolean(),
   status: z.enum(BILLING_SUBSCRIPTION_STATUSES), interval: z.enum(['month', 'year']), cancelAtPeriodEnd: z.boolean(),
   currentPeriodStart: z.string().datetime(), currentPeriodEnd: z.string().datetime(),
@@ -40,6 +41,7 @@ export const BILLING_OPERATION_STATES = ['pending', 'succeeded', 'indeterminate'
 export type BillingOperationKind = (typeof BILLING_OPERATIONS)[number];
 export type BillingOperationResult = z.infer<typeof billingCustomerSchema> | z.infer<typeof billingHostedSessionSchema> | z.infer<typeof billingSubscriptionSchema>;
 export function parseBillingResult(operation: BillingOperationKind, result: unknown): BillingOperationResult {
+  if (operation === 'checkout') return billingHostedSessionSchema.extend({id:z.string().optional()}).strict().parse(result);
   if (operation === 'ensure_customer') return billingCustomerSchema.parse(result);
   if (operation === 'cancel_at_period_end') return billingSubscriptionSchema.parse(result);
   return billingHostedSessionSchema.parse(result);
