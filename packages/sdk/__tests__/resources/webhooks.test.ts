@@ -146,6 +146,7 @@ const payloads = {
   'payment_intent.disputed': dispute,
   'payment_intent.dispute_closed': { ...dispute, status: 'won' },
   'connected_account.updated': account,
+  'billing.observation.updated':{object:'billing_observation',resourceKind:'invoice',resourceId:'in_fixture',revision:1,observedAt:EVENT.created},
 } satisfies WebhookEventPayload;
 
 describe('published event family parity', () => {
@@ -168,3 +169,5 @@ describe('published event family parity', () => {
     expect(() => new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET)).toThrow(PeableSignatureVerificationError);
   });
 });
+
+test('rejects signed malformed recurring wake-ups rather than treating them as paid evidence',()=>{const timestamp=Math.floor(Date.now()/1000);for(const mutation of [{revision:0},{revision:1.5},{resourceKind:'payer'},{resourceId:''},{observedAt:'invalid'},{amountPaid:'2999'}]){const raw=JSON.stringify({id:'evt_fixture',object:'event',type:'billing.observation.updated',created:EVENT.created,data:{object:{...payloads['billing.observation.updated'],...mutation}}});expect(()=>new WebhooksResource().constructEvent(raw,signWebhook(SECRET,raw,timestamp),SECRET)).toThrow(PeableSignatureVerificationError);}});

@@ -246,6 +246,7 @@ export const WEBHOOK_EVENT_SCOPES = {
   'payment_intent.dispute_closed': 'intent',
   // The first event that is not about a payment. It is about a SELLER, so its
   // delivery names no intent — which is why the column is nullable at all.
+  'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
 

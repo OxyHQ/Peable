@@ -18,11 +18,18 @@ export interface StripeBillingClient {
   retrievePrice(ref: string): Promise<unknown>;
   retrieveCheckout(ref: string): Promise<unknown>;
   listCheckoutsForSubscription(ref: string): Promise<unknown>;
+  retrieveTaxSettings?():Promise<unknown>;
+  listTaxRegistrations?(startingAfter?:string):Promise<unknown>;
+  retrieveInvoice?(ref:string):Promise<unknown>;
+  listInvoiceLines?(ref:string):Promise<unknown>;
+  listInvoicePayments?(ref:string):Promise<unknown>;
+  listChargeRefunds?(chargeRef:string,startingAfter?:string):Promise<unknown>;
+  retrievePaidPaymentIntent?(ref:string):Promise<unknown>;
   retrievePortalConfiguration(ref: string): Promise<unknown>;
 }
 const ref = (prefix: string) => z.string().regex(new RegExp(`^${prefix}[A-Za-z0-9]+$`)).max(128);
 const seconds = z.number().int().nonnegative().max(8_640_000_000_000);
-const subscription = z.object({ id: ref('sub_'), customer: ref('cus_'), livemode: z.boolean(), status: z.enum(BILLING_SUBSCRIPTION_STATUSES),
+const subscription = z.object({ latest_invoice:ref('in_').nullable().optional(),id: ref('sub_'), customer: ref('cus_'), livemode: z.boolean(), status: z.enum(BILLING_SUBSCRIPTION_STATUSES),
   cancel_at_period_end: z.boolean(), trial_end: seconds.nullable(), cancel_at: seconds.nullable(), canceled_at: seconds.nullable(),
   items: z.object({ has_more: z.literal(false), data: z.array(z.object({
     current_period_start: seconds, current_period_end: seconds,
@@ -34,7 +41,7 @@ function iso(value: number | null) { return value === null ? null : new Date(val
 export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubscription {
   const parsed = subscription.parse(raw); const item = parsed.items.data[0];
   if (!item || item.current_period_end <= item.current_period_start) throw new BillingError('invalid_provider_response', 502);
-  return { providerSubscriptionId: parsed.id, providerCustomerId: parsed.customer, providerPriceId: item.price.id, livemode: parsed.livemode,
+  return { latestInvoiceId:parsed.latest_invoice??null,providerSubscriptionId: parsed.id, providerCustomerId: parsed.customer, providerPriceId: item.price.id, livemode: parsed.livemode,
     status: parsed.status, interval: item.price.recurring.interval, cancelAtPeriodEnd: parsed.cancel_at_period_end,
     currentPeriodStart: new Date(item.current_period_start * 1000).toISOString(), currentPeriodEnd: new Date(item.current_period_end * 1000).toISOString(),
     trialEndsAt: iso(parsed.trial_end), cancelAt: iso(parsed.cancel_at), cancelledAt: iso(parsed.canceled_at) };

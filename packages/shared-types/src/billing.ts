@@ -18,6 +18,8 @@ export interface BillingHostedSession { url: string; expiresAt: string; }
 /** Provider observations only. Consumers own plan/status/entitlement interpretation. */
 export interface BillingSubscription {
   providerSubscriptionId: string;
+  /** Discovery only; invoice must still be read and proven paid. */
+  latestInvoiceId?: string | null;
   providerCustomerId: string;
   providerPriceId: string;
   storeId: string;
@@ -32,3 +34,11 @@ export interface BillingSubscription {
   cancelAt: string | null;
   cancelledAt: string | null;
 }
+
+/** Owned recurring checkout correlation; completing checkout is not paid evidence. */
+export interface BillingCheckoutSession extends BillingHostedSession { id: string; }
+export interface BillingCheckoutObservation { id:string;status:'open'|'complete'|'expired';storeId:string;planId:string;providerCustomerId:string;providerPriceId:string;subscription:BillingSubscription|null; }
+/** Authenticated authoritative read, one settled full non-prorated line only.
+ * Tax figures are provider observations, not a tax quote or seller configuration. */
+export interface BillingInvoiceState extends BillingPaidInvoice { chargeId:string;amountRefunded:string;state:'paid'|'fully_refunded'|'partially_refunded'; }
+export interface BillingPaidInvoice { invoiceId:string;lineId:string;paymentIntentId:string;providerSubscriptionId:string;providerCustomerId:string;providerPriceId:string;storeId:string;planId:string;livemode:boolean;currency:string;amountPaid:string;netAmount:string|null;taxAmount:string|null;periodStart:string;periodEnd:string;paidAt:string;observedAt:string; }

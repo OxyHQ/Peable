@@ -27,6 +27,7 @@ export {
   type WebhookEventType,
   type WebhookEvent,
   type WebhookEventPayload,
+  type BillingObservation,
 } from './event';
 export { type Dispute, type DisputeEvidence, type DisputeStatus } from './dispute';
 export {
@@ -81,7 +82,7 @@ export {
 export {
   BILLING_SUBSCRIPTION_STATUSES,
   type BillingSubscriptionStatus,
-  type BillingCustomer,
+  type BillingCheckoutSession, type BillingCheckoutObservation, type BillingPaidInvoice, type BillingInvoiceState, type BillingCustomer,
   type EnsureBillingCustomerParams,
   type CreateBillingCheckoutParams,
   type CreateBillingPortalParams,

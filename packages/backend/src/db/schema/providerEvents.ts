@@ -56,6 +56,8 @@ export const providerEvents = pgTable(
      * which is a normal, momentary state, not an error.
      */
     processedAt: timestamptz(),
+    /** Explicit recurring drain deferral; NULL remains immediately eligible. */
+    retryAfter:timestamptz(),
     /** Why processing failed, when it did. Operator-facing. */
     processingError: text(),
     createdAt: createdAt(),

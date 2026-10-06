@@ -1,6 +1,6 @@
 import { BillingResource } from './resources/billing';
 export type { BillingRequestOptions } from './resources/billing';
-export type { BillingCustomer, BillingHostedSession, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
+export type { BillingObservation, BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingCheckoutObservation, BillingPaidInvoice, BillingInvoiceState, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
 // Server entry (`@peable.to/sdk`) — the merchant-authed SDK. Configured with a
 // confidential `ApplicationCredential` (`{publicKey, secret}`); mints and
 // caches an Oxy service token, and exposes Stripe-ergonomics resource

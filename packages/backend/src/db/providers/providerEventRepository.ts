@@ -8,7 +8,7 @@
  * actually sent; a row that can be edited says only what someone last thought
  * the provider sent.
  */
-import { and, asc, eq, isNull, sql } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql,lte,or,inArray } from 'drizzle-orm';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { providerEvents } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -134,7 +134,9 @@ export async function findProviderEventByIdentity(
 }
 
 /**
- * The drain's batch: unprocessed, oldest first.
+ * The drain's batch: unprocessed, oldest first for the legacy drain.
+ * Explicit recurring passes order by next attempt time, then stable ID: once
+ * deferred work becomes due it must not regain priority over untouched work.
  *
  * Ordered by `created_at` and served by the partial index of the same name, so
  * the scan is over the unprocessed rows alone rather than over the whole history
@@ -143,13 +145,17 @@ export async function findProviderEventByIdentity(
  */
 export async function findUnprocessedProviderEvents(
   db: DatabaseOrTransaction,
-  limit: number
+  limit: number,
+  options?:{dueAt:Date}
 ): Promise<readonly ProviderEventRow[]> {
   const rows = await db
     .select(EVENT_COLUMNS)
     .from(providerEvents)
-    .where(isNull(providerEvents.processedAt))
-    .orderBy(asc(providerEvents.createdAt))
+    .where(and(isNull(providerEvents.processedAt),options?or(isNull(providerEvents.retryAfter),lte(providerEvents.retryAfter,options.dueAt)):undefined))
+    .orderBy(
+      options ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`) : asc(providerEvents.createdAt),
+      asc(providerEvents.id)
+    )
     .limit(limit);
   return rows as readonly ProviderEventRow[];
 }
@@ -181,4 +187,12 @@ export async function markProviderEventFailed(
   error: string
 ): Promise<void> {
   await db.update(providerEvents).set({ processingError: error }).where(eq(providerEvents.id, id));
+}
+
+/** Deferral never changes the authenticated envelope or marks an event completed.
+ * Called after the whole explicit recurring pass, so a slow blocked batch cannot
+ * become due again before the pass ends. Default drain never reads this column. */
+export async function deferProviderEvents(db:DatabaseOrTransaction,ids:readonly string[],retryAfter:Date){
+ if(!ids.length)return;if(!Number.isFinite(retryAfter.getTime()))throw new Error('Invalid event retry time');
+ await db.update(providerEvents).set({retryAfter}).where(and(inArray(providerEvents.id,[...ids]),isNull(providerEvents.processedAt)));
 }

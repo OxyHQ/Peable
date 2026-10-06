@@ -1,0 +1,5 @@
+-- oxy:deploy-phase=pre
+ALTER TABLE "webhook_deliveries" DROP CONSTRAINT "webhook_deliveries_event_type_check";--> statement-breakpoint
+ALTER TABLE "recurring_observation_outbox" ADD COLUMN "delivery_id" text;--> statement-breakpoint
+ALTER TABLE "recurring_observation_outbox" ADD CONSTRAINT "recurring_observation_outbox_delivery_id_webhook_deliveries_id_fk" FOREIGN KEY ("delivery_id") REFERENCES "public"."webhook_deliveries"("id") ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "webhook_deliveries" ADD CONSTRAINT "webhook_deliveries_event_type_check" CHECK (event_type in ('payment_intent.confirming', 'payment_intent.settled', 'payment_intent.failed', 'payment_intent.rejected', 'payment_intent.expired', 'payment_intent.refunded', 'payment_intent.partially_refunded', 'payment_intent.disputed', 'payment_intent.dispute_closed', 'billing.observation.updated', 'connected_account.updated'));

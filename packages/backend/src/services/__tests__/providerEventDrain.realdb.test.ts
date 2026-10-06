@@ -1,3 +1,6 @@
+import {bindRecurringObject} from '../../db/recurring/recurringMirrorRepository';
+import {providerEvents} from '../../db/schema';
+import {sql} from 'drizzle-orm';
 /**
  * The drain, end to end: a stored provider event becomes payment state and a
  * merchant's webhook, against a real database.
@@ -17,7 +20,7 @@ import {
   linkProviderObject,
 } from "../../db/payments/paymentIntentRepository";
 import { webhookDeliveries } from "../../db/schema";
-import { runProviderEventDrainPass } from "../providerEventDrain";
+import { runProviderEventDrainPass, ProviderEventDeferralError, retryProviderEventDrainDeferral } from "../providerEventDrain";
 import {
   gatewayDb,
   seedIntent,
@@ -288,4 +291,39 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
     expect(result.applied).toBe(0);
     expect((await findIntentByPublicId(gatewayDb(), chain.publicId))?.status).toBe("created");
   });
+  it('reaches later recurring and one-off events when every pass is beyond the retry backoff',async()=>{
+    // This suite shares rows across its cases: isolate the queue, not the seeded merchant.
+    await gatewayDb().execute(sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`);
+    const deployment={provider:'stripe' as const,platformAccountId:'acct_fixture',livemode:false,environment:'development' as const,apiVersion:'2026-07-29.dahlia'};
+    const blocked:string[]=[];for(let n=0;n<50;n++){const id=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_blocked_${counter}_${n}`,providerAccountId:null,type:'invoice.paid',livemode:false,apiVersion:deployment.apiVersion,objectIds:{invoice:`in_unknown_${n}`},payload:{}});blocked.push(id!);}
+    await bindRecurringObject(gatewayDb(),deployment,{merchantId:merchant.id,providerAccountId:null,kind:'subscription',objectRef:'sub_valid',bindingEvidenceRef:'synthetic-owned'});
+    const valid=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_valid_${counter}`,providerAccountId:null,type:'customer.subscription.updated',livemode:false,apiVersion:deployment.apiVersion,objectIds:{subscription:'sub_valid'},payload:{}});
+    const intent=await linkedCardIntent(`pi_after_blocked_${counter}`);await storeEvent('payment_intent.succeeded',`pi_after_blocked_${counter}`);
+    let time=new Date();const recurring={deployment,reader:{readSnapshot:async()=>({schemaVersion:1,provider:'stripe',platformAccountId:'acct_fixture',providerAccountId:null,livemode:false,objectRef:'sub_valid',apiVersion:deployment.apiVersion,kind:'subscription',status:'active',cancelAtPeriodEnd:false,periods:[{itemRef:'si_valid',start:'2026-10-01T00:00:00Z',end:'2026-11-01T00:00:00Z'}],hasMorePeriods:false})}};
+    const first=await runProviderEventDrainPass({recurring,now:()=>time});expect(first.examined).toBe(50);expect(first.unmatched).toBe(50);
+    time=new Date(time.getTime()+60_001);const second=await runProviderEventDrainPass({recurring,now:()=>time});expect(second.examined).toBe(50);expect(second.applied).toBe(2);expect(second.unmatched).toBe(48);expect((await findProviderEventById(gatewayDb(),valid!))?.processedAt).not.toBeNull();expect((await findIntentByPublicId(gatewayDb(),intent.publicId))?.status).toBe('settled');
+    for(const id of blocked)expect((await findProviderEventById(gatewayDb(),id))?.processedAt).toBeNull();time=new Date(time.getTime()+60_001);expect((await runProviderEventDrainPass({recurring,now:()=>time})).examined).toBe(50);
+  });
+
+  it('reports committed progress on deferral failure and retries scheduling without replaying payment effects', async()=>{
+    await gatewayDb().execute(sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`);
+    const deployment={provider:'stripe' as const,platformAccountId:'acct_fixture',livemode:false,environment:'development' as const,apiVersion:'2026-07-29.dahlia'};
+    const blocked=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_deferral_failure_${counter}`,providerAccountId:null,type:'invoice.paid',livemode:false,apiVersion:deployment.apiVersion,objectIds:{invoice:'in_unknown_failure'},payload:{}});
+    const intent=await linkedCardIntent(`pi_deferral_failure_${counter}`);const valid=await storeEvent('payment_intent.succeeded',`pi_deferral_failure_${counter}`);
+    let time=new Date();const recurring={deployment,reader:{readSnapshot:async()=>{throw new Error('Unknown invoice must not read a snapshot');}}};
+    await gatewayDb().execute(sql`CREATE FUNCTION test_fail_event_deferral() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic deferral write failure'; END $$`);
+    await gatewayDb().execute(sql`CREATE TRIGGER test_fail_event_deferral BEFORE UPDATE OF retry_after ON provider_events FOR EACH ROW EXECUTE FUNCTION test_fail_event_deferral()`);
+    let failure:ProviderEventDeferralError|undefined;
+    try { await runProviderEventDrainPass({recurring,now:()=>time}); }
+    catch(error) { expect(error).toBeInstanceOf(ProviderEventDeferralError);failure=error as ProviderEventDeferralError; }
+    finally { await gatewayDb().execute(sql`DROP TRIGGER test_fail_event_deferral ON provider_events`);await gatewayDb().execute(sql`DROP FUNCTION test_fail_event_deferral()`); }
+    expect(failure).toBeDefined();expect(failure!.progress).toMatchObject({examined:2,applied:1,unmatched:1});expect(failure!.pendingEventIds).toEqual([blocked!]);
+    expect((await findProviderEventById(gatewayDb(),valid))?.processedAt).not.toBeNull();expect((await findIntentByPublicId(gatewayDb(),intent.publicId))?.status).toBe('settled');
+    const deliveriesBefore=await gatewayDb().select().from(webhookDeliveries);
+    time=new Date(time.getTime()+60_001);await retryProviderEventDrainDeferral(failure!,{now:()=>time});
+    const row=await gatewayDb().select().from(providerEvents).where(eq(providerEvents.id,blocked!));expect(row[0]?.retryAfter?.getTime()).toBe(time.getTime()+60_000);expect(row[0]?.processedAt).toBeNull();
+    expect((await runProviderEventDrainPass({recurring,now:()=>time})).examined).toBe(0);expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
+    time=new Date(time.getTime()+60_001);expect((await runProviderEventDrainPass({recurring,now:()=>time})).unmatched).toBe(1);expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
+  });
+
 });

@@ -58,8 +58,11 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the ten webhook event types', () => {
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(10);
+  it('lists the eleven webhook event types', () => {
+    // 11th: `billing.observation.updated`, a wake-up delivered only to the
+    // merchant that owns the recurring mirror, and only when the recurring
+    // relay is explicitly enabled — never to a merchant that did not opt in.
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(11);
   });
 
   /**
@@ -73,14 +76,14 @@ describe('closed value sets', () => {
    * whether a delivery must carry an intent — so what is asserted now is the
    * split, which is the thing the CHECK depends on.
    */
-  it('splits into payment events and the one that is about a seller', () => {
+  it('splits into payment events and the ones that are not about a payment', () => {
     const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) =>
       type.startsWith('payment_intent.')
     );
     expect(aboutPayments).toHaveLength(9);
     expect(
       WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))
-    ).toEqual(['connected_account.updated']);
+    ).toEqual(['billing.observation.updated', 'connected_account.updated']);
   });
 });
 

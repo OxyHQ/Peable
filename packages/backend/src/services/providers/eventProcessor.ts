@@ -245,7 +245,11 @@ export async function processProviderEvent(
 ): Promise<ProcessOutcome | ObservationOutcome> {
   // No production caller supplies this option. Without it legacy no_mapping
   // behavior is preserved, including historical recurring events marked handled.
-  if (recurring && recurringEventKind(event.type)) return observeRecurringEvent(event.id, recurring);
+  if (recurring && recurringEventKind(event.type)) {
+    const observation=await observeRecurringEvent(event.id,recurring);
+    // Unowned refund wake-ups still belong to the existing one-off processor.
+    if(observation.kind!=='unmatched'||!(event.type==='charge.refunded'||event.type.startsWith('refund.')))return observation;
+  }
   const db = getDb();
 
   try {
