@@ -88,3 +88,19 @@ export interface BillingFaircoinRenewalConsent {
 export interface BillingFaircoinRenewalRevocation {
   authorizationId: string; revokedAt: string; revocationEvidenceId: string;
 }
+
+/** A merchant asks Peable to quote a registered product. Monetary/fiscal
+ * configuration is resolved inside Peable, never supplied by a consumer. */
+export interface CreateBillingTaxQuoteParams {
+  storeId: string; planId: string; customerLocationEvidenceId: string;
+}
+export interface BillingTaxQuote {
+  schemaVersion: 1;
+  source: { merchantId: string; appId: string; storeId: string; planId: string;
+    mode: 'test' | 'live'; environment: 'development' | 'staging' | 'production' };
+  quote: { id: string; currency: string; grossMinorUnits: number; netMinorUnits: number; taxMinorUnits: number;
+    taxTreatment: 'inclusive' | 'exclusive'; sellerId: string; invoiceIssuerId: string; taxRemitterId: string;
+    taxServiceRef: string; country: string; coverageEvidenceId: string; taxRateEvidenceId: string;
+    customerLocationEvidenceId: string; quotedAt: string; expiresAt: string };
+  signature: { algorithm: 'Ed25519'; keyId: string; value: string };
+}

@@ -78,3 +78,24 @@ The worldwide sales goal is not an approved country coverage policy. Fiscal
 calculation belongs to Peable behind its SDK; neither Oxy consumers nor this
 change select Stripe Tax or another supplier. Registered selling countries,
 tax-remitter configuration and a supported calculator remain required.
+
+## Unreleased precheckout tax quote gate
+
+The source SDK adds `billing.createTaxQuote({storeId, planId,
+customerLocationEvidenceId})`. A consumer never passes a guessed tax amount,
+seller, issuer, remitter, country allowlist or provider credentials. Peable
+resolves a reviewed product configuration and scoped customer-location evidence,
+requires explicit supported country coverage, and delegates calculation to a
+provider-neutral calculator seam. Wildcard country coverage is rejected. The
+signed quote must match the configured product gross amount, fiscal actors,
+evidence, source, valid clocks and pinned Ed25519 key. The SDK independently
+verifies the signed quote with configured `taxQuoteAuthorityKeys`.
+
+The authenticated route is mounted, but absent a trusted calculator the service
+returns 404. No default supplier, seller/remitter registrations, worldwide
+allowlist or fiscal activation is created. The existing billing owner adapter
+still uses Stripe deployment/binding contracts. The quote seam and evidence
+transport are provider-independent; the Faircoin recurring payment adapter is
+still unfinished. The approved issuer legal name is The Oxy Collective, Inc.;
+its verified fiscal identifier and registrations remain configuration inputs,
+not invented identifiers in an invoice fixture.

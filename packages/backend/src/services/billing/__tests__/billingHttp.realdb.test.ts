@@ -250,6 +250,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','noScope')).status).toBe(403);
     expect(await sdk().retrieveInvoiceState('sub_one','in_one')).toMatchObject({state:'paid',amountRefunded:'0'});
     expect((await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one')).status).toBe(404);
+    expect((await request('/v1/billing/tax_quotes', 'owner', { storeId: 'store:one', planId: 'plan:one', customerLocationEvidenceId: 'location_fixture' })).status).toBe(404);
+    expect((await request('/v1/billing/tax_quotes', 'noScope', { storeId: 'store:one', planId: 'plan:one', customerLocationEvidenceId: 'location_fixture' })).status).toBe(403);
     const keys = generateKeyPairSync('ed25519');
     const verificationKeys = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
     time = new Date();

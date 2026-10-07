@@ -1,3 +1,4 @@
+import { billingTaxQuoteRequestSchema } from '../services/billing/tax-quote';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
@@ -26,6 +27,7 @@ export function createBillingRouter(deps: { requireMerchant: RequestHandler; ser
   const key = (req: Request) => billingIdempotencyKey.parse(req.header('Idempotency-Key'));
   const write = [deps.requireMerchant, requireAuthenticated, oxy.middleware.requireScope('payments:write')];
   const read = [deps.requireMerchant, requireAuthenticated, oxy.middleware.requireScope('payments:read')];
+  router.post('/v1/billing/tax_quotes', ...read, handle((service, owner, req) => service.createTaxQuote(owner, billingTaxQuoteRequestSchema.parse(req.body))));
   router.post('/v1/billing/customers', ...write, handle((service, owner, req) => service.ensureCustomer(owner, ensureCustomerSchema.parse(req.body), key(req))));
   router.post('/v1/billing/checkout_sessions', ...write, handle((service, owner, req) => service.createCheckoutSession(owner, checkoutSchema.parse(req.body), key(req))));
   router.post('/v1/billing/portal_sessions', ...write, handle((service, owner, req) => service.createPortalSession(owner, portalSchema.parse(req.body), key(req))));
