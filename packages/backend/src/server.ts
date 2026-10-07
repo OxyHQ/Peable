@@ -1,4 +1,4 @@
-import { configureBillingRuntime } from './services/billing/configuredBilling';
+import { configureBillingRuntime, type BillingRuntimeAdapters } from './services/billing/configuredBilling';
 import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
 import { createBillingRouter } from './routes/billing';
 import type { BillingService } from './services/billing/billingService';
@@ -290,9 +290,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * own — and both are deliberately started per PROCESS, so N tasks share the
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
-export async function start(): Promise<void> {
+export async function start(options: { billingAdapters?: BillingRuntimeAdapters } = {}): Promise<void> {
   const database = await connectPostgres();
-  const billingRuntime = await configureBillingRuntime(database);
+  const billingRuntime = await configureBillingRuntime(database, config.billingCohortConfig, undefined, options.billingAdapters);
   const gateway = createGateway({ billingService: billingRuntime?.service });
   const stopRecurringRelay = billingRuntime?.relay ? startRecurringRelay(billingRuntime.relay) : undefined;
   startEcosystemActivity(() => gateway.httpServer.listening);

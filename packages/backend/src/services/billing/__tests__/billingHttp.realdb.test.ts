@@ -190,6 +190,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     accountId = 'acct_wrong'; await expect(configureBillingRuntime(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
     accountId = deployment.platformAccountId; portalUpdate = true; await expect(configureBillingRuntime(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
   });
+  it('requires own registered fiscal adapters and pinned public keys before provider boot', async () => {
+    const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }], finalInvoiceAuthorityAdapterRef: 'fiscal_one' };
+    const raw = JSON.stringify(configuration);
+    await expect(configureBillingRuntime(gatewayDb(), raw, client)).rejects.toThrow('unavailable');
+    const adapter = { verificationKeys: {}, read: async () => { throw new Error('fixture unavailable'); } };
+    await expect(configureBillingRuntime(gatewayDb(), raw, client, { finalInvoiceAuthorities: Object.create({ fiscal_one: adapter }) })).rejects.toThrow('unavailable');
+    await expect(configureBillingRuntime(gatewayDb(), raw, client, { finalInvoiceAuthorities: { fiscal_one: adapter } })).rejects.toThrow('pinned verification keys');
+    expect(calls).toHaveLength(0);
+    const keys = generateKeyPairSync('ed25519');
+    const valid = { ...adapter, verificationKeys: { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() } };
+    expect((await configureBillingRuntime(gatewayDb(), raw, client, { finalInvoiceAuthorities: { fiscal_one: valid } }))?.service).toBeDefined();
+  });
   it('composes owned observations only when explicitly enabled', async () => {
     const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }] };
     const disabled = await configureBillingRuntime(gatewayDb(), JSON.stringify(configuration), client);

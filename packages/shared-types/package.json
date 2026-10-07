@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/shared-types",
-  "version": "0.3.1-oxy-one.0",
+  "version": "0.3.2-oxy-one.0",
   "description": "Shared TypeScript types for the Peable Gateway — the wire contract shared by the backend, SDK, and frontend.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
