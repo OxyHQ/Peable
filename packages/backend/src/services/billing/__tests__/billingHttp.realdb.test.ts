@@ -1,3 +1,4 @@
+import { bindRecurringObject } from '../../../db/recurring/recurringMirrorRepository';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type Stripe from 'stripe';
 import express, { type RequestHandler } from 'express';
@@ -10,7 +11,7 @@ import { bindBillingObject, claimBillingOperation, completeBillingOperation } fr
 import { billingOperations, billingObjectBindings, recurringMirrors } from '../../../db/schema';
 import { createBillingRouter } from '../../../routes/billing';
 import { createVerifiedBillingBindings } from '../verifiedBindings';
-import { configureBilling } from '../configuredBilling';
+import { configureBillingRuntime } from '../configuredBilling';
 import { createBillingService, type BillingCohort } from '../billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from '../stripeBillingProvider';
 import { STRIPE_API_VERSION } from '../../providers/stripe/client';
@@ -179,10 +180,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     expect(value.externalSubjectRef).toBe('store:one');
   });
   it('keeps absent boot configuration inactive and rejects another platform or unsafe portal at boot', async () => {
-    expect(await configureBilling(gatewayDb(), undefined, client)).toBeUndefined(); expect(calls).toHaveLength(0);
+    expect(await configureBillingRuntime(gatewayDb(), undefined, client)).toBeUndefined(); expect(calls).toHaveLength(0);
     const raw = JSON.stringify({ deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }] });
-    accountId = 'acct_wrong'; await expect(configureBilling(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
-    accountId = deployment.platformAccountId; portalUpdate = true; await expect(configureBilling(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
+    accountId = 'acct_wrong'; await expect(configureBillingRuntime(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
+    accountId = deployment.platformAccountId; portalUpdate = true; await expect(configureBillingRuntime(gatewayDb(), raw, client)).rejects.toThrow('identity_conflict');
+  });
+  it('composes owned observations only when explicitly enabled', async () => {
+    const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }] };
+    const disabled = await configureBillingRuntime(gatewayDb(), JSON.stringify(configuration), client);
+    expect(disabled?.service).toBeDefined();
+    expect(disabled?.observations).toBeUndefined();
+    expect(disabled?.relay).toBeUndefined();
+    const enabled = await configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, observationsEnabled: true }), client);
+    expect(enabled?.observations?.deployment.environment).toBe(owner.environment);
+    expect(enabled?.observations?.bindOwnedInvoice).toBeFunction();
+    expect(enabled?.relay?.enabled).toBe(true);
+    expect(enabled?.relay?.cohorts).toEqual([{ ...owner, ...deployment, evidenceRef: 'fixture:cohort' }]);
+    await bindRecurringObject(gatewayDb(), { ...deployment, environment: other.environment, apiVersion: STRIPE_API_VERSION }, {
+      merchantId: other.merchantId, providerAccountId: null, kind: 'subscription', objectRef: 'sub_outside', bindingEvidenceRef: 'fixture:foreign',
+    });
+    calls.length = 0;
+    if (!enabled?.observations) throw new Error('Expected observation composition');
+    await expect(enabled.observations.reader.readSnapshot({
+      deployment: enabled.observations.deployment, providerAccountId: null, kind: 'subscription', objectRef: 'sub_outside', signal: new AbortController().signal,
+    })).rejects.toThrow('not_found');
+    expect(calls).toHaveLength(0);
+
   });
   it('SDK refreshes once after 401 and preserves the mutation key', async () => {
     retry401 = true;

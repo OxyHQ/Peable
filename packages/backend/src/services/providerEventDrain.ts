@@ -25,7 +25,7 @@ const DEFAULT_BATCH_SIZE = 50;
 
 export interface DrainPassOptions {
   readonly batchSize?: number;
-  /** Explicit operator-approved composition only; server boot supplies none. */
+  /** Explicit operator-approved composition only; omitted until boot opt-in. */
   readonly recurring?:RecurringObservationOptions;
   readonly now?:()=>Date;
 }

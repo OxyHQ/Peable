@@ -49,6 +49,7 @@ export function createVerifiedBillingBindings(options: { db: Database; client: S
     return {id:checkoutRef,status:value.status,storeId:customer.externalSubjectRef,planId:price.planRef,providerCustomerId:customer.providerRef,providerPriceId:price.providerRef,subscription:snapshot?{...snapshot,storeId:customer.externalSubjectRef,planId:price.planRef}:null};
   }
   return {
+    authorizeOwner: authorize,
     retrieveCheckout,
     async retrieveInvoiceState(owner:BillingOwner,subscriptionRef:string,invoiceRef:string,bindMirror=true,signal?:AbortSignal){
       await authorize(owner);z.string().regex(/^in_[A-Za-z0-9]+$/).max(128).parse(invoiceRef);
