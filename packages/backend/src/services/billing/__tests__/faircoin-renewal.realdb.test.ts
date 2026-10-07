@@ -1,3 +1,5 @@
+import { createDatabase } from '@oxy.so/db';
+import * as schema from '../../../db/schema';
 import { consumeFaircoinRenewalPass, startFaircoinRenewalWorker } from '../faircoin-renewal-worker';
 import { sql } from 'drizzle-orm';
 import { createFaircoinRenewalConsumer } from '../faircoin-renewal-consumer';
@@ -81,20 +83,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const rows = await gatewayDb().select().from(faircoinRenewalAuthorizations);
     expect(rows).toHaveLength(1); expect(rows[0]?.consent.maximumAmountBaseUnits).toBe('10000'); expect(rows[0]?.instructions).toHaveLength(1);
   });
-  it('deduplicates concurrent consumers and orders revocation after an in-flight dispatch', async () => {
+  it('deduplicates concurrent consumers and acknowledges already-authorized dispatch at revocation', async () => {
     const { actor, consent, instruction } = await fixture();
     await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
     let release: () => void = () => {}; let entered: () => void = () => {};
     const gate = new Promise<void>(resolve => { release = resolve; });
     const started = new Promise<void>(resolve => { entered = resolve; });
-    let executions = 0; let revoked = false;
-    const executor = { recover: async () => ({ kind: 'not_found' as const }), execute: async () => {
-      executions++; entered(); await gate; return { kind: 'accepted' as const, operationRef: 'operation_fixture' };
+    let executions = 0; let revoked = false; let dispatched = false;
+    const executor = { domain: 'fixture-provider-v1', recover: async () => dispatched ? ({ kind: 'indeterminate' as const }) : ({ kind: 'not_found' as const }), execute: async () => {
+      dispatched = true; executions++; entered(); await gate; return { kind: 'accepted' as const, operationRef: 'operation_fixture' };
     } };
     const consumer = () => createFaircoinRenewalConsumer({ repository: createPostgresFaircoinRenewalRepository(gatewayDb()), executor, now: () => now });
     const pending = consumer().consume(actor, instruction); await started;
-    const revocation = service().revoke(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_fixture' }).then(() => { revoked = true; });
-    await new Promise(resolve => setTimeout(resolve, 20)); expect(revoked).toBe(false);
+    const revocation = service().revokeWithDispatchAcknowledgement(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_fixture' }).then(() => { revoked = true; });
+    await new Promise(resolve => setTimeout(resolve, 20)); expect(revoked).toBe(true);
     release(); expect((await pending).status).toBe('accepted'); await revocation;
     const replay = await Promise.all([consumer().consume(actor, instruction), consumer().consume(actor, instruction)]);
     expect(replay.every(value => value.status === 'accepted')).toBe(true); expect(executions).toBe(1);
@@ -103,15 +105,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const { actor, consent, instruction } = await fixture();
     await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
     let accepted = false; let executions = 0; const keys: string[] = [];
-    const executor = { recover: async (input: { idempotencyKey: string }) => {
+    const executor = { domain: 'fixture-provider-v1', recover: async (input: { idempotencyKey: string }) => {
       keys.push(input.idempotencyKey); return accepted ? { kind: 'accepted' as const, operationRef: 'operation_fixture' } : { kind: 'not_found' as const };
     }, execute: async () => { accepted = true; executions++; return { kind: 'accepted' as const, operationRef: 'operation_fixture' }; } };
     const consumer = () => createFaircoinRenewalConsumer({ repository: createPostgresFaircoinRenewalRepository(gatewayDb()), executor, now: () => now });
-    await gatewayDb().execute(sql`CREATE FUNCTION reject_execution_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF jsonb_array_length(NEW.executions) > 0 THEN RAISE EXCEPTION 'fixture rollback'; END IF; RETURN NEW; END $$`);
+    await gatewayDb().execute(sql`CREATE FUNCTION reject_execution_fixture() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN IF EXISTS (SELECT 1 FROM jsonb_array_elements(NEW.executions) item WHERE item->>'status' = 'accepted') THEN RAISE EXCEPTION 'fixture rollback'; END IF; RETURN NEW; END $$`);
     await gatewayDb().execute(sql`CREATE TRIGGER reject_execution_fixture BEFORE UPDATE ON faircoin_renewal_authorizations FOR EACH ROW EXECUTE FUNCTION reject_execution_fixture()`);
     await expect(consumer().consume(actor, instruction)).rejects.toThrow();
     await gatewayDb().execute(sql`DROP TRIGGER reject_execution_fixture ON faircoin_renewal_authorizations`);
     await gatewayDb().execute(sql`DROP FUNCTION reject_execution_fixture()`);
+    let incompatibleCalls = 0;
+    const replacement = { ...executor, domain: 'fixture-other-store', recover: async () => { incompatibleCalls++; return { kind: 'not_found' as const }; } };
+    await expect(createFaircoinRenewalConsumer({ repository: createPostgresFaircoinRenewalRepository(gatewayDb()), executor: replacement, now: () => now }).consume(actor, instruction)).rejects.toThrow('idempotency_conflict');
+    expect(incompatibleCalls).toBe(0);
+    const stored = (await gatewayDb().select().from(faircoinRenewalAuthorizations))[0]?.executions[0];
+    expect(stored?.executorDomain).toBe(executor.domain); expect(stored?.status).toBe('authorized'); expect(stored?.permitRef).toBeDefined();
     await service().revoke(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_fixture' });
     expect((await consumer().consume(actor, instruction)).status).toBe('accepted'); expect(executions).toBe(1);
     expect(new Set(keys).size).toBe(1);
@@ -122,7 +130,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const repository = createPostgresFaircoinRenewalRepository(gatewayDb());
     await expect(createFaircoinRenewalConsumer({ repository }).consume(actor, instruction)).rejects.toThrow('provider_unavailable');
     let calls = 0;
-    const executor = { recover: async () => { throw new Error('unavailable'); }, execute: async () => { calls++; return { kind: 'accepted' as const, operationRef: 'operation_fixture' }; } };
+    const executor = { domain: 'fixture-provider-v1', recover: async () => { throw new Error('unavailable'); }, execute: async () => { calls++; return { kind: 'accepted' as const, operationRef: 'operation_fixture' }; } };
     expect((await createFaircoinRenewalConsumer({ repository, executor, now: () => now }).consume(actor, instruction)).status).toBe('indeterminate');
     await service().revoke(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_fixture' });
     executor.recover = async () => { throw new Error('still unknown'); };
@@ -137,7 +145,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const { actor, consent, instruction } = await fixture();
     await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
     let executions = 0;
-    const executor = { recover: async () => ({ kind: 'not_found' as const }), execute: async () => { executions++; return { kind: 'accepted' as const, operationRef: 'operation_fixture' }; } };
+    const executor = { domain: 'fixture-provider-v1', recover: async () => executions ? ({ kind: 'accepted' as const, operationRef: 'operation_fixture' }) : ({ kind: 'not_found' as const }), execute: async () => { if (!executions) executions++; return { kind: 'accepted' as const, operationRef: 'operation_fixture' }; } };
     const options = { db: gatewayDb(), actors: [actor], executor, now: () => now, limit: 1 };
     expect(await consumeFaircoinRenewalPass({ ...options, actors: [{ ...actor, payerAccountId: 'another_payer' }] })).toBe(0);
     expect(await Promise.all([consumeFaircoinRenewalPass(options), consumeFaircoinRenewalPass(options)])).toEqual([1, 1]);
@@ -155,7 +163,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const nextInstruction = { ...instruction, authorizationId: nextConsent.authorizationId, subscriptionId: nextConsent.subscriptionId, idempotencyKey: 'renewal_second' };
     await service().accept(actor, nextConsent); await service().prepareAutomaticRenewal(actor, nextInstruction);
     let executions = 0;
-    const executor = { recover: async (input: { instruction: { authorizationId: string } }) => input.instruction.authorizationId === consent.authorizationId ? { kind: 'indeterminate' as const } : { kind: 'not_found' as const },
+    const executor = { domain: 'fixture-provider-v1', recover: async (input: { instruction: { authorizationId: string } }) => input.instruction.authorizationId === consent.authorizationId ? { kind: 'indeterminate' as const } : { kind: 'not_found' as const },
       execute: async () => { executions++; return { kind: 'accepted' as const, operationRef: 'operation_second' }; } };
     const options = { db: gatewayDb(), actors: [actor], executor, now: () => now, limit: 1, cursors: new Map<string, number>() };
     await consumeFaircoinRenewalPass(options); await consumeFaircoinRenewalPass(options);
@@ -168,9 +176,84 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const { actor, consent, instruction } = await fixture();
     await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
     let executions = 0;
-    const executor = { recover: async () => ({ kind: 'not_found' as const }), execute: async () => { executions++; return { kind: 'indeterminate' as const }; } };
+    const executor = { domain: 'fixture-provider-v1', recover: async () => ({ kind: 'not_found' as const }), execute: async () => { executions++; return { kind: 'indeterminate' as const }; } };
     const consumer = createFaircoinRenewalConsumer({ repository: createPostgresFaircoinRenewalRepository(gatewayDb()), executor, now: () => new Date(instruction.periodEnd) });
     expect((await consumer.consume(actor, instruction)).status).toBe('cancelled'); expect(executions).toBe(0);
+  });
+
+  it('rechecks durable revocation after the prior database session is terminated during recovery', async () => {
+    const { actor, consent, instruction } = await fixture();
+    await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
+    const [database] = await gatewayDb().execute(sql`select current_database() as name`);
+    const adminUrl = process.env.TEST_DATABASE_URL;
+    if (!adminUrl || !database || typeof database.name !== 'string') throw new Error('Expected disposable database');
+    const url = new URL(adminUrl); url.pathname = '/' + database.name;
+    const dedicated = createDatabase({ databaseUrl: url.toString(), schema, client: { max: 1 } });
+    const [backend] = await dedicated.db.execute(sql`select pg_backend_pid() as pid`);
+    if (!backend || typeof backend.pid !== 'number') throw new Error('Expected dedicated backend');
+    let executions = 0; let recovered = false;
+    let finishRecovery: () => void = () => {};
+    const recoveryFinished = new Promise<void>(resolve => { finishRecovery = resolve; });
+    const executor = { domain: 'fixture-provider-v1', recover: async () => {
+      try {
+      const [terminated] = await gatewayDb().execute(sql`select pg_terminate_backend(${backend.pid}) as terminated`);
+      expect(terminated?.terminated).toBe(true);
+      await service().revoke(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_session' });
+      recovered = true; return { kind: 'not_found' as const };
+      } finally { finishRecovery(); }
+    }, execute: async () => { executions++; return { kind: 'accepted' as const, operationRef: 'operation_session' }; } };
+    const consumer = createFaircoinRenewalConsumer({ repository: createPostgresFaircoinRenewalRepository(dedicated.db), executor, now: () => now });
+    await consumer.consume(actor, instruction).catch(() => undefined);
+    await recoveryFinished;
+    await new Promise(resolve => setTimeout(resolve, 10));
+    await dedicated.client.end({ timeout: 1 });
+    expect(recovered).toBe(true); expect(executions).toBe(0);
+  });
+
+  it('keeps an issued permit recoverable when revocation wins before its delayed dispatch', async () => {
+    const { actor, consent, instruction } = await fixture();
+    await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
+    const durable = createPostgresFaircoinRenewalRepository(gatewayDb());
+    let release: () => void = () => {}; let entered: () => void = () => {};
+    const gate = new Promise<void>(resolve => { release = resolve; });
+    const issued = new Promise<void>(resolve => { entered = resolve; });
+    let transactions = 0;
+    const delayedRepository = { async transaction<T>(namespace: string, id: string, action: Parameters<typeof durable.transaction<T>>[2]) {
+      const result = await durable.transaction(namespace, id, action);
+      if (++transactions === 2) { entered(); await gate; }
+      return result;
+    } };
+    let accepted = false; let executions = 0;
+    const executor = { domain: 'fixture-provider-v1', recover: async () => accepted ? { kind: 'accepted' as const, operationRef: 'operation_delayed' } : { kind: 'not_found' as const },
+      execute: async () => { accepted = true; executions++; return { kind: 'accepted' as const, operationRef: 'operation_delayed' }; } };
+    const pending = createFaircoinRenewalConsumer({ repository: delayedRepository, executor, now: () => now }).consume(actor, instruction);
+    await issued;
+    const acknowledgement = await service().revokeWithDispatchAcknowledgement(actor, { authorizationId: consent.authorizationId, revokedAt: now.toISOString(), revocationEvidenceId: 'revoke_delayed' });
+    expect(acknowledgement.alreadyAuthorized).toHaveLength(1);
+    const restarted = createFaircoinRenewalConsumer({ repository: durable, executor, now: () => now });
+    expect((await restarted.consume(actor, instruction)).status).toBe('indeterminate'); expect(executions).toBe(0);
+    release(); expect((await pending).status).toBe('accepted'); expect(executions).toBe(1);
+    expect((await restarted.consume(actor, instruction)).status).toBe('accepted');
+  });
+  it('performs no remote calls unless initial binding and dispatch permit commits are confirmed', async () => {
+    const { actor, consent, instruction } = await fixture();
+    await service().accept(actor, consent); await service().prepareAutomaticRenewal(actor, instruction);
+    const durable = createPostgresFaircoinRenewalRepository(gatewayDb());
+    let recoveries = 0; let executions = 0;
+    const executor = { domain: 'fixture-provider-v1', recover: async () => { recoveries++; return { kind: 'not_found' as const }; },
+      execute: async () => { executions++; return { kind: 'accepted' as const, operationRef: 'operation_commit' }; } };
+    const lostBinding = { async transaction<T>() : Promise<T> { throw new Error('unconfirmed binding'); } };
+    await expect(createFaircoinRenewalConsumer({ repository: lostBinding, executor, now: () => now }).consume(actor, instruction)).rejects.toThrow('unconfirmed binding');
+    expect(recoveries).toBe(0); expect(executions).toBe(0);
+    let transactions = 0;
+    const uncertainPermit = { async transaction<T>(namespace: string, id: string, action: Parameters<typeof durable.transaction<T>>[2]) {
+      const result = await durable.transaction(namespace, id, action);
+      if (++transactions === 2) throw new Error('unconfirmed permit');
+      return result;
+    } };
+    await expect(createFaircoinRenewalConsumer({ repository: uncertainPermit, executor, now: () => now }).consume(actor, instruction)).rejects.toThrow('unconfirmed permit');
+    expect(recoveries).toBe(1); expect(executions).toBe(0);
+    expect((await gatewayDb().select().from(faircoinRenewalAuthorizations))[0]?.executions[0]?.status).toBe('authorized');
   });
 
 });

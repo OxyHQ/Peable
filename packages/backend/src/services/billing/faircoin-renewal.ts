@@ -31,9 +31,11 @@ export interface FaircoinRenewalRecord {
 }
 export const faircoinRenewalExecutionSchema = z.object({
   instructionIdempotencyKey: billingIdempotencyKey, remoteIdempotencyKey: z.string().regex(/^[a-f0-9]{64}$/),
-  status: z.enum(['accepted', 'indeterminate', 'cancelled']), attemptedAt: timestamp,
+  executorDomain: billingReference,
+  status: z.enum(['accepted', 'indeterminate', 'cancelled', 'authorized']), attemptedAt: timestamp,
+  permitRef: z.string().regex(/^[a-f0-9]{64}$/).optional(), authorizedAt: timestamp.optional(),
   operationRef: billingReference.optional(),
-}).strict().refine((value) => value.status === 'accepted' ? !!value.operationRef : !value.operationRef, 'Accepted execution requires remote identity');
+}).strict().refine(value => !!value.permitRef === !!value.authorizedAt && (value.status !== 'authorized' || !!value.permitRef) && (value.status !== 'cancelled' || !value.permitRef), 'Invalid dispatch permit').refine((value) => value.status === 'accepted' ? !!value.operationRef : !value.operationRef, 'Accepted execution requires remote identity');
 export type FaircoinRenewalExecution = z.infer<typeof faircoinRenewalExecutionSchema>;
 
 /** An implementation MUST persist each callback atomically under a row lock or
@@ -64,6 +66,17 @@ export function createFaircoinRenewalAuthorization(options: {
   now?: () => Date;
 }) {
   const now = options.now ?? (() => new Date());
+  async function revokeWithDispatchAcknowledgement(actor: FaircoinRenewalActor, raw: unknown) {
+      const revocation = z.object({ authorizationId: billingReference, revokedAt: timestamp, revocationEvidenceId: billingReference }).strict().parse(raw);
+      if (Date.parse(revocation.revokedAt) > now().getTime() || !await options.verifyRevocation(revocation, actor)) throw new BillingError('identity_conflict');
+      return options.repository.transaction(faircoinRenewalNamespace(actor), revocation.authorizationId, async (record) => {
+        if (!record) throw new BillingError('not_found', 404);
+        assertFaircoinRenewalActor(record.consent, actor);
+        const finalRevocation = record.revocation ?? revocation;
+        const alreadyAuthorized = record.executions.filter(value => value.permitRef).map(value => ({ instructionIdempotencyKey: value.instructionIdempotencyKey, executorDomain: value.executorDomain, permitRef: value.permitRef, status: value.status }));
+        return { record: { ...record, revocation: finalRevocation }, result: { revocation: finalRevocation, alreadyAuthorized } };
+      });
+  }
   return {
     async accept(actor: FaircoinRenewalActor, raw: unknown) {
       const consent = faircoinRenewalConsentSchema.parse(raw);
@@ -78,16 +91,8 @@ export function createFaircoinRenewalAuthorization(options: {
         return { record: { consent, revocation: null, instructions: [], executions: [] }, result: consent };
       });
     },
-    async revoke(actor: FaircoinRenewalActor, raw: unknown) {
-      const revocation = z.object({ authorizationId: billingReference, revokedAt: timestamp, revocationEvidenceId: billingReference }).strict().parse(raw);
-      if (Date.parse(revocation.revokedAt) > now().getTime() || !await options.verifyRevocation(revocation, actor)) throw new BillingError('identity_conflict');
-      return options.repository.transaction(faircoinRenewalNamespace(actor), revocation.authorizationId, async (record) => {
-        if (!record) throw new BillingError('not_found', 404);
-        assertFaircoinRenewalActor(record.consent, actor);
-        if (record.revocation) return { record, result: record.revocation };
-        return { record: { ...record, revocation }, result: revocation };
-      });
-    },
+    async revoke(actor: FaircoinRenewalActor, raw: unknown) { return (await revokeWithDispatchAcknowledgement(actor, raw)).revocation; },
+    revokeWithDispatchAcknowledgement,
     async prepareAutomaticRenewal(actor: FaircoinRenewalActor, raw: unknown) {
       const instruction = faircoinRenewalInstructionSchema.parse(raw);
       return options.repository.transaction(faircoinRenewalNamespace(actor), instruction.authorizationId, async (record) => {

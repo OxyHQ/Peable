@@ -66,18 +66,35 @@ idempotent replay, and rejects past-period instructions. Manual renewal returns
 payer-confirmation-required. Revocation is observable and blocks subsequent
 scheduling and execution checks, including already reserved instructions.
 
-A durable consumer now persists accepted/indeterminate/cancelled outcomes with
-stable remote operation keys in the existing authorization row (pre migration
-0024). It always performs authoritative read-only recovery before a new
-submission, including after revocation: remote acceptance may survive a crash
-before local commit. Network uncertainty never becomes permission to resubmit.
-The same transaction lock orders dispatch against revocation. A compliant
-executor must deduplicate the stable key and finish its submission attempt before
-resolving or rejecting; it cannot start delayed work after settlement. Accepted
-operations dispatched before revocation may finish later and cannot be undone.
+A durable consumer persists accepted/indeterminate/cancelled outcomes and
+confirmed dispatch permits in the existing authorization row (pre migration
+0024). Before any remote call it commits an immutable executor authority domain
+and operation key. Existing execution rows lacking a domain are rejected rather
+than adopted into a replacement idempotency store. Domain identifies the actual
+provider/deployment/account and verified shared operation store, not a friendly
+configuration alias.
+
+Read-only remote recovery holds no database transaction. After recovery, a fresh
+locked transaction rechecks current consent, revocation, limits, period and
+pinned domain. Only a confirmed commit of its durable dispatch permit can enter
+execute; failed/uncertain commits cause no dispatch. The executor must independently
+verify that permit in the durable authority store against actor, instruction,
+domain and key, and atomically deduplicate simultaneous attempts. Fixture
+executors demonstrate the protocol, not a concrete wallet implementation.
+
+Permit commit is the revocation linearization point. Revocation committed before
+that permit prevents new execution. revokeWithDispatchAcknowledgement returns
+alreadyAuthorized permit identities atomically with the recorded revocation;
+legacy revoke preserves its existing payload. Revocation after permit commit
+cannot undo earlier authorized work, including a paused caller that has not yet
+reached the remote provider. Such permits remain indeterminate/recoverable after
+not_found while revoked; they are never falsely declared cancelled without
+external fencing. Remote acceptance can survive a crash before local outcome
+commit and is recovered using the same pinned domain/key. An incompatible
+replacement executor is rejected before even read-only recovery.
 
 The bounded worker scans only explicitly configured payer/merchant/app actors,
-rechecks ownership and authority under that lock, skips terminal instructions,
+rechecks ownership and fresh authority before permit commit, skips terminal instructions,
 and waits for its active pass on shutdown. Boot requires both faircoinExecutorRef
 and faircoinActors, an own trusted registry entry, and actors within configured
 billing cohorts. No executor is installed by default. No funds are transferred

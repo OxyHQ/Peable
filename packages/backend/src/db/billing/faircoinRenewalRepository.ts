@@ -40,8 +40,9 @@ export function createPostgresFaircoinRenewalRepository(db: Database): FaircoinR
           || previous.instructions.some((instruction) => !record.instructions.some((candidate) => JSON.stringify(instruction) === JSON.stringify(candidate))))) throw new BillingError('identity_conflict');
         if (previous?.executions.some((execution) => {
           const current = record.executions.find((candidate) => candidate.instructionIdempotencyKey === execution.instructionIdempotencyKey);
-          return !current || current.remoteIdempotencyKey !== execution.remoteIdempotencyKey
-            || execution.status !== 'indeterminate' && JSON.stringify(current) !== JSON.stringify(execution);
+          return !current || current.remoteIdempotencyKey !== execution.remoteIdempotencyKey || current.executorDomain !== execution.executorDomain
+            || execution.permitRef && (current.permitRef !== execution.permitRef || current.authorizedAt !== execution.authorizedAt)
+            || (execution.status === 'accepted' || execution.status === 'cancelled') && JSON.stringify(current) !== JSON.stringify(execution);
         })) throw new BillingError('identity_conflict');
         const merchant = await findMerchantByAppEnvironment(transaction, record.consent.appId, record.consent.environment);
         if (!merchant || merchant.publicId !== record.consent.merchantId) throw new BillingError('not_found', 404);

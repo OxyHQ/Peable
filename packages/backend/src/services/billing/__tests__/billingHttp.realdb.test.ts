@@ -208,7 +208,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     if (!merchant) throw new Error('Expected fixture merchant');
     const actor = { payerAccountId: 'payer_fixture', merchantId: merchant.publicId, appId: owner.oxyAppId, mode: 'test' as const, environment: owner.environment };
     const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }], faircoinExecutorRef: 'wallet_fixture', faircoinActors: [actor] };
-    const executor = { recover: async () => ({ kind: 'not_found' as const }), execute: async () => ({ kind: 'indeterminate' as const }) };
+    const executor = { domain: 'fixture-provider-v1', recover: async () => ({ kind: 'not_found' as const }), execute: async () => ({ kind: 'indeterminate' as const }) };
     const adapters = { faircoinExecutors: { wallet_fixture: executor } };
     expect(merchant.publicId).not.toBe(owner.merchantId);
     expect((await configureBillingRuntime(gatewayDb(), JSON.stringify(configuration), client, adapters))?.renewals?.actors).toEqual([actor]);
