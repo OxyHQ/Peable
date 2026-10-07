@@ -33,3 +33,39 @@ final paid authority. They may remain pending and retry until a supported final
 projection exists; this worker does not close those lifecycle acceptance cases.
 Monitoring and a provider-neutral full invoice-state adapter remain required
 before enabling a complete commercial lifecycle.
+
+## Unreleased signed authority and Faircoin scheduling infrastructure
+
+The source SDK adds `billing.retrieveFinalInvoiceAuthority(subscriptionId,
+invoiceId)` and the authenticated gateway route `invoice_authorities`. The
+service refuses the read until a trusted final-invoice resolver and pinned
+Ed25519 verification keys are supplied. The SDK separately requires configured
+`invoiceAuthorityKeys` before making this request and verifies the returned
+signature, reference correlation and evidence clocks. Neither runtime boot nor
+merchant input configures a resolver, keys, tax policy or invoice issuer.
+
+The signed canonical JSON includes schemaVersion 1, source, invoice and method. The shared
+canonical encoder sorts object keys and rejects non-JSON values and unsafe
+numbers; the gateway strictly validates the invoice schema, exact owned paid
+invoice references, paid net/tax/gross amounts, mode, period, account, timestamps,
+and Faircoin quote expiry. This is a provider-independent evidence transport;
+existing owned billing retrieval and recurrent event adapters remain Stripe.
+It does not implement a Faircoin subscription payment provider.
+
+The Faircoin scheduling authorization service requires verified consent and
+revocation evidence plus a durable atomic repository. There is no production
+repository or runtime default. Tests use a serial in-memory fixture with
+reordered persisted object keys. Explicit consent binds payer, merchant, app,
+subscription, plan, mode, environment, monthly cadence, maximum base-unit amount
+and expiry. Atomic scheduling excludes overlapping periods, preserves exact
+idempotent replay, and rejects past-period instructions. Manual renewal returns
+payer-confirmation-required. Revocation is observable and blocks subsequent
+scheduling and execution checks, including already reserved instructions.
+
+An execution check is scheduling evidence, not an atomic funds transfer. A real
+wallet/payment-rail executor still needs durable consumption, remote payment
+idempotency, recovery, and revocation linearized with dispatch. No funds are
+transferred here and no payer keys or live mandates are accepted. A real fiscal
+resolver/signer, production authorization repository, complete Faircoin provider
+adapter and executor, approved new shared-types/SDK publication, and consumer
+adoption are separate unfinished implementation/release gates.

@@ -82,6 +82,8 @@ export {
 export {
   BILLING_SUBSCRIPTION_STATUSES,
   type BillingSubscriptionStatus,
+  type BillingInvoiceAuthoritySource, type BillingFinalInvoice, type BillingFinalInvoiceAuthority,
+  type BillingFaircoinRenewalChoice, type BillingFaircoinRenewalConsent, type BillingFaircoinRenewalRevocation,
   type BillingCheckoutSession, type BillingCheckoutObservation, type BillingPaidInvoice, type BillingInvoiceState, type BillingCustomer,
   type EnsureBillingCustomerParams,
   type CreateBillingCheckoutParams,
@@ -89,3 +91,4 @@ export {
   type BillingHostedSession,
   type BillingSubscription,
 } from './billing';
+export { canonicalBillingAuthority } from './billing-authority';

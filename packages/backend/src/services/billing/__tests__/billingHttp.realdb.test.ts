@@ -1,3 +1,6 @@
+import { generateKeyPairSync, sign } from 'node:crypto';
+import { canonicalBillingAuthority, type BillingFinalInvoiceAuthority } from '@peable.to/shared-types';
+import type { FinalInvoiceAuthorityReader } from '../invoice-authority';
 import { bindRecurringObject } from '../../../db/recurring/recurringMirrorRepository';
 import { afterEach, beforeEach, describe, expect, it } from 'bun:test';
 import type Stripe from 'stripe';
@@ -36,6 +39,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
   let calls: Array<{ method: string; params?: unknown; key?: string }>;
   let portalUpdate: boolean; let portalImmediate: boolean; let accountId: string; let failCustomer: boolean;
   let cancelled:boolean;
+  let finalAuthorityReader: FinalInvoiceAuthorityReader | undefined;
   let time: Date; let client: StripeBillingClient;
   let verified: ReturnType<typeof createVerifiedBillingBindings>; let hasCheckout: boolean; let hasMore: boolean;
   let checkoutCustomer: string; let subscriptionPrice: string; let checkoutStatus: string; let duplicateCheckout: boolean; let retry401: boolean;
@@ -69,8 +73,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     };
     const provider = createStripeBillingProvider(deployment, client, { portalConfigurationRef: 'bpc_one', now: () => time });
     const cohorts: BillingCohort[] = [{ ...owner, ...deployment, evidenceRef: 'fixture:approved-cohort' }];
-    verified = createVerifiedBillingBindings({ db: gatewayDb(), client, deployment, cohorts });
-    const service = createBillingService({ db: gatewayDb(), provider, cohorts, verifiedBindings: verified, now: () => time });
+    verified = createVerifiedBillingBindings({ db: gatewayDb(), client, deployment, cohorts, now: () => time });
+    finalAuthorityReader = undefined;
+    const service = createBillingService({ db: gatewayDb(), provider, cohorts, verifiedBindings: verified, now: () => time, get finalInvoiceAuthority() { return finalAuthorityReader; } });
     const auth: RequestHandler = (req, _res, next) => {
       if (retry401) { retry401 = false; _res.status(401).json({ error: { message: 'synthetic_expiry' } }); return; }
       const token = req.header('Authorization')?.replace('Bearer ', ''); const selected = token === 'other' ? other : owner;
@@ -244,6 +249,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     expect(await sdk().retrievePaidInvoice('sub_one','in_one')).toMatchObject({invoiceId:'in_one',storeId:'store:one',planId:'plan:one',amountPaid:'2999',netAmount:'2500',taxAmount:'499'});
     expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one','noScope')).status).toBe(403);
     expect(await sdk().retrieveInvoiceState('sub_one','in_one')).toMatchObject({state:'paid',amountRefunded:'0'});
+    expect((await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one')).status).toBe(404);
+    const keys = generateKeyPairSync('ed25519');
+    const verificationKeys = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
+    time = new Date();
+    finalAuthorityReader = { verificationKeys, async read({ owner: invoiceOwner, merchantPublicId, invoice: paid }) {
+      const authority: BillingFinalInvoiceAuthority = {
+    schemaVersion: 1,
+        source: { invoiceId: paid.invoiceId, paymentIntentId: paid.paymentIntentId, customerId: paid.providerCustomerId,
+          subscriptionId: paid.providerSubscriptionId, priceId: paid.providerPriceId, planId: paid.planId,
+          merchantId: merchantPublicId, appId: invoiceOwner.oxyAppId, mode: 'test', environment: invoiceOwner.environment },
+        invoice: { platform: 'peable', currency: paid.currency, grossMinorUnits: 2999, netMinorUnits: 2500, taxMinorUnits: 499,
+          merchantFeeMinorUnits: 0, taxTreatment: 'inclusive', sellerId: 'seller_fixture', invoiceIssuerId: 'issuer_fixture',
+          taxQuoteId: 'quote_fixture', customerLocationEvidenceId: 'location_fixture', taxRateEvidenceId: 'rate_fixture',
+          context: { payerAccountId: paid.storeId, beneficiaryAccountId: paid.storeId, providerSubscriptionId: paid.providerSubscriptionId,
+            offerId: 'offer_fixture', offerVersion: 1, periodStart: paid.periodStart, periodEnd: paid.periodEnd,
+            mode: 'test', environment: invoiceOwner.environment }, issuedAt: time.toISOString(), expiresAt: new Date(time.getTime() + 60_000).toISOString() },
+        method: 'card', signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+      };
+      authority.signature.value = sign(null, Buffer.from(canonicalBillingAuthority(authority)), keys.privateKey).toString('base64url');
+      return authority;
+    } };
+    const verifiedSdk = new Peable({ baseURL: base, oxyApiUrl: base, publicKey: 'fixture-public', secret: 'fixture-secret', invoiceAuthorityKeys: verificationKeys });
+    expect(await verifiedSdk.billing.retrieveFinalInvoiceAuthority('sub_one', 'in_one')).toMatchObject({ source: { invoiceId: 'in_one', appId: owner.oxyAppId }, invoice: { grossMinorUnits: 2999 } });
+    expect((await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one', 'other')).status).toBe(404);
+    expect((await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one', 'noScope')).status).toBe(403);
+
     expect((await request('/v1/billing/subscriptions/sub_one/invoice_states/in_one','other')).status).toBe(404);expect((await request('/v1/billing/subscriptions/sub_one/invoice_states/in_one','noScope')).status).toBe(403);
     invoice.amount_paid=1;expect((await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one')).status).not.toBe(200);
   });

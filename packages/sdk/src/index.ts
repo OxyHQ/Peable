@@ -1,6 +1,6 @@
 import { BillingResource } from './resources/billing';
 export type { BillingRequestOptions } from './resources/billing';
-export type { BillingObservation, BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingCheckoutObservation, BillingPaidInvoice, BillingInvoiceState, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
+export type { BillingInvoiceAuthoritySource, BillingFinalInvoice, BillingFinalInvoiceAuthority, BillingFaircoinRenewalChoice, BillingFaircoinRenewalConsent, BillingFaircoinRenewalRevocation, BillingObservation, BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingCheckoutObservation, BillingPaidInvoice, BillingInvoiceState, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
 // Server entry (`@peable.to/sdk`) — the merchant-authed SDK. Configured with a
 // confidential `ApplicationCredential` (`{publicKey, secret}`); mints and
 // caches an Oxy service token, and exposes Stripe-ergonomics resource
@@ -58,7 +58,7 @@ export class Peable {
     const tokenProvider = createServiceTokenProvider(config);
     const client = createRestClient({ baseURL: resolved.baseURL, requestTimeoutMs: resolved.requestTimeoutMs }, tokenProvider);
 
-    this.billing = new BillingResource(client);
+    this.billing = new BillingResource(client, resolved.invoiceAuthorityKeys);
     this.paymentIntents = new PaymentIntentsResource(client);
     this.paymentLinks = new PaymentLinksResource(client);
     this.checkout = new CheckoutResource(client);
