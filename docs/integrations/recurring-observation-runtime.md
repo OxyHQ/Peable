@@ -15,7 +15,7 @@ excludes overlapping passes. Shutdown stops scheduling new relay passes. The
 existing webhook dispatcher handles actual delivery and retries.
 
 Apply the existing recurring schema pre-migration before opting in. This change
-introduces no migration, SDK release, fiscal authority, Faircoin mandate, or
+introduces no fiscal authority, Faircoin mandate, or
 commercial configuration. The current production adapter remains Stripe;
 changing a provider label does not implement a Faircoin recurring payment rail.
 
@@ -53,8 +53,12 @@ existing owned billing retrieval and recurrent event adapters remain Stripe.
 It does not implement a Faircoin subscription payment provider.
 
 The Faircoin scheduling authorization service requires verified consent and
-revocation evidence plus a durable atomic repository. There is no production
-repository or runtime default. Tests use a serial in-memory fixture with
+revocation evidence plus a durable atomic repository. The PostgreSQL repository
+uses an advisory transaction lock for first inserts, row locks, exact registered
+merchant identity, immutable consent/revocation and append-only instructions.
+Pre-migration 0023 creates its table. No runtime default enables it. Tests cover
+real PostgreSQL concurrent inserts, restart, revocation and rollback plus a
+serial in-memory fixture with
 reordered persisted object keys. Explicit consent binds payer, merchant, app,
 subscription, plan, mode, environment, monthly cadence, maximum base-unit amount
 and expiry. Atomic scheduling excludes overlapping periods, preserves exact
@@ -66,6 +70,11 @@ An execution check is scheduling evidence, not an atomic funds transfer. A real
 wallet/payment-rail executor still needs durable consumption, remote payment
 idempotency, recovery, and revocation linearized with dispatch. No funds are
 transferred here and no payer keys or live mandates are accepted. A real fiscal
-resolver/signer, production authorization repository, complete Faircoin provider
+resolver/signer, approved runtime consent composition, complete Faircoin provider
 adapter and executor, approved new shared-types/SDK publication, and consumer
 adoption are separate unfinished implementation/release gates.
+
+The worldwide sales goal is not an approved country coverage policy. Fiscal
+calculation belongs to Peable behind its SDK; neither Oxy consumers nor this
+change select Stripe Tax or another supplier. Registered selling countries,
+tax-remitter configuration and a supported calculator remain required.

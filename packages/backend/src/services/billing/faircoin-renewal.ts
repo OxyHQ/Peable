@@ -34,7 +34,7 @@ export interface FaircoinRenewalRecord {
 export interface FaircoinRenewalRepository {
   transaction<T>(namespace: string, authorizationId: string, action: (record: FaircoinRenewalRecord | null) => Promise<{ record: FaircoinRenewalRecord; result: T }>): Promise<T>;
 }
-function namespace(actor: FaircoinRenewalActor): string {
+export function faircoinRenewalNamespace(actor: FaircoinRenewalActor): string {
   return createHash('sha256').update(JSON.stringify([actor.merchantId, actor.appId, actor.mode, actor.environment, actor.payerAccountId])).digest('hex');
 }
 function assertActor(consent: BillingFaircoinRenewalConsent, actor: FaircoinRenewalActor): void {
@@ -44,7 +44,7 @@ function assertActor(consent: BillingFaircoinRenewalConsent, actor: FaircoinRene
 function assertActive(consent: BillingFaircoinRenewalConsent, revocation: BillingFaircoinRenewalRevocation | null, now: Date): void {
   if (revocation || Date.parse(consent.startsAt) > now.getTime() || Date.parse(consent.expiresAt) <= now.getTime()) throw new BillingError('identity_conflict');
 }
-const instructionSchema = z.object({ authorizationId: billingReference, subscriptionId: billingReference, planId: billingReference,
+export const faircoinRenewalInstructionSchema = z.object({ authorizationId: billingReference, subscriptionId: billingReference, planId: billingReference,
   periodStart: timestamp, periodEnd: timestamp, amountBaseUnits: positiveBaseUnits, idempotencyKey: billingIdempotencyKey }).strict();
 
 /** Scheduling authority only. Never takes keys, broadcasts, creates a live mandate,
@@ -62,7 +62,7 @@ export function createFaircoinRenewalAuthorization(options: {
       assertActor(consent, actor);
       if (Date.parse(consent.acceptedAt) > now().getTime() || Date.parse(consent.expiresAt) <= now().getTime()
         || !await options.verifyConsent(consent)) throw new BillingError('identity_conflict');
-      return options.repository.transaction(namespace(actor), consent.authorizationId, async (record) => {
+      return options.repository.transaction(faircoinRenewalNamespace(actor), consent.authorizationId, async (record) => {
         if (record) {
           if (record.revocation || JSON.stringify(faircoinRenewalConsentSchema.parse(record.consent)) !== JSON.stringify(consent)) throw new BillingError('idempotency_conflict');
           return { record, result: record.consent };
@@ -73,7 +73,7 @@ export function createFaircoinRenewalAuthorization(options: {
     async revoke(actor: FaircoinRenewalActor, raw: unknown) {
       const revocation = z.object({ authorizationId: billingReference, revokedAt: timestamp, revocationEvidenceId: billingReference }).strict().parse(raw);
       if (Date.parse(revocation.revokedAt) > now().getTime() || !await options.verifyRevocation(revocation, actor)) throw new BillingError('identity_conflict');
-      return options.repository.transaction(namespace(actor), revocation.authorizationId, async (record) => {
+      return options.repository.transaction(faircoinRenewalNamespace(actor), revocation.authorizationId, async (record) => {
         if (!record) throw new BillingError('not_found', 404);
         assertActor(record.consent, actor);
         if (record.revocation) return { record, result: record.revocation };
@@ -81,8 +81,8 @@ export function createFaircoinRenewalAuthorization(options: {
       });
     },
     async prepareAutomaticRenewal(actor: FaircoinRenewalActor, raw: unknown) {
-      const instruction = instructionSchema.parse(raw);
-      return options.repository.transaction(namespace(actor), instruction.authorizationId, async (record) => {
+      const instruction = faircoinRenewalInstructionSchema.parse(raw);
+      return options.repository.transaction(faircoinRenewalNamespace(actor), instruction.authorizationId, async (record) => {
         if (!record) throw new BillingError('not_found', 404);
         assertActor(record.consent, actor); assertActive(record.consent, record.revocation, now());
         const start = new Date(instruction.periodStart), end = new Date(instruction.periodEnd);
@@ -96,7 +96,7 @@ export function createFaircoinRenewalAuthorization(options: {
           || end.getTime() > Date.parse(record.consent.expiresAt) || end.getTime() !== nextMonth.getTime()) throw new BillingError('identity_conflict');
         const replay = record.instructions.find((value) => value.idempotencyKey === instruction.idempotencyKey);
         if (replay) {
-          if (JSON.stringify(instructionSchema.parse(replay)) !== JSON.stringify(instruction)) throw new BillingError('idempotency_conflict');
+          if (JSON.stringify(faircoinRenewalInstructionSchema.parse(replay)) !== JSON.stringify(instruction)) throw new BillingError('idempotency_conflict');
           return { record, result: replay };
         }
         // Reject overlapping periods, not just matching starts: an altered start
@@ -106,12 +106,12 @@ export function createFaircoinRenewalAuthorization(options: {
       });
     },
     async assertExecutionAuthorized(actor: FaircoinRenewalActor, raw: unknown) {
-      const instruction = instructionSchema.parse(raw);
-      return options.repository.transaction(namespace(actor), instruction.authorizationId, async (record) => {
+      const instruction = faircoinRenewalInstructionSchema.parse(raw);
+      return options.repository.transaction(faircoinRenewalNamespace(actor), instruction.authorizationId, async (record) => {
         if (!record) throw new BillingError('not_found', 404);
         assertActor(record.consent, actor); assertActive(record.consent, record.revocation, now());
         if (Date.parse(instruction.periodStart) > now().getTime() || Date.parse(instruction.periodEnd) <= now().getTime()) throw new BillingError('identity_conflict');
-        if (!record.instructions.some((value) => JSON.stringify(instructionSchema.parse(value)) === JSON.stringify(instruction))) throw new BillingError('identity_conflict');
+        if (!record.instructions.some((value) => JSON.stringify(faircoinRenewalInstructionSchema.parse(value)) === JSON.stringify(instruction))) throw new BillingError('identity_conflict');
         return { record, result: instruction };
       });
     },

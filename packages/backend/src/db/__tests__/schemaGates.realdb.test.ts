@@ -12,6 +12,7 @@ import { PROTECTED_COLUMNS } from '../protectedColumns';
 import {
   billingObjectBindings,
   billingOperations,
+  faircoinRenewalAuthorizations,
   checkoutSessions,
   connectedAccounts,
   merchants,
@@ -44,6 +45,7 @@ const MIGRATIONS_DIR = join(BACKEND_ROOT, 'db', 'migrations');
 const ALL_TABLES = [
   billingObjectBindings,
   billingOperations,
+  faircoinRenewalAuthorizations,
   checkoutSessions,
   connectedAccounts,
   merchants,
