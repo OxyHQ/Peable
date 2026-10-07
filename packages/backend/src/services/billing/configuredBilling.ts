@@ -1,3 +1,5 @@
+import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
+import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
 import { createPublicKey } from 'node:crypto';
 import type { BillingTaxQuoteCalculator } from './tax-quote';
 import type { FinalInvoiceAuthorityReader } from './invoice-authority';
@@ -14,6 +16,9 @@ import { STRIPE_API_VERSION } from '../providers/stripe/client';
 
 const cohortConfiguration = z.object({
   deployment: billingDeploymentSchema,
+  faircoinExecutorRef: billingReference.optional(),
+  faircoinActors: z.array(z.object({ payerAccountId: billingReference, merchantId: billingReference, appId: billingReference,
+    mode: z.enum(['live', 'test']), environment: z.enum(['development', 'staging', 'production']) }).strict()).min(1).max(20).optional(),
   observationsEnabled: z.boolean().default(false),
   taxQuoteAdapterRef: billingReference.optional(),
   finalInvoiceAuthorityAdapterRef: billingReference.optional(),
@@ -23,6 +28,7 @@ const cohortConfiguration = z.object({
 /** Only trusted deployment composition registers adapters. Configuration selects
  * an existing name; it cannot load arbitrary modules, URLs or provider secrets. */
 export interface BillingRuntimeAdapters {
+  faircoinExecutors?: Readonly<Record<string, FaircoinRenewalExecutor>>;
   taxQuoteCalculators?: Readonly<Record<string, BillingTaxQuoteCalculator>>;
   finalInvoiceAuthorities?: Readonly<Record<string, FinalInvoiceAuthorityReader>>;
 }
@@ -39,6 +45,16 @@ export async function configureBillingRuntime(db: Database, raw = config.billing
   if (raw === undefined) return undefined;
   let parsed: z.infer<typeof cohortConfiguration>;
   try { parsed = cohortConfiguration.parse(JSON.parse(raw)); } catch { throw new Error('Invalid PEABLE_BILLING_COHORT configuration'); }
+  if (!!parsed.faircoinExecutorRef !== !!parsed.faircoinActors) throw new Error('Renewal executor requires explicit actor scope');
+  const executor = parsed.faircoinExecutorRef && Object.prototype.hasOwnProperty.call(adapters.faircoinExecutors ?? {}, parsed.faircoinExecutorRef) ? adapters.faircoinExecutors?.[parsed.faircoinExecutorRef] : undefined;
+  if (parsed.faircoinExecutorRef && !executor) throw new Error('Configured renewal executor is unavailable');
+  for (const actor of parsed.faircoinActors ?? []) {
+    const merchant = await findMerchantByAppEnvironment(db, actor.appId, actor.environment);
+    if (!merchant || merchant.publicId !== actor.merchantId || !parsed.cohorts.some(cohort => cohort.merchantId === merchant.id
+      && cohort.oxyAppId === actor.appId && (parsed.deployment.livemode ? 'live' : 'test') === actor.mode
+      && cohort.environment === actor.environment)) throw new Error('Renewal actor is outside configured cohorts');
+  }
+  const renewals = executor && parsed.faircoinActors ? { db, executor, actors: structuredClone(parsed.faircoinActors) } : undefined;
   const selectedTax = parsed.taxQuoteAdapterRef && Object.prototype.hasOwnProperty.call(adapters.taxQuoteCalculators ?? {}, parsed.taxQuoteAdapterRef) ? adapters.taxQuoteCalculators?.[parsed.taxQuoteAdapterRef] : undefined;
   const selectedInvoice = parsed.finalInvoiceAuthorityAdapterRef && Object.prototype.hasOwnProperty.call(adapters.finalInvoiceAuthorities ?? {}, parsed.finalInvoiceAuthorityAdapterRef) ? adapters.finalInvoiceAuthorities?.[parsed.finalInvoiceAuthorityAdapterRef] : undefined;
   if (parsed.taxQuoteAdapterRef && !selectedTax || parsed.finalInvoiceAuthorityAdapterRef && !selectedInvoice) throw new Error('Configured fiscal adapter is unavailable');
@@ -59,13 +75,13 @@ export async function configureBillingRuntime(db: Database, raw = config.billing
   const verifiedBindings = createVerifiedBillingBindings({ db, client, deployment: parsed.deployment, cohorts });
   const service = createBillingService({ db, provider, cohorts, verifiedBindings, taxQuoteCalculator, finalInvoiceAuthority });
   // No recurring queue access until the reviewed cohort explicitly opts in.
-  if (!parsed.observationsEnabled) return { service };
+  if (!parsed.observationsEnabled) return { service, renewals };
   const environment = cohorts[0]?.environment;
   if (!environment || cohorts.some((cohort) => cohort.environment !== environment)) {
     throw new Error('Recurring observations require one deployment environment');
   }
   return {
-    service,
+    service, renewals,
     observations: {
       deployment: { ...parsed.deployment, environment, apiVersion: STRIPE_API_VERSION },
       reader: createOwnedBillingRecurringReader({ db, bindings: verifiedBindings, client }),

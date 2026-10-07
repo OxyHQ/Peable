@@ -1,3 +1,4 @@
+import { findMerchantByAppEnvironment } from '../../../db/merchants/merchantRepository';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { canonicalBillingAuthority, type BillingFinalInvoiceAuthority } from '@peable.to/shared-types';
 import type { FinalInvoiceAuthorityReader } from '../invoice-authority';
@@ -202,12 +203,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('I08 billing HTTP SDK platform adapter 
     const valid = { ...adapter, verificationKeys: { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() } };
     expect((await configureBillingRuntime(gatewayDb(), raw, client, { finalInvoiceAuthorities: { fiscal_one: valid } }))?.service).toBeDefined();
   });
+  it('composes renewal workers with public merchant identities only within owned cohorts', async () => {
+    const merchant = await findMerchantByAppEnvironment(gatewayDb(), owner.oxyAppId, owner.environment);
+    if (!merchant) throw new Error('Expected fixture merchant');
+    const actor = { payerAccountId: 'payer_fixture', merchantId: merchant.publicId, appId: owner.oxyAppId, mode: 'test' as const, environment: owner.environment };
+    const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }], faircoinExecutorRef: 'wallet_fixture', faircoinActors: [actor] };
+    const executor = { recover: async () => ({ kind: 'not_found' as const }), execute: async () => ({ kind: 'indeterminate' as const }) };
+    const adapters = { faircoinExecutors: { wallet_fixture: executor } };
+    expect(merchant.publicId).not.toBe(owner.merchantId);
+    expect((await configureBillingRuntime(gatewayDb(), JSON.stringify(configuration), client, adapters))?.renewals?.actors).toEqual([actor]);
+    await expect(configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, faircoinActors: [{ ...actor, merchantId: owner.merchantId }] }), client, adapters)).rejects.toThrow('outside configured cohorts');
+    await expect(configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, faircoinActors: [{ ...actor, appId: other.oxyAppId }] }), client, adapters)).rejects.toThrow('outside configured cohorts');
+  });
   it('composes owned observations only when explicitly enabled', async () => {
     const configuration = { deployment, portalConfigurationRef: 'bpc_one', cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }] };
     const disabled = await configureBillingRuntime(gatewayDb(), JSON.stringify(configuration), client);
     expect(disabled?.service).toBeDefined();
     expect(disabled?.observations).toBeUndefined();
     expect(disabled?.relay).toBeUndefined();
+    expect(disabled?.renewals).toBeUndefined();
+    await expect(configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, faircoinExecutorRef: 'wallet_fixture' }), client)).rejects.toThrow('explicit actor scope');
+    await expect(configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, faircoinExecutorRef: 'wallet_fixture', faircoinActors: [{ payerAccountId: 'payer_fixture', merchantId: owner.merchantId, appId: owner.oxyAppId, mode: deployment.livemode ? 'live' : 'test', environment: owner.environment }] }), client)).rejects.toThrow('unavailable');
     const enabled = await configureBillingRuntime(gatewayDb(), JSON.stringify({ ...configuration, observationsEnabled: true }), client);
     expect(enabled?.observations?.deployment.environment).toBe(owner.environment);
     expect(enabled?.observations?.bindOwnedInvoice).toBeFunction();

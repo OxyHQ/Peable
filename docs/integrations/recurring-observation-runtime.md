@@ -66,13 +66,35 @@ idempotent replay, and rejects past-period instructions. Manual renewal returns
 payer-confirmation-required. Revocation is observable and blocks subsequent
 scheduling and execution checks, including already reserved instructions.
 
-An execution check is scheduling evidence, not an atomic funds transfer. A real
-wallet/payment-rail executor still needs durable consumption, remote payment
-idempotency, recovery, and revocation linearized with dispatch. No funds are
-transferred here and no payer keys or live mandates are accepted. A real fiscal
-resolver/signer, approved runtime consent composition, complete Faircoin provider
-adapter and executor, approved new shared-types/SDK publication, and consumer
-adoption are separate unfinished implementation/release gates.
+A durable consumer now persists accepted/indeterminate/cancelled outcomes with
+stable remote operation keys in the existing authorization row (pre migration
+0024). It always performs authoritative read-only recovery before a new
+submission, including after revocation: remote acceptance may survive a crash
+before local commit. Network uncertainty never becomes permission to resubmit.
+The same transaction lock orders dispatch against revocation. A compliant
+executor must deduplicate the stable key and finish its submission attempt before
+resolving or rejecting; it cannot start delayed work after settlement. Accepted
+operations dispatched before revocation may finish later and cannot be undone.
+
+The bounded worker scans only explicitly configured payer/merchant/app actors,
+rechecks ownership and authority under that lock, skips terminal instructions,
+and waits for its active pass on shutdown. Boot requires both faircoinExecutorRef
+and faircoinActors, an own trusted registry entry, and actors within configured
+billing cohorts. No executor is installed by default. No funds are transferred
+by these fixtures and no payer keys or live mandates are accepted. The existing
+on-device wallet sender lacks durable operation-key recovery and is deliberately
+not a server executor.
+
+Trusted deployment composition can pass billingAdapters to start(): named
+taxQuoteCalculators, finalInvoiceAuthorities and faircoinExecutors. Fiscal refs
+require separately pinned public Ed25519 keys. The ordinary executable entry
+supplies no registry, so no supplier or wallet adapter becomes live by publishing
+packages. A real fiscal resolver/signer, consent verification composition,
+Faircoin payment-rail executor and full provider-neutral billing persistence
+remain implementation gates; existing owned billing deployments still use Stripe.
+The prepared shared-types 0.3.2-oxy-one.0 and SDK 0.2.4-oxy-one.0 are not published
+until existing registry authentication is available. Consumer registry adoption
+and deployment validation remain release gates.
 
 The worldwide sales goal is not an approved country coverage policy. Fiscal
 calculation belongs to Peable behind its SDK; neither Oxy consumers nor this

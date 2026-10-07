@@ -1,3 +1,4 @@
+import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
 import { configureBillingRuntime, type BillingRuntimeAdapters } from './services/billing/configuredBilling';
 import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
 import { createBillingRouter } from './routes/billing';
@@ -295,6 +296,7 @@ export async function start(options: { billingAdapters?: BillingRuntimeAdapters 
   const billingRuntime = await configureBillingRuntime(database, config.billingCohortConfig, undefined, options.billingAdapters);
   const gateway = createGateway({ billingService: billingRuntime?.service });
   const stopRecurringRelay = billingRuntime?.relay ? startRecurringRelay(billingRuntime.relay) : undefined;
+  const stopFaircoinRenewals = billingRuntime?.renewals ? startFaircoinRenewalWorker(billingRuntime.renewals) : undefined;
   startEcosystemActivity(() => gateway.httpServer.listening);
   let stopping = false;
   const stop = () => {
@@ -306,8 +308,12 @@ export async function start(options: { billingAdapters?: BillingRuntimeAdapters 
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
+    const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void stopEcosystemActivity().finally(() => disconnectPostgres()).catch(() => {
+      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped]).then(async (results) => {
+        await disconnectPostgres();
+        if (results.some(result => result.status === 'rejected')) throw new Error('Shutdown component failed');
+      }).catch(() => {
         console.error('Failed to close activity publisher or database');
         process.exitCode = 1;
       });
