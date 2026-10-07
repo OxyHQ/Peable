@@ -15,6 +15,7 @@ export function createOwnedBillingRecurringReader(options:{db:Database;bindings:
   if(!mirror)throw new Error('Unknown owned recurring object');
   const billingDeployment={provider:request.deployment.provider,platformAccountId:request.deployment.platformAccountId,livemode:request.deployment.livemode};
   const owner={merchantId:mirror.merchantId,oxyAppId:mirror.oxyAppId,environment:mirror.environment as 'development'|'staging'|'production'};
+  await options.bindings.authorizeOwner(owner);
   const identity={schemaVersion:1,provider:request.deployment.provider,platformAccountId:request.deployment.platformAccountId,providerAccountId:request.providerAccountId,livemode:request.deployment.livemode,apiVersion:request.deployment.apiVersion,objectRef:request.objectRef};
   if(request.kind==='subscription'){
    const binding=await requireBillingBinding(options.db,billingDeployment,owner,'subscription',request.objectRef);

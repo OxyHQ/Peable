@@ -162,6 +162,20 @@
       "when": 1791204929924,
       "tag": "0022_needy_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1791397381358,
+      "tag": "0023_dark_marvex",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1791399725614,
+      "tag": "0024_premium_killmonger",
+      "breakpoints": true
     }
   ]
 }

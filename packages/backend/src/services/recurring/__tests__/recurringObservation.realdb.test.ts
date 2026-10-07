@@ -1,3 +1,5 @@
+import { findIntentByPublicId, linkProviderObject, updateIntentState } from '../../../db/payments/paymentIntentRepository';
+import { redactProviderPayload } from '../../providers/redact';
 import {relayRecurringObservations} from '../recurringDelivery';
 import {Peable} from '@peable.to/sdk';
 import {signWebhook} from '@peable.to/shared-types';
@@ -8,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:te
 import { randomUUID } from 'node:crypto';
 import { eq,sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
-import { gatewayDb, POSTGRES_TESTS_ENABLED, resetGatewayTables, seedMerchant, useGatewayDatabase } from '../../../__tests__/helpers/gatewayTestDatabase';
+import { gatewayDb, POSTGRES_TESTS_ENABLED, resetGatewayTables, seedMerchant, seedIntent, useGatewayDatabase } from '../../../__tests__/helpers/gatewayTestDatabase';
 import { bindRecurringObject, findRecurringMirror } from '../../../db/recurring/recurringMirrorRepository';
 import { findProviderEventById, insertProviderEvent } from '../../../db/providers/providerEventRepository';
 import { recurringMirrors, recurringObservationOutbox,merchants,webhookDeliveries } from '../../../db/schema';
@@ -270,6 +272,43 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
     expect(sdk.webhooks.constructEvent(raw,signature,'synthetic-only')).toMatchObject({type:'billing.observation.updated',data:{object:{resourceKind:'subscription',resourceId:'sub_1',revision:1}}});
     expect(()=>sdk.webhooks.constructEvent(raw,signature,'other-secret')).toThrow();
   });
+  it.each(['historical-v0', null])('preserves opted-in one-off refund processing for API version %s', async (apiVersion) => {
+    const merchant = await seedMerchant();
+    const intent = await seedIntent(merchant, { rail: 'card', amount: '100', currency: 'USD' });
+    const paymentRef = `pi_oneoff_${randomUUID()}`;
+    await linkProviderObject(gatewayDb(), intent.id, 'stripe', paymentRef);
+    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    const eventId = await event('invoice', 'unused', { type: 'refund.created', apiVersion,
+      objectIds: { refund: `re_oneoff_${randomUUID()}`, payment_intent: paymentRef },
+      payload: redactProviderPayload({ data: { object: { amount: 100, status: 'succeeded' } } }),
+    });
+    const stored = await findProviderEventById(gatewayDb(), eventId);
+    if (!stored) throw new Error('Expected stored refund');
+    expect(await processProviderEvent(stored, options)).toMatchObject({ kind: 'applied', intentId: intent.id, status: 'refunded' });
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('refunded');
+    expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
+    expect(readSnapshot).not.toHaveBeenCalled();
+    expect(await rows()).toHaveLength(0);
+  });
+
+  it('rejects bound recurring refund version mismatches before any provider read', async () => {
+    const parent = await bind(); await bind('invoice', 'in_1', parent.merchantId);
+    readSnapshot.mockResolvedValue({ ...invoice(), paymentIntentRef: 'pi_owned', chargeRef: 'ch_owned', amountRefunded: '0' });
+    await observeRecurringEvent(await event('invoice', 'in_1'), options);
+    readSnapshot.mockClear();
+    for (const apiVersion of ['historical-v0', null]) {
+      const eventId = await event('invoice', 'unused', { type: 'refund.updated', apiVersion,
+        objectIds: { charge: 'ch_owned', payment_intent: 'pi_owned' },
+      });
+      const stored = await findProviderEventById(gatewayDb(), eventId);
+      if (!stored) throw new Error('Expected stored recurring refund');
+      expect(await processProviderEvent(stored, options)).toMatchObject({ kind: 'failed', error: 'recurring_observation_failed' });
+      expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).toBeNull();
+    }
+    expect(readSnapshot).not.toHaveBeenCalled();
+    expect(await rows()).toHaveLength(1);
+  });
+
   it('refund wake-ups follow previously proven lineage and delayed paid events cannot rewind current refunds',async()=>{
     const sub=await bind();await bind('invoice','in_1',sub.merchantId);
     const paid={...invoice(),paymentIntentRef:'pi_owned',chargeRef:'ch_owned',amountRefunded:'0'};readSnapshot.mockResolvedValue(paid);await observeRecurringEvent(await event('invoice','in_1'),options);

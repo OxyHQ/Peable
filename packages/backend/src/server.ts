@@ -1,4 +1,6 @@
-import { configureBilling } from './services/billing/configuredBilling';
+import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
+import { configureBillingRuntime, type BillingRuntimeAdapters } from './services/billing/configuredBilling';
+import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
 import { createBillingRouter } from './routes/billing';
 import type { BillingService } from './services/billing/billingService';
 import { startEcosystemActivity, stopEcosystemActivity, ecosystemActivityMiddleware } from './ecosystemActivity';
@@ -289,10 +291,12 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * own — and both are deliberately started per PROCESS, so N tasks share the
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
-export async function start(): Promise<void> {
+export async function start(options: { billingAdapters?: BillingRuntimeAdapters } = {}): Promise<void> {
   const database = await connectPostgres();
-  const billingService = await configureBilling(database);
-  const gateway = createGateway({ billingService });
+  const billingRuntime = await configureBillingRuntime(database, config.billingCohortConfig, undefined, options.billingAdapters);
+  const gateway = createGateway({ billingService: billingRuntime?.service });
+  const stopRecurringRelay = billingRuntime?.relay ? startRecurringRelay(billingRuntime.relay) : undefined;
+  const stopFaircoinRenewals = billingRuntime?.renewals ? startFaircoinRenewalWorker(billingRuntime.renewals) : undefined;
   startEcosystemActivity(() => gateway.httpServer.listening);
   let stopping = false;
   const stop = () => {
@@ -302,9 +306,14 @@ export async function start(): Promise<void> {
     stopWebhookOutbox();
     stopExpirySweeper();
     stopProviderEventDrain();
+    stopRecurringRelay?.();
     stopAccountSync();
+    const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void stopEcosystemActivity().finally(() => disconnectPostgres()).catch(() => {
+      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped]).then(async (results) => {
+        await disconnectPostgres();
+        if (results.some(result => result.status === 'rejected')) throw new Error('Shutdown component failed');
+      }).catch(() => {
         console.error('Failed to close activity publisher or database');
         process.exitCode = 1;
       });
@@ -320,7 +329,7 @@ export async function start(): Promise<void> {
   // that have to be finished, and a drain gated on `config.stripe.enabled`
   // would leave them unprocessed with no sign that anything was wrong. With no
   // events the pass reads an empty partial index and does nothing.
-  startProviderEventDrain();
+  startProviderEventDrain({ recurring: billingRuntime?.observations });
   // The backstop for a missed `account.updated`. Gated on nothing, like the
   // drain: with no accounts the pass reads an empty batch and does nothing, and
   // with the rail off it stops after the first refusal rather than logging the

@@ -23,6 +23,9 @@ export interface PeableConfig {
   oxyApiUrl?: string;
   /** Optional deadline per HTTP attempt, including body consumption. */
   requestTimeoutMs?: number;
+  /** Pinned Ed25519 authority keys, obtained from trusted deployment configuration. */
+  invoiceAuthorityKeys?: Readonly<Record<string, string>>;
+  taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
 
 /** `PeableConfig` with every optional field defaulted and normalized. */
@@ -32,6 +35,8 @@ export interface ResolvedPeableConfig {
   baseURL: string;
   oxyApiUrl: string;
   requestTimeoutMs?: number;
+  invoiceAuthorityKeys?: Readonly<Record<string, string>>;
+  taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
 
 export function resolveRequestTimeout(value: number | undefined): number | undefined {
@@ -62,6 +67,8 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
   }
   return {
     requestTimeoutMs: resolveRequestTimeout(config.requestTimeoutMs),
+    taxQuoteAuthorityKeys: config.taxQuoteAuthorityKeys ? Object.freeze({ ...config.taxQuoteAuthorityKeys }) : undefined,
+    invoiceAuthorityKeys: config.invoiceAuthorityKeys ? Object.freeze({ ...config.invoiceAuthorityKeys }) : undefined,
     publicKey: config.publicKey,
     secret: config.secret,
     baseURL: stripTrailingSlash(config.baseURL ?? DEFAULT_GATEWAY_BASE_URL),

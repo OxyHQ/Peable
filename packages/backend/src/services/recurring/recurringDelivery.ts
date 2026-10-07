@@ -4,7 +4,7 @@ import {merchants,recurringMirrors,recurringObservationOutbox} from '../../db/sc
 import {enqueueWebhook} from '../../db/webhooks/webhookOutboxRepository';
 import {buildEvent} from '../webhookDispatcher';
 import type {BillingCohort} from '../billing/billingService';
-/** No boot worker. Disabled returns before schema access. Requires pre migration.
+/** Disabled returns before schema access. Requires pre migration.
  * Relay pointer + public delivery commit together; the private promise already
  * committed with the observation. Wake-up only, never paid/grant authority. */
 export async function relayRecurringObservations(options:{enabled?:boolean;db:Database;cohorts:readonly BillingCohort[];limit?:number}){

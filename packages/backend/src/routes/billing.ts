@@ -1,3 +1,4 @@
+import { billingTaxQuoteRequestSchema } from '../services/billing/tax-quote';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
@@ -26,10 +27,12 @@ export function createBillingRouter(deps: { requireMerchant: RequestHandler; ser
   const key = (req: Request) => billingIdempotencyKey.parse(req.header('Idempotency-Key'));
   const write = [deps.requireMerchant, requireAuthenticated, oxy.middleware.requireScope('payments:write')];
   const read = [deps.requireMerchant, requireAuthenticated, oxy.middleware.requireScope('payments:read')];
+  router.post('/v1/billing/tax_quotes', ...read, handle((service, owner, req) => service.createTaxQuote(owner, billingTaxQuoteRequestSchema.parse(req.body))));
   router.post('/v1/billing/customers', ...write, handle((service, owner, req) => service.ensureCustomer(owner, ensureCustomerSchema.parse(req.body), key(req))));
   router.post('/v1/billing/checkout_sessions', ...write, handle((service, owner, req) => service.createCheckoutSession(owner, checkoutSchema.parse(req.body), key(req))));
   router.post('/v1/billing/portal_sessions', ...write, handle((service, owner, req) => service.createPortalSession(owner, portalSchema.parse(req.body), key(req))));
   router.get('/v1/billing/checkout_sessions/:id',...read,handle((service,owner,req)=>service.retrieveCheckout(owner,req.params.id??'')));
+  router.get('/v1/billing/subscriptions/:id/invoice_authorities/:invoiceId', ...read, handle((service, owner, req) => service.retrieveFinalInvoiceAuthority(owner, req.params.id ?? '', req.params.invoiceId ?? '')));
   router.get('/v1/billing/subscriptions/:id/invoice_states/:invoiceId',...read,handle((service,owner,req)=>service.retrieveInvoiceState(owner,req.params.id??'',req.params.invoiceId??'')));
   router.get('/v1/billing/subscriptions/:id/paid_invoices/:invoiceId',...read,handle((service,owner,req)=>service.retrievePaidInvoice(owner,req.params.id??'',req.params.invoiceId??'')));
   router.get('/v1/billing/subscriptions/:id', ...read, handle((service, owner, req) => service.retrieveSubscription(owner, req.params.id ?? '')));

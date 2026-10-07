@@ -1,5 +1,8 @@
+import { createVerifiedBillingTaxQuote, type BillingTaxQuoteCalculator } from './tax-quote';
+import { findMerchantById } from '../../db/merchants/merchantRepository';
+import { verifyFinalInvoiceAuthority, type FinalInvoiceAuthorityReader } from './invoice-authority';
 import { createHash, randomUUID } from 'node:crypto';
-import type { BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingSubscription, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
+import type { BillingCustomer, BillingHostedSession, BillingCheckoutSession, BillingSubscription, CreateBillingTaxQuoteParams, CreateBillingCheckoutParams, CreateBillingPortalParams, EnsureBillingCustomerParams } from '@peable.to/shared-types';
 import type { Database, Transaction } from '../../db/postgres';
 import { findBillingCustomerForStore, bindBillingObject, claimBillingOperation, completeBillingOperation, markBillingOperationIndeterminate, requireBillingBinding, type BillingOperation, type BillingBinding } from '../../db/billing/billingRepository';
 import { BillingError, billingCustomerSchema, billingHostedSessionSchema, billingCheckoutSessionSchema, billingSubscriptionSchema, billingOwnerSchema, billingDeploymentSchema, ensureCustomerSchema, checkoutSchema, portalSchema, type BillingOwner, type BillingOperationKind, type BillingDeployment } from './contracts';
@@ -8,7 +11,7 @@ import type { VerifiedBillingBindings } from './verifiedBindings';
 
 /** Trusted deployment composition, never a request field. No cohort means no access. */
 export interface BillingCohort extends BillingOwner, BillingDeployment { evidenceRef: string; }
-export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'|'retrieveCheckout'|'retrievePaidInvoice'|'retrieveInvoiceState'>; }
+export interface BillingServiceOptions { db: Database; provider: BillingProvider; cohorts: readonly BillingCohort[]; now?: () => Date; finalInvoiceAuthority?: FinalInvoiceAuthorityReader; taxQuoteCalculator?: BillingTaxQuoteCalculator; verifiedBindings?: Pick<VerifiedBillingBindings, 'resolveCompletedSubscription'|'retrieveCheckout'|'retrievePaidInvoice'|'retrieveInvoiceState'>; }
 /** The five-method recurring transport; no entitlement or settlement decisions. */
 export function createBillingService(options: BillingServiceOptions) {
   const { db, provider } = options; const now = options.now ?? (() => new Date());
@@ -105,6 +108,25 @@ export function createBillingService(options: BillingServiceOptions) {
     },
     async retrieveCheckout(owner:BillingOwner,ref:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);return options.verifiedBindings.retrieveCheckout(owner,ref);},
     async retrieveInvoiceState(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrieveInvoiceState(owner,subRef,invoiceRef);},    async retrievePaidInvoice(owner:BillingOwner,subRef:string,invoiceRef:string){authorize(owner);if(!options.verifiedBindings)throw new BillingError('not_found',404);await ownedSubscription(owner,subRef);return options.verifiedBindings.retrievePaidInvoice(owner,subRef,invoiceRef);},
+    async createTaxQuote(owner: BillingOwner, params: CreateBillingTaxQuoteParams) {
+      authorize(owner);
+      if (!options.taxQuoteCalculator) throw new BillingError('not_found', 404);
+      const customer = await findBillingCustomerForStore(db, deployment, owner, params.storeId);
+      const merchant = await findMerchantById(db, owner.merchantId);
+      if (!customer || !merchant || merchant.oxyAppId !== owner.oxyAppId || merchant.environment !== owner.environment) throw new BillingError('not_found', 404);
+      return createVerifiedBillingTaxQuote(options.taxQuoteCalculator, owner, merchant.publicId, params, now);
+    },
+    async retrieveFinalInvoiceAuthority(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
+      authorize(owner);
+      if (!options.finalInvoiceAuthority || !options.verifiedBindings) throw new BillingError('not_found', 404);
+      await ownedSubscription(owner, subscriptionRef);
+      const invoice = await options.verifiedBindings.retrievePaidInvoice(owner, subscriptionRef, invoiceRef);
+      const merchant = await findMerchantById(db, owner.merchantId);
+      if (!merchant || merchant.oxyAppId !== owner.oxyAppId || merchant.environment !== owner.environment) throw new BillingError('not_found', 404);
+      const expected = { owner, merchantPublicId: merchant.publicId, invoice };
+      const raw = await options.finalInvoiceAuthority.read(expected);
+      return verifyFinalInvoiceAuthority(raw, expected, options.finalInvoiceAuthority.verificationKeys, now());
+    },
     async retrieveSubscription(owner: BillingOwner, ref: string): Promise<BillingSubscription> {
       const binding = await ownedSubscription(owner, ref);
       await provider.verifyDeployment();
