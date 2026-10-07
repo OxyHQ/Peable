@@ -61,9 +61,9 @@ export async function observeRecurringEvent(eventId: string, options: RecurringO
       if (event.processedAt) return { kind: 'already_processed' };
       const kind = recurringEventKind(event.type);
       if (!kind) return { kind: 'unmatched' };
-      if (event.provider !== deployment.provider || event.livemode !== deployment.livemode
-        || event.apiVersion !== deployment.apiVersion) throw new Error('Observation event identity mismatch');
       const refundEvent=event.type==='charge.refunded'||event.type.startsWith('refund.');
+      if (event.provider !== deployment.provider || event.livemode !== deployment.livemode
+        || (!refundEvent && event.apiVersion !== deployment.apiVersion)) throw new Error('Observation event identity mismatch');
       let objectRef = event.objectIds[kind];
       if(refundEvent){
         // Refund wake-ups may name only a charge/PI. Adopt nothing: use only an
@@ -72,6 +72,9 @@ export async function observeRecurringEvent(eventId: string, options: RecurringO
         if(!charge&&!intent)return {kind:'unmatched'};
         const matches=await tx.select().from(recurringMirrors).where(and(eq(recurringMirrors.provider,deployment.provider),eq(recurringMirrors.platformAccountId,deployment.platformAccountId),eq(recurringMirrors.livemode,deployment.livemode),eq(recurringMirrors.environment,deployment.environment),eq(recurringMirrors.kind,'invoice'),sql`${recurringMirrors.providerAccountId} is not distinct from ${event.providerAccountId}`,charge?sql`${recurringMirrors.snapshot}->>'chargeRef' = ${charge}`:undefined,intent?sql`${recurringMirrors.snapshot}->>'paymentIntentRef' = ${intent}`:undefined)).limit(2);
         if(matches.length!==1)return {kind:'unmatched'};objectRef=matches[0]!.objectRef;
+        // Only an exact owned recurring lineage selects this version contract.
+        // Unowned refunds retain the existing one-off processor's compatibility.
+        if(event.apiVersion!==deployment.apiVersion)throw new Error('Observation event identity mismatch');
       }
       if (!objectRef) return { kind: 'unmatched' };
       let [mirror] = await tx.select().from(recurringMirrors).where(and(
