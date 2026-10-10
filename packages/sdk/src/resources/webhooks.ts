@@ -42,6 +42,7 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     typeof candidate.id === 'string' &&
     candidate.object === 'event' &&
     typeof candidate.type === 'string' &&
+    // biome-ignore lint/suspicious/noPrototypeBuiltins: the published SDK targets ES2020, and Object.hasOwn is ES2022
     Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
     typeof candidate.created === 'string' &&
     typeof candidate.data === 'object' &&

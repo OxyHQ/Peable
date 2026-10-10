@@ -5,7 +5,7 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import { eq } from 'drizzle-orm';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { type User } from '@oxy.so/core';
+import type { User } from '@oxy.so/core';
 import { oxy as realOxy } from '../../oxy';
 import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
 import type { DidDocument } from '@oxy.so/contracts';

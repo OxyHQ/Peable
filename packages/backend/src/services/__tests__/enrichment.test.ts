@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, mock } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { type User } from '@oxy.so/core';
+import type { User } from '@oxy.so/core';
 import { oxy as realOxy } from '../../oxy';
 import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
 import { merchants } from '../../db/schema';

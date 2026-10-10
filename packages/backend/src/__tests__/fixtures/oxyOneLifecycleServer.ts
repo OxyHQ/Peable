@@ -57,7 +57,7 @@ let owner: any;
 let period: { start: number; end: number };
 let store: string;
 let cancelled = false;
-let refund = 0;
+const refund = 0;
 let status = 'active';
 let fixtureNow: number | undefined;
 let currentInvoice = 'in_fixture';
