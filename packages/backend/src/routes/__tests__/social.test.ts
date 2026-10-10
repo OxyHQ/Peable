@@ -495,11 +495,9 @@ describe('GET /v1/social/me/payments', () => {
     const { status, body } = await getPayments('testnet', testProfile('alice').id);
     expect(status).toBe(200);
     const byAddress = Object.fromEntries((body.payments ?? []).map((p) => [p.address, p]));
-    expect(byAddress['Tsent000000000000000000000000000000']?.direction).toBe('sent');
-    expect(byAddress['Trecv000000000000000000000000000000']?.direction).toBe('received');
-    expect(byAddress['Tsent000000000000000000000000000000']?.counterparty.username).toBe(
-      'keylessbob',
-    );
+    expect(byAddress.Tsent000000000000000000000000000000?.direction).toBe('sent');
+    expect(byAddress.Trecv000000000000000000000000000000?.direction).toBe('received');
+    expect(byAddress.Tsent000000000000000000000000000000?.counterparty.username).toBe('keylessbob');
   });
 
   /**
@@ -560,13 +558,13 @@ describe('GET /v1/social/me/payments', () => {
     expect(status).toBe(200);
     const byAddress = Object.fromEntries((body.payments ?? []).map((p) => [p.address, p]));
 
-    expect(byAddress['Ttip0000000000000000000000000000000']?.source).toEqual({
+    expect(byAddress.Ttip0000000000000000000000000000000?.source).toEqual({
       app: 'mention',
       ref: 'post_abc123',
     });
     // Absent, not null: `SocialPayment.source` is optional, and a client
     // checking `'source' in payment` must not see a context nobody sent.
-    const plain = byAddress['Tplain00000000000000000000000000000'];
+    const plain = byAddress.Tplain00000000000000000000000000000;
     expect(plain).toBeDefined();
     expect(Object.keys(plain ?? {})).not.toContain('source');
   });

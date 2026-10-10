@@ -114,7 +114,7 @@ export function applyTransactionToWallet(
 
     const existing = utxoSet.get(txid, vout);
     // Never downgrade a confirmed UTXO to unconfirmed on replay.
-    if (existing && existing.confirmed && !confirmed) {
+    if (existing?.confirmed && !confirmed) {
       continue;
     }
 

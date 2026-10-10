@@ -24,13 +24,13 @@ async function fixSpecifier(specifier, fromFile) {
   try {
     const s = await stat(abs);
     if (s.isDirectory()) {
-      return specifier + '/index.js';
+      return `${specifier}/index.js`;
     }
   } catch {
     // Not a directory on disk — fall through to appending the .js extension.
   }
 
-  return specifier + '.js';
+  return `${specifier}.js`;
 }
 
 async function walk(dir) {
@@ -44,10 +44,9 @@ async function walk(dir) {
 
       // Fix 1: Add .js to bare relative specifiers (skip .js and .json)
       const barePattern = /((?:from|import)\s+['"])(\.\.?\/[^'"]+?)(?<!\.js)(?<!\.json)(['"])/g;
-      let match;
       const replacements = [];
 
-      while ((match = barePattern.exec(content)) !== null) {
+      for (const match of content.matchAll(barePattern)) {
         const fixed = await fixSpecifier(match[2], full);
         replacements.push({ original: match[0], replaced: match[1] + fixed + match[3] });
       }

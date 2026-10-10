@@ -6,8 +6,8 @@ import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schem
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX as SERVICE_FIRST_FRESH_INDEX } from '../../services/socialReceive';
 
 /** Two identity public keys, as hex — the cursor stores whatever it is given. */
-const KEY_A = '02' + 'aa'.repeat(32);
-const KEY_B = '02' + 'bb'.repeat(32);
+const KEY_A = `02${'aa'.repeat(32)}`;
+const KEY_B = `02${'bb'.repeat(32)}`;
 import {
   POSTGRES_TESTS_ENABLED,
   createSuiteDatabase,

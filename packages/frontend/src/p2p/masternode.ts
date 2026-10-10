@@ -195,7 +195,7 @@ function buildBroadcastSignatureMessage(
 function derEncodeInteger(n: bigint): Uint8Array {
   let hex = n.toString(16);
   if (hex.length % 2 !== 0) {
-    hex = '0' + hex;
+    hex = `0${hex}`;
   }
   const bytes: number[] = [];
   for (let i = 0; i < hex.length; i += 2) {

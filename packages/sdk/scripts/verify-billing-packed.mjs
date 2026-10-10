@@ -44,7 +44,7 @@ const sourceLock = JSON.parse(
 );
 for (const pkg of ['sdk', 'shared-types']) {
   const manifest = JSON.parse(readFileSync(resolve(root, 'packages', pkg, 'package.json'), 'utf8'));
-  const recorded = sourceLock.workspaces['packages/' + pkg];
+  const recorded = sourceLock.workspaces[`packages/${pkg}`];
   assert.equal(recorded.version, manifest.version);
   for (const group of ['dependencies', 'devDependencies', 'optionalDependencies']) {
     for (const [name, range] of Object.entries(manifest[group] ?? {}))
@@ -133,5 +133,5 @@ const proof = {
     'Fixture-only shared-types tarball override because these additions are unpublished; packed SDK range independently asserted',
   network: 'Registry dependency installation only; no Oxy/Peable/Stripe requests',
 };
-writeFileSync(resolve(fixture, 'evidence.json'), JSON.stringify(proof, null, 2) + '\n');
+writeFileSync(resolve(fixture, 'evidence.json'), `${JSON.stringify(proof, null, 2)}\n`);
 console.log(JSON.stringify(proof, null, 2));

@@ -67,15 +67,13 @@ globalThis.fetch = async (input, init = {}) => {
       },
     },
   });
-  const signature = createHmac('sha256', 'synthetic')
-    .update(time + '.' + raw)
-    .digest('hex');
+  const signature = createHmac('sha256', 'synthetic').update(`${time}.${raw}`).digest('hex');
   assert.equal(
-    new WebhooksResource().constructEvent(raw, 't=' + time + ',v1=' + signature, 'synthetic').type,
+    new WebhooksResource().constructEvent(raw, `t=${time},v1=${signature}`, 'synthetic').type,
     'billing.observation.updated',
   );
   assert.throws(() =>
-    new WebhooksResource().constructEvent(raw + ' ', 't=' + time + ',v1=' + signature, 'synthetic'),
+    new WebhooksResource().constructEvent(`${raw} `, `t=${time},v1=${signature}`, 'synthetic'),
   );
   require('@peable.to/sdk/checkout');
   console.log(
