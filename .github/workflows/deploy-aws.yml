@@ -158,11 +158,6 @@ jobs:
           # opens the pool before listening. An unset or placeholder GitHub
           # secret is SKIPPED by sync_secret below, so this can never overwrite
           # a value provisioned directly in SSM.
-          #
-          # MONGODB_URI is deliberately absent: nothing in the image reads it
-          # any more. The live task definition still injects it until oxy-infra
-          # drops it from `secrets[]`, which is harmless — an environment
-          # variable nothing reads — but it must not be re-added here.
           APP_DATABASE_URL: ${{ secrets.DATABASE_URL }}
           # Read by @oxy.so/core (request hashing).
           APP_IP_HASH_SALT: ${{ secrets.IP_HASH_SALT }}

@@ -242,9 +242,7 @@ export async function findIntentForMerchant(
  *
  * ## Why this exists, and why it is not `findIntentByPublicId`
  *
- * Mongo and Postgres disagree about what an intent REFERENCE is. The Mongo
- * documents stored the public `pi_…` in their foreign-key positions, because
- * `PaymentIntent`'s schema field was itself called `id`; here
+ * An intent REFERENCE is not the id a payer or merchant names.
  * `checkout_sessions.payment_intent_id` and `webhook_deliveries.payment_intent_id`
  * are real references to `payment_intents.id`, the internal uuid. Both ids are
  * on shipped wire contracts (`CheckoutSession.paymentIntentId`,
@@ -317,7 +315,7 @@ export interface ListIntentsParams {
 /**
  * One page, newest first, plus whether another exists.
  *
- * Ordered by the PRIMARY KEY descending — the port of Mongo's `.sort({_id: -1})`.
+ * Ordered by the PRIMARY KEY descending.
  * Two separate properties, and only one of them is total:
  *
  *  - **Pagination is exact.** The key is unique and the order is total, so a
@@ -331,9 +329,7 @@ export interface ListIntentsParams {
  *    order. Measured: 94 of 200 same-millisecond pairs invert, which is the
  *    coin flip you would expect rather than a rare edge.
  *
- * That is a real difference from Mongo, where an ObjectId carries a per-process
- * counter and is therefore monotonic within its one-second timestamp. Nothing
- * in this API promises sub-millisecond ordering, and the pagination contract is
+ * Nothing in this API promises sub-millisecond ordering, and the pagination contract is
  * unaffected — but do not restate this as "primary-key order is creation order",
  * because at the resolution that matters it is not.
  *

@@ -46,8 +46,7 @@ export async function redeliverWebhookDelivery(
 ): Promise<RedeliverResult> {
   const db = getDb();
 
-  // No id-shape guard before the lookup. The Mongo path needed one because
-  // `_id` had to parse as an ObjectId; these ids are `text`, so an id of any
+  // No id-shape guard before the lookup. These ids are `text`, so an id of any
   // shape simply matches no row — and the ownership-scoped read answers
   // "unknown" and "not yours" identically, which is the property that matters.
   const delivery = await findDeliveryForMerchant(db, deliveryId, merchant.id);

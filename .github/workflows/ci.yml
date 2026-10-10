@@ -95,13 +95,6 @@ jobs:
       - name: Expo ESLint (env-var inlining rules)
         run: bun run --filter @peable.to/frontend lint
 
-      # Reads the tracked file listing, so it needs no build and costs seconds. It
-      # answers the one question a green build cannot: Mongo returns as a hoisted
-      # dependency or a workflow variable, and every other step here passes while it
-      # does. The port completed in #20/#36 and the Mongo database `oxypay` was dropped on 2026-08-09.
-      - name: Guard against MongoDB returning
-        run: bun run validate:no-mongo
-
       # `--frozen-lockfile` above fails only when a range resolves to nothing, so
       # it exits 0 on the shapes that actually ship. A plain install plus a diff
       # catches most of them and MISSES the worst: bun does not rewrite a

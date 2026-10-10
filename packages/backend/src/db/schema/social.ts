@@ -96,9 +96,8 @@ export const socialSendAttributions = pgTable(
     senderUserId: text().notNull(),
     recipientUserId: text().notNull(),
     /**
-     * The BIP32 child index this address was derived at. Called `index` in the
-     * Mongo model; renamed because `derivation_index` is what it is, and it
-     * now matches the two counters that produce it.
+     * The BIP32 child index this address was derived at. Named
+     * `derivation_index` to match the two counters that produce it.
      */
     derivationIndex: integer().notNull(),
     /**

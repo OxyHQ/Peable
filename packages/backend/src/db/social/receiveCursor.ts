@@ -16,9 +16,9 @@ import { uuidv7 } from '@oxy.so/db';
  * ## One statement, including the lazy create
  *
  * An ordinary Oxy user has no registration step, so the row may not exist yet
- * — and two concurrent first payments both try to create it. Mongo needed
- * three moves for that: create, tolerate the duplicate-key error, then
- * increment. Here `INSERT … ON CONFLICT DO UPDATE` is all three at once, so
+ * — and two concurrent first payments both try to create it. That takes
+ * three moves: create, tolerate the duplicate-key error, then increment.
+ * `INSERT … ON CONFLICT DO UPDATE` is all three at once, so
  * there is no window between them and no "the cursor vanished" branch to get
  * wrong. The unique index on `(oxy_user_id, network)` is what makes it work,
  * which is why that index is load-bearing rather than hygienic: without it the

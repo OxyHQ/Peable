@@ -36,8 +36,8 @@ export const webhookDeliveries = pgTable(
       .references(() => merchants.id, { onDelete: 'restrict' }),
     /**
      * The intent the event was about, when it was about one. Holds the intent's
-     * PRIMARY KEY; the Mongo field held the public `pi_…`, and the serializer
-     * renders that from the join.
+     * PRIMARY KEY, not the public `pi_…`; the serializer renders the public id
+     * from the join.
      *
      * NULLABLE, because not every merchant-facing event is about a payment.
      * `connected_account.updated` is about a SELLER — their readiness changed —

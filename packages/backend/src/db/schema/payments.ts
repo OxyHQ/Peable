@@ -49,9 +49,8 @@ export const paymentIntents = pgTable(
      * Public Stripe-parity identifier (`pi_…`), minted by `newId('pi')` — the
      * `id` every API surface and every DTO carries.
      *
-     * The Mongo model called this field `id` while the other three public-id
-     * tables called theirs `publicId`. One name here, for all four: the
-     * primary key is the internal id, `public_id` is the external one.
+     * One name for all four public-id tables: the primary key is the
+     * internal id, `public_id` is the external one.
      */
     publicId: text().notNull(),
     status: text().notNull(),

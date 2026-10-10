@@ -27,9 +27,7 @@ export interface WatcherDeps {
   /**
    * Invoked once per actual status change, with the intent AS PERSISTED by
    * that change — the row `transitionIntent` returned, never the pre-update
-   * one. The Mongo path mutated the document in place and saved it, so the
-   * handed-over object carried the new state implicitly; here the new state
-   * exists only in the returned row.
+   * one. The new state exists only in the returned row.
    */
   onChange: (intent: PaymentIntentRow) => void | Promise<void>;
 }

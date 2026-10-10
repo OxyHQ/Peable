@@ -140,11 +140,9 @@ export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
  * merchant consults to find out whether they were told something. `hasMore`
  * still comes from the `limit + 1` overflow rather than a `count(*)`.
  *
- * The Mongo route guarded its cursor with `mongoose.isValidObjectId` before
- * looking it up. That guard is DELETED rather than widened: its only job was to
- * reject a value that could not be an ObjectId, and the ownership-scoped lookup
- * the caller already performs answers the same question correctly for any input
- * — an unknown cursor is a 422 whatever shape it had.
+ * There is deliberately no id-format guard on the cursor: the ownership-scoped
+ * lookup the caller already performs answers the question correctly for any
+ * input — an unknown cursor is a 422 whatever shape it had.
  */
 export async function listDeliveriesForMerchant(
   db: DatabaseOrTransaction,

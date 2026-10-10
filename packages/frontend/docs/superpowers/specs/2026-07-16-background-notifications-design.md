@@ -18,7 +18,7 @@ iOS** when the app is closed, and is **not** what professional wallets do. Custo
 use the same pattern: **a server watches the chain and sends a push notification**; the phone stays
 asleep until an actual event wakes it.
 
-FAIRWallet already has the server it needs in the workspace: **`Explorer`** — an Express 5 + MongoDB
+FAIRWallet already has the server it needs in the workspace: **`Explorer`** — an Express 5
 + `ws` service with a `BlockchainMonitor` that already processes every new block, address routes,
 and a websocket manager. It only lacks a push-subscription layer.
 

@@ -93,10 +93,9 @@ Root `postinstall` builds `shared-types`, so a fresh `bun install` leaves its
 
 ## PostgreSQL is the only store
 
-The port is COMPLETE. There is no Mongoose, no `mongodb-memory-server`, no
-`src/models/`, no `src/db.ts` and no `MONGODB_URI` — every route, service and
-test reads and writes Postgres through the repositories in `src/db/**`, and
-nothing reaches a driver directly.
+There is no `src/models/` and no `src/db.ts` — every route, service and test
+reads and writes Postgres through the repositories in `src/db/**`, and nothing
+reaches a driver directly.
 
 **`DATABASE_URL` is REQUIRED to boot.** `config.ts` refuses to load without it
 and `server.ts` calls `connectPostgres()` — which proves the connection with one
@@ -114,9 +113,7 @@ separate product. **No extensions** — measured, and stated as an explicit empt
 - **Every id is two ids, and confusing them is silent.** A public `pi_…` /
   `merch_…` / `link_…` / `cs_…` lives in `public_id` and is what the wire
   contracts call `id`; `id` itself is the internal primary key that other tables
-  reference. The Mongo documents stored the PUBLIC id in their foreign-key
-  positions, because `PaymentIntent`'s schema field was itself called `id`, so
-  the same expression means different things before and after the port. Both ids
+  reference — never the public one. Both ids
   are on shipped contracts (`CheckoutSession.paymentIntentId` and
   `WebhookDelivery.intentId` carry the `pi_…`), which is why
   `listDeliveriesForMerchant` joins the public id in rather than the DTO

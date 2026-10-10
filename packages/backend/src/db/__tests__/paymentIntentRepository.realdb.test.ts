@@ -243,8 +243,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    * `@oxy.so/db`'s uuid v7 is 48 bits of milliseconds plus randomness — RFC
    * 9562's optional monotonic counter is not used — so two ids minted in the
    * same millisecond invert about half the time (measured: 94 of 200 pairs).
-   * That is a real difference from Mongo, whose ObjectId carries a per-process
-   * counter and is monotonic within its one-second timestamp.
+   * Ids are therefore NOT monotonic within a millisecond.
    *
    * So the ordering claim is tested with rows in DISTINCT milliseconds, which
    * is the resolution the guarantee actually has. A test without the sleep
@@ -385,8 +384,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   /**
    * The two id spaces, told apart.
    *
-   * `checkout_sessions.payment_intent_id` holds the intent's PRIMARY KEY where
-   * the Mongo document held the public `pi_…`, so resolving a session's wrapped
+   * `checkout_sessions.payment_intent_id` holds the intent's PRIMARY KEY, not
+   * the public `pi_…`, so resolving a session's wrapped
    * intent is a different lookup from resolving one a payer named. Every
    * assertion but the second would pass a read that matched on `public_id`
    * instead — it returns the same row — so the discriminating case is the one

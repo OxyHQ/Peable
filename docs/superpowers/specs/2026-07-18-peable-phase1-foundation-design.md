@@ -122,7 +122,7 @@ Ambos convergen en el mismo `PaymentIntent`. F1 implementa los dos; el flujo hé
 - Pantalla **aprobar-pago**: importe (FairCoin + display fiat vía Explorer price, patrón Moovo), payee, dirección; botones aprobar/declinar. Aprobar → reutiliza el pipeline de firma/broadcast existente de FAIRWallet (`wallet-store`, `coin-selection`, `spv-client`).
 - Bandeja de payment-requests + suscripción Socket.io para estado del intent en vivo.
 
-**`packages/backend`** (de cero, layout canónico Oxy — Bun + Express + Mongoose + Socket.io):
+**`packages/backend`** (de cero, layout canónico Oxy — Bun + Express + PostgreSQL + Socket.io):
 - Modelos: `PaymentIntent`, `Merchant` (Oxy app id + xpub watch-only + índice de derivación + webhook url/secret + confirmaciones requeridas).
 - Rutas: `POST /v1/payment-intents` (crear, auth merchant), `GET /v1/payment-intents/:id` (payer y merchant), `POST /v1/payment-intents/:id/reject`. Registro merchant vía app-keys de Console.
 - Servicios: `derivation` (dirección por intent desde xpub), `settlement-watcher` (Explorer watch-only), `webhook-dispatcher` (firmado, reintentos).

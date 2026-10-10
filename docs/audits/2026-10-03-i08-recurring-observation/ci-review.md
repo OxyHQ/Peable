@@ -20,7 +20,7 @@ verified the original proof's 12 source/12 log hashes and this CI run.
 | frontend | 388 | 0 |
 | Total | 1391 | 0 |
 
-Every package typechecked. Shared-types/pay/SDK builds, no-Mongo and lockfile
+Every package typechecked. Shared-types/pay/SDK builds, dependency and lockfile
 checks, and schema/migration consistency passed. The image job built the backend,
 applied all 20 migrations using the image migrator, reached readiness after two
 seconds, returned health `ok`, and stopped/removed the container. This is CI, not

@@ -6,14 +6,14 @@
 
 **Architecture:** Merchant (authenticated via a Console-issued Oxy service app-key) calls `POST /v1/payment_intents`; the backend derives a fresh receive address from the merchant's **watch-only xpub** (public key only — cannot spend), returns a `pi_…` intent + `client_secret`. A tip-driven settlement watcher observes that address on the FairCoin Explorer; on mempool-seen → `confirming`, on N confs → `settled`, emitting Socket.io events and an HMAC-signed webhook. The payer's self-custody wallet (Track B, separate plan) signs the actual on-chain tx — the backend never holds keys or funds.
 
-**Tech Stack:** Bun + Express + Mongoose (MongoDB) + Socket.io; `@oxy.so/core/server` (auth/CORS/rate-limit/`safeFetch`); `@fairco.in/core` (address/units/network) + `@scure/bip32` (xpub derivation); `bun test`.
+**Tech Stack:** Bun + Express + PostgreSQL + Socket.io; `@oxy.so/core/server` (auth/CORS/rate-limit/`safeFetch`); `@fairco.in/core` (address/units/network) + `@scure/bip32` (xpub derivation); `bun test`.
 
 ## Global Constraints
 
 - **Non-custody invariant (legal firewall — never violate):** (1) private keys live only on user devices; the backend never sees/stores/derives them. (2) The backend never possesses or controls funds, ever. (3) The user initiates + signs every payment. (4) Of a merchant the backend stores at most a **watch-only xpub** (public → cannot spend). A change violating 1–4 is a legal bug.
 - **Realtime-first:** REST for commands, **Socket.io for state**. No polling on the critical path. The `PaymentIntent` is the single source of truth.
 - **Stripe parity:** prefixed IDs (`pi_`, `evt_`); `Idempotency-Key` on every create; `Peable-Version` date header; HMAC-signed webhooks with dotted event types (`payment_intent.settled`); `client_secret` reference; `peable.*` SDK ergonomics (later); test/live mode per app-key.
-- **Amounts:** `bigint` base units (m⊜; `1 FAIR = UNITS_PER_COIN = 100_000_000`). Never floats. Mongo stores the decimal string; the domain uses `bigint`.
+- **Amounts:** `bigint` base units (m⊜; `1 FAIR = UNITS_PER_COIN = 100_000_000`). Never floats. Storage holds the decimal string; the domain uses `bigint`.
 - **Package manager:** `bun` only; hoisted linker (`bunfig.toml` at root). Commit `bun.lock` with its `package.json` change. Tests via `bun test`.
 - **Clean code, no tricky things:** no `as any`, `@ts-ignore`, `!`, `var`, `console.log`, silent `catch {}`, TODO/HACK, barrel/re-export shims. Direct imports from owners. `setInterval` in singletons calls `.unref?.()`.
 - **Fix upstream (authorized):** if `@fairco.in/core`, the FairCoin Explorer, or `@oxy.so/core` needs a capability (e.g. a watch-only address endpoint), improve it at the source cleanly — never monkey-patch downstream.
@@ -33,9 +33,9 @@ packages/shared-types/src/
 
 packages/backend/src/
   config.ts                     # env parsing (typed, no magic numbers)
-  db.ts                         # mongoose connection
+  db/                           # database access
   lib/ids.ts                    # prefixed id generator (pi_, evt_)
-  lib/money.ts                  # bigint <-> Mongo-string helpers
+  lib/money.ts                  # bigint <-> base-unit string helpers
   services/derivation.ts        # deriveIntentAddress(xpub, change, index, network) -> string
   services/intentState.ts       # pure state machine: nextStatus(current, event)
   services/webhookSigner.ts     # signWebhook(secret, rawBody, timestamp) -> signature header
@@ -79,7 +79,7 @@ Expected: the archive branch holds the full pre-rewrite tree; the feature branch
 git rm -r packages/backend/src packages/backend/server.ts packages/backend/dist
 ```
 
-- [ ] **Step 3: Rewrite `packages/backend/package.json`** — name `@peable.to/backend`, scripts `dev` (`bun --watch src/server.ts`), `build` (`tsc`), `test` (`bun test`), `typecheck` (`tsc --noEmit`); deps: `express`, `mongoose`, `socket.io`, `@oxy.so/core`, `@fairco.in/core`, `@scure/bip32`, `zod`; devDeps `@types/express`, `mongodb-memory-server`. Run `bun install` from root; commit `bun.lock` in this task's commit.
+- [ ] **Step 3: Rewrite `packages/backend/package.json`** — name `@peable.to/backend`, scripts `dev` (`bun --watch src/server.ts`), `build` (`tsc`), `test` (`bun test`), `typecheck` (`tsc --noEmit`); deps: `express`, `socket.io`, `@oxy.so/core`, `@fairco.in/core`, `@scure/bip32`, `zod`; devDeps `@types/express`. Run `bun install` from root; commit `bun.lock` in this task's commit.
 
 - [ ] **Step 4: Reset `packages/shared-types/src`** — delete the custodial type files (`wallet.ts`, `paymentMethod.ts`, old `payment.ts`/`invoice.ts`/`transaction.ts`), leave `src/` empty except a placeholder `index.ts` (`export {};`).
 
@@ -253,9 +253,9 @@ export function deriveIntentAddress(xpub: string, change: number, index: number,
 
 ---
 
-### Task 7: Mongoose models — Merchant + PaymentIntent (watch-only enforced)
+### Task 7: Merchant + PaymentIntent storage (watch-only enforced)
 
-**Files:** Create `packages/backend/src/models/Merchant.ts`, `models/PaymentIntent.ts`, `lib/money.ts`; Test `…/__tests__/models.test.ts` (uses `mongodb-memory-server`)
+**Files:** Create the merchant and payment-intent repositories under `packages/backend/src/db/`, `lib/money.ts`; tests run against a real database
 
 **Interfaces:**
 - `Merchant`: `{ oxyAppId: string (unique); network: NetworkType; xpub: string; nextDerivationIndex: number; webhookUrl: string; webhookSecret: string; requiredConfirmations: number; livemode: boolean }`
@@ -284,7 +284,7 @@ export function deriveIntentAddress(xpub: string, change: number, index: number,
 - [ ] **Step 1: Pin the `/api/transaction/:txid` response shape.** `curl -s "https://explorer.fairco.in/api/transaction/<a-real-testnet-or-mainnet-txid>?network=…"` and record the exact JSON path to outputs (address + value) in a comment. (Mainnet has live txids; testnet may be empty.)
 - [ ] **Step 2: Failing test** — mock `fetch`; `getTip` parses `stats.blockHeight`; `getTransaction` maps outputs to `{address, valueSat: bigint}` and returns `null` on 404; `verifyPayment` returns `paid:true` only when an output matches address + `valueSat >= expectedSat`.
 - [ ] **Step 3: Run — FAIL.**
-- [ ] **Step 4: Implement** the client against the confirmed endpoints; `config.ts` reads `EXPLORER_BASE_URL` (default from `@fairco.in/core`), `PEABLE_NETWORK`, `MONGODB_URI`, `PORT`, Oxy app-key env — typed, no magic numbers.
+- [ ] **Step 4: Implement** the client against the confirmed endpoints; `config.ts` reads `EXPLORER_BASE_URL` (default from `@fairco.in/core`), `PEABLE_NETWORK`, `DATABASE_URL`, `PORT`, Oxy app-key env — typed, no magic numbers.
 - [ ] **Step 5: Run — PASS**, plus one **live mainnet** assertion (`getTip('mainnet') > 0`; testnet is currently empty so assert against mainnet).
 - [ ] **Step 6: Commit.** `git commit -am "feat(backend): FairCoin Explorer client (tip + address received)"`
 
@@ -324,7 +324,7 @@ export function deriveIntentAddress(xpub: string, change: number, index: number,
 
 **Interfaces:** `POST /v1/payment_intents` (merchant `serviceAuth`; `Idempotency-Key` required; validates body with `zod` against `CreatePaymentIntentParams`; `reserveNextAddress`; returns 201 `PaymentIntent` + `client_secret`). `GET /v1/payment_intents/:id`. `POST /v1/payment_intents/:id/reject`. `POST /v1/payment_intents/:id/submit_tx` — body `{ client_secret, txid }`; the payer proves possession of the intent via `client_secret` (constant-time compare, not merchant auth), sets `intent.txid`, and `applyEvent('broadcast')` so the watcher (Task 9) starts verifying it. This is the payer-reported-txid entry (addressindex is off — see Task 8).
 
-- [ ] **Step 1: Failing test** (spin the express app + memory mongo): create returns a `pi_…` with a derived `address`; **replaying the same `Idempotency-Key` returns the same intent, not a second one**; missing auth → 401; bad amount → 422.
+- [ ] **Step 1: Failing test** (spin the express app + a test database): create returns a `pi_…` with a derived `address`; **replaying the same `Idempotency-Key` returns the same intent, not a second one**; missing auth → 401; bad amount → 422.
 - [ ] **Step 2: Run — FAIL.**
 - [ ] **Step 3: Implement**; idempotency via a unique index on `(merchantId, idempotencyKey)` returning the existing intent on duplicate. Mount `oxyClient.serviceAuth()` on the router. No `new Model(req.body)` — explicit field whitelist.
 - [ ] **Step 4: Run — PASS.**
@@ -350,9 +350,9 @@ export function deriveIntentAddress(xpub: string, change: number, index: number,
 
 **Files:** Create `packages/backend/src/server.ts`, `db.ts`; Test `…/__tests__/e2e.test.ts`
 
-**Interfaces:** `server.ts` wires express (CORS `createOxyCors`, rate-limit `createOxyRateLimit`, `Peable-Version` response header, routes, JSON error handler), boots mongoose + the `SettlementWatcher`, and hands `emitIntentUpdate` + `webhookDispatcher.deliver` to the watcher as `onChange`.
+**Interfaces:** `server.ts` wires express (CORS `createOxyCors`, rate-limit `createOxyRateLimit`, `Peable-Version` response header, routes, JSON error handler), connects the database + boots the `SettlementWatcher`, and hands `emitIntentUpdate` + `webhookDispatcher.deliver` to the watcher as `onChange`.
 
-- [ ] **Step 1: Failing e2e test** — with memory mongo + a stubbed Explorer: create an intent → drive the watcher through `confirming`→`settled` → assert a socket `intent.updated` AND a signed webhook were emitted, and that **no key/seed field exists anywhere on the Merchant/PaymentIntent docs** (non-custody assertion).
+- [ ] **Step 1: Failing e2e test** — with a test database + a stubbed Explorer: create an intent → drive the watcher through `confirming`→`settled` → assert a socket `intent.updated` AND a signed webhook were emitted, and that **no key/seed field exists anywhere on the Merchant/PaymentIntent docs** (non-custody assertion).
 - [ ] **Step 2: Run — FAIL.**
 - [ ] **Step 3: Implement** `server.ts` + `db.ts`; error handler returns Stripe-shaped `{ error: { type, message } }`.
 - [ ] **Step 4: Run — PASS.** Then a **manual live-testnet run** (documented in the test file header): register a merchant with a real testnet xpub, `POST /payment_intents`, pay the returned address from a testnet wallet, watch it reach `settled` and the webhook fire.
