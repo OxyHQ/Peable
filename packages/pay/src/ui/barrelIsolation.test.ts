@@ -20,6 +20,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
+import { must } from '../__tests__/must';
 import { readFile } from 'node:fs/promises';
 import { dirname, join, relative, resolve } from 'node:path';
 
@@ -41,13 +42,13 @@ async function reachableFrom(entry: string): Promise<Map<string, string[]>> {
   const queue = [entry];
 
   while (queue.length > 0) {
-    const file = queue.pop()!;
+    const file = must(queue.pop());
     if (seen.has(file)) continue;
 
     const source = await readFile(file, 'utf8');
     const bare: string[] = [];
     for (const match of source.matchAll(SPECIFIER)) {
-      const specifier = match[1]!;
+      const specifier = must(match[1]);
       if (!specifier.startsWith('.')) {
         bare.push(specifier);
         continue;
@@ -85,7 +86,7 @@ describe('root barrel isolation', () => {
       for (const specifier of specifiers) {
         const pkg = specifier.startsWith('@')
           ? specifier.split('/').slice(0, 2).join('/')
-          : specifier.split('/')[0]!;
+          : must(specifier.split('/')[0]);
         if (FORBIDDEN_PACKAGES.includes(specifier) || pkg === '@oxy.so/bloom') {
           leaked.push(`${relative(SRC, file)} -> ${specifier}`);
         }

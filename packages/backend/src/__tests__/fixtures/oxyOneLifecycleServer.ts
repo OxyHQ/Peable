@@ -1,4 +1,5 @@
 import { createMerchantsRouter } from '../../routes/merchants';
+import { must } from '../helpers/must';
 /** Local-only cross-repository fixture. Synthetic Oxy auth and downstream; actual
  * Peable SDK HTTP, ownership/cohort routes, migrations and durable outboxes.
  * Never imported by boot. Parent sends JSON lines; each response is prefixed. */
@@ -196,7 +197,7 @@ async function initialize(input: {
       has_more: false,
       data: [
         {
-          id: invoices[id]!.line,
+          id: must(invoices[id]).line,
           invoice: id,
           livemode: true,
           subscription: 'sub_fixture',
@@ -207,7 +208,7 @@ async function initialize(input: {
             subscription_item_details: { subscription: 'sub_fixture', proration: false },
           },
           pricing: { price_details: { price: 'price_fixture' } },
-          period: invoices[id]!.period,
+          period: must(invoices[id]).period,
         },
       ],
     }),
@@ -221,8 +222,8 @@ async function initialize(input: {
           currency: 'usd',
           status: 'paid',
           amount_paid: 2999,
-          payment: { type: 'payment_intent', payment_intent: invoices[id]!.pi },
-          status_transitions: { paid_at: invoices[id]!.period.start },
+          payment: { type: 'payment_intent', payment_intent: must(invoices[id]).pi },
+          status_transitions: { paid_at: must(invoices[id]).period.start },
         },
       ],
     }),
@@ -371,7 +372,7 @@ async function initialize(input: {
   app.use(createBillingRouter({ requireMerchant: auth, service }));
   app.use(createMerchantsRouter({ requireMerchant: auth }));
   server = app.listen(0, '127.0.0.1');
-  await new Promise<void>((resolve) => server!.once('listening', resolve));
+  await new Promise<void>((resolve) => must(server).once('listening', resolve));
   const baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   peable = new Peable({
     baseURL,

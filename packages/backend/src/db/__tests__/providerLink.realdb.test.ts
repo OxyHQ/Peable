@@ -8,6 +8,7 @@
  * None of that is visible to a mocked insert.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import { isCheckViolation, isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { paymentIntents } from '../schema';
@@ -89,17 +90,22 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
   });
 
   it('mints a card intent unlinked, then links it once', async () => {
-    const intent = await insertPaymentIntent(suite!.db, cardIntent());
+    const intent = await insertPaymentIntent(must(suite).db, cardIntent());
     // The window the two-step create depends on: the row exists, the provider
     // object does not yet.
     expect(intent?.provider).toBe('stripe');
     expect(intent?.providerObjectId).toBeNull();
 
-    const linked = await linkProviderObject(suite!.db, intent!.id, 'stripe', 'pi_stripe_a');
+    const linked = await linkProviderObject(
+      must(suite).db,
+      must(intent).id,
+      'stripe',
+      'pi_stripe_a',
+    );
     expect(linked).toBe(true);
 
-    const found = await findIntentByProviderObject(suite!.db, 'stripe', 'pi_stripe_a');
-    expect(found?.id).toBe(intent!.id);
+    const found = await findIntentByProviderObject(must(suite).db, 'stripe', 'pi_stripe_a');
+    expect(found?.id).toBe(must(intent).id);
   });
 
   /**
@@ -111,14 +117,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
    * recording that it exists.
    */
   it('refuses to repoint an intent that is already linked, and says so', async () => {
-    const intent = await insertPaymentIntent(suite!.db, cardIntent());
-    expect(await linkProviderObject(suite!.db, intent!.id, 'stripe', 'pi_stripe_b')).toBe(true);
-    expect(await linkProviderObject(suite!.db, intent!.id, 'stripe', 'pi_stripe_c')).toBe(false);
+    const intent = await insertPaymentIntent(must(suite).db, cardIntent());
+    expect(await linkProviderObject(must(suite).db, must(intent).id, 'stripe', 'pi_stripe_b')).toBe(
+      true,
+    );
+    expect(await linkProviderObject(must(suite).db, must(intent).id, 'stripe', 'pi_stripe_c')).toBe(
+      false,
+    );
 
     // The FIRST object still owns the row.
-    const found = await findIntentByProviderObject(suite!.db, 'stripe', 'pi_stripe_b');
-    expect(found?.id).toBe(intent!.id);
-    expect(await findIntentByProviderObject(suite!.db, 'stripe', 'pi_stripe_c')).toBeNull();
+    const found = await findIntentByProviderObject(must(suite).db, 'stripe', 'pi_stripe_b');
+    expect(found?.id).toBe(must(intent).id);
+    expect(await findIntentByProviderObject(must(suite).db, 'stripe', 'pi_stripe_c')).toBeNull();
   });
 
   /**
@@ -128,10 +138,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
    * the second would silently believe it did the linking.
    */
   it('lets exactly one of two concurrent links win', async () => {
-    const intent = await insertPaymentIntent(suite!.db, cardIntent());
+    const intent = await insertPaymentIntent(must(suite).db, cardIntent());
     const results = await Promise.all([
-      linkProviderObject(suite!.db, intent!.id, 'stripe', 'pi_stripe_race'),
-      linkProviderObject(suite!.db, intent!.id, 'stripe', 'pi_stripe_race'),
+      linkProviderObject(must(suite).db, must(intent).id, 'stripe', 'pi_stripe_race'),
+      linkProviderObject(must(suite).db, must(intent).id, 'stripe', 'pi_stripe_race'),
     ]);
     expect(results.filter(Boolean)).toHaveLength(1);
   });
@@ -142,16 +152,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
    * settle whichever it happened to read.
    */
   it('refuses to let a second intent claim the same provider object', async () => {
-    const first = await insertPaymentIntent(suite!.db, cardIntent());
-    const second = await insertPaymentIntent(suite!.db, cardIntent());
-    await linkProviderObject(suite!.db, first!.id, 'stripe', 'pi_stripe_shared');
+    const first = await insertPaymentIntent(must(suite).db, cardIntent());
+    const second = await insertPaymentIntent(must(suite).db, cardIntent());
+    await linkProviderObject(must(suite).db, must(first).id, 'stripe', 'pi_stripe_shared');
 
     let raised: unknown;
     try {
-      await suite!.db
-        .update(paymentIntents)
+      await must(suite)
+        .db.update(paymentIntents)
         .set({ providerObjectId: 'pi_stripe_shared' })
-        .where(eq(paymentIntents.id, second!.id));
+        .where(eq(paymentIntents.id, must(second).id));
     } catch (error) {
       raised = error;
     }
@@ -161,9 +171,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
   /** ...while any number of card intents may sit UNLINKED at the same time. */
   it('lets many unlinked card intents coexist', async () => {
     const minted = await Promise.all([
-      insertPaymentIntent(suite!.db, cardIntent()),
-      insertPaymentIntent(suite!.db, cardIntent()),
-      insertPaymentIntent(suite!.db, cardIntent()),
+      insertPaymentIntent(must(suite).db, cardIntent()),
+      insertPaymentIntent(must(suite).db, cardIntent()),
+      insertPaymentIntent(must(suite).db, cardIntent()),
     ]);
     expect(minted.every((row) => row !== null)).toBe(true);
   });
@@ -171,7 +181,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
   it('refuses a card intent with no provider', async () => {
     let raised: unknown;
     try {
-      await insertPaymentIntent(suite!.db, cardIntent({ provider: null }));
+      await insertPaymentIntent(must(suite).db, cardIntent({ provider: null }));
     } catch (error) {
       raised = error;
     }
@@ -186,7 +196,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider link on payment_intents',
   it('refuses a faircoin intent that names a provider', async () => {
     let raised: unknown;
     try {
-      await insertPaymentIntent(suite!.db, faircoinIntent({ provider: 'stripe' }));
+      await insertPaymentIntent(must(suite).db, faircoinIntent({ provider: 'stripe' }));
     } catch (error) {
       raised = error;
     }

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { HDKey } from '@scure/bip32';
 import { TESTNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
 import { uuidv7 } from '@oxy.so/db';
@@ -61,7 +62,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
 
   it('registers a merchant and reads it back by app and environment', async () => {
     const params = registration();
-    const created = await insertMerchant(suite!.db, params);
+    const created = await insertMerchant(must(suite).db, params);
 
     expect(created?.publicId).toBe(params.publicId);
     expect(created?.network).toBe('testnet');
@@ -69,8 +70,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     expect(created?.requiredConfirmations).toBe(1);
     expect(created?.livemode).toBe(false);
 
-    const found = await findMerchantByAppEnvironment(suite!.db, params.oxyAppId, 'development');
-    expect(found?.id).toBe(created!.id);
+    const found = await findMerchantByAppEnvironment(
+      must(suite).db,
+      params.oxyAppId,
+      'development',
+    );
+    expect(found?.id).toBe(must(created).id);
   });
 
   /**
@@ -101,7 +106,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     const params = registration({ xpub: xprv });
     let raised: unknown;
     try {
-      await insertMerchant(suite!.db, params);
+      await insertMerchant(must(suite).db, params);
     } catch (error) {
       raised = error;
     }
@@ -110,16 +115,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     // Refused BEFORE the insert — a row would mean the gateway had persisted a
     // spending key, which is the exact outcome the firewall exists to prevent.
     expect(
-      await findMerchantByAppEnvironment(suite!.db, params.oxyAppId, 'development'),
+      await findMerchantByAppEnvironment(must(suite).db, params.oxyAppId, 'development'),
     ).toBeNull();
   });
 
   it('converges on the unique index rather than reading first', async () => {
     const first = registration();
-    expect(await insertMerchant(suite!.db, first)).not.toBeNull();
+    expect(await insertMerchant(must(suite).db, first)).not.toBeNull();
 
     const second = await insertMerchant(
-      suite!.db,
+      must(suite).db,
       registration({ oxyAppId: first.oxyAppId, environment: 'development' }),
     );
     expect(second).toBeNull();
@@ -128,20 +133,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
   /** The same app in a DIFFERENT environment is a different merchant — the test/live split. */
   it('allows one merchant per environment for the same application', async () => {
     const dev = registration();
-    await insertMerchant(suite!.db, dev);
+    await insertMerchant(must(suite).db, dev);
     const staging = await insertMerchant(
-      suite!.db,
+      must(suite).db,
       registration({ oxyAppId: dev.oxyAppId, environment: 'staging' }),
     );
     expect(staging).not.toBeNull();
     expect(staging?.id).not.toBe(
-      (await findMerchantByAppEnvironment(suite!.db, dev.oxyAppId, 'development'))?.id,
+      (await findMerchantByAppEnvironment(must(suite).db, dev.oxyAppId, 'development'))?.id,
     );
   });
 
   it('patches only the mutable fields and leaves the rest alone', async () => {
-    const created = await insertMerchant(suite!.db, registration());
-    const patched = await updateMerchantSettings(suite!.db, created!.id, {
+    const created = await insertMerchant(must(suite).db, registration());
+    const patched = await updateMerchantSettings(must(suite).db, must(created).id, {
       webhookUrl: 'https://merchant.example/hook',
       requiredConfirmations: 6,
     });
@@ -156,26 +161,28 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
 
   it('clears a webhook with an explicit null, and ignores an absent field', async () => {
     const created = await insertMerchant(
-      suite!.db,
+      must(suite).db,
       registration({ webhookUrl: 'https://merchant.example/hook', webhookSecret: 'shh' }),
     );
 
     // Absent means "change nothing" — NOT "set to null". The two are different
     // requests and the API distinguishes them, so the repository must too.
-    const untouched = await updateMerchantSettings(suite!.db, created!.id, {
+    const untouched = await updateMerchantSettings(must(suite).db, must(created).id, {
       requiredConfirmations: 2,
     });
     expect(untouched?.webhookUrl).toBe('https://merchant.example/hook');
 
-    const cleared = await updateMerchantSettings(suite!.db, created!.id, { webhookUrl: null });
+    const cleared = await updateMerchantSettings(must(suite).db, must(created).id, {
+      webhookUrl: null,
+    });
     expect(cleared?.webhookUrl).toBeNull();
   });
 
   it('treats an empty patch as a no-op read rather than a failed update', async () => {
-    const created = await insertMerchant(suite!.db, registration());
-    const result = await updateMerchantSettings(suite!.db, created!.id, {});
-    expect(result?.id).toBe(created!.id);
-    expect(result?.updatedAt.getTime()).toBe(created!.updatedAt.getTime());
+    const created = await insertMerchant(must(suite).db, registration());
+    const result = await updateMerchantSettings(must(suite).db, must(created).id, {});
+    expect(result?.id).toBe(must(created).id);
+    expect(result?.updatedAt.getTime()).toBe(must(created).updatedAt.getTime());
   });
 
   /**
@@ -185,29 +192,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
    */
   it('loads the webhook secret only through the delivery-path read', async () => {
     const created = await insertMerchant(
-      suite!.db,
+      must(suite).db,
       registration({ webhookUrl: 'https://merchant.example/hook', webhookSecret: 'shh' }),
     );
 
-    expect(await findWebhookTarget(suite!.db, created!.id)).toEqual({
+    expect(await findWebhookTarget(must(suite).db, must(created).id)).toEqual({
       url: 'https://merchant.example/hook',
       secret: 'shh',
     });
-    expect(Object.keys((await findMerchantById(suite!.db, created!.id)) ?? {})).not.toContain(
-      'webhookSecret',
-    );
+    expect(
+      Object.keys((await findMerchantById(must(suite).db, must(created).id)) ?? {}),
+    ).not.toContain('webhookSecret');
   });
 
   /** A half-configured webhook is not a target — the delivery path must not sign with a missing key. */
   it('reports no webhook target when only one half is configured', async () => {
     const urlOnly = await insertMerchant(
-      suite!.db,
+      must(suite).db,
       registration({ webhookUrl: 'https://merchant.example/hook' }),
     );
-    expect(await findWebhookTarget(suite!.db, urlOnly!.id)).toBeNull();
+    expect(await findWebhookTarget(must(suite).db, must(urlOnly).id)).toBeNull();
 
-    const secretOnly = await insertMerchant(suite!.db, registration({ webhookSecret: 'shh' }));
-    expect(await findWebhookTarget(suite!.db, secretOnly!.id)).toBeNull();
+    const secretOnly = await insertMerchant(must(suite).db, registration({ webhookSecret: 'shh' }));
+    expect(await findWebhookTarget(must(suite).db, must(secretOnly).id)).toBeNull();
   });
 
   /**
@@ -221,11 +228,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
    * assertion here.
    */
   it('reads several merchants in one query, and no others', async () => {
-    const one = (await insertMerchant(suite!.db, registration()))!;
-    const two = (await insertMerchant(suite!.db, registration()))!;
-    const uninvolved = (await insertMerchant(suite!.db, registration()))!;
+    const one = must(await insertMerchant(must(suite).db, registration()));
+    const two = must(await insertMerchant(must(suite).db, registration()));
+    const uninvolved = must(await insertMerchant(must(suite).db, registration()));
 
-    const found = await findMerchantsByIds(suite!.db, [one.id, two.id, uuidv7()]);
+    const found = await findMerchantsByIds(must(suite).db, [one.id, two.id, uuidv7()]);
     expect(found.map((row) => row.id).sort()).toEqual([one.id, two.id].sort());
     expect(found.map((row) => row.id)).not.toContain(uninvolved.id);
     // The signing key must not ride along on a read that feeds a public
@@ -239,13 +246,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant repository', () => {
     // and this assertion holds either way. Verified by a mutation that removed
     // it and left the suite green — reported here rather than dressed up as a
     // check it is not.
-    expect(await findMerchantsByIds(suite!.db, [])).toEqual([]);
+    expect(await findMerchantsByIds(must(suite).db, [])).toEqual([]);
   });
 
   it('returns null for an unknown merchant rather than throwing', async () => {
-    expect(await findMerchantById(suite!.db, uuidv7())).toBeNull();
+    expect(await findMerchantById(must(suite).db, uuidv7())).toBeNull();
     expect(
-      await updateMerchantSettings(suite!.db, uuidv7(), { requiredConfirmations: 3 }),
+      await updateMerchantSettings(must(suite).db, uuidv7(), { requiredConfirmations: 3 }),
     ).toBeNull();
   });
 });

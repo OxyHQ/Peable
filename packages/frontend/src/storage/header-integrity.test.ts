@@ -15,7 +15,7 @@ import { HEADER_HASH_VERSION, headerMatchesItsHash, planHeaderRepair } from './h
 import type { BlockHeaderRow } from './database';
 
 function hexToBytes(hex: string): Uint8Array {
-  return Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
+  return Uint8Array.from((hex.match(/../g) ?? []).map((b) => parseInt(b, 16)));
 }
 
 /** Real mainnet header at height 5000, verified against a live node. */

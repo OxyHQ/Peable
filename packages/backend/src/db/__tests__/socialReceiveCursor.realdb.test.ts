@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { and, eq } from 'drizzle-orm';
 import { isCheckViolation, isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { readReservedThrough, reserveNextSocialReceiveIndex } from '../social/receiveCursor';
@@ -18,8 +19,8 @@ import {
 let suite: SuiteDatabase | undefined;
 
 async function nextIndex(oxyUserId: string): Promise<number | undefined> {
-  const [row] = await suite!.db
-    .select({ next: socialReceiveCursors.nextDerivationIndex })
+  const [row] = await must(suite)
+    .db.select({ next: socialReceiveCursors.nextDerivationIndex })
     .from(socialReceiveCursors)
     .where(
       and(
@@ -54,7 +55,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('creates the cursor on first use and hands out the first fresh index', async () => {
     const oxyUserId = uuidv7();
 
-    const reserved = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const reserved = await reserveNextSocialReceiveIndex(
+      must(suite).db,
+      oxyUserId,
+      'testnet',
+      KEY_A,
+    );
 
     expect(reserved).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX);
     expect(typeof reserved).toBe('number');
@@ -67,9 +73,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('hands out consecutive indices as NUMBERS across the create and update branches', async () => {
     const oxyUserId = uuidv7();
 
-    const first = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    const second = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    const third = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    const first = await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    const second = await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    const third = await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
 
     expect([first, second, third]).toEqual([1, 2, 3]);
     expect(typeof second).toBe('number');
@@ -87,7 +93,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
 
     const reserved = await Promise.all(
       Array.from({ length: concurrency }, () =>
-        reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A),
+        reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A),
       ),
     );
 
@@ -105,10 +111,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('keeps a separate counter per network', async () => {
     const oxyUserId = uuidv7();
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
     const mainnetFirst = await reserveNextSocialReceiveIndex(
-      suite!.db,
+      must(suite).db,
       oxyUserId,
       'mainnet',
       KEY_A,
@@ -120,27 +126,31 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('reads back the highest index reserved, without reserving another', async () => {
     const oxyUserId = uuidv7();
 
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
+    expect((await readReservedThrough(must(suite).db, oxyUserId, 'testnet')).reservedThrough).toBe(
       SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1,
     );
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
 
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(2);
+    expect((await readReservedThrough(must(suite).db, oxyUserId, 'testnet')).reservedThrough).toBe(
+      2,
+    );
     // Reading did not advance anything.
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(2);
+    expect((await readReservedThrough(must(suite).db, oxyUserId, 'testnet')).reservedThrough).toBe(
+      2,
+    );
     expect(await nextIndex(oxyUserId)).toBe(3);
   });
 
   it('refuses a second cursor for the same user and network', async () => {
     const oxyUserId = uuidv7();
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
 
     let raised: unknown;
     try {
-      await suite!.db
-        .insert(socialReceiveCursors)
+      await must(suite)
+        .db.insert(socialReceiveCursors)
         .values({ id: uuidv7(), oxyUserId, network: 'testnet', identityPublicKey: KEY_A });
     } catch (error) {
       raised = error;
@@ -155,7 +165,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('refuses a cursor below the first fresh index', async () => {
     let raised: unknown;
     try {
-      await suite!.db.insert(socialReceiveCursors).values({
+      await must(suite).db.insert(socialReceiveCursors).values({
         id: uuidv7(),
         oxyUserId: uuidv7(),
         network: 'testnet',
@@ -173,7 +183,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('refuses a network outside the closed set', async () => {
     let raised: unknown;
     try {
-      await suite!.db.insert(socialReceiveCursors).values({
+      await must(suite).db.insert(socialReceiveCursors).values({
         id: uuidv7(),
         oxyUserId: uuidv7(),
         network: 'regtest',
@@ -193,29 +203,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
   it('records the identity key the addresses were derived from', async () => {
     const oxyUserId = uuidv7();
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
 
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
-      KEY_A,
-    );
+    expect(
+      (await readReservedThrough(must(suite).db, oxyUserId, 'testnet')).identityPublicKey,
+    ).toBe(KEY_A);
   });
 
   it('follows the key the latest reservation used', async () => {
     const oxyUserId = uuidv7();
 
-    await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    const second = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_B);
+    await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_A);
+    const second = await reserveNextSocialReceiveIndex(must(suite).db, oxyUserId, 'testnet', KEY_B);
 
     // The counter is untouched by the key changing: it counts addresses.
     expect(second).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX + 1);
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
-      KEY_B,
-    );
+    expect(
+      (await readReservedThrough(must(suite).db, oxyUserId, 'testnet')).identityPublicKey,
+    ).toBe(KEY_B);
   });
 
   it('reports no key for a user who has never had an address reserved', async () => {
     expect(
-      (await readReservedThrough(suite!.db, uuidv7(), 'testnet')).identityPublicKey,
+      (await readReservedThrough(must(suite).db, uuidv7(), 'testnet')).identityPublicKey,
     ).toBeNull();
   });
 });

@@ -6,6 +6,7 @@
  * two concurrent inserts. A mocked insert accepts all of it.
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import { isCheckViolation } from '@oxy.so/db';
 import {
@@ -53,12 +54,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
 
   it('stores a delivery and reads it back whole', async () => {
     const id = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_store', objectIds: { payment_intent: 'pi_store' } }),
     );
     expect(id).toBeTruthy();
 
-    const row = await findProviderEventById(suite!.db, id!);
+    const row = await findProviderEventById(must(suite).db, must(id));
     expect(row?.providerEventId).toBe('evt_store');
     expect(row?.objectIds).toEqual({ payment_intent: 'pi_store' });
     // Received and not yet interpreted — the normal state a moment after ingress.
@@ -76,14 +77,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    * remove `.nullsNotDistinct()` and this goes red.
    */
   it('converges on a retry of a PLATFORM-scope delivery, which carries no account', async () => {
-    const first = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_plat' }));
-    const second = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_plat' }));
+    const first = await insertProviderEvent(
+      must(suite).db,
+      delivery({ providerEventId: 'evt_plat' }),
+    );
+    const second = await insertProviderEvent(
+      must(suite).db,
+      delivery({ providerEventId: 'evt_plat' }),
+    );
 
     expect(first).toBeTruthy();
     expect(second).toBeNull();
 
-    const rows = await suite!.db
-      .select({ id: providerEvents.id })
+    const rows = await must(suite)
+      .db.select({ id: providerEvents.id })
       .from(providerEvents)
       .where(eq(providerEvents.providerEventId, 'evt_plat'));
     expect(rows).toHaveLength(1);
@@ -91,11 +98,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
 
   it('converges on a retry of a CONNECT-scope delivery', async () => {
     const first = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' }),
     );
     const second = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' }),
     );
 
@@ -111,15 +118,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    */
   it('keeps deliveries to different scopes apart even when the event id matches', async () => {
     const platform = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_both' }),
     );
     const connectA = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_a' }),
     );
     const connectB = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_b' }),
     );
 
@@ -137,9 +144,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    */
   it('lets exactly one of two CONCURRENT inserts win', async () => {
     const results = await Promise.all([
-      insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_race' })),
-      insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_race' })),
-      insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_race' })),
+      insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_race' })),
+      insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_race' })),
+      insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_race' })),
     ]);
 
     expect(results.filter((id) => id !== null)).toHaveLength(1);
@@ -153,14 +160,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    * answer "we never received it".
    */
   it('finds a platform-scope event by its identity, NULL account and all', async () => {
-    await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_lookup' }));
+    await insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_lookup' }));
 
-    const found = await findProviderEventByIdentity(suite!.db, 'stripe', null, 'evt_lookup');
+    const found = await findProviderEventByIdentity(must(suite).db, 'stripe', null, 'evt_lookup');
     expect(found?.providerEventId).toBe('evt_lookup');
 
     // ...and the connect-scope lookup for the same id finds nothing.
     const wrongScope = await findProviderEventByIdentity(
-      suite!.db,
+      must(suite).db,
       'stripe',
       'acct_nope',
       'evt_lookup',
@@ -172,7 +179,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     let raised: unknown;
     try {
       await insertProviderEvent(
-        suite!.db,
+        must(suite).db,
         delivery({ provider: 'paypal', providerEventId: 'evt_paypal' }),
       );
     } catch (error) {
@@ -185,7 +192,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     let raised: unknown;
     try {
       await insertProviderEvent(
-        suite!.db,
+        must(suite).db,
         delivery({
           providerEventId: 'evt_scalar',
           payload: 'not an object' as unknown as Record<string, unknown>,
@@ -199,24 +206,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
 
   it('serves the drain unprocessed rows oldest first, and drops them once handled', async () => {
     const older = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_drain_1' }),
     );
     const newer = await insertProviderEvent(
-      suite!.db,
+      must(suite).db,
       delivery({ providerEventId: 'evt_drain_2' }),
     );
 
-    const pending = await findUnprocessedProviderEvents(suite!.db, 100);
+    const pending = await findUnprocessedProviderEvents(must(suite).db, 100);
     const ids = pending.map((row) => row.id);
     // Scoped to the two rows this case owns: the suite database is shared with
     // the other cases in this file, which leave unprocessed rows of their own.
-    expect(ids.indexOf(older!)).toBeLessThan(ids.indexOf(newer!));
+    expect(ids.indexOf(must(older))).toBeLessThan(ids.indexOf(must(newer)));
 
-    await markProviderEventProcessed(suite!.db, older!);
-    const after = await findUnprocessedProviderEvents(suite!.db, 100);
-    expect(after.map((row) => row.id)).not.toContain(older!);
-    expect(after.map((row) => row.id)).toContain(newer!);
+    await markProviderEventProcessed(must(suite).db, must(older));
+    const after = await findUnprocessedProviderEvents(must(suite).db, 100);
+    expect(after.map((row) => row.id)).not.toContain(must(older));
+    expect(after.map((row) => row.id)).toContain(must(newer));
   });
 
   /**
@@ -225,18 +232,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    * succeeded must not keep reading as broken in an operator surface.
    */
   it('records a failure without removing the event from the drain, and clears it on success', async () => {
-    const id = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_fail' }));
+    const id = await insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_fail' }));
 
-    await markProviderEventFailed(suite!.db, id!, 'downstream refused');
-    const failed = await findProviderEventById(suite!.db, id!);
+    await markProviderEventFailed(must(suite).db, must(id), 'downstream refused');
+    const failed = await findProviderEventById(must(suite).db, must(id));
     expect(failed?.processingError).toBe('downstream refused');
     expect(failed?.processedAt).toBeNull();
-    expect((await findUnprocessedProviderEvents(suite!.db, 100)).map((row) => row.id)).toContain(
-      id!,
-    );
+    expect(
+      (await findUnprocessedProviderEvents(must(suite).db, 100)).map((row) => row.id),
+    ).toContain(must(id));
 
-    await markProviderEventProcessed(suite!.db, id!);
-    const done = await findProviderEventById(suite!.db, id!);
+    await markProviderEventProcessed(must(suite).db, must(id));
+    const done = await findProviderEventById(must(suite).db, must(id));
     expect(done?.processingError).toBeNull();
     expect(done?.processedAt).toBeInstanceOf(Date);
   });

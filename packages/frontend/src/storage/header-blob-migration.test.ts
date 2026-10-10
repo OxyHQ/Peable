@@ -142,7 +142,7 @@ describe('HEADER_BLOB_MIGRATION_SQL', () => {
     const db = legacyDb();
     db.exec(HEADER_BLOB_MIGRATION_SQL);
 
-    const bytes = Uint8Array.from(HASH_60000.match(/../g)!.map((b) => parseInt(b, 16)));
+    const bytes = Uint8Array.from((HASH_60000.match(/../g) ?? []).map((b) => parseInt(b, 16)));
     const found = db.query('SELECT height FROM block_headers WHERE hash = ?').get(bytes) as {
       height: number;
     } | null;

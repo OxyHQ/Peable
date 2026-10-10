@@ -6,6 +6,7 @@
  * the second automatically. Most of what follows is about that.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 
 const providerCalls: { fn: string; request: Record<string, unknown> }[] = [];
 let refundCounter = 0;
@@ -186,7 +187,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
-      intent: reread!,
+      intent: must(reread),
       externalRef: 'order_two_b',
       amount: '6000',
     });
@@ -238,13 +239,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
       createRefund({
         merchantId: merchant.id,
         environment: merchant.environment,
-        intent: reread!,
+        intent: must(reread),
         externalRef: 'order_left_b',
         amount: '2001',
       }),
     ).rejects.toThrow(RefundExceedsRemainingError);
 
-    expect(await remainingRefundable(reread!)).toBe('2000');
+    expect(await remainingRefundable(must(reread))).toBe('2000');
   });
 
   /**
@@ -491,7 +492,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
       createRefund({
         merchantId: merchant.id,
         environment: merchant.environment,
-        intent: intent!,
+        intent: must(intent),
         externalRef: 'order_unsettled',
         amount: '1000',
       }),
