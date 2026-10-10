@@ -226,14 +226,19 @@ export async function claimBillingOperation(
   const parsed = claimSchema.parse(input);
   return db.transaction(async (tx) => {
     if (parsed.operation === 'checkout') {
+      // claimSchema's refine already requires both for a checkout; this only
+      // narrows them for the compiler.
+      const { customerBindingId, priceBindingId } = parsed;
+      if (!customerBindingId || !priceBindingId)
+        throw new Error('Checkout requires exact customer and price bindings');
       const [customer] = await tx
         .select()
         .from(billingObjectBindings)
-        .where(eq(billingObjectBindings.id, parsed.customerBindingId!));
+        .where(eq(billingObjectBindings.id, customerBindingId));
       const [price] = await tx
         .select()
         .from(billingObjectBindings)
-        .where(eq(billingObjectBindings.id, parsed.priceBindingId!));
+        .where(eq(billingObjectBindings.id, priceBindingId));
       if (
         !customer ||
         !price ||
