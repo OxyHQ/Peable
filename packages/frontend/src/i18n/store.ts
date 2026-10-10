@@ -13,8 +13,8 @@
  * itself is the source of the initial value too.
  */
 
-import { create } from "zustand";
-import { setLanguage as setI18nLanguage, getLanguage } from "./index";
+import { create } from 'zustand';
+import { setLanguage as setI18nLanguage, getLanguage } from './index';
 
 interface LanguageState {
   /** Current language code (e.g. `"en"`, `"es"`). */
@@ -27,7 +27,7 @@ interface LanguageState {
 }
 
 export const useLanguageStore = create<LanguageState>((set) => ({
-  language: "en",
+  language: 'en',
   setLanguage: async (lang: string) => {
     await setI18nLanguage(lang);
     set({ language: getLanguage() });

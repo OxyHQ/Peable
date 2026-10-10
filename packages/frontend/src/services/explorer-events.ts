@@ -13,29 +13,25 @@
  * acts on; unknown extra fields on a frame are ignored by Zod, not rejected.
  */
 
-import { z } from "zod";
-import type { NetworkType } from "@fairco.in/core";
+import { z } from 'zod';
+import type { NetworkType } from '@fairco.in/core';
 
 /** Event types the wallet subscribes to on the Explorer socket. */
-export const SUBSCRIBED_EVENTS = [
-  "new-block",
-  "block-count",
-  "network-stats",
-] as const;
+export const SUBSCRIBED_EVENTS = ['new-block', 'block-count', 'network-stats'] as const;
 
-const networkSchema = z.enum(["mainnet", "testnet"]);
+const networkSchema = z.enum(['mainnet', 'testnet']);
 
 // `new-block` (full BlockData) and `block-count` ({ height, previousHeight })
 // both advance the chain tip. We only read the height off either one; every
 // other field is intentionally ignored.
 const tipEventSchema = z.object({
-  type: z.enum(["new-block", "block-count"]),
+  type: z.enum(['new-block', 'block-count']),
   network: networkSchema,
   data: z.object({ height: z.number() }),
 });
 
 const serverErrorSchema = z.object({
-  type: z.literal("error"),
+  type: z.literal('error'),
   data: z.object({
     code: z.string(),
     message: z.string(),

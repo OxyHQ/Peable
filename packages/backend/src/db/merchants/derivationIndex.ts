@@ -54,7 +54,7 @@ export interface ReservedDerivationIndex {
  */
 export async function reserveNextDerivationIndex(
   db: DatabaseOrTransaction,
-  merchantId: string
+  merchantId: string,
 ): Promise<ReservedDerivationIndex | null> {
   const [row] = await db
     .update(merchants)

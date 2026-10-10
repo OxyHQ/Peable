@@ -9,24 +9,24 @@
  * Legacy single-wallet data is migrated on first read.
  */
 
-import { bytesToHex, hexToBytes } from "@fairco.in/core";
-import { getItemAsync, setItemAsync, deleteItemAsync } from "./kv-store";
-import { buildPinRecord, verifyPinRecord } from "./pin-kdf";
+import { bytesToHex, hexToBytes } from '@fairco.in/core';
+import { getItemAsync, setItemAsync, deleteItemAsync } from './kv-store';
+import { buildPinRecord, verifyPinRecord } from './pin-kdf';
 
 // ---------------------------------------------------------------------------
 // Storage keys
 // ---------------------------------------------------------------------------
 
-const MNEMONIC_KEY = "fairwallet_mnemonic";
-const WALLET_PIN_KEY = "fairwallet_pin";
-const WALLET_CREATED_KEY = "fairwallet_created";
+const MNEMONIC_KEY = 'fairwallet_mnemonic';
+const WALLET_PIN_KEY = 'fairwallet_pin';
+const WALLET_CREATED_KEY = 'fairwallet_created';
 
 // ---------------------------------------------------------------------------
 // Multi-wallet storage keys
 // ---------------------------------------------------------------------------
 
-const WALLETS_INDEX_KEY = "fairwallet_wallets_index";
-const ACTIVE_WALLET_KEY = "fairwallet_active_wallet";
+const WALLETS_INDEX_KEY = 'fairwallet_wallets_index';
+const ACTIVE_WALLET_KEY = 'fairwallet_active_wallet';
 
 // ---------------------------------------------------------------------------
 // Multi-wallet types
@@ -125,16 +125,16 @@ export async function renameWallet(id: string, name: string): Promise<void> {
 // for each wallet. A missing key means "not backed up yet".
 // ---------------------------------------------------------------------------
 
-const BACKED_UP_PREFIX = "fairwallet_backedup_";
+const BACKED_UP_PREFIX = 'fairwallet_backedup_';
 
 /** Whether the wallet's recovery phrase has been revealed / backed up. */
 export async function isWalletBackedUp(id: string): Promise<boolean> {
-  return (await getItemAsync(`${BACKED_UP_PREFIX}${id}`)) === "1";
+  return (await getItemAsync(`${BACKED_UP_PREFIX}${id}`)) === '1';
 }
 
 /** Mark the wallet as backed up (its recovery phrase was shown to the user). */
 export async function markWalletBackedUp(id: string): Promise<void> {
-  await setItemAsync(`${BACKED_UP_PREFIX}${id}`, "1");
+  await setItemAsync(`${BACKED_UP_PREFIX}${id}`, '1');
 }
 
 /**
@@ -144,10 +144,7 @@ export async function markWalletBackedUp(id: string): Promise<void> {
  * range). Pass `chainHeight = 0` on a fresh chain → nothing is written and
  * the rescan continues to start from genesis.
  */
-export async function setWalletBirthdayHeight(
-  id: string,
-  chainHeight: number,
-): Promise<void> {
+export async function setWalletBirthdayHeight(id: string, chainHeight: number): Promise<void> {
   if (!Number.isFinite(chainHeight) || chainHeight <= 0) return;
   const wallets = await getWalletIndex();
   const wallet = wallets.find((w) => w.id === id);
@@ -217,9 +214,7 @@ function walletSeedKey(walletId: string): string {
 }
 
 /** Get the cached BIP39 seed for a wallet, or null if not cached/corrupt. */
-export async function getCachedWalletSeed(
-  walletId: string,
-): Promise<Uint8Array | null> {
+export async function getCachedWalletSeed(walletId: string): Promise<Uint8Array | null> {
   const hex = await getItemAsync(walletSeedKey(walletId));
   if (!hex) return null;
   try {
@@ -231,10 +226,7 @@ export async function getCachedWalletSeed(
 }
 
 /** Persist the BIP39 seed for a wallet. */
-export async function cacheWalletSeed(
-  walletId: string,
-  seed: Uint8Array,
-): Promise<void> {
+export async function cacheWalletSeed(walletId: string, seed: Uint8Array): Promise<void> {
   await setItemAsync(walletSeedKey(walletId), bytesToHex(seed));
 }
 
@@ -270,7 +262,7 @@ async function migrateLegacyMnemonic(): Promise<string | null> {
   const createdAt = createdTimestamp ? Number(createdTimestamp) : Date.now();
 
   await saveWalletMnemonic(walletId, legacyMnemonic);
-  await addWalletToIndex(walletId, "Wallet 1");
+  await addWalletToIndex(walletId, 'Wallet 1');
 
   // Update the createdAt to match the original wallet
   const wallets = await getWalletIndex();
@@ -297,7 +289,7 @@ function generateMigrationWalletId(): string {
   crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
@@ -395,15 +387,15 @@ export async function hasPin(): Promise<boolean> {
 // Biometrics preference
 // ---------------------------------------------------------------------------
 
-const BIOMETRICS_ENABLED_KEY = "fairwallet_biometrics";
+const BIOMETRICS_ENABLED_KEY = 'fairwallet_biometrics';
 
 export async function setBiometricsEnabled(enabled: boolean): Promise<void> {
-  await setItemAsync(BIOMETRICS_ENABLED_KEY, enabled ? "1" : "0");
+  await setItemAsync(BIOMETRICS_ENABLED_KEY, enabled ? '1' : '0');
 }
 
 export async function isBiometricsEnabled(): Promise<boolean> {
   const value = await getItemAsync(BIOMETRICS_ENABLED_KEY);
-  return value === "1";
+  return value === '1';
 }
 
 // ---------------------------------------------------------------------------
@@ -432,7 +424,7 @@ export async function hasWallet(): Promise<boolean> {
 // Auto-lock timeout
 // ---------------------------------------------------------------------------
 
-const AUTO_LOCK_KEY = "fairwallet_auto_lock";
+const AUTO_LOCK_KEY = 'fairwallet_auto_lock';
 
 export async function setAutoLockTimeout(minutes: number): Promise<void> {
   await setItemAsync(AUTO_LOCK_KEY, String(minutes));
@@ -447,7 +439,7 @@ export async function getAutoLockTimeout(): Promise<number> {
 // Display currency
 // ---------------------------------------------------------------------------
 
-const CURRENCY_KEY = "fairwallet_currency";
+const CURRENCY_KEY = 'fairwallet_currency';
 
 export async function setCurrency(currency: string): Promise<void> {
   await setItemAsync(CURRENCY_KEY, currency);
@@ -455,7 +447,7 @@ export async function setCurrency(currency: string): Promise<void> {
 
 export async function getCurrency(): Promise<string> {
   const value = await getItemAsync(CURRENCY_KEY);
-  return value ?? "USD";
+  return value ?? 'USD';
 }
 
 // ---------------------------------------------------------------------------
@@ -498,7 +490,7 @@ export async function clearAll(): Promise<void> {
   // Defensive: a seed can be cached under the "default" key on the transient
   // path where no active wallet id is resolvable yet — clear it too so a wipe
   // leaves no seed material behind.
-  await deleteCachedWalletSeed("default");
+  await deleteCachedWalletSeed('default');
   await deleteItemAsync(WALLETS_INDEX_KEY);
   await deleteItemAsync(ACTIVE_WALLET_KEY);
 }

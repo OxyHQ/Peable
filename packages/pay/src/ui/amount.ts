@@ -84,8 +84,7 @@ export function sanitizeAmountInput(text: string): string {
   const firstDot = digitsAndDots.indexOf('.');
   if (firstDot === -1) return digitsAndDots;
   return (
-    digitsAndDots.slice(0, firstDot + 1) +
-    digitsAndDots.slice(firstDot + 1).replace(/\./g, '')
+    digitsAndDots.slice(0, firstDot + 1) + digitsAndDots.slice(firstDot + 1).replace(/\./g, '')
   );
 }
 

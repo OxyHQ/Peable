@@ -41,11 +41,7 @@ function p2pkhScript(address: string): Uint8Array {
 }
 
 let nextTxidByte = 0;
-function coin(
-  address: string,
-  value: bigint,
-  options: { blockHeight?: number } = {}
-): UTXO {
+function coin(address: string, value: bigint, options: { blockHeight?: number } = {}): UTXO {
   const blockHeight = options.blockHeight ?? 1_000;
   nextTxidByte += 1;
   return {
@@ -86,7 +82,7 @@ function chainHolding(
     broadcast: (hex: string) => Promise<string>;
     feePerByte: () => Promise<number>;
     tip: number;
-  }> = {}
+  }> = {},
 ): Recorder {
   const broadcasts: string[] = [];
   const feeRequests: NetworkType[] = [];
@@ -120,7 +116,7 @@ function chainHolding(
 /** The outpoints a broadcast transaction actually spends. */
 function spentOutpoints(rawHex: string): string[] {
   return deserializeTransaction(hexToBytes(rawHex)).inputs.map(
-    (input) => `${input.txid}:${input.vout}`
+    (input) => `${input.txid}:${input.vout}`,
   );
 }
 
@@ -136,7 +132,7 @@ describe('sendPayment', () => {
 
     const result = await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     // Largest-first covers the amount with one coin, so the other must not move.
@@ -148,14 +144,14 @@ describe('sendPayment', () => {
    * The txid must be the network's answer, not a local hash of what was sent.
    * A local hash says what we tried; only the daemon says what it kept.
    */
-  test('the txid is the daemon\'s, not one computed locally', async () => {
+  test("the txid is the daemon's, not one computed locally", async () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)], {
       broadcast: async () => 'f'.repeat(64),
     });
 
     const result = await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(result.txid).toBe('f'.repeat(64));
@@ -167,8 +163,8 @@ describe('sendPayment', () => {
     await expect(
       sendPayment(
         { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 5_000_000n, feePerByte: 10 },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow(/[Ii]nsufficient funds/);
 
     // Nothing reached the network: the refusal happened in selection, upstream
@@ -188,7 +184,7 @@ describe('sendPayment', () => {
 
     await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(spentOutpoints(chain.broadcasts[0]!)).toEqual([outpoint(settled)]);
@@ -200,8 +196,8 @@ describe('sendPayment', () => {
     await expect(
       sendPayment(
         { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow(/[Ii]nsufficient funds/);
     expect(chain.broadcasts).toEqual([]);
   });
@@ -216,8 +212,8 @@ describe('sendPayment', () => {
     await expect(
       sendPayment(
         { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow('bad-txns-inputs-missingorspent');
   });
 
@@ -230,7 +226,7 @@ describe('sendPayment', () => {
 
     await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     const outputs = deserializeTransaction(hexToBytes(chain.broadcasts[0]!)).outputs;
@@ -240,9 +236,7 @@ describe('sendPayment', () => {
       .filter((script) => script !== payeeScript);
 
     expect(changeScripts).toHaveLength(1);
-    expect(CHANGE.map((address) => bytesToHex(p2pkhScript(address)))).toContain(
-      changeScripts[0]!
-    );
+    expect(CHANGE.map((address) => bytesToHex(p2pkhScript(address)))).toContain(changeScripts[0]!);
   });
 
   /**
@@ -258,7 +252,7 @@ describe('sendPayment', () => {
     });
 
     await expect(
-      sendPayment({ seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n }, chain)
+      sendPayment({ seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n }, chain),
     ).rejects.toThrow('fee estimate failed: HTTP 503');
     expect(chain.broadcasts).toEqual([]);
   });
@@ -276,7 +270,7 @@ describe('sendPayment', () => {
 
     const result = await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n },
-      chain
+      chain,
     );
 
     // 1 input + 2 outputs = 226 bytes, charged at 2 rather than 1.
@@ -289,8 +283,8 @@ describe('sendPayment', () => {
     await expect(
       sendPayment(
         { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 0 },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow(/feePerByte must be a positive number/);
     expect(chain.broadcasts).toEqual([]);
   });
@@ -301,8 +295,8 @@ describe('sendPayment', () => {
     await expect(
       sendPayment(
         { seed: SEED, network: NETWORK, to: 'not-an-address', amountSat: 500_000n, feePerByte: 10 },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow();
     expect(chain.broadcasts).toEqual([]);
   });
@@ -313,14 +307,14 @@ describe('sendPayment', () => {
    * has no key for it and no fallback — and a wrong signature is a transaction
    * the network rejects AFTER the bytes have left.
    */
-  test('only this wallet\'s own addresses are read, so a foreign coin cannot be selected', async () => {
+  test("only this wallet's own addresses are read, so a foreign coin cannot be selected", async () => {
     const foreign = coin(PAYEE, 50_000_000n);
     const mine = coin(EXTERNAL[0]!, 3_000_000n);
     const chain = chainHolding([foreign, mine]);
 
     await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(chain.addressesAsked).not.toContain(PAYEE);
@@ -342,7 +336,7 @@ describe('sendPayment', () => {
         feePerByte: 10,
         minConfirmations: 6,
       },
-      chain
+      chain,
     );
 
     // shallow is 3 deep (1000 - 998 + 1); deep is 101.
@@ -354,7 +348,7 @@ describe('sendPayment', () => {
 
     await sendPayment(
       { seed: SEED, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(chain.tipRequests).toEqual([]);
@@ -373,18 +367,18 @@ describe('sendPayment', () => {
           feePerByte: 10,
           minConfirmations: 0,
         },
-        chain
-      )
+        chain,
+      ),
     ).rejects.toThrow(/minConfirmations/);
     expect(chain.broadcasts).toEqual([]);
   });
 
   /** The seed is the caller's; using it must not damage it. */
-  test('the caller\'s seed survives the call intact', async () => {
+  test("the caller's seed survives the call intact", async () => {
     const seed = new Uint8Array(64).fill(7);
     await sendPayment(
       { seed, network: NETWORK, to: PAYEE, amountSat: 500_000n, feePerByte: 10 },
-      chainHolding([coin(EXTERNAL[0]!, 3_000_000n)])
+      chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]),
     );
 
     expect(seed).toEqual(new Uint8Array(64).fill(7));
@@ -429,7 +423,7 @@ describe('quotePayment', () => {
 
     const quote = await quotePayment(
       { seed: SEED, network: NETWORK, amountSat: 5_000_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(quote.insufficientFunds).toBe(true);
@@ -443,7 +437,7 @@ describe('quotePayment', () => {
 
     await quotePayment(
       { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(chain.broadcasts).toEqual([]);
@@ -455,7 +449,7 @@ describe('quotePayment', () => {
 
     const quote = await quotePayment(
       { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(quote.insufficientFunds).toBe(false);
@@ -465,10 +459,7 @@ describe('quotePayment', () => {
   test('the rate is fetched when the caller gives none, and reported back', async () => {
     const chain = chainHolding([coin(EXTERNAL[0]!, 3_000_000n)]);
 
-    const quote = await quotePayment(
-      { seed: SEED, network: NETWORK, amountSat: 500_000n },
-      chain
-    );
+    const quote = await quotePayment({ seed: SEED, network: NETWORK, amountSat: 500_000n }, chain);
 
     expect(chain.feeRequests).toEqual([NETWORK]);
     expect(quote.feePerByte).toBe(12);
@@ -482,7 +473,7 @@ describe('quotePayment', () => {
 
     const quote = await quotePayment(
       { seed: SEED, network: NETWORK, amountSat: 500_000n, feePerByte: 10 },
-      chain
+      chain,
     );
 
     expect(quote.maxSendableSat).toBeLessThan(3_000_000n);
@@ -516,14 +507,14 @@ describe('readBalance', () => {
 
   test('a deeper minConfirmations moves shallow coins into pending', async () => {
     const chain = chainHolding(
-      [coin(EXTERNAL[0]!, 3_000_000n, { blockHeight: 999 }), coin(EXTERNAL[1]!, 1_000_000n, { blockHeight: 500 })],
-      { tip: 1_000 }
+      [
+        coin(EXTERNAL[0]!, 3_000_000n, { blockHeight: 999 }),
+        coin(EXTERNAL[1]!, 1_000_000n, { blockHeight: 500 }),
+      ],
+      { tip: 1_000 },
     );
 
-    const balance = await readBalance(
-      { seed: SEED, network: NETWORK, minConfirmations: 6 },
-      chain
-    );
+    const balance = await readBalance({ seed: SEED, network: NETWORK, minConfirmations: 6 }, chain);
 
     expect(balance.spendableSat).toBe(1_000_000n);
     expect(balance.pendingSat).toBe(3_000_000n);

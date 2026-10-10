@@ -8,11 +8,11 @@
  * headless-tabs web layout needed to keep its screens scrollable.
  */
 
-import { useCallback } from "react";
-import type { BottomTabBarProps } from "expo-router/tabs";
-import { Rail } from "@oxy.so/bloom/rail";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { WalletTabIcon, walletTabLabel, type WalletTabName } from "./tabs";
+import { useCallback } from 'react';
+import type { BottomTabBarProps } from 'expo-router/tabs';
+import { Rail } from '@oxy.so/bloom/rail';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { WalletTabIcon, walletTabLabel, type WalletTabName } from './tabs';
 
 const ICON_SIZE = 24;
 
@@ -45,9 +45,21 @@ export function WalletRail({
         label: walletTabLabel(name),
         // The rail draws the active item's pill in `primary-subtle`; its glyph
         // takes that pill's foreground.
-        icon: <WalletTabIcon name={name} active={false} color={theme.colors.textSecondary} size={ICON_SIZE} />,
+        icon: (
+          <WalletTabIcon
+            name={name}
+            active={false}
+            color={theme.colors.textSecondary}
+            size={ICON_SIZE}
+          />
+        ),
         activeIcon: (
-          <WalletTabIcon name={name} active color={theme.colors.primarySubtleForeground} size={ICON_SIZE} />
+          <WalletTabIcon
+            name={name}
+            active
+            color={theme.colors.primarySubtleForeground}
+            size={ICON_SIZE}
+          />
         ),
       }))}
     />

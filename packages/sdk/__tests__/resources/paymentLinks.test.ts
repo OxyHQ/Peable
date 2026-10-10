@@ -1,7 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import { PaymentLinksResource } from '../../src/resources/paymentLinks';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
-import { buildTestClient, serviceTokenMintResponse, TEST_GATEWAY_URL } from '../support/testGateway';
+import {
+  buildTestClient,
+  serviceTokenMintResponse,
+  TEST_GATEWAY_URL,
+} from '../support/testGateway';
 
 function gatewayCallOf(requests: CapturedRequest[]): CapturedRequest | undefined {
   return requests.find((r) => !r.url.includes('/auth/service-token'));
@@ -13,7 +17,15 @@ describe('PaymentLinksResource', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return {
         status: 201,
-        json: { id: 'link_1', object: 'payment_link', amount: '100000', network: 'testnet', active: true, metadata: {}, url: 'https://checkout.peable.to/l/link_1' },
+        json: {
+          id: 'link_1',
+          object: 'payment_link',
+          amount: '100000',
+          network: 'testnet',
+          active: true,
+          metadata: {},
+          url: 'https://checkout.peable.to/l/link_1',
+        },
       };
     });
     const resource = new PaymentLinksResource(buildTestClient(fetchImpl));

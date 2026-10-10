@@ -15,16 +15,16 @@
  * the gate against moving to an unknown account.
  */
 
-import type React from "react";
-import { useCallback, useMemo, useState } from "react";
-import { View, Text, Pressable } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { formatFair, parseFairToUnits } from "@fairco.in/core";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { useWalletStore, FEE_RATES } from "../../wallet/wallet-store";
-import { MAIN_POCKET_ACCOUNT, findPocket, type PocketInfo } from "../../wallet/pockets";
-import { AmountInput, Button, EmptyState, ListItem, PocketAvatar } from "../components";
-import { t } from "../../i18n";
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { formatFair, parseFairToUnits } from '@fairco.in/core';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { useWalletStore, FEE_RATES } from '../../wallet/wallet-store';
+import { MAIN_POCKET_ACCOUNT, findPocket, type PocketInfo } from '../../wallet/pockets';
+import { AmountInput, Button, EmptyState, ListItem, PocketAvatar } from '../components';
+import { t } from '../../i18n';
 
 /** Quick-amount buttons as a fraction of the max sendable balance. */
 const QUICK_FRACTIONS = [0.25, 0.5] as const;
@@ -85,14 +85,11 @@ export function MovePocketSheet({
   const [pickerOpen, setPickerOpen] = useState(false);
   // `amount` is the user-facing FAIR decimal string (same contract as
   // SendSheet) — `parseFairToUnits` converts it to the bigint sats amount.
-  const [amount, setAmount] = useState<string>("");
+  const [amount, setAmount] = useState<string>('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const amountSats = useMemo<bigint | null>(
-    () => parseFairToUnits(amount),
-    [amount],
-  );
+  const amountSats = useMemo<bigint | null>(() => parseFairToUnits(amount), [amount]);
   const canMove = toAccount !== null && amountSats !== null && amountSats > 0n;
 
   // Max sendable out of the active Pocket at the fee rate `moveBetweenPockets`
@@ -109,25 +106,25 @@ export function MovePocketSheet({
   const toPocket = toAccount !== null ? findPocket(pockets, toAccount) : undefined;
   const toLabel = toPocket
     ? toPocket.account === MAIN_POCKET_ACCOUNT
-      ? t("pockets.mainName")
+      ? t('pockets.mainName')
       : toPocket.name
-    : "";
+    : '';
   const fromLabel = fromPocket
     ? fromPocket.account === MAIN_POCKET_ACCOUNT
-      ? t("pockets.mainName")
+      ? t('pockets.mainName')
       : fromPocket.name
-    : "";
+    : '';
 
   const handleQuickAmount = useCallback(
     (fraction: number) => {
       const target = (maxSendable * BigInt(Math.round(fraction * 1000))) / 1000n;
-      setAmount(target > 0n ? formatFair(target) : "");
+      setAmount(target > 0n ? formatFair(target) : '');
     },
     [maxSendable],
   );
 
   const handleMax = useCallback(() => {
-    setAmount(maxSendable > 0n ? formatFair(maxSendable) : "");
+    setAmount(maxSendable > 0n ? formatFair(maxSendable) : '');
   }, [maxSendable]);
 
   const handleSelectDestination = useCallback((account: number) => {
@@ -146,7 +143,7 @@ export function MovePocketSheet({
       await moveBetweenPockets(toAccount, amountSats, FEE_RATES.medium);
       onDone();
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t("pockets.move.failed"));
+      setError(err instanceof Error ? err.message : t('pockets.move.failed'));
     } finally {
       setBusy(false);
     }
@@ -160,8 +157,8 @@ export function MovePocketSheet({
       <View className="w-full self-center" style={{ maxWidth: 500 }}>
         <EmptyState
           icon="wallet-outline"
-          title={t("pockets.move.noDestinations.title")}
-          subtitle={t("pockets.move.noDestinations.subtitle")}
+          title={t('pockets.move.noDestinations.title')}
+          subtitle={t('pockets.move.noDestinations.subtitle')}
         />
       </View>
     );
@@ -174,16 +171,14 @@ export function MovePocketSheet({
         <View className="flex-row items-end justify-center">
           <AmountInput
             className="text-foreground"
-            style={{ fontSize: 40, fontWeight: "700", paddingVertical: 0 }}
+            style={{ fontSize: 40, fontWeight: '700', paddingVertical: 0 }}
             placeholder="0.00"
             placeholderTextColor={theme.colors.textSecondary}
             value={amount}
             onValueChange={setAmount}
             maxLength={20}
           />
-          <Text className="text-muted-foreground text-base font-semibold ml-2 mb-1.5">
-            FAIR
-          </Text>
+          <Text className="text-muted-foreground text-base font-semibold ml-2 mb-1.5">FAIR</Text>
         </View>
       </View>
 
@@ -204,7 +199,7 @@ export function MovePocketSheet({
           onPress={handleMax}
           className="bg-surface rounded-full px-4 py-2 active:opacity-70"
         >
-          <Text className="text-primary text-sm font-bold">{t("pockets.move.max")}</Text>
+          <Text className="text-primary text-sm font-bold">{t('pockets.move.max')}</Text>
         </Pressable>
       </View>
 
@@ -214,7 +209,7 @@ export function MovePocketSheet({
           <LegAvatar pocket={fromPocket} />
           <View className="flex-1 min-w-0">
             <Text className="text-muted-foreground text-[10.5px] font-semibold uppercase tracking-wide">
-              {t("pockets.move.fromLabel")}
+              {t('pockets.move.fromLabel')}
             </Text>
             <Text className="text-foreground text-sm font-semibold" numberOfLines={1}>
               {fromLabel}
@@ -222,11 +217,7 @@ export function MovePocketSheet({
           </View>
         </View>
 
-        <MaterialCommunityIcons
-          name="arrow-right"
-          size={18}
-          color={theme.colors.textSecondary}
-        />
+        <MaterialCommunityIcons name="arrow-right" size={18} color={theme.colors.textSecondary} />
 
         <Pressable
           onPress={() => setPickerOpen((open) => !open)}
@@ -235,14 +226,14 @@ export function MovePocketSheet({
           <LegAvatar pocket={toPocket} />
           <View className="flex-1 min-w-0">
             <Text className="text-muted-foreground text-[10.5px] font-semibold uppercase tracking-wide">
-              {t("pockets.move.toLabel")}
+              {t('pockets.move.toLabel')}
             </Text>
             <Text className="text-foreground text-sm font-semibold" numberOfLines={1}>
               {toLabel}
             </Text>
           </View>
           <MaterialCommunityIcons
-            name={pickerOpen ? "chevron-up" : "chevron-down"}
+            name={pickerOpen ? 'chevron-up' : 'chevron-down'}
             size={18}
             color={theme.colors.textSecondary}
           />
@@ -255,7 +246,7 @@ export function MovePocketSheet({
           {destinations.map((pocket, idx) => {
             const selected = pocket.account === toAccount;
             const label =
-              pocket.account === MAIN_POCKET_ACCOUNT ? t("pockets.mainName") : pocket.name;
+              pocket.account === MAIN_POCKET_ACCOUNT ? t('pockets.mainName') : pocket.name;
             return (
               <ListItem
                 key={pocket.account}
@@ -289,8 +280,8 @@ export function MovePocketSheet({
       <Button
         title={
           amountSats !== null && amountSats > 0n
-            ? t("pockets.move.ctaAmount", { amount: formatFair(amountSats) })
-            : t("pockets.move.cta")
+            ? t('pockets.move.ctaAmount', { amount: formatFair(amountSats) })
+            : t('pockets.move.cta')
         }
         onPress={handleMove}
         variant="primary"

@@ -18,9 +18,9 @@
  * directly unit-testable.
  */
 
-import { sha256 } from "@noble/hashes/sha256";
-import { scryptAsync } from "@noble/hashes/scrypt";
-import { bytesToHex, hexToBytes } from "@fairco.in/core";
+import { sha256 } from '@noble/hashes/sha256';
+import { scryptAsync } from '@noble/hashes/scrypt';
+import { bytesToHex, hexToBytes } from '@fairco.in/core';
 
 interface ScryptParams {
   readonly N: number;
@@ -59,7 +59,7 @@ const SCRYPT_SALT_BYTES = 16;
  * `scrypt$<N>$<r>$<p>$<saltHex>$<hashHex>`. The legacy form omits the cost:
  * `scrypt$<saltHex>$<hashHex>`.
  */
-export const PIN_SCHEME_PREFIX = "scrypt$";
+export const PIN_SCHEME_PREFIX = 'scrypt$';
 
 /**
  * Legacy (v1) unsalted SHA-256 hash with a domain separator. Exported only so
@@ -79,11 +79,7 @@ function generatePinSalt(): Uint8Array {
 }
 
 /** Derive the scrypt hash of `pin` with `salt` under `params`, returned as hex. */
-async function scryptHashPin(
-  pin: string,
-  salt: Uint8Array,
-  params: ScryptParams,
-): Promise<string> {
+async function scryptHashPin(pin: string, salt: Uint8Array, params: ScryptParams): Promise<string> {
   const encoder = new TextEncoder();
   const derived = await scryptAsync(encoder.encode(pin), salt, params);
   return bytesToHex(derived);
@@ -95,20 +91,12 @@ export function isScryptRecord(record: string): boolean {
 }
 
 /** Serialize a self-describing record: `scrypt$<N>$<r>$<p>$<saltHex>$<hashHex>`. */
-function formatRecord(
-  params: ScryptParams,
-  salt: Uint8Array,
-  hashHex: string,
-): string {
+function formatRecord(params: ScryptParams, salt: Uint8Array, hashHex: string): string {
   return `${PIN_SCHEME_PREFIX}${params.N}$${params.r}$${params.p}$${bytesToHex(salt)}$${hashHex}`;
 }
 
 /** Parse and validate embedded scrypt cost fields; null if malformed. */
-function parseScryptParams(
-  nStr: string,
-  rStr: string,
-  pStr: string,
-): ScryptParams | null {
+function parseScryptParams(nStr: string, rStr: string, pStr: string): ScryptParams | null {
   const N = Number(nStr);
   const r = Number(rStr);
   const p = Number(pStr);
@@ -164,12 +152,9 @@ export interface PinVerifyResult {
  * is returned so the caller can transparently re-store the PIN under the current
  * parameters — so a slow or weak record never survives the next unlock.
  */
-export async function verifyPinRecord(
-  pin: string,
-  record: string,
-): Promise<PinVerifyResult> {
+export async function verifyPinRecord(pin: string, record: string): Promise<PinVerifyResult> {
   if (isScryptRecord(record)) {
-    const parts = record.slice(PIN_SCHEME_PREFIX.length).split("$");
+    const parts = record.slice(PIN_SCHEME_PREFIX.length).split('$');
 
     // Current self-describing form: N$r$p$salt$hash.
     if (parts.length === 5) {
@@ -187,9 +172,7 @@ export async function verifyPinRecord(
       // retune (or a legacy over-cost read via the branch below) migrates on
       // the next successful unlock.
       const upgradedRecord =
-        valid && !sameParams(params, SCRYPT_PARAMS)
-          ? await buildPinRecord(pin)
-          : null;
+        valid && !sameParams(params, SCRYPT_PARAMS) ? await buildPinRecord(pin) : null;
       return { valid, upgradedRecord };
     }
 

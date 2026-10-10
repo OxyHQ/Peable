@@ -88,7 +88,7 @@ function toDeliveryWithIntentRow(row: {
 export async function findDeliveryForMerchant(
   db: DatabaseOrTransaction,
   id: string,
-  merchantId: string
+  merchantId: string,
 ): Promise<WebhookDeliveryRow | null> {
   const [row] = await db
     .select(DELIVERY_COLUMNS)
@@ -148,7 +148,7 @@ export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
  */
 export async function listDeliveriesForMerchant(
   db: DatabaseOrTransaction,
-  params: ListDeliveriesParams
+  params: ListDeliveriesParams,
 ): Promise<{ data: WebhookDeliveryWithIntentRow[]; hasMore: boolean }> {
   const conditions = [eq(webhookDeliveries.merchantId, params.merchantId)];
   if (params.after !== undefined) conditions.push(lt(webhookDeliveries.id, params.after));

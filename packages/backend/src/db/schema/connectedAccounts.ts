@@ -139,14 +139,11 @@ export const connectedAccounts = pgTable(
      * second account at the provider — which would be a real, unremovable
      * account, and the seller would have two.
      */
-    unique('connected_accounts_merchant_external_ref_key').on(
-      table.merchantId,
-      table.externalRef
-    ),
+    unique('connected_accounts_merchant_external_ref_key').on(table.merchantId, table.externalRef),
     /** "Which seller is this?" — where every inbound account event starts. */
     unique('connected_accounts_provider_account_id_key').on(
       table.provider,
-      table.providerAccountId
+      table.providerAccountId,
     ),
     /** The sync sweep: least-recently-synced first, never-synced ahead of all. */
     index('connected_accounts_sync_idx').on(table.provider, table.lastSyncedAt),
@@ -155,45 +152,42 @@ export const connectedAccounts = pgTable(
       columns: [table.merchantId],
       foreignColumns: [merchants.id],
     }).onDelete('restrict'),
-    check(
-      'connected_accounts_provider_check',
-      sql.raw(`provider in (${inList(PROVIDER_IDS)})`)
-    ),
+    check('connected_accounts_provider_check', sql.raw(`provider in (${inList(PROVIDER_IDS)})`)),
     // An empty string is a VALUE: it satisfies NOT NULL and collides for real in
     // the uniqueness above, so a merchant sending `""` would claim the one row
     // every other empty-ref seller wants.
     check('connected_accounts_external_ref_check', sql`length(${table.externalRef}) > 0`),
     check(
       'connected_accounts_provider_account_id_check',
-      sql`length(${table.providerAccountId}) > 0`
+      sql`length(${table.providerAccountId}) > 0`,
     ),
     check(
       'connected_accounts_country_check',
-      sql`${table.country} = upper(${table.country}) and length(${table.country}) = 2`
+      sql`${table.country} = upper(${table.country}) and length(${table.country}) = 2`,
     ),
     check(
       'connected_accounts_transfers_capability_check',
       sql.raw(
-        `transfers_capability is null or transfers_capability in (${inList(CAPABILITY_STATUSES)})`
-      )
+        `transfers_capability is null or transfers_capability in (${inList(CAPABILITY_STATUSES)})`,
+      ),
     ),
     check(
       'connected_accounts_card_payments_capability_check',
       sql.raw(
-        `card_payments_capability is null or card_payments_capability in (${inList(CAPABILITY_STATUSES)})`
-      )
+        `card_payments_capability is null or card_payments_capability in (${inList(CAPABILITY_STATUSES)})`,
+      ),
     ),
     check(
       'connected_accounts_requirements_check',
       sql`${table.requirementsCurrentlyDue} >= 0 and ${table.requirementsEventuallyDue} >= 0
-          and ${table.requirementsPastDue} >= 0 and ${table.requirementsPendingVerification} >= 0`
+          and ${table.requirementsPastDue} >= 0 and ${table.requirementsPendingVerification} >= 0`,
     ),
     // A code is a code — the allow-list form would be wrong, these are the
     // provider's own and their set grows on the provider's schedule. An EMPTY
     // one carries no meaning and renders as a blank bullet to a seller.
     check(
       'connected_accounts_disabled_reason_codes_check',
-      sql`not ('' = any(${table.disabledReasonCodes}))`
+      sql`not ('' = any(${table.disabledReasonCodes}))`,
     ),
-  ]
+  ],
 );

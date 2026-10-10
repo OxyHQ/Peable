@@ -79,7 +79,7 @@ export interface InsertTransferReversalParams {
  */
 export async function insertTransferReversal(
   db: DatabaseOrTransaction,
-  params: InsertTransferReversalParams
+  params: InsertTransferReversalParams,
 ): Promise<TransferReversalRow | null> {
   try {
     const [row] = await db
@@ -112,14 +112,12 @@ export async function insertTransferReversal(
 export async function markTransferReversalSucceeded(
   db: DatabaseOrTransaction,
   reversalId: string,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<TransferReversalRow | null> {
   const [row] = await db
     .update(transferReversals)
     .set({ providerObjectId, status: 'succeeded', failureMessage: null })
-    .where(
-      and(eq(transferReversals.id, reversalId), isNull(transferReversals.providerObjectId))
-    )
+    .where(and(eq(transferReversals.id, reversalId), isNull(transferReversals.providerObjectId)))
     .returning(REVERSAL_COLUMNS);
   return row ? toRow(row) : null;
 }
@@ -128,7 +126,7 @@ export async function markTransferReversalSucceeded(
 export async function markTransferReversalFailed(
   db: DatabaseOrTransaction,
   reversalId: string,
-  failureMessage: string
+  failureMessage: string,
 ): Promise<TransferReversalRow | null> {
   const [row] = await db
     .update(transferReversals)
@@ -142,7 +140,7 @@ export async function markTransferReversalFailed(
 export async function findTransferReversalByExternalRef(
   db: DatabaseOrTransaction,
   merchantId: string,
-  externalRef: string
+  externalRef: string,
 ): Promise<TransferReversalRow | null> {
   const [row] = await db
     .select(REVERSAL_COLUMNS)
@@ -150,8 +148,8 @@ export async function findTransferReversalByExternalRef(
     .where(
       and(
         eq(transferReversals.merchantId, merchantId),
-        eq(transferReversals.externalRef, externalRef)
-      )
+        eq(transferReversals.externalRef, externalRef),
+      ),
     );
   return row ? toRow(row) : null;
 }
@@ -159,7 +157,7 @@ export async function findTransferReversalByExternalRef(
 /** Every reversal against one settlement. Newest first. */
 export async function listReversalsForTransfer(
   db: DatabaseOrTransaction,
-  transferId: string
+  transferId: string,
 ): Promise<readonly TransferReversalRow[]> {
   const rows = await db
     .select(REVERSAL_COLUMNS)

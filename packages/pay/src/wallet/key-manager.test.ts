@@ -9,39 +9,34 @@
  * re-issued.
  */
 
-import { describe, test, expect } from "bun:test";
-import { deriveAddress, getNetwork } from "@fairco.in/core";
-import { HDKey } from "@scure/bip32";
-import { mnemonicToSeedSync } from "@scure/bip39";
-import { KeyManager } from "./key-manager";
+import { describe, test, expect } from 'bun:test';
+import { deriveAddress, getNetwork } from '@fairco.in/core';
+import { HDKey } from '@scure/bip32';
+import { mnemonicToSeedSync } from '@scure/bip39';
+import { KeyManager } from './key-manager';
 
 // ---------------------------------------------------------------------------
 // BIP44 account index (Pockets). Each account is an isolated subtree; account 0
 // must remain byte-for-byte identical to the pre-Pockets single-account wallet.
 // ---------------------------------------------------------------------------
 
-
-const MAINNET = getNetwork("mainnet");
+const MAINNET = getNetwork('mainnet');
 
 // Canonical BIP39 trial mnemonic — deterministic derivation.
 const MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about";
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 
-describe("KeyManager cursor persistence", () => {
-  test("a fresh manager starts both cursors at 0", () => {
+describe('KeyManager cursor persistence', () => {
+  test('a fresh manager starts both cursors at 0', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     expect(km.getNextExternalIndex()).toBe(0);
     expect(km.getNextChangeIndex()).toBe(0);
   });
 
-  test("restoreCursors advances the cursors and the next address skips used ones", () => {
+  test('restoreCursors advances the cursors and the next address skips used ones', () => {
     // First run: hand out 3 receive addresses (indices 0,1,2 become used).
     const first = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
-    const issued = [
-      first.getNextAddress(),
-      first.getNextAddress(),
-      first.getNextAddress(),
-    ];
+    const issued = [first.getNextAddress(), first.getNextAddress(), first.getNextAddress()];
     expect(issued.map((a) => a.index)).toEqual([0, 1, 2]);
     expect(first.getNextExternalIndex()).toBe(3);
 
@@ -60,7 +55,7 @@ describe("KeyManager cursor persistence", () => {
     expect(next.address).toBe(firstFourth.address);
   });
 
-  test("restoreCursors only ever moves a cursor forward", () => {
+  test('restoreCursors only ever moves a cursor forward', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     km.getNextAddress(); // cursor -> 1
     km.getNextAddress(); // cursor -> 2
@@ -68,7 +63,7 @@ describe("KeyManager cursor persistence", () => {
     expect(km.getNextExternalIndex()).toBe(2);
   });
 
-  test("restoreCursors pre-derives the lookahead window so addresses are watched", () => {
+  test('restoreCursors pre-derives the lookahead window so addresses are watched', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     // Advance the external cursor far ahead, as if many addresses were used.
     km.restoreCursors(50, 0);
@@ -83,7 +78,7 @@ describe("KeyManager cursor persistence", () => {
     expect(km.ownsAddress(next.address)).toBe(true);
   });
 
-  test("change cursor restores independently of the external cursor", () => {
+  test('change cursor restores independently of the external cursor', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     km.restoreCursors(0, 5);
     expect(km.getNextChangeIndex()).toBe(5);
@@ -124,7 +119,7 @@ function accountXprv(): string {
   return root.derive(`m/44'/${MAINNET.bip44CoinType}'/0'`).privateExtendedKey;
 }
 
-describe("KeyManager.accountXpub", () => {
+describe('KeyManager.accountXpub', () => {
   test("returns the account-level extended public key (m/44'/119'/0')", () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     // Must equal the independently-derived account xpub for this mnemonic, so
@@ -133,10 +128,10 @@ describe("KeyManager.accountXpub", () => {
     expect(km.accountXpub()).toBe(accountXpub());
   });
 
-  test("round-trips: fromXpub(accountXpub()) derives the same addresses", () => {
+  test('round-trips: fromXpub(accountXpub()) derives the same addresses', () => {
     const full = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const xpub = full.accountXpub();
-    expect(typeof xpub).toBe("string");
+    expect(typeof xpub).toBe('string');
     expect(xpub.length).toBeGreaterThan(0);
 
     const watch = KeyManager.fromXpub(xpub, MAINNET);
@@ -144,15 +139,15 @@ describe("KeyManager.accountXpub", () => {
     expect(watch.getExternalAddresses()).toEqual(full.getExternalAddresses());
   });
 
-  test("a watch-only manager re-exports the SAME xpub it was built from", () => {
+  test('a watch-only manager re-exports the SAME xpub it was built from', () => {
     const xpub = accountXpub();
     const watch = KeyManager.fromXpub(xpub, MAINNET);
     expect(watch.accountXpub()).toBe(xpub);
   });
 });
 
-describe("KeyManager.fromXpub (watch-only)", () => {
-  test("derives the SAME addresses a full wallet would (watches the right keys)", () => {
+describe('KeyManager.fromXpub (watch-only)', () => {
+  test('derives the SAME addresses a full wallet would (watches the right keys)', () => {
     const full = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const watch = KeyManager.fromXpub(accountXpub(), MAINNET);
 
@@ -166,7 +161,7 @@ describe("KeyManager.fromXpub (watch-only)", () => {
     expect(watch.ownsAddress(first)).toBe(true);
   });
 
-  test("is flagged watch-only and exposes NO private keys", () => {
+  test('is flagged watch-only and exposes NO private keys', () => {
     const watch = KeyManager.fromXpub(accountXpub(), MAINNET);
     expect(watch.isWatchOnly()).toBe(true);
 
@@ -175,7 +170,7 @@ describe("KeyManager.fromXpub (watch-only)", () => {
     expect(() => watch.getPrivateKeyForAddress(addr)).toThrow(/Watch-only/);
   });
 
-  test("the watch-only addresses are real (match full-wallet derivation), not random", () => {
+  test('the watch-only addresses are real (match full-wallet derivation), not random', () => {
     // Regression guard for C2: the bug produced random, unrelated keys. Here the
     // very first watch-only address MUST equal the full wallet's first address.
     const full = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
@@ -183,18 +178,18 @@ describe("KeyManager.fromXpub (watch-only)", () => {
     expect(watch.getNextAddress().address).toBe(full.getNextAddress().address);
   });
 
-  test("rejects a private extended key (xprv) instead of retaining spend power", () => {
+  test('rejects a private extended key (xprv) instead of retaining spend power', () => {
     expect(() => KeyManager.fromXpub(accountXprv(), MAINNET)).toThrow();
   });
 
-  test("rejects a malformed extended key", () => {
-    expect(() => KeyManager.fromXpub("not-an-xpub", MAINNET)).toThrow(
+  test('rejects a malformed extended key', () => {
+    expect(() => KeyManager.fromXpub('not-an-xpub', MAINNET)).toThrow(
       /Invalid extended public key/,
     );
   });
 
-  test("rejects an empty string", () => {
-    expect(() => KeyManager.fromXpub("", MAINNET)).toThrow();
+  test('rejects an empty string', () => {
+    expect(() => KeyManager.fromXpub('', MAINNET)).toThrow();
   });
 });
 
@@ -206,8 +201,8 @@ describe("KeyManager.fromXpub (watch-only)", () => {
 // each private-key buffer with zeros IN PLACE and clears the maps.
 // ---------------------------------------------------------------------------
 
-describe("KeyManager.wipe (M1 zeroization)", () => {
-  test("overwrites the cached private-key bytes with zeros in place", () => {
+describe('KeyManager.wipe (M1 zeroization)', () => {
+  test('overwrites the cached private-key bytes with zeros in place', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const addr = km.getExternalAddresses()[0];
 
@@ -223,7 +218,7 @@ describe("KeyManager.wipe (M1 zeroization)", () => {
     expect(priv.every((b) => b === 0)).toBe(true); // zeroized in place
   });
 
-  test("drops all derived addresses so none are owned after wipe", () => {
+  test('drops all derived addresses so none are owned after wipe', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const addr = km.getExternalAddresses()[0];
     expect(km.ownsAddress(addr)).toBe(true);
@@ -236,7 +231,7 @@ describe("KeyManager.wipe (M1 zeroization)", () => {
     expect(km.ownsAddress(addr)).toBe(false);
   });
 
-  test("zeroizes change-chain private keys too", () => {
+  test('zeroizes change-chain private keys too', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const changeAddr = km.getChangeAddresses()[0];
     const priv = km.getPrivateKeyForAddress(changeAddr);
@@ -247,7 +242,7 @@ describe("KeyManager.wipe (M1 zeroization)", () => {
     expect(priv.every((b) => b === 0)).toBe(true);
   });
 
-  test("a wiped manager can no longer produce a private key", () => {
+  test('a wiped manager can no longer produce a private key', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     const addr = km.getExternalAddresses()[0];
     km.wipe();
@@ -256,7 +251,7 @@ describe("KeyManager.wipe (M1 zeroization)", () => {
     expect(() => km.getPrivateKeyForAddress(addr)).toThrow(/not found/);
   });
 
-  test("wipe() on a watch-only manager is safe (no private keys to zero)", () => {
+  test('wipe() on a watch-only manager is safe (no private keys to zero)', () => {
     const watch = KeyManager.fromXpub(accountXpub(), MAINNET);
     expect(() => watch.wipe()).not.toThrow();
     expect(watch.getAllAddresses()).toHaveLength(0);
@@ -268,32 +263,28 @@ describe("KeyManager.wipe (M1 zeroization)", () => {
 // must remain byte-for-byte identical to the pre-Pockets single-account wallet.
 // ---------------------------------------------------------------------------
 
-describe("KeyManager account index (Pockets)", () => {
-  test("defaults to account 0 and reports it via getAccount()", () => {
+describe('KeyManager account index (Pockets)', () => {
+  test('defaults to account 0 and reports it via getAccount()', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     expect(km.getAccount()).toBe(0);
   });
 
-  test("account 0 addresses are unchanged (backward compatible)", () => {
+  test('account 0 addresses are unchanged (backward compatible)', () => {
     const seed = mnemonicToSeedSync(MNEMONIC);
     const withDefault = KeyManager.fromSeed(seed, MAINNET);
     const withExplicitZero = KeyManager.fromSeed(seed, MAINNET, 0);
-    expect(withExplicitZero.getExternalAddresses()).toEqual(
-      withDefault.getExternalAddresses(),
-    );
+    expect(withExplicitZero.getExternalAddresses()).toEqual(withDefault.getExternalAddresses());
   });
 
-  test("account 1 derives a DIFFERENT external chain than account 0", () => {
+  test('account 1 derives a DIFFERENT external chain than account 0', () => {
     const seed = mnemonicToSeedSync(MNEMONIC);
     const acct0 = KeyManager.fromSeed(seed, MAINNET, 0);
     const acct1 = KeyManager.fromSeed(seed, MAINNET, 1);
     expect(acct1.getAccount()).toBe(1);
-    expect(acct1.getExternalAddresses()[0]).not.toBe(
-      acct0.getExternalAddresses()[0],
-    );
+    expect(acct1.getExternalAddresses()[0]).not.toBe(acct0.getExternalAddresses()[0]);
   });
 
-  test("account 1 addresses match @fairco.in/core deriveAddress(seed, 1, ...)", () => {
+  test('account 1 addresses match @fairco.in/core deriveAddress(seed, 1, ...)', () => {
     const seed = mnemonicToSeedSync(MNEMONIC);
     const acct1 = KeyManager.fromSeed(seed, MAINNET, 1);
     const external = acct1.getExternalAddresses();
@@ -302,14 +293,14 @@ describe("KeyManager account index (Pockets)", () => {
     }
   });
 
-  test("the per-address path string carries the account index", () => {
+  test('the per-address path string carries the account index', () => {
     const seed = mnemonicToSeedSync(MNEMONIC);
     const acct2 = KeyManager.fromSeed(seed, MAINNET, 2);
     const first = acct2.getNextAddress();
     expect(first.path).toBe(`m/44'/${MAINNET.bip44CoinType}'/2'/0/0`);
   });
 
-  test("accountXpub differs per account and round-trips through fromXpub", () => {
+  test('accountXpub differs per account and round-trips through fromXpub', () => {
     const seed = mnemonicToSeedSync(MNEMONIC);
     const acct0 = KeyManager.fromSeed(seed, MAINNET, 0);
     const acct1 = KeyManager.fromSeed(seed, MAINNET, 1);
@@ -318,24 +309,22 @@ describe("KeyManager account index (Pockets)", () => {
     const watch1 = KeyManager.fromXpub(acct1.accountXpub(), MAINNET, 1);
     expect(watch1.getAccount()).toBe(1);
     expect(watch1.getExternalAddresses()).toEqual(acct1.getExternalAddresses());
-    expect(watch1.getExternalAddresses()[0]).not.toBe(
-      acct0.getExternalAddresses()[0],
-    );
+    expect(watch1.getExternalAddresses()[0]).not.toBe(acct0.getExternalAddresses()[0]);
   });
 });
 
-describe("KeyManager watch addresses", () => {
+describe('KeyManager watch addresses', () => {
   // Real 2-of-3 mainnet multisig P2SH address (same fixture used across the
   // @fairco.in/core multisig test suite).
-  const MULTISIG_ADDRESS = "7iKBxUNbBbTa8n1Q32oLucmvmKL7c572P2";
+  const MULTISIG_ADDRESS = '7iKBxUNbBbTa8n1Q32oLucmvmKL7c572P2';
 
-  test("a fresh manager does not own an unregistered watch address", () => {
+  test('a fresh manager does not own an unregistered watch address', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(false);
     expect(km.getAllAddresses()).not.toContain(MULTISIG_ADDRESS);
   });
 
-  test("registerWatchAddress makes ownsAddress true and includes it in getAllAddresses", () => {
+  test('registerWatchAddress makes ownsAddress true and includes it in getAllAddresses', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     km.registerWatchAddress(MULTISIG_ADDRESS);
     expect(km.ownsAddress(MULTISIG_ADDRESS)).toBe(true);
@@ -343,7 +332,7 @@ describe("KeyManager watch addresses", () => {
     expect(km.getWatchAddresses()).toEqual([MULTISIG_ADDRESS]);
   });
 
-  test("wipe() clears registered watch addresses (cross-wallet isolation)", () => {
+  test('wipe() clears registered watch addresses (cross-wallet isolation)', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     km.registerWatchAddress(MULTISIG_ADDRESS);
     km.wipe();
@@ -351,7 +340,7 @@ describe("KeyManager watch addresses", () => {
     expect(km.getWatchAddresses()).toEqual([]);
   });
 
-  test("getPrivateKeyForAddress still throws for a watch address (no key material, by design)", () => {
+  test('getPrivateKeyForAddress still throws for a watch address (no key material, by design)', () => {
     const km = KeyManager.fromMnemonic(MNEMONIC, MAINNET);
     km.registerWatchAddress(MULTISIG_ADDRESS);
     expect(() => km.getPrivateKeyForAddress(MULTISIG_ADDRESS)).toThrow();

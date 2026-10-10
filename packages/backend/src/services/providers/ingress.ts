@@ -16,14 +16,14 @@
  * Ported in shape from Mercaria's `services/payments/stripe/ingress.ts`.
  */
 
-import { getDb } from "../../db/postgres";
-import { insertProviderEvent } from "../../db/providers/providerEventRepository";
-import { config } from "../../config";
-import { ProviderError, type ProviderId } from "./provider";
-import { resolveProvider } from "./registry";
-import type { StripeWebhookScope } from "./stripe/stripeProvider";
-import { StripePaymentProvider } from "./stripe/stripeProvider";
-import { redactProviderPayload } from "./redact";
+import { getDb } from '../../db/postgres';
+import { insertProviderEvent } from '../../db/providers/providerEventRepository';
+import { config } from '../../config';
+import { ProviderError, type ProviderId } from './provider';
+import { resolveProvider } from './registry';
+import type { StripeWebhookScope } from './stripe/stripeProvider';
+import { StripePaymentProvider } from './stripe/stripeProvider';
+import { redactProviderPayload } from './redact';
 
 export interface ProviderDelivery {
   /** The RAW body. A signature covers bytes, not a re-serialization. */
@@ -34,14 +34,14 @@ export interface ProviderDelivery {
 
 export type IngressResult =
   /** Verified, stored, and waiting to be processed. */
-  | { readonly kind: "accepted"; readonly eventId: string }
+  | { readonly kind: 'accepted'; readonly eventId: string }
   /** Verified, and we already had it. A provider retry, answered the same way. */
-  | { readonly kind: "duplicate" }
+  | { readonly kind: 'duplicate' }
   /** Verified and deliberately not stored — see `ignored` below. */
-  | { readonly kind: "ignored"; readonly reason: "livemode_mismatch" }
+  | { readonly kind: 'ignored'; readonly reason: 'livemode_mismatch' }
   | {
-      readonly kind: "rejected";
-      readonly reason: "invalid_signature" | "not_configured";
+      readonly kind: 'rejected';
+      readonly reason: 'invalid_signature' | 'not_configured';
       readonly detail: string;
     };
 
@@ -55,13 +55,13 @@ export type IngressResult =
  */
 export async function ingestProviderDelivery(
   delivery: ProviderDelivery,
-  provider: ProviderId = "stripe",
+  provider: ProviderId = 'stripe',
 ): Promise<IngressResult> {
   const adapter = resolveProvider(provider);
   if (!adapter) {
     return {
-      kind: "rejected",
-      reason: "not_configured",
+      kind: 'rejected',
+      reason: 'not_configured',
       detail: `the ${provider} rail is not configured on this deployment`,
     };
   }
@@ -74,18 +74,18 @@ export async function ingestProviderDelivery(
     envelope =
       adapter instanceof StripePaymentProvider
         ? await adapter.verifyEventForScope(
-            { payload: delivery.payload.toString("utf8"), signature: delivery.signature },
+            { payload: delivery.payload.toString('utf8'), signature: delivery.signature },
             delivery.scope,
           )
         : await adapter.verifyEvent({
-            payload: delivery.payload.toString("utf8"),
+            payload: delivery.payload.toString('utf8'),
             signature: delivery.signature,
           });
   } catch (error) {
     return {
-      kind: "rejected",
-      reason: "invalid_signature",
-      detail: error instanceof ProviderError ? error.message : "signature verification failed",
+      kind: 'rejected',
+      reason: 'invalid_signature',
+      detail: error instanceof ProviderError ? error.message : 'signature verification failed',
     };
   }
 
@@ -93,7 +93,7 @@ export async function ingestProviderDelivery(
   // webhook" produces one. Processing it on a live deployment would settle a
   // payment that does not exist.
   if (envelope.livemode !== config.stripe.livemode) {
-    return { kind: "ignored", reason: "livemode_mismatch" };
+    return { kind: 'ignored', reason: 'livemode_mismatch' };
   }
 
   const stored = await insertProviderEvent(getDb(), {
@@ -112,7 +112,5 @@ export async function ingestProviderDelivery(
 
   // `null` means the unique index converged: the provider retried a delivery we
   // already have. That is a success, not a conflict.
-  return stored === null
-    ? { kind: "duplicate" }
-    : { kind: "accepted", eventId: stored };
+  return stored === null ? { kind: 'duplicate' } : { kind: 'accepted', eventId: stored };
 }

@@ -20,16 +20,13 @@
  * the provider what is true NOW. The event says something changed; only a fresh
  * read says what.
  */
-import type { PaymentIntentStatus } from "@peable.to/shared-types";
-import {
-  findIntentById,
-  type PaymentIntentRow,
-} from "../db/payments/paymentIntentRepository";
-import { getDb } from "../db/postgres";
-import { applyEvent, type IntentEvent } from "./intentState";
-import { announceIntentChange, transitionIntent } from "./intentTransition";
-import type { ProviderPaymentStatus } from "./providers/provider";
-import { resolveProvider } from "./providers/registry";
+import type { PaymentIntentStatus } from '@peable.to/shared-types';
+import { findIntentById, type PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import { getDb } from '../db/postgres';
+import { applyEvent, type IntentEvent } from './intentState';
+import { announceIntentChange, transitionIntent } from './intentTransition';
+import type { ProviderPaymentStatus } from './providers/provider';
+import { resolveProvider } from './providers/registry';
 
 /**
  * Which card event a provider's own status means.
@@ -42,32 +39,32 @@ import { resolveProvider } from "./providers/registry";
  */
 function eventForProviderStatus(status: ProviderPaymentStatus): IntentEvent | null {
   switch (status) {
-    case "succeeded":
-      return "card_settled";
-    case "failed":
-      return "card_failed";
-    case "canceled":
-      return "card_canceled";
-    case "processing":
-      return "card_processing";
-    case "requires_action":
-      return "card_requires_action";
-    case "created":
-    case "refunded":
-    case "partially_refunded":
+    case 'succeeded':
+      return 'card_settled';
+    case 'failed':
+      return 'card_failed';
+    case 'canceled':
+      return 'card_canceled';
+    case 'processing':
+      return 'card_processing';
+    case 'requires_action':
+      return 'card_requires_action';
+    case 'created':
+    case 'refunded':
+    case 'partially_refunded':
       return null;
   }
 }
 
 export type ReconcileOutcome =
   /** The row moved to match the provider. */
-  | { readonly kind: "applied"; readonly status: PaymentIntentStatus }
+  | { readonly kind: 'applied'; readonly status: PaymentIntentStatus }
   /** The provider agrees with the row, or says nothing that changes it. */
-  | { readonly kind: "agreed"; readonly status: PaymentIntentStatus }
+  | { readonly kind: 'agreed'; readonly status: PaymentIntentStatus }
   /** There is no provider object to read — a FairCoin intent, or an unlinked one. */
-  | { readonly kind: "unreadable" }
+  | { readonly kind: 'unreadable' }
   /** The provider's truth is not a legal move from where the row stands. */
-  | { readonly kind: "irreconcilable"; readonly error: string };
+  | { readonly kind: 'irreconcilable'; readonly error: string };
 
 /**
  * Re-read a card payment and move the row to whatever the provider says.
@@ -80,17 +77,17 @@ export type ReconcileOutcome =
 export async function reconcileIntentWithProvider(
   intent: PaymentIntentRow,
 ): Promise<ReconcileOutcome> {
-  if (!intent.provider || !intent.providerObjectId) return { kind: "unreadable" };
+  if (!intent.provider || !intent.providerObjectId) return { kind: 'unreadable' };
   const provider = resolveProvider(intent.provider);
-  if (!provider) return { kind: "unreadable" };
+  if (!provider) return { kind: 'unreadable' };
 
   let current;
   try {
     current = await provider.getStatus(intent.providerObjectId);
   } catch (error) {
     return {
-      kind: "irreconcilable",
-      error: error instanceof Error ? error.message : "the payment could not be read",
+      kind: 'irreconcilable',
+      error: error instanceof Error ? error.message : 'the payment could not be read',
     };
   }
 
@@ -102,26 +99,26 @@ export async function reconcileIntentWithProvider(
   const fresh = (await findIntentById(getDb(), intent.id)) ?? intent;
 
   const event = eventForProviderStatus(current.status);
-  if (!event) return { kind: "agreed", status: fresh.status };
+  if (!event) return { kind: 'agreed', status: fresh.status };
 
   let target: PaymentIntentStatus;
   try {
     target = applyEvent(fresh.status, event);
   } catch (error) {
     return {
-      kind: "irreconcilable",
+      kind: 'irreconcilable',
       error: error instanceof Error ? error.message : "the provider's state is not reachable",
     };
   }
-  if (target === fresh.status) return { kind: "agreed", status: fresh.status };
+  if (target === fresh.status) return { kind: 'agreed', status: fresh.status };
 
   const result = await transitionIntent(fresh.id, { from: fresh.status, status: target });
-  if (result.kind !== "updated") {
+  if (result.kind !== 'updated') {
     // Something else moved the row between the read and the write. Not an
     // error: the next pass reads the new status and either agrees with it or
     // reconciles from there.
-    return { kind: "agreed", status: fresh.status };
+    return { kind: 'agreed', status: fresh.status };
   }
   announceIntentChange(result.row);
-  return { kind: "applied", status: result.row.status };
+  return { kind: 'applied', status: result.row.status };
 }

@@ -17,8 +17,8 @@
  * Kept free of any I/O so the funds-correctness logic is directly testable.
  */
 
-import { SMALLEST_UNIT_NAME } from "@fairco.in/core";
-import { UTXOSet, type UTXO } from "./utxo-set";
+import { SMALLEST_UNIT_NAME } from '@fairco.in/core';
+import { UTXOSet, type UTXO } from './utxo-set';
 
 export interface SelectInputsParams {
   /**
@@ -89,14 +89,11 @@ function computeFeeAndChange(
  * @throws If the target is non-positive, a coin-control outpoint is missing /
  *         unconfirmed, or the selection cannot cover the amount + fee.
  */
-export function selectInputsForSend(
-  params: SelectInputsParams,
-): SelectedInputs {
-  const { candidates, targetValue, feePerByte, coinControl, dustThreshold } =
-    params;
+export function selectInputsForSend(params: SelectInputsParams): SelectedInputs {
+  const { candidates, targetValue, feePerByte, coinControl, dustThreshold } = params;
 
   if (targetValue <= 0n) {
-    throw new Error("Target value must be positive");
+    throw new Error('Target value must be positive');
   }
 
   // Build a confirmed-only working set. Even if a caller accidentally passes an
@@ -117,9 +114,7 @@ export function selectInputsForSend(
     for (const { txid, vout } of coinControl) {
       const utxo = confirmed.get(txid, vout);
       if (!utxo) {
-        throw new Error(
-          `Selected coin ${outpointKey(txid, vout)} is unavailable or unconfirmed`,
-        );
+        throw new Error(`Selected coin ${outpointKey(txid, vout)} is unavailable or unconfirmed`);
       }
       selected.push(utxo);
     }
@@ -156,17 +151,13 @@ export function selectInputsForSend(
  * recipient plus a change output. Mirrors {@link UTXOSet.selectCoins}'s sizing
  * (recipient + change = 2 outputs) so the displayed and built fees agree.
  */
-export function estimateFeeForInputs(
-  inputCount: number,
-  feePerByte: number,
-): bigint {
+export function estimateFeeForInputs(inputCount: number, feePerByte: number): bigint {
   // P2PKH sizing, identical to utxo-set.ts: overhead + inputs*148 + outputs*34.
   const TX_OVERHEAD_BYTES = 10;
   const BYTES_PER_INPUT = 148;
   const BYTES_PER_OUTPUT = 34;
   const OUTPUT_COUNT = 2; // recipient + change
-  const size =
-    TX_OVERHEAD_BYTES + inputCount * BYTES_PER_INPUT + OUTPUT_COUNT * BYTES_PER_OUTPUT;
+  const size = TX_OVERHEAD_BYTES + inputCount * BYTES_PER_INPUT + OUTPUT_COUNT * BYTES_PER_OUTPUT;
   return BigInt(size) * BigInt(feePerByte);
 }
 
@@ -198,16 +189,12 @@ export function estimateSend(params: SelectInputsParams): SendEstimate {
   const confirmed = candidates.filter((u) => u.confirmed);
   const pool =
     coinControl && coinControl.length > 0
-      ? confirmed.filter((u) =>
-          coinControl.some((c) => c.txid === u.txid && c.vout === u.vout),
-        )
+      ? confirmed.filter((u) => coinControl.some((c) => c.txid === u.txid && c.vout === u.vout))
       : confirmed;
 
   const poolTotal = pool.reduce((sum, u) => sum + u.value, 0n);
-  const feeForFullPool =
-    pool.length > 0 ? estimateFeeForInputs(pool.length, feePerByte) : 0n;
-  const maxSendable =
-    poolTotal > feeForFullPool ? poolTotal - feeForFullPool : 0n;
+  const feeForFullPool = pool.length > 0 ? estimateFeeForInputs(pool.length, feePerByte) : 0n;
+  const maxSendable = poolTotal > feeForFullPool ? poolTotal - feeForFullPool : 0n;
 
   if (targetValue <= 0n) {
     return { fee: null, total: null, insufficientFunds: false, maxSendable };

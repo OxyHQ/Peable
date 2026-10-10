@@ -10,19 +10,19 @@
  * rest — no snap-back flash.
  */
 
-import { useMemo } from "react";
-import { View, Text, Pressable } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import { useMemo } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from "react-native-reanimated";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
+} from 'react-native-reanimated';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export interface Suggestion {
   id: string;
@@ -57,14 +57,13 @@ function SwipableCard({
         .activeOffsetX([-12, 12])
         .failOffsetY([-16, 16])
         .onUpdate((e) => {
-          "worklet";
+          'worklet';
           translateX.set(e.translationX);
         })
         .onEnd((e) => {
-          "worklet";
+          'worklet';
           const dismiss =
-            Math.abs(e.translationX) > DISMISS_DX ||
-            Math.abs(e.velocityX) > FLING_VELOCITY;
+            Math.abs(e.translationX) > DISMISS_DX || Math.abs(e.velocityX) > FLING_VELOCITY;
           if (dismiss) {
             const dir = e.translationX < 0 || e.velocityX < 0 ? -1 : 1;
             translateX.set(
@@ -94,18 +93,11 @@ function SwipableCard({
           accessibilityLabel={item.title}
         >
           <View className="w-10 h-10 rounded-full bg-primary/10 items-center justify-center">
-            <MaterialCommunityIcons
-              name={item.icon}
-              size={20}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name={item.icon} size={20} color={theme.colors.primary} />
           </View>
           <View className="flex-1">
             <View className="flex-row items-center">
-              <Text
-                className="text-foreground text-sm font-semibold flex-1"
-                numberOfLines={1}
-              >
+              <Text className="text-foreground text-sm font-semibold flex-1" numberOfLines={1}>
                 {item.title}
               </Text>
               {item.badge ? (
@@ -116,10 +108,7 @@ function SwipableCard({
                 </View>
               ) : null}
             </View>
-            <Text
-              className="text-muted-foreground text-xs mt-1 leading-4"
-              numberOfLines={2}
-            >
+            <Text className="text-muted-foreground text-xs mt-1 leading-4" numberOfLines={2}>
               {item.subtitle}
             </Text>
           </View>

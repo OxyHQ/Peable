@@ -4,17 +4,14 @@
  * colour like a font icon (`viewBox` is Material Symbols' `0 -960 960 960`).
  */
 
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path } from 'react-native-svg';
 
 interface ArrowCircleDownIconProps {
   color: string;
   size?: number;
 }
 
-export function ArrowCircleDownIcon({
-  color,
-  size = 24,
-}: ArrowCircleDownIconProps) {
+export function ArrowCircleDownIcon({ color, size = 24 }: ArrowCircleDownIconProps) {
   return (
     <Svg width={size} height={size} viewBox="0 -960 960 960">
       <Path

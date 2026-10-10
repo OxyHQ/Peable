@@ -23,23 +23,23 @@
  * is not. A mocked update returns whatever the test wired and would pass with
  * the predicate deleted — which is the failure this file exists to catch.
  */
-import { beforeEach, describe, expect, it } from "bun:test";
-import { eq } from "drizzle-orm";
+import { beforeEach, describe, expect, it } from 'bun:test';
+import { eq } from 'drizzle-orm';
 import {
   expireDueIntents,
   findIntentById,
   updateIntentState,
-} from "../../db/payments/paymentIntentRepository";
-import { webhookDeliveries } from "../../db/schema";
-import { transitionIntent } from "../intentTransition";
+} from '../../db/payments/paymentIntentRepository';
+import { webhookDeliveries } from '../../db/schema';
+import { transitionIntent } from '../intentTransition';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
-import type { MerchantRow } from "../../db/merchants/merchantRepository";
-import { POSTGRES_TESTS_ENABLED } from "../../db/testDatabase";
+} from '../../__tests__/helpers/gatewayTestDatabase';
+import type { MerchantRow } from '../../db/merchants/merchantRepository';
+import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
 
 const PAST = new Date(Date.now() - 60_000);
 /** Generous: these cases are about WHICH row is claimed, never about batching. */
@@ -55,7 +55,7 @@ async function deliveryTypesFor(intentId: string): Promise<string[]> {
   return rows.map((row) => row.eventType);
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent has left", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('a transition from a status the intent has left', () => {
   useGatewayDatabase();
 
   beforeEach(async () => {
@@ -63,8 +63,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
     // and a null target makes the enqueue a no-op — so the delivery counts
     // below would pass vacuously on a merchant with only one of them.
     merchant = await seedMerchant({
-      webhookUrl: "https://merchant.invalid/hook",
-      webhookSecret: "whsec_stale_transition",
+      webhookUrl: 'https://merchant.invalid/hook',
+      webhookSecret: 'whsec_stale_transition',
     });
   });
 
@@ -72,7 +72,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
    * THE regression, in the order it actually happens: the sweeper commits
    * first, and the settlement that was decided a moment earlier arrives second.
    */
-  it("refuses to write over a row the expiry sweeper already claimed", async () => {
+  it('refuses to write over a row the expiry sweeper already claimed', async () => {
     const intent = await seedIntent(merchant, { expiresAt: PAST });
     // What a caller read before deciding. Everything below is that caller
     // finishing its work against a row that has since moved.
@@ -81,12 +81,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
     const expired = await expireDueIntents(gatewayDb(), new Date(), BATCH);
     expect(expired.map((row) => row.id)).toContain(intent.id);
 
-    const late = await transitionIntent(intent.id, { from: observed, status: "settled" });
+    const late = await transitionIntent(intent.id, { from: observed, status: 'settled' });
 
-    expect(late.kind).toBe("stale");
-    expect(late.kind === "stale" ? late.current : undefined).toBe("expired");
+    expect(late.kind).toBe('stale');
+    expect(late.kind === 'stale' ? late.current : undefined).toBe('expired');
     // The row is untouched — `expired` is terminal and stays so.
-    expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe("expired");
+    expect((await findIntentById(gatewayDb(), intent.id))?.status).toBe('expired');
   });
 
   /**
@@ -98,7 +98,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
    * payment succeeded — moments after telling them it expired, about the same
    * payment, with no way to tell which is true.
    */
-  it("enqueues exactly the expiry event, and nothing for the refused write", async () => {
+  it('enqueues exactly the expiry event, and nothing for the refused write', async () => {
     const intent = await seedIntent(merchant, { expiresAt: PAST });
     const observed = intent.status;
 
@@ -107,10 +107,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
     // the state the late writer arrives into.
     const afterSweep = await deliveryTypesFor(intent.id);
 
-    await transitionIntent(intent.id, { from: observed, status: "settled" });
+    await transitionIntent(intent.id, { from: observed, status: 'settled' });
 
     expect(await deliveryTypesFor(intent.id)).toEqual(afterSweep);
-    expect(await deliveryTypesFor(intent.id)).not.toContain("payment_intent.settled");
+    expect(await deliveryTypesFor(intent.id)).not.toContain('payment_intent.settled');
   });
 
   /**
@@ -118,19 +118,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
    * answers 404 for one and 409 for the other. Collapsing them told a merchant
    * their payment did not exist when it did.
    */
-  it("tells a row that moved apart from a row that is not there", async () => {
+  it('tells a row that moved apart from a row that is not there', async () => {
     const intent = await seedIntent(merchant, { expiresAt: PAST });
     await expireDueIntents(gatewayDb(), new Date(), BATCH);
 
-    expect(await transitionIntent(intent.id, { from: "created", status: "settled" })).toMatchObject({
-      kind: "stale",
-    });
+    expect(await transitionIntent(intent.id, { from: 'created', status: 'settled' })).toMatchObject(
+      {
+        kind: 'stale',
+      },
+    );
     expect(
-      await transitionIntent("00000000-0000-7000-8000-000000000000", {
-        from: "created",
-        status: "settled",
+      await transitionIntent('00000000-0000-7000-8000-000000000000', {
+        from: 'created',
+        status: 'settled',
       }),
-    ).toEqual({ kind: "missing" });
+    ).toEqual({ kind: 'missing' });
   });
 
   /**
@@ -139,16 +141,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("a transition from a status the intent 
    * legitimate ones. This is the one that proves the predicate lets the right
    * write through.
    */
-  it("still applies a transition from the status the row actually holds", async () => {
+  it('still applies a transition from the status the row actually holds', async () => {
     const intent = await seedIntent(merchant);
 
     const moved = await updateIntentState(gatewayDb(), intent.id, {
       from: intent.status,
-      status: "broadcast",
-      txid: "f".repeat(64),
+      status: 'broadcast',
+      txid: 'f'.repeat(64),
     });
 
-    expect(moved.kind).toBe("updated");
-    expect(moved.kind === "updated" ? moved.row.status : undefined).toBe("broadcast");
+    expect(moved.kind).toBe('updated');
+    expect(moved.kind === 'updated' ? moved.row.status : undefined).toBe('broadcast');
   });
 });

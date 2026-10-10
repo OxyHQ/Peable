@@ -3,18 +3,18 @@ import {
   SsrfRejection,
   UpstreamError,
   type SafeFetchResult,
-} from "@oxy.so/core/server";
+} from '@oxy.so/core/server';
 import {
   signWebhook,
   type PaymentIntent,
   type WebhookEvent,
   type WebhookEventPayload,
   type WebhookEventType,
-} from "@peable.to/shared-types";
-import { newId } from "../lib/ids";
+} from '@peable.to/shared-types';
+import { newId } from '../lib/ids';
 
 /** The concrete `safeFetch` signature — injected in tests, real one in prod. */
-export type SafeFetchFn = typeof import("@oxy.so/core/server").safeFetch;
+export type SafeFetchFn = typeof import('@oxy.so/core/server').safeFetch;
 
 /** Where a merchant's signed webhook events are POSTed, and the signing secret. */
 export interface WebhookTarget {
@@ -42,8 +42,8 @@ export function buildEvent<K extends WebhookEventType>(
   object: WebhookEventPayload[K],
 ): WebhookEvent<K> {
   return {
-    id: newId("evt"),
-    object: "event",
+    id: newId('evt'),
+    object: 'event',
     type,
     created: new Date(Date.now()).toISOString(),
     data: { object },
@@ -52,9 +52,9 @@ export function buildEvent<K extends WebhookEventType>(
 
 /** One attempt's conclusion, in the outbox's vocabulary. */
 export type AttemptOutcome =
-  | { kind: "delivered" }
-  | { kind: "refused"; reason: string }
-  | { kind: "retry"; reason: string };
+  | { kind: 'delivered' }
+  | { kind: 'refused'; reason: string }
+  | { kind: 'retry'; reason: string };
 
 /**
  * Make ONE signed POST to a merchant endpoint and classify what came back.
@@ -92,20 +92,20 @@ export async function attemptDelivery(
   let result: SafeFetchResult | null = null;
   try {
     result = await safeFetch(target.url, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Peable-Signature": signature,
+        'Content-Type': 'application/json',
+        'Peable-Signature': signature,
       },
       body: rawBody,
     });
     if (result.status >= HTTP_OK_MIN && result.status < HTTP_OK_MAX) {
-      return { kind: "delivered" };
+      return { kind: 'delivered' };
     }
     if (result.status < HTTP_SERVER_ERROR_MIN) {
-      return { kind: "refused", reason: `target responded ${result.status}` };
+      return { kind: 'refused', reason: `target responded ${result.status}` };
     }
-    return { kind: "retry", reason: `target responded ${result.status}` };
+    return { kind: 'retry', reason: `target responded ${result.status}` };
   } catch (error) {
     if (error instanceof SsrfRejection) {
       // Warned, not just recorded: an SSRF-rejected target is a configuration
@@ -114,17 +114,17 @@ export async function attemptDelivery(
       process.emitWarning(
         `Peable webhook target refused as SSRF-unsafe: ${target.url} (${error.message})`,
       );
-      return { kind: "refused", reason: `ssrf rejection: ${error.message}` };
+      return { kind: 'refused', reason: `ssrf rejection: ${error.message}` };
     }
     if (error instanceof UpstreamError) {
-      return { kind: "retry", reason: `upstream error: ${error.message}` };
+      return { kind: 'retry', reason: `upstream error: ${error.message}` };
     }
     // An unexpected failure. `retry` rather than `refused`, deliberately:
     // assuming an unknown defect is permanent is how a recoverable outage
     // becomes an abandoned event, and the attempt budget bounds the cost of
     // being wrong in this direction.
     const message = error instanceof Error ? error.message : String(error);
-    return { kind: "retry", reason: `unexpected error: ${message}` };
+    return { kind: 'retry', reason: `unexpected error: ${message}` };
   } finally {
     result?.response.destroy();
   }

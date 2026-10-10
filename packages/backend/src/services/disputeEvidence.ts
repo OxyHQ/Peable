@@ -37,25 +37,22 @@
  * missing the receipt it rests on — which is the same failure the read-only
  * route was avoiding, one level down.
  */
-import type { MerchantEnvironment } from "@peable.to/shared-types";
-import {
-  markDisputeEvidenceSubmitted,
-  type DisputeRow,
-} from "../db/disputes/disputeRepository";
-import { getDb } from "../db/postgres";
-import { assertEnvironmentMatchesProvider } from "./providers/environmentGuard";
+import type { MerchantEnvironment } from '@peable.to/shared-types';
+import { markDisputeEvidenceSubmitted, type DisputeRow } from '../db/disputes/disputeRepository';
+import { getDb } from '../db/postgres';
+import { assertEnvironmentMatchesProvider } from './providers/environmentGuard';
 import {
   isDisputeHandlingProvider,
   type DisputeEvidence,
   type ProviderId,
-} from "./providers/provider";
-import { resolveProvider } from "./providers/registry";
+} from './providers/provider';
+import { resolveProvider } from './providers/registry';
 
 /** The rail cannot answer disputes — true of the chain rail, which has none. */
 export class DisputesUnanswerableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "DisputesUnanswerableError";
+    this.name = 'DisputesUnanswerableError';
   }
 }
 
@@ -63,7 +60,7 @@ export class DisputesUnanswerableError extends Error {
 export class DisputeNotAnswerableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "DisputeNotAnswerableError";
+    this.name = 'DisputeNotAnswerableError';
   }
 }
 
@@ -103,7 +100,7 @@ export async function submitDisputeEvidence(
     // reported rather than repeated.
     return { dispute, submitted: false };
   }
-  if (dispute.status !== "needs_response") {
+  if (dispute.status !== 'needs_response') {
     throw new DisputeNotAnswerableError(
       `this dispute is '${dispute.status}' and is not accepting a response`,
     );
@@ -113,14 +110,12 @@ export async function submitDisputeEvidence(
     // because the merchant needs to know it was the clock and not their
     // request — and because a late submission is the one failure on this
     // surface that no retry fixes.
-    throw new DisputeNotAnswerableError(
-      "the deadline for responding to this dispute has passed",
-    );
+    throw new DisputeNotAnswerableError('the deadline for responding to this dispute has passed');
   }
   if (!hasAnyEvidence(input.evidence)) {
     // An empty response would be submitted, final, and would say nothing — the
     // worst possible use of a one-shot action.
-    throw new DisputeNotAnswerableError("a response needs at least one field");
+    throw new DisputeNotAnswerableError('a response needs at least one field');
   }
 
   const provider = resolveProvider(dispute.provider as ProviderId);
@@ -130,9 +125,7 @@ export async function submitDisputeEvidence(
     );
   }
   if (!isDisputeHandlingProvider(provider)) {
-    throw new DisputesUnanswerableError(
-      `the ${provider.id} rail cannot answer disputes`,
-    );
+    throw new DisputesUnanswerableError(`the ${provider.id} rail cannot answer disputes`);
   }
 
   await provider.submitDisputeEvidence({
@@ -153,6 +146,6 @@ export async function submitDisputeEvidence(
 /** Whether the merchant said anything at all. */
 function hasAnyEvidence(evidence: DisputeEvidence): boolean {
   return Object.values(evidence).some(
-    (value) => typeof value === "string" && value.trim().length > 0,
+    (value) => typeof value === 'string' && value.trim().length > 0,
   );
 }

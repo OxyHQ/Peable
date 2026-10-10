@@ -55,8 +55,8 @@ export async function discoverUtxos(
   network: NetworkType,
   fetchInfo: (
     addresses: readonly string[],
-    network: NetworkType
-  ) => Promise<Map<string, AddressInfo>> = fetchAddressInfo
+    network: NetworkType,
+  ) => Promise<Map<string, AddressInfo>> = fetchAddressInfo,
 ): Promise<UTXO[]> {
   const utxos: UTXO[] = [];
   const seen = new Set<string>();

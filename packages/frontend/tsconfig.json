@@ -10,16 +10,10 @@
     // `baseUrl` intentionally omitted (TS 6 / expo-router); `paths` resolve
     // relative to this file.
     "composite": true,
-    "types": [
-      "bun-types"
-    ],
+    "types": ["bun-types"],
     "paths": {
-      "@/*": [
-        "./src/*"
-      ],
-      "@app/*": [
-        "./app/*"
-      ]
+      "@/*": ["./src/*"],
+      "@app/*": ["./app/*"]
     }
   },
   "include": [

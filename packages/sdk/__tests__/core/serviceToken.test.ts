@@ -2,7 +2,12 @@ import { afterEach, describe, expect, setSystemTime, test } from 'bun:test';
 import { createServiceTokenProvider } from '../../src/core/serviceToken';
 import { PeableApiError, PeableAuthenticationError } from '../../src/core/errors';
 import { createMockFetch } from '../support/mockFetch';
-import { SERVICE_TOKEN_MINT_URL, TEST_OXY_API_URL, TEST_PUBLIC_KEY, TEST_SECRET } from '../support/testGateway';
+import {
+  SERVICE_TOKEN_MINT_URL,
+  TEST_OXY_API_URL,
+  TEST_PUBLIC_KEY,
+  TEST_SECRET,
+} from '../support/testGateway';
 
 afterEach(() => {
   setSystemTime();

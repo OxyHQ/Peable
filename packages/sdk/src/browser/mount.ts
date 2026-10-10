@@ -340,10 +340,7 @@ function toPeableError(error: unknown): PeableError {
  * first `settled`/`confirming`/`failed`/`error` event can fire on the
  * following microtask.
  */
-function mount(
-  target: string | Element,
-  opts: PeableCheckoutMountOptions,
-): PeableCheckoutInstance {
+function mount(target: string | Element, opts: PeableCheckoutMountOptions): PeableCheckoutInstance {
   const element = resolveTarget(target);
   const intentId = deriveIntentId(opts.clientSecret, opts.intentId);
   const clientSecret = opts.clientSecret;

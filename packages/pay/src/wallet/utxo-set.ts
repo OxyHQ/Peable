@@ -4,7 +4,7 @@
  * and performs coin selection for transaction building.
  */
 
-import { UNITS_PER_COIN, SMALLEST_UNIT_NAME } from "@fairco.in/core";
+import { UNITS_PER_COIN, SMALLEST_UNIT_NAME } from '@fairco.in/core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -136,12 +136,9 @@ export class UTXOSet {
    * @returns Selected UTXOs, total fee, and change amount.
    * @throws If insufficient funds.
    */
-  selectCoins(
-    targetValue: bigint,
-    feePerByte: number,
-  ): CoinSelectionResult {
+  selectCoins(targetValue: bigint, feePerByte: number): CoinSelectionResult {
     if (targetValue <= 0n) {
-      throw new Error("Target value must be positive");
+      throw new Error('Target value must be positive');
     }
 
     // Sort UTXOs by value descending (largest first)
@@ -237,9 +234,5 @@ function utxoKey(txid: string, vout: number): string {
 }
 
 function estimateTxSize(inputCount: number, outputCount: number): number {
-  return (
-    TX_OVERHEAD_BYTES +
-    inputCount * BYTES_PER_INPUT +
-    outputCount * BYTES_PER_OUTPUT
-  );
+  return TX_OVERHEAD_BYTES + inputCount * BYTES_PER_INPUT + outputCount * BYTES_PER_OUTPUT;
 }

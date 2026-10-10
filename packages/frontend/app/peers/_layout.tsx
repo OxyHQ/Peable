@@ -2,8 +2,8 @@
  * Peers group layout — Stack navigator for peers list + add peer subscreen.
  */
 
-import { Stack } from "expo-router";
-import { useTheme } from "@oxy.so/bloom/theme";
+import { Stack } from 'expo-router';
+import { useTheme } from '@oxy.so/bloom/theme';
 
 export default function PeersLayout() {
   const theme = useTheme();

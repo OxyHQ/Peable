@@ -12,12 +12,12 @@
  * the submission is ONE SHOT, the evidence is never stored, and a deadline that
  * has passed is refused here rather than at the acquirer.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
 
 interface ProviderCall {
   readonly fn: string;
@@ -27,29 +27,29 @@ const providerCalls: ProviderCall[] = [];
 let submitThrows: Error | null = null;
 
 const fakeProvider = {
-  id: "stripe" as const,
+  id: 'stripe' as const,
   submitDisputeEvidence: async (request: Record<string, unknown>) => {
-    providerCalls.push({ fn: "submitDisputeEvidence", request });
+    providerCalls.push({ fn: 'submitDisputeEvidence', request });
     if (submitThrows) throw submitThrows;
-    return { providerObjectId: String(request.providerObjectId), status: "under_review" };
+    return { providerObjectId: String(request.providerObjectId), status: 'under_review' };
   },
   createPayment: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   capture: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   cancel: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   refund: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   getStatus: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   verifyEvent: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
 };
 
@@ -57,30 +57,30 @@ const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import("../../services/providers/registry");
+} = await import('../../services/providers/registry');
 let useFake = false;
 
-mock.module("../../services/providers/registry", () => ({
-  resolveProvider: (id: "stripe") => (useFake ? fakeProvider : realResolveProvider(id)),
+mock.module('../../services/providers/registry', () => ({
+  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
   resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
   resetProviders: () => {
     realResetProviders();
   },
 }));
 
-const { createDisputesRouter } = await import("../disputes");
+const { createDisputesRouter } = await import('../disputes');
 const { upsertDispute, findDisputeByProviderObject } = await import(
-  "../../db/disputes/disputeRepository"
+  '../../db/disputes/disputeRepository'
 );
 const { gatewayDb, seedIntent, seedMerchant, useGatewayDatabase } = await import(
-  "../../__tests__/helpers/gatewayTestDatabase"
+  '../../__tests__/helpers/gatewayTestDatabase'
 );
-const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
+const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
 let server: Server;
-let baseUrl = "";
+let baseUrl = '';
 let counter = 0;
 
 interface Body {
@@ -94,8 +94,8 @@ interface Body {
 
 async function post(path: string, body: unknown): Promise<{ status: number; json: Body }> {
   const response = await fetch(`${baseUrl}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   const text = await response.text();
@@ -103,27 +103,27 @@ async function post(path: string, body: unknown): Promise<{ status: number; json
 }
 
 /** A dispute in the one state that accepts a response. */
-async function openDispute(options: { dueAt?: Date | null; status?: "needs_response" | "won" } = {}) {
+async function openDispute(
+  options: { dueAt?: Date | null; status?: 'needs_response' | 'won' } = {},
+) {
   counter += 1;
-  const intent = await seedIntent(merchant, { rail: "card", currency: "EUR", amount: "5000" });
+  const intent = await seedIntent(merchant, { rail: 'card', currency: 'EUR', amount: '5000' });
   const { dispute } = await upsertDispute(gatewayDb(), {
     merchantId: merchant.id,
     paymentIntentId: intent.id,
-    provider: "stripe",
+    provider: 'stripe',
     providerObjectId: `dp_stripe_${String(counter)}`,
-    amount: "5000",
-    currency: "EUR",
-    status: options.status ?? "needs_response",
-    reason: "fraudulent",
+    amount: '5000',
+    currency: 'EUR',
+    status: options.status ?? 'needs_response',
+    reason: 'fraudulent',
     evidenceDueAt:
-      options.dueAt === undefined
-        ? new Date(Date.now() + 7 * 86_400_000)
-        : options.dueAt,
+      options.dueAt === undefined ? new Date(Date.now() + 7 * 86_400_000) : options.dueAt,
   });
   return dispute;
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
@@ -133,12 +133,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
     const stubAuth: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: merchant.oxyAppId,
-        appName: "t",
-        scopes: ["payments:read", "payments:write"],
-        credentialId: "c",
-        ownerAccountId: "owner",
-        environment: "development",
-        tier: "external",
+        appName: 't',
+        scopes: ['payments:read', 'payments:write'],
+        credentialId: 'c',
+        ownerAccountId: 'owner',
+        environment: 'development',
+        tier: 'external',
       };
       next();
     };
@@ -168,16 +168,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
     const dispute = await openDispute();
 
     const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      productDescription: "A blue enamel mug, 350ml",
-      shippingTrackingNumber: "TRACK-1",
-      uncategorizedText: "The buyer collected this in person on the 3rd.",
+      productDescription: 'A blue enamel mug, 350ml',
+      shippingTrackingNumber: 'TRACK-1',
+      uncategorizedText: 'The buyer collected this in person on the 3rd.',
     });
 
     expect(status).toBe(201);
-    expect(json.object).toBe("dispute");
+    expect(json.object).toBe('dispute');
     expect(json.evidenceSubmittedAt).not.toBeNull();
 
-    const call = providerCalls.find((entry) => entry.fn === "submitDisputeEvidence");
+    const call = providerCalls.find((entry) => entry.fn === 'submitDisputeEvidence');
     expect(call?.request.providerObjectId).toBe(dispute.providerObjectId);
     // Derived from the dispute's own id, so a retry after a lost response is
     // the same submission rather than a second one.
@@ -188,9 +188,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * THE property. Submitting is one-way at the network, so a second call must
    * not send a second response — it answers 200 with the dispute as it stands.
    */
-  test("submits once, however many times it is asked", async () => {
+  test('submits once, however many times it is asked', async () => {
     const dispute = await openDispute();
-    const body = { uncategorizedText: "The goods were delivered and signed for." };
+    const body = { uncategorizedText: 'The goods were delivered and signed for.' };
 
     const first = await post(`/v1/disputes/${dispute.publicId}/evidence`, body);
     providerCalls.length = 0;
@@ -211,28 +211,28 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * `redactProviderPayload` exists because this gateway does not keep that
    * class of data. What is recorded is THAT a response was given and when.
    */
-  test("keeps none of the evidence, only the fact that it was submitted", async () => {
+  test('keeps none of the evidence, only the fact that it was submitted', async () => {
     const dispute = await openDispute();
     await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      customerName: "Jane Buyer",
-      customerEmailAddress: "jane@example.com",
-      billingAddress: "3 Flat Street, Springfield",
-      uncategorizedText: "She collected it herself.",
+      customerName: 'Jane Buyer',
+      customerEmailAddress: 'jane@example.com',
+      billingAddress: '3 Flat Street, Springfield',
+      uncategorizedText: 'She collected it herself.',
     });
 
     const stored = await findDisputeByProviderObject(
       gatewayDb(),
-      "stripe",
+      'stripe',
       dispute.providerObjectId,
     );
     expect(stored?.evidenceSubmittedAt).toBeInstanceOf(Date);
 
     // The whole row, serialized — none of the merchant's words are in it.
     const asText = JSON.stringify(stored);
-    expect(asText).not.toContain("Jane Buyer");
-    expect(asText).not.toContain("jane@example.com");
-    expect(asText).not.toContain("Springfield");
-    expect(asText).not.toContain("collected it herself");
+    expect(asText).not.toContain('Jane Buyer');
+    expect(asText).not.toContain('jane@example.com');
+    expect(asText).not.toContain('Springfield');
+    expect(asText).not.toContain('collected it herself');
   });
 
   /**
@@ -242,24 +242,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * late submission is the one failure on this surface no retry fixes, so
    * finding out from the acquirer's error message is finding out too late.
    */
-  test("refuses a response after the deadline, without calling the provider", async () => {
+  test('refuses a response after the deadline, without calling the provider', async () => {
     const dispute = await openDispute({ dueAt: new Date(Date.now() - 1000) });
 
     const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: "Late.",
+      uncategorizedText: 'Late.',
     });
 
     expect(status).toBe(409);
-    expect(json.error?.message).toContain("deadline");
+    expect(json.error?.message).toContain('deadline');
     expect(providerCalls).toHaveLength(0);
   });
 
   /** A decided dispute accepts nothing. */
-  test("refuses a response to a dispute that is already closed", async () => {
-    const dispute = await openDispute({ status: "won", dueAt: null });
+  test('refuses a response to a dispute that is already closed', async () => {
+    const dispute = await openDispute({ status: 'won', dueAt: null });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: "Anything.",
+      uncategorizedText: 'Anything.',
     });
 
     expect(status).toBe(409);
@@ -270,7 +270,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * An EMPTY response would be submitted, final, and would say nothing — the
    * worst possible use of a one-shot action.
    */
-  test("refuses a response with nothing in it", async () => {
+  test('refuses a response with nothing in it', async () => {
     const dispute = await openDispute();
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {});
@@ -286,11 +286,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * would otherwise submit — finally — a response missing the field they were
    * relying on, and find out when the dispute is decided.
    */
-  test("refuses a field name the network would not recognise", async () => {
+  test('refuses a field name the network would not recognise', async () => {
     const dispute = await openDispute();
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      trackingNumber: "TRACK-2",
+      trackingNumber: 'TRACK-2',
     });
 
     expect(status).toBe(422);
@@ -298,23 +298,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
   });
 
   /** Another merchant's dispute is a 404, exactly like one that does not exist. */
-  test("does not answer across merchants", async () => {
+  test('does not answer across merchants', async () => {
     const other = await seedMerchant();
-    const intent = await seedIntent(other, { rail: "card", currency: "EUR", amount: "5000" });
+    const intent = await seedIntent(other, { rail: 'card', currency: 'EUR', amount: '5000' });
     counter += 1;
     const { dispute } = await upsertDispute(gatewayDb(), {
       merchantId: other.id,
       paymentIntentId: intent.id,
-      provider: "stripe",
+      provider: 'stripe',
       providerObjectId: `dp_stripe_other_${String(counter)}`,
-      amount: "5000",
-      currency: "EUR",
-      status: "needs_response",
+      amount: '5000',
+      currency: 'EUR',
+      status: 'needs_response',
       evidenceDueAt: new Date(Date.now() + 86_400_000),
     });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: "Not mine to answer.",
+      uncategorizedText: 'Not mine to answer.',
     });
 
     expect(status).toBe(404);
@@ -325,24 +325,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("answering a dispute", () => {
    * A provider failure leaves the dispute UNANSWERED, so the merchant can try
    * again while the deadline is still running.
    */
-  test("does not record a submission the provider refused", async () => {
+  test('does not record a submission the provider refused', async () => {
     const dispute = await openDispute();
-    const { ProviderError } = await import("../../services/providers/provider");
+    const { ProviderError } = await import('../../services/providers/provider');
     submitThrows = new ProviderError({
-      provider: "stripe",
-      stage: "dispute",
-      message: "the acquirer could not be reached",
+      provider: 'stripe',
+      stage: 'dispute',
+      message: 'the acquirer could not be reached',
       retryable: true,
     });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: "Delivered and signed for.",
+      uncategorizedText: 'Delivered and signed for.',
     });
 
     expect(status).toBe(502);
     const stored = await findDisputeByProviderObject(
       gatewayDb(),
-      "stripe",
+      'stripe',
       dispute.providerObjectId,
     );
     // Still unanswered — the row records a FACT at the network, not an attempt,

@@ -12,14 +12,14 @@ import {
   deriveKeyFromSeed,
   publicKeyToAddress,
   TESTNET,
-} from "@fairco.in/core";
-import { HDKey } from "@scure/bip32";
+} from '@fairco.in/core';
+import { HDKey } from '@scure/bip32';
 
 // Canonical 24-word BIP39 test mnemonic (all "abandon" + checksum word "art").
 const MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
 
-if (!validateMnemonic(MNEMONIC)) throw new Error("test mnemonic invalid");
+if (!validateMnemonic(MNEMONIC)) throw new Error('test mnemonic invalid');
 
 const seed = mnemonicToSeed(MNEMONIC);
 const root = deriveKeyFromSeed(seed, TESTNET);
@@ -34,18 +34,18 @@ const node = HDKey.fromExtendedKey(accountXpub, {
 
 function addr(change: number, index: number): string {
   const child = node.deriveChild(change).deriveChild(index);
-  if (!child.publicKey) throw new Error("no public key derived");
+  if (!child.publicKey) throw new Error('no public key derived');
   return publicKeyToAddress(child.publicKey, TESTNET);
 }
 
 console.log(
   JSON.stringify(
     {
-      network: "testnet",
+      network: 'testnet',
       accountPath,
       bip44CoinType: TESTNET.bip44CoinType,
       xpub: accountXpub,
-      external: { "0/0": addr(0, 0), "0/1": addr(0, 1), "0/2": addr(0, 2) },
+      external: { '0/0': addr(0, 0), '0/1': addr(0, 1), '0/2': addr(0, 2) },
     },
     null,
     2,

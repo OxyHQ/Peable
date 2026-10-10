@@ -47,7 +47,7 @@ export async function createSuiteDatabase(): Promise<SuiteDatabase> {
     throw new Error(
       'TEST_DATABASE_URL is not set. Start the local server with ' +
         '`docker compose -f docker-compose.postgres.yml up -d` and export ' +
-        'TEST_DATABASE_URL=postgres://peable:peable@localhost:5439/postgres'
+        'TEST_DATABASE_URL=postgres://peable:peable@localhost:5439/postgres',
     );
   }
 

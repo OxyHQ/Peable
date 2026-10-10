@@ -54,7 +54,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
   it('stores a delivery and reads it back whole', async () => {
     const id = await insertProviderEvent(
       suite!.db,
-      delivery({ providerEventId: 'evt_store', objectIds: { payment_intent: 'pi_store' } })
+      delivery({ providerEventId: 'evt_store', objectIds: { payment_intent: 'pi_store' } }),
     );
     expect(id).toBeTruthy();
 
@@ -92,11 +92,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
   it('converges on a retry of a CONNECT-scope delivery', async () => {
     const first = await insertProviderEvent(
       suite!.db,
-      delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' })
+      delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' }),
     );
     const second = await insertProviderEvent(
       suite!.db,
-      delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' })
+      delivery({ providerEventId: 'evt_conn', providerAccountId: 'acct_1' }),
     );
 
     expect(first).toBeTruthy();
@@ -110,14 +110,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
    * them together would drop a delivery nobody ever sees again.
    */
   it('keeps deliveries to different scopes apart even when the event id matches', async () => {
-    const platform = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_both' }));
+    const platform = await insertProviderEvent(
+      suite!.db,
+      delivery({ providerEventId: 'evt_both' }),
+    );
     const connectA = await insertProviderEvent(
       suite!.db,
-      delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_a' })
+      delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_a' }),
     );
     const connectB = await insertProviderEvent(
       suite!.db,
-      delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_b' })
+      delivery({ providerEventId: 'evt_both', providerAccountId: 'acct_b' }),
     );
 
     expect(platform).toBeTruthy();
@@ -160,7 +163,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
       suite!.db,
       'stripe',
       'acct_nope',
-      'evt_lookup'
+      'evt_lookup',
     );
     expect(wrongScope).toBeNull();
   });
@@ -170,7 +173,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     try {
       await insertProviderEvent(
         suite!.db,
-        delivery({ provider: 'paypal', providerEventId: 'evt_paypal' })
+        delivery({ provider: 'paypal', providerEventId: 'evt_paypal' }),
       );
     } catch (error) {
       raised = error;
@@ -186,7 +189,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
         delivery({
           providerEventId: 'evt_scalar',
           payload: 'not an object' as unknown as Record<string, unknown>,
-        })
+        }),
       );
     } catch (error) {
       raised = error;
@@ -195,8 +198,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
   });
 
   it('serves the drain unprocessed rows oldest first, and drops them once handled', async () => {
-    const older = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_drain_1' }));
-    const newer = await insertProviderEvent(suite!.db, delivery({ providerEventId: 'evt_drain_2' }));
+    const older = await insertProviderEvent(
+      suite!.db,
+      delivery({ providerEventId: 'evt_drain_1' }),
+    );
+    const newer = await insertProviderEvent(
+      suite!.db,
+      delivery({ providerEventId: 'evt_drain_2' }),
+    );
 
     const pending = await findUnprocessedProviderEvents(suite!.db, 100);
     const ids = pending.map((row) => row.id);
@@ -223,7 +232,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     expect(failed?.processingError).toBe('downstream refused');
     expect(failed?.processedAt).toBeNull();
     expect((await findUnprocessedProviderEvents(suite!.db, 100)).map((row) => row.id)).toContain(
-      id!
+      id!,
     );
 
     await markProviderEventProcessed(suite!.db, id!);

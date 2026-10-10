@@ -1,7 +1,7 @@
 // bigint <-> canonical base-unit-string helpers. The domain works in bigint
 // base units (m⊜); the database stores the decimal string. No float ever touches a
 // monetary value on either side of this boundary.
-import { isBaseUnitString } from "@peable.to/shared-types";
+import { isBaseUnitString } from '@peable.to/shared-types';
 
 /**
  * Parse a canonical base-unit integer string into a bigint. Throws (via the

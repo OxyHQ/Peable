@@ -8,21 +8,21 @@
  * action and full-width sizing on native — are layered on here.
  */
 
-import { useCallback } from "react";
-import type { ViewStyle } from "react-native";
-import { Button as BloomButton } from "@oxy.so/bloom/button";
-import type { ButtonProps as BloomButtonProps } from "@oxy.so/bloom/button";
-import { hapticImpact } from "../../utils/haptics";
+import { useCallback } from 'react';
+import type { ViewStyle } from 'react-native';
+import { Button as BloomButton } from '@oxy.so/bloom/button';
+import type { ButtonProps as BloomButtonProps } from '@oxy.so/bloom/button';
+import { hapticImpact } from '../../utils/haptics';
 
-type ButtonVariant = "primary" | "secondary" | "danger" | "outline" | "ghost";
-type ButtonSize = "sm" | "md" | "lg";
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'outline' | 'ghost';
+type ButtonSize = 'sm' | 'md' | 'lg';
 
-const VARIANT_MAP: Record<ButtonVariant, Pick<BloomButtonProps, "appearance" | "tone">> = {
-  primary: { appearance: "solid", tone: "accent" },
-  secondary: { appearance: "outline", tone: "neutral" },
-  danger: { appearance: "solid", tone: "danger" },
-  outline: { appearance: "outline" },
-  ghost: { appearance: "subtle" },
+const VARIANT_MAP: Record<ButtonVariant, Pick<BloomButtonProps, 'appearance' | 'tone'>> = {
+  primary: { appearance: 'solid', tone: 'accent' },
+  secondary: { appearance: 'outline', tone: 'neutral' },
+  danger: { appearance: 'solid', tone: 'danger' },
+  outline: { appearance: 'outline' },
+  ghost: { appearance: 'subtle' },
 };
 
 interface ButtonProps {
@@ -33,7 +33,7 @@ interface ButtonProps {
   disabled?: boolean;
   loading?: boolean;
   icon?: React.ReactNode;
-  iconPosition?: "left" | "right";
+  iconPosition?: 'left' | 'right';
   fullWidth?: boolean;
   style?: ViewStyle;
 }
@@ -41,17 +41,17 @@ interface ButtonProps {
 export function Button({
   title,
   onPress,
-  variant = "primary",
-  size = "md",
+  variant = 'primary',
+  size = 'md',
   disabled = false,
   loading = false,
   icon,
-  iconPosition = "left",
+  iconPosition = 'left',
   fullWidth = true,
   style,
 }: ButtonProps) {
   const handlePress = useCallback(() => {
-    if (variant === "primary") hapticImpact();
+    if (variant === 'primary') hapticImpact();
     onPress();
   }, [variant, onPress]);
 
@@ -64,7 +64,7 @@ export function Button({
       loading={loading}
       icon={icon}
       iconPosition={iconPosition}
-      style={fullWidth ? [{ width: "100%" }, style] : style}
+      style={fullWidth ? [{ width: '100%' }, style] : style}
     >
       {title}
     </BloomButton>

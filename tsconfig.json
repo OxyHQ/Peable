@@ -27,15 +27,6 @@
   // composite project — consumers resolve it via node_modules like any other
   // published dependency, the same way oxy-api resolves `@oxy.so/contracts`.
   "files": [],
-  "references": [
-    { "path": "./packages/backend" },
-    { "path": "./packages/frontend" }
-  ],
-  "exclude": [
-    "node_modules",
-    "**/node_modules",
-    "**/dist",
-    "**/build",
-    "**/.expo"
-  ]
+  "references": [{ "path": "./packages/backend" }, { "path": "./packages/frontend" }],
+  "exclude": ["node_modules", "**/node_modules", "**/dist", "**/build", "**/.expo"]
 }

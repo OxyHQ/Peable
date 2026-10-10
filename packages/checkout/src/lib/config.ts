@@ -4,8 +4,7 @@
 // lookup.
 
 /** Peable Gateway base URL — the REST + socket API this app talks to. */
-export const GATEWAY_URL: string =
-  import.meta.env.VITE_GATEWAY_URL ?? 'https://api.peable.to';
+export const GATEWAY_URL: string = import.meta.env.VITE_GATEWAY_URL ?? 'https://api.peable.to';
 
 /** Custom URL scheme the wallet app registers for the "open in wallet" deep link. */
 export const WALLET_DEEPLINK_SCHEME: string =

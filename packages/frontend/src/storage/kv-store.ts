@@ -17,7 +17,7 @@
  * All other modules use this adapter instead.
  */
 
-import { Platform } from "react-native";
+import { Platform } from 'react-native';
 
 // ---------------------------------------------------------------------------
 // Storage interface
@@ -35,7 +35,7 @@ interface StorageAdapter {
 
 function createNativeAdapter(): StorageAdapter {
   // Dynamic import to avoid web bundling issues
-  const SecureStore = require("expo-secure-store") as typeof import("expo-secure-store");
+  const SecureStore = require('expo-secure-store') as typeof import('expo-secure-store');
   return {
     getItem: (key) => SecureStore.getItemAsync(key),
     setItem: (key, value) => SecureStore.setItemAsync(key, value),
@@ -60,7 +60,7 @@ interface ElectronSecureBridge {
 }
 
 function getElectronSecure(): ElectronSecureBridge | undefined {
-  if (typeof window === "undefined") return undefined;
+  if (typeof window === 'undefined') return undefined;
   const win = window as unknown as Record<string, unknown>;
   const api = win.electronAPI as { secure?: ElectronSecureBridge } | undefined;
   if (api?.secure == null) return undefined;
@@ -70,10 +70,10 @@ function getElectronSecure(): ElectronSecureBridge | undefined {
 // Values encrypted via the Electron bridge are stored as this marker followed
 // by the base64 of the ciphertext, so reads can tell an encrypted entry from a
 // legacy/plaintext one and migrate transparently.
-const ENC_PREFIX = "enc:v1:";
+const ENC_PREFIX = 'enc:v1:';
 
 function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
+  let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
@@ -104,9 +104,9 @@ function warnUnencryptedOnce(): void {
   if (warnedUnencrypted) return;
   warnedUnencrypted = true;
   console.warn(
-    "[kv-store] Persisting wallet data UNENCRYPTED in localStorage: the " +
-      "Electron safeStorage bridge is unavailable (plain browser, or OS " +
-      "keychain not available). Sensitive data is not protected at rest.",
+    '[kv-store] Persisting wallet data UNENCRYPTED in localStorage: the ' +
+      'Electron safeStorage bridge is unavailable (plain browser, or OS ' +
+      'keychain not available). Sensitive data is not protected at rest.',
   );
 }
 
@@ -119,9 +119,7 @@ function createWebAdapter(): StorageAdapter {
   function isEncryptionAvailable(): Promise<boolean> {
     if (!secure) return Promise.resolve(false);
     if (!encryptionAvailable) {
-      encryptionAvailable = secure
-        .isAvailable()
-        .catch(() => false);
+      encryptionAvailable = secure.isAvailable().catch(() => false);
     }
     return encryptionAvailable;
   }
@@ -181,7 +179,7 @@ let _adapter: StorageAdapter | null = null;
 
 function getAdapter(): StorageAdapter {
   if (_adapter) return _adapter;
-  _adapter = Platform.OS === "web" ? createWebAdapter() : createNativeAdapter();
+  _adapter = Platform.OS === 'web' ? createWebAdapter() : createNativeAdapter();
   return _adapter;
 }
 

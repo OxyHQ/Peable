@@ -30,8 +30,8 @@
  * client — so it runs outside the app. Broadcast is the only step that needs a
  * live network path, kept deliberately pluggable.
  */
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
-import * as secp256k1 from "@noble/secp256k1";
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import * as secp256k1 from '@noble/secp256k1';
 import {
   createMultisigRedeemScript,
   multisigAddress,
@@ -41,19 +41,18 @@ import {
   hexToBytes,
   getNetwork,
   type UTXO,
-} from "@fairco.in/core";
+} from '@fairco.in/core';
 import {
   buildMultisigSendDraft,
   exportSigningRequest,
   signMultisigSendRequest,
   finalizeMultisigSend,
-} from "../src/wallet/multisig";
+} from '../src/wallet/multisig';
 
 // --- Constants -------------------------------------------------------------
 
-const NETWORK = getNetwork("testnet");
-const STATE_FILE = new URL("../.multisig-probe.testnet.json", import.meta.url)
-  .pathname;
+const NETWORK = getNetwork('testnet');
+const STATE_FILE = new URL('../.multisig-probe.testnet.json', import.meta.url).pathname;
 const THRESHOLD = 2; // m
 const COSIGNERS = 3; // n
 const DEFAULT_FEE_PER_BYTE = 10n;
@@ -65,7 +64,7 @@ const DEFAULT_FEE_RESERVE = 5_000n;
 /** Persisted probe identity. Holds TESTNET private keys — gitignored, never
  *  mainnet, never a real user's funds. */
 interface ProbeState {
-  network: "testnet";
+  network: 'testnet';
   m: number;
   n: number;
   /** Cosigner private keys, hex. TESTNET ONLY. */
@@ -86,11 +85,11 @@ function loadState(): ProbeState {
       `No probe state at ${STATE_FILE}. Run \`bun scripts/multisig-testnet-probe.ts setup\` first.`,
     );
   }
-  const parsed: unknown = JSON.parse(readFileSync(STATE_FILE, "utf8"));
+  const parsed: unknown = JSON.parse(readFileSync(STATE_FILE, 'utf8'));
   if (
-    typeof parsed !== "object" ||
+    typeof parsed !== 'object' ||
     parsed === null ||
-    (parsed as ProbeState).network !== "testnet"
+    (parsed as ProbeState).network !== 'testnet'
   ) {
     throw new Error(`Probe state at ${STATE_FILE} is malformed.`);
   }
@@ -115,11 +114,11 @@ function parseFlags(argv: string[]): Map<string, string> {
   const flags = new Map<string, string>();
   for (let i = 0; i < argv.length; i++) {
     const token = argv[i];
-    if (!token.startsWith("--")) continue;
+    if (!token.startsWith('--')) continue;
     const key = token.slice(2);
     const next = argv[i + 1];
-    if (next === undefined || next.startsWith("--")) {
-      flags.set(key, "true");
+    if (next === undefined || next.startsWith('--')) {
+      flags.set(key, 'true');
     } else {
       flags.set(key, next);
       i++;
@@ -155,7 +154,7 @@ function cmdSetup(): void {
   const address = multisigAddress(redeemScript, NETWORK);
 
   const state: ProbeState = {
-    network: "testnet",
+    network: 'testnet',
     m: THRESHOLD,
     n: COSIGNERS,
     privateKeys: privateKeys.map((k) => bytesToHex(k)),
@@ -169,7 +168,7 @@ function cmdSetup(): void {
   console.log(`  multisig address : ${address}`);
   console.log(`  redeem script    : ${state.redeemScript}`);
   console.log(`  P2SH scriptPubKey: ${bytesToHex(p2shScriptPubKey(redeemScript))}`);
-  console.log(`  cosigner pubkeys : ${state.publicKeys.join("\n                     ")}`);
+  console.log(`  cosigner pubkeys : ${state.publicKeys.join('\n                     ')}`);
   console.log(
     `  cosigner1 P2PKH  : ${publicKeyToAddress(publicKeys[0], NETWORK)} (an alternative --to target)`,
   );
@@ -184,9 +183,9 @@ function cmdSpend(flags: Map<string, string>): void {
   const redeemScript = hexToBytes(state.redeemScript);
 
   // --utxo txid:vout:satoshis (the funding output paying the multisig address)
-  const utxoParts = requireFlag(flags, "utxo").split(":");
+  const utxoParts = requireFlag(flags, 'utxo').split(':');
   if (utxoParts.length !== 3) {
-    throw new Error("--utxo must be <txid>:<vout>:<satoshis>");
+    throw new Error('--utxo must be <txid>:<vout>:<satoshis>');
   }
   const [txid, voutStr, satsStr] = utxoParts;
   const vout = Number.parseInt(voutStr, 10);
@@ -200,12 +199,12 @@ function cmdSpend(flags: Map<string, string>): void {
 
   // Destination defaults to the multisig address itself (a self-spend also
   // exercises the SPV receive path recognizing the change/output as ours).
-  const recipient = flags.get("to") ?? state.multisigAddress;
-  const feePerByte = flags.has("fee-per-byte")
-    ? BigInt(requireFlag(flags, "fee-per-byte"))
+  const recipient = flags.get('to') ?? state.multisigAddress;
+  const feePerByte = flags.has('fee-per-byte')
+    ? BigInt(requireFlag(flags, 'fee-per-byte'))
     : DEFAULT_FEE_PER_BYTE;
-  const amount = flags.has("amount")
-    ? BigInt(requireFlag(flags, "amount"))
+  const amount = flags.has('amount')
+    ? BigInt(requireFlag(flags, 'amount'))
     : value - DEFAULT_FEE_RESERVE;
   if (amount <= 0n) {
     throw new Error(
@@ -268,7 +267,7 @@ function cmdSpend(flags: Map<string, string>): void {
 }
 
 async function cmdBroadcast(flags: Map<string, string>): Promise<void> {
-  const rawHex = requireFlag(flags, "raw");
+  const rawHex = requireFlag(flags, 'raw');
   // Validate it is hex before doing anything with it.
   hexToBytes(rawHex);
 
@@ -291,17 +290,17 @@ async function cmdBroadcast(flags: Map<string, string>): Promise<void> {
   }
 
   const auth = process.env.FAIRCOIN_TESTNET_RPC_AUTH;
-  const headers: Record<string, string> = { "content-type": "application/json" };
+  const headers: Record<string, string> = { 'content-type': 'application/json' };
   if (auth !== undefined) {
-    headers.authorization = `Basic ${Buffer.from(auth).toString("base64")}`;
+    headers.authorization = `Basic ${Buffer.from(auth).toString('base64')}`;
   }
   const response = await fetch(rpcUrl, {
-    method: "POST",
+    method: 'POST',
     headers,
     body: JSON.stringify({
-      jsonrpc: "1.0",
-      id: "multisig-probe",
-      method: "sendrawtransaction",
+      jsonrpc: '1.0',
+      id: 'multisig-probe',
+      method: 'sendrawtransaction',
       params: [rawHex],
     }),
   });
@@ -342,16 +341,16 @@ async function main(): Promise<void> {
   const [command, ...rest] = process.argv.slice(2);
   const flags = parseFlags(rest);
   switch (command) {
-    case "setup":
+    case 'setup':
       cmdSetup();
       break;
-    case "spend":
+    case 'spend':
       cmdSpend(flags);
       break;
-    case "broadcast":
+    case 'broadcast':
       await cmdBroadcast(flags);
       break;
-    case "help":
+    case 'help':
     case undefined:
       cmdHelp();
       break;

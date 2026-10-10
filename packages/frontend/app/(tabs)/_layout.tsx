@@ -21,31 +21,31 @@
  * signal and the bar that reads it.
  */
 
-import { View } from "react-native";
-import { useSegments } from "expo-router";
-import { Tabs } from "expo-router/tabs";
-import { TabBarMinimizeProvider } from "@oxy.so/bloom/tab-bar";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { WalletRail } from "../../src/ui/navigation/WalletRail";
-import { WalletTabBar } from "../../src/ui/navigation/WalletTabBar";
-import { WALLET_TABS, useWalletNavLayout, type WalletTabName } from "../../src/ui/navigation/tabs";
-import { SignInView } from "../../src/ui/components/SignInView";
-import { hasIdentityKeystore } from "../../src/wallet/keystore";
-import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
+import { View } from 'react-native';
+import { useSegments } from 'expo-router';
+import { Tabs } from 'expo-router/tabs';
+import { TabBarMinimizeProvider } from '@oxy.so/bloom/tab-bar';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { WalletRail } from '../../src/ui/navigation/WalletRail';
+import { WalletTabBar } from '../../src/ui/navigation/WalletTabBar';
+import { WALLET_TABS, useWalletNavLayout, type WalletTabName } from '../../src/ui/navigation/tabs';
+import { SignInView } from '../../src/ui/components/SignInView';
+import { hasIdentityKeystore } from '../../src/wallet/keystore';
+import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
 
 /**
  * Send signs and Buy delivers to an address derived from the wallet's xpub, so
  * a read-only host does not offer them. Their screens also redirect a
  * read-only visitor home, for a typed URL.
  */
-const READ_ONLY_HIDDEN_TABS: ReadonlySet<WalletTabName> = new Set(["send", "buy"]);
+const READ_ONLY_HIDDEN_TABS: ReadonlySet<WalletTabName> = new Set(['send', 'buy']);
 
 /**
  * The public `/@username` profile (and, through the same dynamic segment, the
  * 404 for any unknown single-segment URL). A payer arriving from a shared link
  * has no session and must still see it.
  */
-const PUBLIC_ROUTE = "[username]";
+const PUBLIC_ROUTE = '[username]';
 
 export default function TabLayout() {
   const theme = useTheme();
@@ -77,24 +77,26 @@ export default function TabLayout() {
   // The public profile is the exception: it renders for anyone, inside the
   // navigator but with NO bar while there is no capability behind the viewer —
   // a rail of wallet destinations means nothing to a signed-out payer.
-  const noShell = !hasIdentityKeystore() && (capability === "pending" || capability === "none");
+  const noShell = !hasIdentityKeystore() && (capability === 'pending' || capability === 'none');
   if (!hasIdentityKeystore() && !onPublicRoute) {
-    if (capability === "pending") {
+    if (capability === 'pending') {
       return <View style={{ flex: 1, backgroundColor: theme.colors.background }} />;
     }
-    if (capability === "none") {
+    if (capability === 'none') {
       return <SignInView />;
     }
   }
 
   const tabs =
-    capability === "read-only" ? WALLET_TABS.filter((name) => !READ_ONLY_HIDDEN_TABS.has(name)) : WALLET_TABS;
+    capability === 'read-only'
+      ? WALLET_TABS.filter((name) => !READ_ONLY_HIDDEN_TABS.has(name))
+      : WALLET_TABS;
 
   return (
     <TabBarMinimizeProvider>
       <Tabs
         tabBar={(props) =>
-          noShell ? null : layout === "rail" ? (
+          noShell ? null : layout === 'rail' ? (
             <WalletRail {...props} tabs={tabs} />
           ) : (
             <WalletTabBar {...props} tabs={tabs} />
@@ -102,7 +104,7 @@ export default function TabLayout() {
         }
         screenOptions={{
           headerShown: false,
-          tabBarPosition: layout === "rail" && !noShell ? "left" : "bottom",
+          tabBarPosition: layout === 'rail' && !noShell ? 'left' : 'bottom',
           sceneStyle: { backgroundColor: theme.colors.background },
         }}
       >

@@ -7,13 +7,9 @@
  * working.
  */
 
-import {
-  createAudioPlayer,
-  setAudioModeAsync,
-  type AudioPlayer,
-} from "expo-audio";
+import { createAudioPlayer, setAudioModeAsync, type AudioPlayer } from 'expo-audio';
 
-type SoundKind = "sent" | "received" | "unlocked";
+type SoundKind = 'sent' | 'received' | 'unlocked';
 
 let initialized = false;
 
@@ -29,7 +25,7 @@ async function init(): Promise<void> {
       // Local short SFX; we never want background media playback.
       shouldPlayInBackground: false,
       // Mix with other apps — these are UI feedback sounds, not media.
-      interruptionMode: "mixWithOthers",
+      interruptionMode: 'mixWithOthers',
     });
   } catch {
     // setAudioModeAsync can fail on web / electron where the native audio
@@ -42,9 +38,9 @@ function loadSource(kind: SoundKind): number | null {
   // `require()` is wrapped in try/catch so a missing asset file or a
   // platform that cannot resolve the asset doesn't break the import graph.
   try {
-    if (kind === "sent") return require("../../assets/sounds/sent.mp3");
-    if (kind === "received") return require("../../assets/sounds/received.mp3");
-    return require("../../assets/sounds/unlocked.mp3");
+    if (kind === 'sent') return require('../../assets/sounds/sent.mp3');
+    if (kind === 'received') return require('../../assets/sounds/received.mp3');
+    return require('../../assets/sounds/unlocked.mp3');
   } catch {
     // Asset not bundled or platform cannot resolve — graceful no-op.
     return null;
@@ -84,13 +80,13 @@ async function play(kind: SoundKind): Promise<void> {
 }
 
 export function playSent(): void {
-  void play("sent");
+  void play('sent');
 }
 
 export function playReceived(): void {
-  void play("received");
+  void play('received');
 }
 
 export function playUnlocked(): void {
-  void play("unlocked");
+  void play('unlocked');
 }

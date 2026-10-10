@@ -18,8 +18,8 @@
  * the wallet's own receive addresses and is already in `addresses`.
  */
 
-import type { Database } from "../storage/database";
-import type { BuyOrderStatus, PaymentCurrency } from "../api/buy";
+import type { Database } from '../storage/database';
+import type { BuyOrderStatus, PaymentCurrency } from '../api/buy';
 
 export interface BuyHistoryEntry {
   readonly id: string;
@@ -42,11 +42,7 @@ export interface BuyHistoryEntry {
  * Statuses the bridge will never move away from. Used to skip refreshing
  * orders that can no longer change.
  */
-const TERMINAL_STATUSES: ReadonlySet<BuyOrderStatus> = new Set([
-  "DELIVERED",
-  "FAILED",
-  "EXPIRED",
-]);
+const TERMINAL_STATUSES: ReadonlySet<BuyOrderStatus> = new Set(['DELIVERED', 'FAILED', 'EXPIRED']);
 
 export function isTerminalBuyStatus(status: BuyOrderStatus): boolean {
   return TERMINAL_STATUSES.has(status);
@@ -62,7 +58,7 @@ export function needsStatusRefresh(entry: BuyHistoryEntry): boolean {
 
 export async function recordBuyOrder(
   db: Database,
-  entry: Omit<BuyHistoryEntry, "updatedAt" | "deliveryTxId" | "errorMessage">,
+  entry: Omit<BuyHistoryEntry, 'updatedAt' | 'deliveryTxId' | 'errorMessage'>,
 ): Promise<void> {
   await db.upsertBuyOrder({
     id: entry.id,
@@ -71,8 +67,8 @@ export async function recordBuyOrder(
     payment_amount: entry.paymentAmountFormatted,
     payment_symbol: entry.paymentSymbol,
     status: entry.status,
-    delivery_txid: "",
-    error_message: "",
+    delivery_txid: '',
+    error_message: '',
     created_at: entry.createdAt,
     updated_at: entry.createdAt,
   });
@@ -87,16 +83,13 @@ export async function updateBuyOrderStatus(
   await db.updateBuyOrderStatus(
     id,
     status,
-    options.deliveryTxId ?? "",
-    options.errorMessage ?? "",
+    options.deliveryTxId ?? '',
+    options.errorMessage ?? '',
     Math.floor(Date.now() / 1000),
   );
 }
 
-export async function listBuyOrders(
-  db: Database,
-  limit: number,
-): Promise<BuyHistoryEntry[]> {
+export async function listBuyOrders(db: Database, limit: number): Promise<BuyHistoryEntry[]> {
   const rows = await db.getBuyOrders(limit);
   return rows.map((row) => ({
     id: row.id,
@@ -107,7 +100,7 @@ export async function listBuyOrders(
     status: row.status as BuyOrderStatus,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    deliveryTxId: row.delivery_txid === "" ? null : row.delivery_txid,
-    errorMessage: row.error_message === "" ? null : row.error_message,
+    deliveryTxId: row.delivery_txid === '' ? null : row.delivery_txid,
+    errorMessage: row.error_message === '' ? null : row.error_message,
   }));
 }

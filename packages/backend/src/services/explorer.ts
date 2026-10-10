@@ -1,7 +1,7 @@
-import { z } from "zod";
-import { parseFairToUnits } from "@fairco.in/core";
-import type { NetworkType } from "@fairco.in/core";
-import { config } from "../config";
+import { z } from 'zod';
+import { parseFairToUnits } from '@fairco.in/core';
+import type { NetworkType } from '@fairco.in/core';
+import { config } from '../config';
 
 /**
  * FairCoin Explorer HTTP client (read-only — non-custodial by construction:
@@ -80,18 +80,14 @@ function statsUrl(network: NetworkType): string {
 }
 
 function transactionUrl(txid: string, network: NetworkType): string {
-  return `${config.explorerBaseUrl}/api/transaction/${encodeURIComponent(
-    txid,
-  )}?network=${network}`;
+  return `${config.explorerBaseUrl}/api/transaction/${encodeURIComponent(txid)}?network=${network}`;
 }
 
 /** Current confirmed chain tip (block height) for the given network. */
 export async function getTip(network: NetworkType): Promise<number> {
   const response = await fetch(statsUrl(network));
   if (!response.ok) {
-    throw new Error(
-      `Explorer stats request failed: ${response.status} ${response.statusText}`,
-    );
+    throw new Error(`Explorer stats request failed: ${response.status} ${response.statusText}`);
   }
   const body: unknown = await response.json();
   return statsResponseSchema.parse(body).stats.blockHeight;
@@ -142,4 +138,3 @@ export function verifyPayment(
   );
   return { paid, confirmations: tx.confirmations };
 }
-

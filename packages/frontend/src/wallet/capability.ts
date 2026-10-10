@@ -18,7 +18,7 @@
  * Pure so the table is unit-testable; `use-wallet-capability.ts` feeds it.
  */
 
-export type WalletCapability = "full" | "read-only" | "pending" | "none";
+export type WalletCapability = 'full' | 'read-only' | 'pending' | 'none';
 
 export function decideWalletCapability(input: {
   walletInitialized: boolean;
@@ -28,13 +28,13 @@ export function decideWalletCapability(input: {
 }): WalletCapability {
   const { walletInitialized, hasIdentityKeystore, isAuthResolved, isAuthenticated } = input;
 
-  if (walletInitialized) return "full";
+  if (walletInitialized) return 'full';
 
   // A host WITH a keystore reaches the shell only through `app/index.tsx`,
   // which initializes the wallet (and passes the PIN gate) first. Admitting it
   // uninitialized would open a wallet UI with no wallet behind it.
-  if (hasIdentityKeystore) return "none";
+  if (hasIdentityKeystore) return 'none';
 
-  if (!isAuthResolved) return "pending";
-  return isAuthenticated ? "read-only" : "none";
+  if (!isAuthResolved) return 'pending';
+  return isAuthenticated ? 'read-only' : 'none';
 }

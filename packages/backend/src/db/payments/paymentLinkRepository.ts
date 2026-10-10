@@ -93,7 +93,7 @@ export interface InsertPaymentLinkParams {
  */
 export async function insertPaymentLink(
   db: DatabaseOrTransaction,
-  params: InsertPaymentLinkParams
+  params: InsertPaymentLinkParams,
 ): Promise<PaymentLinkRow> {
   const [row] = await db
     .insert(paymentLinks)
@@ -126,9 +126,12 @@ export async function insertPaymentLink(
  */
 export async function findLinkByPublicId(
   db: DatabaseOrTransaction,
-  publicId: string
+  publicId: string,
 ): Promise<PaymentLinkRow | null> {
-  const [row] = await db.select(LINK_COLUMNS).from(paymentLinks).where(eq(paymentLinks.publicId, publicId));
+  const [row] = await db
+    .select(LINK_COLUMNS)
+    .from(paymentLinks)
+    .where(eq(paymentLinks.publicId, publicId));
   return row ? toLinkRow(row) : null;
 }
 
@@ -136,7 +139,7 @@ export async function findLinkByPublicId(
 export async function findLinkForMerchant(
   db: DatabaseOrTransaction,
   publicId: string,
-  merchantId: string
+  merchantId: string,
 ): Promise<PaymentLinkRow | null> {
   const [row] = await db
     .select(LINK_COLUMNS)
@@ -156,7 +159,7 @@ export interface ListLinksParams {
 /** One page, newest first. Same ordering contract as `listIntentsForMerchant` — read its note. */
 export async function listLinksForMerchant(
   db: DatabaseOrTransaction,
-  params: ListLinksParams
+  params: ListLinksParams,
 ): Promise<{ data: PaymentLinkRow[]; hasMore: boolean }> {
   const conditions = [eq(paymentLinks.merchantId, params.merchantId)];
   if (params.active !== undefined) conditions.push(eq(paymentLinks.active, params.active));
@@ -195,7 +198,7 @@ export async function updatePaymentLink(
   db: DatabaseOrTransaction,
   publicId: string,
   merchantId: string,
-  patch: PaymentLinkPatch
+  patch: PaymentLinkPatch,
 ): Promise<PaymentLinkRow | null> {
   const values: Record<string, unknown> = {};
   if (patch.active !== undefined) values.active = patch.active;

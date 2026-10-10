@@ -16,15 +16,11 @@
  *     can't fill up with nodes that would get us banned on reconnect.
  */
 
-import { describe, test, expect } from "bun:test";
-import { Peer, type SocketConnection, type SocketProvider } from "./peer";
-import type { ReadyPeerInfo } from "./spv-client";
-import {
-  buildMessage,
-  serializeVersion,
-  type VersionPayload,
-} from "./messages";
-import { getNetwork } from "@fairco.in/core";
+import { describe, test, expect } from 'bun:test';
+import { Peer, type SocketConnection, type SocketProvider } from './peer';
+import type { ReadyPeerInfo } from './spv-client';
+import { buildMessage, serializeVersion, type VersionPayload } from './messages';
+import { getNetwork } from '@fairco.in/core';
 
 const NODE_NETWORK = 1n;
 const NODE_BLOOM = 1n << 2n;
@@ -69,10 +65,7 @@ class FakeSocketProvider implements SocketProvider {
   }
 }
 
-function makeVersionFrame(
-  network: ReturnType<typeof getNetwork>,
-  services: bigint,
-): Uint8Array {
+function makeVersionFrame(network: ReturnType<typeof getNetwork>, services: bigint): Uint8Array {
   const payload: VersionPayload = {
     version: network.protocolVersion,
     services,
@@ -80,23 +73,15 @@ function makeVersionFrame(
     addrRecv: { services, ip: new Uint8Array(16), port: 0 },
     addrFrom: { services, ip: new Uint8Array(16), port: 0 },
     nonce: 0x1234_5678_9abc_def0n,
-    userAgent: "/FakePeer:0.0.1/",
+    userAgent: '/FakePeer:0.0.1/',
     startHeight: 100,
     relay: true,
   };
-  return buildMessage(
-    "version",
-    serializeVersion(payload),
-    new Uint8Array(network.magicBytes),
-  );
+  return buildMessage('version', serializeVersion(payload), new Uint8Array(network.magicBytes));
 }
 
 function makeVerackFrame(network: ReturnType<typeof getNetwork>): Uint8Array {
-  return buildMessage(
-    "verack",
-    new Uint8Array(0),
-    new Uint8Array(network.magicBytes),
-  );
+  return buildMessage('verack', new Uint8Array(0), new Uint8Array(network.magicBytes));
 }
 
 /**
@@ -104,12 +89,12 @@ function makeVerackFrame(network: ReturnType<typeof getNetwork>): Uint8Array {
  * bridge the SPV client installs, and collect what the cache would be told.
  */
 function collectCachedPeers(remoteServices: bigint): ReadyPeerInfo[] {
-  const network = getNetwork("mainnet");
+  const network = getNetwork('mainnet');
   const provider = new FakeSocketProvider();
   const cached: ReadyPeerInfo[] = [];
 
   const peer = new Peer(
-    { host: "203.0.113.7", port: network.p2pPort, network },
+    { host: '203.0.113.7', port: network.p2pPort, network },
     {
       onReady: (p) => {
         cached.push({ host: p.host, port: p.port, services: p.services });
@@ -136,18 +121,18 @@ function collectCachedPeers(remoteServices: bigint): ReadyPeerInfo[] {
   return cached;
 }
 
-describe("known-peer cache feed", () => {
-  test("a peer that reaches ready is reported once with host/port/services", () => {
-    const network = getNetwork("mainnet");
+describe('known-peer cache feed', () => {
+  test('a peer that reaches ready is reported once with host/port/services', () => {
+    const network = getNetwork('mainnet');
     const cached = collectCachedPeers(NODE_NETWORK | NODE_BLOOM);
 
     expect(cached).toHaveLength(1);
-    expect(cached[0].host).toBe("203.0.113.7");
+    expect(cached[0].host).toBe('203.0.113.7');
     expect(cached[0].port).toBe(network.p2pPort);
     expect(cached[0].services & NODE_BLOOM).toBe(NODE_BLOOM);
   });
 
-  test("services survive the bigint → number conversion the DB column uses", () => {
+  test('services survive the bigint → number conversion the DB column uses', () => {
     const cached = collectCachedPeers(NODE_NETWORK | NODE_BLOOM);
     const stored = Number(cached[0].services);
 
@@ -155,7 +140,7 @@ describe("known-peer cache feed", () => {
     expect(BigInt(stored)).toBe(cached[0].services);
   });
 
-  test("a peer rejected by the NODE_BLOOM gate is never cached", () => {
+  test('a peer rejected by the NODE_BLOOM gate is never cached', () => {
     expect(collectCachedPeers(NODE_NETWORK)).toHaveLength(0);
   });
 });

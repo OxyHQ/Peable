@@ -21,13 +21,13 @@ export const MAIN_POCKET_ACCOUNT = 0;
  * resolves to one of these values.
  */
 export const POCKET_COLORS = [
-  "#0064b3", // blue (Main's default)
-  "#12a46b", // emerald
-  "#e29316", // amber
-  "#6c5ce7", // violet
-  "#e5588a", // rose
-  "#0ea5a5", // teal
-  "#f9897b", // coral
+  '#0064b3', // blue (Main's default)
+  '#12a46b', // emerald
+  '#e29316', // amber
+  '#6c5ce7', // violet
+  '#e5588a', // rose
+  '#0ea5a5', // teal
+  '#f9897b', // coral
 ] as const;
 
 /** Deterministic default color for a Pocket missing one (backward compat). */
@@ -79,7 +79,7 @@ export function normalizePockets(pockets: PocketInfo[]): PocketInfo[] {
   if (!byAccount.has(MAIN_POCKET_ACCOUNT)) {
     byAccount.set(MAIN_POCKET_ACCOUNT, {
       account: MAIN_POCKET_ACCOUNT,
-      name: "Main",
+      name: 'Main',
       createdAt: 0,
       color: defaultColorFor(MAIN_POCKET_ACCOUNT),
     });
@@ -93,10 +93,7 @@ export function nextAccountIndex(list: PocketInfo[]): number {
 }
 
 /** Find a Pocket by account index. */
-export function findPocket(
-  list: PocketInfo[],
-  account: number,
-): PocketInfo | undefined {
+export function findPocket(list: PocketInfo[], account: number): PocketInfo | undefined {
   return list.find((p) => p.account === account);
 }
 
@@ -110,21 +107,12 @@ export function addPocket(
   now: number,
 ): PocketInfo[] {
   const account = nextAccountIndex(list);
-  return normalizePockets([
-    ...list,
-    { account, name, createdAt: now, color, image, goal },
-  ]);
+  return normalizePockets([...list, { account, name, createdAt: now, color, image, goal }]);
 }
 
 /** Rename the Pocket at `account`, leaving all other fields untouched. */
-export function renamePocket(
-  list: PocketInfo[],
-  account: number,
-  name: string,
-): PocketInfo[] {
-  return normalizePockets(
-    list.map((p) => (p.account === account ? { ...p, name } : p)),
-  );
+export function renamePocket(list: PocketInfo[], account: number, name: string): PocketInfo[] {
+  return normalizePockets(list.map((p) => (p.account === account ? { ...p, name } : p)));
 }
 
 /**
@@ -165,10 +153,7 @@ export function updatePocketMeta(
 }
 
 /** Remove the Pocket at `account`. The main Pocket can never be removed. */
-export function removePocket(
-  list: PocketInfo[],
-  account: number,
-): PocketInfo[] {
+export function removePocket(list: PocketInfo[], account: number): PocketInfo[] {
   if (account === MAIN_POCKET_ACCOUNT) return normalizePockets(list);
   return normalizePockets(list.filter((p) => p.account !== account));
 }

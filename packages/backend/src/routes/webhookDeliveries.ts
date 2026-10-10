@@ -1,18 +1,18 @@
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { oxy } from "../oxy";
-import { getDb } from "../db/postgres";
-import { findWebhookTarget } from "../db/merchants/merchantRepository";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
-import { findIntentByIdForMerchant } from "../db/payments/paymentIntentRepository";
-import { findDeliveryForMerchant } from "../db/webhooks/webhookDeliveryRepository";
-import type { WebhookDeliveryRow } from "../db/webhooks/webhookDeliveryRepository";
-import { enqueueWebhook } from "../db/webhooks/webhookOutboxRepository";
-import type { SafeFetchFn } from "../services/webhookDispatcher";
-import { runWebhookOutboxPass } from "../services/webhookOutbox";
-import { toWebhookDeliveryDTO } from "../lib/serialize";
-import { sendError, wrap, requireAuthenticated } from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { oxy } from '../oxy';
+import { getDb } from '../db/postgres';
+import { findWebhookTarget } from '../db/merchants/merchantRepository';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { findIntentByIdForMerchant } from '../db/payments/paymentIntentRepository';
+import { findDeliveryForMerchant } from '../db/webhooks/webhookDeliveryRepository';
+import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
+import { enqueueWebhook } from '../db/webhooks/webhookOutboxRepository';
+import type { SafeFetchFn } from '../services/webhookDispatcher';
+import { runWebhookOutboxPass } from '../services/webhookOutbox';
+import { toWebhookDeliveryDTO } from '../lib/serialize';
+import { sendError, wrap, requireAuthenticated } from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
 
 export type RedeliverResult =
   | {
@@ -27,7 +27,7 @@ export type RedeliverResult =
        * id while `WebhookDelivery.intentId` on the wire is the public one, and
        * this path already loaded the intent when there was one.
        */
-       intentPublicId: string | null;
+      intentPublicId: string | null;
     }
   | { ok: false; status: number; message: string };
 
@@ -52,7 +52,7 @@ export async function redeliverWebhookDelivery(
   // "unknown" and "not yours" identically, which is the property that matters.
   const delivery = await findDeliveryForMerchant(db, deliveryId, merchant.id);
   if (!delivery) {
-    return { ok: false, status: 404, message: "webhook delivery not found" };
+    return { ok: false, status: 404, message: 'webhook delivery not found' };
   }
 
   /**
@@ -75,7 +75,7 @@ export async function redeliverWebhookDelivery(
       return {
         ok: false,
         status: 404,
-        message: "the payment intent for this delivery no longer exists",
+        message: 'the payment intent for this delivery no longer exists',
       };
     }
   }
@@ -84,7 +84,7 @@ export async function redeliverWebhookDelivery(
   // loaded explicitly and only on a delivery path.
   const target = await findWebhookTarget(db, merchant.id);
   if (!target) {
-    return { ok: false, status: 422, message: "merchant has no webhook configured" };
+    return { ok: false, status: 422, message: 'merchant has no webhook configured' };
   }
 
   // A delivery from before this table stored envelopes cannot be replayed: the
@@ -97,7 +97,7 @@ export async function redeliverWebhookDelivery(
     return {
       ok: false,
       status: 422,
-      message: "this delivery predates stored envelopes and cannot be replayed",
+      message: 'this delivery predates stored envelopes and cannot be replayed',
     };
   }
 
@@ -113,7 +113,7 @@ export async function redeliverWebhookDelivery(
   const enqueuedId = await enqueueWebhook(db, {
     merchantId: merchant.id,
     paymentIntentId: intent?.id,
-    event: delivery.payload as unknown as Parameters<typeof enqueueWebhook>[1]["event"],
+    event: delivery.payload as unknown as Parameters<typeof enqueueWebhook>[1]['event'],
     url: target.url,
   });
 
@@ -126,7 +126,7 @@ export async function redeliverWebhookDelivery(
 
   const redelivery = await findDeliveryForMerchant(db, enqueuedId, merchant.id);
   if (!redelivery) {
-    return { ok: false, status: 404, message: "webhook delivery not found" };
+    return { ok: false, status: 404, message: 'webhook delivery not found' };
   }
 
   return { ok: true, delivery: redelivery, intentPublicId: intent?.publicId ?? null };
@@ -147,10 +147,10 @@ export function createWebhookDeliveriesRouter(deps: {
   const router = Router();
 
   router.post(
-    "/v1/webhook_deliveries/:id/redeliver",
+    '/v1/webhook_deliveries/:id/redeliver',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -159,13 +159,13 @@ export function createWebhookDeliveriesRouter(deps: {
       // `undefined` even though Express guarantees `:id` is present here.
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       res.status(200).json(toWebhookDeliveryDTO(result.delivery, result.intentPublicId));

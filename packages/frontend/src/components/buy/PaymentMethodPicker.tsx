@@ -7,13 +7,13 @@
  * Tapping a disabled (coming-soon) option is a no-op.
  */
 
-import { View, Text, Pressable } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import type { PaymentCurrency } from "../../api/buy";
-import { t } from "../../i18n";
+import { View, Text, Pressable } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import type { PaymentCurrency } from '../../api/buy';
+import { t } from '../../i18n';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 export interface PaymentMethodOption {
   currency: PaymentCurrency;
@@ -30,11 +30,7 @@ interface PaymentMethodPickerProps {
   onChange: (next: PaymentCurrency) => void;
 }
 
-export function PaymentMethodPicker({
-  options,
-  value,
-  onChange,
-}: PaymentMethodPickerProps) {
+export function PaymentMethodPicker({ options, value, onChange }: PaymentMethodPickerProps) {
   const theme = useTheme();
 
   return (
@@ -56,25 +52,19 @@ export function PaymentMethodPicker({
               accessibilityRole="radio"
               accessibilityState={{ selected, disabled }}
               className={`flex-row items-center gap-3 px-4 py-3.5 ${
-                disabled ? "opacity-50" : "active:opacity-70"
+                disabled ? 'opacity-50' : 'active:opacity-70'
               }`}
             >
               <View className="w-9 h-9 rounded-full bg-primary/10 items-center justify-center">
-                <MaterialCommunityIcons
-                  name={option.icon}
-                  size={18}
-                  color={theme.colors.primary}
-                />
+                <MaterialCommunityIcons name={option.icon} size={18} color={theme.colors.primary} />
               </View>
               <View className="flex-1">
                 <View className="flex-row items-center gap-2 flex-wrap">
-                  <Text className="text-foreground text-[15px] font-semibold">
-                    {option.label}
-                  </Text>
+                  <Text className="text-foreground text-[15px] font-semibold">{option.label}</Text>
                   {option.recommended ? (
                     <View className="bg-primary/20 rounded-full px-2 py-0.5">
                       <Text className="text-primary text-[10px] font-semibold uppercase tracking-wider">
-                        {t("buy.payment.recommended")}
+                        {t('buy.payment.recommended')}
                       </Text>
                     </View>
                   ) : null}
@@ -84,22 +74,18 @@ export function PaymentMethodPicker({
                         className="text-[10px] font-semibold uppercase tracking-wider"
                         style={{ color: theme.colors.textSecondary }}
                       >
-                        {t("buy.payment.comingSoon")}
+                        {t('buy.payment.comingSoon')}
                       </Text>
                     </View>
                   ) : null}
                 </View>
-                <Text className="text-muted-foreground text-xs mt-0.5">
-                  {option.description}
-                </Text>
+                <Text className="text-muted-foreground text-xs mt-0.5">{option.description}</Text>
               </View>
               {!disabled ? (
                 <MaterialCommunityIcons
-                  name={selected ? "radiobox-marked" : "radiobox-blank"}
+                  name={selected ? 'radiobox-marked' : 'radiobox-blank'}
                   size={20}
-                  color={
-                    selected ? theme.colors.primary : theme.colors.textSecondary
-                  }
+                  color={selected ? theme.colors.primary : theme.colors.textSecondary}
                 />
               ) : null}
             </Pressable>

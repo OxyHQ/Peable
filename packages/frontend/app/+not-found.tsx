@@ -7,6 +7,6 @@
  * paths its dynamic segment also matches.
  */
 
-import { NotFoundScreen } from "../src/ui/components/NotFoundScreen";
+import { NotFoundScreen } from '../src/ui/components/NotFoundScreen';
 
 export default NotFoundScreen;

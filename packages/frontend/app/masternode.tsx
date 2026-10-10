@@ -10,28 +10,21 @@
  * explains what remains.
  */
 
-import { useCallback } from "react";
-import { View, Text } from "react-native";
-import { SafeAreaView } from "../src/ui/safe-area-view";
-import { useFocusEffect, useRouter } from "expo-router";
-import { GestureDetector } from "react-native-gesture-handler";
-import Animated from "react-native-reanimated";
-import { useWalletStore } from "../src/wallet/wallet-store";
-import {
-  ListItem,
-  Button,
-  Badge,
-  EmptyState,
-  ScreenHeader,
-} from "../src/ui/components";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { usePullToRefreshBand } from "../src/hooks/usePullToRefreshBand";
-import { t } from "../src/i18n";
+import { useCallback } from 'react';
+import { View, Text } from 'react-native';
+import { SafeAreaView } from '../src/ui/safe-area-view';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { GestureDetector } from 'react-native-gesture-handler';
+import Animated from 'react-native-reanimated';
+import { useWalletStore } from '../src/wallet/wallet-store';
+import { ListItem, Button, Badge, EmptyState, ScreenHeader } from '../src/ui/components';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { usePullToRefreshBand } from '../src/hooks/usePullToRefreshBand';
+import { t } from '../src/i18n';
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 function truncateTxid(txid: string): string {
   if (txid.length <= 20) return txid;
@@ -41,9 +34,7 @@ function truncateTxid(txid: string): string {
 export default function MasternodeScreen() {
   const router = useRouter();
   const masternodeUTXOs = useWalletStore((s) => s.masternodeUTXOs);
-  const refreshMasternodeUTXOs = useWalletStore(
-    (s) => s.refreshMasternodeUTXOs,
-  );
+  const refreshMasternodeUTXOs = useWalletStore((s) => s.refreshMasternodeUTXOs);
   const theme = useTheme();
 
   // Masternode start is not yet implemented (no P2P mnb relay). Tapping the
@@ -57,9 +48,7 @@ export default function MasternodeScreen() {
   );
 
   // Pull down to re-check which UTXOs still meet the collateral requirement.
-  const { gesture, scrollHandler, band } = usePullToRefreshBand(
-    refreshMasternodeUTXOs,
-  );
+  const { gesture, scrollHandler, band } = usePullToRefreshBand(refreshMasternodeUTXOs);
 
   const eligibleUtxos = masternodeUTXOs;
 
@@ -68,11 +57,8 @@ export default function MasternodeScreen() {
   }, [notAvailableControl]);
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "bottom", "left", "right"]}
-    >
-      <ScreenHeader title={t("masternode.title")} onBack={() => router.back()} />
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+      <ScreenHeader title={t('masternode.title')} onBack={() => router.back()} />
       {band}
 
       <GestureDetector gesture={gesture}>
@@ -83,77 +69,69 @@ export default function MasternodeScreen() {
           contentContainerClassName="px-5 pt-4 pb-10"
           showsVerticalScrollIndicator={false}
         >
-        {/* Requirements — card-less: section label above a muted description */}
-        <View>
-          <Text className={SECTION_LABEL}>
-            {t("masternode.requirements.title")}
-          </Text>
-          <Text className="text-muted-foreground text-sm leading-5 mt-2">
-            {t("masternode.requirements.description")}
-          </Text>
-        </View>
+          {/* Requirements — card-less: section label above a muted description */}
+          <View>
+            <Text className={SECTION_LABEL}>{t('masternode.requirements.title')}</Text>
+            <Text className="text-muted-foreground text-sm leading-5 mt-2">
+              {t('masternode.requirements.description')}
+            </Text>
+          </View>
 
-        <View className="h-px bg-border my-7" />
+          <View className="h-px bg-border my-7" />
 
-        {/* Eligible UTXOs — grouped rows inside a raised surface, hairline
+          {/* Eligible UTXOs — grouped rows inside a raised surface, hairline
             dividers between rows (the ListItem handles those). */}
-        <View>
-          <Text className={SECTION_LABEL}>{t("masternode.candidates")}</Text>
-          {eligibleUtxos.length === 0 ? (
-            <View className="mt-2">
-              <EmptyState
-                icon="server"
-                title={t("masternode.empty.title")}
-                subtitle={t("masternode.empty.subtitle")}
-              />
-            </View>
-          ) : (
-            <View className="mt-2">
-              {eligibleUtxos.map((utxo, idx) => {
-                const confirmOk = utxo.confirmations >= 15;
-                return (
-                  <ListItem
-                    key={`${utxo.txid}-${utxo.vout}`}
-                    icon="server"
-                    iconBg={confirmOk ? "bg-primary/10" : "bg-yellow-500/10"}
-                    iconColor={
-                      confirmOk ? theme.colors.success : theme.colors.warning
-                    }
-                    title={truncateTxid(utxo.txid)}
-                    subtitle={`${utxo.address.slice(0, 8)}...${utxo.address.slice(-6)}`}
-                    value="5,000 FAIR"
-                    isLast={idx === eligibleUtxos.length - 1}
-                    trailing={
-                      <Badge
-                        text={`${utxo.confirmations}/15`}
-                        variant={confirmOk ? "success" : "warning"}
-                        size="sm"
-                      />
-                    }
-                  />
-                );
-              })}
-            </View>
-          )}
-        </View>
+          <View>
+            <Text className={SECTION_LABEL}>{t('masternode.candidates')}</Text>
+            {eligibleUtxos.length === 0 ? (
+              <View className="mt-2">
+                <EmptyState
+                  icon="server"
+                  title={t('masternode.empty.title')}
+                  subtitle={t('masternode.empty.subtitle')}
+                />
+              </View>
+            ) : (
+              <View className="mt-2">
+                {eligibleUtxos.map((utxo, idx) => {
+                  const confirmOk = utxo.confirmations >= 15;
+                  return (
+                    <ListItem
+                      key={`${utxo.txid}-${utxo.vout}`}
+                      icon="server"
+                      iconBg={confirmOk ? 'bg-primary/10' : 'bg-yellow-500/10'}
+                      iconColor={confirmOk ? theme.colors.success : theme.colors.warning}
+                      title={truncateTxid(utxo.txid)}
+                      subtitle={`${utxo.address.slice(0, 8)}...${utxo.address.slice(-6)}`}
+                      value="5,000 FAIR"
+                      isLast={idx === eligibleUtxos.length - 1}
+                      trailing={
+                        <Badge
+                          text={`${utxo.confirmations}/15`}
+                          variant={confirmOk ? 'success' : 'warning'}
+                          size="sm"
+                        />
+                      }
+                    />
+                  );
+                })}
+              </View>
+            )}
+          </View>
 
-        {/* Start masternode — performs no broadcast (P2P mnb relay is not yet
+          {/* Start masternode — performs no broadcast (P2P mnb relay is not yet
             implemented). Tapping explains this honestly; the badge marks it as
             unavailable. No fake "broadcast sent" success is shown. */}
-        <View className="mt-8">
-          <Button
-            title={t("masternode.startCta")}
-            onPress={handleStartMasternode}
-            variant="secondary"
-          />
-          <View className="flex-row justify-center mt-3">
-            <Badge
-              text={t("masternode.notAvailableBadge")}
-              variant="warning"
-              size="sm"
+          <View className="mt-8">
+            <Button
+              title={t('masternode.startCta')}
+              onPress={handleStartMasternode}
+              variant="secondary"
             />
+            <View className="flex-row justify-center mt-3">
+              <Badge text={t('masternode.notAvailableBadge')} variant="warning" size="sm" />
+            </View>
           </View>
-        </View>
         </Animated.ScrollView>
       </GestureDetector>
 
@@ -161,9 +139,9 @@ export default function MasternodeScreen() {
       <Dialog
         control={notAvailableControl}
         placement="bottom"
-        title={t("masternode.notAvailable.title")}
-        description={t("masternode.notAvailable.description")}
-        actions={[{ label: t("common.ok") }]}
+        title={t('masternode.notAvailable.title')}
+        description={t('masternode.notAvailable.description')}
+        actions={[{ label: t('common.ok') }]}
       />
     </SafeAreaView>
   );

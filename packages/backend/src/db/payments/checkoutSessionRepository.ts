@@ -105,7 +105,7 @@ export interface InsertCheckoutSessionParams {
  */
 export async function insertCheckoutSession(
   db: DatabaseOrTransaction,
-  params: InsertCheckoutSessionParams
+  params: InsertCheckoutSessionParams,
 ): Promise<CheckoutSessionRow | null> {
   try {
     const [row] = await db
@@ -150,7 +150,7 @@ export async function insertCheckoutSession(
  */
 export async function findSessionByIntentId(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<CheckoutSessionRow | null> {
   const [row] = await db
     .select(SESSION_COLUMNS)
@@ -169,7 +169,7 @@ export async function findSessionByIntentId(
  */
 export async function findSessionByPublicId(
   db: DatabaseOrTransaction,
-  publicId: string
+  publicId: string,
 ): Promise<CheckoutSessionRow | null> {
   const [row] = await db
     .select(SESSION_COLUMNS)
@@ -182,13 +182,13 @@ export async function findSessionByPublicId(
 export async function findSessionForMerchant(
   db: DatabaseOrTransaction,
   publicId: string,
-  merchantId: string
+  merchantId: string,
 ): Promise<CheckoutSessionRow | null> {
   const [row] = await db
     .select(SESSION_COLUMNS)
     .from(checkoutSessions)
     .where(
-      and(eq(checkoutSessions.publicId, publicId), eq(checkoutSessions.merchantId, merchantId))
+      and(eq(checkoutSessions.publicId, publicId), eq(checkoutSessions.merchantId, merchantId)),
     );
   return row ? toSessionRow(row) : null;
 }
@@ -197,7 +197,7 @@ export async function findSessionForMerchant(
 export async function listSessionsForMerchant(
   db: DatabaseOrTransaction,
   merchantId: string,
-  limit: number
+  limit: number,
 ): Promise<CheckoutSessionRow[]> {
   const rows = await db
     .select(SESSION_COLUMNS)

@@ -1,11 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { getClientAction } from '../lib/intentClient';
-import {
-  loadProviderSdk,
-  type ProviderElements,
-  type ProviderSdk,
-} from '../lib/providerJs';
+import { loadProviderSdk, type ProviderElements, type ProviderSdk } from '../lib/providerJs';
 
 /**
  * The card surface — the half of this page that did not exist.
@@ -38,9 +34,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
   const sdkRef = useRef<ProviderSdk | null>(null);
   const elementsRef = useRef<ProviderElements | null>(null);
 
-  const [phase, setPhase] = useState<'loading' | 'ready' | 'confirming' | 'unavailable'>(
-    'loading',
-  );
+  const [phase, setPhase] = useState<'loading' | 'ready' | 'confirming' | 'unavailable'>('loading');
   const [error, setError] = useState<string | null>(null);
 
   /**
@@ -149,9 +143,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
       setPhase('confirming');
     } catch (cause) {
       setPhase('ready');
-      setError(
-        cause instanceof Error ? cause.message : 'This payment could not be confirmed.',
-      );
+      setError(cause instanceof Error ? cause.message : 'This payment could not be confirmed.');
     }
   }
 

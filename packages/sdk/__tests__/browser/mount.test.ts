@@ -102,7 +102,7 @@ describe('buildPayDeepLink', () => {
     );
   });
 
-  test('round-trips through the wallet\'s real parsePaymentRequest byte-for-byte', () => {
+  test("round-trips through the wallet's real parsePaymentRequest byte-for-byte", () => {
     const link = buildPayDeepLink(PARAMS);
     const parsed = parsePaymentRequest(link);
 
@@ -248,7 +248,7 @@ describe('payDeepLinkFor', () => {
         address: INTENT.address as string,
         amount: INTENT.amount,
         network: INTENT.network as NonNullable<PaymentIntent['network']>,
-      })
+      }),
     );
   });
 

@@ -104,7 +104,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
    */
   test('a card intent cannot name a merchant that does not exist', async () => {
     await expect(
-      insertPaymentIntent(gatewayDb(), cardIntentParams('merchant-that-is-not-there'))
+      insertPaymentIntent(gatewayDb(), cardIntentParams('merchant-that-is-not-there')),
     ).rejects.toThrow();
   });
 
@@ -119,22 +119,22 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
           network: 'mainnet',
           address: 'Tsomething',
           provider: null,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow();
   });
 
   test('a card intent carrying an address is refused', async () => {
     const merchant = await seedMerchant();
     await expect(
-      insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id, { address: 'Tsomething' }))
+      insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id, { address: 'Tsomething' })),
     ).rejects.toThrow();
   });
 
   test('a card intent denominated in FAIR is refused', async () => {
     const merchant = await seedMerchant();
     await expect(
-      insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id, { currency: 'FAIR' }))
+      insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id, { currency: 'FAIR' })),
     ).rejects.toThrow();
   });
 
@@ -149,8 +149,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
           network: 'testnet',
           address: 'Tsomething',
           provider: null,
-        })
-      )
+        }),
+      ),
     ).rejects.toThrow();
   });
 
@@ -162,7 +162,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
         from: 'created',
         status: 'confirming',
         txid: 'deadbeef',
-      })
+      }),
     ).rejects.toThrow();
   });
 
@@ -170,7 +170,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await seedIntent(merchant);
     await expect(
-      updateIntentState(gatewayDb(), intent.id, { from: intent.status, status: 'requires_action' })
+      updateIntentState(gatewayDb(), intent.id, { from: intent.status, status: 'requires_action' }),
     ).rejects.toThrow();
   });
 

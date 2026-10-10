@@ -7,21 +7,21 @@
  * primitive enforces that, and that coins return to the pool on release.
  */
 
-import { describe, test, expect } from "bun:test";
-import { UtxoReservation } from "./utxo-reservation";
+import { describe, test, expect } from 'bun:test';
+import { UtxoReservation } from './utxo-reservation';
 
-const A = { txid: "aa".repeat(32), vout: 0 };
-const B = { txid: "bb".repeat(32), vout: 1 };
-const C = { txid: "cc".repeat(32), vout: 0 };
+const A = { txid: 'aa'.repeat(32), vout: 0 };
+const B = { txid: 'bb'.repeat(32), vout: 1 };
+const C = { txid: 'cc'.repeat(32), vout: 0 };
 
-describe("UtxoReservation", () => {
-  test("a fresh reservation holds nothing", () => {
+describe('UtxoReservation', () => {
+  test('a fresh reservation holds nothing', () => {
     const r = new UtxoReservation();
     expect(r.size).toBe(0);
     expect(r.has(A.txid, A.vout)).toBe(false);
   });
 
-  test("reserve() locks the outpoints and reports them held", () => {
+  test('reserve() locks the outpoints and reports them held', () => {
     const r = new UtxoReservation();
     expect(r.reserve([A, B])).toBeNull();
     expect(r.has(A.txid, A.vout)).toBe(true);
@@ -29,7 +29,7 @@ describe("UtxoReservation", () => {
     expect(r.size).toBe(2);
   });
 
-  test("a second send cannot reserve a coin the first holds (no double-spend)", () => {
+  test('a second send cannot reserve a coin the first holds (no double-spend)', () => {
     const r = new UtxoReservation();
     // First send reserves A and B.
     expect(r.reserve([A, B])).toBeNull();
@@ -39,7 +39,7 @@ describe("UtxoReservation", () => {
     expect(conflict).toBe(`${B.txid}:${B.vout}`);
   });
 
-  test("a refused reserve() is atomic — it locks NONE of its outpoints", () => {
+  test('a refused reserve() is atomic — it locks NONE of its outpoints', () => {
     const r = new UtxoReservation();
     r.reserve([B]);
     // [C, B] conflicts on B; C must NOT end up reserved as a side effect, so a
@@ -49,14 +49,14 @@ describe("UtxoReservation", () => {
     expect(r.reserve([C])).toBeNull();
   });
 
-  test("disjoint sends reserve independently", () => {
+  test('disjoint sends reserve independently', () => {
     const r = new UtxoReservation();
     expect(r.reserve([A])).toBeNull();
     expect(r.reserve([B, C])).toBeNull();
     expect(r.size).toBe(3);
   });
 
-  test("release() returns coins to the pool so a later send can reuse them", () => {
+  test('release() returns coins to the pool so a later send can reuse them', () => {
     const r = new UtxoReservation();
     r.reserve([A, B]);
     r.release([A]);
@@ -66,7 +66,7 @@ describe("UtxoReservation", () => {
     expect(r.reserve([A])).toBeNull();
   });
 
-  test("release() of an unheld outpoint is a no-op", () => {
+  test('release() of an unheld outpoint is a no-op', () => {
     const r = new UtxoReservation();
     r.reserve([A]);
     r.release([B]); // B was never reserved
@@ -74,7 +74,7 @@ describe("UtxoReservation", () => {
     expect(r.has(A.txid, A.vout)).toBe(true);
   });
 
-  test("the same txid with different vouts are distinct outpoints", () => {
+  test('the same txid with different vouts are distinct outpoints', () => {
     const r = new UtxoReservation();
     const v0 = { txid: A.txid, vout: 0 };
     const v1 = { txid: A.txid, vout: 1 };
@@ -84,7 +84,7 @@ describe("UtxoReservation", () => {
     expect(r.size).toBe(2);
   });
 
-  test("clear() drops every reservation (wallet reset/lock/switch)", () => {
+  test('clear() drops every reservation (wallet reset/lock/switch)', () => {
     const r = new UtxoReservation();
     r.reserve([A, B, C]);
     r.clear();

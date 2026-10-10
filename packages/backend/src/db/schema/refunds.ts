@@ -121,7 +121,7 @@ export const refunds = pgTable(
     check('refunds_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
     check(
       'refunds_external_ref_check',
-      sql`${table.externalRef} is null or length(${table.externalRef}) > 0`
+      sql`${table.externalRef} is null or length(${table.externalRef}) > 0`,
     ),
     check('refunds_origin_check', sql.raw(`origin in (${inList(REFUND_ORIGINS)})`)),
     /**
@@ -136,7 +136,7 @@ export const refunds = pgTable(
      */
     check(
       'refunds_origin_ref_agrees_check',
-      sql`(${table.origin} = 'merchant') = (${table.externalRef} is not null)`
+      sql`(${table.origin} = 'merchant') = (${table.externalRef} is not null)`,
     ),
     check('refunds_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     /**
@@ -152,7 +152,7 @@ export const refunds = pgTable(
     /** A succeeded refund HAS a provider object; a pending or failed one may not. */
     check(
       'refunds_succeeded_has_provider_object_check',
-      sql`${table.status} <> 'succeeded' or ${table.providerObjectId} is not null`
+      sql`${table.status} <> 'succeeded' or ${table.providerObjectId} is not null`,
     ),
-  ]
+  ],
 );

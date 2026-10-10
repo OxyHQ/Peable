@@ -9,13 +9,11 @@
  *     UTXO set / cursor space / history.
  */
 
-const DEFAULT_DATABASE_NAME = "fairwallet.db";
+const DEFAULT_DATABASE_NAME = 'fairwallet.db';
 
 export function databaseFileName(walletId?: string, account = 0): string {
   if (!walletId) {
     return account === 0 ? DEFAULT_DATABASE_NAME : `fairwallet_acct${account}.db`;
   }
-  return account === 0
-    ? `fairwallet_${walletId}.db`
-    : `fairwallet_${walletId}_acct${account}.db`;
+  return account === 0 ? `fairwallet_${walletId}.db` : `fairwallet_${walletId}_acct${account}.db`;
 }

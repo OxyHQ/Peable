@@ -10,18 +10,18 @@
  *
  * The durable half is covered by `services/__tests__/webhookOutbox.realdb.test.ts`.
  */
-import { test, expect } from "bun:test";
-import type { Server as SocketServer } from "socket.io";
-import { updateIntentState } from "../db/payments/paymentIntentRepository";
-import { listDeliveriesForMerchant } from "../db/webhooks/webhookDeliveryRepository";
-import { transitionIntent } from "../services/intentTransition";
+import { test, expect } from 'bun:test';
+import type { Server as SocketServer } from 'socket.io';
+import { updateIntentState } from '../db/payments/paymentIntentRepository';
+import { listDeliveriesForMerchant } from '../db/webhooks/webhookDeliveryRepository';
+import { transitionIntent } from '../services/intentTransition';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
   useGatewayDatabase,
-} from "./helpers/gatewayTestDatabase";
-import { onIntentChange } from "../server";
+} from './helpers/gatewayTestDatabase';
+import { onIntentChange } from '../server';
 
 useGatewayDatabase();
 
@@ -44,33 +44,33 @@ function fakeIo(): { io: SocketServer; rooms: () => string[] } {
  * Under the previous design there was no row until after the HTTP call
  * returned, which is precisely the window a crash used to lose the event in.
  */
-test("the outbox row exists before onIntentChange runs, not because of it", async () => {
+test('the outbox row exists before onIntentChange runs, not because of it', async () => {
   const merchant = await seedMerchant({
-    webhookUrl: "https://merchant.example/hook",
-    webhookSecret: "whsec_log",
+    webhookUrl: 'https://merchant.example/hook',
+    webhookSecret: 'whsec_log',
   });
   const seeded = await seedIntent(merchant);
   const broadcast = await updateIntentState(gatewayDb(), seeded.id, {
     from: seeded.status,
-    status: "broadcast",
-    txid: "tx_delivery_log",
+    status: 'broadcast',
+    txid: 'tx_delivery_log',
   });
-  if (broadcast.kind !== "updated") throw new Error("intent fixture missing");
+  if (broadcast.kind !== 'updated') throw new Error('intent fixture missing');
 
   const transition = await transitionIntent(broadcast.row.id, {
-    from: "broadcast",
-    status: "settled",
+    from: 'broadcast',
+    status: 'settled',
     confirmations: 1,
   });
-  if (transition.kind !== "updated") throw new Error("transition returned no row");
+  if (transition.kind !== 'updated') throw new Error('transition returned no row');
   const settled = transition.row;
 
   const beforeAnnounce = (
     await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, limit: 50 })
   ).data;
   expect(beforeAnnounce).toHaveLength(1);
-  expect(beforeAnnounce[0]?.eventType).toBe("payment_intent.settled");
-  expect(beforeAnnounce[0]?.lastStatus).toBe("pending");
+  expect(beforeAnnounce[0]?.eventType).toBe('payment_intent.settled');
+  expect(beforeAnnounce[0]?.lastStatus).toBe('pending');
 
   const { io, rooms } = fakeIo();
   await onIntentChange(io, settled);
@@ -91,7 +91,7 @@ test("the outbox row exists before onIntentChange runs, not because of it", asyn
  * reconciling every intent after this one in the batch. The reason has changed
  * — there is no database write left to fail — and the contract has not.
  */
-test("announcing an intent whose merchant has no webhook does not throw", async () => {
+test('announcing an intent whose merchant has no webhook does not throw', async () => {
   const merchant = await seedMerchant();
   const intent = await seedIntent(merchant);
 

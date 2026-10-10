@@ -1,13 +1,13 @@
-import { test, expect } from "bun:test";
-import { validateAddress, getNetwork } from "@fairco.in/core";
-import { parsePaymentRequest } from "./payment-request";
+import { test, expect } from 'bun:test';
+import { validateAddress, getNetwork } from '@fairco.in/core';
+import { parsePaymentRequest } from './payment-request';
 
-const ADDR = "FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek";
-const NET = validateAddress(ADDR, getNetwork("mainnet")) ? "mainnet" : "testnet";
-const ID = "pi_0123456789abcdef01234567";
+const ADDR = 'FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek';
+const NET = validateAddress(ADDR, getNetwork('mainnet')) ? 'mainnet' : 'testnet';
+const ID = 'pi_0123456789abcdef01234567';
 const SECRET = `${ID}_secret_00112233445566778899aabbccddeeff`;
 
-test("parses a well-formed peable://pay request", () => {
+test('parses a well-formed peable://pay request', () => {
   const url = `peable://pay?intent=${ID}&secret=${SECRET}&address=${ADDR}&amount=150000000&network=${NET}`;
   const parsed = parsePaymentRequest(url);
   expect(parsed).not.toBeNull();
@@ -18,7 +18,7 @@ test("parses a well-formed peable://pay request", () => {
   expect(parsed?.network).toBe(NET);
 });
 
-test("rejects malformed requests", () => {
+test('rejects malformed requests', () => {
   const bad = [
     `faircoin:${ADDR}?amount=1`,
     `peable://pay?intent=${ID}&address=${ADDR}&amount=1&network=${NET}`,

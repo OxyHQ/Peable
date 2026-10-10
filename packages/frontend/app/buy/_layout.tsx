@@ -8,9 +8,9 @@
  * `/buy/*` children as distinct URLs.
  */
 
-import { useMemo } from "react";
-import { Stack } from "expo-router";
-import { useTheme } from "@oxy.so/bloom/theme";
+import { useMemo } from 'react';
+import { Stack } from 'expo-router';
+import { useTheme } from '@oxy.so/bloom/theme';
 
 export default function BuyLayout() {
   const theme = useTheme();

@@ -18,7 +18,7 @@
  * native pieces (notifications, wallet store, prefs) inside its body.
  */
 
-import { parseFairToUnits } from "@fairco.in/core";
+import { parseFairToUnits } from '@fairco.in/core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -52,10 +52,7 @@ export interface PushHandlerDeps {
 }
 
 export interface PushHandler {
-  handleIncomingPush: (data: {
-    txid: string;
-    event: string;
-  }) => Promise<void>;
+  handleIncomingPush: (data: { txid: string; event: string }) => Promise<void>;
 }
 
 // ---------------------------------------------------------------------------
@@ -83,10 +80,7 @@ function sumOursUnits(entries: PushTxEntry[], ours: Set<string>): bigint {
 }
 
 export function createPushHandler(deps: PushHandlerDeps): PushHandler {
-  async function handleIncomingPush(data: {
-    txid: string;
-    event: string;
-  }): Promise<void> {
+  async function handleIncomingPush(data: { txid: string; event: string }): Promise<void> {
     const tx = await deps.fetchTransaction(data.txid);
     if (!tx) return;
 
@@ -96,7 +90,7 @@ export function createPushHandler(deps: PushHandlerDeps): PushHandler {
     const receivedUnits = sumOursUnits(tx.vout, ours);
     const spentUnits = sumOursUnits(tx.vin, ours);
 
-    if (data.event === "outgoing_confirmed") {
+    if (data.event === 'outgoing_confirmed') {
       // Amount that left the wallet = our spent inputs minus change back to us.
       const net = spentUnits - receivedUnits;
       if (net > 0n) {
@@ -142,7 +136,7 @@ interface RawTransaction {
 function mapExplorerTransaction(raw: RawTransaction): PushTransaction {
   const vout: PushTxEntry[] = (raw.vout ?? []).map((out) => ({
     addresses: out.scriptPubKey?.addresses ?? [],
-    value: typeof out.value === "number" ? out.value : 0,
+    value: typeof out.value === 'number' ? out.value : 0,
   }));
   const vin: PushTxEntry[] = [];
   for (const input of raw.vin ?? []) {
@@ -150,8 +144,7 @@ function mapExplorerTransaction(raw: RawTransaction): PushTransaction {
     if (input.prevout) {
       vin.push({
         addresses: input.prevout.addresses ?? [],
-        value:
-          typeof input.prevout.value === "number" ? input.prevout.value : 0,
+        value: typeof input.prevout.value === 'number' ? input.prevout.value : 0,
       });
     }
   }
@@ -178,20 +171,13 @@ function delay(ms: number): Promise<void> {
  * notification-received listener / background task. Never throws — a failed
  * fetch just posts nothing (normal SPV sync reconciles on next app open).
  */
-export async function handleIncomingPush(data: {
-  txid: string;
-  event: string;
-}): Promise<void> {
-  const settings =
-    require("./notification-settings") as typeof import("./notification-settings");
-  const notifications =
-    require("./notifications") as typeof import("./notifications");
-  const {
-    useWalletStore,
-    getActiveWalletAddresses,
-  } = require("../wallet/wallet-store") as typeof import("../wallet/wallet-store");
+export async function handleIncomingPush(data: { txid: string; event: string }): Promise<void> {
+  const settings = require('./notification-settings') as typeof import('./notification-settings');
+  const notifications = require('./notifications') as typeof import('./notifications');
+  const { useWalletStore, getActiveWalletAddresses } =
+    require('../wallet/wallet-store') as typeof import('../wallet/wallet-store');
   const { normalizeServerUrl } =
-    require("./notification-server") as typeof import("./notification-server");
+    require('./notification-server') as typeof import('./notification-server');
 
   const handler = createPushHandler({
     fetchTransaction: async (txid) => {
@@ -214,9 +200,9 @@ export async function handleIncomingPush(data: {
           const response = await fetch(url);
           if (!response.ok) continue;
           const body: unknown = await response.json();
-          if (body === null || typeof body !== "object") continue;
+          if (body === null || typeof body !== 'object') continue;
           const raw = (body as { transaction?: unknown }).transaction;
-          if (raw === null || typeof raw !== "object") continue;
+          if (raw === null || typeof raw !== 'object') continue;
           return mapExplorerTransaction(raw as RawTransaction);
         } catch {
           // Network hiccup — retry within the attempt budget.

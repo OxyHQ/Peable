@@ -30,33 +30,33 @@
  * stranger's opinion.
  */
 
-import type { CurrencyCode, DisputeEvidence } from "@peable.to/shared-types";
+import type { CurrencyCode, DisputeEvidence } from '@peable.to/shared-types';
 
 /** The providers this gateway can route a fiat payment through. */
-export type ProviderId = "stripe";
+export type ProviderId = 'stripe';
 
 /**
  * The stages a payment can fail at — used by diagnostics and by the contract
  * suite's failure injection, which walks every one of them.
  */
 export type ProviderStage =
-  | "createPayment"
-  | "capture"
-  | "cancel"
-  | "refund"
-  | "transfer"
-  | "getStatus"
-  | "verifyEvent"
-  | "account"
+  | 'createPayment'
+  | 'capture'
+  | 'cancel'
+  | 'refund'
+  | 'transfer'
+  | 'getStatus'
+  | 'verifyEvent'
+  | 'account'
   // Reading what a payment came to. Its own stage because a failure here is
   // the one on this list that is not a money movement at all: it degrades a
   // reconciliation read to `unknown`, and nothing is left half-done.
-  | "settlement"
+  | 'settlement'
   // Answering a dispute. Its own stage rather than reusing `account`, because
   // the operator question it raises is different: a failure here means a
   // merchant's response did not reach the network before a deadline, which is
   // the one failure on this surface that cannot be retried later.
-  | "dispute";
+  | 'dispute';
 
 /**
  * A failure from a payment provider.
@@ -84,7 +84,7 @@ export class ProviderError extends Error {
     code?: string;
   }) {
     super(input.message);
-    this.name = "ProviderError";
+    this.name = 'ProviderError';
     this.provider = input.provider;
     this.stage = input.stage;
     this.retryable = input.retryable;
@@ -123,7 +123,7 @@ export interface ProviderAmount {
  * it cannot become a credential sitting in a database.
  */
 export interface ProviderClientAction {
-  readonly kind: "client_secret" | "redirect";
+  readonly kind: 'client_secret' | 'redirect';
   readonly value: string;
 }
 
@@ -136,14 +136,14 @@ export interface ProviderClientAction {
  * `PaymentIntentStatus` would put `applyEvent`'s job inside every adapter.
  */
 export type ProviderPaymentStatus =
-  | "created"
-  | "requires_action"
-  | "processing"
-  | "succeeded"
-  | "failed"
-  | "canceled"
-  | "refunded"
-  | "partially_refunded";
+  | 'created'
+  | 'requires_action'
+  | 'processing'
+  | 'succeeded'
+  | 'failed'
+  | 'canceled'
+  | 'refunded'
+  | 'partially_refunded';
 
 export interface CreatePaymentRequest {
   /** The intent's PUBLIC id — the basis of the provider idempotency key. */
@@ -212,7 +212,7 @@ export interface ProviderRefundResult {
   /** Where the PAYMENT stands after it. */
   readonly status: ProviderPaymentStatus;
   /** Where the REFUND itself stands — the money's own lifecycle. */
-  readonly state: "pending" | "succeeded" | "failed";
+  readonly state: 'pending' | 'succeeded' | 'failed';
   readonly failureCode?: string;
 }
 
@@ -299,7 +299,7 @@ export interface CreateTransferRequest {
 
 export interface ProviderTransferResult {
   readonly providerObjectId: string;
-  readonly status: "pending" | "paid" | "failed" | "reversed";
+  readonly status: 'pending' | 'paid' | 'failed' | 'reversed';
 }
 
 export interface ReverseTransferRequest {
@@ -331,13 +331,11 @@ export interface ProviderTransferReversalResult {
  */
 export interface SettlingPaymentProvider extends PaymentProvider {
   createTransfer(request: CreateTransferRequest): Promise<ProviderTransferResult>;
-  reverseTransfer(
-    request: ReverseTransferRequest,
-  ): Promise<ProviderTransferReversalResult>;
+  reverseTransfer(request: ReverseTransferRequest): Promise<ProviderTransferReversalResult>;
 }
 
 /** A capability's state as the provider reports it. */
-export type ProviderCapabilityStatus = "active" | "pending" | "inactive";
+export type ProviderCapabilityStatus = 'active' | 'pending' | 'inactive';
 
 /** How a sub-merchant's onboarding stands, in the gateway's vocabulary. */
 export interface ProviderAccountSnapshot {
@@ -384,7 +382,7 @@ export interface CreateAccountRequest {
   readonly accountId: string;
   /** ISO 3166-1 alpha-2. Constrained by the provider's own transfer region. */
   readonly country: string;
-  readonly businessType: "individual" | "company";
+  readonly businessType: 'individual' | 'company';
   readonly idempotencyKey: string;
   readonly metadata: Readonly<Record<string, string>>;
 }
@@ -483,7 +481,7 @@ export function isDisputeHandlingProvider(
   provider: PaymentProvider,
 ): provider is DisputeHandlingProvider {
   const candidate = provider as Partial<DisputeHandlingProvider>;
-  return typeof candidate.submitDisputeEvidence === "function";
+  return typeof candidate.submitDisputeEvidence === 'function';
 }
 
 /**
@@ -505,7 +503,7 @@ export interface ProviderSettlement {
    *  - `pending`   — it exists and the figures are not final yet.
    *  - `unknown`   — the provider has no settlement record at all. Not zero.
    */
-  readonly status: "available" | "pending" | "unknown";
+  readonly status: 'available' | 'pending' | 'unknown';
   readonly gross: string | null;
   readonly fee: string | null;
   readonly net: string | null;
@@ -527,7 +525,7 @@ export interface ProviderSettlement {
  * copies of it invite one of them growing a zero.
  */
 export const UNKNOWN_SETTLEMENT: ProviderSettlement = {
-  status: "unknown",
+  status: 'unknown',
   gross: null,
   fee: null,
   net: null,
@@ -553,17 +551,15 @@ export function isSettlementReportingProvider(
   provider: PaymentProvider,
 ): provider is SettlementReportingProvider {
   const candidate = provider as Partial<SettlementReportingProvider>;
-  return typeof candidate.getSettlement === "function";
+  return typeof candidate.getSettlement === 'function';
 }
 
 /** Whether this rail can settle sub-merchants. Both halves, never one. */
-export function isSettlingProvider(
-  provider: PaymentProvider,
-): provider is SettlingPaymentProvider {
+export function isSettlingProvider(provider: PaymentProvider): provider is SettlingPaymentProvider {
   const candidate = provider as Partial<SettlingPaymentProvider>;
   return (
-    typeof candidate.createTransfer === "function" &&
-    typeof candidate.reverseTransfer === "function"
+    typeof candidate.createTransfer === 'function' &&
+    typeof candidate.reverseTransfer === 'function'
   );
 }
 
@@ -573,8 +569,8 @@ export function isAccountHoldingProvider(
 ): provider is AccountHoldingProvider {
   const candidate = provider as Partial<AccountHoldingProvider>;
   return (
-    typeof candidate.createAccount === "function" &&
-    typeof candidate.accountLink === "function" &&
-    typeof candidate.getAccount === "function"
+    typeof candidate.createAccount === 'function' &&
+    typeof candidate.accountLink === 'function' &&
+    typeof candidate.getAccount === 'function'
   );
 }

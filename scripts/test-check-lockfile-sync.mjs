@@ -15,13 +15,13 @@
 // what `ci.yml` had before this script — exits 0 on it. That case fails if the
 // manifest comparison is ever dropped.
 
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const checkScript = resolve(dirname(fileURLToPath(import.meta.url)), "check-lockfile-sync.mjs");
-const fixturePrefix = join(tmpdir(), "peable-lockfile-sync-");
+const checkScript = resolve(dirname(fileURLToPath(import.meta.url)), 'check-lockfile-sync.mjs');
+const fixturePrefix = join(tmpdir(), 'peable-lockfile-sync-');
 const decoder = new TextDecoder();
 const createdFixtures = [];
 const failures = [];
@@ -31,8 +31,8 @@ function run(cmd, cwd, extraEnvironment = {}) {
     cmd,
     cwd,
     env: { ...process.env, ...extraEnvironment },
-    stdout: "pipe",
-    stderr: "pipe",
+    stdout: 'pipe',
+    stderr: 'pipe',
   });
   return {
     exitCode: result.exitCode,
@@ -43,21 +43,24 @@ function run(cmd, cwd, extraEnvironment = {}) {
 async function writeManifest(root, workspacePath, manifest) {
   const directory = join(root, workspacePath);
   await mkdir(directory, { recursive: true });
-  await writeFile(join(directory, "package.json"), `${JSON.stringify(manifest, null, 2)}\n`);
+  await writeFile(join(directory, 'package.json'), `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
 async function writeDockerfile(root, version) {
-  await writeFile(join(root, "Dockerfile"), `FROM oven/bun:${version}-alpine AS builder\nWORKDIR /app\n`);
+  await writeFile(
+    join(root, 'Dockerfile'),
+    `FROM oven/bun:${version}-alpine AS builder\nWORKDIR /app\n`,
+  );
 }
 
 function rootManifest(overrides = {}) {
   return {
-    name: "fixture-root",
+    name: 'fixture-root',
     private: true,
-    version: "0.0.0",
+    version: '0.0.0',
     packageManager: `bun@${Bun.version}`,
-    workspaces: ["packages/*"],
-    devDependencies: { alpha: "workspace:*", beta: "workspace:*" },
+    workspaces: ['packages/*'],
+    devDependencies: { alpha: 'workspace:*', beta: 'workspace:*' },
     ...overrides,
   };
 }
@@ -76,39 +79,53 @@ function rootManifest(overrides = {}) {
 async function createFixture({ dockerfileVersion = Bun.version, workflowBunVersion = null } = {}) {
   const root = await mkdtemp(fixturePrefix);
   createdFixtures.push(root);
-  await writeManifest(root, ".", rootManifest());
-  await writeManifest(root, "packages/alpha", {
-    name: "alpha",
+  await writeManifest(root, '.', rootManifest());
+  await writeManifest(root, 'packages/alpha', {
+    name: 'alpha',
     private: true,
-    version: "1.0.0",
-    dependencies: { beta: "workspace:*" },
+    version: '1.0.0',
+    dependencies: { beta: 'workspace:*' },
   });
-  await writeManifest(root, "packages/beta", { name: "beta", private: true, version: "2.0.0" });
+  await writeManifest(root, 'packages/beta', { name: 'beta', private: true, version: '2.0.0' });
   if (dockerfileVersion !== null) await writeDockerfile(root, dockerfileVersion);
   if (workflowBunVersion !== null) {
-    await mkdir(join(root, ".github/workflows"), { recursive: true });
+    await mkdir(join(root, '.github/workflows'), { recursive: true });
     await writeFile(
-      join(root, ".github/workflows/ci.yml"),
+      join(root, '.github/workflows/ci.yml'),
       `jobs:\n  t:\n    steps:\n      - uses: oven-sh/setup-bun\n        with:\n          bun-version: ${workflowBunVersion}\n`,
     );
   }
 
-  const install = run([process.execPath, "install", "--ignore-scripts"], root);
+  const install = run([process.execPath, 'install', '--ignore-scripts'], root);
   if (install.exitCode !== 0) throw new Error(`Fixture install failed: ${install.output}`);
 
   for (const args of [
-    ["init", "-q", "."],
-    ["add", "-A"],
-    ["-c", "user.email=fixture@example.invalid", "-c", "user.name=fixture", "commit", "-qm", "fixture"],
+    ['init', '-q', '.'],
+    ['add', '-A'],
+    [
+      '-c',
+      'user.email=fixture@example.invalid',
+      '-c',
+      'user.name=fixture',
+      'commit',
+      '-qm',
+      'fixture',
+    ],
   ]) {
-    const step = run(["git", ...args], root);
+    const step = run(['git', ...args], root);
     if (step.exitCode !== 0) throw new Error(`Fixture git ${args[0]} failed: ${step.output}`);
   }
   return root;
 }
 
-async function expectVerdict(caseName, root, expectedExitCode, expectedFragment, extraEnvironment = {}) {
-  const lockfileBefore = await readFile(join(root, "bun.lock"), "utf8");
+async function expectVerdict(
+  caseName,
+  root,
+  expectedExitCode,
+  expectedFragment,
+  extraEnvironment = {},
+) {
+  const lockfileBefore = await readFile(join(root, 'bun.lock'), 'utf8');
   const { exitCode, output } = run([process.execPath, checkScript], root, {
     LOCKFILE_SYNC_ROOT: root,
     ...extraEnvironment,
@@ -118,38 +135,40 @@ async function expectVerdict(caseName, root, expectedExitCode, expectedFragment,
     return;
   }
   if (!output.includes(expectedFragment)) {
-    failures.push(`${caseName}: output does not contain ${JSON.stringify(expectedFragment)}.\n${output}`);
+    failures.push(
+      `${caseName}: output does not contain ${JSON.stringify(expectedFragment)}.\n${output}`,
+    );
     return;
   }
   // The check installs to reach its verdict, so it must hand back the lockfile it
   // was asked to judge. Leaving a regenerated lockfile behind would make the next
   // run refuse with "already has uncommitted changes" instead of reporting again.
-  if ((await readFile(join(root, "bun.lock"), "utf8")) !== lockfileBefore) {
+  if ((await readFile(join(root, 'bun.lock'), 'utf8')) !== lockfileBefore) {
     failures.push(`${caseName}: the check left bun.lock modified.`);
   }
 }
 
 // A lockfile that matches its manifests must pass, or nothing below means anything.
-await expectVerdict("synced", await createFixture(), 0, "bun.lock is in sync");
+await expectVerdict('synced', await createFixture(), 0, 'bun.lock is in sync');
 
 // Same tree, cold install cache — what a fresh CI runner has. A gate that is only
 // quiet on a warm cache is a gate that fails every first build.
 const coldFixture = await createFixture();
-await expectVerdict("synced-cold-cache", coldFixture, 0, "bun.lock is in sync", {
-  BUN_INSTALL_CACHE_DIR: join(coldFixture, ".private-install-cache"),
+await expectVerdict('synced-cold-cache', coldFixture, 0, 'bun.lock is in sync', {
+  BUN_INSTALL_CACHE_DIR: join(coldFixture, '.private-install-cache'),
 });
 
 // The mode an install-only gate cannot see: bun leaves the stale version in the
 // lockfile and reports no changes, so only the manifest comparison catches it.
 const versionFixture = await createFixture();
-await writeManifest(versionFixture, "packages/alpha", {
-  name: "alpha",
+await writeManifest(versionFixture, 'packages/alpha', {
+  name: 'alpha',
   private: true,
-  version: "1.0.1",
-  dependencies: { beta: "workspace:*" },
+  version: '1.0.1',
+  dependencies: { beta: 'workspace:*' },
 });
 await expectVerdict(
-  "workspace-version-bumped",
+  'workspace-version-bumped',
   versionFixture,
   1,
   'packages/alpha is at version "1.0.1" but bun.lock records "1.0.0"',
@@ -158,9 +177,13 @@ await expectVerdict(
 // A renamed workspace leaves every dependent's recorded range pointing at a name
 // that no longer exists.
 const renameFixture = await createFixture();
-await writeManifest(renameFixture, "packages/beta", { name: "beta-renamed", private: true, version: "2.0.0" });
+await writeManifest(renameFixture, 'packages/beta', {
+  name: 'beta-renamed',
+  private: true,
+  version: '2.0.0',
+});
 await expectVerdict(
-  "workspace-renamed",
+  'workspace-renamed',
   renameFixture,
   1,
   'packages/beta is named "beta-renamed" but bun.lock records "beta"',
@@ -169,47 +192,70 @@ await expectVerdict(
 // A new package no install has recorded yet: the lockfile describes a workspace
 // set that is no longer the repository's.
 const addedFixture = await createFixture();
-await writeManifest(addedFixture, "packages/gamma", { name: "gamma", private: true, version: "3.0.0" });
-await expectVerdict("workspace-added", addedFixture, 1, "packages/gamma has a package.json that bun.lock does not record");
+await writeManifest(addedFixture, 'packages/gamma', {
+  name: 'gamma',
+  private: true,
+  version: '3.0.0',
+});
+await expectVerdict(
+  'workspace-added',
+  addedFixture,
+  1,
+  'packages/gamma has a package.json that bun.lock does not record',
+);
 
 // An override changed without reinstalling silently pins a different version than
 // the lockfile resolves.
 const overrideFixture = await createFixture();
-await writeManifest(overrideFixture, ".", rootManifest({ overrides: { beta: "workspace:*" } }));
-await expectVerdict("override-added", overrideFixture, 1, "override beta is");
+await writeManifest(overrideFixture, '.', rootManifest({ overrides: { beta: 'workspace:*' } }));
+await expectVerdict('override-added', overrideFixture, 1, 'override beta is');
 
 // A dependency removed from a manifest while the lockfile still resolves it. This
 // one is invisible to the manifest comparison and is caught by the install.
 const removedFixture = await createFixture();
-await writeManifest(removedFixture, "packages/alpha", { name: "alpha", private: true, version: "1.0.0" });
-await expectVerdict("dependency-removed", removedFixture, 1, "is OUT OF SYNC with the package.json files");
+await writeManifest(removedFixture, 'packages/alpha', {
+  name: 'alpha',
+  private: true,
+  version: '1.0.0',
+});
+await expectVerdict(
+  'dependency-removed',
+  removedFixture,
+  1,
+  'is OUT OF SYNC with the package.json files',
+);
 
 // The pin protects the verdict itself: a lockfile written by another bun can
 // differ on formatting alone, so the check must refuse rather than report a
 // difference it caused.
 const pinFixture = await createFixture();
-await writeManifest(pinFixture, ".", rootManifest({ packageManager: "bun@0.0.1" }));
-await expectVerdict("bun-pin-mismatch", pinFixture, 1, "pins bun@0.0.1 but bun");
+await writeManifest(pinFixture, '.', rootManifest({ packageManager: 'bun@0.0.1' }));
+await expectVerdict('bun-pin-mismatch', pinFixture, 1, 'pins bun@0.0.1 but bun');
 
 // The image builds on a different bun than the one that wrote the lockfile. This
 // is the shape that produces `lockfile had changes, but lockfile is frozen` in
 // the Docker build and nowhere else, so it reads as a lockfile fault.
-const dockerfileFixture = await createFixture({ dockerfileVersion: "1.0.0" });
-await expectVerdict("dockerfile-pin-mismatch", dockerfileFixture, 1, "builds on oven/bun:1.0.0 but package.json pins");
+const dockerfileFixture = await createFixture({ dockerfileVersion: '1.0.0' });
+await expectVerdict(
+  'dockerfile-pin-mismatch',
+  dockerfileFixture,
+  1,
+  'builds on oven/bun:1.0.0 but package.json pins',
+);
 
 // A workflow pinning a literal version overrides the authority it should be
 // reading. Floating values are somebody's deliberate choice and must NOT trip it.
 await expectVerdict(
-  "workflow-pin-mismatch",
-  await createFixture({ workflowBunVersion: "9.9.9" }),
+  'workflow-pin-mismatch',
+  await createFixture({ workflowBunVersion: '9.9.9' }),
   1,
-  "pins bun-version 9.9.9 but package.json pins",
+  'pins bun-version 9.9.9 but package.json pins',
 );
 await expectVerdict(
-  "workflow-floating-pin-ignored",
-  await createFixture({ workflowBunVersion: "latest" }),
+  'workflow-floating-pin-ignored',
+  await createFixture({ workflowBunVersion: 'latest' }),
   0,
-  "bun.lock is in sync",
+  'bun.lock is in sync',
 );
 
 // The floating case above must pass because `latest` is not a semver pin — NOT
@@ -218,25 +264,35 @@ await expectVerdict(
 // floating value leaves the floor unsatisfied and the check refuses. That
 // refusal is what proves the scan reached the file at all.
 await expectVerdict(
-  "floating-workflow-pin-does-not-satisfy-the-floor",
-  await createFixture({ dockerfileVersion: null, workflowBunVersion: "latest" }),
+  'floating-workflow-pin-does-not-satisfy-the-floor',
+  await createFixture({ dockerfileVersion: null, workflowBunVersion: 'latest' }),
   1,
-  "No bun version pin was found",
+  'No bun version pin was found',
 );
 
 // The pin layer's vacuity floor. With no Dockerfile and no workflow there is
 // nothing to compare, and "every pin agrees" is exactly what a scan that read
 // nothing reports — so it must refuse rather than pass.
 const noPinFixture = await createFixture({ dockerfileVersion: null });
-await expectVerdict("no-pin-anywhere-refuses", noPinFixture, 1, "No bun version pin was found");
+await expectVerdict('no-pin-anywhere-refuses', noPinFixture, 1, 'No bun version pin was found');
 
 // An already-modified lockfile makes attribution impossible, so it must refuse
 // rather than blame the commit for what was altered beforehand.
 const dirtyFixture = await createFixture();
-await writeFile(join(dirtyFixture, "bun.lock"), `${await readFile(join(dirtyFixture, "bun.lock"), "utf8")}\n`);
-const dirtyVerdict = run([process.execPath, checkScript], dirtyFixture, { LOCKFILE_SYNC_ROOT: dirtyFixture });
-if (dirtyVerdict.exitCode !== 1 || !dirtyVerdict.output.includes("already has uncommitted changes")) {
-  failures.push(`dirty-lockfile: expected a refusal, got exit ${dirtyVerdict.exitCode}.\n${dirtyVerdict.output}`);
+await writeFile(
+  join(dirtyFixture, 'bun.lock'),
+  `${await readFile(join(dirtyFixture, 'bun.lock'), 'utf8')}\n`,
+);
+const dirtyVerdict = run([process.execPath, checkScript], dirtyFixture, {
+  LOCKFILE_SYNC_ROOT: dirtyFixture,
+});
+if (
+  dirtyVerdict.exitCode !== 1 ||
+  !dirtyVerdict.output.includes('already has uncommitted changes')
+) {
+  failures.push(
+    `dirty-lockfile: expected a refusal, got exit ${dirtyVerdict.exitCode}.\n${dirtyVerdict.output}`,
+  );
 }
 
 for (const fixture of createdFixtures) {
@@ -244,7 +300,7 @@ for (const fixture of createdFixtures) {
 }
 
 if (failures.length > 0) {
-  console.error("Lockfile sync check tests failed:\n");
+  console.error('Lockfile sync check tests failed:\n');
   for (const failure of failures) console.error(`- ${failure}`);
   process.exit(1);
 }

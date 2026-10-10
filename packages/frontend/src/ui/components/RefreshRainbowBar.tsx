@@ -11,25 +11,53 @@
  * be swapped for the FairCoin palette later.
  */
 
-import { useEffect } from "react";
-import { View } from "react-native";
+import { useEffect } from 'react';
+import { View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedStyle,
   useSharedValue,
   withRepeat,
   withTiming,
-} from "react-native-reanimated";
+} from 'react-native-reanimated';
 
 /** Distinct rainbow stops (7 gradients × 5 shades) flowed end to end. */
 const RAINBOW_STOPS = [
-  "#b983d6", "#a65dc2", "#944bb4", "#9d3ea2", "#c03a92",
-  "#d6458d", "#ec5e73", "#f77a52", "#f99145", "#fbad5c",
-  "#fbad5c", "#fcb75e", "#fcca60", "#fadb74", "#f8ea9a",
-  "#e7f196", "#c6e47f", "#99d472", "#6bc36c", "#42b067",
-  "#42b067", "#3a9e83", "#3a8e8e", "#3e7c91", "#476998",
-  "#476998", "#4a5fa5", "#5c59b5", "#734fbf", "#8942c2",
-  "#8942c2", "#9b3ca9", "#b3398c", "#c73f6b", "#d9484f",
+  '#b983d6',
+  '#a65dc2',
+  '#944bb4',
+  '#9d3ea2',
+  '#c03a92',
+  '#d6458d',
+  '#ec5e73',
+  '#f77a52',
+  '#f99145',
+  '#fbad5c',
+  '#fbad5c',
+  '#fcb75e',
+  '#fcca60',
+  '#fadb74',
+  '#f8ea9a',
+  '#e7f196',
+  '#c6e47f',
+  '#99d472',
+  '#6bc36c',
+  '#42b067',
+  '#42b067',
+  '#3a9e83',
+  '#3a8e8e',
+  '#3e7c91',
+  '#476998',
+  '#476998',
+  '#4a5fa5',
+  '#5c59b5',
+  '#734fbf',
+  '#8942c2',
+  '#8942c2',
+  '#9b3ca9',
+  '#b3398c',
+  '#c73f6b',
+  '#d9484f',
 ];
 
 const BLOCK_WIDTH = 20;
@@ -75,7 +103,7 @@ export function RefreshRainbowBar() {
     <Animated.View
       style={[
         flowStyle,
-        { flexDirection: "row", height: RAINBOW_BAND_HEIGHT, width: SET_WIDTH * 2 },
+        { flexDirection: 'row', height: RAINBOW_BAND_HEIGHT, width: SET_WIDTH * 2 },
       ]}
     >
       {[...RAINBOW_STOPS, ...RAINBOW_STOPS].map((color, index) => (

@@ -46,10 +46,10 @@ describe('the derivation index bound', () => {
     const network = getNetwork('testnet');
     // One below the boundary derives; the boundary itself does not.
     expect(
-      typeof deriveSocialReceiveAddress(identityPublicKey!, MAX_DERIVATION_INDEX, network)
+      typeof deriveSocialReceiveAddress(identityPublicKey!, MAX_DERIVATION_INDEX, network),
     ).toBe('string');
     expect(() =>
-      deriveSocialReceiveAddress(identityPublicKey!, HARDENED_OFFSET, network)
+      deriveSocialReceiveAddress(identityPublicKey!, HARDENED_OFFSET, network),
     ).toThrow();
   });
 
@@ -73,7 +73,7 @@ describe('the derivation index bound', () => {
 
     expect(() => publicOnly.deriveChild(MAX_DERIVATION_INDEX)).not.toThrow();
     expect(() => publicOnly.deriveChild(HARDENED_OFFSET)).toThrow(
-      'Could not derive hardened child key'
+      'Could not derive hardened child key',
     );
   });
 });

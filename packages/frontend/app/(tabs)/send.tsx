@@ -9,18 +9,18 @@
  * resolved recipient from the `/@username` profile page.
  */
 
-import { View, ScrollView } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import { Redirect, useLocalSearchParams } from "expo-router";
-import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
-import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
-import { SendSheet } from "../../src/ui/sheets/SendSheet";
-import type { SocialRecipient } from "../../src/ui/components/SocialRecipientPicker";
+import { View, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Redirect, useLocalSearchParams } from 'expo-router';
+import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
+import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
+import { SendSheet } from '../../src/ui/sheets/SendSheet';
+import type { SocialRecipient } from '../../src/ui/components/SocialRecipientPicker';
 
 export default function SendScreen() {
   // Hidden from a read-only host's rail; this catches a typed or linked URL.
   // `/(tabs)` is inside the same shell, so it cannot bounce back here.
-  if (useWalletCapability() === "read-only") return <Redirect href="/(tabs)" />;
+  if (useWalletCapability() === 'read-only') return <Redirect href="/(tabs)" />;
   return <SendForm />;
 }
 
@@ -66,11 +66,7 @@ function SendForm() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <SendSheet
-          address={params.address}
-          amount={params.amount}
-          recipient={recipient}
-        />
+        <SendSheet address={params.address} amount={params.amount} recipient={recipient} />
       </ScrollView>
     </View>
   );

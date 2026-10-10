@@ -8,19 +8,15 @@
  * keeps it fresh, instead of depending on another screen being focused.
  */
 
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   acquirePricePolling,
   getCachedPrice,
   subscribeToPrice,
   type PriceData,
-} from "../services/price";
+} from '../services/price';
 
 export function usePrice(): PriceData | null {
   useEffect(() => acquirePricePolling(), []);
-  return useSyncExternalStore(
-    subscribeToPrice,
-    getCachedPrice,
-    getCachedPrice,
-  );
+  return useSyncExternalStore(subscribeToPrice, getCachedPrice, getCachedPrice);
 }

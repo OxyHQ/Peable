@@ -1,58 +1,53 @@
-import {
-  test,
-  expect,
-  afterEach,
-  describe,
-} from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import { eq, sql } from "drizzle-orm";
-import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from "@fairco.in/core";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
-import { merchants } from "../../db/schema";
+import { test, expect, afterEach, describe } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import { eq, sql } from 'drizzle-orm';
+import { MAINNET, deriveKeyFromSeed, mnemonicToSeed } from '@fairco.in/core';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
+import { merchants } from '../../db/schema';
 import {
   gatewayDb,
   resetGatewayTables,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
-import { createMerchantsRouter } from "../merchants";
-import { findMerchantByAppEnvironment } from "../../db/merchants/merchantRepository";
-import { resolveMerchantDisplay } from "../../services/merchantDisplay";
+} from '../../__tests__/helpers/gatewayTestDatabase';
+import { createMerchantsRouter } from '../merchants';
+import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
+import { resolveMerchantDisplay } from '../../services/merchantDisplay';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
 // (m/44'/1'/0' neutered) — public-key-only, cannot spend.
 const XPUB =
-  "DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn";
+  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
 
 // The same mnemonic's MAINNET-network account xpub (distinct BIP32 version
 // bytes from XPUB above) — the non-custody derivation firewall inside
 // `insertMerchant` enforces that `xpub`'s encoded network matches `network`,
 // so the "production on mainnet" registration test needs a real mainnet xpub.
 const MNEMONIC =
-  "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
-const MAINNET_XPUB = deriveKeyFromSeed(mnemonicToSeed(MNEMONIC), MAINNET)
-  .derive(`m/44'/${MAINNET.bip44CoinType}'/0'`)
-  .hdKey.publicExtendedKey;
+  'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
+const MAINNET_XPUB = deriveKeyFromSeed(mnemonicToSeed(MNEMONIC), MAINNET).derive(
+  `m/44'/${MAINNET.bip44CoinType}'/0'`,
+).hdKey.publicExtendedKey;
 
-const DEV_APP_ID = "app_merch_dev";
-const PROD_APP_ID = "app_merch_prod";
+const DEV_APP_ID = 'app_merch_dev';
+const PROD_APP_ID = 'app_merch_prod';
 
 function stubRequireMerchant(appId: string, environment: string): RequestHandler {
   return (req, _res, next) => {
     (req as OxyAuthRequest).serviceApp = {
       appId,
-      appName: "t",
-      scopes: ["payments:read", "payments:write"],
-      credentialId: "c",
-      ownerAccountId: "owner",
-      environment: environment as OxyAuthRequest["serviceApp"] extends infer T
+      appName: 't',
+      scopes: ['payments:read', 'payments:write'],
+      credentialId: 'c',
+      ownerAccountId: 'owner',
+      environment: environment as OxyAuthRequest['serviceApp'] extends infer T
         ? T extends { environment: infer E }
           ? E
           : never
         : never,
-      tier: "external",
+      tier: 'external',
     };
     next();
   };
@@ -89,7 +84,7 @@ async function countMerchants(oxyAppId: string): Promise<number> {
     .select({ n: sql<number>`count(*)::int` })
     .from(merchants)
     .where(eq(merchants.oxyAppId, oxyAppId));
-  if (!row) throw new Error("count(*) returned no row");
+  if (!row) throw new Error('count(*) returned no row');
   return row.n;
 }
 
@@ -99,7 +94,10 @@ afterEach(async () => {
   await resetGatewayTables();
 });
 
-function createApp(appId: string, environment: string): { app: ReturnType<typeof express>; requireMerchant: RequestHandler } {
+function createApp(
+  appId: string,
+  environment: string,
+): { app: ReturnType<typeof express>; requireMerchant: RequestHandler } {
   const requireMerchant = stubRequireMerchant(appId, environment);
   const app = express();
   app.use(express.json());
@@ -107,47 +105,49 @@ function createApp(appId: string, environment: string): { app: ReturnType<typeof
   return { app, requireMerchant };
 }
 
-async function listen(app: ReturnType<typeof express>): Promise<{ server: Server; baseUrl: string }> {
+async function listen(
+  app: ReturnType<typeof express>,
+): Promise<{ server: Server; baseUrl: string }> {
   const s = app.listen(0);
-  await new Promise<void>((resolve) => s.once("listening", resolve));
+  await new Promise<void>((resolve) => s.once('listening', resolve));
   const address = s.address() as AddressInfo;
   return { server: s, baseUrl: `http://127.0.0.1:${address.port}` };
 }
 
-describe("POST /v1/merchants", () => {
-  test("a production credential registers a mainnet merchant (201)", async () => {
-    const { app } = createApp(PROD_APP_ID, "production");
+describe('POST /v1/merchants', () => {
+  test('a production credential registers a mainnet merchant (201)', async () => {
+    const { app } = createApp(PROD_APP_ID, 'production');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "mainnet", xpub: MAINNET_XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'mainnet', xpub: MAINNET_XPUB }),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
       expect(body.id).toMatch(/^merch_[0-9a-f]{24}$/);
-      expect(body.object).toBe("merchant");
-      expect(body.environment).toBe("production");
-      expect(body.network).toBe("mainnet");
+      expect(body.object).toBe('merchant');
+      expect(body.environment).toBe('production');
+      expect(body.network).toBe('mainnet');
       expect(body.requiredConfirmations).toBe(1);
     } finally {
       s.close();
     }
   });
 
-  test("a development credential CANNOT register a mainnet merchant (422) — test/live firewall", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('a development credential CANNOT register a mainnet merchant (422) — test/live firewall', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "mainnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'mainnet', xpub: XPUB }),
       });
       expect(res.status).toBe(422);
       const body = await readJson(res);
-      expect(body.error?.type).toBe("invalid_request_error");
+      expect(body.error?.type).toBe('invalid_request_error');
       const count = await countMerchants(DEV_APP_ID);
       expect(count).toBe(0);
     } finally {
@@ -155,38 +155,38 @@ describe("POST /v1/merchants", () => {
     }
   });
 
-  test("a development credential registers a testnet merchant (201)", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('a development credential registers a testnet merchant (201)', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
-      expect(body.environment).toBe("development");
-      expect(body.network).toBe("testnet");
+      expect(body.environment).toBe('development');
+      expect(body.network).toBe('testnet');
     } finally {
       s.close();
     }
   });
 
-  test("a private xprv is rejected by the same non-custody firewall the model enforces (422 or 500-free rejection)", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('a private xprv is rejected by the same non-custody firewall the model enforces (422 or 500-free rejection)', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: "testnet",
+          network: 'testnet',
           // Malformed extended key — the non-custody firewall inside
           // `insertMerchant` must reject this before persisting, regardless of
           // exact string; asserting NOT-201 + NOT-persisted is the load-bearing
           // check.
-          xpub: "not-a-real-extended-key",
+          xpub: 'not-a-real-extended-key',
         }),
       });
       expect(res.status).not.toBe(201);
@@ -197,21 +197,21 @@ describe("POST /v1/merchants", () => {
     }
   });
 
-  test("registering twice for the same app+environment collides (409)", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('registering twice for the same app+environment collides (409)', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const first = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       expect(first.status).toBe(201);
 
       const second = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       expect(second.status).toBe(409);
     } finally {
@@ -219,16 +219,16 @@ describe("POST /v1/merchants", () => {
     }
   });
 
-  test("no service app credentials at all -> 401", async () => {
+  test('no service app credentials at all -> 401', async () => {
     const app = express();
     app.use(express.json());
     app.use(createMerchantsRouter({ requireMerchant: (_req, _res, next) => next() }));
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       expect(res.status).toBe(401);
     } finally {
@@ -236,16 +236,16 @@ describe("POST /v1/merchants", () => {
     }
   });
 
-  test("a credential without payments:write is rejected (403 INSUFFICIENT_SCOPE)", async () => {
+  test('a credential without payments:write is rejected (403 INSUFFICIENT_SCOPE)', async () => {
     const noScopeRequireMerchant: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: DEV_APP_ID,
-        appName: "t",
+        appName: 't',
         scopes: [],
-        credentialId: "c",
-        ownerAccountId: "owner",
-        environment: "development",
-        tier: "external",
+        credentialId: 'c',
+        ownerAccountId: 'owner',
+        environment: 'development',
+        tier: 'external',
       };
       next();
     };
@@ -255,9 +255,9 @@ describe("POST /v1/merchants", () => {
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       expect(res.status).toBe(403);
     } finally {
@@ -266,15 +266,15 @@ describe("POST /v1/merchants", () => {
   });
 });
 
-describe("GET /v1/merchants/me", () => {
+describe('GET /v1/merchants/me', () => {
   test("returns the caller's own merchant", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const create = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
       const created = await readJson(create);
 
@@ -287,8 +287,8 @@ describe("GET /v1/merchants/me", () => {
     }
   });
 
-  test("no merchant registered for this app+environment yet -> 403", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('no merchant registered for this app+environment yet -> 403', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants/me`);
@@ -298,7 +298,7 @@ describe("GET /v1/merchants/me", () => {
     }
   });
 
-  test("no service app credentials at all -> 401", async () => {
+  test('no service app credentials at all -> 401', async () => {
     const app = express();
     app.use(express.json());
     app.use(createMerchantsRouter({ requireMerchant: (_req, _res, next) => next() }));
@@ -312,50 +312,50 @@ describe("GET /v1/merchants/me", () => {
   });
 });
 
-describe("PATCH /v1/merchants/me", () => {
-  test("updates webhookUrl and requiredConfirmations", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+describe('PATCH /v1/merchants/me', () => {
+  test('updates webhookUrl and requiredConfirmations', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webhookUrl: "https://merchant.example/new-hook",
+          webhookUrl: 'https://merchant.example/new-hook',
           requiredConfirmations: 3,
         }),
       });
       expect(res.status).toBe(200);
       const body = await readJson(res);
-      expect(body.webhookUrl).toBe("https://merchant.example/new-hook");
+      expect(body.webhookUrl).toBe('https://merchant.example/new-hook');
       expect(body.requiredConfirmations).toBe(3);
       // xpub/network/environment are immutable via this route.
-      expect(body.network).toBe("testnet");
+      expect(body.network).toBe('testnet');
     } finally {
       s.close();
     }
   });
 
-  test("xpub is not a field this route accepts — an attempted xpub change is silently ignored", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('xpub is not a field this route accepts — an attempted xpub change is silently ignored', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB }),
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ requiredConfirmations: 2, xpub: "attempted-change" }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ requiredConfirmations: 2, xpub: 'attempted-change' }),
       });
       expect(res.status).toBe(200);
       const body = await readJson(res);
@@ -365,15 +365,15 @@ describe("PATCH /v1/merchants/me", () => {
     }
   });
 
-  test("no service app credentials at all -> 401", async () => {
+  test('no service app credentials at all -> 401', async () => {
     const app = express();
     app.use(express.json());
     app.use(createMerchantsRouter({ requireMerchant: (_req, _res, next) => next() }));
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requiredConfirmations: 2 }),
       });
       expect(res.status).toBe(401);
@@ -383,123 +383,123 @@ describe("PATCH /v1/merchants/me", () => {
   });
 });
 
-describe("merchant branding", () => {
+describe('merchant branding', () => {
   // Before these fields had a write path, `merchants.display_name`,
   // `avatar_file_id` and `description` were read by `resolveMerchantDisplay`
   // and `enrichAddresses` but written by nothing, so EVERY merchant rendered
   // to a payer as the "Peable merchant" fallback with no logo.
-  test("registration persists the branding fields and returns them", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('registration persists the branding fields and returns them', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: "testnet",
+          network: 'testnet',
           xpub: XPUB,
-          displayName: "Mercaria",
-          avatarFileId: "file_mercaria_logo",
-          description: "Fair goods, fairly paid for.",
+          displayName: 'Mercaria',
+          avatarFileId: 'file_mercaria_logo',
+          description: 'Fair goods, fairly paid for.',
         }),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
-      expect(body.displayName).toBe("Mercaria");
-      expect(body.avatarFileId).toBe("file_mercaria_logo");
-      expect(body.description).toBe("Fair goods, fairly paid for.");
+      expect(body.displayName).toBe('Mercaria');
+      expect(body.avatarFileId).toBe('file_mercaria_logo');
+      expect(body.description).toBe('Fair goods, fairly paid for.');
     } finally {
       s.close();
     }
   });
 
   test("the payer-facing display resolves to the merchant's own name", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: "testnet",
+          network: 'testnet',
           xpub: XPUB,
-          displayName: "Mercaria",
+          displayName: 'Mercaria',
         }),
       });
 
-      const row = await findMerchantByAppEnvironment(gatewayDb(), DEV_APP_ID, "development");
-      if (!row) throw new Error("merchant was not registered");
+      const row = await findMerchantByAppEnvironment(gatewayDb(), DEV_APP_ID, 'development');
+      if (!row) throw new Error('merchant was not registered');
       const display = await resolveMerchantDisplay(row);
 
       // This string is what the hosted checkout page shows the payer.
-      expect(display.name).toBe("Mercaria");
+      expect(display.name).toBe('Mercaria');
     } finally {
       s.close();
     }
   });
 
-  test("PATCH updates branding, and an explicit null clears it", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('PATCH updates branding, and an explicit null clears it', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB, displayName: "Old" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, displayName: 'Old' }),
       });
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: "New", description: null }),
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: 'New', description: null }),
       });
       expect(patched.status).toBe(200);
       const body = await readJson(patched);
-      expect(body.displayName).toBe("New");
+      expect(body.displayName).toBe('New');
       expect(body.description).toBeUndefined();
     } finally {
       s.close();
     }
   });
 
-  test("an absent branding field leaves the stored value alone", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('an absent branding field leaves the stored value alone', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet", xpub: XPUB, displayName: "Kept" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, displayName: 'Kept' }),
       });
 
       // Patching an unrelated field must not blank the name — `null` clears,
       // absent means "leave alone", the same contract webhookUrl already has.
       const patched = await fetch(`${url}/v1/merchants/me`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ requiredConfirmations: 3 }),
       });
       const body = await readJson(patched);
-      expect(body.displayName).toBe("Kept");
+      expect(body.displayName).toBe('Kept');
       expect(body.requiredConfirmations).toBe(3);
     } finally {
       s.close();
     }
   });
 
-  test("an over-long displayName is refused (422)", async () => {
-    const { app } = createApp(DEV_APP_ID, "development");
+  test('an over-long displayName is refused (422)', async () => {
+    const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       // The columns are bare `text()` with no CHECK, so the route schema is the
       // only thing standing between a merchant and an unbounded write.
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          network: "testnet",
+          network: 'testnet',
           xpub: XPUB,
-          displayName: "x".repeat(200),
+          displayName: 'x'.repeat(200),
         }),
       });
       expect(res.status).toBe(422);
@@ -518,15 +518,15 @@ describe("merchant branding", () => {
  * their FairCoin receive addresses underivable by their own wallet. Neither is
  * a thing to ask of someone who wants a card form.
  */
-describe("card-only registration", () => {
-  test("registers with no network and no xpub (201)", async () => {
-    const { app } = createApp(`${DEV_APP_ID}_cardonly`, "development");
+describe('card-only registration', () => {
+  test('registers with no network and no xpub (201)', async () => {
+    const { app } = createApp(`${DEV_APP_ID}_cardonly`, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ displayName: "Cards Only Ltd" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ displayName: 'Cards Only Ltd' }),
       });
 
       expect(res.status).toBe(201);
@@ -535,7 +535,7 @@ describe("card-only registration", () => {
       // fabricated one would be a claim about a key nobody holds.
       expect(body.network).toBeNull();
       expect(body.xpub).toBeNull();
-      expect(body.displayName).toBe("Cards Only Ltd");
+      expect(body.displayName).toBe('Cards Only Ltd');
     } finally {
       s.close();
     }
@@ -548,18 +548,18 @@ describe("card-only registration", () => {
    * network-specific. The failure of a half-registered merchant is a payer
    * shown an address on the wrong chain, which is unrecoverable.
    */
-  test("refuses a network with no xpub, and an xpub with no network (422)", async () => {
-    const { app } = createApp(`${DEV_APP_ID}_halfchain`, "development");
+  test('refuses a network with no xpub, and an xpub with no network (422)', async () => {
+    const { app } = createApp(`${DEV_APP_ID}_halfchain`, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const networkOnly = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ network: "testnet" }),
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet' }),
       });
       const xpubOnly = await fetch(`${url}/v1/merchants`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ xpub: XPUB }),
       });
 

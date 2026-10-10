@@ -16,12 +16,12 @@
  * provider that can be made to LOSE the race, because the ordering is the whole
  * subject and only the losing side proves it.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
 
 const providerCalls: string[] = [];
 
@@ -34,51 +34,54 @@ const providerCalls: string[] = [];
  *    fault, so the adapter re-reads the payment to find out which.
  *  - `unreachable` — a transient failure. Nothing may be announced.
  */
-let cancelBehaviour: "cancels" | "refuses_succeeded" | "unreachable" = "cancels";
+let cancelBehaviour: 'cancels' | 'refuses_succeeded' | 'unreachable' = 'cancels';
 
 class FakeProviderError extends Error {
   readonly retryable: boolean;
   constructor(message: string, retryable: boolean) {
     super(message);
-    this.name = "ProviderError";
+    this.name = 'ProviderError';
     this.retryable = retryable;
   }
 }
 
 const fakeProvider = {
-  id: "stripe" as const,
+  id: 'stripe' as const,
   cancel: async (request: Record<string, unknown>) => {
-    providerCalls.push(`cancel:${String(request.providerObjectId)}:${String(request.idempotencyKey)}`);
-    if (cancelBehaviour === "cancels") {
-      return { providerObjectId: String(request.providerObjectId), status: "canceled" as const };
+    providerCalls.push(
+      `cancel:${String(request.providerObjectId)}:${String(request.idempotencyKey)}`,
+    );
+    if (cancelBehaviour === 'cancels') {
+      return { providerObjectId: String(request.providerObjectId), status: 'canceled' as const };
     }
-    if (cancelBehaviour === "refuses_succeeded") {
+    if (cancelBehaviour === 'refuses_succeeded') {
       throw new FakeProviderError(
-        "You cannot cancel this PaymentIntent because it has a status of succeeded.",
+        'You cannot cancel this PaymentIntent because it has a status of succeeded.',
         false,
       );
     }
-    throw new FakeProviderError("the acquirer could not be reached", true);
+    throw new FakeProviderError('the acquirer could not be reached', true);
   },
   getStatus: async (providerObjectId: string) => {
     providerCalls.push(`getStatus:${providerObjectId}`);
     return {
       providerObjectId,
-      status: cancelBehaviour === "refuses_succeeded" ? ("succeeded" as const) : ("created" as const),
-      chargeObjectId: providerObjectId.replace(/^pi_/, "ch_"),
+      status:
+        cancelBehaviour === 'refuses_succeeded' ? ('succeeded' as const) : ('created' as const),
+      chargeObjectId: providerObjectId.replace(/^pi_/, 'ch_'),
     };
   },
   createPayment: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   capture: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   refund: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   verifyEvent: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
 };
 
@@ -86,11 +89,11 @@ const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import("../providers/registry");
+} = await import('../providers/registry');
 let useFake = false;
 
-mock.module("../providers/registry", () => ({
-  resolveProvider: (id: "stripe") => (useFake ? fakeProvider : realResolveProvider(id)),
+mock.module('../providers/registry', () => ({
+  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
   resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
   resetProviders: () => {
     realResetProviders();
@@ -102,8 +105,8 @@ mock.module("../providers/registry", () => ({
  * so the fake's own error class has to BE one. Mocking the module is how a fake
  * throws something the production code recognises without importing Stripe.
  */
-const realProvider = await import("../providers/provider");
-mock.module("../providers/provider", () => ({
+const realProvider = await import('../providers/provider');
+mock.module('../providers/provider', () => ({
   ...realProvider,
   isRetryableProviderError: (error: unknown) =>
     error instanceof FakeProviderError
@@ -111,23 +114,21 @@ mock.module("../providers/provider", () => ({
       : realProvider.isRetryableProviderError(error),
 }));
 
-const { createPaymentIntentsRouter } = await import("../../routes/paymentIntents");
-const { runExpirySweep } = await import("../expirySweeper");
-const {
-  findIntentByPublicId,
-  insertPaymentIntent,
-  linkProviderObject,
-} = await import("../../db/payments/paymentIntentRepository");
-const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
-  "../../__tests__/helpers/gatewayTestDatabase"
+const { createPaymentIntentsRouter } = await import('../../routes/paymentIntents');
+const { runExpirySweep } = await import('../expirySweeper');
+const { findIntentByPublicId, insertPaymentIntent, linkProviderObject } = await import(
+  '../../db/payments/paymentIntentRepository'
 );
-const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
-const { uuidv7 } = await import("@oxy.so/db");
+const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
+  '../../__tests__/helpers/gatewayTestDatabase'
+);
+const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
+const { uuidv7 } = await import('@oxy.so/db');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
 let server: Server;
-let baseUrl = "";
+let baseUrl = '';
 let counter = 0;
 
 const passthrough: RequestHandler = (_req, _res, next) => next();
@@ -138,7 +139,7 @@ interface ErrorBody {
 }
 
 async function post(path: string): Promise<{ status: number; json: ErrorBody }> {
-  const response = await fetch(`${baseUrl}${path}`, { method: "POST" });
+  const response = await fetch(`${baseUrl}${path}`, { method: 'POST' });
   const text = await response.text();
   return { status: response.status, json: text ? (JSON.parse(text) as ErrorBody) : {} };
 }
@@ -150,23 +151,23 @@ async function cardIntent(options: { expiresAt?: Date } = {}) {
   const intent = await insertPaymentIntent(gatewayDb(), {
     publicId,
     merchantId: merchant.id,
-    rail: "card",
-    amount: "5000",
-    currency: "EUR",
+    rail: 'card',
+    amount: '5000',
+    currency: 'EUR',
     network: null,
     address: null,
-    provider: "stripe",
+    provider: 'stripe',
     clientSecret: `cs_${publicId}`,
     idempotencyKey: uuidv7(),
     metadata: {},
     expiresAt: options.expiresAt ?? new Date(Date.now() + 900_000),
   });
-  if (!intent) throw new Error("could not seed the intent");
-  await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_${publicId}`);
+  if (!intent) throw new Error('could not seed the intent');
+  await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_${publicId}`);
   return intent;
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
@@ -176,12 +177,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
     const stubMerchantAuth: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: merchant.oxyAppId,
-        appName: "t",
-        scopes: ["payments:read", "payments:write"],
-        credentialId: "c",
-        ownerAccountId: "owner",
-        environment: "development",
-        tier: "external",
+        appName: 't',
+        scopes: ['payments:read', 'payments:write'],
+        credentialId: 'c',
+        ownerAccountId: 'owner',
+        environment: 'development',
+        tier: 'external',
       };
       next();
     };
@@ -200,7 +201,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
 
   beforeEach(() => {
     providerCalls.length = 0;
-    cancelBehaviour = "cancels";
+    cancelBehaviour = 'cancels';
   });
 
   afterAll(async () => {
@@ -214,7 +215,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
 
   // ── reject ───────────────────────────────────────────────────────────────
 
-  test("cancels at the provider BEFORE announcing a rejection", async () => {
+  test('cancels at the provider BEFORE announcing a rejection', async () => {
     const intent = await cardIntent();
 
     const { status } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
@@ -225,7 +226,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
     expect(providerCalls).toContain(
       `cancel:pi_stripe_${intent.publicId}:cancel:${intent.publicId}`,
     );
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("rejected");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('rejected');
   });
 
   /**
@@ -242,36 +243,36 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
    * The payer confirmed first. The gateway must NOT announce a rejection it
    * cannot deliver — the money is real.
    */
-  test("reconciles to the truth when the payer pays during the rejection", async () => {
+  test('reconciles to the truth when the payer pays during the rejection', async () => {
     const intent = await cardIntent();
-    cancelBehaviour = "refuses_succeeded";
+    cancelBehaviour = 'refuses_succeeded';
 
     const { status, json } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
 
     expect(status).toBe(409);
-    expect(json.error?.message).toContain("completed by the payer");
+    expect(json.error?.message).toContain('completed by the payer');
     // ...and the row now says what actually happened, rather than staying
     // `created` with a payment nobody recorded.
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
   });
 
   /**
    * The provider could not be reached. The payment is still live and its state
    * is unknown, so NOTHING is written and nothing is announced.
    */
-  test("refuses to reject when the provider cannot be reached", async () => {
+  test('refuses to reject when the provider cannot be reached', async () => {
     const intent = await cardIntent();
-    cancelBehaviour = "unreachable";
+    cancelBehaviour = 'unreachable';
 
     const { status } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
 
     expect(status).toBe(502);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("created");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
   });
 
   // ── expiry ───────────────────────────────────────────────────────────────
 
-  test("the sweeper cancels a due card payment before expiring it", async () => {
+  test('the sweeper cancels a due card payment before expiring it', async () => {
     const intent = await cardIntent({ expiresAt: new Date(Date.now() - 1000) });
 
     const result = await runExpirySweep({ now: new Date() });
@@ -280,22 +281,22 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
     expect(providerCalls).toContain(
       `cancel:pi_stripe_${intent.publicId}:cancel:${intent.publicId}`,
     );
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("expired");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('expired');
   });
 
   /**
    * THE case. A payer who completed the payment inside the sweep's own window
    * must not be told nobody paid in time.
    */
-  test("does not expire a payment the payer completed during the sweep", async () => {
+  test('does not expire a payment the payer completed during the sweep', async () => {
     const intent = await cardIntent({ expiresAt: new Date(Date.now() - 1000) });
-    cancelBehaviour = "refuses_succeeded";
+    cancelBehaviour = 'refuses_succeeded';
 
     const result = await runExpirySweep({ now: new Date() });
 
     expect(result.examined).toBeGreaterThanOrEqual(1);
     expect(result.expired).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
   });
 
   /**
@@ -304,14 +305,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
    * lost by waiting; announcing an expiry that the acquirer has not been told
    * about cannot be taken back.
    */
-  test("leaves a due payment alone when the provider cannot be reached", async () => {
+  test('leaves a due payment alone when the provider cannot be reached', async () => {
     const intent = await cardIntent({ expiresAt: new Date(Date.now() - 1000) });
-    cancelBehaviour = "unreachable";
+    cancelBehaviour = 'unreachable';
 
     const result = await runExpirySweep({ now: new Date() });
 
     expect(result.expired).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("created");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
   });
 
   /**
@@ -322,13 +323,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
    * right for that rail and why this sweep did not need splitting until the
    * card rail existed.
    */
-  test("expires a FairCoin intent without calling any provider", async () => {
+  test('expires a FairCoin intent without calling any provider', async () => {
     const intent = await insertPaymentIntent(gatewayDb(), {
       publicId: `pi_chain_${uuidv7()}`,
       merchantId: merchant.id,
-      rail: "faircoin",
-      amount: "100000000",
-      currency: "FAIR",
+      rail: 'faircoin',
+      amount: '100000000',
+      currency: 'FAIR',
       network: merchant.network,
       address: `T${uuidv7()}`,
       provider: null,
@@ -337,7 +338,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
       metadata: {},
       expiresAt: new Date(Date.now() - 1000),
     });
-    if (!intent) throw new Error("could not seed the chain intent");
+    if (!intent) throw new Error('could not seed the chain intent');
 
     await runExpirySweep({ now: new Date() });
 
@@ -346,6 +347,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("ending a card payment", () => {
     // rightly keeps retrying it. What must be true is that nothing was asked
     // about the CHAIN payment.
     expect(providerCalls.filter((call) => call.includes(intent.publicId))).toEqual([]);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("expired");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('expired');
   });
 });

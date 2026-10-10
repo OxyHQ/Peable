@@ -221,10 +221,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
   it('finds an account by the merchant address and by the provider address', async () => {
     const account = await seedAccount('store_lookup');
     expect((await findAccountByPublicId(suite!.db, merchant.id, account.publicId))?.id).toBe(
-      account.id
+      account.id,
     );
     expect(
-      (await findAccountByProviderAccountId(suite!.db, 'stripe', account.providerAccountId))?.id
+      (await findAccountByProviderAccountId(suite!.db, 'stripe', account.providerAccountId))?.id,
     ).toBe(account.id);
     // ...and NOT for a different merchant, which is the access control.
     expect(await findAccountByPublicId(suite!.db, 'someone-else', account.publicId)).toBeNull();
@@ -238,7 +238,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
   it('syncs never-synced accounts before ones it has already read', async () => {
     const stale = await seedAccount('store_stale');
     const never = await seedAccount('store_never');
-    await applyAccountSnapshot(suite!.db, stale.id, EMPTY_SNAPSHOT, new Date(Date.now() - 86_400_000));
+    await applyAccountSnapshot(
+      suite!.db,
+      stale.id,
+      EMPTY_SNAPSHOT,
+      new Date(Date.now() - 86_400_000),
+    );
 
     const queue = await findAccountsToSync(suite!.db, 'stripe', 100);
     const ids = queue.map((row) => row.id);
@@ -264,7 +269,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
 
     expect(second).toBeNull();
     expect((await findTransferByExternalRef(suite!.db, merchant.id, 'order_dup'))?.id).toBe(
-      first.id
+      first.id,
     );
   });
 
@@ -307,7 +312,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
     await markTransferPaid(suite!.db, transfer.id, 'tr_stripe_over');
 
     await expect(applyTransferReversal(suite!.db, transfer.id, '101')).rejects.toThrow(
-      TransferReversalTooLargeError
+      TransferReversalTooLargeError,
     );
 
     const untouched = await findTransferByExternalRef(suite!.db, merchant.id, 'order_over');
@@ -335,7 +340,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
     await markTransferPaid(suite!.db, transfer.id, 'tr_stripe_big');
 
     await expect(applyTransferReversal(suite!.db, transfer.id, over)).rejects.toThrow(
-      TransferReversalTooLargeError
+      TransferReversalTooLargeError,
     );
 
     // ...and the exact amount is still accepted.
@@ -355,10 +360,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
     await markTransferPaid(suite!.db, transfer.id, 'tr_stripe_partial');
 
     expect((await applyTransferReversal(suite!.db, transfer.id, '30'))?.status).toBe(
-      'partially_reversed'
+      'partially_reversed',
     );
     expect((await applyTransferReversal(suite!.db, transfer.id, '70'))?.status).toBe(
-      'partially_reversed'
+      'partially_reversed',
     );
     const full = await applyTransferReversal(suite!.db, transfer.id, '100');
     expect(full?.status).toBe('reversed');

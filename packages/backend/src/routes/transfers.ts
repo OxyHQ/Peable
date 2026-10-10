@@ -9,27 +9,27 @@
  * The amounts here come from the merchant and are recorded, never computed.
  * This router does not know what a marketplace fee is and must not learn.
  */
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import { isBaseUnitString } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import { isBaseUnitString } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
 import {
   findAccountById,
   findAccountByExternalRef,
   findAccountByPublicId,
   type ConnectedAccountRow,
-} from "../db/accounts/connectedAccountRepository";
-import { findIntentById, findIntentByPublicId } from "../db/payments/paymentIntentRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
+} from '../db/accounts/connectedAccountRepository';
+import { findIntentById, findIntentByPublicId } from '../db/payments/paymentIntentRepository';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   findTransferByExternalRef,
   findTransferByPublicId,
   listTransfersForIntent,
   TransferReversalTooLargeError,
   type TransferRow,
-} from "../db/transfers/transferRepository";
+} from '../db/transfers/transferRepository';
 import {
   AccountNotPayableError,
   createTransfer,
@@ -38,10 +38,10 @@ import {
   TransferExceedsPaymentError,
   TransferSourceUnresolvedError,
   TransfersUnavailableError,
-} from "../services/transfers/transferService";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import { ProviderError } from "../services/providers/provider";
-import { toTransferDTO, type TransferDTO } from "../lib/serializeSettlement";
+} from '../services/transfers/transferService';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import { ProviderError } from '../services/providers/provider';
+import { toTransferDTO, type TransferDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
   requireProviderMode,
@@ -49,8 +49,8 @@ import {
   sendError,
   sendProviderError,
   wrap,
-} from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
+} from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
 
 /**
  * A canonical base-unit integer string, validated with the SAME predicate the
@@ -68,7 +68,7 @@ const baseUnitAmount = z
   // zero transfer is not a transfer: it would consume the merchant's
   // `externalRef`, so the REAL settlement of that order could never be created
   // afterwards. The refund route refuses a zero for the same reason.
-  .refine((value) => value !== "0", "a transfer of 0 is not a transfer");
+  .refine((value) => value !== '0', 'a transfer of 0 is not a transfer');
 
 const createTransferBodySchema = z
   .object({
@@ -81,10 +81,9 @@ const createTransferBodySchema = z
     externalRef: z.string().min(1).max(255),
     amount: baseUnitAmount,
   })
-  .refine(
-    (body) => Boolean(body.connectedAccountId) !== Boolean(body.connectedAccountRef),
-    { message: "name the seller by exactly one of connectedAccountId or connectedAccountRef" },
-  );
+  .refine((body) => Boolean(body.connectedAccountId) !== Boolean(body.connectedAccountRef), {
+    message: 'name the seller by exactly one of connectedAccountId or connectedAccountRef',
+  });
 
 const reverseTransferBodySchema = z.object({
   amount: baseUnitAmount,
@@ -135,7 +134,8 @@ async function serializeTransfer(
   intent: PaymentIntentRow,
   account?: ConnectedAccountRow,
 ): Promise<TransferDTO> {
-  const seller = account ?? (await findAccountById(getDb(), merchantId, transfer.connectedAccountId));
+  const seller =
+    account ?? (await findAccountById(getDb(), merchantId, transfer.connectedAccountId));
   if (!seller) {
     // Structurally unreachable: `transfers.connected_account_id` carries a
     // foreign key and both rows belong to this merchant. Stated rather than
@@ -183,10 +183,10 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
    * second time. They did not, and the status code says so.
    */
   router.post(
-    "/v1/transfers",
+    '/v1/transfers',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -199,8 +199,8 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid body',
         );
         return;
       }
@@ -211,7 +211,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       // ONE 404 for "does not exist" and for "is not yours". Distinguishing
       // them tells a caller whether another merchant's `pi_…` is real.
       if (!intent || intent.merchantId !== merchant.id) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
@@ -242,7 +242,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
          */
         const conflict = transferReplayConflict(existing, body, intent);
         if (conflict) {
-          sendError(res, 409, "invalid_request_error", conflict);
+          sendError(res, 409, 'invalid_request_error', conflict);
           return;
         }
         /**
@@ -256,7 +256,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
          * it under the same provider idempotency key, so the retry completes
          * the settlement rather than describing a seller who was not paid.
          */
-        if (existing.providerObjectId !== null || existing.status === "failed") {
+        if (existing.providerObjectId !== null || existing.status === 'failed') {
           /**
            * Serialized against the STORED transfer's own intent, never the one
            * this request names.
@@ -276,9 +276,9 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
 
       const account = body.connectedAccountId
         ? await findAccountByPublicId(db, merchant.id, body.connectedAccountId)
-        : await findAccountByExternalRef(db, merchant.id, body.connectedAccountRef ?? "");
+        : await findAccountByExternalRef(db, merchant.id, body.connectedAccountRef ?? '');
       if (!account) {
-        sendError(res, 404, "invalid_request_error", "connected account not found");
+        sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
 
@@ -306,7 +306,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           // message says how much is left.
           error instanceof TransferExceedsPaymentError
         ) {
-          sendError(res, 422, "invalid_request_error", error.message);
+          sendError(res, 422, 'invalid_request_error', error.message);
           return;
         }
         // The gateway believes the payment settled and the PROVIDER reports no
@@ -314,11 +314,11 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         // than the request being wrong: retrying after reconciliation is the
         // action, editing the body is not.
         if (error instanceof TransferSourceUnresolvedError) {
-          sendError(res, 409, "invalid_request_error", error.message);
+          sendError(res, 409, 'invalid_request_error', error.message);
           return;
         }
         if (error instanceof TransfersUnavailableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {
@@ -336,10 +336,10 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
 
   /** Take some or all of a settlement back. */
   router.post(
-    "/v1/transfers/:transferId/reversals",
+    '/v1/transfers/:transferId/reversals',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -350,8 +350,8 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid body',
         );
         return;
       }
@@ -359,34 +359,38 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       const db = getDb();
       const { transferId } = req.params;
       if (!transferId) {
-        sendError(res, 422, "invalid_request_error", "transferId is required");
+        sendError(res, 422, 'invalid_request_error', 'transferId is required');
         return;
       }
 
       const transfer = await findTransferByPublicId(db, merchant.id, transferId);
       if (!transfer) {
-        sendError(res, 404, "invalid_request_error", "transfer not found");
+        sendError(res, 404, 'invalid_request_error', 'transfer not found');
         return;
       }
 
       const externalRef = resolveReversalRef(
-        req.header("Idempotency-Key"),
+        req.header('Idempotency-Key'),
         parsed.data.externalRef,
       );
       if (!externalRef) {
         sendError(
           res,
           400,
-          "invalid_request_error",
-          "a reversal needs an Idempotency-Key header or an externalRef: " +
-            "two reversals of one settlement for the same amount are two operations, " +
-            "and an amount is not an identity",
+          'invalid_request_error',
+          'a reversal needs an Idempotency-Key header or an externalRef: ' +
+            'two reversals of one settlement for the same amount are two operations, ' +
+            'and an amount is not an identity',
         );
         return;
       }
 
       try {
-        const { transfer: updated, reversal, created } = await reverseTransfer({
+        const {
+          transfer: updated,
+          reversal,
+          created,
+        } = await reverseTransfer({
           merchantId: merchant.id,
           environment: merchant.environment,
           transfer,
@@ -402,7 +406,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           ...(await serializeTransfer(merchant.id, updated, intent)),
           reversal: {
             id: reversal.publicId,
-            object: "transfer_reversal" as const,
+            object: 'transfer_reversal' as const,
             externalRef: reversal.externalRef,
             amount: reversal.amount,
             currency: reversal.currency,
@@ -413,11 +417,11 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         });
       } catch (error) {
         if (error instanceof TransferReversalTooLargeError) {
-          sendError(res, 422, "invalid_request_error", error.message);
+          sendError(res, 422, 'invalid_request_error', error.message);
           return;
         }
         if (error instanceof TransfersUnavailableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {
@@ -435,10 +439,10 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
 
   /** What one payment settled. The reconciliation read. */
   router.get(
-    "/v1/payment_intents/:intentId/transfers",
+    '/v1/payment_intents/:intentId/transfers',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -446,13 +450,13 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       const db = getDb();
       const { intentId } = req.params;
       if (!intentId) {
-        sendError(res, 422, "invalid_request_error", "intentId is required");
+        sendError(res, 422, 'invalid_request_error', 'intentId is required');
         return;
       }
 
       const intent = await findIntentByPublicId(db, intentId);
       if (!intent || intent.merchantId !== merchant.id) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
@@ -460,7 +464,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       const data = await Promise.all(
         rows.map((row) => serializeTransfer(merchant.id, row, intent)),
       );
-      res.status(200).json({ object: "list", data });
+      res.status(200).json({ object: 'list', data });
     }),
   );
 

@@ -4,11 +4,11 @@
  * Manages address gap limits for external (20) and internal/change (10) addresses.
  */
 
-import { HDKey } from "@scure/bip32";
-import { mnemonicToSeedSync } from "@scure/bip39";
-import { sha256 } from "@noble/hashes/sha256";
-import { ripemd160 } from "@noble/hashes/ripemd160";
-import { encodeAddress, type NetworkConfig } from "@fairco.in/core";
+import { HDKey } from '@scure/bip32';
+import { mnemonicToSeedSync } from '@scure/bip39';
+import { sha256 } from '@noble/hashes/sha256';
+import { ripemd160 } from '@noble/hashes/ripemd160';
+import { encodeAddress, type NetworkConfig } from '@fairco.in/core';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -90,11 +90,7 @@ export class KeyManager {
    * of {@link fromMnemonic} — it does NOT run the PBKDF2 mnemonic→seed step, so
    * it's used on unlock with a cached seed.
    */
-  static fromSeed(
-    seed: Uint8Array,
-    network: NetworkConfig,
-    account = 0,
-  ): KeyManager {
+  static fromSeed(seed: Uint8Array, network: NetworkConfig, account = 0): KeyManager {
     const root = HDKey.fromMasterSeed(seed, {
       public: network.bip32.public,
       private: network.bip32.private,
@@ -118,11 +114,7 @@ export class KeyManager {
    * Create a KeyManager from a BIP39 mnemonic. Derives the seed then the BIP44
    * account key: m/44'/coinType'/account'.
    */
-  static fromMnemonic(
-    mnemonic: string,
-    network: NetworkConfig,
-    account = 0,
-  ): KeyManager {
+  static fromMnemonic(mnemonic: string, network: NetworkConfig, account = 0): KeyManager {
     return KeyManager.fromSeed(KeyManager.deriveSeed(mnemonic), network, account);
   }
 
@@ -148,19 +140,17 @@ export class KeyManager {
         private: network.bip32.private,
       });
     } catch (err: unknown) {
-      const detail = err instanceof Error ? err.message : "unknown error";
+      const detail = err instanceof Error ? err.message : 'unknown error';
       throw new Error(`Invalid extended public key for this network: ${detail}`);
     }
 
     // A watch-only manager must hold no private material. If an xprv slipped
     // through, refuse it rather than silently retaining spend capability.
     if (accountKey.privateKey) {
-      throw new Error(
-        "Expected an extended PUBLIC key (xpub) but got a private key",
-      );
+      throw new Error('Expected an extended PUBLIC key (xpub) but got a private key');
     }
     if (!accountKey.publicKey) {
-      throw new Error("Extended key has no public key");
+      throw new Error('Extended key has no public key');
     }
 
     const manager = new KeyManager(accountKey, network, true, account);
@@ -200,7 +190,7 @@ export class KeyManager {
   accountXpub(): string {
     const xpub = this.accountKey.publicExtendedKey;
     if (!xpub) {
-      throw new Error("Account key has no extended public key");
+      throw new Error('Account key has no extended public key');
     }
     return xpub;
   }
@@ -381,9 +371,7 @@ export class KeyManager {
    */
   getPrivateKeyForAddress(address: string): Uint8Array {
     if (this.watchOnly) {
-      throw new Error(
-        "Watch-only wallet has no private keys; cannot sign or spend",
-      );
+      throw new Error('Watch-only wallet has no private keys; cannot sign or spend');
     }
 
     const externalEntry = this.externalKeys.get(address);
@@ -396,9 +384,7 @@ export class KeyManager {
       return changeEntry.privateKey;
     }
 
-    throw new Error(
-      `Address not found in key manager: ${address}`,
-    );
+    throw new Error(`Address not found in key manager: ${address}`);
   }
 
   /**
@@ -437,9 +423,7 @@ export class KeyManager {
    *
    * @param checkFn - Returns true if the address has been used (has history).
    */
-  async scanForUsedAddresses(
-    checkFn: (address: string) => Promise<boolean>,
-  ): Promise<void> {
+  async scanForUsedAddresses(checkFn: (address: string) => Promise<boolean>): Promise<void> {
     await this.scanChain(false, checkFn);
     await this.scanChain(true, checkFn);
   }
@@ -457,9 +441,7 @@ export class KeyManager {
     let index = 0;
 
     while (consecutiveUnused < gapLimit) {
-      const entry = isChange
-        ? this.deriveChange(index)
-        : this.deriveExternal(index);
+      const entry = isChange ? this.deriveChange(index) : this.deriveExternal(index);
 
       const used = await checkFn(entry.address);
 
@@ -538,10 +520,7 @@ export class KeyManager {
     return this.deriveAndStore(1, index);
   }
 
-  private deriveAndStore(
-    chain: 0 | 1,
-    index: number,
-  ): DerivedKeyEntry {
+  private deriveAndStore(chain: 0 | 1, index: number): DerivedKeyEntry {
     const childKey = this.accountKey.deriveChild(chain).deriveChild(index);
     const privateKey = childKey.privateKey;
     const publicKey = childKey.publicKey;
@@ -550,14 +529,10 @@ export class KeyManager {
     // key is absent for watch-only (xpub) wallets, which is expected; only a
     // signing wallet must have one.
     if (!publicKey) {
-      throw new Error(
-        `Failed to derive public key at chain=${chain} index=${index}`,
-      );
+      throw new Error(`Failed to derive public key at chain=${chain} index=${index}`);
     }
     if (!this.watchOnly && !privateKey) {
-      throw new Error(
-        `Failed to derive private key at chain=${chain} index=${index}`,
-      );
+      throw new Error(`Failed to derive private key at chain=${chain} index=${index}`);
     }
 
     const hash = hash160(publicKey);

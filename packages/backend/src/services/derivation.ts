@@ -1,6 +1,6 @@
-import { HDKey } from "@scure/bip32";
-import { publicKeyToAddress } from "@fairco.in/core";
-import type { NetworkConfig } from "@fairco.in/core";
+import { HDKey } from '@scure/bip32';
+import { publicKeyToAddress } from '@fairco.in/core';
+import type { NetworkConfig } from '@fairco.in/core';
 
 /**
  * Derive a per-intent FairCoin receive address from a merchant's **watch-only**
@@ -23,14 +23,12 @@ export function deriveIntentAddress(
   });
 
   if (node.privateKey) {
-    throw new Error(
-      "watch-only violation: extended key carries a private key",
-    );
+    throw new Error('watch-only violation: extended key carries a private key');
   }
 
   const child = node.deriveChild(change).deriveChild(index);
   if (!child.publicKey) {
-    throw new Error("failed to derive public key from watch-only xpub");
+    throw new Error('failed to derive public key from watch-only xpub');
   }
 
   return publicKeyToAddress(child.publicKey, network);

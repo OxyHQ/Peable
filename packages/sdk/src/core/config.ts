@@ -67,8 +67,12 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
   }
   return {
     requestTimeoutMs: resolveRequestTimeout(config.requestTimeoutMs),
-    taxQuoteAuthorityKeys: config.taxQuoteAuthorityKeys ? Object.freeze({ ...config.taxQuoteAuthorityKeys }) : undefined,
-    invoiceAuthorityKeys: config.invoiceAuthorityKeys ? Object.freeze({ ...config.invoiceAuthorityKeys }) : undefined,
+    taxQuoteAuthorityKeys: config.taxQuoteAuthorityKeys
+      ? Object.freeze({ ...config.taxQuoteAuthorityKeys })
+      : undefined,
+    invoiceAuthorityKeys: config.invoiceAuthorityKeys
+      ? Object.freeze({ ...config.invoiceAuthorityKeys })
+      : undefined,
     publicKey: config.publicKey,
     secret: config.secret,
     baseURL: stripTrailingSlash(config.baseURL ?? DEFAULT_GATEWAY_BASE_URL),

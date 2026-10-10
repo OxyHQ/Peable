@@ -43,10 +43,7 @@ export interface RescanCallbacks {
    * height range, in ascending height order. Heights without a stored header
    * are skipped (the returned array may be shorter than the range).
    */
-  getBlockHashesInRange(
-    fromHeight: number,
-    toHeight: number,
-  ): Promise<Uint8Array[]>;
+  getBlockHashesInRange(fromHeight: number, toHeight: number): Promise<Uint8Array[]>;
   /** Request the given block hashes as filtered (merkle) blocks from a peer. */
   requestMerkleBlocks(hashes: Uint8Array[]): Promise<boolean>;
   /** Persist progress so the scan can resume after a restart. */
@@ -97,7 +94,7 @@ export class Rescanner {
     resumeFrom?: number,
   ): Promise<RescanProgress> {
     if (this.running) {
-      throw new Error("Rescan already in progress");
+      throw new Error('Rescan already in progress');
     }
     this.running = true;
 

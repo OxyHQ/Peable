@@ -115,7 +115,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the gateway test harness', () => {
    * `payment_intents_merchant_id_network_fkey` instead of on its subject —
    * which is why this is asserted rather than assumed.
    */
-  it('defaults an intent to its merchant\'s network', async () => {
+  it("defaults an intent to its merchant's network", async () => {
     const mainnet = await seedMerchant({ environment: 'production', network: 'mainnet' });
     const intent = await seedIntent(mainnet);
     expect(intent.network).toBe('mainnet');

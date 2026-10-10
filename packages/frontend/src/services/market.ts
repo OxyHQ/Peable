@@ -13,8 +13,8 @@
  * error while it continues to serve the last successful data.
  */
 
-import { z } from "zod";
-import { EXPLORER_BASE_URL, type NetworkType } from "@fairco.in/core";
+import { z } from 'zod';
+import { EXPLORER_BASE_URL, type NetworkType } from '@fairco.in/core';
 
 const EXPLORER_API = EXPLORER_BASE_URL;
 
@@ -60,7 +60,7 @@ export type NetworkStats = z.infer<typeof networkStatsSchema>;
  */
 export async function fetchPriceHistory(
   network: NetworkType,
-  period = "7d",
+  period = '7d',
 ): Promise<PriceHistoryPoint[]> {
   const response = await fetch(
     `${EXPLORER_API}/api/price/history?period=${encodeURIComponent(period)}&network=${network}`,
@@ -76,9 +76,7 @@ export async function fetchPriceHistory(
  * Fetch the live network stats. Throws on a non-OK response or a payload the
  * schema rejects.
  */
-export async function fetchNetworkStats(
-  network: NetworkType,
-): Promise<NetworkStats> {
+export async function fetchNetworkStats(network: NetworkType): Promise<NetworkStats> {
   const response = await fetch(`${EXPLORER_API}/api/stats?network=${network}`);
   if (!response.ok) {
     throw new Error(`network stats request failed: ${response.status}`);

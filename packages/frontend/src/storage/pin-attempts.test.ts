@@ -10,7 +10,7 @@
  * localStorage that the integration suites cover at the device level.
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 import {
   computeNextPinAttemptState,
   lockoutSecondsForAttempts,
@@ -18,51 +18,43 @@ import {
   PIN_BASE_LOCKOUT_SECONDS,
   PIN_MAX_LOCKOUT_SECONDS,
   type PinAttemptState,
-} from "./pin-attempts-policy";
+} from './pin-attempts-policy';
 
 const NOW = 1_700_000_000_000; // arbitrary fixed wall clock for determinism
 const EMPTY: PinAttemptState = { failedAttempts: 0, lockedUntil: 0 };
 
-describe("N-3: PIN attempt back-off math", () => {
-  test("no lockout under the threshold", () => {
+describe('N-3: PIN attempt back-off math', () => {
+  test('no lockout under the threshold', () => {
     for (let i = 0; i < PIN_MAX_ATTEMPTS; i++) {
       expect(lockoutSecondsForAttempts(i)).toBe(0);
     }
   });
 
-  test("the first lockout uses the base duration", () => {
-    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS)).toBe(
-      PIN_BASE_LOCKOUT_SECONDS,
-    );
+  test('the first lockout uses the base duration', () => {
+    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS)).toBe(PIN_BASE_LOCKOUT_SECONDS);
   });
 
-  test("each subsequent triggered lockout doubles the wait", () => {
-    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 1)).toBe(
-      PIN_BASE_LOCKOUT_SECONDS * 2,
-    );
-    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 2)).toBe(
-      PIN_BASE_LOCKOUT_SECONDS * 4,
-    );
-    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 3)).toBe(
-      PIN_BASE_LOCKOUT_SECONDS * 8,
-    );
+  test('each subsequent triggered lockout doubles the wait', () => {
+    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 1)).toBe(PIN_BASE_LOCKOUT_SECONDS * 2);
+    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 2)).toBe(PIN_BASE_LOCKOUT_SECONDS * 4);
+    expect(lockoutSecondsForAttempts(PIN_MAX_ATTEMPTS + 3)).toBe(PIN_BASE_LOCKOUT_SECONDS * 8);
   });
 
-  test("back-off is capped at PIN_MAX_LOCKOUT_SECONDS", () => {
+  test('back-off is capped at PIN_MAX_LOCKOUT_SECONDS', () => {
     // Push the back-off well above the cap.
     const huge = PIN_MAX_ATTEMPTS + 30;
     expect(lockoutSecondsForAttempts(huge)).toBe(PIN_MAX_LOCKOUT_SECONDS);
   });
 });
 
-describe("N-3: PIN attempt state transitions", () => {
-  test("an attempt below the threshold only increments the counter", () => {
+describe('N-3: PIN attempt state transitions', () => {
+  test('an attempt below the threshold only increments the counter', () => {
     const next = computeNextPinAttemptState(EMPTY, NOW);
     expect(next.failedAttempts).toBe(1);
     expect(next.lockedUntil).toBe(0);
   });
 
-  test("crossing the threshold sets lockedUntil = NOW + base * 1000", () => {
+  test('crossing the threshold sets lockedUntil = NOW + base * 1000', () => {
     const beforeLast: PinAttemptState = {
       failedAttempts: PIN_MAX_ATTEMPTS - 1,
       lockedUntil: 0,
@@ -72,7 +64,7 @@ describe("N-3: PIN attempt state transitions", () => {
     expect(next.lockedUntil).toBe(NOW + PIN_BASE_LOCKOUT_SECONDS * 1000);
   });
 
-  test("an additional failure after the first lockout uses the doubled back-off", () => {
+  test('an additional failure after the first lockout uses the doubled back-off', () => {
     // The lock screen does NOT reset the counter when the timer expires
     // (deliberate, see LockScreenContent), so the next failure feeds into
     // the doubling math.
@@ -96,7 +88,7 @@ describe("N-3: PIN attempt state transitions", () => {
     let totalWaitSeconds = PIN_BASE_LOCKOUT_SECONDS;
     let now = NOW;
     for (let extra = 1; extra <= 5; extra++) {
-      now += (state.lockedUntil - (state.lockedUntil - 1)); // advance past lockout
+      now += state.lockedUntil - (state.lockedUntil - 1); // advance past lockout
       now = state.lockedUntil + 1;
       const previous = state.lockedUntil;
       state = computeNextPinAttemptState(state, now);
@@ -110,8 +102,7 @@ describe("N-3: PIN attempt state transitions", () => {
     // attempts past the initial threshold (≈ 11 failed PINs total). For a
     // 10⁶ space, even sustained the search would take centuries.
     expect(totalWaitSeconds).toBeGreaterThanOrEqual(
-      PIN_BASE_LOCKOUT_SECONDS *
-        (1 + 2 + 4 + 8 + 16 + 32), // 63x base
+      PIN_BASE_LOCKOUT_SECONDS * (1 + 2 + 4 + 8 + 16 + 32), // 63x base
     );
   });
 });

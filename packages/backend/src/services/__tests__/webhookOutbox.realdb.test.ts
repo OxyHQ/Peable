@@ -275,8 +275,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the webhook outbox', () => {
           limit: 10,
           leaseOwner: 'dispatcher-b',
           leaseMs: 60_000,
-        })
-      )
+        }),
+      ),
     );
 
     const [claimedByA, claimedByB] = await Promise.all([a, b]);

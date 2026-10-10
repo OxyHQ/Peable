@@ -2,7 +2,11 @@ import { describe, expect, test } from 'bun:test';
 import { PeableInvalidRequestError } from '../../src/core/errors';
 import { CheckoutResource } from '../../src/resources/checkoutSessions';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
-import { buildTestClient, serviceTokenMintResponse, TEST_GATEWAY_URL } from '../support/testGateway';
+import {
+  buildTestClient,
+  serviceTokenMintResponse,
+  TEST_GATEWAY_URL,
+} from '../support/testGateway';
 
 function gatewayCallOf(requests: CapturedRequest[]): CapturedRequest | undefined {
   return requests.find((r) => !r.url.includes('/auth/service-token'));
@@ -84,9 +88,9 @@ describe('CheckoutResource.sessions', () => {
     const checkout = new CheckoutResource(buildTestClient(fetchImpl));
     const params = { amount: '100000', network: 'testnet' as const };
 
-    await expect(
-      checkout.sessions.create(params, { idempotencyKey: 'order-7' }),
-    ).rejects.toThrow('Failed to reach the Peable Gateway');
+    await expect(checkout.sessions.create(params, { idempotencyKey: 'order-7' })).rejects.toThrow(
+      'Failed to reach the Peable Gateway',
+    );
     const session = await checkout.sessions.create(params, { idempotencyKey: 'order-7' });
 
     expect(session.id).toBe('cs_1');
@@ -102,7 +106,12 @@ describe('CheckoutResource.sessions', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return {
         status: 409,
-        json: { error: { type: 'idempotency_error', message: 'Idempotency-Key reused with different parameters' } },
+        json: {
+          error: {
+            type: 'idempotency_error',
+            message: 'Idempotency-Key reused with different parameters',
+          },
+        },
       };
     });
     const checkout = new CheckoutResource(buildTestClient(fetchImpl));

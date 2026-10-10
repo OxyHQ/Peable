@@ -30,31 +30,31 @@
  * exactly like the sibling sheets.
  */
 
-import type React from "react";
-import { useEffect, useMemo, useState } from "react";
-import { View, Text, Pressable } from "react-native";
-import { Gesture, GestureDetector } from "react-native-gesture-handler";
+import type React from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from "react-native-reanimated";
-import { SendSheet } from "./SendSheet";
-import { ReceiveSheet } from "./ReceiveSheet";
-import { hapticSelection } from "../../utils/haptics";
-import { t } from "../../i18n";
+} from 'react-native-reanimated';
+import { SendSheet } from './SendSheet';
+import { ReceiveSheet } from './ReceiveSheet';
+import { hapticSelection } from '../../utils/haptics';
+import { t } from '../../i18n';
 
-type Mode = "send" | "receive";
+type Mode = 'send' | 'receive';
 
-const MODES: readonly Mode[] = ["send", "receive"] as const;
+const MODES: readonly Mode[] = ['send', 'receive'] as const;
 const CONTENT_MAX_WIDTH = 600;
 // A fling faster than this (px/s) flips the page regardless of drag distance.
 const SWIPE_VELOCITY = 500;
 const PAGE_ANIM_MS = 220;
 
 function getModeLabel(mode: Mode): string {
-  return mode === "send" ? t("wallet.send") : t("wallet.receive");
+  return mode === 'send' ? t('wallet.send') : t('wallet.receive');
 }
 
 export function SendReceiveSheet({
@@ -85,7 +85,7 @@ export function SendReceiveSheet({
 
   // The resting X for the active page. Kept in sync when the mode is changed by
   // the toggle (not by a drag), and settles the pages once width is measured.
-  const restingX = mode === "send" ? 0 : -pageWidth;
+  const restingX = mode === 'send' ? 0 : -pageWidth;
   useEffect(() => {
     translateX.set(withTiming(restingX, { duration: PAGE_ANIM_MS }));
   }, [restingX, translateX]);
@@ -98,23 +98,23 @@ export function SendReceiveSheet({
         .activeOffsetX([-12, 12])
         .failOffsetY([-14, 14])
         .onUpdate((e) => {
-          "worklet";
+          'worklet';
           const width = pageW.get();
-          const base = mode === "send" ? 0 : -width;
+          const base = mode === 'send' ? 0 : -width;
           translateX.set(Math.max(-width, Math.min(0, base + e.translationX)));
         })
         .onEnd((e) => {
-          "worklet";
+          'worklet';
           const width = pageW.get();
           if (width === 0) return;
-          const base = mode === "send" ? 0 : -width;
+          const base = mode === 'send' ? 0 : -width;
           const pos = base + e.translationX;
           let next: Mode;
-          if (e.velocityX < -SWIPE_VELOCITY) next = "receive";
-          else if (e.velocityX > SWIPE_VELOCITY) next = "send";
-          else next = pos < -width / 2 ? "receive" : "send";
+          if (e.velocityX < -SWIPE_VELOCITY) next = 'receive';
+          else if (e.velocityX > SWIPE_VELOCITY) next = 'send';
+          else next = pos < -width / 2 ? 'receive' : 'send';
           translateX.set(
-            withTiming(next === "send" ? 0 : -width, {
+            withTiming(next === 'send' ? 0 : -width, {
               duration: PAGE_ANIM_MS,
             }),
           );
@@ -140,16 +140,12 @@ export function SendReceiveSheet({
       return single > 0 ? { height: single } : {};
     }
     const width = pageW.get();
-    const progress =
-      width > 0 ? Math.min(1, Math.max(0, -translateX.get() / width)) : 0;
+    const progress = width > 0 ? Math.min(1, Math.max(0, -translateX.get() / width)) : 0;
     return { height: from + (to - from) * progress };
   });
 
   return (
-    <View
-      className="w-full self-center gap-5 pt-2 pb-4"
-      style={{ maxWidth: CONTENT_MAX_WIDTH }}
-    >
+    <View className="w-full self-center gap-5 pt-2 pb-4" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
       {/* Send | Receive segmented toggle — the sheet's header. Own horizontal
           inset (the sheet is full-bleed so the pager can slide edge-to-edge). */}
       <View className="flex-row bg-surface rounded-full p-1 mx-5">
@@ -166,12 +162,12 @@ export function SendReceiveSheet({
               // removing a pressable variant after the first render makes
               // react-native-css reset the component and re-mount its children.
               className={`flex-1 rounded-full py-2.5 items-center active:opacity-70 ${
-                isActive ? "bg-primary" : "bg-transparent"
+                isActive ? 'bg-primary' : 'bg-transparent'
               }`}
             >
               <Text
                 className={`text-sm font-semibold ${
-                  isActive ? "text-primary-foreground" : "text-muted-foreground"
+                  isActive ? 'text-primary-foreground' : 'text-muted-foreground'
                 }`}
               >
                 {getModeLabel(segment)}
@@ -193,14 +189,12 @@ export function SendReceiveSheet({
         }}
       >
         <GestureDetector gesture={pageGesture}>
-          <Animated.View
-            style={[{ flexDirection: "row", width: "200%" }, rowStyle]}
-          >
+          <Animated.View style={[{ flexDirection: 'row', width: '200%' }, rowStyle]}>
             {/* Each page owns its horizontal inset so it fills the sheet width
                 and slides fully off-screen (no hiding inside a shared padding). */}
             <View
               className="px-5"
-              style={{ width: "50%" }}
+              style={{ width: '50%' }}
               onLayout={(e) => {
                 sendH.set(e.nativeEvent.layout.height);
               }}
@@ -209,7 +203,7 @@ export function SendReceiveSheet({
             </View>
             <View
               className="px-5"
-              style={{ width: "50%" }}
+              style={{ width: '50%' }}
               onLayout={(e) => {
                 recvH.set(e.nativeEvent.layout.height);
               }}

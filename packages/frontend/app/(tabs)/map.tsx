@@ -25,7 +25,7 @@
  *    a `building-3d` extrusion layer that renders 3D buildings at high zoom.
  */
 
-import { memo, useCallback, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -35,22 +35,22 @@ import {
   StyleSheet,
   Image,
   useWindowDimensions,
-} from "react-native";
+} from 'react-native';
 import Animated, {
   Extrapolation,
   interpolate,
   useAnimatedStyle,
   useSharedValue,
-} from "react-native-reanimated";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as Linking from "expo-linking";
-import { useRouter } from "expo-router";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
+} from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Linking from 'expo-linking';
+import { useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import BottomSheet, {
   BottomSheetScrollView,
   useBottomSheetScrollableCreator,
-} from "@gorhom/bottom-sheet";
-import { FlashList } from "@shopify/flash-list";
+} from '@gorhom/bottom-sheet';
+import { FlashList } from '@shopify/flash-list';
 import {
   MapView,
   Camera,
@@ -62,11 +62,11 @@ import {
   type OnPressEvent,
   type CircleLayerStyle,
   type SymbolLayerStyle,
-} from "@maplibre/maplibre-react-native";
-import * as Location from "expo-location";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { t } from "../../src/i18n";
+} from '@maplibre/maplibre-react-native';
+import * as Location from 'expo-location';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { t } from '../../src/i18n';
 import {
   PLACES,
   distanceKm,
@@ -74,11 +74,11 @@ import {
   type FiatPayoutMethod,
   type Place,
   type PlaceCategory,
-} from "../../src/data/places";
-import { EmptyState } from "../../src/ui/components/EmptyState";
-import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
-import { hapticSelection } from "../../src/utils/haptics";
-import { COIN_TICKER } from "@fairco.in/core";
+} from '../../src/data/places';
+import { EmptyState } from '../../src/ui/components/EmptyState';
+import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
+import { hapticSelection } from '../../src/utils/haptics';
+import { COIN_TICKER } from '@fairco.in/core';
 
 // ---------------------------------------------------------------------------
 // MapLibre access token
@@ -93,7 +93,7 @@ void setAccessToken(null);
 // Types
 // ---------------------------------------------------------------------------
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 // MapLibre / Mapbox / GeoJSON use `[longitude, latitude]` positions.
 type Position = [number, number];
@@ -103,9 +103,9 @@ interface UserCoords {
   longitude: number;
 }
 
-type SheetMode = "list" | "detail";
+type SheetMode = 'list' | 'detail';
 
-type CategoryFilter = PlaceCategory | "all";
+type CategoryFilter = PlaceCategory | 'all';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -113,10 +113,8 @@ type CategoryFilter = PlaceCategory | "all";
 
 // Carto basemap style URLs — free, public, no API key, no rate limits.
 // https://github.com/CartoDB/basemap-styles
-const MAP_STYLE_LIGHT =
-  "https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json";
-const MAP_STYLE_DARK =
-  "https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json";
+const MAP_STYLE_LIGHT = 'https://basemaps.cartocdn.com/gl/voyager-gl-style/style.json';
+const MAP_STYLE_DARK = 'https://basemaps.cartocdn.com/gl/dark-matter-gl-style/style.json';
 
 const INITIAL_ZOOM = 5;
 const INITIAL_PITCH = 0;
@@ -137,10 +135,9 @@ const MARKER_HITBOX = { width: 50, height: 50 } as const;
 // fills the screen all the way up behind the notch, sliding under the
 // floating search pill. Magnetic snapping pulls a flick past mid
 // straight to the top.
-const SHEET_SNAP_POINTS: (string | number)[] = ["15%", "62%", "100%"];
+const SHEET_SNAP_POINTS: (string | number)[] = ['15%', '62%', '100%'];
 const SHEET_INDEX_MID = 1;
 const SHEET_INDEX_TOP = 2;
-
 
 // Fallback map center when PLACES is empty (Madrid).
 const FALLBACK_CENTER: Position = [-3.7038, 40.4168];
@@ -154,52 +151,53 @@ const INITIAL_CENTER: Position = PLACES[0]
 // ---------------------------------------------------------------------------
 
 const CATEGORY_ICON: Record<PlaceCategory, IconName> = {
-  cafe: "coffee",
-  restaurant: "silverware-fork-knife",
-  shop: "storefront",
-  service: "tools",
-  atm: "cash-multiple",
-  other: "map-marker",
+  cafe: 'coffee',
+  restaurant: 'silverware-fork-knife',
+  shop: 'storefront',
+  service: 'tools',
+  atm: 'cash-multiple',
+  other: 'map-marker',
 };
 
 // Per-category palette for the native CircleLayer that renders pins.
 // High-contrast hues so each category is recognisable at a glance, matching
 // Google Maps' conventions.
 const CATEGORY_COLOR: Record<PlaceCategory, string> = {
-  cafe: "#78350f",
-  restaurant: "#dc2626",
-  shop: "#2563eb",
-  service: "#7c3aed",
-  atm: "#16a34a",
-  other: "#6b7280",
+  cafe: '#78350f',
+  restaurant: '#dc2626',
+  shop: '#2563eb',
+  service: '#7c3aed',
+  atm: '#16a34a',
+  other: '#6b7280',
 };
 
 // `match` expression driving `circleColor`, derived once from CATEGORY_COLOR
 // so adding a new PlaceCategory only requires extending the record above.
 const CATEGORY_COLOR_EXPRESSION = [
-  "match",
-  ["get", "category"],
-  ...(Object.entries(CATEGORY_COLOR) as [PlaceCategory, string][]).flatMap(
-    ([cat, color]) => [cat, color],
-  ),
+  'match',
+  ['get', 'category'],
+  ...(Object.entries(CATEGORY_COLOR) as [PlaceCategory, string][]).flatMap(([cat, color]) => [
+    cat,
+    color,
+  ]),
   CATEGORY_COLOR.other,
 ] as const;
 
 // Order of chips in the Google-Maps-style filter row at the top of the
 // sheet. `all` is the initial/reset state.
 const CATEGORY_FILTERS: readonly CategoryFilter[] = [
-  "all",
-  "cafe",
-  "restaurant",
-  "shop",
-  "service",
-  "atm",
-  "other",
+  'all',
+  'cafe',
+  'restaurant',
+  'shop',
+  'service',
+  'atm',
+  'other',
 ] as const;
 
 // Stable MapLibre sub-expression reused by the selected-state filter so the
 // inner `["get", "id"]` array isn't reallocated on every selection change.
-const GET_ID_EXPR = ["get", "id"] as const;
+const GET_ID_EXPR = ['get', 'id'] as const;
 
 function categoryLabel(category: PlaceCategory): string {
   return t(`map.category.${category}`);
@@ -232,55 +230,31 @@ function FloatingHandle() {
 // `circleTranslate` in viewport space so the shadow always drops straight
 // down on screen regardless of map rotation.
 const PLACES_SHADOW_STYLE: CircleLayerStyle = {
-  circleRadius: [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    10, 5,
-    14, 7,
-    16, 10,
-    18, 14,
-  ],
-  circleColor: "rgba(0,0,0,0.35)",
+  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 7, 16, 10, 18, 14],
+  circleColor: 'rgba(0,0,0,0.35)',
   circleBlur: 0.8,
   circleTranslate: [0, 2],
-  circleTranslateAnchor: "viewport",
-  circlePitchAlignment: "map",
+  circleTranslateAnchor: 'viewport',
+  circlePitchAlignment: 'map',
 };
 
 // Base pin circle. Zoom-interpolated radius + native `match` on category.
 const PLACES_CIRCLE_STYLE: CircleLayerStyle = {
-  circleRadius: [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    10, 4,
-    14, 6,
-    16, 9,
-    18, 12,
-  ],
+  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 4, 14, 6, 16, 9, 18, 12],
   circleColor: CATEGORY_COLOR_EXPRESSION,
-  circleStrokeColor: "#ffffff",
+  circleStrokeColor: '#ffffff',
   circleStrokeWidth: 2.5,
-  circlePitchAlignment: "map",
+  circlePitchAlignment: 'map',
 };
 
 // Small white glossy highlight on the selected pin. Offset in viewport
 // space so it's always top-left of the pin regardless of rotation.
 const PLACES_SELECTED_HIGHLIGHT_STYLE: CircleLayerStyle = {
-  circleRadius: [
-    "interpolate",
-    ["linear"],
-    ["zoom"],
-    10, 2,
-    14, 3,
-    16, 4,
-    18, 5,
-  ],
-  circleColor: "rgba(255,255,255,0.9)",
+  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3, 16, 4, 18, 5],
+  circleColor: 'rgba(255,255,255,0.9)',
   circleTranslate: [-2, -2],
-  circleTranslateAnchor: "viewport",
-  circlePitchAlignment: "map",
+  circleTranslateAnchor: 'viewport',
+  circlePitchAlignment: 'map',
 };
 
 // Google Maps directions URL — on iOS opens the Google Maps app if
@@ -294,7 +268,7 @@ function openDirections(place: Place): void {
 }
 
 function formatDistanceLabel(km: number | null): string | null {
-  return km !== null ? t("map.distance", { km: formatDistanceKm(km) }) : null;
+  return km !== null ? t('map.distance', { km: formatDistanceKm(km) }) : null;
 }
 
 // ---------------------------------------------------------------------------
@@ -332,12 +306,10 @@ export default function MapScreen() {
   // row is visible just below the pill, exactly like Google Maps.
   const sheetTopInset = insets.top + 10 + 56 + 8;
 
-  const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string>(
-    PLACES[0]?.id ?? "",
-  );
-  const [sheetMode, setSheetMode] = useState<SheetMode>("list");
+  const [query, setQuery] = useState('');
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
+  const [selectedPlaceId, setSelectedPlaceId] = useState<string>(PLACES[0]?.id ?? '');
+  const [sheetMode, setSheetMode] = useState<SheetMode>('list');
   const [sheetIndex, setSheetIndex] = useState<number>(SHEET_INDEX_MID);
   const [userLocation, setUserLocation] = useState<UserCoords | null>(null);
 
@@ -364,7 +336,7 @@ export default function MapScreen() {
   const filteredPlaces = useMemo<readonly Place[]>(() => {
     const trimmed = query.trim().toLowerCase();
     return PLACES.filter((p) => {
-      if (categoryFilter !== "all" && p.category !== categoryFilter) {
+      if (categoryFilter !== 'all' && p.category !== categoryFilter) {
         return false;
       }
       if (!trimmed) return true;
@@ -380,12 +352,12 @@ export default function MapScreen() {
 
   const placesGeoJson = useMemo<GeoJSON.FeatureCollection<GeoJSON.Point>>(
     () => ({
-      type: "FeatureCollection",
+      type: 'FeatureCollection',
       features: filteredPlaces.map((place) => ({
-        type: "Feature",
+        type: 'Feature',
         id: place.id,
         geometry: {
-          type: "Point",
+          type: 'Point',
           coordinates: [place.longitude, place.latitude],
         },
         properties: {
@@ -419,7 +391,7 @@ export default function MapScreen() {
     (place: Place, shouldAnimateCamera: boolean) => {
       hapticSelection();
       setSelectedPlaceId(place.id);
-      setSheetMode("detail");
+      setSheetMode('detail');
       sheetRef.current?.snapToIndex(SHEET_INDEX_MID);
       if (shouldAnimateCamera) {
         animateToCoordinate(place.latitude, place.longitude);
@@ -432,7 +404,7 @@ export default function MapScreen() {
     (event: OnPressEvent) => {
       const feature = event.features[0];
       const id = feature?.properties?.id;
-      if (typeof id !== "string") return;
+      if (typeof id !== 'string') return;
       const place = PLACES.find((p) => p.id === id);
       if (place) {
         selectPlace(place, true);
@@ -442,7 +414,7 @@ export default function MapScreen() {
   );
 
   const handleCloseDetail = useCallback(() => {
-    setSheetMode("list");
+    setSheetMode('list');
   }, []);
 
   const handleSheetChange = useCallback((index: number) => {
@@ -472,12 +444,12 @@ export default function MapScreen() {
       const existing = await Location.getForegroundPermissionsAsync();
       let status = existing.status;
 
-      if (status !== "granted") {
+      if (status !== 'granted') {
         const requested = await Location.requestForegroundPermissionsAsync();
         status = requested.status;
       }
 
-      if (status !== "granted") {
+      if (status !== 'granted') {
         locationDeniedPrompt.open();
         return;
       }
@@ -527,17 +499,11 @@ export default function MapScreen() {
   // module scope at the top of the file.
   const placesSelectedStyle = useMemo<CircleLayerStyle>(
     () => ({
-      circleRadius: [
-        "interpolate", ["linear"], ["zoom"],
-        10, 6,
-        14, 9,
-        16, 13,
-        18, 16,
-      ],
+      circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 6, 14, 9, 16, 13, 18, 16],
       circleColor: theme.colors.primary,
-      circleStrokeColor: "#ffffff",
+      circleStrokeColor: '#ffffff',
       circleStrokeWidth: 3,
-      circlePitchAlignment: "map",
+      circlePitchAlignment: 'map',
     }),
     [theme.colors.primary],
   );
@@ -546,23 +512,16 @@ export default function MapScreen() {
   // the user zooms out (Google Maps collision avoidance).
   const placesLabelStyle = useMemo<SymbolLayerStyle>(
     () => ({
-      textField: ["get", "name"],
-      textSize: [
-        "interpolate", ["linear"], ["zoom"],
-        11, 0,
-        12, 10,
-        14, 11,
-        16, 12,
-        18, 14,
-      ],
+      textField: ['get', 'name'],
+      textSize: ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 10, 14, 11, 16, 12, 18, 14],
       textColor: theme.colors.text,
       textHaloColor: theme.colors.background,
       textHaloWidth: 2,
       textOffset: [0, 1.4],
-      textAnchor: "top",
+      textAnchor: 'top',
       textAllowOverlap: false,
       textIgnorePlacement: false,
-      textPitchAlignment: "viewport",
+      textPitchAlignment: 'viewport',
       textMaxWidth: 8,
     }),
     [theme.colors.text, theme.colors.background],
@@ -570,16 +529,16 @@ export default function MapScreen() {
 
   const placesSelectedLabelStyle = useMemo<SymbolLayerStyle>(
     () => ({
-      textField: ["get", "name"],
+      textField: ['get', 'name'],
       textSize: 14,
       textColor: theme.colors.primary,
       textHaloColor: theme.colors.background,
       textHaloWidth: 2.5,
       textOffset: [0, 1.6],
-      textAnchor: "top",
+      textAnchor: 'top',
       textAllowOverlap: true,
       textIgnorePlacement: true,
-      textPitchAlignment: "viewport",
+      textPitchAlignment: 'viewport',
       textMaxWidth: 10,
     }),
     [theme.colors.primary, theme.colors.background],
@@ -588,7 +547,7 @@ export default function MapScreen() {
   // Only `selectedPlaceId` varies — the inner `["get", "id"]` is a stable
   // module constant (`GET_ID_EXPR`) so we don't reallocate it per render.
   const placesSelectedFilter = useMemo(
-    () => ["==", GET_ID_EXPR, selectedPlaceId] as const,
+    () => ['==', GET_ID_EXPR, selectedPlaceId] as const,
     [selectedPlaceId],
   );
 
@@ -597,7 +556,7 @@ export default function MapScreen() {
       backgroundColor: theme.colors.background,
       borderTopLeftRadius: 24,
       borderTopRightRadius: 24,
-      overflow: "hidden" as const,
+      overflow: 'hidden' as const,
     }),
     [theme.colors.background],
   );
@@ -606,7 +565,7 @@ export default function MapScreen() {
   // the FAB container style is a StyleSheet entry (see `styles.fabContainer`).
   const searchPillBaseStyle = useMemo(
     () => ({
-      position: "absolute" as const,
+      position: 'absolute' as const,
       top: insets.top + 10,
       left: 0,
       right: 0,
@@ -650,10 +609,10 @@ export default function MapScreen() {
     () =>
       userLocation
         ? {
-            type: "Feature",
+            type: 'Feature',
             properties: {},
             geometry: {
-              type: "Point",
+              type: 'Point',
               coordinates: [userLocation.longitude, userLocation.latitude],
             },
           }
@@ -666,7 +625,7 @@ export default function MapScreen() {
       circleRadius: 7,
       circleColor: theme.colors.primary,
       circleStrokeWidth: 3,
-      circleStrokeColor: "#ffffff",
+      circleStrokeColor: '#ffffff',
     }),
     [theme.colors.primary],
   );
@@ -746,21 +705,17 @@ export default function MapScreen() {
             onPress={() => router.back()}
             className="w-11 h-11 items-center justify-center rounded-full active:opacity-70"
             accessibilityRole="button"
-            accessibilityLabel={t("common.back")}
+            accessibilityLabel={t('common.back')}
             hitSlop={8}
           >
-            <MaterialCommunityIcons
-              name="arrow-left"
-              size={22}
-              color={theme.colors.text}
-            />
+            <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
           </Pressable>
 
           <TextInput
             value={query}
             onChangeText={setQuery}
             onFocus={handleSearchFocus}
-            placeholder={t("map.searchPlaceholder")}
+            placeholder={t('map.searchPlaceholder')}
             placeholderTextColor={theme.colors.textSecondary}
             className="flex-1 ml-1 mr-2 text-base"
             style={{ color: theme.colors.text }}
@@ -771,24 +726,16 @@ export default function MapScreen() {
 
           {query.length > 0 ? (
             <Pressable
-              onPress={() => setQuery("")}
+              onPress={() => setQuery('')}
               className="w-8 h-8 items-center justify-center rounded-full active:opacity-70"
               accessibilityRole="button"
-              accessibilityLabel={t("common.clear")}
+              accessibilityLabel={t('common.clear')}
               hitSlop={6}
             >
-              <MaterialCommunityIcons
-                name="close"
-                size={18}
-                color={theme.colors.textSecondary}
-              />
+              <MaterialCommunityIcons name="close" size={18} color={theme.colors.textSecondary} />
             </Pressable>
           ) : (
-            <MaterialCommunityIcons
-              name="magnify"
-              size={22}
-              color={theme.colors.textSecondary}
-            />
+            <MaterialCommunityIcons name="magnify" size={22} color={theme.colors.textSecondary} />
           )}
         </View>
       </View>
@@ -799,13 +746,9 @@ export default function MapScreen() {
           className="w-12 h-12 rounded-full bg-surface items-center justify-center active:opacity-80"
           style={styles.fab}
           accessibilityRole="button"
-          accessibilityLabel={t("map.locateMe.accessibility")}
+          accessibilityLabel={t('map.locateMe.accessibility')}
         >
-          <MaterialCommunityIcons
-            name="crosshairs-gps"
-            size={22}
-            color={theme.colors.primary}
-          />
+          <MaterialCommunityIcons name="crosshairs-gps" size={22} color={theme.colors.primary} />
         </Pressable>
       </View>
 
@@ -823,7 +766,7 @@ export default function MapScreen() {
         backgroundStyle={sheetBackgroundStyle}
         handleComponent={renderNullHandle}
       >
-        {sheetMode === "detail" && selectedPlace ? (
+        {sheetMode === 'detail' && selectedPlace ? (
           <PlaceDetail
             place={selectedPlace}
             distanceKm={selectedPlaceDistanceKm}
@@ -842,24 +785,17 @@ export default function MapScreen() {
                   <Animated.View style={headerSpacerStyle} />
                   <View className="px-5 pt-4 pb-2">
                     <Text className="text-foreground text-lg font-semibold">
-                      {t("map.nearYou")}
+                      {t('map.nearYou')}
                     </Text>
                     <Text className="text-muted-foreground text-xs mt-0.5">
-                      {filteredPlaces.length}{" "}
-                      {filteredPlaces.length === 1
-                        ? t("map.resultOne")
-                        : t("map.resultOther")}
+                      {filteredPlaces.length}{' '}
+                      {filteredPlaces.length === 1 ? t('map.resultOne') : t('map.resultOther')}
                     </Text>
                   </View>
-                  <CategoryFilterRow
-                    value={categoryFilter}
-                    onChange={handleCategoryFilter}
-                  />
+                  <CategoryFilterRow value={categoryFilter} onChange={handleCategoryFilter} />
                 </View>
               }
-              ListEmptyComponent={
-                <EmptyState icon="map-marker-off" title={t("map.noResults")} />
-              }
+              ListEmptyComponent={<EmptyState icon="map-marker-off" title={t('map.noResults')} />}
               renderItem={renderPlaceRow}
             />
             <FloatingHandle />
@@ -870,9 +806,9 @@ export default function MapScreen() {
       <Dialog
         control={locationDeniedPrompt}
         placement="bottom"
-        title={t("map.permissionDenied.title")}
-        description={t("map.permissionDenied.subtitle")}
-        actions={[{ label: t("common.ok") }]}
+        title={t('map.permissionDenied.title')}
+        description={t('map.permissionDenied.subtitle')}
+        actions={[{ label: t('common.ok') }]}
       />
     </View>
   );
@@ -900,16 +836,14 @@ function CategoryFilterRow({ value, onChange }: CategoryFilterRowProps) {
     >
       {CATEGORY_FILTERS.map((key) => {
         const isActive = key === value;
-        const label =
-          key === "all" ? t("map.filter.all") : categoryLabel(key);
-        const icon: IconName =
-          key === "all" ? "filter-variant" : CATEGORY_ICON[key];
+        const label = key === 'all' ? t('map.filter.all') : categoryLabel(key);
+        const icon: IconName = key === 'all' ? 'filter-variant' : CATEGORY_ICON[key];
         return (
           <Pressable
             key={key}
             onPress={() => onChange(key)}
             className={`flex-row items-center rounded-full px-3 h-9 mr-2 border ${
-              isActive ? "border-transparent" : ""
+              isActive ? 'border-transparent' : ''
             }`}
             style={[
               styles.chip,
@@ -927,11 +861,11 @@ function CategoryFilterRow({ value, onChange }: CategoryFilterRowProps) {
             <MaterialCommunityIcons
               name={icon}
               size={16}
-              color={isActive ? "#ffffff" : theme.colors.textSecondary}
+              color={isActive ? '#ffffff' : theme.colors.textSecondary}
             />
             <Text
               className="ml-1.5 text-sm font-medium"
-              style={{ color: isActive ? "#ffffff" : theme.colors.text }}
+              style={{ color: isActive ? '#ffffff' : theme.colors.text }}
             >
               {label}
             </Text>
@@ -972,9 +906,7 @@ const PlaceRow = memo(function PlaceRow({
   return (
     <Pressable
       onPress={onPress}
-      className={`px-5 py-3 ${
-        isSelected ? "bg-primary/5" : "active:bg-surface"
-      }`}
+      className={`px-5 py-3 ${isSelected ? 'bg-primary/5' : 'active:bg-surface'}`}
     >
       <View className="flex-row items-center">
         {place.imageUrl ? (
@@ -986,40 +918,25 @@ const PlaceRow = memo(function PlaceRow({
           />
         ) : (
           <View className="w-14 h-14 rounded-xl bg-primary/10 items-center justify-center mr-3">
-            <MaterialCommunityIcons
-              name={icon}
-              size={24}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name={icon} size={24} color={theme.colors.primary} />
           </View>
         )}
 
         <View className="flex-1 mr-2">
-          <Text
-            className="text-foreground text-base font-semibold"
-            numberOfLines={1}
-          >
+          <Text className="text-foreground text-base font-semibold" numberOfLines={1}>
             {place.name}
           </Text>
-          <Text
-            className="text-muted-foreground text-xs mt-0.5"
-            numberOfLines={1}
-          >
+          <Text className="text-muted-foreground text-xs mt-0.5" numberOfLines={1}>
             {categoryLabel(place.category)} · {place.city}
           </Text>
-          <Text
-            className="text-muted-foreground text-xs mt-0.5"
-            numberOfLines={1}
-          >
+          <Text className="text-muted-foreground text-xs mt-0.5" numberOfLines={1}>
             {place.address}
           </Text>
         </View>
 
         {distanceLabel ? (
           <View className="bg-surface rounded-full px-3 py-1 mr-2">
-            <Text className="text-muted-foreground text-xs font-medium">
-              {distanceLabel}
-            </Text>
+            <Text className="text-muted-foreground text-xs font-medium">{distanceLabel}</Text>
           </View>
         ) : null}
 
@@ -1027,16 +944,12 @@ const PlaceRow = memo(function PlaceRow({
           onPress={handleDirectionsPress}
           className="w-10 h-10 rounded-full bg-primary items-center justify-center active:opacity-80"
           accessibilityRole="button"
-          accessibilityLabel={t("map.directions.accessibility", {
+          accessibilityLabel={t('map.directions.accessibility', {
             name: place.name,
           })}
           hitSlop={6}
         >
-          <MaterialCommunityIcons
-            name="directions"
-            size={20}
-            color="#ffffff"
-          />
+          <MaterialCommunityIcons name="directions" size={20} color="#ffffff" />
         </Pressable>
       </View>
     </Pressable>
@@ -1081,10 +994,7 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
     void Linking.openURL(website);
   }, [place.website]);
 
-  const contentStyle = useMemo(
-    () => ({ paddingBottom: bottomInset + 16 }),
-    [bottomInset],
-  );
+  const contentStyle = useMemo(() => ({ paddingBottom: bottomInset + 16 }), [bottomInset]);
 
   return (
     <BottomSheetScrollView
@@ -1106,20 +1016,13 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
           />
         ) : (
           <View className="w-full h-[200px] bg-primary/10 items-center justify-center">
-            <MaterialCommunityIcons
-              name={heroIcon}
-              size={64}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name={heroIcon} size={64} color={theme.colors.primary} />
           </View>
         )}
         {/* Custom drag handle overlayed on the hero image so the user can
          * still pan the sheet up/down even though the chrome handle is
          * suppressed in detail mode. */}
-        <View
-          pointerEvents="none"
-          style={styles.heroHandleContainer}
-        >
+        <View pointerEvents="none" style={styles.heroHandleContainer}>
           <View style={styles.heroHandleBar} />
         </View>
         <Pressable
@@ -1127,23 +1030,16 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
           className="absolute top-3 left-3 w-10 h-10 rounded-full bg-background/80 items-center justify-center active:opacity-80"
           style={styles.heroCloseButton}
           accessibilityRole="button"
-          accessibilityLabel={t("map.detail.close.accessibility")}
+          accessibilityLabel={t('map.detail.close.accessibility')}
           hitSlop={8}
         >
-          <MaterialCommunityIcons
-            name="arrow-left"
-            size={22}
-            color={theme.colors.text}
-          />
+          <MaterialCommunityIcons name="arrow-left" size={22} color={theme.colors.text} />
         </Pressable>
       </View>
 
       {/* Title block */}
       <View className="px-5 pt-4 pb-2">
-        <Text
-          className="text-foreground text-2xl font-bold"
-          numberOfLines={2}
-        >
+        <Text className="text-foreground text-2xl font-bold" numberOfLines={2}>
           {place.name}
         </Text>
         <Text className="text-muted-foreground text-sm mt-1">
@@ -1155,9 +1051,7 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
       {distanceLabel ? (
         <View className="px-5 mb-2 flex-row items-center">
           <View className="bg-primary/10 rounded-full px-3 py-1">
-            <Text className="text-primary text-xs font-semibold">
-              {distanceLabel}
-            </Text>
+            <Text className="text-primary text-xs font-semibold">{distanceLabel}</Text>
           </View>
         </View>
       ) : null}
@@ -1175,9 +1069,7 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
 
       {place.description ? (
         <View className="px-5 py-2">
-          <Text className="text-foreground text-sm leading-5">
-            {place.description}
-          </Text>
+          <Text className="text-foreground text-sm leading-5">{place.description}</Text>
         </View>
       ) : null}
 
@@ -1188,16 +1080,10 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
           onPress={handleDirections}
           className="flex-1 bg-primary rounded-full py-3 flex-row items-center justify-center active:opacity-80"
           accessibilityRole="button"
-          accessibilityLabel={t("map.detail.directions")}
+          accessibilityLabel={t('map.detail.directions')}
         >
-          <MaterialCommunityIcons
-            name="directions"
-            size={18}
-            color="#ffffff"
-          />
-          <Text className="text-white font-semibold ml-2">
-            {t("map.detail.directions")}
-          </Text>
+          <MaterialCommunityIcons name="directions" size={18} color="#ffffff" />
+          <Text className="text-white font-semibold ml-2">{t('map.detail.directions')}</Text>
         </Pressable>
 
         {place.phone ? (
@@ -1205,13 +1091,9 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
             onPress={handleCall}
             className="w-12 h-12 rounded-full bg-surface items-center justify-center active:opacity-80"
             accessibilityRole="button"
-            accessibilityLabel={t("map.detail.call")}
+            accessibilityLabel={t('map.detail.call')}
           >
-            <MaterialCommunityIcons
-              name="phone"
-              size={20}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name="phone" size={20} color={theme.colors.primary} />
           </Pressable>
         ) : null}
 
@@ -1220,13 +1102,9 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
             onPress={handleWebsite}
             className="w-12 h-12 rounded-full bg-surface items-center justify-center active:opacity-80"
             accessibilityRole="button"
-            accessibilityLabel={t("map.detail.website")}
+            accessibilityLabel={t('map.detail.website')}
           >
-            <MaterialCommunityIcons
-              name="web"
-              size={20}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name="web" size={20} color={theme.colors.primary} />
           </Pressable>
         ) : null}
       </View>
@@ -1244,9 +1122,7 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
 function PlaceFacts({ place }: { place: Place }) {
   const theme = useTheme();
   const hasAnyFact =
-    place.minimumSpend !== undefined ||
-    place.acceptsFairToFiat ||
-    place.openingHours !== undefined;
+    place.minimumSpend !== undefined || place.acceptsFairToFiat || place.openingHours !== undefined;
   if (!hasAnyFact) return null;
 
   return (
@@ -1254,8 +1130,8 @@ function PlaceFacts({ place }: { place: Place }) {
       {place.minimumSpend !== undefined ? (
         <FactRow
           icon="cash-minus"
-          label={t("map.detail.minimumSpend")}
-          value={t("map.detail.minimumSpendValue", {
+          label={t('map.detail.minimumSpend')}
+          value={t('map.detail.minimumSpendValue', {
             amount: place.minimumSpend,
             ticker: COIN_TICKER,
           })}
@@ -1269,12 +1145,12 @@ function PlaceFacts({ place }: { place: Place }) {
         <View className="mt-2">
           <FactRow
             icon="swap-horizontal-bold"
-            label={t("map.detail.fiatExchange", {
+            label={t('map.detail.fiatExchange', {
               currency: place.localCurrency,
             })}
             value={
               place.maxFiatPayout !== undefined
-                ? t("map.detail.maxFiatPayout", {
+                ? t('map.detail.maxFiatPayout', {
                     amount: place.maxFiatPayout,
                     currency: place.localCurrency,
                   })
@@ -1287,10 +1163,7 @@ function PlaceFacts({ place }: { place: Place }) {
           {place.fiatPayoutMethods && place.fiatPayoutMethods.length > 0 ? (
             <View className="flex-row flex-wrap mt-2 ml-7">
               {place.fiatPayoutMethods.map((method) => (
-                <View
-                  key={method}
-                  className="bg-primary/10 rounded-full px-3 py-1 mr-2 mb-2"
-                >
+                <View key={method} className="bg-primary/10 rounded-full px-3 py-1 mr-2 mb-2">
                   <Text className="text-primary text-xs font-semibold">
                     {fiatPayoutLabel(method)}
                   </Text>
@@ -1305,7 +1178,7 @@ function PlaceFacts({ place }: { place: Place }) {
         <View className="mt-2">
           <FactRow
             icon="clock-outline"
-            label={t("map.detail.openingHours")}
+            label={t('map.detail.openingHours')}
             value={place.openingHours}
             iconColor={theme.colors.textSecondary}
             labelColor={theme.colors.textSecondary}
@@ -1326,22 +1199,10 @@ interface FactRowProps {
   valueColor: string;
 }
 
-function FactRow({
-  icon,
-  label,
-  value,
-  iconColor,
-  labelColor,
-  valueColor,
-}: FactRowProps) {
+function FactRow({ icon, label, value, iconColor, labelColor, valueColor }: FactRowProps) {
   return (
     <View className="flex-row items-start">
-      <MaterialCommunityIcons
-        name={icon}
-        size={18}
-        color={iconColor}
-        style={styles.addressIcon}
-      />
+      <MaterialCommunityIcons name={icon} size={18} color={iconColor} style={styles.addressIcon} />
       <View className="flex-1">
         <Text className="text-sm font-medium" style={{ color: labelColor }}>
           {label}
@@ -1364,20 +1225,20 @@ const styles = StyleSheet.create({
   // Matches Google Maps' search pill shadow on iOS (soft, wide, offset
   // slightly below) and Android (Material 3 elevation 8).
   floatingBar: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOpacity: 0.22,
     shadowRadius: 16,
     shadowOffset: { width: 0, height: 4 },
     elevation: 8,
   },
   fabContainer: {
-    position: "absolute",
+    position: 'absolute',
     right: 16,
-    bottom: "42%",
+    bottom: '42%',
     zIndex: 9,
   },
   fab: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOpacity: 0.2,
     shadowRadius: 10,
     shadowOffset: { width: 0, height: 4 },
@@ -1395,34 +1256,34 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   floatingHandle: {
-    position: "absolute",
+    position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
     height: 20,
-    alignItems: "center",
-    justifyContent: "center",
+    alignItems: 'center',
+    justifyContent: 'center',
     zIndex: 2,
   },
   floatingHandleBar: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(120, 120, 128, 0.55)",
+    backgroundColor: 'rgba(120, 120, 128, 0.55)',
   },
   heroHandleContainer: {
-    position: "absolute",
+    position: 'absolute',
     top: 8,
     left: 0,
     right: 0,
-    alignItems: "center",
+    alignItems: 'center',
     zIndex: 2,
   },
   heroHandleBar: {
     width: 40,
     height: 4,
     borderRadius: 2,
-    backgroundColor: "rgba(255, 255, 255, 0.85)",
+    backgroundColor: 'rgba(255, 255, 255, 0.85)',
   },
   // Row thumbnail: we express the sizing / radius in the StyleSheet so the
   // `<Image>` honours the exact rounded-square shape across Android, where
@@ -1437,17 +1298,17 @@ const styles = StyleSheet.create({
   // drag handle) match the parent sheet's rounded shape. `overflow: hidden`
   // clips the image bitmap to the radius.
   heroWrapper: {
-    position: "relative",
+    position: 'relative',
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    overflow: "hidden",
+    overflow: 'hidden',
   },
   // Hero image spans the sheet full-width and is clipped by the rounded
   // heroWrapper above. No radius on the Image itself — Android <Image>
   // ignores borderRadius on the `source` bitmap in some layouts, so we
   // rely on parent clipping instead.
   heroImage: {
-    width: "100%",
+    width: '100%',
     height: 200,
   },
   // The circular back button floating over the hero sits on top of arbitrary
@@ -1455,7 +1316,7 @@ const styles = StyleSheet.create({
   // the photo colours. The translucent fill itself comes from the NativeWind
   // `bg-background/80` class.
   heroCloseButton: {
-    shadowColor: "#000",
+    shadowColor: '#000',
     shadowOpacity: 0.15,
     shadowRadius: 6,
     shadowOffset: { width: 0, height: 2 },

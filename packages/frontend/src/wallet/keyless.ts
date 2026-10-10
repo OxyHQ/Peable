@@ -8,7 +8,7 @@
  * Peable is a Relying Party; it never mints or imports identities itself.
  */
 
-import type { AuthMethodEntry } from "@oxy.so/contracts";
+import type { AuthMethodEntry } from '@oxy.so/contracts';
 
 /**
  * Commons deep link that starts Oxy ID creation
@@ -18,7 +18,7 @@ import type { AuthMethodEntry } from "@oxy.so/contracts";
  * mount (no navigation state required from the caller), so it is safe to
  * deep-link into directly.
  */
-export const COMMONS_CREATE_IDENTITY_URL = "commons://create-identity";
+export const COMMONS_CREATE_IDENTITY_URL = 'commons://create-identity';
 
 /**
  * Commons deep link that opens the recovery-phrase import screen
@@ -27,9 +27,9 @@ export const COMMONS_CREATE_IDENTITY_URL = "commons://create-identity";
  * schemes are `commons` and `oxycommons` (`packages/commons/app.config.js`);
  * either works, `commons://` is used for brevity to match the create URL.
  */
-export const COMMONS_IMPORT_IDENTITY_URL = "commons://import-identity";
+export const COMMONS_IMPORT_IDENTITY_URL = 'commons://import-identity';
 
-export type KeylessAction = { kind: "create" | "sync"; url: string };
+export type KeylessAction = { kind: 'create' | 'sync'; url: string };
 
 /**
  * True when the account already has a self-sovereign identity key on the
@@ -40,7 +40,7 @@ export type KeylessAction = { kind: "create" | "sync"; url: string };
  * so a keyless account answers an empty list.
  */
 export function hasIdentityAuthMethod(methods: readonly AuthMethodEntry[]): boolean {
-  return methods.some((m) => m.type === "identity");
+  return methods.some((m) => m.type === 'identity');
 }
 
 /**
@@ -50,6 +50,6 @@ export function hasIdentityAuthMethod(methods: readonly AuthMethodEntry[]): bool
  */
 export function resolveKeylessAction(serverHasIdentity: boolean): KeylessAction {
   return serverHasIdentity
-    ? { kind: "sync", url: COMMONS_IMPORT_IDENTITY_URL }
-    : { kind: "create", url: COMMONS_CREATE_IDENTITY_URL };
+    ? { kind: 'sync', url: COMMONS_IMPORT_IDENTITY_URL }
+    : { kind: 'create', url: COMMONS_CREATE_IDENTITY_URL };
 }

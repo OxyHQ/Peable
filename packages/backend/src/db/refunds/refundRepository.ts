@@ -77,7 +77,7 @@ export interface InsertRefundParams {
  */
 export async function insertRefund(
   db: DatabaseOrTransaction,
-  params: InsertRefundParams
+  params: InsertRefundParams,
 ): Promise<RefundRow | null> {
   try {
     const [row] = await db
@@ -110,7 +110,7 @@ export async function insertRefund(
 export async function markRefundSucceeded(
   db: DatabaseOrTransaction,
   refundId: string,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .update(refunds)
@@ -141,7 +141,7 @@ export async function markRefundSucceeded(
 export async function linkRefundObject(
   db: DatabaseOrTransaction,
   refundId: string,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .update(refunds)
@@ -179,7 +179,7 @@ export async function applyRefundState(
   db: DatabaseOrTransaction,
   refundId: string,
   status: RefundStatus,
-  failureCode: string | null
+  failureCode: string | null,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .update(refunds)
@@ -189,8 +189,8 @@ export async function applyRefundState(
         eq(refunds.id, refundId),
         status === 'failed'
           ? sql`${refunds.status} in ('pending', 'succeeded')`
-          : eq(refunds.status, 'pending')
-      )
+          : eq(refunds.status, 'pending'),
+      ),
     )
     .returning(REFUND_COLUMNS);
   return row ? toRow(row) : null;
@@ -218,7 +218,7 @@ export async function importProviderRefund(
     readonly provider: ProviderId;
     readonly providerObjectId: string;
     readonly status: RefundStatus;
-  }
+  },
 ): Promise<RefundRow | null> {
   try {
     const [row] = await db
@@ -257,7 +257,7 @@ export async function markRefundFailed(
   db: DatabaseOrTransaction,
   refundId: string,
   failureCode: string,
-  providerObjectId?: string
+  providerObjectId?: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .update(refunds)
@@ -284,7 +284,7 @@ export async function markRefundFailed(
  */
 export async function sumSucceededRefunds(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<string> {
   const [row] = await db
     .select({
@@ -311,16 +311,14 @@ export async function sumSucceededRefunds(
  */
 export async function sumCommittedRefunds(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<string> {
   const [row] = await db
     .select({
       total: sql<string>`coalesce(sum(${refunds.amount}::numeric), 0)::text`,
     })
     .from(refunds)
-    .where(
-      and(eq(refunds.paymentIntentId, paymentIntentId), sql`${refunds.status} <> 'failed'`)
-    );
+    .where(and(eq(refunds.paymentIntentId, paymentIntentId), sql`${refunds.status} <> 'failed'`));
   return row?.total ?? '0';
 }
 
@@ -328,7 +326,7 @@ export async function sumCommittedRefunds(
 export async function findRefundByExternalRef(
   db: DatabaseOrTransaction,
   merchantId: string,
-  externalRef: string
+  externalRef: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .select(REFUND_COLUMNS)
@@ -341,7 +339,7 @@ export async function findRefundByExternalRef(
 export async function findRefundByPublicId(
   db: DatabaseOrTransaction,
   merchantId: string,
-  publicId: string
+  publicId: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .select(REFUND_COLUMNS)
@@ -354,7 +352,7 @@ export async function findRefundByPublicId(
 export async function findRefundByProviderObject(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<RefundRow | null> {
   const [row] = await db
     .select(REFUND_COLUMNS)
@@ -366,7 +364,7 @@ export async function findRefundByProviderObject(
 /** Every refund against one payment. Newest first. */
 export async function listRefundsForIntent(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<readonly RefundRow[]> {
   const rows = await db
     .select(REFUND_COLUMNS)

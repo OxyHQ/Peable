@@ -1,20 +1,20 @@
-import { randomUUID } from "node:crypto";
-import type { NetworkType } from "@fairco.in/core";
-import type { CurrencyCode, PaymentIntentRail } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
+import { randomUUID } from 'node:crypto';
+import type { NetworkType } from '@fairco.in/core';
+import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
   findIntentByIdempotencyKey,
   insertPaymentIntent,
   linkProviderObject,
-} from "../db/payments/paymentIntentRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
-import type { Database } from "../db/postgres";
-import type { PaymentProvider, ProviderClientAction } from "./providers/provider";
-import { assertEnvironmentMatchesProvider } from "./providers/environmentGuard";
-import { resolveCardProvider, resolveProvider } from "./providers/registry";
-import { reserveNextAddress } from "./reserveAddress";
-import { newId, clientSecretFor } from "../lib/ids";
+} from '../db/payments/paymentIntentRepository';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import type { Database } from '../db/postgres';
+import type { PaymentProvider, ProviderClientAction } from './providers/provider';
+import { assertEnvironmentMatchesProvider } from './providers/environmentGuard';
+import { resolveCardProvider, resolveProvider } from './providers/registry';
+import { reserveNextAddress } from './reserveAddress';
+import { newId, clientSecretFor } from '../lib/ids';
 
 const DEFAULT_EXPIRY_SECONDS = 15 * 60;
 const MS_PER_SECOND = 1000;
@@ -30,7 +30,7 @@ export class NetworkMismatchError extends Error {
     super(
       `network '${requested}' does not match the merchant's configured network '${merchantNetwork}'`,
     );
-    this.name = "NetworkMismatchError";
+    this.name = 'NetworkMismatchError';
   }
 }
 
@@ -47,7 +47,7 @@ export class NetworkMismatchError extends Error {
 export class RailMismatchError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "RailMismatchError";
+    this.name = 'RailMismatchError';
   }
 }
 
@@ -61,15 +61,11 @@ export class RailMismatchError extends Error {
  * database. Widening it later is a migration with a decision behind it.
  */
 function assertRailCurrency(rail: PaymentIntentRail, currency: CurrencyCode): void {
-  if (rail === "faircoin" && currency !== "FAIR") {
-    throw new RailMismatchError(
-      `the faircoin rail settles in FAIR, not '${currency}'`,
-    );
+  if (rail === 'faircoin' && currency !== 'FAIR') {
+    throw new RailMismatchError(`the faircoin rail settles in FAIR, not '${currency}'`);
   }
-  if (rail === "card" && currency === "FAIR") {
-    throw new RailMismatchError(
-      "the card rail cannot settle in FAIR; name a fiat currency",
-    );
+  if (rail === 'card' && currency === 'FAIR') {
+    throw new RailMismatchError('the card rail cannot settle in FAIR; name a fiat currency');
   }
 }
 
@@ -125,7 +121,7 @@ export interface CreateIntentResult {
 export class RailUnavailableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "RailUnavailableError";
+    this.name = 'RailUnavailableError';
   }
 }
 
@@ -159,20 +155,20 @@ export function resolveRail(
   merchant: MerchantRow,
   input: { rail?: PaymentIntentRail; currency?: CurrencyCode; network?: NetworkType },
 ): ResolvedRail {
-  const rail = input.rail ?? "faircoin";
-  const currency = input.currency ?? (rail === "faircoin" ? "FAIR" : undefined);
+  const rail = input.rail ?? 'faircoin';
+  const currency = input.currency ?? (rail === 'faircoin' ? 'FAIR' : undefined);
 
   if (currency === undefined) {
-    throw new RailMismatchError("the card rail requires an explicit currency");
+    throw new RailMismatchError('the card rail requires an explicit currency');
   }
   assertRailCurrency(rail, currency);
 
-  if (rail === "faircoin") {
+  if (rail === 'faircoin') {
     // The network firewall, unchanged. A `network` label that disagrees with the
     // network the `address` actually encodes sends a payer's funds to an address
     // nobody is watching.
     if (input.network === undefined) {
-      throw new RailMismatchError("the faircoin rail requires a network");
+      throw new RailMismatchError('the faircoin rail requires a network');
     }
     if (merchant.network === null) {
       // A CARD-ONLY merchant. There is no xpub to derive a receive address
@@ -180,7 +176,7 @@ export function resolveRail(
       // rather than reaching `reserveNextAddress`, which would have burned a
       // derivation index before discovering the same thing.
       throw new RailMismatchError(
-        "this merchant has not registered a FairCoin account; register a network and xpub to accept it",
+        'this merchant has not registered a FairCoin account; register a network and xpub to accept it',
       );
     }
     if (input.network !== merchant.network) {
@@ -194,7 +190,7 @@ export function resolveRail(
     // reference to `merchants (id, network)` BIND, tying a card charge to a
     // chain — and `payment_intents_card_has_no_chain_fields_check` refuses it
     // one layer down anyway, as a 500 instead of this 422.
-    throw new RailMismatchError("the card rail has no network");
+    throw new RailMismatchError('the card rail has no network');
   }
   return { rail, currency, network: null };
 }
@@ -310,7 +306,7 @@ function replayConflict(
 export class IdempotencyConflictError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "IdempotencyConflictError";
+    this.name = 'IdempotencyConflictError';
   }
 }
 
@@ -326,10 +322,8 @@ export class IdempotencyConflictError extends Error {
  * @throws {RailUnavailableError}
  */
 export function assertRailAvailable(rail: PaymentIntentRail): void {
-  if (rail === "card" && !resolveCardProvider()) {
-    throw new RailUnavailableError(
-      "the card rail is not configured on this deployment",
-    );
+  if (rail === 'card' && !resolveCardProvider()) {
+    throw new RailUnavailableError('the card rail is not configured on this deployment');
   }
 }
 
@@ -343,7 +337,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // intent written and then abandoned would sit in `created` until the sweeper
   // expired it, and a merchant debugging a rejected credential would find
   // payments they never made.
-  if (rail === "card") assertEnvironmentMatchesProvider(merchant.environment);
+  if (rail === 'card') assertEnvironmentMatchesProvider(merchant.environment);
 
   const db = getDb();
 
@@ -361,9 +355,8 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // A card payment reserves NO derivation index. Reserving one anyway would
   // burn an index on a payment that can never receive coins, and every FairCoin
   // payer after it would be handed a different address than the counter implies.
-  const address =
-    rail === "faircoin" ? (await reserveNextAddress(merchant.id)).address : null;
-  const publicId = newId("pi");
+  const address = rail === 'faircoin' ? (await reserveNextAddress(merchant.id)).address : null;
+  const publicId = newId('pi');
   const clientSecret = clientSecretFor(publicId);
   const expiresAt = new Date(
     Date.now() + (expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS) * MS_PER_SECOND,
@@ -375,13 +368,10 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // refuses a card intent without one — a rail that is off must fail here,
   // where nothing has been written, rather than after a row exists that no
   // adapter can ever act on.
-  const cardProvider = rail === "card" ? resolveCardProvider() : undefined;
-  if (rail === "card" && !cardProvider) {
-    throw new RailUnavailableError(
-      "the card rail is not configured on this deployment",
-    );
+  const cardProvider = rail === 'card' ? resolveCardProvider() : undefined;
+  if (rail === 'card' && !cardProvider) {
+    throw new RailUnavailableError('the card rail is not configured on this deployment');
   }
-
 
   // Explicit field whitelist — never spread a caller body (mass-assignment
   // would be an IDOR). `status`, `currency` and `confirmations` take their

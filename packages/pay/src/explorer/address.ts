@@ -88,7 +88,7 @@ export interface AddressInfo {
  */
 export async function fetchAddressInfo(
   addresses: readonly string[],
-  network: NetworkType
+  network: NetworkType,
 ): Promise<Map<string, AddressInfo>> {
   const result = new Map<string, AddressInfo>();
   if (addresses.length === 0) return result;
@@ -103,16 +103,14 @@ export async function fetchAddressInfo(
       const info = (body as { addressInfo?: { utxos?: unknown; txCount?: unknown } })?.addressInfo;
       const rawUtxos = Array.isArray(info?.utxos) ? info.utxos : [];
       const txCount =
-        typeof info?.txCount === 'number' && Number.isSafeInteger(info.txCount)
-          ? info.txCount
-          : 0;
+        typeof info?.txCount === 'number' && Number.isSafeInteger(info.txCount) ? info.txCount : 0;
 
       const utxos = rawUtxos
         .map((entry: ExplorerUtxo) => toUtxo(entry, address))
         .filter((utxo): utxo is UTXO => utxo !== null);
 
       return [address, { txCount, utxos }];
-    })
+    }),
   );
 
   for (const [address, info] of entries) result.set(address, info);

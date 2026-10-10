@@ -16,34 +16,33 @@
  * re-running the scan (idempotency) does not double-count.
  */
 
-import { describe, test, expect } from "bun:test";
-import { sha256 } from "@noble/hashes/sha256";
-import { getNetwork, hexToBytes, UNITS_PER_COIN } from "@fairco.in/core";
-import { parseTx } from "../p2p/messages";
-import type { MerkleBlockMsg } from "../p2p/messages";
-import { validateMerkleProof } from "../p2p/merkle-proof";
-import { UTXOSet } from "@peable.to/pay";
+import { describe, test, expect } from 'bun:test';
+import { sha256 } from '@noble/hashes/sha256';
+import { getNetwork, hexToBytes, UNITS_PER_COIN } from '@fairco.in/core';
+import { parseTx } from '../p2p/messages';
+import type { MerkleBlockMsg } from '../p2p/messages';
+import { validateMerkleProof } from '../p2p/merkle-proof';
+import { UTXOSet } from '@peable.to/pay';
 import {
   applyTransactionToWallet,
   reverseBytesToHex,
   type ConfirmationInfo,
-} from "./apply-transaction";
+} from './apply-transaction';
 
-const MAINNET = getNetwork("mainnet");
+const MAINNET = getNetwork('mainnet');
 
 // Real mainnet transaction (raw hex from explorer.fairco.in). Output #1 pays
 // 10 FAIR to FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek.
 const RAW_TX_HEX =
-  "01000000019bc5c112bd21fd699f301ba70237ee07c924a53bfdd1e21f7c2996ee0b907bac" +
-  "0100000048473044022063217b3fbff910185d1b3caf4fa6d248d0c5cd27ea33729c6cdc2b" +
-  "99b17049580220280664029acc5259de8249d74175f16ec601b228f6e19fc8bcf3468af9ce" +
-  "90aa01ffffffff026a55cd1d000000001976a914dcd555e41658449bc79d13d561f7f85dff" +
-  "e76d6e88ac00ca9a3b000000001976a91430dcb7d3cc3a4733d0e478c66835a0946cfcfacf" +
-  "88ac00000000";
+  '01000000019bc5c112bd21fd699f301ba70237ee07c924a53bfdd1e21f7c2996ee0b907bac' +
+  '0100000048473044022063217b3fbff910185d1b3caf4fa6d248d0c5cd27ea33729c6cdc2b' +
+  '99b17049580220280664029acc5259de8249d74175f16ec601b228f6e19fc8bcf3468af9ce' +
+  '90aa01ffffffff026a55cd1d000000001976a914dcd555e41658449bc79d13d561f7f85dff' +
+  'e76d6e88ac00ca9a3b000000001976a91430dcb7d3cc3a4733d0e478c66835a0946cfcfacf' +
+  '88ac00000000';
 
-const EXPECTED_TXID =
-  "b7953d1d04a5909fe73e939fe3150054b4237f0d9f21dc118cd8df823019f4fc";
-const RECEIVE_ADDRESS = "FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek";
+const EXPECTED_TXID = 'b7953d1d04a5909fe73e939fe3150054b4237f0d9f21dc118cd8df823019f4fc';
+const RECEIVE_ADDRESS = 'FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek';
 const TEN_FAIR = 10n * UNITS_PER_COIN;
 const BIRTH_BLOCK_HEIGHT = 1234;
 
@@ -99,18 +98,11 @@ function deliverThroughRescanPipeline(
   };
 
   // (4) Credit the wallet.
-  applyTransactionToWallet(
-    utxoSet,
-    tx,
-    displayTxid,
-    ownsAddress,
-    MAINNET,
-    confirmation,
-  );
+  applyTransactionToWallet(utxoSet, tx, displayTxid, ownsAddress, MAINNET, confirmation);
 }
 
-describe("historical rescan discovers a pre-filter payment", () => {
-  test("a restored wallet finds the 10 FAIR sent to FAHUJ… and credits it once", () => {
+describe('historical rescan discovers a pre-filter payment', () => {
+  test('a restored wallet finds the 10 FAIR sent to FAHUJ… and credits it once', () => {
     const rawTx = hexToBytes(RAW_TX_HEX);
     const utxoSet = new UTXOSet();
     const owns = (a: string): boolean => a === RECEIVE_ADDRESS;

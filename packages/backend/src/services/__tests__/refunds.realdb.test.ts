@@ -5,7 +5,7 @@
  * payer sent their money twice has no reason to report it, and nothing reverses
  * the second automatically. Most of what follows is about that.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 const providerCalls: { fn: string; request: Record<string, unknown> }[] = [];
 let refundCounter = 0;
@@ -18,35 +18,35 @@ let refundThrows: Error | null = null;
  * reject one days later — and until `createRefund` read this field at all, both
  * of them were stored as successes.
  */
-let refundState: "succeeded" | "pending" | "failed" = "succeeded";
+let refundState: 'succeeded' | 'pending' | 'failed' = 'succeeded';
 
 const fakeProvider = {
-  id: "stripe" as const,
+  id: 'stripe' as const,
   refund: async (request: Record<string, unknown>) => {
-    providerCalls.push({ fn: "refund", request });
+    providerCalls.push({ fn: 'refund', request });
     if (refundThrows) throw refundThrows;
     refundCounter += 1;
     return {
       providerObjectId: `re_stripe_${String(refundCounter)}`,
-      status: refundState === "succeeded" ? "partially_refunded" : "settled",
+      status: refundState === 'succeeded' ? 'partially_refunded' : 'settled',
       state: refundState,
-      ...(refundState === "failed" ? { failureCode: "insufficient_funds" } : {}),
+      ...(refundState === 'failed' ? { failureCode: 'insufficient_funds' } : {}),
     };
   },
   createPayment: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   capture: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   cancel: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   getStatus: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   verifyEvent: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
 };
 
@@ -54,11 +54,11 @@ const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import("../providers/registry");
+} = await import('../providers/registry');
 let useFake = false;
 
-mock.module("../providers/registry", () => ({
-  resolveProvider: (id: "stripe") => (useFake ? fakeProvider : realResolveProvider(id)),
+mock.module('../providers/registry', () => ({
+  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
   resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
   resetProviders: () => {
     realResetProviders();
@@ -70,22 +70,18 @@ const {
   PaymentNotRefundableError,
   RefundExceedsRemainingError,
   remainingRefundable,
-} = await import("../refunds/refundService");
-const { ProviderError } = await import("../providers/provider");
+} = await import('../refunds/refundService');
+const { ProviderError } = await import('../providers/provider');
 const { listRefundsForIntent, sumSucceededRefunds } = await import(
-  "../../db/refunds/refundRepository"
+  '../../db/refunds/refundRepository'
 );
-const {
-  findIntentByPublicId,
-  insertPaymentIntent,
-  linkProviderObject,
-  updateIntentState,
-} = await import("../../db/payments/paymentIntentRepository");
+const { findIntentByPublicId, insertPaymentIntent, linkProviderObject, updateIntentState } =
+  await import('../../db/payments/paymentIntentRepository');
 const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
-  "../../__tests__/helpers/gatewayTestDatabase"
+  '../../__tests__/helpers/gatewayTestDatabase'
 );
-const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
-const { uuidv7 } = await import("@oxy.so/db");
+const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
+const { uuidv7 } = await import('@oxy.so/db');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
@@ -97,75 +93,75 @@ async function settledIntent(amount: string) {
   const intent = await insertPaymentIntent(gatewayDb(), {
     publicId: `pi_refundable_${String(counter)}`,
     merchantId: merchant.id,
-    rail: "card",
+    rail: 'card',
     amount,
-    currency: "EUR",
+    currency: 'EUR',
     network: null,
     address: null,
-    provider: "stripe",
-    clientSecret: "cs_x",
+    provider: 'stripe',
+    clientSecret: 'cs_x',
     idempotencyKey: uuidv7(),
     metadata: {},
     expiresAt: new Date(Date.now() + 900_000),
   });
-  if (!intent) throw new Error("could not seed the intent");
-  await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_${String(counter)}`);
+  if (!intent) throw new Error('could not seed the intent');
+  await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_${String(counter)}`);
   const settled = await updateIntentState(gatewayDb(), intent.id, {
-    from: "created",
-    status: "settled",
+    from: 'created',
+    status: 'settled',
   });
-  return settled.kind === "updated" ? settled.row : intent;
+  return settled.kind === 'updated' ? settled.row : intent;
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
     useFake = true;
     merchant = await seedMerchant({
-      webhookUrl: "https://merchant.example/hooks",
-      webhookSecret: "whsec_x",
+      webhookUrl: 'https://merchant.example/hooks',
+      webhookSecret: 'whsec_x',
     });
   });
 
   beforeEach(() => {
     providerCalls.length = 0;
     refundThrows = null;
-    refundState = "succeeded";
+    refundState = 'succeeded';
   });
 
   afterAll(() => {
     useFake = false;
   });
 
-  test("refunds part of a payment and moves it to partially_refunded", async () => {
-    const intent = await settledIntent("10000");
+  test('refunds part of a payment and moves it to partially_refunded', async () => {
+    const intent = await settledIntent('10000');
     const { refund, created, paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_partial",
-      amount: "3000",
+      externalRef: 'order_partial',
+      amount: '3000',
     });
 
     expect(created).toBe(true);
-    expect(refund.status).toBe("succeeded");
-    expect(paymentStatus).toBe("partially_refunded");
+    expect(refund.status).toBe('succeeded');
+    expect(paymentStatus).toBe('partially_refunded');
     expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
-      "partially_refunded",
+      'partially_refunded',
     );
   });
 
-  test("a refund exhausting the payment moves it to refunded", async () => {
-    const intent = await settledIntent("10000");
+  test('a refund exhausting the payment moves it to refunded', async () => {
+    const intent = await settledIntent('10000');
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_full",
-      amount: "10000",
+      externalRef: 'order_full',
+      amount: '10000',
     });
-    expect(paymentStatus).toBe("refunded");
+    expect(paymentStatus).toBe('refunded');
   });
 
   /**
@@ -177,26 +173,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * `LEGAL_SOURCES` allows `refund_full` from and `refund_partial` from not at
    * all.
    */
-  test("two partial refunds reach refunded, from the sum rather than a counter", async () => {
-    const first = await settledIntent("10000");
+  test('two partial refunds reach refunded, from the sum rather than a counter', async () => {
+    const first = await settledIntent('10000');
     await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent: first,
-      externalRef: "order_two_a",
-      amount: "4000",
+      externalRef: 'order_two_a',
+      amount: '4000',
     });
     const reread = await findIntentByPublicId(gatewayDb(), first.publicId);
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent: reread!,
-      externalRef: "order_two_b",
-      amount: "6000",
+      externalRef: 'order_two_b',
+      amount: '6000',
     });
 
-    expect(paymentStatus).toBe("refunded");
-    expect(await sumSucceededRefunds(gatewayDb(), first.id)).toBe("10000");
+    expect(paymentStatus).toBe('refunded');
+    expect(await sumSucceededRefunds(gatewayDb(), first.id)).toBe('10000');
     expect(await listRefundsForIntent(gatewayDb(), first.id)).toHaveLength(2);
   });
 
@@ -204,37 +200,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * THE constraint this whole domain is built around. A retried refund
    * submission converges rather than sending the payer their money again.
    */
-  test("a repeated refund converges and does not send money twice", async () => {
-    const intent = await settledIntent("10000");
+  test('a repeated refund converges and does not send money twice', async () => {
+    const intent = await settledIntent('10000');
     const first = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_dup",
-      amount: "2500",
+      externalRef: 'order_dup',
+      amount: '2500',
     });
     providerCalls.length = 0;
     const second = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_dup",
-      amount: "2500",
+      externalRef: 'order_dup',
+      amount: '2500',
     });
 
     expect(second.created).toBe(false);
     expect(second.refund.id).toBe(first.refund.id);
-    expect(providerCalls.filter((call) => call.fn === "refund")).toHaveLength(0);
+    expect(providerCalls.filter((call) => call.fn === 'refund')).toHaveLength(0);
   });
 
-  test("refuses more than the payment has left", async () => {
-    const intent = await settledIntent("10000");
+  test('refuses more than the payment has left', async () => {
+    const intent = await settledIntent('10000');
     await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_left_a",
-      amount: "8000",
+      externalRef: 'order_left_a',
+      amount: '8000',
     });
     const reread = await findIntentByPublicId(gatewayDb(), intent.publicId);
 
@@ -243,12 +239,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
         merchantId: merchant.id,
         environment: merchant.environment,
         intent: reread!,
-        externalRef: "order_left_b",
-        amount: "2001",
+        externalRef: 'order_left_b',
+        amount: '2001',
       }),
     ).rejects.toThrow(RefundExceedsRemainingError);
 
-    expect(await remainingRefundable(reread!)).toBe("2000");
+    expect(await remainingRefundable(reread!)).toBe('2000');
   });
 
   /**
@@ -257,11 +253,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * ref, permanently, for a refund that never happened.
    */
   test("a failed refund does not consume the payment's remaining balance", async () => {
-    const intent = await settledIntent("10000");
+    const intent = await settledIntent('10000');
     refundThrows = new ProviderError({
-      provider: "stripe",
-      stage: "refund",
-      message: "charge already refunded",
+      provider: 'stripe',
+      stage: 'refund',
+      message: 'charge already refunded',
       retryable: false,
     });
 
@@ -269,14 +265,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_failed",
-      amount: "9000",
+      externalRef: 'order_failed',
+      amount: '9000',
     });
-    expect(refund.status).toBe("failed");
+    expect(refund.status).toBe('failed');
 
     // The whole amount is still refundable.
-    expect(await remainingRefundable(intent)).toBe("10000");
-    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+    expect(await remainingRefundable(intent)).toBe('10000');
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe('0');
   });
 
   /**
@@ -284,12 +280,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * Marking it failed would tell the merchant the payer's money is not coming
    * when the next attempt would have sent it.
    */
-  test("rethrows a retryable provider failure and leaves the refund pending", async () => {
-    const intent = await settledIntent("10000");
+  test('rethrows a retryable provider failure and leaves the refund pending', async () => {
+    const intent = await settledIntent('10000');
     refundThrows = new ProviderError({
-      provider: "stripe",
-      stage: "refund",
-      message: "the acquirer timed out",
+      provider: 'stripe',
+      stage: 'refund',
+      message: 'the acquirer timed out',
       retryable: true,
     });
 
@@ -298,13 +294,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
         merchantId: merchant.id,
         environment: merchant.environment,
         intent,
-        externalRef: "order_retryable",
-        amount: "1000",
+        externalRef: 'order_retryable',
+        amount: '1000',
       }),
     ).rejects.toThrow(ProviderError);
 
     const rows = await listRefundsForIntent(gatewayDb(), intent.id);
-    expect(rows[0]?.status).toBe("pending");
+    expect(rows[0]?.status).toBe('pending');
 
     /**
      * ...and the pending amount IS reserved against the balance.
@@ -320,8 +316,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
      * The payment's own status is still derived from succeeded rows only, which
      * the `sumSucceededRefunds` assertion in the failed-refund case above pins.
      */
-    expect(await remainingRefundable(intent)).toBe("9000");
-    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+    expect(await remainingRefundable(intent)).toBe('9000');
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe('0');
   });
 
   /**
@@ -334,25 +330,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * One that then failed left a payment permanently claiming money had gone
    * back that never did.
    */
-  test("a pending refund is stored pending and does not move the payment", async () => {
-    const intent = await settledIntent("10000");
-    refundState = "pending";
+  test('a pending refund is stored pending and does not move the payment', async () => {
+    const intent = await settledIntent('10000');
+    refundState = 'pending';
 
     const { refund, paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_pending",
-      amount: "4000",
+      externalRef: 'order_pending',
+      amount: '4000',
     });
 
-    expect(refund.status).toBe("pending");
-    expect(paymentStatus).toBe("settled");
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect(refund.status).toBe('pending');
+    expect(paymentStatus).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
     // Nothing has come back...
-    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe("0");
+    expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe('0');
     // ...and the amount is reserved, so a second refund cannot exceed the total.
-    expect(await remainingRefundable(intent)).toBe("6000");
+    expect(await remainingRefundable(intent)).toBe('6000');
     /**
      * The provider's id is recorded even though the money has not moved. It is
      * the ONLY handle a later `refund.updated` can be matched on, so a pending
@@ -366,25 +362,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * A refund the provider reports as FAILED is not money that came back
    * either, and the payment must not move.
    */
-  test("a provider-reported failure is stored failed, with its reason", async () => {
-    const intent = await settledIntent("10000");
-    refundState = "failed";
+  test('a provider-reported failure is stored failed, with its reason', async () => {
+    const intent = await settledIntent('10000');
+    refundState = 'failed';
 
     const { refund, paymentStatus } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_reported_failure",
-      amount: "4000",
+      externalRef: 'order_reported_failure',
+      amount: '4000',
     });
 
-    expect(refund.status).toBe("failed");
-    expect(refund.failureCode).toBe("insufficient_funds");
-    expect(paymentStatus).toBe("settled");
+    expect(refund.status).toBe('failed');
+    expect(refund.failureCode).toBe('insufficient_funds');
+    expect(paymentStatus).toBe('settled');
     // A failed refund reserves nothing: the whole amount is still refundable,
     // so a retry under a new reference is not blocked by a refund that never
     // happened.
-    expect(await remainingRefundable(intent)).toBe("10000");
+    expect(await remainingRefundable(intent)).toBe('10000');
   });
 
   /**
@@ -399,12 +395,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * provider key is derived from the row's own public id, so the call either
    * makes the refund or returns the one it already made.
    */
-  test("finishes an interrupted refund on the retry, under the same provider key", async () => {
-    const intent = await settledIntent("10000");
+  test('finishes an interrupted refund on the retry, under the same provider key', async () => {
+    const intent = await settledIntent('10000');
     refundThrows = new ProviderError({
-      provider: "stripe",
-      stage: "refund",
-      message: "the acquirer timed out",
+      provider: 'stripe',
+      stage: 'refund',
+      message: 'the acquirer timed out',
       retryable: true,
     });
 
@@ -413,14 +409,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
         merchantId: merchant.id,
         environment: merchant.environment,
         intent,
-        externalRef: "order_resume",
-        amount: "3000",
+        externalRef: 'order_resume',
+        amount: '3000',
       }),
     ).rejects.toThrow(ProviderError);
 
     const [pending] = await listRefundsForIntent(gatewayDb(), intent.id);
-    if (!pending) throw new Error("the interrupted attempt left no row to resume");
-    expect(pending.status).toBe("pending");
+    if (!pending) throw new Error('the interrupted attempt left no row to resume');
+    expect(pending.status).toBe('pending');
     expect(pending.providerObjectId).toBeNull();
 
     // The provider is reachable again, and the merchant retries the same ref.
@@ -430,18 +426,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_resume",
-      amount: "3000",
+      externalRef: 'order_resume',
+      amount: '3000',
     });
 
     expect(created).toBe(true);
-    expect(refund.status).toBe("succeeded");
+    expect(refund.status).toBe('succeeded');
     expect(refund.publicId).toBe(pending.publicId);
     // ONE row, not two.
     expect(await listRefundsForIntent(gatewayDb(), intent.id)).toHaveLength(1);
     // ...and the SAME provider key the interrupted attempt used, which is what
     // makes the resume a completion rather than a second refund.
-    const call = providerCalls.find((entry) => entry.fn === "refund");
+    const call = providerCalls.find((entry) => entry.fn === 'refund');
     expect(call?.request.idempotencyKey).toBe(`re:${refund.publicId}`);
   });
 
@@ -450,14 +446,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * asked about again — even when the remaining balance no longer accommodates
    * it, which it will not, since this very refund consumed it.
    */
-  test("a completed refund is answered from history, with no second call", async () => {
-    const intent = await settledIntent("10000");
+  test('a completed refund is answered from history, with no second call', async () => {
+    const intent = await settledIntent('10000');
     const first = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_history",
-      amount: "10000",
+      externalRef: 'order_history',
+      amount: '10000',
     });
     providerCalls.length = 0;
 
@@ -465,27 +461,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_history",
-      amount: "10000",
+      externalRef: 'order_history',
+      amount: '10000',
     });
 
     expect(replay.created).toBe(false);
     expect(replay.refund.id).toBe(first.refund.id);
-    expect(providerCalls.filter((entry) => entry.fn === "refund")).toHaveLength(0);
+    expect(providerCalls.filter((entry) => entry.fn === 'refund')).toHaveLength(0);
   });
 
-  test("refuses to refund a payment that never settled", async () => {
+  test('refuses to refund a payment that never settled', async () => {
     counter += 1;
     const intent = await insertPaymentIntent(gatewayDb(), {
       publicId: `pi_unsettled_${String(counter)}`,
       merchantId: merchant.id,
-      rail: "card",
-      amount: "10000",
-      currency: "EUR",
+      rail: 'card',
+      amount: '10000',
+      currency: 'EUR',
       network: null,
       address: null,
-      provider: "stripe",
-      clientSecret: "cs_x",
+      provider: 'stripe',
+      clientSecret: 'cs_x',
       idempotencyKey: uuidv7(),
       metadata: {},
       expiresAt: new Date(Date.now() + 900_000),
@@ -496,8 +492,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
         merchantId: merchant.id,
         environment: merchant.environment,
         intent: intent!,
-        externalRef: "order_unsettled",
-        amount: "1000",
+        externalRef: 'order_unsettled',
+        amount: '1000',
       }),
     ).rejects.toThrow(PaymentNotRefundableError);
   });
@@ -508,18 +504,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * whose response was lost into a second real refund.
    */
   test("derives the provider idempotency key from the gateway's refund id", async () => {
-    const intent = await settledIntent("10000");
+    const intent = await settledIntent('10000');
     const { refund } = await createRefund({
       merchantId: merchant.id,
       environment: merchant.environment,
       intent,
-      externalRef: "order_key",
-      amount: "1000",
+      externalRef: 'order_key',
+      amount: '1000',
     });
 
-    const call = providerCalls.find((entry) => entry.fn === "refund");
+    const call = providerCalls.find((entry) => entry.fn === 'refund');
     expect(call?.request.idempotencyKey).toBe(`re:${refund.publicId}`);
-    expect(call?.request.amount).toEqual({ amount: "1000", currency: "EUR" });
+    expect(call?.request.amount).toEqual({ amount: '1000', currency: 'EUR' });
   });
 
   /**
@@ -528,17 +524,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("refunds", () => {
    * a minor-unit currency reaches, and where letting one unit through matters
    * most.
    */
-  test("compares a refund against the remaining balance without rounding", async () => {
+  test('compares a refund against the remaining balance without rounding', async () => {
     // `Number` rounds both of these to the same float, so a float comparison
     // says the over-refund is not larger and lets it through.
-    const intent = await settledIntent("9007199254740992");
+    const intent = await settledIntent('9007199254740992');
     await expect(
       createRefund({
         merchantId: merchant.id,
         environment: merchant.environment,
         intent,
-        externalRef: "order_big",
-        amount: "9007199254740993",
+        externalRef: 'order_big',
+        amount: '9007199254740993',
       }),
     ).rejects.toThrow(RefundExceedsRemainingError);
   });

@@ -27,12 +27,7 @@ import type { CurrencyCode } from './money';
 export type CapabilityStatus = 'active' | 'pending' | 'inactive';
 
 /** Where one settlement stands. */
-export type TransferStatus =
-  | 'pending'
-  | 'paid'
-  | 'partially_reversed'
-  | 'reversed'
-  | 'failed';
+export type TransferStatus = 'pending' | 'paid' | 'partially_reversed' | 'reversed' | 'failed';
 
 /** Where one reversal of a settlement stands. */
 export type TransferReversalStatus = 'pending' | 'succeeded' | 'failed';

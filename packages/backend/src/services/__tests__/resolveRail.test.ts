@@ -9,11 +9,7 @@
  */
 import { describe, expect, test } from 'bun:test';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
-import {
-  NetworkMismatchError,
-  RailMismatchError,
-  resolveRail,
-} from '../createIntent';
+import { NetworkMismatchError, RailMismatchError, resolveRail } from '../createIntent';
 
 const MERCHANT = { id: 'm_1', network: 'testnet' } as unknown as MerchantRow;
 
@@ -40,7 +36,7 @@ describe('resolveRail', () => {
 
   test('the card rail cannot settle in FAIR', () => {
     expect(() => resolveRail(MERCHANT, { rail: 'card', currency: 'FAIR' })).toThrow(
-      RailMismatchError
+      RailMismatchError,
     );
   });
 
@@ -51,7 +47,7 @@ describe('resolveRail', () => {
    */
   test('the faircoin rail cannot settle in a fiat currency', () => {
     expect(() =>
-      resolveRail(MERCHANT, { rail: 'faircoin', currency: 'EUR', network: 'testnet' })
+      resolveRail(MERCHANT, { rail: 'faircoin', currency: 'EUR', network: 'testnet' }),
     ).toThrow(RailMismatchError);
   });
 
@@ -67,7 +63,7 @@ describe('resolveRail', () => {
    */
   test('the card rail refuses a network rather than ignoring it', () => {
     expect(() =>
-      resolveRail(MERCHANT, { rail: 'card', currency: 'EUR', network: 'testnet' })
+      resolveRail(MERCHANT, { rail: 'card', currency: 'EUR', network: 'testnet' }),
     ).toThrow(RailMismatchError);
   });
 

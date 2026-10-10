@@ -34,7 +34,7 @@ function murmurHash3(data: Uint8Array, seed: number): number {
   const c1 = 0xcc9e2d51;
   const c2 = 0x1b873593;
   const length = data.length;
-  const roundedEnd = (length & ~3); // = length - (length % 4)
+  const roundedEnd = length & ~3; // = length - (length % 4)
 
   let h1 = seed >>> 0;
 
@@ -109,7 +109,8 @@ export class BloomFilter {
    * Seed = (hashIndex * 0xFBA4C795 + tweak) mod 2^32
    */
   private hash(hashIndex: number, data: Uint8Array): number {
-    const seed = ((Math.imul(hashIndex, MURMURHASH_SEED_MULTIPLIER) + this.tweak) & 0xffffffff) >>> 0;
+    const seed =
+      ((Math.imul(hashIndex, MURMURHASH_SEED_MULTIPLIER) + this.tweak) & 0xffffffff) >>> 0;
     return murmurHash3(data, seed) % (this.data.length * 8);
   }
 
@@ -194,7 +195,7 @@ export class BloomFilter {
     // Optimal number of hash functions:
     //   k = filterSizeBytes * 8 / n * LN2
     const numHashFuncs = Math.min(
-      Math.max(Math.round((filterSize * 8 / n) * LN2), 1),
+      Math.max(Math.round(((filterSize * 8) / n) * LN2), 1),
       MAX_HASH_FUNCS,
     );
 
@@ -205,7 +206,8 @@ export class BloomFilter {
       (tweakBytes[0] |
         (tweakBytes[1] << 8) |
         (tweakBytes[2] << 16) |
-        ((tweakBytes[3] << 24) >>> 0)) >>> 0;
+        ((tweakBytes[3] << 24) >>> 0)) >>>
+      0;
 
     const filter = new BloomFilter(filterSize, numHashFuncs, tweak, BLOOM_UPDATE_ALL);
 

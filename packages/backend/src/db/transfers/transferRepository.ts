@@ -14,12 +14,7 @@ import { transfers } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
-export type TransferStatus =
-  | 'pending'
-  | 'paid'
-  | 'partially_reversed'
-  | 'reversed'
-  | 'failed';
+export type TransferStatus = 'pending' | 'paid' | 'partially_reversed' | 'reversed' | 'failed';
 
 export interface TransferRow {
   readonly id: string;
@@ -88,7 +83,7 @@ export interface InsertTransferParams {
  */
 export async function insertTransfer(
   db: DatabaseOrTransaction,
-  params: InsertTransferParams
+  params: InsertTransferParams,
 ): Promise<TransferRow | null> {
   try {
     const [row] = await db
@@ -126,7 +121,7 @@ export async function insertTransfer(
 export async function markTransferPaid(
   db: DatabaseOrTransaction,
   transferId: string,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<TransferRow | null> {
   const [row] = await db
     .update(transfers)
@@ -140,7 +135,7 @@ export async function markTransferPaid(
 export async function markTransferFailed(
   db: DatabaseOrTransaction,
   transferId: string,
-  failureMessage: string
+  failureMessage: string,
 ): Promise<TransferRow | null> {
   const [row] = await db
     .update(transfers)
@@ -196,7 +191,7 @@ export class TransferReversalTooLargeError extends Error {
 export async function applyTransferReversal(
   db: DatabaseOrTransaction,
   transferId: string,
-  total: string
+  total: string,
 ): Promise<TransferRow | null> {
   const [current] = await db
     .select({ amount: transfers.amount })
@@ -225,8 +220,8 @@ export async function applyTransferReversal(
         // Out-of-order provider events are ordinary. A `reversed` transfer must
         // not be walked back to `partially_reversed` by a late delivery of the
         // first leg.
-        sql`${total}::numeric >= ${transfers.amountReversed}::numeric`
-      )
+        sql`${total}::numeric >= ${transfers.amountReversed}::numeric`,
+      ),
     )
     .returning(TRANSFER_COLUMNS);
   return row ? toRow(row) : null;
@@ -247,7 +242,7 @@ export async function applyTransferReversal(
  */
 export async function sumCommittedTransfers(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<string> {
   const [row] = await db
     .select({
@@ -255,7 +250,7 @@ export async function sumCommittedTransfers(
     })
     .from(transfers)
     .where(
-      and(eq(transfers.paymentIntentId, paymentIntentId), sql`${transfers.status} <> 'failed'`)
+      and(eq(transfers.paymentIntentId, paymentIntentId), sql`${transfers.status} <> 'failed'`),
     );
   return row?.total ?? '0';
 }
@@ -264,7 +259,7 @@ export async function sumCommittedTransfers(
 export async function findTransferByExternalRef(
   db: DatabaseOrTransaction,
   merchantId: string,
-  externalRef: string
+  externalRef: string,
 ): Promise<TransferRow | null> {
   const [row] = await db
     .select(TRANSFER_COLUMNS)
@@ -277,7 +272,7 @@ export async function findTransferByExternalRef(
 export async function findTransferByPublicId(
   db: DatabaseOrTransaction,
   merchantId: string,
-  publicId: string
+  publicId: string,
 ): Promise<TransferRow | null> {
   const [row] = await db
     .select(TRANSFER_COLUMNS)
@@ -290,21 +285,19 @@ export async function findTransferByPublicId(
 export async function findTransferByProviderObject(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<TransferRow | null> {
   const [row] = await db
     .select(TRANSFER_COLUMNS)
     .from(transfers)
-    .where(
-      and(eq(transfers.provider, provider), eq(transfers.providerObjectId, providerObjectId))
-    );
+    .where(and(eq(transfers.provider, provider), eq(transfers.providerObjectId, providerObjectId)));
   return row ? toRow(row) : null;
 }
 
 /** "What did this payment settle?" — the reconciliation read. */
 export async function listTransfersForIntent(
   db: DatabaseOrTransaction,
-  paymentIntentId: string
+  paymentIntentId: string,
 ): Promise<readonly TransferRow[]> {
   const rows = await db
     .select(TRANSFER_COLUMNS)

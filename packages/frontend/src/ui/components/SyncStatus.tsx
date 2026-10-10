@@ -2,9 +2,9 @@
  * Sync status indicator component.
  */
 
-import { useMemo } from "react";
-import { View, Text } from "react-native";
-import { t } from "../../i18n";
+import { useMemo } from 'react';
+import { View, Text } from 'react-native';
+import { t } from '../../i18n';
 
 interface SyncStatusProps {
   progress: number;
@@ -14,18 +14,18 @@ interface SyncStatusProps {
   networkStatus: string;
 }
 
-type SyncState = "synced" | "syncing" | "disconnected";
+type SyncState = 'synced' | 'syncing' | 'disconnected';
 
 function getSyncState(isSyncing: boolean, connectedPeers: number): SyncState {
-  if (connectedPeers === 0) return "disconnected";
-  if (isSyncing) return "syncing";
-  return "synced";
+  if (connectedPeers === 0) return 'disconnected';
+  if (isSyncing) return 'syncing';
+  return 'synced';
 }
 
 const DOT_COLORS: Record<SyncState, string> = {
-  synced: "bg-primary",
-  syncing: "bg-yellow-400",
-  disconnected: "bg-red-400",
+  synced: 'bg-primary',
+  syncing: 'bg-yellow-400',
+  disconnected: 'bg-red-400',
 };
 
 export function SyncStatus({
@@ -43,11 +43,11 @@ export function SyncStatus({
   const dotColor = DOT_COLORS[syncState];
 
   const statusLabel = useMemo(() => {
-    if (syncState === "syncing") {
-      return t("syncStatus.syncing", { progress: Math.round(progress) });
+    if (syncState === 'syncing') {
+      return t('syncStatus.syncing', { progress: Math.round(progress) });
     }
-    if (syncState === "synced") {
-      return t("syncStatus.synced");
+    if (syncState === 'synced') {
+      return t('syncStatus.synced');
     }
     return networkStatus;
   }, [syncState, progress, networkStatus]);
@@ -66,8 +66,8 @@ export function SyncStatus({
         {/* Peers */}
         <Text className="text-muted-foreground text-xs">
           {connectedPeers === 1
-            ? t("peers.peerCountLabel.one", { count: connectedPeers })
-            : t("peers.peerCountLabel.other", { count: connectedPeers })}
+            ? t('peers.peerCountLabel.one', { count: connectedPeers })
+            : t('peers.peerCountLabel.other', { count: connectedPeers })}
         </Text>
       </View>
 
@@ -84,7 +84,7 @@ export function SyncStatus({
       {/* Chain height */}
       {chainHeight > 0 ? (
         <Text className="text-muted-foreground text-xs mt-1">
-          {t("syncStatus.blockHeight", { height: chainHeight.toLocaleString() })}
+          {t('syncStatus.blockHeight', { height: chainHeight.toLocaleString() })}
         </Text>
       ) : null}
     </View>

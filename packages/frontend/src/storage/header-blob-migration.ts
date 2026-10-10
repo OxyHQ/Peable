@@ -12,15 +12,13 @@
  */
 
 /** SQLite type name that means the table has already been converted. */
-const BLOB_TYPE = "BLOB";
+const BLOB_TYPE = 'BLOB';
 
 /**
  * Whether a `block_headers` table needs converting, given the declared type of
  * its `hash` column (`undefined` when the table does not exist yet).
  */
-export function needsHeaderBlobMigration(
-  hashColumnType: string | undefined,
-): boolean {
+export function needsHeaderBlobMigration(hashColumnType: string | undefined): boolean {
   if (hashColumnType === undefined) return false;
   return hashColumnType.toUpperCase() !== BLOB_TYPE;
 }

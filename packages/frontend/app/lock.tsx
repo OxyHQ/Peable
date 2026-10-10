@@ -8,7 +8,7 @@
  * is shown if (and only if) the app is actually locked.
  */
 
-import { Redirect } from "expo-router";
+import { Redirect } from 'expo-router';
 
 export default function LockScreen() {
   return <Redirect href="/(tabs)" />;

@@ -13,11 +13,8 @@
  * OS removes this ongoing notification automatically when the process ends.
  */
 
-import { useWalletStore } from "../wallet/wallet-store";
-import {
-  presentSyncNotification,
-  dismissSyncNotification,
-} from "./notifications";
+import { useWalletStore } from '../wallet/wallet-store';
+import { presentSyncNotification, dismissSyncNotification } from './notifications';
 
 let unsubscribe: (() => void) | null = null;
 /** Last percent pushed to the notification; -1 means "no notification shown". */
@@ -56,10 +53,7 @@ export function startSyncNotifier(): void {
       // Refresh immediately on a percent change; also refresh on height ticks so
       // the notification keeps moving while the rounded percent is unchanged —
       // throttled so a fast header sync doesn't re-post the tray every block.
-      if (
-        percentChanged ||
-        (heightChanged && now - lastUpdateAt >= HEIGHT_UPDATE_THROTTLE_MS)
-      ) {
+      if (percentChanged || (heightChanged && now - lastUpdateAt >= HEIGHT_UPDATE_THROTTLE_MS)) {
         shownProgress = state.syncProgress;
         shownHeight = state.chainHeight;
         lastUpdateAt = now;

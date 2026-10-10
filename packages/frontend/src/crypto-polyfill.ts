@@ -8,18 +8,18 @@
  * at module evaluation time. If crypto doesn't exist then, it's permanently undefined.
  */
 
-import { getRandomValues } from "expo-crypto";
+import { getRandomValues } from 'expo-crypto';
 
-if (typeof globalThis.crypto === "undefined") {
-  Object.defineProperty(globalThis, "crypto", {
+if (typeof globalThis.crypto === 'undefined') {
+  Object.defineProperty(globalThis, 'crypto', {
     value: { getRandomValues },
     writable: true,
     configurable: true,
     enumerable: true,
   });
-} else if (typeof globalThis.crypto.getRandomValues !== "function") {
+} else if (typeof globalThis.crypto.getRandomValues !== 'function') {
   const existing = globalThis.crypto;
-  Object.defineProperty(globalThis, "crypto", {
+  Object.defineProperty(globalThis, 'crypto', {
     value: Object.assign(existing, { getRandomValues }),
     writable: true,
     configurable: true,

@@ -1,4 +1,4 @@
-import type { oxy as OxyInstance } from "../../oxy";
+import type { oxy as OxyInstance } from '../../oxy';
 
 type Oxy = typeof OxyInstance;
 type Overrides = { [K in keyof Oxy]?: Partial<Record<keyof Oxy[K], unknown>> };
@@ -11,7 +11,7 @@ type Overrides = { [K in keyof Oxy]?: Partial<Record<keyof Oxy[K], unknown>> };
  */
 export function overrideOxy(real: Oxy, overrides: Overrides): Oxy {
   const bindTo = (target: object, value: unknown) =>
-    typeof value === "function" ? value.bind(target) : value;
+    typeof value === 'function' ? value.bind(target) : value;
   return new Proxy(real, {
     get(target, prop) {
       const replaced = overrides[prop as keyof Oxy] as Record<PropertyKey, unknown> | undefined;

@@ -12,11 +12,12 @@ afterEach(() => {
 });
 
 function explorerReturns(addressInfo: unknown): void {
-  globalThis.fetch = mock(async () =>
-    new Response(JSON.stringify({ addressInfo }), {
-      status: 200,
-      headers: { 'content-type': 'application/json' },
-    }),
+  globalThis.fetch = mock(
+    async () =>
+      new Response(JSON.stringify({ addressInfo }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      }),
   ) as unknown as typeof fetch;
 }
 
@@ -24,7 +25,9 @@ describe('fetchAddressInfo', () => {
   test('returns the outputs an address holds, in the wallet"s own shape', async () => {
     explorerReturns({
       txCount: 2,
-      utxos: [{ txid: 'ab'.repeat(32), outputIndex: 1, script: P2PKH, satoshis: 250_000, height: 900 }],
+      utxos: [
+        { txid: 'ab'.repeat(32), outputIndex: 1, script: P2PKH, satoshis: 250_000, height: 900 },
+      ],
     });
 
     const info = await fetchAddressInfo([ADDRESS], 'mainnet');
@@ -41,7 +44,9 @@ describe('fetchAddressInfo', () => {
   test('a mempool output is not confirmed', async () => {
     explorerReturns({
       txCount: 1,
-      utxos: [{ txid: 'cd'.repeat(32), outputIndex: 0, script: P2PKH, satoshis: 10_000, height: 0 }],
+      utxos: [
+        { txid: 'cd'.repeat(32), outputIndex: 0, script: P2PKH, satoshis: 10_000, height: 0 },
+      ],
     });
 
     const info = await fetchAddressInfo([ADDRESS], 'mainnet');
@@ -73,7 +78,9 @@ describe('fetchAddressInfo', () => {
   // A freshly derived address is exactly this until someone pays it, and
   // gap-limit discovery has to tell "never used" from "not asked about".
   test('an address the chain has never seen answers zero, not absent', async () => {
-    globalThis.fetch = mock(async () => new Response('not found', { status: 404 })) as unknown as typeof fetch;
+    globalThis.fetch = mock(
+      async () => new Response('not found', { status: 404 }),
+    ) as unknown as typeof fetch;
 
     const info = await fetchAddressInfo([ADDRESS], 'mainnet');
 

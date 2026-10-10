@@ -7,12 +7,12 @@
  * color.
  */
 
-import { useCallback } from "react";
-import { StyleSheet, View } from "react-native";
-import type { BottomTabBarProps } from "expo-router/tabs";
-import { TabBar, TabBarButton } from "@oxy.so/bloom/tab-bar";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { WalletTabIcon, walletTabLabel, type WalletTabName } from "./tabs";
+import { useCallback } from 'react';
+import { StyleSheet, View } from 'react-native';
+import type { BottomTabBarProps } from 'expo-router/tabs';
+import { TabBar, TabBarButton } from '@oxy.so/bloom/tab-bar';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { WalletTabIcon, walletTabLabel, type WalletTabName } from './tabs';
 
 /**
  * Ceiling on the pill's width. Bloom sizes the bar from the window, so on a
@@ -47,7 +47,11 @@ export function WalletTabBar({
 
   return (
     <View style={styles.host}>
-      <TabBar activeIndex={activeIndex} onIndexChange={handleIndexChange} maxWidth={TAB_BAR_MAX_WIDTH}>
+      <TabBar
+        activeIndex={activeIndex}
+        onIndexChange={handleIndexChange}
+        maxWidth={TAB_BAR_MAX_WIDTH}
+      >
         {tabs.map((name, index) => (
           <TabBarButton
             key={name}
@@ -57,8 +61,17 @@ export function WalletTabBar({
               label: walletTabLabel(name),
               // Pre-colored with the bar's own default tints (Bloom's
               // `activeTint` is `text`, `inactiveTint` is `textSecondary`).
-              icon: <WalletTabIcon name={name} active={false} color={theme.colors.textSecondary} size={ICON_SIZE} />,
-              activeIcon: <WalletTabIcon name={name} active color={theme.colors.text} size={ICON_SIZE} />,
+              icon: (
+                <WalletTabIcon
+                  name={name}
+                  active={false}
+                  color={theme.colors.textSecondary}
+                  size={ICON_SIZE}
+                />
+              ),
+              activeIcon: (
+                <WalletTabIcon name={name} active color={theme.colors.text} size={ICON_SIZE} />
+              ),
             }}
           />
         ))}
@@ -75,10 +88,10 @@ const styles = StyleSheet.create({
   //
   // `pointerEvents` in the style object: react-native-web warns on the prop.
   host: {
-    position: "absolute",
+    position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    pointerEvents: "box-none",
+    pointerEvents: 'box-none',
   },
 });

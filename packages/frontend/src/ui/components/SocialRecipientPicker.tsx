@@ -5,14 +5,14 @@
  * local contacts database.
  */
 
-import { useCallback, useEffect, useState } from "react";
-import { View, Text, TextInput, Pressable, Modal, ActivityIndicator } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { useQuery } from "@tanstack/react-query";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { oxyServices } from "../../services/oxy-services";
-import { UserAvatar } from "./UserAvatar";
-import { t } from "../../i18n";
+import { useCallback, useEffect, useState } from 'react';
+import { View, Text, TextInput, Pressable, Modal, ActivityIndicator } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { useQuery } from '@tanstack/react-query';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { oxyServices } from '../../services/oxy-services';
+import { UserAvatar } from './UserAvatar';
+import { t } from '../../i18n';
 
 export interface SocialRecipient {
   id: string;
@@ -66,14 +66,10 @@ function SocialRecipientRow({
   );
 }
 
-export function SocialRecipientPicker({
-  visible,
-  onSelect,
-  onClose,
-}: SocialRecipientPickerProps) {
+export function SocialRecipientPicker({ visible, onSelect, onClose }: SocialRecipientPickerProps) {
   const theme = useTheme();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), SEARCH_DEBOUNCE_MS);
@@ -81,7 +77,7 @@ export function SocialRecipientPicker({
   }, [query]);
 
   const { data, isFetching } = useQuery({
-    queryKey: ["oxyUserSearch", debouncedQuery],
+    queryKey: ['oxyUserSearch', debouncedQuery],
     queryFn: async (): Promise<SocialRecipient[]> => {
       const response = await oxyServices.users.search(debouncedQuery, {
         limit: SEARCH_RESULT_LIMIT,
@@ -99,13 +95,13 @@ export function SocialRecipientPicker({
   const results = data ?? [];
 
   const handleOpen = useCallback(() => {
-    setQuery("");
-    setDebouncedQuery("");
+    setQuery('');
+    setDebouncedQuery('');
   }, []);
 
   const handleClose = useCallback(() => {
-    setQuery("");
-    setDebouncedQuery("");
+    setQuery('');
+    setDebouncedQuery('');
     onClose();
   }, [onClose]);
 
@@ -131,10 +127,10 @@ export function SocialRecipientPicker({
       <View className="flex-1 bg-background">
         <View className="pt-14 pb-3 px-6 flex-row items-center justify-between bg-background border-b border-border">
           <Text className="text-foreground text-lg font-bold">
-            {t("socialRecipientPicker.title")}
+            {t('socialRecipientPicker.title')}
           </Text>
           <Pressable onPress={handleClose} className="p-2">
-            <Text className="text-primary text-base font-semibold">{t("common.close")}</Text>
+            <Text className="text-primary text-base font-semibold">{t('common.close')}</Text>
           </Pressable>
         </View>
 
@@ -142,7 +138,7 @@ export function SocialRecipientPicker({
           <View className="bg-surface border border-border rounded-xl px-4 py-2.5">
             <TextInput
               className="text-foreground text-sm"
-              placeholder={t("socialRecipientPicker.searchPlaceholder")}
+              placeholder={t('socialRecipientPicker.searchPlaceholder')}
               placeholderTextColor={theme.colors.textSecondary}
               value={query}
               onChangeText={setQuery}
@@ -159,13 +155,13 @@ export function SocialRecipientPicker({
         ) : debouncedQuery.length < MIN_QUERY_LENGTH ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-muted-foreground text-base text-center">
-              {t("socialRecipientPicker.prompt")}
+              {t('socialRecipientPicker.prompt')}
             </Text>
           </View>
         ) : results.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-muted-foreground text-base text-center">
-              {t("socialRecipientPicker.empty")}
+              {t('socialRecipientPicker.empty')}
             </Text>
           </View>
         ) : (

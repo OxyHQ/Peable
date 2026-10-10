@@ -24,8 +24,8 @@
  * never registering.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Gesture } from "react-native-gesture-handler";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Gesture } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS,
   useAnimatedReaction,
@@ -33,13 +33,13 @@ import Animated, {
   useAnimatedStyle,
   useSharedValue,
   withTiming,
-} from "react-native-reanimated";
+} from 'react-native-reanimated';
 import {
   RefreshRainbowBar,
   RAINBOW_BAND_HEIGHT,
   REFRESH_HOLD_MS,
-} from "../ui/components/RefreshRainbowBar";
-import { hapticSelection, hapticSuccess } from "../utils/haptics";
+} from '../ui/components/RefreshRainbowBar';
+import { hapticSelection, hapticSuccess } from '../utils/haptics';
 
 /** Reveal (px) the pull must reach on release to trigger a refresh. */
 const REFRESH_TRIGGER = 42;
@@ -100,11 +100,11 @@ export function usePullToRefreshBand(onRefresh: () => void | Promise<void>) {
     () =>
       Gesture.Pan()
         .onBegin(() => {
-          "worklet";
+          'worklet';
           passedTrigger.set(false);
         })
         .onUpdate((event) => {
-          "worklet";
+          'worklet';
           if (refreshingSV.get()) return;
           const next =
             scrollY.get() <= 0 && event.translationY > 0
@@ -121,7 +121,7 @@ export function usePullToRefreshBand(onRefresh: () => void | Promise<void>) {
           pull.set(next);
         })
         .onEnd(() => {
-          "worklet";
+          'worklet';
           if (refreshingSV.get()) return;
           if (pull.get() >= REFRESH_TRIGGER) {
             refreshingSV.set(true);
@@ -136,10 +136,7 @@ export function usePullToRefreshBand(onRefresh: () => void | Promise<void>) {
 
   // Simultaneous with the scroll view's own gesture: dragging at the top
   // reveals the band, everything else scrolls normally.
-  const gesture = useMemo(
-    () => Gesture.Simultaneous(pullGesture, Gesture.Native()),
-    [pullGesture],
-  );
+  const gesture = useMemo(() => Gesture.Simultaneous(pullGesture, Gesture.Native()), [pullGesture]);
 
   const bandStyle = useAnimatedStyle(() => ({ height: pull.get() }));
 
@@ -158,7 +155,7 @@ export function usePullToRefreshBand(onRefresh: () => void | Promise<void>) {
   // Returned as an element rather than as a style, so the clip, the overflow
   // and the mount condition cannot drift between the screens that use it.
   const band = (
-    <Animated.View style={[bandStyle, { overflow: "hidden" }]}>
+    <Animated.View style={[bandStyle, { overflow: 'hidden' }]}>
       {bandVisible ? <RefreshRainbowBar /> : null}
     </Animated.View>
   );

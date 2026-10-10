@@ -21,46 +21,28 @@
  * signed-out payer still pays and is shown a sign-in nudge.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  ScrollView,
-  ActivityIndicator,
-  Pressable,
-} from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import * as Linking from "expo-linking";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useAuth } from "@oxy.so/services";
-import { useTheme } from "@oxy.so/bloom/theme";
-import {
-  formatFair,
-  explorerTxUrl,
-  UNITS_PER_COIN,
-  type NetworkType,
-} from "@fairco.in/core";
-import type {
-  PaymentIntent,
-  PaymentIntentStatus,
-} from "@peable.to/shared-types";
-import { SafeAreaView } from "../../src/ui/safe-area-view";
-import { ScreenHeader, Button } from "../../src/ui/components";
-import { FairCoinSymbol } from "../../src/ui/components/FairCoinSymbol";
-import { useWalletStore, FEE_RATES } from "../../src/wallet/wallet-store";
-import { submitTx } from "../../src/services/gateway-client";
-import {
-  subscribeToIntent,
-  type IntentSubscription,
-} from "../../src/services/gateway-socket";
-import { getCachedPrice } from "../../src/services/price";
-import { hapticSuccess, hapticError } from "../../src/utils/haptics";
-import { FONT_PHUDU_BLACK } from "../../src/utils/fonts";
-import { t } from "../../src/i18n";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Linking from 'expo-linking';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useAuth } from '@oxy.so/services';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { formatFair, explorerTxUrl, UNITS_PER_COIN, type NetworkType } from '@fairco.in/core';
+import type { PaymentIntent, PaymentIntentStatus } from '@peable.to/shared-types';
+import { SafeAreaView } from '../../src/ui/safe-area-view';
+import { ScreenHeader, Button } from '../../src/ui/components';
+import { FairCoinSymbol } from '../../src/ui/components/FairCoinSymbol';
+import { useWalletStore, FEE_RATES } from '../../src/wallet/wallet-store';
+import { submitTx } from '../../src/services/gateway-client';
+import { subscribeToIntent, type IntentSubscription } from '../../src/services/gateway-socket';
+import { getCachedPrice } from '../../src/services/price';
+import { hapticSuccess, hapticError } from '../../src/utils/haptics';
+import { FONT_PHUDU_BLACK } from '../../src/utils/fonts';
+import { t } from '../../src/i18n';
 
 /** Uppercase section label — matches the send/home screens. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 /**
  * Screen phase:
@@ -70,15 +52,10 @@ const SECTION_LABEL =
  * - `sent_no_status` tx broadcast, but no live channel (signed out / socket down).
  * - `error`         the payment failed BEFORE broadcast (no coins left).
  */
-type PayPhase =
-  | "review"
-  | "processing"
-  | "tracking"
-  | "sent_no_status"
-  | "error";
+type PayPhase = 'review' | 'processing' | 'tracking' | 'sent_no_status' | 'error';
 
 interface StatusVisual {
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   iconColor: string;
   title: string;
   subtitle: string;
@@ -88,10 +65,7 @@ interface StatusVisual {
 /** Terminal statuses stop the live spinner and reveal the Done affordance. */
 function isTerminalStatus(status: PaymentIntentStatus): boolean {
   return (
-    status === "settled" ||
-    status === "failed" ||
-    status === "expired" ||
-    status === "rejected"
+    status === 'settled' || status === 'failed' || status === 'expired' || status === 'rejected'
   );
 }
 
@@ -103,56 +77,56 @@ function describePaymentStatus(
 ): StatusVisual {
   const status = intent?.status ?? null;
   switch (status) {
-    case "confirming":
+    case 'confirming':
       return {
-        icon: "progress-clock",
+        icon: 'progress-clock',
         iconColor: primary,
-        title: t("pay.status.confirming.title"),
-        subtitle: t("pay.status.confirming.subtitle", {
+        title: t('pay.status.confirming.title'),
+        subtitle: t('pay.status.confirming.subtitle', {
           count: intent?.confirmations ?? 0,
         }),
         showSpinner: true,
       };
-    case "settled":
+    case 'settled':
       return {
-        icon: "check-circle",
+        icon: 'check-circle',
         iconColor: primary,
-        title: t("pay.status.settled.title"),
-        subtitle: t("pay.status.settled.subtitle"),
+        title: t('pay.status.settled.title'),
+        subtitle: t('pay.status.settled.subtitle'),
         showSpinner: false,
       };
-    case "failed":
+    case 'failed':
       return {
-        icon: "alert-circle",
+        icon: 'alert-circle',
         iconColor: destructive,
-        title: t("pay.status.failed.title"),
-        subtitle: t("pay.status.failed.subtitle"),
+        title: t('pay.status.failed.title'),
+        subtitle: t('pay.status.failed.subtitle'),
         showSpinner: false,
       };
-    case "expired":
+    case 'expired':
       return {
-        icon: "clock-alert",
+        icon: 'clock-alert',
         iconColor: warning,
-        title: t("pay.status.expired.title"),
-        subtitle: t("pay.status.expired.subtitle"),
+        title: t('pay.status.expired.title'),
+        subtitle: t('pay.status.expired.subtitle'),
         showSpinner: false,
       };
-    case "rejected":
+    case 'rejected':
       return {
-        icon: "close-circle",
+        icon: 'close-circle',
         iconColor: destructive,
-        title: t("pay.status.rejected.title"),
-        subtitle: t("pay.status.rejected.subtitle"),
+        title: t('pay.status.rejected.title'),
+        subtitle: t('pay.status.rejected.subtitle'),
         showSpinner: false,
       };
     // `broadcast` and any pre-broadcast status we might still observe: the tx is
     // on the network and waiting to be seen / confirmed.
     default:
       return {
-        icon: "send-circle",
+        icon: 'send-circle',
         iconColor: primary,
-        title: t("pay.status.broadcast.title"),
-        subtitle: t("pay.status.broadcast.subtitle"),
+        title: t('pay.status.broadcast.title'),
+        subtitle: t('pay.status.broadcast.subtitle'),
         showSpinner: true,
       };
   }
@@ -176,7 +150,7 @@ export default function ApprovePayScreen() {
   const isWatchOnly = useWalletStore((s) => s.isWatchOnly);
   const initialized = useWalletStore((s) => s.initialized);
 
-  const [phase, setPhase] = useState<PayPhase>("review");
+  const [phase, setPhase] = useState<PayPhase>('review');
   const [txid, setTxid] = useState<string | null>(null);
   const [intent, setIntent] = useState<PaymentIntent | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -195,15 +169,12 @@ export default function ApprovePayScreen() {
   // Re-derive + revalidate the request from the route params. The deep-link
   // router only pushes a well-formed request, but a direct navigation could
   // arrive incomplete — treat anything malformed as an invalid request.
-  const intentId = params.intent ?? "";
-  const clientSecret = params.secret ?? "";
-  const address = params.address ?? "";
-  const amount =
-    params.amount && /^\d+$/.test(params.amount) ? BigInt(params.amount) : null;
+  const intentId = params.intent ?? '';
+  const clientSecret = params.secret ?? '';
+  const address = params.address ?? '';
+  const amount = params.amount && /^\d+$/.test(params.amount) ? BigInt(params.amount) : null;
   const network: NetworkType | null =
-    params.network === "mainnet" || params.network === "testnet"
-      ? params.network
-      : null;
+    params.network === 'mainnet' || params.network === 'testnet' ? params.network : null;
   const requestValid =
     intentId.length > 0 &&
     clientSecret.startsWith(`${intentId}_secret_`) &&
@@ -234,25 +205,25 @@ export default function ApprovePayScreen() {
     void signIn();
   }, [signIn]);
 
-  const explorerUrl = txid ? explorerTxUrl(txid) : "";
+  const explorerUrl = txid ? explorerTxUrl(txid) : '';
   const handleViewTransaction = useCallback(() => {
     if (!explorerUrl) return;
     Linking.openURL(explorerUrl).catch(() => {
-      setNotice(t("pay.notice.openLinkFailed"));
+      setNotice(t('pay.notice.openLinkFailed'));
     });
   }, [explorerUrl]);
 
   const handleRetry = useCallback(() => {
     setErrorMessage(null);
     setNotice(null);
-    setPhase("review");
+    setPhase('review');
   }, []);
 
   const handleApprove = useCallback(async () => {
     if (amount === null) return;
     setNotice(null);
     setErrorMessage(null);
-    setPhase("processing");
+    setPhase('processing');
 
     // 1. Pay via the wallet's normal build/sign/broadcast flow. A failure HERE
     //    means nothing was broadcast — the only genuinely failed-payment path.
@@ -261,10 +232,8 @@ export default function ApprovePayScreen() {
       broadcastTxid = await sendTransaction(address, amount, FEE_RATES.medium);
     } catch (err: unknown) {
       hapticError();
-      setErrorMessage(
-        err instanceof Error ? err.message : t("pay.error.sendFailed"),
-      );
-      setPhase("error");
+      setErrorMessage(err instanceof Error ? err.message : t('pay.error.sendFailed'));
+      setPhase('error');
       return;
     }
 
@@ -281,34 +250,30 @@ export default function ApprovePayScreen() {
     } catch {
       // Gateway didn't record it, but the settlement watcher still catches the
       // tx on-chain. Surface a soft notice rather than failing the payment.
-      setNotice(t("pay.notice.reportFailed"));
+      setNotice(t('pay.notice.reportFailed'));
     }
 
     // 3. Live status needs an authenticated Oxy session for the socket handshake.
     if (!isAuthenticated) {
-      setPhase("sent_no_status");
+      setPhase('sent_no_status');
       return;
     }
 
     try {
-      setPhase("tracking");
-      const subscription = await subscribeToIntent(
-        intentId,
-        clientSecret,
-        (updated) => {
-          setIntent(updated);
-          if (updated.status === "settled") {
-            hapticSuccess();
-          } else if (updated.status === "failed") {
-            hapticError();
-          }
-        },
-      );
+      setPhase('tracking');
+      const subscription = await subscribeToIntent(intentId, clientSecret, (updated) => {
+        setIntent(updated);
+        if (updated.status === 'settled') {
+          hapticSuccess();
+        } else if (updated.status === 'failed') {
+          hapticError();
+        }
+      });
       subscriptionRef.current = subscription;
     } catch {
       // Couldn't open the realtime channel; the payment still went through.
-      setNotice(t("pay.notice.liveStatusUnavailable"));
-      setPhase("sent_no_status");
+      setNotice(t('pay.notice.liveStatusUnavailable'));
+      setPhase('sent_no_status');
     }
   }, [amount, address, intentId, clientSecret, isAuthenticated, sendTransaction]);
 
@@ -321,11 +286,8 @@ export default function ApprovePayScreen() {
   const terminal = intent !== null && isTerminalStatus(intent.status);
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "bottom", "left", "right"]}
-    >
-      <ScreenHeader title={t("pay.title")} onBack={handleDecline} />
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+      <ScreenHeader title={t('pay.title')} onBack={handleDecline} />
       <ScrollView className="flex-1" contentContainerClassName="px-5 pt-4 pb-8">
         {!requestValid ? (
           <View className="items-center justify-center py-16 gap-3">
@@ -335,17 +297,13 @@ export default function ApprovePayScreen() {
               color={theme.colors.textSecondary}
             />
             <Text className="text-foreground text-base font-semibold text-center">
-              {t("pay.invalid.title")}
+              {t('pay.invalid.title')}
             </Text>
             <Text className="text-muted-foreground text-sm text-center">
-              {t("pay.invalid.subtitle")}
+              {t('pay.invalid.subtitle')}
             </Text>
             <View className="w-full mt-2">
-              <Button
-                title={t("common.close")}
-                onPress={handleDecline}
-                variant="secondary"
-              />
+              <Button title={t('common.close')} onPress={handleDecline} variant="secondary" />
             </View>
           </View>
         ) : (
@@ -361,22 +319,22 @@ export default function ApprovePayScreen() {
                   style={{ fontFamily: FONT_PHUDU_BLACK, fontSize: 44 }}
                   numberOfLines={1}
                 >
-                  {amount !== null ? formatFair(amount) : ""}
+                  {amount !== null ? formatFair(amount) : ''}
                 </Text>
               </View>
               <Text className="text-muted-foreground text-sm mt-2">
-                {t("pay.usdApprox", { amount: usdEquivalent ?? "0.00" })}
+                {t('pay.usdApprox', { amount: usdEquivalent ?? '0.00' })}
               </Text>
             </View>
 
             {/* Payee address */}
             <View>
-              <Text className={SECTION_LABEL}>{t("pay.payTo")}</Text>
+              <Text className={SECTION_LABEL}>{t('pay.payTo')}</Text>
               <View className="bg-surface rounded-2xl px-4 py-3.5 mt-2">
                 <Text
                   selectable
                   className="text-foreground text-sm"
-                  style={{ fontFamily: "monospace" }}
+                  style={{ fontFamily: 'monospace' }}
                 >
                   {address}
                 </Text>
@@ -385,11 +343,11 @@ export default function ApprovePayScreen() {
 
             {/* Network */}
             <View>
-              <Text className={SECTION_LABEL}>{t("pay.network")}</Text>
+              <Text className={SECTION_LABEL}>{t('pay.network')}</Text>
               <View className="flex-row mt-2">
                 <View className="bg-surface rounded-full px-3.5 py-1.5">
                   <Text className="text-foreground text-xs font-semibold">
-                    {network !== null ? t(`pay.network.${network}`) : ""}
+                    {network !== null ? t(`pay.network.${network}`) : ''}
                   </Text>
                 </View>
               </View>
@@ -398,21 +356,18 @@ export default function ApprovePayScreen() {
             {/* Soft notice (non-fatal issues after broadcast) */}
             {notice ? (
               <View className="bg-primary/10 rounded-2xl p-3.5">
-                <Text className="text-foreground text-sm text-center">
-                  {notice}
-                </Text>
+                <Text className="text-foreground text-sm text-center">{notice}</Text>
               </View>
             ) : null}
 
             {/* Phase-specific body */}
-            {phase === "review" ? (
+            {phase === 'review' ? (
               <View className="gap-3">
                 {networkMismatch ? (
                   <View className="bg-destructive/10 rounded-2xl p-3.5">
                     <Text className="text-destructive text-sm text-center">
-                      {t("pay.error.networkMismatch", {
-                        requested:
-                          network !== null ? t(`pay.network.${network}`) : "",
+                      {t('pay.error.networkMismatch', {
+                        requested: network !== null ? t(`pay.network.${network}`) : '',
                         active: t(`pay.network.${walletNetwork}`),
                       })}
                     </Text>
@@ -421,28 +376,26 @@ export default function ApprovePayScreen() {
                 {isWatchOnly ? (
                   <View className="bg-destructive/10 rounded-2xl p-3.5">
                     <Text className="text-destructive text-sm text-center">
-                      {t("pay.error.watchOnly")}
+                      {t('pay.error.watchOnly')}
                     </Text>
                   </View>
                 ) : null}
                 {!initialized ? (
                   <View className="bg-surface rounded-2xl p-3.5">
                     <Text className="text-muted-foreground text-sm text-center">
-                      {t("pay.error.notInitialized")}
+                      {t('pay.error.notInitialized')}
                     </Text>
                   </View>
                 ) : null}
                 <Button
-                  title={t("pay.approve")}
+                  title={t('pay.approve')}
                   onPress={handleApprove}
                   variant="primary"
                   size="lg"
-                  disabled={
-                    isWatchOnly || networkMismatch || !initialized
-                  }
+                  disabled={isWatchOnly || networkMismatch || !initialized}
                 />
                 <Button
-                  title={t("pay.decline")}
+                  title={t('pay.decline')}
                   onPress={handleDecline}
                   variant="ghost"
                   size="lg"
@@ -450,27 +403,21 @@ export default function ApprovePayScreen() {
               </View>
             ) : null}
 
-            {phase === "processing" ? (
+            {phase === 'processing' ? (
               <View className="bg-surface rounded-2xl p-6 items-center gap-3">
                 <ActivityIndicator color={theme.colors.primary} />
-                <Text className="text-foreground text-sm font-semibold">
-                  {t("pay.processing")}
-                </Text>
+                <Text className="text-foreground text-sm font-semibold">{t('pay.processing')}</Text>
               </View>
             ) : null}
 
-            {phase === "tracking" || phase === "sent_no_status" ? (
+            {phase === 'tracking' || phase === 'sent_no_status' ? (
               <View className="gap-3">
                 {/* Live / static status card */}
                 <View className="bg-surface rounded-2xl p-6 items-center gap-3">
                   {visual.showSpinner ? (
                     <ActivityIndicator color={visual.iconColor} />
                   ) : (
-                    <MaterialCommunityIcons
-                      name={visual.icon}
-                      size={40}
-                      color={visual.iconColor}
-                    />
+                    <MaterialCommunityIcons name={visual.icon} size={40} color={visual.iconColor} />
                   )}
                   <Text className="text-foreground text-base font-semibold text-center">
                     {visual.title}
@@ -481,16 +428,12 @@ export default function ApprovePayScreen() {
                 </View>
 
                 {/* Signed-out payers: nudge for live status (never blocks pay) */}
-                {phase === "sent_no_status" && !isAuthenticated ? (
+                {phase === 'sent_no_status' && !isAuthenticated ? (
                   <View className="bg-surface rounded-2xl p-4 gap-3">
                     <Text className="text-muted-foreground text-sm text-center">
-                      {t("pay.sent.signedOut")}
+                      {t('pay.sent.signedOut')}
                     </Text>
-                    <Button
-                      title={t("pay.signIn")}
-                      onPress={handleSignIn}
-                      variant="secondary"
-                    />
+                    <Button title={t('pay.signIn')} onPress={handleSignIn} variant="secondary" />
                   </View>
                 ) : null}
 
@@ -505,14 +448,14 @@ export default function ApprovePayScreen() {
                       color={theme.colors.primary}
                     />
                     <Text className="text-primary text-sm font-semibold">
-                      {t("pay.viewTransaction")}
+                      {t('pay.viewTransaction')}
                     </Text>
                   </Pressable>
                 ) : null}
 
-                {phase === "sent_no_status" || terminal ? (
+                {phase === 'sent_no_status' || terminal ? (
                   <Button
-                    title={t("common.done")}
+                    title={t('common.done')}
                     onPress={handleDecline}
                     variant="primary"
                     size="lg"
@@ -521,21 +464,21 @@ export default function ApprovePayScreen() {
               </View>
             ) : null}
 
-            {phase === "error" ? (
+            {phase === 'error' ? (
               <View className="gap-3">
                 <View className="bg-destructive/10 rounded-2xl p-3.5">
                   <Text className="text-destructive text-sm text-center">
-                    {errorMessage ?? t("pay.error.sendFailed")}
+                    {errorMessage ?? t('pay.error.sendFailed')}
                   </Text>
                 </View>
                 <Button
-                  title={t("common.retry")}
+                  title={t('common.retry')}
                   onPress={handleRetry}
                   variant="primary"
                   size="lg"
                 />
                 <Button
-                  title={t("pay.decline")}
+                  title={t('pay.decline')}
                   onPress={handleDecline}
                   variant="ghost"
                   size="lg"

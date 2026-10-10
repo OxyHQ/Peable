@@ -45,7 +45,9 @@ function installFakeSocket(
       }
       const next = queue.shift();
       if (next === undefined) {
-        throw new Error('installFakeSocket() ack queue exhausted — emitWithAck called too many times');
+        throw new Error(
+          'installFakeSocket() ack queue exhausted — emitWithAck called too many times',
+        );
       }
       if (next instanceof Error) throw next;
       return next;
@@ -169,8 +171,7 @@ describe('getPaymentIntent', () => {
   });
 
   test('wraps a network-level fetch failure as PeableApiError', async () => {
-    globalThis.fetch = (() =>
-      Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await expect(client.getPaymentIntent('pi_1', 'secret_1')).rejects.toBeInstanceOf(
@@ -216,8 +217,7 @@ describe('submitTx', () => {
   });
 
   test('wraps a network-level fetch failure as PeableApiError', async () => {
-    globalThis.fetch = (() =>
-      Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
+    globalThis.fetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await expect(client.submitTx('pi_1', 'secret_1', 'tx_abc')).rejects.toBeInstanceOf(
@@ -303,9 +303,7 @@ describe('subscribe', () => {
     // and it went red when a `disconnect` listener was added beside it — for a
     // change that does not touch the property this case is about. A proxy that
     // fails on unrelated work is one somebody eventually deletes.
-    const intentUpdatedCalls = socket.on.mock.calls.filter(
-      ([event]) => event === 'intent.updated',
-    );
+    const intentUpdatedCalls = socket.on.mock.calls.filter(([event]) => event === 'intent.updated');
     expect(intentUpdatedCalls).toHaveLength(1);
 
     const listener = intentUpdatedCalls[0]?.[1] as (intent: PaymentIntent) => void;
@@ -314,10 +312,7 @@ describe('subscribe', () => {
   });
 
   test('a failed resubscribe on reconnect is swallowed (no unhandled rejection, no throw)', async () => {
-    const socket = installFakeSocket([
-      { ok: true },
-      new Error('intent has since expired'),
-    ]);
+    const socket = installFakeSocket([{ ok: true }, new Error('intent has since expired')]);
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await client.subscribe('pi_1', 'secret_1', () => {});
@@ -364,7 +359,12 @@ describe('subscribe', () => {
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
     const states: string[] = [];
 
-    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+    await client.subscribe(
+      'pi_1',
+      'secret_1',
+      () => {},
+      (state) => states.push(state),
+    );
 
     const disconnectHandler = socket.on.mock.calls.find(
       ([event]) => event === 'disconnect',
@@ -387,7 +387,12 @@ describe('subscribe', () => {
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
     const states: string[] = [];
 
-    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+    await client.subscribe(
+      'pi_1',
+      'secret_1',
+      () => {},
+      (state) => states.push(state),
+    );
     const reconnectHandler = socket.io.on.mock.calls[0]?.[1] as () => void;
 
     reconnectHandler();
@@ -409,7 +414,12 @@ describe('subscribe', () => {
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
     const states: string[] = [];
 
-    await client.subscribe('pi_1', 'secret_1', () => {}, (state) => states.push(state));
+    await client.subscribe(
+      'pi_1',
+      'secret_1',
+      () => {},
+      (state) => states.push(state),
+    );
     const reconnectHandler = socket.io.on.mock.calls[0]?.[1] as () => void;
 
     reconnectHandler();

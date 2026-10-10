@@ -122,7 +122,7 @@ export interface InsertPaymentIntentParams {
  */
 export async function insertPaymentIntent(
   db: DatabaseOrTransaction,
-  params: InsertPaymentIntentParams
+  params: InsertPaymentIntentParams,
 ): Promise<PaymentIntentRow | null> {
   try {
     // Explicit field list, never a spread. `status` and `confirmations` take
@@ -161,7 +161,7 @@ export async function insertPaymentIntent(
 export async function findIntentByIdempotencyKey(
   db: DatabaseOrTransaction,
   merchantId: string,
-  idempotencyKey: string
+  idempotencyKey: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -169,8 +169,8 @@ export async function findIntentByIdempotencyKey(
     .where(
       and(
         eq(paymentIntents.merchantId, merchantId),
-        eq(paymentIntents.idempotencyKey, idempotencyKey)
-      )
+        eq(paymentIntents.idempotencyKey, idempotencyKey),
+      ),
     );
   return row ? toIntentRow(row) : null;
 }
@@ -193,7 +193,7 @@ export async function findIntentByIdempotencyKey(
  */
 export async function lockIntentForUpdate(
   tx: DatabaseOrTransaction,
-  id: string
+  id: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await tx
     .select(INTENT_COLUMNS)
@@ -206,7 +206,7 @@ export async function lockIntentForUpdate(
 /** The PAYER path: `pi_…` alone, authorized by `client_secret` rather than by ownership. */
 export async function findIntentByPublicId(
   db: DatabaseOrTransaction,
-  publicId: string
+  publicId: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -228,14 +228,12 @@ export async function findIntentByPublicId(
 export async function findIntentForMerchant(
   db: DatabaseOrTransaction,
   publicId: string,
-  merchantId: string
+  merchantId: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
-    .where(
-      and(eq(paymentIntents.publicId, publicId), eq(paymentIntents.merchantId, merchantId))
-    );
+    .where(and(eq(paymentIntents.publicId, publicId), eq(paymentIntents.merchantId, merchantId)));
   return row ? toIntentRow(row) : null;
 }
 
@@ -265,7 +263,7 @@ export async function findIntentForMerchant(
  */
 export async function findIntentById(
   db: DatabaseOrTransaction,
-  id: string
+  id: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -299,7 +297,7 @@ export async function findIntentById(
 export async function findIntentByIdForMerchant(
   db: DatabaseOrTransaction,
   id: string,
-  merchantId: string
+  merchantId: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -344,7 +342,7 @@ export interface ListIntentsParams {
  */
 export async function listIntentsForMerchant(
   db: DatabaseOrTransaction,
-  params: ListIntentsParams
+  params: ListIntentsParams,
 ): Promise<{ data: PaymentIntentRow[]; hasMore: boolean }> {
   const conditions = [eq(paymentIntents.merchantId, params.merchantId)];
   if (params.status !== undefined) conditions.push(eq(paymentIntents.status, params.status));
@@ -378,7 +376,7 @@ export async function listIntentsForMerchant(
  */
 export async function findIntentsByAddresses(
   db: DatabaseOrTransaction,
-  addresses: readonly string[]
+  addresses: readonly string[],
 ): Promise<PaymentIntentRow[]> {
   if (addresses.length === 0) return [];
   const rows = await db
@@ -405,7 +403,7 @@ export async function findIntentsByAddresses(
  */
 export async function findExpiredIntents(
   db: DatabaseOrTransaction,
-  params: { readonly now: Date; readonly limit: number }
+  params: { readonly now: Date; readonly limit: number },
 ): Promise<PaymentIntentRow[]> {
   const rows = await db
     .select(INTENT_COLUMNS)
@@ -418,8 +416,8 @@ export async function findExpiredIntents(
           'requires_action',
           'processing',
         ]),
-        lt(paymentIntents.expiresAt, params.now)
-      )
+        lt(paymentIntents.expiresAt, params.now),
+      ),
     )
     .orderBy(paymentIntents.expiresAt)
     .limit(params.limit);
@@ -433,7 +431,7 @@ export async function findExpiredIntents(
  */
 export async function findWatchableIntents(
   db: DatabaseOrTransaction,
-  statuses: readonly PaymentIntentStatus[]
+  statuses: readonly PaymentIntentStatus[],
 ): Promise<PaymentIntentRow[]> {
   if (statuses.length === 0) return [];
   const rows = await db
@@ -451,8 +449,8 @@ export async function findWatchableIntents(
         // query rather than of the caller's current status list.
         eq(paymentIntents.rail, 'faircoin'),
         inArray(paymentIntents.status, [...statuses]),
-        isNotNull(paymentIntents.txid)
-      )
+        isNotNull(paymentIntents.txid),
+      ),
     );
   return rows.map(toIntentRow);
 }
@@ -516,7 +514,7 @@ export type IntentStateResult =
 export async function updateIntentState(
   db: DatabaseOrTransaction,
   id: string,
-  change: IntentStateChange
+  change: IntentStateChange,
 ): Promise<IntentStateResult> {
   const values: Record<string, string | number> = { status: change.status };
   if (change.txid !== undefined) values.txid = change.txid;
@@ -559,7 +557,7 @@ export async function linkProviderObject(
   db: DatabaseOrTransaction,
   intentId: string,
   provider: ProviderId,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<boolean> {
   const rows = await db
     .update(paymentIntents)
@@ -568,8 +566,8 @@ export async function linkProviderObject(
       and(
         eq(paymentIntents.id, intentId),
         eq(paymentIntents.provider, provider),
-        isNull(paymentIntents.providerObjectId)
-      )
+        isNull(paymentIntents.providerObjectId),
+      ),
     )
     .returning({ id: paymentIntents.id });
   return rows.length === 1;
@@ -592,7 +590,7 @@ export async function linkProviderCharge(
   db: DatabaseOrTransaction,
   intentId: string,
   provider: ProviderId,
-  providerChargeId: string
+  providerChargeId: string,
 ): Promise<boolean> {
   const rows = await db
     .update(paymentIntents)
@@ -601,8 +599,8 @@ export async function linkProviderCharge(
       and(
         eq(paymentIntents.id, intentId),
         eq(paymentIntents.provider, provider),
-        isNull(paymentIntents.providerChargeId)
-      )
+        isNull(paymentIntents.providerChargeId),
+      ),
     )
     .returning({ id: paymentIntents.id });
   return rows.length === 1;
@@ -619,7 +617,7 @@ export async function linkProviderCharge(
 export async function findIntentByProviderObject(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  providerObjectId: string
+  providerObjectId: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -627,8 +625,8 @@ export async function findIntentByProviderObject(
     .where(
       and(
         eq(paymentIntents.provider, provider),
-        eq(paymentIntents.providerObjectId, providerObjectId)
-      )
+        eq(paymentIntents.providerObjectId, providerObjectId),
+      ),
     );
   return row ? toIntentRow(row) : null;
 }
@@ -648,7 +646,7 @@ export async function findIntentByProviderObject(
 export async function findIntentByProviderCharge(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  providerChargeId: string
+  providerChargeId: string,
 ): Promise<PaymentIntentRow | null> {
   const [row] = await db
     .select(INTENT_COLUMNS)
@@ -656,8 +654,8 @@ export async function findIntentByProviderCharge(
     .where(
       and(
         eq(paymentIntents.provider, provider),
-        eq(paymentIntents.providerChargeId, providerChargeId)
-      )
+        eq(paymentIntents.providerChargeId, providerChargeId),
+      ),
     );
   return row ? toIntentRow(row) : null;
 }
@@ -714,7 +712,7 @@ export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
 export async function findDueCardIntents(
   db: DatabaseOrTransaction,
   now: Date,
-  limit: number
+  limit: number,
 ): Promise<PaymentIntentRow[]> {
   const rows = await db
     .select(INTENT_COLUMNS)
@@ -723,8 +721,8 @@ export async function findDueCardIntents(
       and(
         eq(paymentIntents.rail, 'card'),
         inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
-        lt(paymentIntents.expiresAt, now)
-      )
+        lt(paymentIntents.expiresAt, now),
+      ),
     )
     // Oldest first, like the claim below: a stream that expired its newest
     // arrivals first would starve its own head under a backlog.
@@ -757,7 +755,7 @@ export async function findDueCardIntents(
 export async function expireDueIntents(
   db: DatabaseOrTransaction,
   now: Date,
-  limit: number
+  limit: number,
 ): Promise<PaymentIntentRow[]> {
   const due = db
     .select({ id: paymentIntents.id })
@@ -773,8 +771,8 @@ export async function expireDueIntents(
         // set-based claim is still right for it.
         eq(paymentIntents.rail, 'faircoin'),
         inArray(paymentIntents.status, [...EXPIRABLE_STATUSES]),
-        lt(paymentIntents.expiresAt, now)
-      )
+        lt(paymentIntents.expiresAt, now),
+      ),
     )
     // Oldest first: a stream that expired its newest arrivals first would
     // starve its own head under a backlog.

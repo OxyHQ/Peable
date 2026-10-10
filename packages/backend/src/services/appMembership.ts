@@ -1,8 +1,8 @@
-import type { IncomingMessage } from "node:http";
-import { z } from "zod";
-import { safeFetch as realSafeFetch, SsrfRejection, UpstreamError } from "@oxy.so/core/server";
-import { config } from "../config";
-import type { SafeFetchFn } from "./webhookDispatcher";
+import type { IncomingMessage } from 'node:http';
+import { z } from 'zod';
+import { safeFetch as realSafeFetch, SsrfRejection, UpstreamError } from '@oxy.so/core/server';
+import { config } from '../config';
+import type { SafeFetchFn } from './webhookDispatcher';
 
 /**
  * Delegates `/v1/dashboard/*` authorization to oxy-api's own Application RBAC
@@ -76,7 +76,7 @@ function readBodyLimited(response: IncomingMessage, maxBytes: number): Promise<B
       settled = true;
       resolve(value);
     };
-    response.on("data", (chunk: Buffer) => {
+    response.on('data', (chunk: Buffer) => {
       total += chunk.length;
       if (total > maxBytes) {
         response.destroy();
@@ -85,13 +85,13 @@ function readBodyLimited(response: IncomingMessage, maxBytes: number): Promise<B
       }
       chunks.push(chunk);
     });
-    response.on("end", () => finish(Buffer.concat(chunks, total)));
-    response.on("error", (err) => {
+    response.on('end', () => finish(Buffer.concat(chunks, total)));
+    response.on('error', (err) => {
       if (settled) return;
       settled = true;
       reject(err);
     });
-    response.on("close", () => finish(null));
+    response.on('close', () => finish(null));
   });
 }
 
@@ -127,7 +127,7 @@ async function fetchCallerMembership(
     if (result.status !== 200) return false;
     const buffer = await readBodyLimited(result.response, MAX_RESPONSE_BYTES);
     if (!buffer || buffer.length === 0) return false;
-    const parsed = applicationResponseSchema.safeParse(JSON.parse(buffer.toString("utf-8")));
+    const parsed = applicationResponseSchema.safeParse(JSON.parse(buffer.toString('utf-8')));
     return parsed.success && parsed.data.application.callerMembership !== null;
   } catch {
     return false;

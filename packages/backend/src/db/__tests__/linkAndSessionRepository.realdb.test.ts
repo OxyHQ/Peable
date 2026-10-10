@@ -72,7 +72,11 @@ async function makeIntent(merchant: MerchantRow) {
   }))!;
 }
 
-function sessionParams(merchant: MerchantRow, intentId: string, overrides: Record<string, unknown> = {}) {
+function sessionParams(
+  merchant: MerchantRow,
+  intentId: string,
+  overrides: Record<string, unknown> = {},
+) {
   const unique = uuidv7();
   return {
     publicId: `cs_${unique}`,
@@ -166,12 +170,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
    * a no-op update would also do if the predicate were missing but the row
    * happened not to match.
    */
-  it('never lets one merchant patch another merchant\'s link', async () => {
+  it("never lets one merchant patch another merchant's link", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
     const link = await insertPaymentLink(suite!.db, linkParams(owner));
 
-    expect(await updatePaymentLink(suite!.db, link.publicId, stranger.id, { active: false })).toBeNull();
+    expect(
+      await updatePaymentLink(suite!.db, link.publicId, stranger.id, { active: false }),
+    ).toBeNull();
     expect((await findLinkByPublicId(suite!.db, link.publicId))?.active).toBe(true);
 
     const patched = await updatePaymentLink(suite!.db, link.publicId, owner.id, {
@@ -192,7 +198,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     await updatePaymentLink(suite!.db, retired.publicId, merchant.id, { active: false });
     await insertPaymentLink(suite!.db, linkParams(stranger));
 
-    const page = await listLinksForMerchant(suite!.db, { merchantId: merchant.id, active: true, limit: 10 });
+    const page = await listLinksForMerchant(suite!.db, {
+      merchantId: merchant.id,
+      active: true,
+      limit: 10,
+    });
     expect(page.data.map((row) => row.publicId)).toEqual([live.publicId]);
     expect(page.hasMore).toBe(false);
   });
@@ -217,7 +227,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
   it('refuses a second session around the same intent', async () => {
     const merchant = await makeMerchant();
     const intent = await makeIntent(merchant);
-    expect(await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id))).not.toBeNull();
+    expect(
+      await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id)),
+    ).not.toBeNull();
     expect(await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id))).toBeNull();
   });
 
@@ -230,7 +242,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
       raised = error;
     }
     expect(
-      isForeignKeyViolation(raised, 'checkout_sessions_payment_intent_id_payment_intents_id_fk')
+      isForeignKeyViolation(raised, 'checkout_sessions_payment_intent_id_payment_intents_id_fk'),
     ).toBe(true);
   });
 
@@ -240,19 +252,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const intent = await makeIntent(owner);
     const session = await insertCheckoutSession(suite!.db, sessionParams(owner, intent.id));
 
-    expect((await findSessionForMerchant(suite!.db, session!.publicId, owner.id))?.id).toBe(session!.id);
+    expect((await findSessionForMerchant(suite!.db, session!.publicId, owner.id))?.id).toBe(
+      session!.id,
+    );
     expect(await findSessionForMerchant(suite!.db, session!.publicId, stranger.id)).toBeNull();
     expect((await findSessionByPublicId(suite!.db, session!.publicId))?.id).toBe(session!.id);
   });
 
-  it('lists only the caller\'s sessions', async () => {
+  it("lists only the caller's sessions", async () => {
     const merchant = await makeMerchant();
     const stranger = await makeMerchant();
     const mine = await insertCheckoutSession(
       suite!.db,
-      sessionParams(merchant, (await makeIntent(merchant)).id)
+      sessionParams(merchant, (await makeIntent(merchant)).id),
     );
-    await insertCheckoutSession(suite!.db, sessionParams(stranger, (await makeIntent(stranger)).id));
+    await insertCheckoutSession(
+      suite!.db,
+      sessionParams(stranger, (await makeIntent(stranger)).id),
+    );
 
     const rows = await listSessionsForMerchant(suite!.db, merchant.id, 10);
     expect(rows.map((row) => row.publicId)).toEqual([mine!.publicId]);

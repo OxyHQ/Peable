@@ -12,9 +12,9 @@
  * unit-testable without a running peer connection.
  */
 
-import { sha256 } from "@noble/hashes/sha256";
-import { bytesEqual } from "@fairco.in/core";
-import type { MerkleBlockMsg } from "./messages";
+import { sha256 } from '@noble/hashes/sha256';
+import { bytesEqual } from '@fairco.in/core';
+import type { MerkleBlockMsg } from './messages';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,11 +63,11 @@ export function validateMerkleProof(merkleBlock: MerkleBlockMsg): Uint8Array[] {
   if (totalTransactions === 0) {
     // An empty tree carries no hashes and no meaningful flag bits.
     if (hashes.length !== 0) {
-      throw new Error("Merkle proof invalid: hashes present for empty tree");
+      throw new Error('Merkle proof invalid: hashes present for empty tree');
     }
     for (let i = 0; i < flags.length; i++) {
       if (flags[i] !== 0) {
-        throw new Error("Merkle proof invalid: flag bits set for empty tree");
+        throw new Error('Merkle proof invalid: flag bits set for empty tree');
       }
     }
     return matchedTxHashes;
@@ -89,14 +89,14 @@ export function validateMerkleProof(merkleBlock: MerkleBlockMsg): Uint8Array[] {
     bitsUsed++;
     if (byteIdx >= flags.length) {
       // Running off the end of the flag bytes is itself a malformed proof.
-      throw new Error("Merkle proof invalid: ran out of flag bits");
+      throw new Error('Merkle proof invalid: ran out of flag bits');
     }
     return (flags[byteIdx] & (1 << bitIdx)) !== 0;
   }
 
   function getHash(): Uint8Array {
     if (hashIndex >= hashes.length) {
-      throw new Error("Merkle proof invalid: ran out of hashes");
+      throw new Error('Merkle proof invalid: ran out of hashes');
     }
     const h = hashes[hashIndex];
     hashIndex++;
@@ -127,7 +127,7 @@ export function validateMerkleProof(merkleBlock: MerkleBlockMsg): Uint8Array[] {
       if (bytesEqual(left, right)) {
         // Bitcoin disallows a node whose two children are identical: it is the
         // signature of the CVE-2012-2459 duplicate-txid Merkle malleability.
-        throw new Error("Merkle proof invalid: duplicate child hashes");
+        throw new Error('Merkle proof invalid: duplicate child hashes');
       }
     } else {
       // Odd number of nodes at this level: the last node is duplicated.
@@ -141,7 +141,7 @@ export function validateMerkleProof(merkleBlock: MerkleBlockMsg): Uint8Array[] {
 
   // All provided hashes must be consumed (no dangling extra hashes).
   if (hashIndex !== hashes.length) {
-    throw new Error("Merkle proof invalid: unused hashes remain");
+    throw new Error('Merkle proof invalid: unused hashes remain');
   }
 
   // All flag bits must be consumed except the zero padding that rounds the bit
@@ -149,18 +149,18 @@ export function validateMerkleProof(merkleBlock: MerkleBlockMsg): Uint8Array[] {
   // padding bit, indicates a malformed/padded proof.
   const usedFlagBytes = (bitsUsed + 7) >>> 3;
   if (usedFlagBytes !== flags.length) {
-    throw new Error("Merkle proof invalid: trailing flag bytes");
+    throw new Error('Merkle proof invalid: trailing flag bytes');
   }
   for (let bit = bitsUsed; bit < usedFlagBytes * 8; bit++) {
     const byteIdx = bit >>> 3;
     const bitIdx = bit & 7;
     if ((flags[byteIdx] & (1 << bitIdx)) !== 0) {
-      throw new Error("Merkle proof invalid: trailing flag bits set");
+      throw new Error('Merkle proof invalid: trailing flag bits set');
     }
   }
 
   if (!bytesEqual(computedRoot, merkleBlock.merkleRoot)) {
-    throw new Error("Merkle proof validation failed: root mismatch");
+    throw new Error('Merkle proof validation failed: root mismatch');
   }
 
   return matchedTxHashes;

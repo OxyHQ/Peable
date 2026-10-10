@@ -1,7 +1,11 @@
 import { createServer } from 'node:http';
 import { describe, expect, test } from 'bun:test';
 import { createRestClient } from '../../src/core/client';
-import { PeableApiError, PeableAuthenticationError, PeableInvalidRequestError } from '../../src/core/errors';
+import {
+  PeableApiError,
+  PeableAuthenticationError,
+  PeableInvalidRequestError,
+} from '../../src/core/errors';
 import type { ServiceTokenProvider } from '../../src/core/serviceToken';
 import { createMockFetch } from '../support/mockFetch';
 import { TEST_GATEWAY_URL } from '../support/testGateway';
@@ -47,7 +51,10 @@ describe('createRestClient', () => {
   });
 
   test('serializes a JSON body and sets Content-Type', async () => {
-    const { fetch: fetchImpl, requests } = createMockFetch(() => ({ status: 201, json: { id: 'pi_1' } }));
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({
+      status: 201,
+      json: { id: 'pi_1' },
+    }));
     const { provider } = fakeTokenProvider(['tok_1']);
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
 
@@ -112,9 +119,9 @@ describe('createRestClient', () => {
     const { provider } = fakeTokenProvider(['tok_1']);
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
 
-    await expect(client.request('POST', '/v1/payment_intents', { body: {} })).rejects.toBeInstanceOf(
-      PeableInvalidRequestError,
-    );
+    await expect(
+      client.request('POST', '/v1/payment_intents', { body: {} }),
+    ).rejects.toBeInstanceOf(PeableInvalidRequestError);
   });
 
   test('on 401, invalidates the token and retries once with a fresh token', async () => {
@@ -155,10 +162,11 @@ describe('createRestClient', () => {
   });
 
   test('wraps a network-level fetch failure as PeableApiError', async () => {
-    const failingFetch = (() =>
-      Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
+    const failingFetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
     const { provider } = fakeTokenProvider(['tok_1']);
-    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: failingFetch });
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, {
+      fetch: failingFetch,
+    });
 
     await expect(client.request('GET', '/v1/payment_intents/pi_1')).rejects.toBeInstanceOf(
       PeableApiError,
@@ -169,38 +177,67 @@ describe('createRestClient', () => {
 // Real HTTP response boundary: an accepted remote effect can lose its JSON body.
 // The caller must receive a controlled failure and choose to retry the SAME key.
 describe('createRestClient real HTTP response integrity', () => {
-  for (const [status, body] of [[200, ''], [201, ''], [200, '{incomplete'], [201, '<html>upstream</html>']] as const) {
+  for (const [status, body] of [
+    [200, ''],
+    [201, ''],
+    [200, '{incomplete'],
+    [201, '<html>upstream</html>'],
+  ] as const) {
     test(`rejects missing or malformed JSON on ${status}: ${body.length} bytes`, async () => {
       const keys: Array<string | null> = [];
-      const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
-        keys.push(request.headers.get('Idempotency-Key'));
-        return new Response(body, { status });
-      } });
+      const server = Bun.serve({
+        hostname: '127.0.0.1',
+        port: 0,
+        fetch(request) {
+          keys.push(request.headers.get('Idempotency-Key'));
+          return new Response(body, { status });
+        },
+      });
       try {
         const { provider } = fakeTokenProvider(['synthetic-token']);
         const client = createRestClient({ baseURL: `http://127.0.0.1:${server.port}` }, provider);
-        await expect(client.request('POST', '/v1/billing/checkout_sessions', { body: {}, idempotencyKey: 'same-intent' })).rejects.toMatchObject({
-          name: 'PeableApiError', statusCode: status, code: 'invalid_response',
+        await expect(
+          client.request('POST', '/v1/billing/checkout_sessions', {
+            body: {},
+            idempotencyKey: 'same-intent',
+          }),
+        ).rejects.toMatchObject({
+          name: 'PeableApiError',
+          statusCode: status,
+          code: 'invalid_response',
         });
         expect(keys).toEqual(['same-intent']); // No hidden POST retry.
-      } finally { await server.stop(true); }
+      } finally {
+        await server.stop(true);
+      }
     });
   }
 
   test('preserves valid JSON, explicit 204 and malformed non-success status mapping', async () => {
-    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
-      const path = new URL(request.url).pathname;
-      if (path === '/empty') return new Response(null, { status: 204 });
-      if (path === '/failure') return new Response('<html>upstream</html>', { status: 503 });
-      return Response.json({ id: 'synthetic-result' }, { status: 201 });
-    } });
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch(request) {
+        const path = new URL(request.url).pathname;
+        if (path === '/empty') return new Response(null, { status: 204 });
+        if (path === '/failure') return new Response('<html>upstream</html>', { status: 503 });
+        return Response.json({ id: 'synthetic-result' }, { status: 201 });
+      },
+    });
     try {
       const { provider } = fakeTokenProvider(['synthetic-token']);
       const client = createRestClient({ baseURL: `http://127.0.0.1:${server.port}` }, provider);
-      expect(await client.request<{ id: string }>('GET', '/valid')).toEqual({ id: 'synthetic-result' });
+      expect(await client.request<{ id: string }>('GET', '/valid')).toEqual({
+        id: 'synthetic-result',
+      });
       expect(await client.request<void>('DELETE', '/empty')).toBeUndefined();
-      await expect(client.request('GET', '/failure')).rejects.toMatchObject({ name: 'PeableApiError', statusCode: 503 });
-    } finally { await server.stop(true); }
+      await expect(client.request('GET', '/failure')).rejects.toMatchObject({
+        name: 'PeableApiError',
+        statusCode: 503,
+      });
+    } finally {
+      await server.stop(true);
+    }
   });
 });
 
@@ -225,24 +262,33 @@ describe('createRestClient interrupted HTTP body', () => {
           response.end(JSON.stringify({ id: 'same-committed-result' }));
         }
       });
-      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
       try {
         const address = server.address();
         if (!address || typeof address === 'string') throw new Error('Missing fixture port');
         const { provider, invalidateCalls } = fakeTokenProvider(['synthetic-token']);
         const client = createRestClient({ baseURL: `http://127.0.0.1:${address.port}` }, provider);
         const intent = { body: { storeId: 'synthetic-store' }, idempotencyKey: 'original-intent' };
-        await expect(client.request('POST', '/v1/billing/checkout_sessions', intent)).rejects.toMatchObject({
-          name: 'PeableApiError', statusCode: status, code: 'invalid_response',
+        await expect(
+          client.request('POST', '/v1/billing/checkout_sessions', intent),
+        ).rejects.toMatchObject({
+          name: 'PeableApiError',
+          statusCode: status,
+          code: 'invalid_response',
         });
         expect(keys).toEqual(['original-intent']);
         expect(invalidateCalls).toEqual([]);
-        expect(await client.request<{ id: string }>('POST', '/v1/billing/checkout_sessions', intent)).toEqual({ id: 'same-committed-result' });
+        expect(
+          await client.request<{ id: string }>('POST', '/v1/billing/checkout_sessions', intent),
+        ).toEqual({ id: 'same-committed-result' });
         expect(keys).toEqual(['original-intent', 'original-intent']);
         expect(effects).toBe(1);
       } finally {
         server.closeAllConnections();
-        if (server.listening) await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+        if (server.listening)
+          await new Promise<void>((resolve, reject) =>
+            server.close((error) => (error ? reject(error) : resolve())),
+          );
       }
     });
   }

@@ -27,8 +27,8 @@
  * asserts that agreement so the two can never drift.
  */
 
-import { hexToBytes, type NetworkType } from "@fairco.in/core";
-import type { StoredBlockHeader } from "./spv-client";
+import { hexToBytes, type NetworkType } from '@fairco.in/core';
+import type { StoredBlockHeader } from './spv-client';
 
 /**
  * Mainnet anchor: block 60000. All hashes are in internal (`uint256`) byte
@@ -36,16 +36,10 @@ import type { StoredBlockHeader } from "./spv-client";
  */
 const MAINNET_ANCHOR: StoredBlockHeader = {
   height: 60_000,
-  hash: hexToBytes(
-    "20711ef417c640875ad9c3a4ca8cc2b177bc61efef6c07a7c522a2756531b9b4",
-  ),
+  hash: hexToBytes('20711ef417c640875ad9c3a4ca8cc2b177bc61efef6c07a7c522a2756531b9b4'),
   version: 3,
-  prevBlock: hexToBytes(
-    "3051e3f9084407e48f116991b36f022ba778f1f8b796a1039687863de88ba169",
-  ),
-  merkleRoot: hexToBytes(
-    "ec808dc98d66a36184e5d577e684efe47d831483810c7b4ba7b0e2aa4702b63f",
-  ),
+  prevBlock: hexToBytes('3051e3f9084407e48f116991b36f022ba778f1f8b796a1039687863de88ba169'),
+  merkleRoot: hexToBytes('ec808dc98d66a36184e5d577e684efe47d831483810c7b4ba7b0e2aa4702b63f'),
   timestamp: 1783843225,
   bits: 454092943,
   // Proof-of-stake block: FairCoin leaves the nonce at 0 above nLastPOWBlock.
@@ -58,8 +52,6 @@ const MAINNET_ANCHOR: StoredBlockHeader = {
  * verified, and a wrong anchor would strand the wallet on a chain that never
  * links).
  */
-export function getSyncAnchor(
-  network: NetworkType,
-): StoredBlockHeader | undefined {
-  return network === "mainnet" ? MAINNET_ANCHOR : undefined;
+export function getSyncAnchor(network: NetworkType): StoredBlockHeader | undefined {
+  return network === 'mainnet' ? MAINNET_ANCHOR : undefined;
 }

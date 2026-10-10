@@ -12,7 +12,7 @@
  *    depends on the platform's balance from other traffic. Refusing here makes
  *    it deterministic.
  */
-import type { CurrencyCode, MerchantEnvironment } from "@peable.to/shared-types";
+import type { CurrencyCode, MerchantEnvironment } from '@peable.to/shared-types';
 import {
   applyTransferReversal,
   findTransferByExternalRef,
@@ -21,32 +21,33 @@ import {
   markTransferPaid,
   sumCommittedTransfers,
   type TransferRow,
-} from "../../db/transfers/transferRepository";
-import {
-  linkProviderCharge,
-  lockIntentForUpdate,
-} from "../../db/payments/paymentIntentRepository";
+} from '../../db/transfers/transferRepository';
+import { linkProviderCharge, lockIntentForUpdate } from '../../db/payments/paymentIntentRepository';
 import {
   findTransferReversalByExternalRef,
   insertTransferReversal,
   markTransferReversalFailed,
   markTransferReversalSucceeded,
   type TransferReversalRow,
-} from "../../db/transfers/transferReversalRepository";
-import type { ConnectedAccountRow } from "../../db/accounts/connectedAccountRepository";
-import type { PaymentIntentRow } from "../../db/payments/paymentIntentRepository";
-import { getDb } from "../../db/postgres";
-import { newId } from "../../lib/ids";
-import { assertEnvironmentMatchesProvider } from "../providers/environmentGuard";
-import { isSettlingProvider, ProviderError, type SettlingPaymentProvider } from "../providers/provider";
-import { redactProviderMessage } from "../providers/redact";
-import { resolveProvider } from "../providers/registry";
+} from '../../db/transfers/transferReversalRepository';
+import type { ConnectedAccountRow } from '../../db/accounts/connectedAccountRepository';
+import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
+import { getDb } from '../../db/postgres';
+import { newId } from '../../lib/ids';
+import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard';
+import {
+  isSettlingProvider,
+  ProviderError,
+  type SettlingPaymentProvider,
+} from '../providers/provider';
+import { redactProviderMessage } from '../providers/redact';
+import { resolveProvider } from '../providers/registry';
 
 /** The rail cannot settle sub-merchants — a true statement about the chain rail. */
 export class TransfersUnavailableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "TransfersUnavailableError";
+    this.name = 'TransfersUnavailableError';
   }
 }
 
@@ -54,7 +55,7 @@ export class TransfersUnavailableError extends Error {
 export class PaymentNotSettledError extends Error {
   constructor(status: string) {
     super(`a transfer needs a settled payment; this one is '${status}'`);
-    this.name = "PaymentNotSettledError";
+    this.name = 'PaymentNotSettledError';
   }
 }
 
@@ -62,7 +63,7 @@ export class PaymentNotSettledError extends Error {
 export class AccountNotPayableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "AccountNotPayableError";
+    this.name = 'AccountNotPayableError';
   }
 }
 
@@ -78,9 +79,9 @@ export class TransferSourceUnresolvedError extends Error {
   constructor(intentPublicId: string) {
     super(
       `no captured charge could be resolved for ${intentPublicId}; ` +
-        "a transfer must draw on the charge that funded the payment",
+        'a transfer must draw on the charge that funded the payment',
     );
-    this.name = "TransferSourceUnresolvedError";
+    this.name = 'TransferSourceUnresolvedError';
   }
 }
 
@@ -89,14 +90,12 @@ export class TransferSourceUnresolvedError extends Error {
  */
 export class TransferExceedsPaymentError extends Error {
   constructor(requested: string, remaining: string) {
-    super(
-      `a transfer of ${requested} exceeds the ${remaining} this payment can still settle`,
-    );
-    this.name = "TransferExceedsPaymentError";
+    super(`a transfer of ${requested} exceeds the ${remaining} this payment can still settle`);
+    this.name = 'TransferExceedsPaymentError';
   }
 }
 
-function requireSettlingProvider(id: TransferRow["provider"]): SettlingPaymentProvider {
+function requireSettlingProvider(id: TransferRow['provider']): SettlingPaymentProvider {
   const provider = resolveProvider(id);
   if (!provider) {
     throw new TransfersUnavailableError(`the ${id} rail is not configured on this deployment`);
@@ -152,7 +151,7 @@ async function resolveSourceCharge(
   if (!intent.providerObjectId) throw new TransferSourceUnresolvedError(intent.publicId);
 
   const current = await provider.getStatus(intent.providerObjectId);
-  if (current.status !== "succeeded" || !current.chargeObjectId) {
+  if (current.status !== 'succeeded' || !current.chargeObjectId) {
     throw new TransferSourceUnresolvedError(intent.publicId);
   }
   // Best-effort: `linkProviderCharge` is guarded on the column being NULL, so a
@@ -184,15 +183,13 @@ async function resolveSourceCharge(
  * The lock is on the payment rather than on the transfer rows because the first
  * settlement of a payment has no transfer rows to lock.
  */
-export async function createTransfer(
-  input: CreateTransferInput,
-): Promise<CreateTransferResult> {
+export async function createTransfer(input: CreateTransferInput): Promise<CreateTransferResult> {
   // FIRST, for the same reason the refund path checks it first: this is an
   // authorization decision, and a wrong-mode credential must not be able to
   // probe a payment's state or a seller's readiness by reading which refusal
   // it gets back.
   assertEnvironmentMatchesProvider(input.environment);
-  if (input.intent.status !== "settled") {
+  if (input.intent.status !== 'settled') {
     throw new PaymentNotSettledError(input.intent.status);
   }
   if (!input.intent.provider || !input.intent.providerObjectId) {
@@ -200,13 +197,11 @@ export async function createTransfer(
     // money never passed through this gateway and which it therefore cannot
     // move. Not an error state — a different rail.
     throw new TransfersUnavailableError(
-      "this payment did not settle through a provider this gateway can transfer from",
+      'this payment did not settle through a provider this gateway can transfer from',
     );
   }
-  if (input.account.transfersCapability !== "active" || !input.account.payoutsEnabled) {
-    throw new AccountNotPayableError(
-      "the seller's account cannot receive settlements yet",
-    );
+  if (input.account.transfersCapability !== 'active' || !input.account.payoutsEnabled) {
+    throw new AccountNotPayableError("the seller's account cannot receive settlements yet");
   }
   if (input.currency !== input.intent.currency) {
     // A transfer in a different currency from the charge is an FX conversion
@@ -240,7 +235,7 @@ export async function createTransfer(
    * right now.
    */
   const existing = await findTransferByExternalRef(db, input.merchantId, input.externalRef);
-  if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
+  if (existing && (existing.providerObjectId !== null || existing.status === 'failed')) {
     // Finished, one way or the other. History does not change because it was
     // asked about again.
     return { transfer: existing, created: false };
@@ -271,7 +266,7 @@ export async function createTransfer(
         );
       }
       return insertTransfer(tx, {
-        publicId: newId("tr"),
+        publicId: newId('tr'),
         merchantId: input.merchantId,
         paymentIntentId: input.intent.id,
         connectedAccountId: input.account.id,
@@ -287,8 +282,7 @@ export async function createTransfer(
   // between the read above and the write. Its row is this order's row, so
   // re-reading is correct rather than merely convenient.
   const row =
-    inserted ??
-    (await findTransferByExternalRef(db, input.merchantId, input.externalRef));
+    inserted ?? (await findTransferByExternalRef(db, input.merchantId, input.externalRef));
   if (!row) {
     throw new Error(`transfer for ${input.externalRef} neither inserted nor found`);
   }
@@ -318,11 +312,7 @@ export async function createTransfer(
       // A PERMANENT refusal is recorded and reported. A retryable one is left
       // as `pending` and rethrown: marking it failed would tell the merchant a
       // settlement is dead when the next attempt would have worked.
-      const failed = await markTransferFailed(
-        db,
-        row.id,
-        redactProviderMessage(error.message),
-      );
+      const failed = await markTransferFailed(db, row.id, redactProviderMessage(error.message));
       return { transfer: failed ?? row, created: true };
     }
     throw error;
@@ -376,21 +366,19 @@ export interface ReverseTransferResult {
  * own cumulative figure, which includes reversals this gateway did not make and
  * is what the seller's balance reflects.
  */
-export async function reverseTransfer(
-  input: ReverseTransferInput,
-): Promise<ReverseTransferResult> {
+export async function reverseTransfer(input: ReverseTransferInput): Promise<ReverseTransferResult> {
   const { transfer } = input;
   assertEnvironmentMatchesProvider(input.environment);
   if (!transfer.providerObjectId) {
     throw new TransfersUnavailableError(
-      "this transfer never reached the provider; there is nothing to reverse",
+      'this transfer never reached the provider; there is nothing to reverse',
     );
   }
   const provider = requireSettlingProvider(transfer.provider);
   const db = getDb();
 
   const inserted = await insertTransferReversal(db, {
-    publicId: newId("trr"),
+    publicId: newId('trr'),
     merchantId: input.merchantId,
     transferId: transfer.id,
     externalRef: input.externalRef,

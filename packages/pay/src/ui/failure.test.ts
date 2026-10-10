@@ -85,7 +85,7 @@ describe('classifyPayFailure', () => {
    * a defect here, and calling it a network rejection is both false and
    * un-debuggable.
    */
-  test("a local refusal is not blamed on the network", () => {
+  test('a local refusal is not blamed on the network', () => {
     for (const message of [
       'Refusing to send: change address is not owned by this wallet',
       'Refusing to send: transaction pays 10 but selection quoted 9',

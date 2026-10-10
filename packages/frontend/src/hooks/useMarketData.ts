@@ -11,35 +11,31 @@
  * other network's data, and each network keeps its own cached last-good value.
  */
 
-import { useQuery, type UseQueryResult } from "@tanstack/react-query";
-import type { NetworkType } from "@fairco.in/core";
+import { useQuery, type UseQueryResult } from '@tanstack/react-query';
+import type { NetworkType } from '@fairco.in/core';
 import {
   fetchPriceHistory,
   fetchNetworkStats,
   type PriceHistoryPoint,
   type NetworkStats,
-} from "../services/market";
+} from '../services/market';
 
 /** Fallback poll cadence; realtime WS pushes keep stats fresher than this. */
 const MARKET_REFETCH_INTERVAL_MS = 60_000;
 
 /** FAIR/USD price history for `network` (oldest→newest), refreshed while observed. */
-export function usePriceHistory(
-  network: NetworkType,
-): UseQueryResult<PriceHistoryPoint[], Error> {
+export function usePriceHistory(network: NetworkType): UseQueryResult<PriceHistoryPoint[], Error> {
   return useQuery({
-    queryKey: ["priceHistory", network],
+    queryKey: ['priceHistory', network],
     queryFn: () => fetchPriceHistory(network),
     refetchInterval: MARKET_REFETCH_INTERVAL_MS,
   });
 }
 
 /** Live network stats for `network`; driven by the realtime socket + poll fallback. */
-export function useNetworkStats(
-  network: NetworkType,
-): UseQueryResult<NetworkStats, Error> {
+export function useNetworkStats(network: NetworkType): UseQueryResult<NetworkStats, Error> {
   return useQuery({
-    queryKey: ["networkStats", network],
+    queryKey: ['networkStats', network],
     queryFn: () => fetchNetworkStats(network),
     refetchInterval: MARKET_REFETCH_INTERVAL_MS,
   });

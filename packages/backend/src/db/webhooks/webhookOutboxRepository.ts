@@ -60,7 +60,7 @@ export interface EnqueueWebhookParams {
  */
 export async function enqueueWebhook(
   db: DatabaseOrTransaction,
-  params: EnqueueWebhookParams
+  params: EnqueueWebhookParams,
 ): Promise<string> {
   const [row] = await db
     .insert(webhookDeliveries)
@@ -122,7 +122,7 @@ export interface ClaimDueParams {
  */
 export async function claimDueDeliveries(
   db: DatabaseOrTransaction,
-  params: ClaimDueParams
+  params: ClaimDueParams,
 ): Promise<ClaimedDeliveryRow[]> {
   const now = params.now ?? new Date();
   const leaseExpiresAt = new Date(now.getTime() + params.leaseMs);
@@ -137,9 +137,9 @@ export async function claimDueDeliveries(
         lte(webhookDeliveries.nextAttemptAt, now),
         or(
           sql`${webhookDeliveries.leaseExpiresAt} is null`,
-          lte(webhookDeliveries.leaseExpiresAt, now)
-        )
-      )
+          lte(webhookDeliveries.leaseExpiresAt, now),
+        ),
+      ),
     )
     .orderBy(webhookDeliveries.nextAttemptAt)
     .limit(params.limit)
@@ -185,7 +185,7 @@ export interface RecordAttemptParams {
  */
 export async function recordDeliveryAttempt(
   db: DatabaseOrTransaction,
-  params: RecordAttemptParams
+  params: RecordAttemptParams,
 ): Promise<void> {
   const { outcome } = params;
   const lastStatus =
@@ -225,7 +225,7 @@ export async function recordDeliveryAttempt(
 export async function releaseDeliveryClaim(
   db: DatabaseOrTransaction,
   id: string,
-  params: { readonly nextAttemptAt: Date | null; readonly reason: string }
+  params: { readonly nextAttemptAt: Date | null; readonly reason: string },
 ): Promise<void> {
   await db
     .update(webhookDeliveries)

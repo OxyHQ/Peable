@@ -21,9 +21,9 @@
  *   robust against list reordering or in-place confirmation updates.
  */
 
-import { useWalletStore, type WalletTransaction } from "../wallet/wallet-store";
-import { playReceived } from "./sounds";
-import { scheduleReceivedNotification } from "./notifications";
+import { useWalletStore, type WalletTransaction } from '../wallet/wallet-store';
+import { playReceived } from './sounds';
+import { scheduleReceivedNotification } from './notifications';
 
 let unsubscribe: (() => void) | null = null;
 const seenTxids = new Set<string>();

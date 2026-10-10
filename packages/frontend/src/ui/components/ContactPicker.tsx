@@ -3,15 +3,15 @@
  * Used in the Send screen to quickly fill an address from the address book.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import { View, Text, TextInput, Pressable, Modal } from "react-native";
-import { FlashList } from "@shopify/flash-list";
-import { useContactsStore } from "../../wallet/contacts-store";
-import { getDatabase } from "../../wallet/wallet-store";
-import type { ContactRow } from "../../storage/database";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { ContactAvatar } from "./ContactAvatar";
-import { t } from "../../i18n";
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, TextInput, Pressable, Modal } from 'react-native';
+import { FlashList } from '@shopify/flash-list';
+import { useContactsStore } from '../../wallet/contacts-store';
+import { getDatabase } from '../../wallet/wallet-store';
+import type { ContactRow } from '../../storage/database';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { ContactAvatar } from './ContactAvatar';
+import { t } from '../../i18n';
 
 interface ContactPickerProps {
   visible: boolean;
@@ -53,15 +53,11 @@ function ContactPickerItem({
   );
 }
 
-export function ContactPicker({
-  visible,
-  onSelect,
-  onClose,
-}: ContactPickerProps) {
+export function ContactPicker({ visible, onSelect, onClose }: ContactPickerProps) {
   const contacts = useContactsStore((s) => s.contacts);
   const loadContacts = useContactsStore((s) => s.loadContacts);
   const theme = useTheme();
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<ContactRow[] | null>(null);
 
   const handleOpen = useCallback(() => {
@@ -69,29 +65,23 @@ export function ContactPicker({
     if (db) {
       loadContacts(db);
     }
-    setSearchQuery("");
+    setSearchQuery('');
     setSearchResults(null);
   }, [loadContacts]);
 
-  const handleSearch = useCallback(
-    (query: string) => {
-      setSearchQuery(query);
-      if (query.trim() === "") {
-        setSearchResults(null);
-        return;
-      }
-      const db = getDatabase();
-      if (db) {
-        db.searchContacts(query.trim()).then(setSearchResults);
-      }
-    },
-    [],
-  );
+  const handleSearch = useCallback((query: string) => {
+    setSearchQuery(query);
+    if (query.trim() === '') {
+      setSearchResults(null);
+      return;
+    }
+    const db = getDatabase();
+    if (db) {
+      db.searchContacts(query.trim()).then(setSearchResults);
+    }
+  }, []);
 
-  const displayContacts = useMemo(
-    () => searchResults ?? contacts,
-    [searchResults, contacts],
-  );
+  const displayContacts = useMemo(() => searchResults ?? contacts, [searchResults, contacts]);
 
   const handleSelect = useCallback(
     (address: string) => {
@@ -102,37 +92,26 @@ export function ContactPicker({
   );
 
   const handleClose = useCallback(() => {
-    setSearchQuery("");
+    setSearchQuery('');
     setSearchResults(null);
     onClose();
   }, [onClose]);
 
   const renderItem = useCallback(
-    ({ item }: { item: ContactRow }) => (
-      <ContactPickerItem contact={item} onPress={handleSelect} />
-    ),
+    ({ item }: { item: ContactRow }) => <ContactPickerItem contact={item} onPress={handleSelect} />,
     [handleSelect],
   );
 
   const keyExtractor = useCallback((item: ContactRow) => item.id, []);
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      onRequestClose={handleClose}
-      onShow={handleOpen}
-    >
+    <Modal visible={visible} animationType="slide" onRequestClose={handleClose} onShow={handleOpen}>
       <View className="flex-1 bg-background">
         {/* Header */}
         <View className="pt-14 pb-3 px-6 flex-row items-center justify-between bg-background border-b border-border">
-          <Text className="text-foreground text-lg font-bold">
-            {t("contactPicker.title")}
-          </Text>
+          <Text className="text-foreground text-lg font-bold">{t('contactPicker.title')}</Text>
           <Pressable onPress={handleClose} className="p-2">
-            <Text className="text-primary text-base font-semibold">
-              {t("common.close")}
-            </Text>
+            <Text className="text-primary text-base font-semibold">{t('common.close')}</Text>
           </Pressable>
         </View>
 
@@ -141,7 +120,7 @@ export function ContactPicker({
           <View className="bg-surface border border-border rounded-xl px-4 py-2.5">
             <TextInput
               className="text-foreground text-sm"
-              placeholder={t("contactPicker.searchPlaceholder")}
+              placeholder={t('contactPicker.searchPlaceholder')}
               placeholderTextColor={theme.colors.textSecondary}
               value={searchQuery}
               onChangeText={handleSearch}
@@ -155,9 +134,7 @@ export function ContactPicker({
         {displayContacts.length === 0 ? (
           <View className="flex-1 items-center justify-center px-8">
             <Text className="text-muted-foreground text-base text-center">
-              {searchQuery
-                ? t("contactPicker.emptySearch")
-                : t("contactPicker.empty")}
+              {searchQuery ? t('contactPicker.emptySearch') : t('contactPicker.empty')}
             </Text>
           </View>
         ) : (

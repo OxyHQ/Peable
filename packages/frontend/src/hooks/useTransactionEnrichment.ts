@@ -4,21 +4,19 @@
  * failed request never surfaces as an error, callers just render raw
  * address + amount for whichever entries are missing from the returned map.
  */
-import { useQuery } from "@tanstack/react-query";
-import type { EnrichmentResult } from "@peable.to/shared-types";
-import { enrichAddresses } from "../services/gateway-client";
+import { useQuery } from '@tanstack/react-query';
+import type { EnrichmentResult } from '@peable.to/shared-types';
+import { enrichAddresses } from '../services/gateway-client';
 
 /** Mirrors the backend's `ENRICH_MAX_ADDRESSES` cap. */
 const MAX_ENRICH_BATCH = 50;
 const ENRICHMENT_STALE_TIME_MS = 5 * 60 * 1000;
 
-export function useTransactionEnrichment(
-  addresses: string[],
-): Record<string, EnrichmentResult> {
+export function useTransactionEnrichment(addresses: string[]): Record<string, EnrichmentResult> {
   const uniqueAddresses = [...new Set(addresses)].sort().slice(0, MAX_ENRICH_BATCH);
 
   const { data } = useQuery({
-    queryKey: ["transactionEnrichment", uniqueAddresses],
+    queryKey: ['transactionEnrichment', uniqueAddresses],
     queryFn: () => enrichAddresses(uniqueAddresses),
     enabled: uniqueAddresses.length > 0,
     staleTime: ENRICHMENT_STALE_TIME_MS,

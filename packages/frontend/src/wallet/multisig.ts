@@ -23,9 +23,9 @@ import {
   type BuildMultisigSpendParams,
   type PartialSignature,
   type SerializedMultisigSigningRequest,
-} from "@fairco.in/core";
-import type { Database } from "../storage/database";
-import type { KeyManager } from "@peable.to/pay";
+} from '@fairco.in/core';
+import type { Database } from '../storage/database';
+import type { KeyManager } from '@peable.to/pay';
 
 /**
  * Compute the P2SH address for a redeem script, persist it as a watch
@@ -38,7 +38,7 @@ export async function registerMultisigWatchAddress(
   keyManager: KeyManager,
   redeemScript: Uint8Array,
   network: NetworkConfig,
-  label = "",
+  label = '',
 ): Promise<string> {
   const address = multisigAddress(redeemScript, network);
   await database.insertWatchAddress(address, bytesToHex(redeemScript), label);
@@ -120,7 +120,7 @@ export interface SignedMultisigPartial {
 export function buildMultisigSendDraft(params: BuildMultisigSpendParams): MultisigSendDraft {
   if (params.utxos.length !== 1) {
     throw new Error(
-      "buildMultisigSendDraft supports exactly one multisig UTXO input; multi-input multisig spends are not yet supported",
+      'buildMultisigSendDraft supports exactly one multisig UTXO input; multi-input multisig spends are not yet supported',
     );
   }
   const tx = buildMultisigSpend(params);
@@ -176,7 +176,7 @@ export function decodeMultisigSpend(
   const totalOutput = outputs.reduce((sum, out) => sum + out.value, 0n);
   if (totalOutput > totalInput) {
     throw new Error(
-      "decodeMultisigSpend: outputs exceed the provided input value(s); the request over-spends or the out-of-band input values are wrong",
+      'decodeMultisigSpend: outputs exceed the provided input value(s); the request over-spends or the out-of-band input values are wrong',
     );
   }
   return {

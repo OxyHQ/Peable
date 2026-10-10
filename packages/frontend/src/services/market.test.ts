@@ -10,8 +10,8 @@
  *   - a payload the schema rejects throws.
  */
 
-import { describe, test, expect, mock, afterEach } from "bun:test";
-import { fetchPriceHistory, fetchNetworkStats } from "./market";
+import { describe, test, expect, mock, afterEach } from 'bun:test';
+import { fetchPriceHistory, fetchNetworkStats } from './market';
 
 const originalFetch = globalThis.fetch;
 
@@ -24,58 +24,56 @@ function mockFetchOnce(status: number, body: unknown): void {
     async () =>
       new Response(JSON.stringify(body), {
         status,
-        headers: { "content-type": "application/json" },
+        headers: { 'content-type': 'application/json' },
       }),
   ) as unknown as typeof fetch;
 }
 
-describe("fetchPriceHistory", () => {
-  test("parses and normalizes samples oldest→newest", async () => {
+describe('fetchPriceHistory', () => {
+  test('parses and normalizes samples oldest→newest', async () => {
     mockFetchOnce(200, {
       history: [
-        { price_usd: 1.25, timestamp: "2026-07-15T00:00:00.000Z" },
-        { price_usd: 1.5, timestamp: "2026-07-16T00:00:00.000Z" },
+        { price_usd: 1.25, timestamp: '2026-07-15T00:00:00.000Z' },
+        { price_usd: 1.5, timestamp: '2026-07-16T00:00:00.000Z' },
       ],
     });
 
-    const points = await fetchPriceHistory("mainnet");
+    const points = await fetchPriceHistory('mainnet');
 
     expect(points).toEqual([
-      { priceUsd: 1.25, timestamp: Date.parse("2026-07-15T00:00:00.000Z") },
-      { priceUsd: 1.5, timestamp: Date.parse("2026-07-16T00:00:00.000Z") },
+      { priceUsd: 1.25, timestamp: Date.parse('2026-07-15T00:00:00.000Z') },
+      { priceUsd: 1.5, timestamp: Date.parse('2026-07-16T00:00:00.000Z') },
     ]);
   });
 
-  test("drops samples with an unparseable timestamp", async () => {
+  test('drops samples with an unparseable timestamp', async () => {
     mockFetchOnce(200, {
       history: [
-        { price_usd: 1.0, timestamp: "not-a-date" },
-        { price_usd: 2.0, timestamp: "2026-07-16T00:00:00.000Z" },
+        { price_usd: 1.0, timestamp: 'not-a-date' },
+        { price_usd: 2.0, timestamp: '2026-07-16T00:00:00.000Z' },
       ],
     });
 
-    const points = await fetchPriceHistory("mainnet");
+    const points = await fetchPriceHistory('mainnet');
 
-    expect(points).toEqual([
-      { priceUsd: 2.0, timestamp: Date.parse("2026-07-16T00:00:00.000Z") },
-    ]);
+    expect(points).toEqual([{ priceUsd: 2.0, timestamp: Date.parse('2026-07-16T00:00:00.000Z') }]);
   });
 
-  test("throws on a non-OK response", async () => {
+  test('throws on a non-OK response', async () => {
     mockFetchOnce(500, { history: [] });
-    await expect(fetchPriceHistory("mainnet")).rejects.toThrow();
+    await expect(fetchPriceHistory('mainnet')).rejects.toThrow();
   });
 
-  test("throws when a sample fails the schema", async () => {
+  test('throws when a sample fails the schema', async () => {
     mockFetchOnce(200, {
-      history: [{ price_usd: "nope", timestamp: "2026-07-16T00:00:00.000Z" }],
+      history: [{ price_usd: 'nope', timestamp: '2026-07-16T00:00:00.000Z' }],
     });
-    await expect(fetchPriceHistory("mainnet")).rejects.toThrow();
+    await expect(fetchPriceHistory('mainnet')).rejects.toThrow();
   });
 });
 
-describe("fetchNetworkStats", () => {
-  test("parses the three rendered fields and ignores extras", async () => {
+describe('fetchNetworkStats', () => {
+  test('parses the three rendered fields and ignores extras', async () => {
     mockFetchOnce(200, {
       stats: {
         blockHeight: 123456,
@@ -86,7 +84,7 @@ describe("fetchNetworkStats", () => {
       },
     });
 
-    const stats = await fetchNetworkStats("mainnet");
+    const stats = await fetchNetworkStats('mainnet');
 
     expect(stats).toEqual({
       blockHeight: 123456,
@@ -95,15 +93,15 @@ describe("fetchNetworkStats", () => {
     });
   });
 
-  test("throws on a non-OK response", async () => {
+  test('throws on a non-OK response', async () => {
     mockFetchOnce(503, { stats: null });
-    await expect(fetchNetworkStats("mainnet")).rejects.toThrow();
+    await expect(fetchNetworkStats('mainnet')).rejects.toThrow();
   });
 
-  test("throws when a required field is missing", async () => {
+  test('throws when a required field is missing', async () => {
     mockFetchOnce(200, {
       stats: { blockHeight: 1, masternodeCount: 2 },
     });
-    await expect(fetchNetworkStats("mainnet")).rejects.toThrow();
+    await expect(fetchNetworkStats('mainnet')).rejects.toThrow();
   });
 });

@@ -42,14 +42,9 @@
  * that is sound to enforce header-only.
  */
 
-import type { BlockHeader } from "@fairco.in/core";
-import {
-  bytesEqual,
-  hashBlockHeader,
-  isValidTargetBits,
-  meetsProofOfWork,
-} from "@fairco.in/core";
-import type { BlockHeaderMsg } from "./messages";
+import type { BlockHeader } from '@fairco.in/core';
+import { bytesEqual, hashBlockHeader, isValidTargetBits, meetsProofOfWork } from '@fairco.in/core';
+import type { BlockHeaderMsg } from './messages';
 
 // ---------------------------------------------------------------------------
 // Compact ("nBits") target encoding — Bitcoin/FairCoin `uint256::SetCompact`.
@@ -108,7 +103,7 @@ export interface ValidateHeaderChainParams {
 export class HeaderValidationError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "HeaderValidationError";
+    this.name = 'HeaderValidationError';
   }
 }
 
@@ -122,9 +117,9 @@ export class HeaderValidationError extends Error {
  * either dead or spuriously fatal depending on which side is wrong.
  */
 function toDisplayHex(bytes: Uint8Array): string {
-  let hex = "";
+  let hex = '';
   for (let i = bytes.length - 1; i >= 0; i--) {
-    hex += bytes[i].toString(16).padStart(2, "0");
+    hex += bytes[i].toString(16).padStart(2, '0');
   }
   return hex;
 }
@@ -141,17 +136,10 @@ function toDisplayHex(bytes: Uint8Array): string {
  */
 export function validateHeaderChain(
   params: ValidateHeaderChainParams,
-  hashFn: (header: BlockHeaderMsg) => Uint8Array = (h) =>
-    hashBlockHeader(toCoreHeader(h)),
+  hashFn: (header: BlockHeaderMsg) => Uint8Array = (h) => hashBlockHeader(toCoreHeader(h)),
 ): ValidatedHeader[] {
-  const {
-    headers,
-    anchor,
-    powLimit,
-    checkpointHashHex,
-    genesisHashHex,
-    lastPowBlockHeight,
-  } = params;
+  const { headers, anchor, powLimit, checkpointHashHex, genesisHashHex, lastPowBlockHeight } =
+    params;
 
   const result: ValidatedHeader[] = [];
   let prevHash = anchor?.hash;
@@ -174,7 +162,7 @@ export function validateHeaderChain(
       const hash = hashFn(header);
       if (genesisHashHex && toDisplayHex(hash) !== genesisHashHex) {
         throw new HeaderValidationError(
-          "first header does not match genesis and no anchor was provided",
+          'first header does not match genesis and no anchor was provided',
         );
       }
       height = 0;
@@ -230,9 +218,7 @@ function assertCheckpoint(
   if (!checkpointHashHex) return;
   const expected = checkpointHashHex(height);
   if (expected && toDisplayHex(hash) !== expected) {
-    throw new HeaderValidationError(
-      `header at height ${height} does not match checkpoint`,
-    );
+    throw new HeaderValidationError(`header at height ${height} does not match checkpoint`);
   }
 }
 
@@ -240,7 +226,7 @@ function assertCheckpoint(
 // Chain-update decision (extension vs reorg vs reject)
 // ---------------------------------------------------------------------------
 
-export type ChainUpdateAction = "extend" | "reorg" | "ignore";
+export type ChainUpdateAction = 'extend' | 'reorg' | 'ignore';
 
 export interface ChainUpdatePlan {
   readonly action: ChainUpdateAction;
@@ -275,13 +261,12 @@ export interface PlanChainUpdateParams {
  *    is kept.
  */
 export function planChainUpdate(params: PlanChainUpdateParams): ChainUpdatePlan {
-  const { anchorHeight, batchTipHeight, currentTipHeight, maxReorgDepth } =
-    params;
+  const { anchorHeight, batchTipHeight, currentTipHeight, maxReorgDepth } = params;
 
   // Empty store, or the batch builds right on the tip → simple extension.
   if (currentTipHeight < 0 || anchorHeight >= currentTipHeight) {
     return {
-      action: "extend",
+      action: 'extend',
       forkHeight: anchorHeight,
       newTipHeight: batchTipHeight,
     };
@@ -289,16 +274,16 @@ export function planChainUpdate(params: PlanChainUpdateParams): ChainUpdatePlan 
 
   // Forks below the tip: only accept a strictly longer competing chain.
   if (batchTipHeight <= currentTipHeight) {
-    return { action: "ignore", forkHeight: anchorHeight, newTipHeight: currentTipHeight };
+    return { action: 'ignore', forkHeight: anchorHeight, newTipHeight: currentTipHeight };
   }
 
   // Reject forks deeper than the maximum reorg depth.
   if (currentTipHeight - anchorHeight > maxReorgDepth) {
-    return { action: "ignore", forkHeight: anchorHeight, newTipHeight: currentTipHeight };
+    return { action: 'ignore', forkHeight: anchorHeight, newTipHeight: currentTipHeight };
   }
 
   return {
-    action: "reorg",
+    action: 'reorg',
     forkHeight: anchorHeight,
     newTipHeight: batchTipHeight,
   };

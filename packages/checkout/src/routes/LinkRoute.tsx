@@ -93,7 +93,11 @@ export function LinkRoute() {
       <MerchantIdentity merchant={link.merchant} />
       <p className="checkout-page__pending">{formatFair(BigInt(link.amount))} FAIR</p>
       {payState.status === 'error' && <p className="checkout-page__pending">{payState.message}</p>}
-      <button type="button" onClick={() => void handlePay()} disabled={payState.status === 'loading'}>
+      <button
+        type="button"
+        onClick={() => void handlePay()}
+        disabled={payState.status === 'loading'}
+      >
         {payState.status === 'loading' ? 'Starting…' : 'Pay'}
       </button>
     </main>

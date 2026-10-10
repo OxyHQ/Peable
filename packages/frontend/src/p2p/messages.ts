@@ -9,7 +9,7 @@
  * Network addresses embed port in **big-endian** (per Bitcoin protocol).
  */
 
-import { sha256 } from "@noble/hashes/sha256";
+import { sha256 } from '@noble/hashes/sha256';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -119,20 +119,16 @@ function readUint16BE(buf: Uint8Array, offset: number): number {
 
 function readUint32LE(buf: Uint8Array, offset: number): number {
   return (
-    (buf[offset]) |
-    (buf[offset + 1] << 8) |
-    (buf[offset + 2] << 16) |
-    ((buf[offset + 3] << 24) >>> 0)
-  ) >>> 0;
+    (buf[offset] |
+      (buf[offset + 1] << 8) |
+      (buf[offset + 2] << 16) |
+      ((buf[offset + 3] << 24) >>> 0)) >>>
+    0
+  );
 }
 
 function readInt32LE(buf: Uint8Array, offset: number): number {
-  return (
-    (buf[offset]) |
-    (buf[offset + 1] << 8) |
-    (buf[offset + 2] << 16) |
-    (buf[offset + 3] << 24)
-  );
+  return buf[offset] | (buf[offset + 1] << 8) | (buf[offset + 2] << 16) | (buf[offset + 3] << 24);
 }
 
 function readUint64LE(buf: Uint8Array, offset: number): bigint {
@@ -144,7 +140,7 @@ function readUint64LE(buf: Uint8Array, offset: number): bigint {
 function readInt64LE(buf: Uint8Array, offset: number): bigint {
   const unsigned = readUint64LE(buf, offset);
   // Reinterpret as signed
-  if (unsigned >= (1n << 63n)) {
+  if (unsigned >= 1n << 63n) {
     return unsigned - (1n << 64n);
   }
   return unsigned;
@@ -246,7 +242,10 @@ function writeVarInt(buf: Uint8Array, offset: number, value: number): number {
 
 function readVarStr(buf: Uint8Array, offset: number): { value: string; bytesRead: number } {
   const lenResult = readVarInt(buf, offset);
-  const strBytes = buf.slice(offset + lenResult.bytesRead, offset + lenResult.bytesRead + lenResult.value);
+  const strBytes = buf.slice(
+    offset + lenResult.bytesRead,
+    offset + lenResult.bytesRead + lenResult.value,
+  );
   const value = new TextDecoder().decode(strBytes);
   return { value, bytesRead: lenResult.bytesRead + lenResult.value };
 }
@@ -417,10 +416,7 @@ export function parseVersion(data: Uint8Array): VersionPayload {
 // getheaders
 // ---------------------------------------------------------------------------
 
-export function serializeGetHeaders(
-  locatorHashes: Uint8Array[],
-  stopHash: Uint8Array,
-): Uint8Array {
+export function serializeGetHeaders(locatorHashes: Uint8Array[], stopHash: Uint8Array): Uint8Array {
   // version (uint32) + varint(count) + count*32 + 32 (stop hash)
   const count = locatorHashes.length;
   const viSize = varIntSize(count);
@@ -457,10 +453,7 @@ export function serializeGetHeaders(
  * the legacy block-announcement path, replying to `getblocks` with an `inv` of
  * block hashes, which the SPV client then requests as filtered (merkle) blocks.
  */
-export function serializeGetBlocks(
-  locatorHashes: Uint8Array[],
-  stopHash: Uint8Array,
-): Uint8Array {
+export function serializeGetBlocks(locatorHashes: Uint8Array[], stopHash: Uint8Array): Uint8Array {
   return serializeGetHeaders(locatorHashes, stopHash);
 }
 
@@ -625,7 +618,17 @@ export function parseMerkleBlock(data: Uint8Array): MerkleBlockMsg {
   offset += flagLenResult.bytesRead;
   const flags = data.slice(offset, offset + flagLenResult.value);
 
-  return { version, prevBlock, merkleRoot, timestamp, bits, nonce, totalTransactions, hashes, flags };
+  return {
+    version,
+    prevBlock,
+    merkleRoot,
+    timestamp,
+    bits,
+    nonce,
+    totalTransactions,
+    hashes,
+    flags,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -750,7 +753,7 @@ export function buildMessage(command: string, payload: Uint8Array, magic: Uint8A
 // ---------------------------------------------------------------------------
 
 export function ipv4ToMappedIPv6(ipv4Str: string): Uint8Array {
-  const parts = ipv4Str.split(".");
+  const parts = ipv4Str.split('.');
   if (parts.length !== 4) {
     throw new Error(`Invalid IPv4 address: ${ipv4Str}`);
   }

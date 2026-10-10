@@ -18,21 +18,21 @@ import type {
   PaymentIntentStatus,
   WebhookEvent,
   WebhookEventType,
-} from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import type { DatabaseOrTransaction } from "../db/postgres";
-import { findWebhookTarget } from "../db/merchants/merchantRepository";
+} from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import type { DatabaseOrTransaction } from '../db/postgres';
+import { findWebhookTarget } from '../db/merchants/merchantRepository';
 import {
   updateIntentState,
   type IntentStateChange,
   type IntentStateResult,
   type PaymentIntentRow,
-} from "../db/payments/paymentIntentRepository";
-import { enqueueWebhook } from "../db/webhooks/webhookOutboxRepository";
-import { emitIntentUpdateToActive } from "../realtime/socket";
-import { toPaymentIntentDTO } from "../lib/serialize";
-import { buildEvent } from "./webhookDispatcher";
-import { kickWebhookOutbox } from "./webhookOutbox";
+} from '../db/payments/paymentIntentRepository';
+import { enqueueWebhook } from '../db/webhooks/webhookOutboxRepository';
+import { emitIntentUpdateToActive } from '../realtime/socket';
+import { toPaymentIntentDTO } from '../lib/serialize';
+import { buildEvent } from './webhookDispatcher';
+import { kickWebhookOutbox } from './webhookOutbox';
 
 /**
  * Which statuses a merchant is told about.
@@ -43,19 +43,17 @@ import { kickWebhookOutbox } from "./webhookOutbox";
  * ergonomics acts on outcomes. Moved here from `server.ts` because the outbox
  * write is now part of the transition rather than part of the server's fan-out.
  */
-export const WEBHOOK_EVENT_FOR: Partial<
-  Record<PaymentIntentStatus, WebhookEventType>
-> = {
-  confirming: "payment_intent.confirming",
-  settled: "payment_intent.settled",
-  failed: "payment_intent.failed",
-  rejected: "payment_intent.rejected",
-  expired: "payment_intent.expired",
+export const WEBHOOK_EVENT_FOR: Partial<Record<PaymentIntentStatus, WebhookEventType>> = {
+  confirming: 'payment_intent.confirming',
+  settled: 'payment_intent.settled',
+  failed: 'payment_intent.failed',
+  rejected: 'payment_intent.rejected',
+  expired: 'payment_intent.expired',
   // A refund is an OUTCOME, which is the line this map draws: the pre-payment
   // statuses describe a payer moving through a flow and emit nothing, while
   // money leaving again is something a merchant acts on.
-  refunded: "payment_intent.refunded",
-  partially_refunded: "payment_intent.partially_refunded",
+  refunded: 'payment_intent.refunded',
+  partially_refunded: 'payment_intent.partially_refunded',
 };
 
 /**

@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, test } from 'bun:test';
-import { canStartEcosystemActivity, ecosystemActivityMiddleware, startEcosystemActivity, stopEcosystemActivity } from '../ecosystemActivity';
+import {
+  canStartEcosystemActivity,
+  ecosystemActivityMiddleware,
+  startEcosystemActivity,
+  stopEcosystemActivity,
+} from '../ecosystemActivity';
 
 const keys = [
   'OXY_SERVICE_API_KEY',
@@ -9,7 +14,7 @@ const keys = [
   'AWS_CONTAINER_CREDENTIALS_FULL_URI',
   'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
 ] as const;
-const initial = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+const initial = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
 afterEach(async () => {
   await stopEcosystemActivity();
   for (const key of keys) {
@@ -25,7 +30,9 @@ describe('ecosystem activity configuration', () => {
     delete process.env.OXY_SERVICE_API_SECRET;
     startEcosystemActivity(() => false);
     let continued = false;
-    ecosystemActivityMiddleware({} as never, {} as never, () => { continued = true; });
+    ecosystemActivityMiddleware({} as never, {} as never, () => {
+      continued = true;
+    });
     expect(continued).toBe(true);
   });
   test('a credential missing only its pair is a no-op, not a crash', () => {
@@ -33,7 +40,9 @@ describe('ecosystem activity configuration', () => {
     delete process.env.OXY_SERVICE_API_SECRET;
     expect(() => startEcosystemActivity(() => true)).not.toThrow();
     let continued = false;
-    ecosystemActivityMiddleware({} as never, {} as never, () => { continued = true; });
+    ecosystemActivityMiddleware({} as never, {} as never, () => {
+      continued = true;
+    });
     expect(continued).toBe(true);
   });
   test('blank credentials are treated as absent', () => {
@@ -41,7 +50,9 @@ describe('ecosystem activity configuration', () => {
     process.env.OXY_SERVICE_API_SECRET = '   ';
     expect(() => startEcosystemActivity(() => true)).not.toThrow();
     let continued = false;
-    ecosystemActivityMiddleware({} as never, {} as never, () => { continued = true; });
+    ecosystemActivityMiddleware({} as never, {} as never, () => {
+      continued = true;
+    });
     expect(continued).toBe(true);
   });
   /**

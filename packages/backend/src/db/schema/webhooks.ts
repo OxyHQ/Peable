@@ -1,13 +1,5 @@
 import { sql } from 'drizzle-orm';
-import {
-  boolean,
-  check,
-  index,
-  integer,
-  jsonb,
-  pgTable,
-  text,
-} from 'drizzle-orm/pg-core';
+import { boolean, check, index, integer, jsonb, pgTable, text } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
@@ -81,10 +73,7 @@ export const webhookDeliveries = pgTable(
      * The SIGNATURE is not stored — it is recomputed per attempt over a fresh
      * timestamp, because the receiver's tolerance window is measured against it.
      */
-    payload: jsonb()
-      .$type<Record<string, unknown>>()
-      .notNull()
-      .default(sql`'{}'::jsonb`),
+    payload: jsonb().$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
     /**
      * The URL actually POSTed to, as of the latest attempt.
      *
@@ -136,11 +125,11 @@ export const webhookDeliveries = pgTable(
       .where(sql`${table.nextAttemptAt} is not null`),
     check(
       'webhook_deliveries_event_type_check',
-      sql.raw(`event_type in (${inList(WEBHOOK_EVENT_TYPES)})`)
+      sql.raw(`event_type in (${inList(WEBHOOK_EVENT_TYPES)})`),
     ),
     check(
       'webhook_deliveries_last_status_check',
-      sql.raw(`last_status in (${inList(WEBHOOK_DELIVERY_STATUSES)})`)
+      sql.raw(`last_status in (${inList(WEBHOOK_DELIVERY_STATUSES)})`),
     ),
     /**
      * Was `attempts > 0`, because a row only existed after `deliver()` had run
@@ -156,7 +145,7 @@ export const webhookDeliveries = pgTable(
      */
     check(
       'webhook_deliveries_status_agrees_check',
-      sql`${table.delivered} = (${table.lastStatus} = 'delivered')`
+      sql`${table.delivered} = (${table.lastStatus} = 'delivered')`,
     ),
     /**
      * A row is scheduled exactly when it is pending.
@@ -169,20 +158,20 @@ export const webhookDeliveries = pgTable(
      */
     check(
       'webhook_deliveries_schedule_agrees_check',
-      sql`(${table.lastStatus} = 'pending') = (${table.nextAttemptAt} is not null)`
+      sql`(${table.lastStatus} = 'pending') = (${table.nextAttemptAt} is not null)`,
     ),
     check(
       'webhook_deliveries_lease_agrees_check',
-      sql`(${table.leaseOwner} is null) = (${table.leaseExpiresAt} is null)`
+      sql`(${table.leaseOwner} is null) = (${table.leaseExpiresAt} is null)`,
     ),
     /** A terminal row holds no lease — nothing may claim what is already done. */
     check(
       'webhook_deliveries_terminal_has_no_lease_check',
-      sql`${table.lastStatus} = 'pending' or ${table.leaseOwner} is null`
+      sql`${table.lastStatus} = 'pending' or ${table.leaseOwner} is null`,
     ),
     check(
       'webhook_deliveries_payload_object_check',
-      sql`jsonb_typeof(${table.payload}) = 'object'`
+      sql`jsonb_typeof(${table.payload}) = 'object'`,
     ),
     /**
      * An event ABOUT a payment names one; an event about something else does
@@ -206,8 +195,8 @@ export const webhookDeliveries = pgTable(
     check(
       'webhook_deliveries_intent_event_has_intent_check',
       sql.raw(
-        `(event_type in (${inList(INTENT_WEBHOOK_EVENT_TYPES)})) = (payment_intent_id is not null)`
-      )
+        `(event_type in (${inList(INTENT_WEBHOOK_EVENT_TYPES)})) = (payment_intent_id is not null)`,
+      ),
     ),
     /**
      * A row that will be ATTEMPTED carries a real envelope.
@@ -227,7 +216,7 @@ export const webhookDeliveries = pgTable(
      */
     check(
       'webhook_deliveries_pending_has_envelope_check',
-      sql`${table.lastStatus} <> 'pending' or ${table.payload} <> '{}'::jsonb`
+      sql`${table.lastStatus} <> 'pending' or ${table.payload} <> '{}'::jsonb`,
     ),
-  ]
+  ],
 );

@@ -1,9 +1,9 @@
-import { test, expect, beforeAll, afterAll } from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import { createEnrichRouter } from "../enrich";
-import { createSocialRouter } from "../social";
+import { test, expect, beforeAll, afterAll } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import { createEnrichRouter } from '../enrich';
+import { createSocialRouter } from '../social';
 
 /**
  * `createEnrichRouter` / `createSocialRouter` both accept an injectable
@@ -40,25 +40,25 @@ afterAll(async () => {
   });
 });
 
-test("POST /v1/enrich with no Authorization header is rejected (401) under the real requireOxyUser default", async () => {
+test('POST /v1/enrich with no Authorization header is rejected (401) under the real requireOxyUser default', async () => {
   const res = await fetch(`${baseUrl}/v1/enrich`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ addresses: ["TAddrA"] }),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ addresses: ['TAddrA'] }),
   });
   expect(res.status).toBe(401);
 });
 
-test("POST /v1/social/:username/next_address with no Authorization header is rejected (401) under the real requireOxyUser default", async () => {
+test('POST /v1/social/:username/next_address with no Authorization header is rejected (401) under the real requireOxyUser default', async () => {
   const res = await fetch(`${baseUrl}/v1/social/alice/next_address`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ network: "testnet" }),
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ network: 'testnet' }),
   });
   expect(res.status).toBe(401);
 });
 
-test("GET /v1/social/me/cursor with no Authorization header is rejected (401) under the real requireOxyUser default", async () => {
+test('GET /v1/social/me/cursor with no Authorization header is rejected (401) under the real requireOxyUser default', async () => {
   const res = await fetch(`${baseUrl}/v1/social/me/cursor?network=testnet`);
   expect(res.status).toBe(401);
 });

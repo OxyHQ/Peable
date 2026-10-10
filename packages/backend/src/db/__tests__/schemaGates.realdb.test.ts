@@ -93,8 +93,14 @@ describe('id-column classification', () => {
       tables: ALL_TABLES,
       deferred: [],
       withoutForeignKey: [
-        { column: 'billing_object_bindings.platform_account_id', reason: 'Verified Stripe platform account identity; external provider namespace' },
-        { column: 'billing_operations.platform_account_id', reason: 'Verified Stripe platform account identity; external provider namespace' },
+        {
+          column: 'billing_object_bindings.platform_account_id',
+          reason: 'Verified Stripe platform account identity; external provider namespace',
+        },
+        {
+          column: 'billing_operations.platform_account_id',
+          reason: 'Verified Stripe platform account identity; external provider namespace',
+        },
         // The four public ids are this row's OWN external identifier, not a
         // reference to another row. They end in `_id` and are caught by the
         // scan for that reason alone.
@@ -244,7 +250,7 @@ describe('migration files', () => {
     for (const file of files) {
       const contents = await readFile(join(MIGRATIONS_DIR, file), 'utf8');
       const markers = [phaseMarkerLine('pre'), phaseMarkerLine('post')].filter((marker) =>
-        contents.includes(marker)
+        contents.includes(marker),
       );
       expect([file, markers.length]).toEqual([file, 1]);
     }

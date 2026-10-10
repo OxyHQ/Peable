@@ -28,11 +28,8 @@ import {
   unregisterFromPush,
   normalizeServerUrl,
   type RegisterInput,
-} from "./notification-server";
-import type {
-  NotificationPrefs,
-  StoredSubscription,
-} from "./notification-settings";
+} from './notification-server';
+import type { NotificationPrefs, StoredSubscription } from './notification-settings';
 
 /**
  * BIP44 default gap limit registered with the server. Matches the wallet's own
@@ -47,7 +44,7 @@ const REGISTRATION_GAP_LIMIT = 20;
 /** The registerable facts about the active wallet (all public — no secrets). */
 export interface RegistrationWallet {
   walletId: string;
-  network: "mainnet" | "testnet";
+  network: 'mainnet' | 'testnet';
   accountXpub: string;
   gapLimit: number;
 }
@@ -55,7 +52,7 @@ export interface RegistrationWallet {
 /** A native push token plus the platform it came from. */
 export interface DeviceToken {
   token: string;
-  platform: "android" | "ios";
+  platform: 'android' | 'ios';
 }
 
 export interface PushRegistrationDeps {
@@ -69,10 +66,7 @@ export interface PushRegistrationDeps {
   register: (input: RegisterInput) => Promise<{ subscriptionId: string }>;
   unregister: (serverUrl: string, subscriptionId: string) => Promise<void>;
   loadSubscription: (walletId: string) => Promise<StoredSubscription | null>;
-  saveSubscription: (
-    walletId: string,
-    subscription: StoredSubscription,
-  ) => Promise<void>;
+  saveSubscription: (walletId: string, subscription: StoredSubscription) => Promise<void>;
   clearSubscription: (walletId: string) => Promise<void>;
 }
 
@@ -113,9 +107,7 @@ function payloadKeyFor(input: RegisterInput): string {
  * Build a registration controller over injected dependencies. Pure of native
  * modules so it can be unit-tested directly.
  */
-export function createPushRegistration(
-  deps: PushRegistrationDeps,
-): PushRegistrationController {
+export function createPushRegistration(deps: PushRegistrationDeps): PushRegistrationController {
   let current: Promise<void> | null = null;
   let rerun = false;
   let started = false;
@@ -151,7 +143,7 @@ export function createPushRegistration(
     const input: RegisterInput = {
       serverUrl: prefs.serverUrl,
       xpub: wallet.accountXpub,
-      scriptType: "p2pkh",
+      scriptType: 'p2pkh',
       gapLimit: wallet.gapLimit,
       network: wallet.network,
       deviceToken: device.token,
@@ -249,14 +241,13 @@ let controller: PushRegistrationController | null = null;
 export function startPushRegistration(): void {
   if (controller) return;
 
-  const rn = require("react-native") as typeof import("react-native");
+  const rn = require('react-native') as typeof import('react-native');
   // No native push token surface on web; foreground alerts still work.
-  if (rn.Platform.OS === "web") return;
+  if (rn.Platform.OS === 'web') return;
 
-  const settings =
-    require("./notification-settings") as typeof import("./notification-settings");
+  const settings = require('./notification-settings') as typeof import('./notification-settings');
   const { useWalletStore, getActiveAccountXpub } =
-    require("../wallet/wallet-store") as typeof import("../wallet/wallet-store");
+    require('../wallet/wallet-store') as typeof import('../wallet/wallet-store');
 
   const deps: PushRegistrationDeps = {
     getPrefs: settings.getNotificationPrefs,
@@ -287,13 +278,11 @@ export function startPushRegistration(): void {
       }),
     getDeviceToken: async () => {
       try {
-        const Notifications =
-          require("expo-notifications") as typeof import("expo-notifications");
-        const platform: "android" | "ios" =
-          rn.Platform.OS === "ios" ? "ios" : "android";
+        const Notifications = require('expo-notifications') as typeof import('expo-notifications');
+        const platform: 'android' | 'ios' = rn.Platform.OS === 'ios' ? 'ios' : 'android';
         const devicePushToken = await Notifications.getDevicePushTokenAsync();
         const value =
-          typeof devicePushToken.data === "string"
+          typeof devicePushToken.data === 'string'
             ? devicePushToken.data
             : String(devicePushToken.data);
         if (value.length === 0) return null;
@@ -304,8 +293,7 @@ export function startPushRegistration(): void {
       }
     },
     register: (input) => registerForPush(input),
-    unregister: (serverUrl, subscriptionId) =>
-      unregisterFromPush(serverUrl, subscriptionId),
+    unregister: (serverUrl, subscriptionId) => unregisterFromPush(serverUrl, subscriptionId),
     loadSubscription: settings.getStoredSubscription,
     saveSubscription: settings.saveStoredSubscription,
     clearSubscription: settings.clearStoredSubscription,

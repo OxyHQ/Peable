@@ -55,12 +55,12 @@ function readRun(argv: readonly string[]): MigrationRun {
         '`pre` applies additive migrations while the previous image is still serving; ' +
         '`post` applies drops, renames and narrowings once the new image is live; ' +
         '`all` applies the whole chain in one run and is for a from-zero genesis or a ' +
-        'cutover batch, never a normal release.'
+        'cutover batch, never a normal release.',
     );
   }
   if (!MIGRATION_RUNS.includes(value as MigrationRun)) {
     throw new Error(
-      `Refusing to migrate: --phase=${JSON.stringify(value)} is not one of ${MIGRATION_RUNS.join(', ')}.`
+      `Refusing to migrate: --phase=${JSON.stringify(value)} is not one of ${MIGRATION_RUNS.join(', ')}.`,
     );
   }
   return value as MigrationRun;
@@ -68,7 +68,7 @@ function readRun(argv: readonly string[]): MigrationRun {
 
 export async function main(
   argv: readonly string[] = process.argv.slice(2),
-  env: Record<string, string | undefined> = process.env
+  env: Record<string, string | undefined> = process.env,
 ): Promise<void> {
   const databaseUrl = env.DATABASE_URL;
   if (!databaseUrl) {

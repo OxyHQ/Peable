@@ -5,10 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": [
-      "peable",
-      "faircoin"
-    ],
+    "scheme": ["peable", "faircoin"],
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
@@ -42,10 +39,7 @@
               "scheme": "peable"
             }
           ],
-          "category": [
-            "DEFAULT",
-            "BROWSABLE"
-          ]
+          "category": ["DEFAULT", "BROWSABLE"]
         }
       ]
     },

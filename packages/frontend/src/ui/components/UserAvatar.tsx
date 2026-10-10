@@ -8,8 +8,8 @@
  * absent. Used everywhere an identity's avatar renders in Peable: the
  * recipient picker, the receive screen, and the transaction history.
  */
-import type React from "react";
-import { Avatar } from "@oxy.so/bloom/avatar";
+import type React from 'react';
+import { Avatar } from '@oxy.so/bloom/avatar';
 
 export function UserAvatar({
   avatarFileId,

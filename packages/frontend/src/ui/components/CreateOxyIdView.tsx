@@ -6,12 +6,12 @@
  * entry boundary itself.
  */
 
-import { useCallback, useState } from "react";
-import { View, Text, Linking } from "react-native";
-import { Button } from "./Button";
-import { oxyServices } from "../../services/oxy-services";
-import { hasIdentityAuthMethod, resolveKeylessAction } from "../../wallet/keyless";
-import { t } from "../../i18n";
+import { useCallback, useState } from 'react';
+import { View, Text, Linking } from 'react-native';
+import { Button } from './Button';
+import { oxyServices } from '../../services/oxy-services';
+import { hasIdentityAuthMethod, resolveKeylessAction } from '../../wallet/keyless';
+import { t } from '../../i18n';
 
 export function CreateOxyIdView() {
   const [opening, setOpening] = useState(false);
@@ -32,12 +32,12 @@ export function CreateOxyIdView() {
       const action = resolveKeylessAction(hasIdentityAuthMethod(methods));
       const canOpen = await Linking.canOpenURL(action.url);
       if (!canOpen) {
-        setNotice(t("onboarding.commonsNotInstalled"));
+        setNotice(t('onboarding.commonsNotInstalled'));
         return;
       }
       await Linking.openURL(action.url);
     } catch {
-      setNotice(t("onboarding.createIdentityError"));
+      setNotice(t('onboarding.createIdentityError'));
     } finally {
       setOpening(false);
     }
@@ -46,14 +46,14 @@ export function CreateOxyIdView() {
   return (
     <View className="flex-1 bg-background items-center justify-center px-8">
       <Text className="text-foreground text-2xl text-center mb-3">
-        {t("onboarding.createIdentityTitle")}
+        {t('onboarding.createIdentityTitle')}
       </Text>
       <Text className="text-muted-foreground text-base text-center mb-8">
-        {t("onboarding.createIdentitySubtitle")}
+        {t('onboarding.createIdentitySubtitle')}
       </Text>
       <View className="w-full">
         <Button
-          title={t("onboarding.createIdentityCta")}
+          title={t('onboarding.createIdentityCta')}
           onPress={() => void handleSetup()}
           variant="primary"
           size="lg"

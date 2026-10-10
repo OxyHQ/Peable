@@ -6,9 +6,9 @@
  * wallet that needs no private key, so it is the half a browser can show.
  */
 
-import { View, Text } from "react-native";
-import QRCode from "react-native-qrcode-svg";
-import { buildProfileUrl } from "../../pay/profile-route";
+import { View, Text } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
+import { buildProfileUrl } from '../../pay/profile-route';
 
 const PROFILE_QR_SIZE = 220;
 const HTTPS_PREFIX = /^https:\/\//;
@@ -32,7 +32,7 @@ export function ProfileQRCard({ username }: { username: string }) {
       {/* The link in plain text under it: a QR is useless to someone reading
           this over a call, or copying it into a message. */}
       <Text className="text-muted-foreground text-sm mt-4" selectable>
-        {profileUrl.replace(HTTPS_PREFIX, "")}
+        {profileUrl.replace(HTTPS_PREFIX, '')}
       </Text>
     </View>
   );

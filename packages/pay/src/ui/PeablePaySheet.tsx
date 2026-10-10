@@ -332,7 +332,11 @@ function RecipientRow({
 }) {
   return (
     <View style={styles.recipientRow}>
-      <Avatar source={recipient.avatarFileId ?? null} name={recipient.displayName ?? recipient.username} size={44} />
+      <Avatar
+        source={recipient.avatarFileId ?? null}
+        name={recipient.displayName ?? recipient.username}
+        size={44}
+      />
       <View style={styles.recipientText}>
         <BloomText style={[styles.title, { color: colors.text }]} numberOfLines={1}>
           {recipient.displayName ?? `@${recipient.username}`}
@@ -374,7 +378,9 @@ function Body({
                   styles.preset,
                   {
                     backgroundColor:
-                      state.input === amountInputFor(preset) ? colors.primarySubtle : colors.backgroundSecondary,
+                      state.input === amountInputFor(preset)
+                        ? colors.primarySubtle
+                        : colors.backgroundSecondary,
                     borderColor: colors.border,
                   },
                 ]}
@@ -409,7 +415,8 @@ function Body({
           ) : null}
 
           <Button
-            appearance="solid" tone="accent"
+            appearance="solid"
+            tone="accent"
             disabled={state.entry.kind !== 'ok'}
             onPress={() => dispatch({ type: 'continue' })}
           >
@@ -431,12 +438,28 @@ function Body({
     case 'review':
       return (
         <View style={styles.section}>
-          <SummaryRow styles={styles} colors={colors} label="Amount" value={fair(state.reviewed.amountSat)} />
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Amount"
+            value={fair(state.reviewed.amountSat)}
+          />
           {/* The fee the payer agrees to. `sendPayment` is called with the rate
               this row was priced at, so the number here is the number charged. */}
-          <SummaryRow styles={styles} colors={colors} label="Network fee" value={fair(state.reviewed.feeSat)} />
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Network fee"
+            value={fair(state.reviewed.feeSat)}
+          />
           <Divider />
-          <SummaryRow styles={styles} colors={colors} label="Total" value={fair(state.reviewed.totalSat)} strong />
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Total"
+            value={fair(state.reviewed.totalSat)}
+            strong
+          />
           <BloomText style={[styles.mono, { color: colors.textTertiary }]} numberOfLines={1}>
             {state.reviewed.to}
           </BloomText>
@@ -452,14 +475,22 @@ function Body({
     case 'handoff':
       return (
         <View style={styles.section}>
-          <BloomText style={[styles.title, { color: colors.text }]}>Continue on your phone</BloomText>
+          <BloomText style={[styles.title, { color: colors.text }]}>
+            Continue on your phone
+          </BloomText>
           <BloomText style={[styles.caption, { color: colors.textSecondary }]}>
             {`This browser has no wallet key, so it can't sign a payment. Scan this with the ${COIN_TICKER} wallet on your phone — the amount is already filled in.`}
           </BloomText>
           <View style={styles.qrWrap}>
             <PayQrCode value={state.offer.uri} size={QR_SIZE} />
           </View>
-          <SummaryRow styles={styles} colors={colors} label="Amount" value={fair(state.offer.amountSat)} strong />
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Amount"
+            value={fair(state.offer.amountSat)}
+            strong
+          />
           {/* The URI in plain text under the code: a QR is useless to someone
               pasting the link into a message or reading it over a call. */}
           <BloomText style={[styles.mono, { color: colors.textTertiary }]} selectable>
@@ -478,12 +509,31 @@ function Body({
       return (
         <View style={styles.section}>
           <BloomText style={[styles.title, { color: colors.success }]}>Paid</BloomText>
-          <SummaryRow styles={styles} colors={colors} label="Amount" value={fair(state.paid.amountSat)} strong />
-          <SummaryRow styles={styles} colors={colors} label="Network fee" value={fair(state.paid.feeSat)} />
-          <BloomText style={[styles.mono, { color: colors.textTertiary }]} numberOfLines={1} selectable>
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Amount"
+            value={fair(state.paid.amountSat)}
+            strong
+          />
+          <SummaryRow
+            styles={styles}
+            colors={colors}
+            label="Network fee"
+            value={fair(state.paid.feeSat)}
+          />
+          <BloomText
+            style={[styles.mono, { color: colors.textTertiary }]}
+            numberOfLines={1}
+            selectable
+          >
             {state.paid.txid}
           </BloomText>
-          <Button appearance="outline" tone="neutral" onPress={() => void Linking.openURL(state.paid.explorerUrl)}>
+          <Button
+            appearance="outline"
+            tone="neutral"
+            onPress={() => void Linking.openURL(state.paid.explorerUrl)}
+          >
             View on the explorer
           </Button>
         </View>
@@ -492,7 +542,9 @@ function Body({
     case 'failed':
       return (
         <View style={styles.section}>
-          <BloomText style={[styles.title, { color: colors.error }]}>{state.failure.title}</BloomText>
+          <BloomText style={[styles.title, { color: colors.error }]}>
+            {state.failure.title}
+          </BloomText>
           {state.failure.detail !== null ? (
             <BloomText style={[styles.caption, { color: colors.textSecondary }]}>
               {state.failure.detail}
@@ -573,7 +625,12 @@ function makeStyles(colors: Colors) {
     title: { fontSize: 17, fontWeight: '700' },
     caption: { fontSize: 13 },
     mono: { fontSize: 12, fontFamily: 'monospace' },
-    summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12 },
+    summaryRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: 12,
+    },
     waiting: { paddingVertical: 32, alignItems: 'center', gap: 12 },
     qrWrap: { alignItems: 'center', paddingVertical: 8, backgroundColor: colors.background },
   });

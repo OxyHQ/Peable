@@ -9,8 +9,8 @@
  * Ported from Mercaria's `services/payments/stripe/verify.ts`.
  */
 
-import type Stripe from "stripe";
-import type { ProviderEventEnvelope, ProviderPaymentStatus } from "../provider";
+import type Stripe from 'stripe';
+import type { ProviderEventEnvelope, ProviderPaymentStatus } from '../provider';
 
 /**
  * Stripe's PaymentIntent status → the gateway's.
@@ -27,22 +27,20 @@ import type { ProviderEventEnvelope, ProviderPaymentStatus } from "../provider";
  *    authorized and NOT captured; calling it succeeded would settle an order
  *    against funds nobody has taken.
  */
-export function mapPaymentIntentStatus(
-  status: Stripe.PaymentIntent.Status,
-): ProviderPaymentStatus {
+export function mapPaymentIntentStatus(status: Stripe.PaymentIntent.Status): ProviderPaymentStatus {
   switch (status) {
-    case "requires_payment_method":
-    case "requires_confirmation":
-      return "created";
-    case "requires_action":
-      return "requires_action";
-    case "processing":
-    case "requires_capture":
-      return "processing";
-    case "succeeded":
-      return "succeeded";
-    case "canceled":
-      return "canceled";
+    case 'requires_payment_method':
+    case 'requires_confirmation':
+      return 'created';
+    case 'requires_action':
+      return 'requires_action';
+    case 'processing':
+    case 'requires_capture':
+      return 'processing';
+    case 'succeeded':
+      return 'succeeded';
+    case 'canceled':
+      return 'canceled';
   }
 }
 
@@ -53,11 +51,11 @@ export function mapPaymentIntentStatus(
  * enumerable — the ingress route filters on it, and a test can walk it.
  */
 const PAYMENT_STATUS_FOR_EVENT: Readonly<Record<string, ProviderPaymentStatus>> = {
-  "payment_intent.succeeded": "succeeded",
-  "payment_intent.payment_failed": "failed",
-  "payment_intent.processing": "processing",
-  "payment_intent.canceled": "canceled",
-  "payment_intent.requires_action": "requires_action",
+  'payment_intent.succeeded': 'succeeded',
+  'payment_intent.payment_failed': 'failed',
+  'payment_intent.processing': 'processing',
+  'payment_intent.canceled': 'canceled',
+  'payment_intent.requires_action': 'requires_action',
 };
 
 /**
@@ -77,13 +75,13 @@ export function stripeObjectIds(event: Stripe.Event): Record<string, string> {
   // arrived, and every read below is guarded by a `typeof` check.
   const object = event.data.object as unknown as Record<string, unknown> & { id?: unknown };
 
-  if (typeof object.id === "string") {
-    const objectType = typeof object.object === "string" ? object.object : "object";
+  if (typeof object.id === 'string') {
+    const objectType = typeof object.object === 'string' ? object.object : 'object';
     ids[objectType] = object.id;
   }
-  for (const key of ["payment_intent", "charge", "transfer", "source_transaction"]) {
+  for (const key of ['payment_intent', 'charge', 'transfer', 'source_transaction']) {
     const value = object[key];
-    if (typeof value === "string") ids[key] = value;
+    if (typeof value === 'string') ids[key] = value;
   }
   if (event.account) ids.account = event.account;
   return ids;
@@ -99,7 +97,7 @@ export function stripeObjectIds(event: Stripe.Event): Record<string, string> {
 export function toProviderEventEnvelope(event: Stripe.Event): ProviderEventEnvelope {
   const paymentStatus = PAYMENT_STATUS_FOR_EVENT[event.type];
   return {
-    provider: "stripe",
+    provider: 'stripe',
     ...(event.account !== undefined ? { providerAccountId: event.account } : {}),
     providerEventId: event.id,
     type: event.type,

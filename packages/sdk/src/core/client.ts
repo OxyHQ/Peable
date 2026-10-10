@@ -107,10 +107,13 @@ export function createRestClient(
       // Headers can arrive before the connection fails during body consumption.
       // Preserve the known status, but do not infer whether a mutation committed
       // or retry it automatically. Recovery keeps the caller's original key.
-      throw new PeableApiError('The Peable Gateway response body could not be read; remote outcome is unknown', {
-        statusCode: response.status,
-        code: 'invalid_response',
-      });
+      throw new PeableApiError(
+        'The Peable Gateway response body could not be read; remote outcome is unknown',
+        {
+          statusCode: response.status,
+          code: 'invalid_response',
+        },
+      );
     }
     if (!response.ok) {
       throw errorFromResponse(response.status, body);

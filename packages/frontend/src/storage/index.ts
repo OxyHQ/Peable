@@ -1,16 +1,16 @@
-export { Database } from "./database";
+export { Database } from './database';
 export type {
   BlockHeaderRow,
   TransactionRow,
   UTXORow,
   AddressRow,
   PeerRow,
-} from "./database";
+} from './database';
 export {
   getItemAsync,
   setItemAsync,
   deleteItemAsync,
-} from "./kv-store";
+} from './kv-store';
 export {
   saveMnemonic,
   getMnemonic,
@@ -30,5 +30,5 @@ export {
   deleteWalletMnemonic,
   isBiometricsEnabled,
   setBiometricsEnabled,
-} from "./secure-store";
-export type { WalletInfo } from "./secure-store";
+} from './secure-store';
+export type { WalletInfo } from './secure-store';

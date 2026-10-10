@@ -8,26 +8,26 @@
  * lock-state transition to the caller.
  */
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { View, Text, Pressable, Image } from "react-native";
-import { SafeAreaView } from "../safe-area-view";
-import * as LocalAuthentication from "expo-local-authentication";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { verifyPin, isBiometricsEnabled } from "../../storage/secure-store";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { View, Text, Pressable, Image } from 'react-native';
+import { SafeAreaView } from '../safe-area-view';
+import * as LocalAuthentication from 'expo-local-authentication';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { verifyPin, isBiometricsEnabled } from '../../storage/secure-store';
 import {
   loadPinAttempts,
   recordPinFailure,
   clearPinAttempts,
   PIN_MAX_ATTEMPTS,
   lockoutSecondsForAttempts,
-} from "../../storage/pin-attempts";
-import { PinPad } from "./PinPad";
-import { PinDots } from "./PinDots";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { hapticSuccess, hapticError } from "../../utils/haptics";
-import { playUnlocked } from "../../services/sounds";
-import { APP_DISPLAY_NAME } from "../../config";
-import { t } from "../../i18n";
+} from '../../storage/pin-attempts';
+import { PinPad } from './PinPad';
+import { PinDots } from './PinDots';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { hapticSuccess, hapticError } from '../../utils/haptics';
+import { playUnlocked } from '../../services/sounds';
+import { APP_DISPLAY_NAME } from '../../config';
+import { t } from '../../i18n';
 
 const PIN_LENGTH = 6;
 const MAX_ATTEMPTS = PIN_MAX_ATTEMPTS;
@@ -39,7 +39,7 @@ interface LockScreenContentProps {
 
 export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
   const theme = useTheme();
-  const [pin, setPin] = useState("");
+  const [pin, setPin] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [attempts, setAttempts] = useState(0);
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
@@ -107,7 +107,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
       setBiometricsAvailable(true);
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: t("lock.unlockPrompt", { app: APP_DISPLAY_NAME }),
+        promptMessage: t('lock.unlockPrompt', { app: APP_DISPLAY_NAME }),
         disableDeviceFallback: false,
       });
 
@@ -115,7 +115,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
         handleUnlocked();
       }
     } catch (error: unknown) {
-      console.debug("Biometric unlock was unavailable", error);
+      console.debug('Biometric unlock was unavailable', error);
     }
   }, [handleUnlocked]);
 
@@ -132,7 +132,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
           setLockedUntil(state.lockedUntil);
           startLockoutTimer(state.lockedUntil);
           setError(
-            t("lock.tooManyAttempts", {
+            t('lock.tooManyAttempts', {
               seconds: Math.ceil((state.lockedUntil - Date.now()) / 1000),
             }),
           );
@@ -169,7 +169,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
 
         try {
           const result = await LocalAuthentication.authenticateAsync({
-            promptMessage: t("lock.unlockPrompt", { app: APP_DISPLAY_NAME }),
+            promptMessage: t('lock.unlockPrompt', { app: APP_DISPLAY_NAME }),
             disableDeviceFallback: false,
           });
 
@@ -177,7 +177,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
             handleUnlocked();
           }
         } catch (error: unknown) {
-          console.debug("Biometric unlock did not complete", error);
+          console.debug('Biometric unlock did not complete', error);
         }
       }
     };
@@ -227,7 +227,7 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
                   Date.now() + lockoutSecondsForAttempts(newAttempts) * 1000;
                 setLockedUntil(until);
                 setError(
-                  t("lock.tooManyAttempts", {
+                  t('lock.tooManyAttempts', {
                     seconds: Math.ceil((until - Date.now()) / 1000),
                   }),
                 );
@@ -236,16 +236,16 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
                 const remaining = MAX_ATTEMPTS - newAttempts;
                 setError(
                   remaining === 1
-                    ? t("lock.wrongPasscode.one", { count: remaining })
-                    : t("lock.wrongPasscode.other", { count: remaining }),
+                    ? t('lock.wrongPasscode.one', { count: remaining })
+                    : t('lock.wrongPasscode.other', { count: remaining }),
                 );
               }
-              setPin("");
+              setPin('');
               setVerifying(false);
             })
             .catch(() => {
-              setError(t("lock.verificationFailed"));
-              setPin("");
+              setError(t('lock.verificationFailed'));
+              setPin('');
               setVerifying(false);
             });
         }
@@ -282,34 +282,26 @@ export function LockScreenContent({ onUnlock }: LockScreenContentProps) {
         {/* Brand + prompt */}
         <View className="items-center flex-1 justify-center">
           <Image
-            source={require("../../../assets/icon.png")}
+            source={require('../../../assets/icon.png')}
             style={{ width: 88, height: 88, marginBottom: 24, borderRadius: 20 }}
             resizeMode="contain"
             accessibilityIgnoresInvertColors
             accessibilityRole="image"
-            accessibilityLabel={t("onboarding.logoAccessibility")}
+            accessibilityLabel={t('onboarding.logoAccessibility')}
           />
 
           <Text className="text-foreground text-xl font-semibold mb-8">
-            {t("lock.enterPasscode")}
+            {t('lock.enterPasscode')}
           </Text>
 
-          <PinDots
-            length={PIN_LENGTH}
-            filled={pin.length}
-            error={error !== null}
-          />
+          <PinDots length={PIN_LENGTH} filled={pin.length} error={error !== null} />
 
           {/* Error / lockout messages */}
           <View className="h-12 justify-center mt-4">
-            {error ? (
-              <Text className="text-red-400 text-sm text-center px-4">
-                {error}
-              </Text>
-            ) : null}
+            {error ? <Text className="text-red-400 text-sm text-center px-4">{error}</Text> : null}
             {isLockedOut && lockoutRemaining > 0 ? (
               <Text className="text-muted-foreground text-sm text-center">
-                {t("lock.lockedFor", { seconds: lockoutRemaining })}
+                {t('lock.lockedFor', { seconds: lockoutRemaining })}
               </Text>
             ) : null}
           </View>

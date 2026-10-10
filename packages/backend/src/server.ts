@@ -1,9 +1,16 @@
 import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
-import { configureBillingRuntime, type BillingRuntimeAdapters } from './services/billing/configuredBilling';
+import {
+  configureBillingRuntime,
+  type BillingRuntimeAdapters,
+} from './services/billing/configuredBilling';
 import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
 import { createBillingRouter } from './routes/billing';
 import type { BillingService } from './services/billing/billingService';
-import { startEcosystemActivity, stopEcosystemActivity, ecosystemActivityMiddleware } from './ecosystemActivity';
+import {
+  startEcosystemActivity,
+  stopEcosystemActivity,
+  ecosystemActivityMiddleware,
+} from './ecosystemActivity';
 /**
  * Peable Gateway — backend entry point.
  *
@@ -12,45 +19,38 @@ import { startEcosystemActivity, stopEcosystemActivity, ecosystemActivityMiddlew
  * over Socket.io, a tip-driven settlement watcher, and signed webhooks — while
  * the payer's self-custody wallet signs and broadcasts the on-chain transaction.
  */
-import { createServer, type Server as HttpServer } from "node:http";
-import express, {
-  type ErrorRequestHandler,
-  type RequestHandler,
-} from "express";
-import { Server as SocketServer } from "socket.io";
-import { oxy } from "./oxy";
-import { createOxyCors, createOxyRateLimit } from "@oxy.so/core/server";
-import { config } from "./config";
-import { connectPostgres, disconnectPostgres, isPostgresReady } from "./db/postgres";
-import { createPaymentIntentsRouter } from "./routes/paymentIntents";
-import { createMerchantsRouter } from "./routes/merchants";
-import { createWebhookDeliveriesRouter } from "./routes/webhookDeliveries";
-import { createPaymentLinksRouter } from "./routes/paymentLinks";
-import { createCheckoutSessionsRouter } from "./routes/checkoutSessions";
-import { createSocialRouter } from "./routes/social";
-import { createEnrichRouter } from "./routes/enrich";
-import { createDashboardRouter } from "./routes/dashboard";
-import { createProviderWebhooksRouter } from "./routes/providerWebhooks";
-import { createConnectedAccountsRouter } from "./routes/connectedAccounts";
-import { createTransfersRouter } from "./routes/transfers";
-import { createRefundsRouter } from "./routes/refunds";
-import { createDisputesRouter } from "./routes/disputes";
-import { SettlementWatcher } from "./services/settlementWatcher";
-import type { PaymentIntentRow } from "./db/payments/paymentIntentRepository";
-import { getTransaction } from "./services/explorer";
-import type { SafeFetchFn } from "./services/webhookDispatcher";
-import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from "./services/webhookOutbox";
-import { startExpirySweeper, stopExpirySweeper } from "./services/expirySweeper";
-import { startProviderEventDrain, stopProviderEventDrain } from "./services/providerEventDrain";
-import { startAccountSync, stopAccountSync } from "./services/accountSync";
-import {
-  initSocket,
-  emitIntentUpdate,
-  type SocketAuth,
-} from "./realtime/socket";
+import { createServer, type Server as HttpServer } from 'node:http';
+import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
+import { Server as SocketServer } from 'socket.io';
+import { oxy } from './oxy';
+import { createOxyCors, createOxyRateLimit } from '@oxy.so/core/server';
+import { config } from './config';
+import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
+import { createPaymentIntentsRouter } from './routes/paymentIntents';
+import { createMerchantsRouter } from './routes/merchants';
+import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
+import { createPaymentLinksRouter } from './routes/paymentLinks';
+import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
+import { createSocialRouter } from './routes/social';
+import { createEnrichRouter } from './routes/enrich';
+import { createDashboardRouter } from './routes/dashboard';
+import { createProviderWebhooksRouter } from './routes/providerWebhooks';
+import { createConnectedAccountsRouter } from './routes/connectedAccounts';
+import { createTransfersRouter } from './routes/transfers';
+import { createRefundsRouter } from './routes/refunds';
+import { createDisputesRouter } from './routes/disputes';
+import { SettlementWatcher } from './services/settlementWatcher';
+import type { PaymentIntentRow } from './db/payments/paymentIntentRepository';
+import { getTransaction } from './services/explorer';
+import type { SafeFetchFn } from './services/webhookDispatcher';
+import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './services/webhookOutbox';
+import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
+import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
+import { startAccountSync, stopAccountSync } from './services/accountSync';
+import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
 
 /** Date-based API version, echoed on every response (Stripe-parity). */
-const PEABLE_VERSION = "2026-07-18";
+const PEABLE_VERSION = '2026-07-18';
 
 /**
  * Flat per-window cap for the IDENTITY-AGNOSTIC public payer routes
@@ -152,13 +152,13 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // of its own and is NOT affected by this setting — see
   // `realtime/socket.ts`'s `resolveClientIp`, which reads the same header
   // directly for the same reason.
-  app.set("trust proxy", 1);
+  app.set('trust proxy', 1);
 
   // Unauthenticated liveness probe for the ALB target-group health check.
   // Mounted first so it is never CORS-blocked or rate-limited, and returns 200
   // regardless of auth (every other route is auth-gated). It reveals nothing.
-  app.get("/health", (_req, res) => {
-    res.status(200).json({ status: "ok" });
+  app.get('/health', (_req, res) => {
+    res.status(200).json({ status: 'ok' });
   });
 
   /**
@@ -174,9 +174,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
    * 503, not 500, and no detail: an unauthenticated route must not describe the
    * database it failed to reach.
    */
-  app.get("/ready", (_req, res) => {
+  app.get('/ready', (_req, res) => {
     void isPostgresReady().then((ready) => {
-      res.status(ready ? 200 : 503).json({ status: ready ? "ready" : "unavailable" });
+      res.status(ready ? 200 : 503).json({ status: ready ? 'ready' : 'unavailable' });
     });
   });
 
@@ -204,11 +204,10 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createOxyRateLimit(oxy));
   app.use(express.json());
   app.use(((_req, res, next) => {
-    res.setHeader("Peable-Version", PEABLE_VERSION);
+    res.setHeader('Peable-Version', PEABLE_VERSION);
     next();
   }) as RequestHandler);
-  const requireMerchant: RequestHandler =
-    deps.requireMerchant ?? oxy.middleware.service();
+  const requireMerchant: RequestHandler = deps.requireMerchant ?? oxy.middleware.service();
   const optionalServiceAuth: RequestHandler =
     deps.optionalServiceAuth ?? oxy.middleware.auth({ optional: true });
   const publicRateLimit: RequestHandler =
@@ -234,9 +233,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createTransfersRouter({ requireMerchant }));
   app.use(createRefundsRouter({ requireMerchant }));
   app.use(createDisputesRouter({ requireMerchant }));
-  app.use(
-    createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }),
-  );
+  app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
   app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit }));
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
@@ -245,8 +242,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   );
 
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    const message = err instanceof Error ? err.message : "internal error";
-    res.status(500).json({ error: { type: "api_error", message } });
+    const message = err instanceof Error ? err.message : 'internal error';
+    res.status(500).json({ error: { type: 'api_error', message } });
   };
   app.use(errorHandler);
 
@@ -291,12 +288,23 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * own — and both are deliberately started per PROCESS, so N tasks share the
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
-export async function start(options: { billingAdapters?: BillingRuntimeAdapters } = {}): Promise<void> {
+export async function start(
+  options: { billingAdapters?: BillingRuntimeAdapters } = {},
+): Promise<void> {
   const database = await connectPostgres();
-  const billingRuntime = await configureBillingRuntime(database, config.billingCohortConfig, undefined, options.billingAdapters);
+  const billingRuntime = await configureBillingRuntime(
+    database,
+    config.billingCohortConfig,
+    undefined,
+    options.billingAdapters,
+  );
   const gateway = createGateway({ billingService: billingRuntime?.service });
-  const stopRecurringRelay = billingRuntime?.relay ? startRecurringRelay(billingRuntime.relay) : undefined;
-  const stopFaircoinRenewals = billingRuntime?.renewals ? startFaircoinRenewalWorker(billingRuntime.renewals) : undefined;
+  const stopRecurringRelay = billingRuntime?.relay
+    ? startRecurringRelay(billingRuntime.relay)
+    : undefined;
+  const stopFaircoinRenewals = billingRuntime?.renewals
+    ? startFaircoinRenewalWorker(billingRuntime.renewals)
+    : undefined;
   startEcosystemActivity(() => gateway.httpServer.listening);
   let stopping = false;
   const stop = () => {
@@ -310,13 +318,16 @@ export async function start(options: { billingAdapters?: BillingRuntimeAdapters 
     stopAccountSync();
     const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped]).then(async (results) => {
-        await disconnectPostgres();
-        if (results.some(result => result.status === 'rejected')) throw new Error('Shutdown component failed');
-      }).catch(() => {
-        console.error('Failed to close activity publisher or database');
-        process.exitCode = 1;
-      });
+      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped])
+        .then(async (results) => {
+          await disconnectPostgres();
+          if (results.some((result) => result.status === 'rejected'))
+            throw new Error('Shutdown component failed');
+        })
+        .catch(() => {
+          console.error('Failed to close activity publisher or database');
+          process.exitCode = 1;
+        });
     });
   };
   process.once('SIGTERM', stop);
@@ -340,9 +351,7 @@ export async function start(options: { billingAdapters?: BillingRuntimeAdapters 
 
 if (import.meta.main) {
   start().catch((error: unknown) => {
-    process.emitWarning(
-      error instanceof Error ? error : new Error(String(error)),
-    );
+    process.emitWarning(error instanceof Error ? error : new Error(String(error)));
     process.exitCode = 1;
   });
 }

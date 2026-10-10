@@ -5,8 +5,8 @@
  * is a straight field rename with no hex encoding on the sync hot path.
  */
 
-import type { HeaderStore, StoredBlockHeader } from "./spv-client";
-import type { Database, BlockHeaderRow } from "../storage/database";
+import type { HeaderStore, StoredBlockHeader } from './spv-client';
+import type { Database, BlockHeaderRow } from '../storage/database';
 
 // ---------------------------------------------------------------------------
 // DatabaseHeaderStore

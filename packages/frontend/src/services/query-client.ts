@@ -12,8 +12,8 @@
  * this client owns only *server* state.
  */
 
-import { AppState, Platform } from "react-native";
-import { QueryClient, focusManager } from "@tanstack/react-query";
+import { AppState, Platform } from 'react-native';
+import { QueryClient, focusManager } from '@tanstack/react-query';
 
 /** How long a fetched value is considered fresh before a background refetch. */
 const DEFAULT_STALE_TIME_MS = 30_000;
@@ -34,10 +34,10 @@ export const queryClient = new QueryClient({
 // don't exist on native. Bridge `refetchOnWindowFocus` to React Native's
 // AppState so returning to the foreground revalidates active queries. Web keeps
 // React Query's default (document visibility) listener.
-if (Platform.OS !== "web") {
+if (Platform.OS !== 'web') {
   focusManager.setEventListener((handleFocus) => {
-    const subscription = AppState.addEventListener("change", (status) => {
-      handleFocus(status === "active");
+    const subscription = AppState.addEventListener('change', (status) => {
+      handleFocus(status === 'active');
     });
     return () => subscription.remove();
   });

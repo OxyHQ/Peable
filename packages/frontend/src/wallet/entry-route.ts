@@ -20,16 +20,10 @@
  * place, outside the shell, and lost the navigation with it.
  */
 
-import type { IdentityInitResult } from "./wallet-store";
+import type { IdentityInitResult } from './wallet-store';
 
 export type EntryRoute = {
-  kind:
-    | "loading"
-    | "signin"
-    | "create-identity"
-    | "needs-pin"
-    | "ready"
-    | "read-only";
+  kind: 'loading' | 'signin' | 'create-identity' | 'needs-pin' | 'ready' | 'read-only';
 };
 
 export function decideEntryRoute(input: {
@@ -40,16 +34,16 @@ export function decideEntryRoute(input: {
 }): EntryRoute {
   const { isAuthResolved, isAuthenticated, identityInit, hasPinConfigured } = input;
 
-  if (!isAuthResolved) return { kind: "loading" };
-  if (!isAuthenticated) return { kind: "signin" };
+  if (!isAuthResolved) return { kind: 'loading' };
+  if (!isAuthenticated) return { kind: 'signin' };
 
   // Signed in: the identity/wallet probe runs asynchronously; wait for it.
-  if (identityInit === null) return { kind: "loading" };
-  if (identityInit === "no-keystore") return { kind: "read-only" };
-  if (identityInit === "no-identity") return { kind: "create-identity" };
+  if (identityInit === null) return { kind: 'loading' };
+  if (identityInit === 'no-keystore') return { kind: 'read-only' };
+  if (identityInit === 'no-identity') return { kind: 'create-identity' };
 
   // Wallet initialized: PIN gate before any authenticated screen (spec §7).
-  if (hasPinConfigured === null) return { kind: "loading" };
-  if (!hasPinConfigured) return { kind: "needs-pin" };
-  return { kind: "ready" };
+  if (hasPinConfigured === null) return { kind: 'loading' };
+  if (!hasPinConfigured) return { kind: 'needs-pin' };
+  return { kind: 'ready' };
 }

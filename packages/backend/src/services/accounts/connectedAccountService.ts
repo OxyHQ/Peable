@@ -8,7 +8,7 @@
  * database constraint rather than a check — a check loses the race that
  * produces the second account.
  */
-import type { MerchantEnvironment } from "@peable.to/shared-types";
+import type { MerchantEnvironment } from '@peable.to/shared-types';
 import {
   applyAccountSnapshot,
   findAccountByExternalRef,
@@ -16,25 +16,25 @@ import {
   type AccountSnapshot,
   type ConnectedAccountRow,
   type SnapshotWrittenField,
-} from "../../db/accounts/connectedAccountRepository";
-import { getDb } from "../../db/postgres";
-import { newId } from "../../lib/ids";
-import { toConnectedAccountDTO } from "../../lib/serializeSettlement";
-import { enqueueConnectedAccountWebhook } from "../intentTransition";
-import { assertEnvironmentMatchesProvider } from "../providers/environmentGuard";
+} from '../../db/accounts/connectedAccountRepository';
+import { getDb } from '../../db/postgres';
+import { newId } from '../../lib/ids';
+import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
+import { enqueueConnectedAccountWebhook } from '../intentTransition';
+import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard';
 import {
   isAccountHoldingProvider,
   type AccountHoldingProvider,
   type PaymentProvider,
   type ProviderAccountSnapshot,
-} from "../providers/provider";
-import { resolveCardProvider, resolveProvider } from "../providers/registry";
+} from '../providers/provider';
+import { resolveCardProvider, resolveProvider } from '../providers/registry';
 
 /** The card rail is off, or its provider cannot hold accounts. */
 export class AccountsUnavailableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "AccountsUnavailableError";
+    this.name = 'AccountsUnavailableError';
   }
 }
 
@@ -42,7 +42,7 @@ export class AccountsUnavailableError extends Error {
 export class UnsupportedCountryError extends Error {
   constructor(country: string) {
     super(`the country '${country}' is not supported for seller accounts`);
-    this.name = "UnsupportedCountryError";
+    this.name = 'UnsupportedCountryError';
   }
 }
 
@@ -96,7 +96,7 @@ function requireProviderFor(account: ConnectedAccountRow): AccountHoldingProvide
  * per-country choice would go when there is a second one).
  */
 function requireDefaultAccountProvider(): AccountHoldingProvider {
-  return requireAccountProvider(resolveCardProvider(), "card");
+  return requireAccountProvider(resolveCardProvider(), 'card');
 }
 
 function requireAccountProvider(
@@ -104,17 +104,13 @@ function requireAccountProvider(
   named: string,
 ): AccountHoldingProvider {
   if (!provider) {
-    throw new AccountsUnavailableError(
-      `the ${named} rail is not configured on this deployment`,
-    );
+    throw new AccountsUnavailableError(`the ${named} rail is not configured on this deployment`);
   }
   if (!isAccountHoldingProvider(provider)) {
     // A rail that moves money but cannot hold sub-merchant accounts is a real
     // shape — the FairCoin rail is exactly that — so this is a capability
     // question, not an error to assume away.
-    throw new AccountsUnavailableError(
-      `the ${provider.id} rail cannot hold seller accounts`,
-    );
+    throw new AccountsUnavailableError(`the ${provider.id} rail cannot hold seller accounts`);
   }
   return provider;
 }
@@ -127,7 +123,7 @@ export interface EnsureAccountInput {
   readonly externalRef: string;
   /** ISO-3166-1 alpha-2. Upper-cased here; the CHECK insists on it. */
   readonly country: string;
-  readonly businessType: "individual" | "company";
+  readonly businessType: 'individual' | 'company';
 }
 
 export interface EnsureAccountResult {
@@ -184,7 +180,7 @@ export async function ensureConnectedAccount(
   });
 
   const inserted = await insertConnectedAccount(db, {
-    publicId: newId("ca"),
+    publicId: newId('ca'),
     merchantId: input.merchantId,
     externalRef: input.externalRef,
     provider: provider.id,
@@ -198,9 +194,7 @@ export async function ensureConnectedAccount(
     // rather than merely convenient.
     const winner = await findAccountByExternalRef(db, input.merchantId, input.externalRef);
     if (!winner) {
-      throw new Error(
-        `connected account for ${input.externalRef} neither inserted nor found`,
-      );
+      throw new Error(`connected account for ${input.externalRef} neither inserted nor found`);
     }
     return { account: winner, created: false };
   }
@@ -246,10 +240,7 @@ const NOTIFIES_MERCHANT = {
 } satisfies Record<SnapshotWrittenField, boolean>;
 
 /** Whether anything a MERCHANT acts on has changed. */
-function readinessChanged(
-  before: ConnectedAccountRow,
-  after: ConnectedAccountRow,
-): boolean {
+function readinessChanged(before: ConnectedAccountRow, after: ConnectedAccountRow): boolean {
   return Object.entries(NOTIFIES_MERCHANT).some(([field, notifies]) => {
     if (!notifies) return false;
     const key = field as SnapshotWrittenField;
@@ -300,11 +291,7 @@ export async function refreshConnectedAccount(
     const updated = await applyAccountSnapshot(tx, account.id, toAccountSnapshot(snapshot));
     if (!updated) return account;
     if (readinessChanged(account, updated)) {
-      await enqueueConnectedAccountWebhook(
-        tx,
-        updated.merchantId,
-        toConnectedAccountDTO(updated),
-      );
+      await enqueueConnectedAccountWebhook(tx, updated.merchantId, toConnectedAccountDTO(updated));
     }
     return updated;
   });

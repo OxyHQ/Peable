@@ -5,11 +5,11 @@
  * left-aligned icon + label.
  */
 
-import { Text, Pressable } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
+import { Text, Pressable } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 interface ActionButtonProps {
   icon: IconName;
@@ -19,12 +19,7 @@ interface ActionButtonProps {
   renderIcon?: (opts: { color: string; size: number }) => React.ReactNode;
 }
 
-export function ActionButton({
-  icon,
-  label,
-  onPress,
-  renderIcon,
-}: ActionButtonProps) {
+export function ActionButton({ icon, label, onPress, renderIcon }: ActionButtonProps) {
   const theme = useTheme();
 
   return (
@@ -37,11 +32,7 @@ export function ActionButton({
       {renderIcon ? (
         renderIcon({ color: theme.colors.primary, size: 22 })
       ) : (
-        <MaterialCommunityIcons
-          name={icon}
-          size={22}
-          color={theme.colors.primary}
-        />
+        <MaterialCommunityIcons name={icon} size={22} color={theme.colors.primary} />
       )}
       <Text className="text-primary text-xs mt-1.5 font-medium">{label}</Text>
     </Pressable>

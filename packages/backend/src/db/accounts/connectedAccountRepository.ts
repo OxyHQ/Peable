@@ -89,7 +89,7 @@ export interface InsertConnectedAccountParams {
  */
 export async function insertConnectedAccount(
   db: DatabaseOrTransaction,
-  params: InsertConnectedAccountParams
+  params: InsertConnectedAccountParams,
 ): Promise<ConnectedAccountRow | null> {
   try {
     const [row] = await db
@@ -117,7 +117,7 @@ export async function insertConnectedAccount(
 export async function findAccountByExternalRef(
   db: DatabaseOrTransaction,
   merchantId: string,
-  externalRef: string
+  externalRef: string,
 ): Promise<ConnectedAccountRow | null> {
   const [row] = await db
     .select(ACCOUNT_COLUMNS)
@@ -125,8 +125,8 @@ export async function findAccountByExternalRef(
     .where(
       and(
         eq(connectedAccounts.merchantId, merchantId),
-        eq(connectedAccounts.externalRef, externalRef)
-      )
+        eq(connectedAccounts.externalRef, externalRef),
+      ),
     );
   return row ? toRow(row) : null;
 }
@@ -142,16 +142,13 @@ export async function findAccountByExternalRef(
 export async function findAccountByPublicId(
   db: DatabaseOrTransaction,
   merchantId: string,
-  publicId: string
+  publicId: string,
 ): Promise<ConnectedAccountRow | null> {
   const [row] = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
     .where(
-      and(
-        eq(connectedAccounts.merchantId, merchantId),
-        eq(connectedAccounts.publicId, publicId)
-      )
+      and(eq(connectedAccounts.merchantId, merchantId), eq(connectedAccounts.publicId, publicId)),
     );
   return row ? toRow(row) : null;
 }
@@ -166,7 +163,7 @@ export async function findAccountByPublicId(
 export async function findAccountById(
   db: DatabaseOrTransaction,
   merchantId: string,
-  id: string
+  id: string,
 ): Promise<ConnectedAccountRow | null> {
   const [row] = await db
     .select(ACCOUNT_COLUMNS)
@@ -185,7 +182,7 @@ export async function findAccountById(
 export async function findAccountByProviderAccountId(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  providerAccountId: string
+  providerAccountId: string,
 ): Promise<ConnectedAccountRow | null> {
   const [row] = await db
     .select(ACCOUNT_COLUMNS)
@@ -193,8 +190,8 @@ export async function findAccountByProviderAccountId(
     .where(
       and(
         eq(connectedAccounts.provider, provider),
-        eq(connectedAccounts.providerAccountId, providerAccountId)
-      )
+        eq(connectedAccounts.providerAccountId, providerAccountId),
+      ),
     );
   return row ? toRow(row) : null;
 }
@@ -253,7 +250,7 @@ export async function applyAccountSnapshot(
   db: DatabaseOrTransaction,
   accountId: string,
   snapshot: AccountSnapshot,
-  now: Date = new Date()
+  now: Date = new Date(),
 ): Promise<ConnectedAccountRow | null> {
   const [row] = await db
     .update(connectedAccounts)
@@ -290,13 +287,16 @@ export async function applyAccountSnapshot(
 export async function findAccountsToSync(
   db: DatabaseOrTransaction,
   provider: ProviderId,
-  limit: number
+  limit: number,
 ): Promise<readonly ConnectedAccountRow[]> {
   const rows = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
     .where(eq(connectedAccounts.provider, provider))
-    .orderBy(sql`${connectedAccounts.lastSyncedAt} asc nulls first`, asc(connectedAccounts.createdAt))
+    .orderBy(
+      sql`${connectedAccounts.lastSyncedAt} asc nulls first`,
+      asc(connectedAccounts.createdAt),
+    )
     .limit(limit);
   return rows.map(toRow);
 }
@@ -329,7 +329,7 @@ export async function listAccountsForMerchant(
   db: DatabaseOrTransaction,
   merchantId: string,
   limit: number,
-  after?: string
+  after?: string,
 ): Promise<ListAccountsPage> {
   const rows = await db
     .select(ACCOUNT_COLUMNS)
@@ -337,8 +337,8 @@ export async function listAccountsForMerchant(
     .where(
       and(
         eq(connectedAccounts.merchantId, merchantId),
-        after === undefined ? undefined : lt(connectedAccounts.id, after)
-      )
+        after === undefined ? undefined : lt(connectedAccounts.id, after),
+      ),
     )
     .orderBy(desc(connectedAccounts.id))
     .limit(limit + 1);

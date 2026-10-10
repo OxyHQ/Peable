@@ -11,8 +11,8 @@
  * derive a different, wrong seed — spec §4.1).
  */
 
-import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
-import { bytesToHex } from "@fairco.in/core";
+import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
+import { bytesToHex } from '@fairco.in/core';
 
 /**
  * HKDF `info` binding the derived seed to Peable's FairCoin wallet.
@@ -24,17 +24,17 @@ import { bytesToHex } from "@fairco.in/core";
  * wallets to strand. From here on it is frozen: bump the `v1` suffix if the
  * derivation ever has to change, and never edit this string in place.
  */
-export const PEABLE_SEED_INFO = "peable/faircoin/v1";
+export const PEABLE_SEED_INFO = 'peable/faircoin/v1';
 
 /** Fixed wallet id for the single identity-derived wallet (SQLite namespace). */
-export const OXY_IDENTITY_WALLET_ID = "oxy-identity";
+export const OXY_IDENTITY_WALLET_ID = 'oxy-identity';
 
 /**
  * Marker prefix for the in-memory "secret" the store's `initialize` accepts to
  * build a KeyManager straight from a 32-byte seed (mirrors the `xpub:` marker).
  * The seed is NEVER persisted — it is re-derived from the identity each boot.
  */
-export const SEED_SECRET_PREFIX = "seed:";
+export const SEED_SECRET_PREFIX = 'seed:';
 
 /**
  * Derive the FairCoin wallet seed from the on-device Oxy identity, or `null`

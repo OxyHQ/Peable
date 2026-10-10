@@ -19,9 +19,9 @@
  * sites, so "is this rail available" has exactly one answer.
  */
 
-import { config } from "../../config";
-import type { PaymentProvider, ProviderId } from "./provider";
-import { StripePaymentProvider } from "./stripe/stripeProvider";
+import { config } from '../../config';
+import type { PaymentProvider, ProviderId } from './provider';
+import { StripePaymentProvider } from './stripe/stripeProvider';
 
 let stripeInstance: StripePaymentProvider | undefined;
 
@@ -33,7 +33,7 @@ let stripeInstance: StripePaymentProvider | undefined;
  * it while the rail is OFF would defeat the point of the gate above.
  */
 export function resolveProvider(provider: ProviderId): PaymentProvider | undefined {
-  if (provider === "stripe") {
+  if (provider === 'stripe') {
     if (!config.stripe.enabled) return undefined;
     stripeInstance ??= new StripePaymentProvider();
     return stripeInstance;
@@ -55,5 +55,5 @@ export function resetProviders(): void {
  * country), and it will be made HERE rather than in six routes.
  */
 export function resolveCardProvider(): PaymentProvider | undefined {
-  return resolveProvider("stripe");
+  return resolveProvider('stripe');
 }

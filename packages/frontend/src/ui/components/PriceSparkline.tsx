@@ -7,20 +7,13 @@
  * points → the price with a "not enough data" caption instead of a broken chart.
  */
 
-import { useMemo, useState } from "react";
-import { View, Text, type LayoutChangeEvent } from "react-native";
-import Svg, {
-  Polyline,
-  Path,
-  Defs,
-  LinearGradient,
-  Stop,
-  Circle,
-} from "react-native-svg";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { FONT_PHUDU_BLACK } from "../../utils/fonts";
-import { formatFiatAmount, t } from "../../i18n";
-import type { PriceHistoryPoint } from "../../services/market";
+import { useMemo, useState } from 'react';
+import { View, Text, type LayoutChangeEvent } from 'react-native';
+import Svg, { Polyline, Path, Defs, LinearGradient, Stop, Circle } from 'react-native-svg';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { FONT_PHUDU_BLACK } from '../../utils/fonts';
+import { formatFiatAmount, t } from '../../i18n';
+import type { PriceHistoryPoint } from '../../services/market';
 
 /** Chart height in px; width is measured from the container via onLayout. */
 const CHART_HEIGHT = 120;
@@ -36,11 +29,7 @@ interface PriceSparklineProps {
   currentPriceUsd: number | null;
 }
 
-export function PriceSparkline({
-  points,
-  changePct,
-  currentPriceUsd,
-}: PriceSparklineProps) {
+export function PriceSparkline({ points, changePct, currentPriceUsd }: PriceSparklineProps) {
   const theme = useTheme();
   const [width, setWidth] = useState(0);
 
@@ -64,27 +53,22 @@ export function PriceSparkline({
     const coords = points.map((point, index) => ({
       x: index * stepX,
       // Center a flat series (range 0) instead of pinning it to the bottom.
-      y:
-        CHART_PADDING +
-        (1 - (range === 0 ? 0.5 : (point.priceUsd - min) / range)) * innerHeight,
+      y: CHART_PADDING + (1 - (range === 0 ? 0.5 : (point.priceUsd - min) / range)) * innerHeight,
     }));
 
-    const line = coords.map((coord) => `${coord.x},${coord.y}`).join(" ");
+    const line = coords.map((coord) => `${coord.x},${coord.y}`).join(' ');
     const first = coords[0];
     const last = coords[coords.length - 1];
     const area = `M ${first.x},${CHART_HEIGHT} ${coords
       .map((coord) => `L ${coord.x},${coord.y}`)
-      .join(" ")} L ${last.x},${CHART_HEIGHT} Z`;
+      .join(' ')} L ${last.x},${CHART_HEIGHT} Z`;
 
     return { line, area, last };
   }, [width, points]);
 
-  const priceLabel =
-    currentPriceUsd != null ? formatFiatAmount(currentPriceUsd, "USD") : null;
+  const priceLabel = currentPriceUsd != null ? formatFiatAmount(currentPriceUsd, 'USD') : null;
   const changeLabel =
-    changePct != null
-      ? `${changePct >= 0 ? "+" : ""}${changePct.toFixed(1)}%`
-      : null;
+    changePct != null ? `${changePct >= 0 ? '+' : ''}${changePct.toFixed(1)}%` : null;
 
   const onChartLayout = (event: LayoutChangeEvent) => {
     setWidth(event.nativeEvent.layout.width);
@@ -94,7 +78,7 @@ export function PriceSparkline({
     <View>
       <View className="px-5">
         <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wider">
-          {t("overview.priceChart.title")}
+          {t('overview.priceChart.title')}
         </Text>
 
         {priceLabel ? (
@@ -106,17 +90,14 @@ export function PriceSparkline({
               {priceLabel}
             </Text>
             {changeLabel ? (
-              <Text
-                className="text-base font-semibold ml-3 mb-2"
-                style={{ color: trendColor }}
-              >
+              <Text className="text-base font-semibold ml-3 mb-2" style={{ color: trendColor }}>
                 {changeLabel}
               </Text>
             ) : null}
           </View>
         ) : (
           <Text className="text-muted-foreground text-base mt-1.5">
-            {t("overview.priceChart.unavailable")}
+            {t('overview.priceChart.unavailable')}
           </Text>
         )}
       </View>
@@ -143,16 +124,11 @@ export function PriceSparkline({
               strokeLinejoin="round"
               strokeLinecap="round"
             />
-            <Circle
-              cx={geometry.last.x}
-              cy={geometry.last.y}
-              r={4}
-              fill={trendColor}
-            />
+            <Circle cx={geometry.last.x} cy={geometry.last.y} r={4} fill={trendColor} />
           </Svg>
         ) : priceLabel ? (
           <Text className="text-muted-foreground text-xs px-5">
-            {t("overview.priceChart.notEnoughData")}
+            {t('overview.priceChart.notEnoughData')}
           </Text>
         ) : null}
       </View>

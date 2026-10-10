@@ -72,5 +72,5 @@ async function walk(dir) {
 
 await walk(ESM_DIR);
 // Explicit module scope preserves Node18 support and leaves CJS as CommonJS.
-await writeFile(join(ESM_DIR, 'package.json'), JSON.stringify({type: 'module'}) + '\n');
+await writeFile(join(ESM_DIR, 'package.json'), JSON.stringify({ type: 'module' }) + '\n');
 console.log('ESM imports fixed');

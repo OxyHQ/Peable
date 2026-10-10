@@ -38,7 +38,7 @@ export async function reserveNextSocialReceiveIndex(
   db: DatabaseOrTransaction,
   oxyUserId: string,
   network: NetworkType,
-  identityPublicKey: string
+  identityPublicKey: string,
 ): Promise<number> {
   const [row] = await db
     .insert(socialReceiveCursors)
@@ -85,7 +85,7 @@ export async function reserveNextSocialReceiveIndex(
 export async function readReservedThrough(
   db: DatabaseOrTransaction,
   oxyUserId: string,
-  network: NetworkType
+  network: NetworkType,
 ): Promise<{ reservedThrough: number; identityPublicKey: string | null }> {
   const [row] = await db
     .select({
@@ -94,10 +94,7 @@ export async function readReservedThrough(
     })
     .from(socialReceiveCursors)
     .where(
-      and(
-        eq(socialReceiveCursors.oxyUserId, oxyUserId),
-        eq(socialReceiveCursors.network, network)
-      )
+      and(eq(socialReceiveCursors.oxyUserId, oxyUserId), eq(socialReceiveCursors.network, network)),
     );
 
   if (!row) {

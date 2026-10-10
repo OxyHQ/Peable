@@ -5,23 +5,24 @@
  * monitoring, Merkle proof validation, and transaction broadcasting.
  */
 
-import { sha256 } from "@noble/hashes/sha256";
-import type { NetworkConfig, BlockHeader } from "@fairco.in/core";
-import { bytesEqual, hashBlockHeader as quarkHashBlockHeader, getCheckpointHash, hexToBytes } from "@fairco.in/core";
-import { BloomFilter } from "./bloom-filter";
-import { validateMerkleProof } from "./merkle-proof";
+import { sha256 } from '@noble/hashes/sha256';
+import type { NetworkConfig, BlockHeader } from '@fairco.in/core';
+import {
+  bytesEqual,
+  hashBlockHeader as quarkHashBlockHeader,
+  getCheckpointHash,
+  hexToBytes,
+} from '@fairco.in/core';
+import { BloomFilter } from './bloom-filter';
+import { validateMerkleProof } from './merkle-proof';
 import {
   validateHeaderChain,
   planChainUpdate,
   HeaderValidationError,
   type HeaderChainAnchor,
   type ValidatedHeader,
-} from "./header-validation";
-import {
-  Rescanner,
-  DEFAULT_RESCAN_WINDOW,
-  type RescanProgress,
-} from "./rescan";
+} from './header-validation';
+import { Rescanner, DEFAULT_RESCAN_WINDOW, type RescanProgress } from './rescan';
 import {
   type BlockHeaderMsg,
   type InvItem,
@@ -38,15 +39,11 @@ import {
   serializeFilterLoad,
   serializeGetData,
   serializeGetBlocks,
-} from "./messages";
-import type { Peer, SocketProvider } from "./peer";
-import {
-  PeerManager,
-  type PeerManagerConfig,
-  type PeerEventSink,
-} from "./peer-manager";
-import type { NativeDnsResolver } from "./dns-seeds";
-import { getSyncAnchor } from "./sync-anchor";
+} from './messages';
+import type { Peer, SocketProvider } from './peer';
+import { PeerManager, type PeerManagerConfig, type PeerEventSink } from './peer-manager';
+import type { NativeDnsResolver } from './dns-seeds';
+import { getSyncAnchor } from './sync-anchor';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -120,11 +117,7 @@ export interface SPVClientEvents {
    *                  produced by `hashBlockHeader`), or `undefined` for an
    *                  unconfirmed (mempool) transaction.
    */
-  onTransaction?: (
-    tx: ParsedTransaction,
-    txid: string,
-    blockHash: Uint8Array | undefined,
-  ) => void;
+  onTransaction?: (tx: ParsedTransaction, txid: string, blockHash: Uint8Array | undefined) => void;
   onBlockHeader?: (header: StoredBlockHeader) => void;
   onSyncProgress?: (progress: number) => void;
   /**
@@ -385,7 +378,7 @@ export class SPVClient {
         this.bloomFilter.tweak,
         1, // BLOOM_UPDATE_ALL
       );
-      peer.sendMessage("filterload", filterPayload);
+      peer.sendMessage('filterload', filterPayload);
     }
 
     // Begin chain sync on first ready peer
@@ -428,7 +421,7 @@ export class SPVClient {
         // is itself behind answers with nothing, which the loop below reads as
         // "caught up".
         const sent = this.peerManager.sendToOne(
-          "getblocks",
+          'getblocks',
           serializeGetBlocks(locator, stopHash),
           { minBestHeight: this.chainHeight + 1 },
         );
@@ -443,10 +436,7 @@ export class SPVClient {
         await this.waitForBatch();
 
         // Update target from peers (they may have advanced)
-        this.syncTargetHeight = Math.max(
-          this.syncTargetHeight,
-          this.peerManager.getBestHeight(),
-        );
+        this.syncTargetHeight = Math.max(this.syncTargetHeight, this.peerManager.getBestHeight());
 
         if (this.chainHeight >= this.syncTargetHeight) {
           // Caught up
@@ -477,11 +467,7 @@ export class SPVClient {
   private async waitForBatch(): Promise<void> {
     let last = this.chainHeight;
     let idleTicks = 0;
-    for (
-      let tick = 0;
-      tick < BATCH_MAX_TICKS && this.syncing && this.running;
-      tick++
-    ) {
+    for (let tick = 0; tick < BATCH_MAX_TICKS && this.syncing && this.running; tick++) {
       await delay(BATCH_POLL_MS);
       if (this.chainHeight > last) {
         last = this.chainHeight;
@@ -506,7 +492,7 @@ export class SPVClient {
       this.bloomFilter.getFlags(),
     );
 
-    this.peerManager.broadcast("filterload", filterPayload);
+    this.peerManager.broadcast('filterload', filterPayload);
   }
 
   /**
@@ -572,7 +558,7 @@ export class SPVClient {
     onProgress?: (progress: RescanProgress) => Promise<void> | void;
   }): Promise<RescanProgress> {
     if (this.rescanner?.isActive) {
-      throw new Error("Rescan already in progress");
+      throw new Error('Rescan already in progress');
     }
 
     this.rescanner = new Rescanner(
@@ -592,7 +578,7 @@ export class SPVClient {
             type: INV_FILTERED_BLOCK,
             hash,
           }));
-          return this.peerManager.sendToOne("getdata", serializeGetData(items));
+          return this.peerManager.sendToOne('getdata', serializeGetData(items));
         },
         persist: async (progress) => {
           if (params.onProgress) {
@@ -605,11 +591,7 @@ export class SPVClient {
       DEFAULT_RESCAN_WINDOW,
     );
 
-    return this.rescanner.run(
-      params.fromHeight,
-      params.toHeight,
-      params.resumeFrom,
-    );
+    return this.rescanner.run(params.fromHeight, params.toHeight, params.resumeFrom);
   }
 
   // -----------------------------------------------------------------------
@@ -618,7 +600,7 @@ export class SPVClient {
 
   private handlePeerMessage(peer: Peer, command: string, payload: Uint8Array): void {
     switch (command) {
-      case "headers":
+      case 'headers':
         // Serialise header batches: each batch (and any reorg rewind it
         // triggers) must fully apply before the next one starts, otherwise two
         // concurrent batches could assign overlapping heights or rewind a chain
@@ -630,16 +612,16 @@ export class SPVClient {
             // current (unchanged) tip. Swallow so the serial chain continues.
           });
         break;
-      case "inv":
+      case 'inv':
         this.processInv(peer, payload);
         break;
-      case "merkleblock":
+      case 'merkleblock':
         this.processMerkleBlock(payload);
         break;
-      case "tx":
+      case 'tx':
         this.processTransaction(payload);
         break;
-      case "addr":
+      case 'addr':
         this.processAddr(payload);
         break;
       default:
@@ -707,8 +689,7 @@ export class SPVClient {
         headers,
         anchor,
         powLimit: this.powLimit,
-        checkpointHashHex: (height) =>
-          getCheckpointHash(height, this.network.name),
+        checkpointHashHex: (height) => getCheckpointHash(height, this.network.name),
         genesisHashHex: this.network.genesisHash,
         lastPowBlockHeight: this.network.lastPowBlock,
       });
@@ -736,11 +717,11 @@ export class SPVClient {
       maxReorgDepth: this.network.maxReorgDepth,
     });
 
-    if (plan.action === "ignore") {
+    if (plan.action === 'ignore') {
       return;
     }
 
-    if (plan.action === "reorg") {
+    if (plan.action === 'reorg') {
       // Roll the wallet back to the fork point BEFORE storing the new branch,
       // so balance/UTXOs never reflect orphaned blocks. The wallet's rewind is
       // atomic and also prunes orphaned headers; the explicit delete below is a
@@ -807,7 +788,7 @@ export class SPVClient {
 
     if (wanted.length > 0) {
       const getDataPayload = serializeGetData(wanted);
-      peer.sendMessage("getdata", getDataPayload);
+      peer.sendMessage('getdata', getDataPayload);
     }
   }
 
@@ -918,17 +899,17 @@ function delay(ms: number): Promise<void> {
 }
 
 function bytesToHex(bytes: Uint8Array): string {
-  let hex = "";
+  let hex = '';
   for (let i = 0; i < bytes.length; i++) {
-    hex += bytes[i].toString(16).padStart(2, "0");
+    hex += bytes[i].toString(16).padStart(2, '0');
   }
   return hex;
 }
 
 function bytesToHexReversed(bytes: Uint8Array): string {
-  let hex = "";
+  let hex = '';
   for (let i = bytes.length - 1; i >= 0; i--) {
-    hex += bytes[i].toString(16).padStart(2, "0");
+    hex += bytes[i].toString(16).padStart(2, '0');
   }
   return hex;
 }
@@ -964,7 +945,7 @@ export function broadcastTransactionToPeers(
   let delivered = 0;
   for (const peer of readyPeers) {
     try {
-      peer.sendMessage("tx", rawTx);
+      peer.sendMessage('tx', rawTx);
       delivered++;
     } catch {
       // Skip peers that error mid-send; other peers can still relay.

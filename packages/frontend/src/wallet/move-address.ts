@@ -6,8 +6,8 @@
  * ordinary on-chain self-transfer handled by `wallet-store.sendTransaction`.
  */
 
-import type { NetworkConfig } from "@fairco.in/core";
-import { KeyManager, type DerivedAddress } from "@peable.to/pay";
+import type { NetworkConfig } from '@fairco.in/core';
+import { KeyManager, type DerivedAddress } from '@peable.to/pay';
 
 export function resolveMoveDestinationAddress(
   seed: Uint8Array,

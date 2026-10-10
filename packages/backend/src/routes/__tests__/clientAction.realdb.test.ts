@@ -14,45 +14,45 @@
  * half this file: the merchant's single read carries it, the payer asks for it
  * explicitly, and the polled payer read never does.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
 
-let statusToReport = "created";
+let statusToReport = 'created';
 
 /** Set to make the provider unreachable, which must not break a merchant read. */
 let getStatusThrows: Error | null = null;
 
 const fakeProvider = {
-  id: "stripe" as const,
+  id: 'stripe' as const,
   getStatus: async (providerObjectId: string) => {
     if (getStatusThrows) throw getStatusThrows;
     return {
       providerObjectId,
       status: statusToReport,
       clientAction: {
-        kind: "client_secret" as const,
+        kind: 'client_secret' as const,
         value: `${providerObjectId}_secret_live`,
       },
     };
   },
   createPayment: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   capture: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   cancel: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   refund: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   verifyEvent: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
 };
 
@@ -60,32 +60,32 @@ const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import("../../services/providers/registry");
+} = await import('../../services/providers/registry');
 let useFake = false;
 
-mock.module("../../services/providers/registry", () => ({
-  resolveProvider: (id: "stripe") => (useFake ? fakeProvider : realResolveProvider(id)),
+mock.module('../../services/providers/registry', () => ({
+  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
   resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
   resetProviders: () => {
     realResetProviders();
   },
 }));
 
-const { config } = await import("../../config");
-const { createPaymentIntentsRouter } = await import("../paymentIntents");
+const { config } = await import('../../config');
+const { createPaymentIntentsRouter } = await import('../paymentIntents');
 const { insertPaymentIntent, linkProviderObject, updateIntentState } = await import(
-  "../../db/payments/paymentIntentRepository"
+  '../../db/payments/paymentIntentRepository'
 );
 const { gatewayDb, seedIntent, seedMerchant, useGatewayDatabase } = await import(
-  "../../__tests__/helpers/gatewayTestDatabase"
+  '../../__tests__/helpers/gatewayTestDatabase'
 );
-const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
-const { uuidv7 } = await import("@oxy.so/db");
+const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
+const { uuidv7 } = await import('@oxy.so/db');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
 let server: Server;
-let baseUrl = "";
+let baseUrl = '';
 let counter = 0;
 let publishableRestore: string | undefined;
 /** Whether the stubbed credential presents a merchant service token. */
@@ -110,7 +110,7 @@ async function request(
   return {
     status: response.status,
     json: text ? (JSON.parse(text) as Body) : {},
-    cacheControl: response.headers.get("cache-control"),
+    cacheControl: response.headers.get('cache-control'),
   };
 }
 
@@ -121,41 +121,41 @@ async function cardIntent() {
   const intent = await insertPaymentIntent(gatewayDb(), {
     publicId,
     merchantId: merchant.id,
-    rail: "card",
-    amount: "4200",
-    currency: "EUR",
+    rail: 'card',
+    amount: '4200',
+    currency: 'EUR',
     network: null,
     address: null,
-    provider: "stripe",
+    provider: 'stripe',
     clientSecret: `${publicId}_secret_${uuidv7()}`,
     idempotencyKey: uuidv7(),
     metadata: {},
     expiresAt: new Date(Date.now() + 900_000),
   });
-  if (!intent) throw new Error("could not seed the intent");
-  await linkProviderObject(gatewayDb(), intent.id, "stripe", `pi_stripe_${publicId}`);
+  if (!intent) throw new Error('could not seed the intent');
+  await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_${publicId}`);
   return intent;
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
     useFake = true;
     merchant = await seedMerchant();
     publishableRestore = config.stripe.publishableKey;
-    (config.stripe as { publishableKey: string | undefined }).publishableKey = "pk_test_abc";
+    (config.stripe as { publishableKey: string | undefined }).publishableKey = 'pk_test_abc';
 
     const stubAuth: RequestHandler = (req, _res, next) => {
       if (asMerchant) {
         (req as OxyAuthRequest).serviceApp = {
           appId: merchant.oxyAppId,
-          appName: "t",
-          scopes: ["payments:read", "payments:write"],
-          credentialId: "c",
-          ownerAccountId: "owner",
-          environment: "development",
-          tier: "external",
+          appName: 't',
+          scopes: ['payments:read', 'payments:write'],
+          credentialId: 'c',
+          ownerAccountId: 'owner',
+          environment: 'development',
+          tier: 'external',
         };
       }
       next();
@@ -174,14 +174,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
   });
 
   beforeEach(() => {
-    statusToReport = "created";
+    statusToReport = 'created';
     getStatusThrows = null;
     asMerchant = true;
   });
 
   afterAll(async () => {
-    (config.stripe as { publishableKey: string | undefined }).publishableKey =
-      publishableRestore;
+    (config.stripe as { publishableKey: string | undefined }).publishableKey = publishableRestore;
     useFake = false;
     await new Promise<void>((resolve) => {
       server.close(() => {
@@ -194,13 +193,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
     const intent = await cardIntent();
 
     const { status, json, cacheControl } = await request(
-      "POST",
+      'POST',
       `/v1/payment_intents/${intent.publicId}/client_action`,
     );
 
     expect(status).toBe(200);
-    expect(json.object).toBe("client_action");
-    expect(json.kind).toBe("client_secret");
+    expect(json.object).toBe('client_action');
+    expect(json.kind).toBe('client_secret');
     expect(json.value).toBe(`pi_stripe_${intent.publicId}_secret_live`);
     /**
      * The PUBLISHABLE key rides along, and is not baked into the checkout
@@ -208,9 +207,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
      * pointed at, so a compiled-in key would be the wrong mode the first time a
      * test deployment used the same page.
      */
-    expect(json.publishableKey).toBe("pk_test_abc");
+    expect(json.publishableKey).toBe('pk_test_abc');
     // Never cached. The body carries a credential.
-    expect(cacheControl).toBe("no-store");
+    expect(cacheControl).toBe('no-store');
   });
 
   /**
@@ -226,28 +225,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
     asMerchant = false;
 
     const { status, json } = await request(
-      "POST",
+      'POST',
       `/v1/payment_intents/${intent.publicId}/client_action`,
-      { "X-Peable-Client-Secret": intent.clientSecret },
+      { 'X-Peable-Client-Secret': intent.clientSecret },
     );
 
     expect(status).toBe(200);
     expect(json.value).toBe(`pi_stripe_${intent.publicId}_secret_live`);
   });
 
-  test("a wrong client_secret is refused, and a missing one is unauthenticated", async () => {
+  test('a wrong client_secret is refused, and a missing one is unauthenticated', async () => {
     const intent = await cardIntent();
     asMerchant = false;
 
-    const wrong = await request(
-      "POST",
-      `/v1/payment_intents/${intent.publicId}/client_action`,
-      { "X-Peable-Client-Secret": "pi_ca_1_secret_not_this" },
-    );
-    const missing = await request(
-      "POST",
-      `/v1/payment_intents/${intent.publicId}/client_action`,
-    );
+    const wrong = await request('POST', `/v1/payment_intents/${intent.publicId}/client_action`, {
+      'X-Peable-Client-Secret': 'pi_ca_1_secret_not_this',
+    });
+    const missing = await request('POST', `/v1/payment_intents/${intent.publicId}/client_action`);
 
     expect(wrong.status).toBe(403);
     expect(missing.status).toBe(401);
@@ -258,30 +252,30 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
    * than answering nothing: a checkout handed a credential renders a card form
    * over a payment that is already settled.
    */
-  test("refuses to hand out a credential for a payment that is over", async () => {
+  test('refuses to hand out a credential for a payment that is over', async () => {
     const intent = await cardIntent();
-    await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
+    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
 
     const { status, json } = await request(
-      "POST",
+      'POST',
       `/v1/payment_intents/${intent.publicId}/client_action`,
     );
 
     expect(status).toBe(409);
-    expect(json.error?.message).toContain("settled");
+    expect(json.error?.message).toContain('settled');
   });
 
   /** The FairCoin rail needs no client action; its address is on the intent. */
-  test("refuses the operation on a rail that has no client action", async () => {
+  test('refuses the operation on a rail that has no client action', async () => {
     const intent = await seedIntent(merchant);
 
     const { status, json } = await request(
-      "POST",
+      'POST',
       `/v1/payment_intents/${intent.publicId}/client_action`,
     );
 
     expect(status).toBe(422);
-    expect(json.error?.message).toContain("address");
+    expect(json.error?.message).toContain('address');
   });
 
   // ── the two GET surfaces, which differ deliberately ──────────────────────
@@ -294,21 +288,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
     const intent = await cardIntent();
 
     const { status, json, cacheControl } = await request(
-      "GET",
+      'GET',
       `/v1/payment_intents/${intent.publicId}`,
     );
 
     expect(status).toBe(200);
     expect(json.client_action?.value).toBe(`pi_stripe_${intent.publicId}_secret_live`);
-    expect(cacheControl).toBe("no-store");
+    expect(cacheControl).toBe('no-store');
   });
 
   /** ...and stops as soon as the payment can no longer be paid. */
   test("a merchant's read of a finished payment carries none", async () => {
     const intent = await cardIntent();
-    await updateIntentState(gatewayDb(), intent.id, { from: "created", status: "settled" });
+    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
 
-    const { json } = await request("GET", `/v1/payment_intents/${intent.publicId}`);
+    const { json } = await request('GET', `/v1/payment_intents/${intent.publicId}`);
 
     expect(json.client_action).toBeUndefined();
   });
@@ -321,23 +315,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
    * — an integrator polling for a settlement would see their own integration
    * break for a reason that has nothing to do with the payment.
    */
-  test("still answers the intent when the provider cannot be reached", async () => {
+  test('still answers the intent when the provider cannot be reached', async () => {
     const intent = await cardIntent();
-    getStatusThrows = new Error("the acquirer could not be reached");
+    getStatusThrows = new Error('the acquirer could not be reached');
 
-    const { status, json } = await request("GET", `/v1/payment_intents/${intent.publicId}`);
+    const { status, json } = await request('GET', `/v1/payment_intents/${intent.publicId}`);
 
     expect(status).toBe(200);
     expect(json.client_action).toBeUndefined();
   });
 
   /** ...and the explicit resume operation says so, rather than 500ing. */
-  test("the resume operation reports an unreachable provider as unavailable", async () => {
+  test('the resume operation reports an unreachable provider as unavailable', async () => {
     const intent = await cardIntent();
-    getStatusThrows = new Error("the acquirer could not be reached");
+    getStatusThrows = new Error('the acquirer could not be reached');
 
     const { status } = await request(
-      "POST",
+      'POST',
       `/v1/payment_intents/${intent.publicId}/client_action`,
     );
 
@@ -355,8 +349,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("resuming a card payment", () => {
     const intent = await cardIntent();
     asMerchant = false;
 
-    const { status, json } = await request("GET", `/v1/payment_intents/${intent.publicId}`, {
-      "X-Peable-Client-Secret": intent.clientSecret,
+    const { status, json } = await request('GET', `/v1/payment_intents/${intent.publicId}`, {
+      'X-Peable-Client-Secret': intent.clientSecret,
     });
 
     expect(status).toBe(200);

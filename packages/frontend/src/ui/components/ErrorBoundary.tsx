@@ -10,10 +10,10 @@
  * have no hook equivalent.
  */
 
-import { Component, type ReactNode } from "react";
-import { View, Text, Pressable, ScrollView } from "react-native";
-import { recordCrash } from "../../services/crash-log";
-import { t } from "../../i18n";
+import { Component, type ReactNode } from 'react';
+import { View, Text, Pressable, ScrollView } from 'react-native';
+import { recordCrash } from '../../services/crash-log';
+import { t } from '../../i18n';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -23,10 +23,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -48,10 +45,10 @@ export class ErrorBoundary extends Component<
     return (
       <View className="flex-1 bg-background items-center justify-center px-6">
         <Text className="text-foreground text-xl font-semibold text-center">
-          {t("crash.title")}
+          {t('crash.title')}
         </Text>
         <Text className="text-muted-foreground text-[15px] text-center mt-2 leading-5">
-          {t("crash.subtitle")}
+          {t('crash.subtitle')}
         </Text>
 
         <ScrollView
@@ -70,7 +67,7 @@ export class ErrorBoundary extends Component<
           className="mt-6 self-stretch rounded-full bg-primary py-3.5 items-center active:opacity-70"
         >
           <Text className="text-primary-foreground text-base font-semibold">
-            {t("crash.retry")}
+            {t('crash.retry')}
           </Text>
         </Pressable>
       </View>

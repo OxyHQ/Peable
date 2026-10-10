@@ -5,16 +5,16 @@
  * Follows Revolut's pattern: symbol + amount inline.
  */
 
-import { useMemo } from "react";
-import { View, Text } from "react-native";
-import { Badge } from "./Badge";
-import { AmountText } from "./AmountText";
-import { FairCoinSymbol } from "./FairCoinSymbol";
-import { formatFiatAmount, t } from "../../i18n";
-import { FONT_PHUDU_LIGHT, FONT_PHUDU, FONT_PHUDU_BLACK } from "../../utils/fonts";
-import { COIN_SYMBOL, UNITS_PER_COIN } from "@fairco.in/core";
+import { useMemo } from 'react';
+import { View, Text } from 'react-native';
+import { Badge } from './Badge';
+import { AmountText } from './AmountText';
+import { FairCoinSymbol } from './FairCoinSymbol';
+import { formatFiatAmount, t } from '../../i18n';
+import { FONT_PHUDU_LIGHT, FONT_PHUDU, FONT_PHUDU_BLACK } from '../../utils/fonts';
+import { COIN_SYMBOL, UNITS_PER_COIN } from '@fairco.in/core';
 
-type BalanceSize = "sm" | "md" | "lg";
+type BalanceSize = 'sm' | 'md' | 'lg';
 
 interface BalanceDisplayProps {
   value: bigint;
@@ -23,7 +23,7 @@ interface BalanceDisplayProps {
   size?: BalanceSize;
   showFiatPrimary?: boolean;
   /** Cross-axis alignment of the stacked amount/fiat/change. Default centered. */
-  align?: "center" | "start";
+  align?: 'center' | 'start';
 }
 
 function coinValueToUsd(value: bigint, priceUsd: number): number {
@@ -35,8 +35,8 @@ function formatChange(change: number): string {
   // i18n-localised "{value}% today" label. The percentage is rendered with
   // the same fixed precision in every language; only the trailing word
   // changes — the {percent} placeholder keeps that single concept atomic.
-  const sign = change >= 0 ? "+" : "";
-  return t("balance.change24h", { percent: `${sign}${change.toFixed(1)}` });
+  const sign = change >= 0 ? '+' : '';
+  return t('balance.change24h', { percent: `${sign}${change.toFixed(1)}` });
 }
 
 const SIZE_PRIMARY: Record<BalanceSize, number> = {
@@ -55,11 +55,11 @@ export function BalanceDisplay({
   value,
   priceUsd,
   change24h,
-  size = "lg",
+  size = 'lg',
   showFiatPrimary = false,
-  align = "center",
+  align = 'center',
 }: BalanceDisplayProps) {
-  const alignClass = align === "start" ? "items-start" : "items-center";
+  const alignClass = align === 'start' ? 'items-start' : 'items-center';
   const usdValue = useMemo(() => {
     if (priceUsd == null || priceUsd === 0) return null;
     return coinValueToUsd(value, priceUsd);
@@ -67,15 +67,17 @@ export function BalanceDisplay({
 
   const usdFormatted = useMemo(() => {
     if (usdValue === null) return null;
-    return formatFiatAmount(usdValue, "USD");
+    return formatFiatAmount(usdValue, 'USD');
   }, [usdValue]);
 
   const changeInfo = useMemo(() => {
     if (change24h == null) return null;
     return {
       text: formatChange(change24h),
-      variant: (change24h > 0 ? "success" : change24h < 0 ? "error" : "neutral") as
-        "success" | "error" | "neutral",
+      variant: (change24h > 0 ? 'success' : change24h < 0 ? 'error' : 'neutral') as
+        | 'success'
+        | 'error'
+        | 'neutral',
     };
   }, [change24h]);
 
@@ -128,11 +130,8 @@ export function BalanceDisplay({
       </View>
 
       {usdFormatted !== null ? (
-        <Text
-          className="text-muted-foreground mt-1"
-          style={{ fontSize: secondary }}
-        >
-          {"\u2248"} {usdFormatted}
+        <Text className="text-muted-foreground mt-1" style={{ fontSize: secondary }}>
+          {'\u2248'} {usdFormatted}
         </Text>
       ) : null}
 

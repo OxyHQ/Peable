@@ -1,25 +1,20 @@
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import type { OxyServiceEnvironment } from "@oxy.so/core/server";
-import { getDb } from "../db/postgres";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import type { OxyServiceEnvironment } from '@oxy.so/core/server';
+import { getDb } from '../db/postgres';
 import {
   ChainRegistrationError,
   insertMerchant,
   updateMerchantSettings,
   WatchOnlyViolationError,
-} from "../db/merchants/merchantRepository";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
-import { newId } from "../lib/ids";
-import { toMerchantDTO } from "../lib/serialize";
-import {
-  sendError,
-  wrap,
-  requireServiceApp,
-  requireAuthenticated,
-} from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
+} from '../db/merchants/merchantRepository';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { newId } from '../lib/ids';
+import { toMerchantDTO } from '../lib/serialize';
+import { sendError, wrap, requireServiceApp, requireAuthenticated } from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
 
 /** Exported: `routes/dashboard.ts` parses the SAME registration body for its dashboard-authed register route (F2.5) so the two never drift. */
 // The branding columns are bare `text()` with no CHECK, so these bounds are
@@ -47,21 +42,18 @@ export const createMerchantBodySchema = z
      * they had to custody, or a fixture that silently made their FairCoin
      * receive addresses underivable by their own wallet.
      */
-    network: z.enum(["mainnet", "testnet"]).optional(),
+    network: z.enum(['mainnet', 'testnet']).optional(),
     xpub: z.string().min(1).optional(),
     webhookUrl: z.string().url().optional(),
     webhookSecret: z.string().min(1).optional(),
     requiredConfirmations: z.number().int().positive().optional(),
     ...brandingFields,
   })
-  .refine(
-    (body) => (body.network === undefined) === (body.xpub === undefined),
-    {
-      message:
-        "accepting FairCoin needs both a network and a watch-only xpub, or neither — " +
-        "omit both to register a card-only merchant",
-    },
-  );
+  .refine((body) => (body.network === undefined) === (body.xpub === undefined), {
+    message:
+      'accepting FairCoin needs both a network and a watch-only xpub, or neither — ' +
+      'omit both to register a card-only merchant',
+  });
 
 /** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
 export const patchMerchantBodySchema = z.object({
@@ -91,7 +83,7 @@ export async function registerMerchant(
   oxyAppId: string,
   environment: OxyServiceEnvironment,
   params: {
-    network?: "mainnet" | "testnet";
+    network?: 'mainnet' | 'testnet';
     xpub?: string;
     webhookUrl?: string;
     webhookSecret?: string;
@@ -105,7 +97,7 @@ export async function registerMerchant(
   // ever register a testnet merchant — this makes it structurally impossible
   // for a leaked test credential (or a compromised dashboard session) to move
   // mainnet funds, not merely a data-labelling convention.
-  if (environment !== "production" && params.network === "mainnet") {
+  if (environment !== 'production' && params.network === 'mainnet') {
     return {
       ok: false,
       status: 422,
@@ -123,7 +115,7 @@ export async function registerMerchant(
     // firewall runs inside `insertMerchant` on `xpub` regardless of this
     // function: it refuses any private extended key.
     merchant = await insertMerchant(getDb(), {
-      publicId: newId("merch"),
+      publicId: newId('merch'),
       oxyAppId,
       environment,
       network: params.network,
@@ -157,7 +149,7 @@ export async function registerMerchant(
     return {
       ok: false,
       status: 409,
-      message: "a merchant is already registered for this application and environment",
+      message: 'a merchant is already registered for this application and environment',
     };
   }
 
@@ -205,17 +197,15 @@ export async function applyMerchantPatch(
  * `environment` is always available from the token — doubling as the
  * enforcement point for the test/live firewall below.
  */
-export function createMerchantsRouter(deps: {
-  requireMerchant: RequestHandler;
-}): Router {
+export function createMerchantsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const { requireMerchant } = deps;
   const router = Router();
 
   router.post(
-    "/v1/merchants",
+    '/v1/merchants',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const serviceApp = requireServiceApp(req, res);
       if (!serviceApp) return;
@@ -225,14 +215,14 @@ export function createMerchantsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
       const result = await registerMerchant(serviceApp.appId, serviceApp.environment, parsed.data);
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       res.status(201).json(toMerchantDTO(result.merchant));
@@ -240,10 +230,10 @@ export function createMerchantsRouter(deps: {
   );
 
   router.get(
-    "/v1/merchants/me",
+    '/v1/merchants/me',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -252,10 +242,10 @@ export function createMerchantsRouter(deps: {
   );
 
   router.patch(
-    "/v1/merchants/me",
+    '/v1/merchants/me',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -265,14 +255,14 @@ export function createMerchantsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
       const updated = await applyMerchantPatch(merchant, parsed.data);
       if (!updated) {
-        sendError(res, 404, "invalid_request_error", "merchant not found");
+        sendError(res, 404, 'invalid_request_error', 'merchant not found');
         return;
       }
       res.status(200).json(toMerchantDTO(updated));

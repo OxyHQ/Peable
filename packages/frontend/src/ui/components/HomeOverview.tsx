@@ -11,21 +11,20 @@
  * or "unavailable" state, never crashing.
  */
 
-import { useMemo, useState } from "react";
-import { View, Text } from "react-native";
-import { AmountText } from "./AmountText";
-import { PriceSparkline } from "./PriceSparkline";
-import { useWalletStore } from "../../wallet/wallet-store";
-import { usePriceHistory, useNetworkStats } from "../../hooks/useMarketData";
-import { COIN_SYMBOL } from "@fairco.in/core";
-import { FONT_PHUDU_BLACK } from "../../utils/fonts";
-import { formatNumber, t } from "../../i18n";
+import { useMemo, useState } from 'react';
+import { View, Text } from 'react-native';
+import { AmountText } from './AmountText';
+import { PriceSparkline } from './PriceSparkline';
+import { useWalletStore } from '../../wallet/wallet-store';
+import { usePriceHistory, useNetworkStats } from '../../hooks/useMarketData';
+import { COIN_SYMBOL } from '@fairco.in/core';
+import { FONT_PHUDU_BLACK } from '../../utils/fonts';
+import { formatNumber, t } from '../../i18n';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const THIRTY_DAYS_SECONDS = 30 * 24 * 60 * 60;
 
-const SECTION_HEADER =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_HEADER = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 /** A labelled key/value row (label left, value right). */
 function StatRow({ label, value }: { label: string; value: string }) {
@@ -80,7 +79,7 @@ export function HomeOverview(): React.JSX.Element {
     let last30 = 0n;
     let count = 0;
     for (const tx of transactions) {
-      if (tx.type !== "stake" && tx.type !== "masternode_reward") continue;
+      if (tx.type !== 'stake' && tx.type !== 'masternode_reward') continue;
       const abs = tx.amount < 0n ? -tx.amount : tx.amount;
       total += abs;
       count += 1;
@@ -102,10 +101,10 @@ export function HomeOverview(): React.JSX.Element {
 
       {/* ---- Staking / rewards ---- */}
       <View className="px-5">
-        <Text className={SECTION_HEADER}>{t("overview.staking.title")}</Text>
+        <Text className={SECTION_HEADER}>{t('overview.staking.title')}</Text>
         {rewards.count === 0 ? (
           <Text className="text-muted-foreground text-[15px] mt-2 leading-5">
-            {t("overview.staking.empty.subtitle")}
+            {t('overview.staking.empty.subtitle')}
           </Text>
         ) : (
           <View className="mt-2">
@@ -117,13 +116,13 @@ export function HomeOverview(): React.JSX.Element {
               style={{ fontFamily: FONT_PHUDU_BLACK, fontSize: 32 }}
             />
             <Text className="text-muted-foreground text-[13px] mt-1">
-              {t("overview.staking.totalEarned")}
+              {t('overview.staking.totalEarned')}
             </Text>
 
             <View className="flex-row mt-5">
               <View className="flex-1">
                 <Text className="text-muted-foreground text-[13px]">
-                  {t("overview.staking.last30Days")}
+                  {t('overview.staking.last30Days')}
                 </Text>
                 <AmountText
                   value={rewards.last30}
@@ -134,7 +133,7 @@ export function HomeOverview(): React.JSX.Element {
               </View>
               <View className="flex-1">
                 <Text className="text-muted-foreground text-[13px]">
-                  {t("overview.staking.rewardsReceived")}
+                  {t('overview.staking.rewardsReceived')}
                 </Text>
                 <Text className="text-foreground text-[17px] font-semibold mt-1">
                   {formatNumber(rewards.count, 0)}
@@ -149,25 +148,25 @@ export function HomeOverview(): React.JSX.Element {
 
       {/* ---- Network ---- */}
       <View className="px-5">
-        <Text className={SECTION_HEADER}>{t("overview.network.title")}</Text>
+        <Text className={SECTION_HEADER}>{t('overview.network.title')}</Text>
         {stats ? (
           <View className="mt-1.5">
             <StatRow
-              label={t("overview.network.blockHeight")}
+              label={t('overview.network.blockHeight')}
               value={formatNumber(stats.blockHeight, 0)}
             />
             <StatRow
-              label={t("overview.network.masternodes")}
+              label={t('overview.network.masternodes')}
               value={formatNumber(stats.masternodeCount, 0)}
             />
             <StatRow
-              label={t("overview.network.circulatingSupply")}
+              label={t('overview.network.circulatingSupply')}
               value={`${formatNumber(stats.circulatingSupply, 0)} ${COIN_SYMBOL}`}
             />
           </View>
         ) : (
           <Text className="text-muted-foreground text-[15px] mt-2">
-            {t("overview.network.unavailable")}
+            {t('overview.network.unavailable')}
           </Text>
         )}
       </View>

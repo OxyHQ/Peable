@@ -14,7 +14,7 @@
  * at-rest container.
  */
 
-import { getItemAsync, setItemAsync, deleteItemAsync } from "../storage/kv-store";
+import { getItemAsync, setItemAsync, deleteItemAsync } from '../storage/kv-store';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,10 +24,7 @@ import { getItemAsync, setItemAsync, deleteItemAsync } from "../storage/kv-store
  * The payment events a user can subscribe to. Mirrors the Explorer wire
  * contract (spec §4.1) and the notification catalog core set (spec §3).
  */
-export type NotificationEvent =
-  | "incoming_pending"
-  | "incoming_confirmed"
-  | "outgoing_confirmed";
+export type NotificationEvent = 'incoming_pending' | 'incoming_confirmed' | 'outgoing_confirmed';
 
 export interface NotificationPrefs {
   /** Master switch. When false, no registration exists and no push is sent. */
@@ -58,12 +55,12 @@ export interface StoredSubscription {
 // ---------------------------------------------------------------------------
 
 /** The official FairCoin Explorer — the default (and privacy "Default") server. */
-export const DEFAULT_NOTIFICATION_SERVER_URL = "https://explorer.fairco.in";
+export const DEFAULT_NOTIFICATION_SERVER_URL = 'https://explorer.fairco.in';
 
 const ALL_EVENTS: readonly NotificationEvent[] = [
-  "incoming_pending",
-  "incoming_confirmed",
-  "outgoing_confirmed",
+  'incoming_pending',
+  'incoming_confirmed',
+  'outgoing_confirmed',
 ];
 
 /** Minimum / maximum confirmation depth the UI and store enforce. */
@@ -81,8 +78,8 @@ export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
 // Storage keys
 // ---------------------------------------------------------------------------
 
-const PREFS_KEY = "fairwallet_notification_prefs";
-const SUBSCRIPTION_KEY_PREFIX = "fairwallet_notification_sub_";
+const PREFS_KEY = 'fairwallet_notification_prefs';
+const SUBSCRIPTION_KEY_PREFIX = 'fairwallet_notification_sub_';
 
 function subscriptionKey(walletId: string): string {
   return `${SUBSCRIPTION_KEY_PREFIX}${walletId}`;
@@ -94,9 +91,7 @@ function subscriptionKey(walletId: string): string {
 
 function isNotificationEvent(value: unknown): value is NotificationEvent {
   return (
-    value === "incoming_pending" ||
-    value === "incoming_confirmed" ||
-    value === "outgoing_confirmed"
+    value === 'incoming_pending' || value === 'incoming_confirmed' || value === 'outgoing_confirmed'
   );
 }
 
@@ -107,17 +102,17 @@ function isNotificationEvent(value: unknown): value is NotificationEvent {
  */
 function sanitizePrefs(raw: unknown): NotificationPrefs {
   const obj: Record<string, unknown> =
-    raw !== null && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+    raw !== null && typeof raw === 'object' ? (raw as Record<string, unknown>) : {};
 
   const enabled = obj.enabled === true;
 
   const serverUrl =
-    typeof obj.serverUrl === "string" && obj.serverUrl.trim().length > 0
+    typeof obj.serverUrl === 'string' && obj.serverUrl.trim().length > 0
       ? obj.serverUrl.trim()
       : DEFAULT_NOTIFICATION_SERVER_URL;
 
   let confirmations = DEFAULT_NOTIFICATION_PREFS.confirmations;
-  if (typeof obj.confirmations === "number" && Number.isFinite(obj.confirmations)) {
+  if (typeof obj.confirmations === 'number' && Number.isFinite(obj.confirmations)) {
     confirmations = Math.min(
       MAX_CONFIRMATIONS,
       Math.max(MIN_CONFIRMATIONS, Math.round(obj.confirmations)),
@@ -155,9 +150,7 @@ export async function getNotificationPrefs(): Promise<NotificationPrefs> {
   if (cachedPrefs) return cachedPrefs;
   try {
     const stored = await getItemAsync(PREFS_KEY);
-    cachedPrefs = stored
-      ? sanitizePrefs(JSON.parse(stored))
-      : { ...DEFAULT_NOTIFICATION_PREFS };
+    cachedPrefs = stored ? sanitizePrefs(JSON.parse(stored)) : { ...DEFAULT_NOTIFICATION_PREFS };
   } catch {
     // Corrupt JSON or storage unavailable — fall back to defaults so the app
     // still boots; the next successful write repairs the persisted value.
@@ -199,19 +192,17 @@ export function subscribeNotificationPrefs(listener: () => void): () => void {
 // ---------------------------------------------------------------------------
 
 /** Load the persisted registration state for a wallet, or null if none. */
-export async function getStoredSubscription(
-  walletId: string,
-): Promise<StoredSubscription | null> {
+export async function getStoredSubscription(walletId: string): Promise<StoredSubscription | null> {
   try {
     const raw = await getItemAsync(subscriptionKey(walletId));
     if (!raw) return null;
     const parsed: unknown = JSON.parse(raw);
-    if (parsed === null || typeof parsed !== "object") return null;
+    if (parsed === null || typeof parsed !== 'object') return null;
     const obj = parsed as Record<string, unknown>;
     if (
-      typeof obj.subscriptionId !== "string" ||
-      typeof obj.serverUrl !== "string" ||
-      typeof obj.payloadKey !== "string"
+      typeof obj.subscriptionId !== 'string' ||
+      typeof obj.serverUrl !== 'string' ||
+      typeof obj.payloadKey !== 'string'
     ) {
       return null;
     }

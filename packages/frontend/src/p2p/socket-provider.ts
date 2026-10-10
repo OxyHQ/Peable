@@ -8,8 +8,8 @@
  * Uses conditional require to avoid web bundling issues with native modules.
  */
 
-import { Platform } from "react-native";
-import type { SocketConnection, SocketProvider } from "./peer";
+import { Platform } from 'react-native';
+import type { SocketConnection, SocketProvider } from './peer';
 
 // ---------------------------------------------------------------------------
 // Electron IPC bridge type
@@ -42,18 +42,15 @@ interface ElectronAPI {
 // ---------------------------------------------------------------------------
 
 interface NativeTcpSocket {
-  on(event: "data", callback: (data: Uint8Array) => void): void;
-  on(event: "close", callback: () => void): void;
-  on(event: "error", callback: (err: Error) => void): void;
+  on(event: 'data', callback: (data: Uint8Array) => void): void;
+  on(event: 'close', callback: () => void): void;
+  on(event: 'error', callback: (err: Error) => void): void;
   write(data: Uint8Array | Buffer): void;
   destroy(): void;
 }
 
 interface NativeTcpModule {
-  createConnection(
-    options: { host: string; port: number },
-    callback: () => void,
-  ): NativeTcpSocket;
+  createConnection(options: { host: string; port: number }, callback: () => void): NativeTcpSocket;
 }
 
 // ---------------------------------------------------------------------------
@@ -61,7 +58,7 @@ interface NativeTcpModule {
 // ---------------------------------------------------------------------------
 
 function getElectronAPI(): ElectronAPI | undefined {
-  if (typeof window === "undefined") return undefined;
+  if (typeof window === 'undefined') return undefined;
   const win = window as unknown as Record<string, unknown>;
   const api = win.electronAPI;
   if (api == null) return undefined;
@@ -74,7 +71,7 @@ function getElectronAPI(): ElectronAPI | undefined {
 
 class NativeSocketProvider implements SocketProvider {
   connect(host: string, port: number): SocketConnection {
-    const TcpSocket = require("react-native-tcp-socket") as NativeTcpModule;
+    const TcpSocket = require('react-native-tcp-socket') as NativeTcpModule;
 
     let connectCallback: (() => void) | undefined;
 
@@ -89,15 +86,15 @@ class NativeSocketProvider implements SocketProvider {
         connectCallback = cb;
       },
       onData: (cb: (data: Uint8Array) => void) => {
-        socket.on("data", (data: Uint8Array) => {
+        socket.on('data', (data: Uint8Array) => {
           cb(new Uint8Array(data));
         });
       },
       onClose: (cb: () => void) => {
-        socket.on("close", cb);
+        socket.on('close', cb);
       },
       onError: (cb: (err: Error) => void) => {
-        socket.on("error", cb);
+        socket.on('error', cb);
       },
       write: (data: Uint8Array) => {
         socket.write(data);
@@ -129,7 +126,7 @@ class ElectronSocketProvider implements SocketProvider {
     const electronAPI = getElectronAPI();
     if (!electronAPI?.p2p) {
       throw new Error(
-        "Electron P2P bridge not available. Ensure preload.js exposes window.electronAPI.p2p.",
+        'Electron P2P bridge not available. Ensure preload.js exposes window.electronAPI.p2p.',
       );
     }
 
@@ -247,8 +244,8 @@ class ElectronSocketProvider implements SocketProvider {
 class FallbackSocketProvider implements SocketProvider {
   connect(_host: string, _port: number): never {
     throw new Error(
-      "TCP connections are not available in web browsers. " +
-      "Run Peable as a native app (iOS/Android) or via Electron for P2P connectivity.",
+      'TCP connections are not available in web browsers. ' +
+        'Run Peable as a native app (iOS/Android) or via Electron for P2P connectivity.',
     );
   }
 }
@@ -265,7 +262,7 @@ class FallbackSocketProvider implements SocketProvider {
  * - Web (browser): FallbackSocketProvider (throws on connect)
  */
 export function createSocketProvider(): SocketProvider {
-  if (Platform.OS === "web") {
+  if (Platform.OS === 'web') {
     if (getElectronAPI() != null) {
       return new ElectronSocketProvider();
     }

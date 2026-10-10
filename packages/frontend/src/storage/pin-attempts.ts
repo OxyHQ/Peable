@@ -20,11 +20,8 @@
  * storage dependency.
  */
 
-import { getItemAsync, setItemAsync, deleteItemAsync } from "./kv-store";
-import {
-  computeNextPinAttemptState,
-  type PinAttemptState,
-} from "./pin-attempts-policy";
+import { getItemAsync, setItemAsync, deleteItemAsync } from './kv-store';
+import { computeNextPinAttemptState, type PinAttemptState } from './pin-attempts-policy';
 
 // Re-export the public surface so callers only import from one module.
 export {
@@ -34,7 +31,7 @@ export {
   lockoutSecondsForAttempts,
   computeNextPinAttemptState,
   type PinAttemptState,
-} from "./pin-attempts-policy";
+} from './pin-attempts-policy';
 
 // ---------------------------------------------------------------------------
 // Storage key
@@ -45,7 +42,7 @@ export {
  * the PIN record so a corrupt attempts blob can be reset without invalidating
  * the PIN itself.
  */
-const PIN_ATTEMPTS_KEY = "fairwallet_pin_attempts";
+const PIN_ATTEMPTS_KEY = 'fairwallet_pin_attempts';
 
 const EMPTY_STATE: PinAttemptState = {
   failedAttempts: 0,
@@ -57,7 +54,7 @@ const EMPTY_STATE: PinAttemptState = {
 // ---------------------------------------------------------------------------
 
 function isFiniteNonNegative(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0;
 }
 
 /**
@@ -72,15 +69,14 @@ export async function loadPinAttempts(): Promise<PinAttemptState> {
     if (raw === null) return EMPTY_STATE;
     const parsed: unknown = JSON.parse(raw);
     if (
-      typeof parsed !== "object" ||
+      typeof parsed !== 'object' ||
       parsed === null ||
-      !("failedAttempts" in parsed) ||
-      !("lockedUntil" in parsed)
+      !('failedAttempts' in parsed) ||
+      !('lockedUntil' in parsed)
     ) {
       return EMPTY_STATE;
     }
-    const failedAttempts = (parsed as { failedAttempts: unknown })
-      .failedAttempts;
+    const failedAttempts = (parsed as { failedAttempts: unknown }).failedAttempts;
     const lockedUntil = (parsed as { lockedUntil: unknown }).lockedUntil;
     if (!isFiniteNonNegative(failedAttempts) || !isFiniteNonNegative(lockedUntil)) {
       return EMPTY_STATE;

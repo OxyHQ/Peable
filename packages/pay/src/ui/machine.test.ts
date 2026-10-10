@@ -165,10 +165,9 @@ describe('a superseded attempt decides nothing', () => {
   test('restarting never reuses an attempt number', () => {
     const inFlight = payReducer(readyToContinue('2'), { type: 'continue' });
     const restarted = payReducer(inFlight, { type: 'restart' });
-    const again = payReducer(
-      payReducer(restarted, { type: 'amount-typed', text: '2' }),
-      { type: 'continue' },
-    );
+    const again = payReducer(payReducer(restarted, { type: 'amount-typed', text: '2' }), {
+      type: 'continue',
+    });
     expect(again.attempt).not.toBe(inFlight.attempt);
   });
 

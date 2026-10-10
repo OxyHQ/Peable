@@ -8,7 +8,7 @@
  * reverse order leaves a real charge at the acquirer with no row anywhere, which
  * nothing can find and no reconciliation can start from.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 
 interface ProviderCall {
   readonly fn: string;
@@ -21,26 +21,26 @@ let getStatusImpl: (objectId: string) => Promise<unknown>;
 let railEnabled = true;
 
 const fakeProvider = {
-  id: "stripe" as const,
+  id: 'stripe' as const,
   createPayment: async (request: Record<string, unknown>) => {
-    providerCalls.push({ fn: "createPayment", request });
+    providerCalls.push({ fn: 'createPayment', request });
     return createPaymentImpl(request);
   },
   getStatus: async (objectId: string) => {
-    providerCalls.push({ fn: "getStatus", request: { objectId } });
+    providerCalls.push({ fn: 'getStatus', request: { objectId } });
     return getStatusImpl(objectId);
   },
   capture: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   cancel: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   refund: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
   verifyEvent: async () => {
-    throw new Error("not used");
+    throw new Error('not used');
   },
 };
 
@@ -69,11 +69,11 @@ const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import("../providers/registry");
+} = await import('../providers/registry');
 let useFakeRegistry = false;
 
-mock.module("../providers/registry", () => ({
-  resolveProvider: (id: "stripe") =>
+mock.module('../providers/registry', () => ({
+  resolveProvider: (id: 'stripe') =>
     useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveProvider(id),
   resolveCardProvider: () =>
     useFakeRegistry ? (railEnabled ? fakeProvider : undefined) : realResolveCardProvider(),
@@ -83,20 +83,20 @@ mock.module("../providers/registry", () => ({
 }));
 
 const { createIntent, IdempotencyConflictError, RailUnavailableError } = await import(
-  "../createIntent"
+  '../createIntent'
 );
 const { findIntentByProviderObject, findIntentByPublicId } = await import(
-  "../../db/payments/paymentIntentRepository"
+  '../../db/payments/paymentIntentRepository'
 );
 const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
-  "../../__tests__/helpers/gatewayTestDatabase"
+  '../../__tests__/helpers/gatewayTestDatabase'
 );
-const { POSTGRES_TESTS_ENABLED } = await import("../../db/testDatabase");
+const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('minting a card intent', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
@@ -113,13 +113,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
     // collide, on the constraint rather than on its subject.
     createPaymentImpl = async (request) => ({
       providerObjectId: `pi_stripe_${String(request.intentId)}`,
-      status: "created",
-      clientAction: { kind: "client_secret", value: `${String(request.intentId)}_secret_x` },
+      status: 'created',
+      clientAction: { kind: 'client_secret', value: `${String(request.intentId)}_secret_x` },
     });
     getStatusImpl = async (objectId) => ({
       providerObjectId: objectId,
-      status: "created",
-      clientAction: { kind: "client_secret", value: `${objectId}_secret_reread` },
+      status: 'created',
+      clientAction: { kind: 'client_secret', value: `${objectId}_secret_reread` },
     });
   });
 
@@ -128,17 +128,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
     useFakeRegistry = false;
   });
 
-  test("writes the row, then creates at the provider, then links the two", async () => {
+  test('writes the row, then creates at the provider, then links the two', async () => {
     const { intent, clientAction } = await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: `k-${Date.now().toString()}-a`,
     });
 
-    expect(intent.rail).toBe("card");
-    expect(intent.provider).toBe("stripe");
+    expect(intent.rail).toBe('card');
+    expect(intent.provider).toBe('stripe');
     // A card intent reserves NO derivation index and carries no chain fields.
     expect(intent.address).toBeNull();
     expect(intent.network).toBeNull();
@@ -146,10 +146,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
     const objectId = `pi_stripe_${intent.publicId}`;
     const linked = await findIntentByPublicId(gatewayDb(), intent.publicId);
     expect(linked?.providerObjectId).toBe(objectId);
-    expect(await findIntentByProviderObject(gatewayDb(), "stripe", objectId)).not.toBeNull();
+    expect(await findIntentByProviderObject(gatewayDb(), 'stripe', objectId)).not.toBeNull();
 
     expect(clientAction).toEqual({
-      kind: "client_secret",
+      kind: 'client_secret',
       value: `${intent.publicId}_secret_x`,
     });
   });
@@ -164,16 +164,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
   test("derives the provider idempotency key from the intent's own id", async () => {
     const { intent } = await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: `k-${Date.now().toString()}-b`,
     });
 
-    const call = providerCalls.find((entry) => entry.fn === "createPayment");
+    const call = providerCalls.find((entry) => entry.fn === 'createPayment');
     expect(call?.request.idempotencyKey).toBe(`pay:${intent.publicId}`);
     expect(call?.request.intentId).toBe(intent.publicId);
-    expect(call?.request.amount).toEqual({ amount: "2500", currency: "EUR" });
+    expect(call?.request.amount).toEqual({ amount: '2500', currency: 'EUR' });
   });
 
   /**
@@ -184,16 +184,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
   test("does not forward the merchant's metadata to the provider", async () => {
     await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
-      metadata: { customer_email: "buyer@example.com", note: "Jane Buyer, flat 3" },
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
+      metadata: { customer_email: 'buyer@example.com', note: 'Jane Buyer, flat 3' },
       idempotencyKey: `k-${Date.now().toString()}-c`,
     });
 
-    const call = providerCalls.find((entry) => entry.fn === "createPayment");
+    const call = providerCalls.find((entry) => entry.fn === 'createPayment');
     expect(call?.request.metadata).toEqual({});
-    expect(JSON.stringify(call?.request)).not.toContain("buyer@example.com");
+    expect(JSON.stringify(call?.request)).not.toContain('buyer@example.com');
   });
 
   /**
@@ -215,15 +215,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
    * provider key is derived from the intent's own public id, so the call either
    * creates the payment or returns the one it already made.
    */
-  test("finishes an interrupted create on the retry, under the same provider key", async () => {
+  test('finishes an interrupted create on the retry, under the same provider key', async () => {
     createPaymentImpl = async () => {
-      throw new Error("acquirer timeout");
+      throw new Error('acquirer timeout');
     };
     const key = `k-${Date.now().toString()}-d`;
 
     await expect(
-      createIntent({ merchant, amount: "2500", rail: "card", currency: "EUR", idempotencyKey: key }),
-    ).rejects.toThrow("acquirer timeout");
+      createIntent({
+        merchant,
+        amount: '2500',
+        rail: 'card',
+        currency: 'EUR',
+        idempotencyKey: key,
+      }),
+    ).rejects.toThrow('acquirer timeout');
 
     const unlinked = await findIntentByPublicId(gatewayDb(), `pi_unused`);
     expect(unlinked).toBeNull();
@@ -232,30 +238,30 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
     // they already used.
     createPaymentImpl = async (request) => ({
       providerObjectId: `pi_stripe_${String(request.intentId)}`,
-      status: "created",
-      clientAction: { kind: "client_secret", value: `${String(request.intentId)}_secret_resumed` },
+      status: 'created',
+      clientAction: { kind: 'client_secret', value: `${String(request.intentId)}_secret_resumed` },
     });
     providerCalls.length = 0;
 
     const { intent, reused, clientAction } = await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: key,
     });
 
     expect(reused).toBe(true);
-    expect(intent.provider).toBe("stripe");
+    expect(intent.provider).toBe('stripe');
     // LINKED now, and the payer has something to do.
-    expect(
-      (await findIntentByPublicId(gatewayDb(), intent.publicId))?.providerObjectId,
-    ).toBe(`pi_stripe_${intent.publicId}`);
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.providerObjectId).toBe(
+      `pi_stripe_${intent.publicId}`,
+    );
     expect(clientAction?.value).toBe(`${intent.publicId}_secret_resumed`);
 
     // The SAME provider idempotency key the interrupted attempt used, which is
     // what makes the resume a completion rather than a second charge.
-    const call = providerCalls.find((entry) => entry.fn === "createPayment");
+    const call = providerCalls.find((entry) => entry.fn === 'createPayment');
     expect(call?.request.idempotencyKey).toBe(`pay:${intent.publicId}`);
   });
 
@@ -266,22 +272,22 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
    * payment exists, and they would wait for money against an amount nobody
    * asked for. The key addresses one operation; this is a second one.
    */
-  test("refuses an Idempotency-Key replayed with a different amount", async () => {
+  test('refuses an Idempotency-Key replayed with a different amount', async () => {
     const key = `k-${Date.now().toString()}-conflict`;
     await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: key,
     });
 
     await expect(
       createIntent({
         merchant,
-        amount: "9900",
-        rail: "card",
-        currency: "EUR",
+        amount: '9900',
+        rail: 'card',
+        currency: 'EUR',
         idempotencyKey: key,
       }),
     ).rejects.toThrow(IdempotencyConflictError);
@@ -293,32 +299,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
    * than remembered: a client secret is a confirmation credential and storing
    * one would put it in every backup and every support query.
    */
-  test("re-reads the client action from the provider on an idempotent replay", async () => {
+  test('re-reads the client action from the provider on an idempotent replay', async () => {
     const key = `k-${Date.now().toString()}-e`;
     const first = await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: key,
     });
     expect(first.reused).toBe(false);
 
     const replay = await createIntent({
       merchant,
-      amount: "2500",
-      rail: "card",
-      currency: "EUR",
+      amount: '2500',
+      rail: 'card',
+      currency: 'EUR',
       idempotencyKey: key,
     });
     expect(replay.reused).toBe(true);
     expect(replay.clientAction).toEqual({
-      kind: "client_secret",
+      kind: 'client_secret',
       value: `pi_stripe_${first.intent.publicId}_secret_reread`,
     });
-    expect(providerCalls.filter((entry) => entry.fn === "getStatus")).toHaveLength(1);
+    expect(providerCalls.filter((entry) => entry.fn === 'getStatus')).toHaveLength(1);
     // ...and NOT a second charge.
-    expect(providerCalls.filter((entry) => entry.fn === "createPayment")).toHaveLength(1);
+    expect(providerCalls.filter((entry) => entry.fn === 'createPayment')).toHaveLength(1);
   });
 
   /**
@@ -327,23 +333,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("minting a card intent", () => {
    * `payment_intents_card_requires_provider_check` anyway — as a 500 — so
    * catching it here is the difference between a clear 503 and a stack trace.
    */
-  test("refuses a card intent, with nothing written, when the rail is not configured", async () => {
+  test('refuses a card intent, with nothing written, when the rail is not configured', async () => {
     railEnabled = false;
     const key = `k-${Date.now().toString()}-f`;
 
     await expect(
-      createIntent({ merchant, amount: "2500", rail: "card", currency: "EUR", idempotencyKey: key }),
+      createIntent({
+        merchant,
+        amount: '2500',
+        rail: 'card',
+        currency: 'EUR',
+        idempotencyKey: key,
+      }),
     ).rejects.toThrow(RailUnavailableError);
 
     expect(providerCalls).toHaveLength(0);
   });
 
   /** The FairCoin rail is untouched by any of this: no provider, no call. */
-  test("mints a faircoin intent with no provider and no provider call", async () => {
+  test('mints a faircoin intent with no provider and no provider call', async () => {
     const { intent, clientAction } = await createIntent({
       merchant,
-      amount: "100000000",
-      rail: "faircoin",
+      amount: '100000000',
+      rail: 'faircoin',
       // `?? undefined`: the merchant's network is nullable now (a card-only
       // merchant has none), and this fixture registers one.
       network: merchant.network ?? undefined,

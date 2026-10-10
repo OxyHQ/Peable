@@ -11,22 +11,25 @@
  * dispute in advance: the network opens it, so absence is the normal first
  * state and waiting for a row that will never appear is the bug.
  */
-import { beforeAll, describe, expect, it } from "bun:test";
-import type { Dispute, WebhookEvent } from "@peable.to/shared-types";
-import { eq } from "drizzle-orm";
-import { insertProviderEvent, findProviderEventById } from "../../db/providers/providerEventRepository";
-import { linkProviderObject } from "../../db/payments/paymentIntentRepository";
-import { listDisputesForIntent } from "../../db/disputes/disputeRepository";
-import { disputes, webhookDeliveries } from "../../db/schema";
-import { runProviderEventDrainPass } from "../providerEventDrain";
-import { redactProviderPayload } from "../providers/redact";
+import { beforeAll, describe, expect, it } from 'bun:test';
+import type { Dispute, WebhookEvent } from '@peable.to/shared-types';
+import { eq } from 'drizzle-orm';
+import {
+  insertProviderEvent,
+  findProviderEventById,
+} from '../../db/providers/providerEventRepository';
+import { linkProviderObject } from '../../db/payments/paymentIntentRepository';
+import { listDisputesForIntent } from '../../db/disputes/disputeRepository';
+import { disputes, webhookDeliveries } from '../../db/schema';
+import { runProviderEventDrainPass } from '../providerEventDrain';
+import { redactProviderPayload } from '../providers/redact';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
-import { POSTGRES_TESTS_ENABLED } from "../../db/testDatabase";
+} from '../../__tests__/helpers/gatewayTestDatabase';
+import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
@@ -63,21 +66,21 @@ async function storeDisputeEvent(input: {
   if (input.disputeObjectId) objectIds.dispute = input.disputeObjectId;
 
   const id = await insertProviderEvent(gatewayDb(), {
-    provider: "stripe",
+    provider: 'stripe',
     providerEventId: `evt_dispute_${String(counter)}`,
     providerAccountId: null,
     type: input.type,
     livemode: false,
-    apiVersion: "2026-07-29.dahlia",
+    apiVersion: '2026-07-29.dahlia',
     objectIds,
     payload: redactProviderPayload({
       id: `evt_dispute_${String(counter)}`,
-      object: "event",
+      object: 'event',
       type: input.type,
       data: {
         object: {
           id: input.disputeObjectId,
-          object: "dispute",
+          object: 'dispute',
           amount: input.amount ?? 2500,
           ...(input.reason ? { reason: input.reason } : {}),
           ...(input.status ? { status: input.status } : {}),
@@ -86,13 +89,13 @@ async function storeDisputeEvent(input: {
       },
     }),
   });
-  if (!id) throw new Error("the event was already stored");
+  if (!id) throw new Error('the event was already stored');
   return id;
 }
 
 async function linkedCardIntent(objectId: string) {
-  const intent = await seedIntent(merchant, { rail: "card", currency: "EUR", amount: "2500" });
-  await linkProviderObject(gatewayDb(), intent.id, "stripe", objectId);
+  const intent = await seedIntent(merchant, { rail: 'card', currency: 'EUR', amount: '2500' });
+  await linkProviderObject(gatewayDb(), intent.id, 'stripe', objectId);
   return intent;
 }
 
@@ -121,13 +124,12 @@ async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
     .map((row) => row.payload as unknown as WebhookEvent)
     .filter(
       (event) =>
-        event.type === "payment_intent.disputed" ||
-        event.type === "payment_intent.dispute_closed",
+        event.type === 'payment_intent.disputed' || event.type === 'payment_intent.dispute_closed',
     )
     .map((event) => event.data.object as Dispute);
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
@@ -136,8 +138,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
     // `enqueueIntentWebhook` return without writing a delivery row. Seeding
     // only the url would leave every delivery assertion below vacuously empty.
     merchant = await seedMerchant({
-      webhookUrl: "https://merchant.invalid/hook",
-      webhookSecret: "whsec_dispute_fixture",
+      webhookUrl: 'https://merchant.invalid/hook',
+      webhookSecret: 'whsec_dispute_fixture',
     });
   });
 
@@ -146,15 +148,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * CREATE one — the refund handler would have returned `unmatched` here and
    * retried until it dead-lettered, losing the dispute.
    */
-  it("creates the dispute row it has never seen, rather than waiting for one", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_create");
+  it('creates the dispute row it has never seen, rather than waiting for one', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_create');
     const dueBy = Math.floor(Date.now() / 1000) + 7 * 86_400;
     await storeDisputeEvent({
-      type: "charge.dispute.created",
-      intentObjectId: "pi_stripe_dp_create",
-      disputeObjectId: "dp_stripe_create",
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_create',
+      disputeObjectId: 'dp_stripe_create',
       amount: 2500,
-      reason: "fraudulent",
+      reason: 'fraudulent',
       dueBy,
     });
 
@@ -162,20 +164,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
 
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.status).toBe("needs_response");
-    expect(rows[0]?.amount).toBe("2500");
+    expect(rows[0]?.status).toBe('needs_response');
+    expect(rows[0]?.amount).toBe('2500');
     // Passed through unmapped: it is the field a merchant quotes to their
     // acquirer, and a gateway paraphrase would not match what the acquirer holds.
-    expect(rows[0]?.reason).toBe("fraudulent");
+    expect(rows[0]?.reason).toBe('fraudulent');
     expect(rows[0]?.evidenceDueAt).not.toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain("payment_intent.disputed");
+    expect(await deliveriesFor(intent.id)).toContain('payment_intent.disputed');
 
     // The payload is the DISPUTE, and it carries the three things a merchant
     // needs to act: how much, why, and by when.
     const [delivered] = await disputePayloadsFor(intent.id);
-    expect(delivered?.object).toBe("dispute");
-    expect(delivered?.amount).toBe("2500");
-    expect(delivered?.reason).toBe("fraudulent");
+    expect(delivered?.object).toBe('dispute');
+    expect(delivered?.amount).toBe('2500');
+    expect(delivered?.reason).toBe('fraudulent');
     expect(delivered?.evidenceDueAt).not.toBeNull();
     // And back to the payment, by its PUBLIC id — the internal one would name a
     // row the merchant has never seen.
@@ -187,20 +189,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * merchant told twice that one payment is disputed cannot tell that from two
    * disputes on it.
    */
-  it("tells the merchant once, however many times the creation is redelivered", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_dupe");
+  it('tells the merchant once, however many times the creation is redelivered', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_dupe');
     for (let i = 0; i < 2; i += 1) {
       await storeDisputeEvent({
-        type: "charge.dispute.created",
-        intentObjectId: "pi_stripe_dp_dupe",
-        disputeObjectId: "dp_stripe_dupe",
+        type: 'charge.dispute.created',
+        intentObjectId: 'pi_stripe_dp_dupe',
+        disputeObjectId: 'dp_stripe_dupe',
       });
       await runProviderEventDrainPass();
     }
 
     expect(await listDisputesForIntent(gatewayDb(), intent.id)).toHaveLength(1);
     const delivered = await deliveriesFor(intent.id);
-    expect(delivered.filter((type) => type === "payment_intent.disputed")).toHaveLength(1);
+    expect(delivered.filter((type) => type === 'payment_intent.disputed')).toHaveLength(1);
   });
 
   /**
@@ -208,56 +210,56 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * `charge.dispute.closed` closes one the merchant may have won or lost, and
    * defaulting either way tells them the opposite of the truth half the time.
    */
-  it("reads won and lost from the payload, and clears the deadline", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_lost");
+  it('reads won and lost from the payload, and clears the deadline', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_lost');
     await storeDisputeEvent({
-      type: "charge.dispute.created",
-      intentObjectId: "pi_stripe_dp_lost",
-      disputeObjectId: "dp_stripe_lost",
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_lost',
+      disputeObjectId: 'dp_stripe_lost',
       dueBy: Math.floor(Date.now() / 1000) + 86_400,
     });
     await runProviderEventDrainPass();
 
     await storeDisputeEvent({
-      type: "charge.dispute.closed",
-      intentObjectId: "pi_stripe_dp_lost",
-      disputeObjectId: "dp_stripe_lost",
-      status: "lost",
+      type: 'charge.dispute.closed',
+      intentObjectId: 'pi_stripe_dp_lost',
+      disputeObjectId: 'dp_stripe_lost',
+      status: 'lost',
     });
     await runProviderEventDrainPass();
 
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.status).toBe("lost");
+    expect(rows[0]?.status).toBe('lost');
     // The CHECK refuses a closed dispute that still carries a deadline, so this
     // is also what stops an operator queue showing a response that can no
     // longer be given.
     expect(rows[0]?.evidenceDueAt).toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain("payment_intent.dispute_closed");
+    expect(await deliveriesFor(intent.id)).toContain('payment_intent.dispute_closed');
 
     // The closing payload says WHICH way it went and carries no deadline — a
     // merchant told only that a dispute "closed" has a notification and no
     // information, and a response deadline on a decided dispute is a response
     // that can no longer be given.
     const closing = (await disputePayloadsFor(intent.id)).find(
-      (payload) => payload.status === "lost",
+      (payload) => payload.status === 'lost',
     );
     expect(closing).toBeDefined();
     expect(closing?.evidenceDueAt).toBeNull();
   });
 
-  it("reads a win as a win", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_won");
+  it('reads a win as a win', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_won');
     await storeDisputeEvent({
-      type: "charge.dispute.closed",
-      intentObjectId: "pi_stripe_dp_won",
-      disputeObjectId: "dp_stripe_won",
-      status: "won",
+      type: 'charge.dispute.closed',
+      intentObjectId: 'pi_stripe_dp_won',
+      disputeObjectId: 'dp_stripe_won',
+      status: 'won',
     });
     await runProviderEventDrainPass();
 
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
-    expect(rows[0]?.status).toBe("won");
+    expect(rows[0]?.status).toBe('won');
   });
 
   /**
@@ -274,32 +276,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * default: a merchant told they won does not reconcile, does not re-bill, and
    * finds out from their balance.
    */
-  it("refuses to call a close a win when the outcome cannot be read", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_unknown");
+  it('refuses to call a close a win when the outcome cannot be read', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_unknown');
     await storeDisputeEvent({
-      type: "charge.dispute.created",
-      intentObjectId: "pi_stripe_dp_unknown",
-      disputeObjectId: "dp_stripe_unknown",
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_unknown',
+      disputeObjectId: 'dp_stripe_unknown',
     });
     await runProviderEventDrainPass();
 
     const eventId = await storeDisputeEvent({
-      type: "charge.dispute.closed",
-      intentObjectId: "pi_stripe_dp_unknown",
-      disputeObjectId: "dp_stripe_unknown",
-      status: "some_state_nobody_mapped",
+      type: 'charge.dispute.closed',
+      intentObjectId: 'pi_stripe_dp_unknown',
+      disputeObjectId: 'dp_stripe_unknown',
+      status: 'some_state_nobody_mapped',
     });
     await runProviderEventDrainPass();
 
     // The dispute keeps the status it had; nothing claims an outcome.
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
-    expect(rows[0]?.status).toBe("needs_response");
-    expect(await deliveriesFor(intent.id)).not.toContain("payment_intent.dispute_closed");
+    expect(rows[0]?.status).toBe('needs_response');
+    expect(await deliveriesFor(intent.id)).not.toContain('payment_intent.dispute_closed');
     // ...and the event stays VISIBLE for an operator rather than being marked
     // handled with a guess.
     const stored = await findProviderEventById(gatewayDb(), eventId);
     expect(stored?.processedAt).toBeNull();
-    expect(stored?.processingError).toContain("outcome");
+    expect(stored?.processingError).toContain('outcome');
   });
 
   /**
@@ -309,29 +311,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * yet. `warning_closed` collapses onto `under_review` rather than onto a
    * result — calling it a win would report a verdict the network never gave.
    */
-  it("maps a provider warning state without inventing an outcome", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_warning");
+  it('maps a provider warning state without inventing an outcome', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_warning');
     await storeDisputeEvent({
-      type: "charge.dispute.updated",
-      intentObjectId: "pi_stripe_dp_warning",
-      disputeObjectId: "dp_stripe_warning",
-      status: "warning_needs_response",
+      type: 'charge.dispute.updated',
+      intentObjectId: 'pi_stripe_dp_warning',
+      disputeObjectId: 'dp_stripe_warning',
+      status: 'warning_needs_response',
       dueBy: Math.floor(Date.now() / 1000) + 86_400,
     });
     await runProviderEventDrainPass();
 
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
-    expect(rows[0]?.status).toBe("needs_response");
+    expect(rows[0]?.status).toBe('needs_response');
     // A warning that is still open keeps its deadline — that is the one thing
     // the merchant has to act on.
     expect(rows[0]?.evidenceDueAt).not.toBeNull();
   });
 
-  it("leaves a dispute for an unlinked payment unprocessed, to retry", async () => {
+  it('leaves a dispute for an unlinked payment unprocessed, to retry', async () => {
     const eventId = await storeDisputeEvent({
-      type: "charge.dispute.created",
-      intentObjectId: "pi_stripe_dp_nobody",
-      disputeObjectId: "dp_stripe_nobody",
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_nobody',
+      disputeObjectId: 'dp_stripe_nobody',
     });
 
     await runProviderEventDrainPass();
@@ -347,16 +349,19 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
    * running alongside it, and the intent was `settled` throughout.
    */
   it("never moves the payment's own status", async () => {
-    const intent = await linkedCardIntent("pi_stripe_dp_status");
+    const intent = await linkedCardIntent('pi_stripe_dp_status');
     const before = intent.status;
     await storeDisputeEvent({
-      type: "charge.dispute.created",
-      intentObjectId: "pi_stripe_dp_status",
-      disputeObjectId: "dp_stripe_status",
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_status',
+      disputeObjectId: 'dp_stripe_status',
     });
     await runProviderEventDrainPass();
 
-    const rows = await gatewayDb().select().from(disputes).where(eq(disputes.paymentIntentId, intent.id));
+    const rows = await gatewayDb()
+      .select()
+      .from(disputes)
+      .where(eq(disputes.paymentIntentId, intent.id));
     expect(rows).toHaveLength(1);
     // The dispute exists AND the payment is untouched. Asserting only the
     // second would pass against a drain that ignored the event entirely.
@@ -365,7 +370,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("disputes", () => {
       .from(disputes)
       .where(eq(disputes.paymentIntentId, intent.id));
     expect(after).toBeDefined();
-    expect((await listDisputesForIntent(gatewayDb(), intent.id))[0]?.status).toBe("needs_response");
+    expect((await listDisputesForIntent(gatewayDb(), intent.id))[0]?.status).toBe('needs_response');
     expect(before).toBe(intent.status);
   });
 });
