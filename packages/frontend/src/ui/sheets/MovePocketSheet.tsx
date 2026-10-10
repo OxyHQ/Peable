@@ -100,9 +100,9 @@ export function MovePocketSheet({
   // "Max" never offer more than what can really be moved. `confirmedBalance`
   // is an explicit dep (see note above) so this re-derives when the balance
   // changes, not just when `estimateSend` itself is re-bound.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `confirmedBalance` is an explicit re-derive key (see note above)
   const maxSendable = useMemo(
     () => estimateSend(0n, FEE_RATES.medium).maxSendable,
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [estimateSend, confirmedBalance],
   );
 

@@ -113,16 +113,17 @@ bun run --filter @peable.to/sdk dev
 <br>
 
 **Root**: `dev`, `dev:frontend`, `dev:backend`, `build`, `build:shared-types`,
-`build:frontend`, `build:backend`, `test`, `lint`, `clean`, `start:frontend`,
-`start:backend`.
+`build:frontend`, `build:backend`, `test`, `lint`, `lint:fix`, `format`, `clean`,
+`start:frontend`, `start:backend`. `lint` is Biome (`biome check .`) over the whole
+repo plus the frontend's minimal Expo ESLint; `format` / `lint:fix` write Biome's fixes.
 
 | Package | Scripts |
 |---|---|
-| `@peable.to/backend` | `dev`, `start`, `build`, `typecheck`, `lint`, `test`, `clean` |
-| `@peable.to/sdk` | `build` (cjs, esm and types), `dev`, `typecheck`, `lint`, `test`, `clean` |
+| `@peable.to/backend` | `dev`, `start`, `build`, `typecheck`, `test`, `clean` |
+| `@peable.to/sdk` | `build` (cjs, esm and types), `dev`, `typecheck`, `test`, `clean` |
 | `@peable.to/checkout` | `dev`, `build`, `preview`, `typecheck`, `test` |
 | `@peable.to/frontend` | `dev`, `start`, `android`, `ios`, `web`, `electron`, `build`, `electron:build`, `typecheck`, `lint`, `test` |
-| `@peable.to/shared-types` | same build trio as the SDK, plus `dev`, `typecheck`, `lint`, `test`, `clean` |
+| `@peable.to/shared-types` | same build trio as the SDK, plus `dev`, `typecheck`, `test`, `clean` |
 
 </details>
 

@@ -60,7 +60,6 @@
     "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs",
     "build:types": "tsc -p tsconfig.types.json",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepublishOnly": "bun run clean && bun run build"

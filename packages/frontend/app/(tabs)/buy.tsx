@@ -132,7 +132,7 @@ function BuyForm() {
   // and descriptions stay localised at runtime (N-8).
   const language = useLanguageStore((s) => s.language);
   // The translation function reads the store-backed locale outside React.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the translation function reads the store-backed locale outside React, so `language` is the re-derive key
   const paymentOptions = useMemo(() => buildPaymentOptions(), [language]);
 
   const amountSats = useMemo(() => parseFairToUnits(amount), [amount]);

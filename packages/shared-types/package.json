@@ -54,7 +54,6 @@
     "build:types": "tsc -p tsconfig.types.json",
     "clean": "rm -rf dist",
     "dev": "tsc --watch",
-    "lint": "tsc --noEmit",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "prepublishOnly": "bun run clean && bun run build"

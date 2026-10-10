@@ -84,6 +84,17 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # Biome formats and lints every package (root `biome.json`). `biome ci`
+      # fails on formatting drift as well as lint errors, and needs no build.
+      - name: Biome (format + lint)
+        run: bunx biome ci .
+
+      # The frontend keeps a minimal ESLint config for the Expo rules Biome has
+      # no equivalent for (`EXPO_PUBLIC_*` reads Metro would silently fail to
+      # inline). See packages/frontend/eslint.config.js.
+      - name: Expo ESLint (env-var inlining rules)
+        run: bun run --filter @peable.to/frontend lint
+
       # Reads the tracked file listing, so it needs no build and costs seconds. It
       # answers the one question a green build cannot: Mongo returns as a hoisted
       # dependency or a workflow variable, and every other step here passes while it

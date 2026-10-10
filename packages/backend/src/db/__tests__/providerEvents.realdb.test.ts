@@ -170,7 +170,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     try {
       await insertProviderEvent(
         suite!.db,
-        // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
         delivery({ provider: 'paypal', providerEventId: 'evt_paypal' })
       );
     } catch (error) {

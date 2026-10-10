@@ -64,7 +64,8 @@ test("the pay gate reads the constant rather than a literal", () => {
   expect(gate).toContain("SOCIAL_PAY_NETWORK");
   // The literal it replaced. Its return would mean the gate had started
   // deciding the network on its own again.
-  expect(gate).not.toContain('network !== "testnet"');
+  // Either quote style: the formatter writes single quotes.
+  expect(gate).not.toMatch(/network !== ["']testnet["']/);
 });
 
 test("the read-only history reads the constant, not the wallet store", () => {

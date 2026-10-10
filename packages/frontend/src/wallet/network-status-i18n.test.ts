@@ -35,17 +35,19 @@ const I18N_SOURCE = readFileSync(I18N_SOURCE_PATH, "utf8");
 
 /**
  * Find every occurrence of `"<key>": "<value>"` and return the list of
- * non-empty translation values. The i18n file declares two tables (en, es)
+ * non-empty translation values. Either quote style matches: the formatter
+ * writes single quotes, and keeps double quotes around a value that contains
+ * an apostrophe. The i18n file declares two tables (en, es)
  * inside a single object, so a translated key will appear twice if both
  * translations are wired.
  */
 function findTranslations(key: string): string[] {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const re = new RegExp(`"${escaped}"\\s*:\\s*"([^"]+)"`, "g");
+  const re = new RegExp(`["']${escaped}["']\\s*:\\s*(?:"([^"]+)"|'([^']+)')`, "g");
   const values: string[] = [];
   let m: RegExpExecArray | null;
   while ((m = re.exec(I18N_SOURCE)) !== null) {
-    values.push(m[1]);
+    values.push(m[1] ?? m[2]);
   }
   return values;
 }

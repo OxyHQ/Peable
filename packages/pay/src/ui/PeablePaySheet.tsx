@@ -148,6 +148,7 @@ export function PeablePaySheet({
   const step = state.step;
   const attempt = state.attempt;
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `state` is intentionally not a dependency; re-running the effect for any other state change is a second payment
   useEffect(() => {
     if (step !== 'preparing' && step !== 'sending') return;
     const key = `${step}:${attempt}`;
@@ -162,7 +163,6 @@ export function PeablePaySheet({
     // `state` is intentionally not a dependency: the effect keys off the step and
     // the attempt, and re-running it for any other change to the state object is
     // a second payment.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [step, attempt]);
 
   const handleClose = useCallback(() => {

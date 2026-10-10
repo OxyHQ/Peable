@@ -9,7 +9,6 @@
     "dev": "bun --watch src/server.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "tsc --noEmit",
     "test": "bun test src",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src/db/migrate.ts",
