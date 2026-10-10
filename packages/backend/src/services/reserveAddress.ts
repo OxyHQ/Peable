@@ -10,9 +10,8 @@ import { deriveIntentAddress } from './derivation';
  * The reservation is `UPDATE … SET x = x + 1 … RETURNING x - 1`, which takes
  * the row lock and returns the PRE-increment value — exactly the index this
  * call owns, so concurrent callers each get a distinct index with no
- * read-modify-write race. It is the direct port of Mongo's
- * `findOneAndUpdate({ $inc }, { new: false })`; see
- * `db/merchants/derivationIndex.ts` for what a wrong index costs.
+ * read-modify-write race; see `db/merchants/derivationIndex.ts` for what a
+ * wrong index costs.
  *
  * The key material comes back in the SAME statement as the index, so the xpub
  * used to derive the address is the one the reservation was taken against.

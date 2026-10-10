@@ -316,8 +316,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   ).data;
   expect(deliveryLog.length).toBeGreaterThan(0);
   // NEWEST first — `listDeliveriesForMerchant` is the paginated read and orders
-  // by primary key descending, where the Mongo `find()` this replaces returned
-  // insertion order. `at(0)` is the same delivery `at(-1)` used to name.
+  // by primary key descending, so `at(0)` is the most recent delivery.
   const lastDelivery = deliveryLog.at(0);
   expect(lastDelivery?.delivered).toBe(true);
   expect(lastDelivery?.intentPublicId).toBe(created.id);
@@ -325,7 +324,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   // 8. Non-custody invariant: no private-key/seed field was ever persisted.
   // Every column of both rows, not a repository projection: a projection can
   // only report the columns it selects, and the question here is what the
-  // table HOLDS — which is what Mongo's `.lean()` answered.
+  // table HOLDS.
   const [merchantDoc] = await gatewayDb()
     .select()
     .from(merchants)

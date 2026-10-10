@@ -33,8 +33,7 @@ export interface ReservedDerivationIndex {
  * + 1` takes the row lock and does not.
  *
  * `RETURNING next_derivation_index - 1` is the PRE-increment value — the index
- * this call reserved — and is the direct port of Mongo's `findOneAndUpdate({
- * $inc }, { new: false })`. Getting that `- 1` wrong hands out an index one
+ * this call reserved. Getting that `- 1` wrong hands out an index one
  * higher than the one recorded, so the address a payer is shown is not the
  * address the next reservation avoids.
  *

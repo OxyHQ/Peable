@@ -6,7 +6,7 @@
 
 **Architecture:** Reuse the existing `BlockchainMonitor` (already processes every new block). Wallets register a watch-only account xpub + gap limit; the server derives their FairCoin P2PKH addresses, matches them against each block's tx outputs, advances the gap-limit window, and dispatches **silent** FCM/APNS pushes carrying only a `txid`. No amounts/addresses in the payload; no key can ever spend.
 
-**Tech Stack:** Express 5, MongoDB/Mongoose, `ws`, vitest. New: `@scure/bip32` + `@scure/base` (address derivation), FCM HTTP v1 (`google-auth-library` for the OAuth token), APNS token auth (`.p8` via `jsonwebtoken` + HTTP/2).
+**Tech Stack:** Express 5, `ws`, vitest. New: `@scure/bip32` + `@scure/base` (address derivation), FCM HTTP v1 (`google-auth-library` for the OAuth token), APNS token auth (`.p8` via `jsonwebtoken` + HTTP/2).
 
 ## Global Constraints
 
@@ -19,7 +19,7 @@
 
 ---
 
-### Task 1: Address-derivation util + Mongo models
+### Task 1: Address-derivation util + models
 
 **Files:**
 - Create: `server/lib/notifications/derive.ts`
@@ -29,7 +29,7 @@
 
 **Interfaces:**
 - Produces: `deriveWindow(xpub: string, chain: 0 | 1, from: number, count: number, network: "mainnet" | "testnet"): { index: number; address: string }[]`
-- Produces (models): `NotificationSubscription`, `WatchedAddress` mongoose models with the fields in the spec §4.3.
+- Produces (models): `NotificationSubscription`, `WatchedAddress` models with the fields in the spec §4.3.
 
 - [ ] **Step 1: Write failing test** — derive index 0 of the receive chain from a known test xpub and assert it equals the address the wallet produces for the same xpub. Obtain the vector from FAIRWallet: run its `KeyManager.fromXpub(xpub).getAddress(0)` for a fixed test xpub and paste the expected address into the test. Include one testnet vector.
 
@@ -57,7 +57,7 @@ describe("deriveWindow", () => {
 
 - [ ] **Step 4: Run test, verify pass.**
 
-- [ ] **Step 5: Implement the two mongoose models** — `NotificationSubscription` ({ subscriptionId (unique), xpub, scriptType, gapLimit, network, deviceToken, platform, confirmations, events[], derivedTo:{receive,change}, createdAt, lastSeenAt }); `WatchedAddress` ({ address (indexed), subscriptionId, chain, index }, compound unique on {subscriptionId,chain,index}). Follow the existing model style in `server/lib/db/models/Transaction.ts`.
+- [ ] **Step 5: Implement the two models** — `NotificationSubscription` ({ subscriptionId (unique), xpub, scriptType, gapLimit, network, deviceToken, platform, confirmations, events[], derivedTo:{receive,change}, createdAt, lastSeenAt }); `WatchedAddress` ({ address (indexed), subscriptionId, chain, index }, compound unique on {subscriptionId,chain,index}). Follow the existing model style in `server/lib/db/models/Transaction.ts`.
 
 - [ ] **Step 6: Commit** — `git add` the four files + `bun.lock` if deps added; `git commit -m "feat(notifications): xpub address derivation + subscription models"`.
 

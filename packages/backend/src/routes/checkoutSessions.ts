@@ -120,10 +120,8 @@ export function createCheckoutSessionsRouter(deps: {
         // Explicit field whitelist — never spread `req.body`.
         //
         // `paymentIntentId` is the intent's INTERNAL id, which is what
-        // `checkout_sessions.payment_intent_id` references. The Mongo document
-        // stored the public `pi_…` in this position, because `PaymentIntent`'s
-        // schema field was itself called `id` — the expression is unchanged and
-        // its meaning is not. The public id still reaches the wire, from
+        // `checkout_sessions.payment_intent_id` references, NOT the public
+        // `pi_…`. The public id still reaches the wire, from
         // `toCheckoutSessionDTO`, which reads it off the intent.
         const session = await insertCheckoutSession(getDb(), {
           publicId: newId('cs'),

@@ -55,7 +55,7 @@ const MERCHANT_COLUMNS = {
 
 /**
  * Raised when the extended key handed in is not a spend-incapable watch-only
- * key. Callers translate it into the same refusal the Mongo path produced.
+ * key. Callers translate it into the `watch-only violation` refusal.
  */
 export class WatchOnlyViolationError extends Error {
   constructor(cause: unknown) {
@@ -80,15 +80,13 @@ export class ChainRegistrationError extends Error {
 }
 
 /**
- * The non-custody firewall, re-implemented because Postgres has no counterpart
- * to a Mongoose hook.
+ * The non-custody firewall.
  *
  * ## Read this before touching `insertMerchant`
  *
- * `models/Merchant.ts` enforces this in a `pre('validate')` hook, which runs on
- * EVERY save regardless of the call site — and the repository AGENTS.md calls
- * it "the legal firewall": if a merchant ever hands over an `xprv`, the gateway
- * refuses it rather than silently gaining the ability to spend their funds.
+ * The repository AGENTS.md calls this "the legal firewall": if a merchant ever
+ * hands over an `xprv`, the gateway refuses it rather than silently gaining the
+ * ability to spend their funds.
  *
  * A schema has no hooks. There is no CHECK constraint that can express it
  * either — deciding it requires deriving a child key, which is a secp256k1

@@ -46,20 +46,17 @@ import {
  *
  * ## Why this exists
  *
- * Before this, twenty test files each created their own `MongoMemoryServer` and
- * each carried the same three-line create/connect/stop dance. Nineteen copies of
- * a setup block is how one of them quietly stops tearing down — or, once the
- * store changes, stops getting a fresh database — and nothing fails loudly when
- * it does.
+ * Twenty test files need the same per-file create/connect/stop lifecycle.
+ * Twenty copies of a setup block is how one of them quietly stops tearing down
+ * — or stops getting a fresh database — and nothing fails loudly when it does,
+ * so the lifecycle lives here once.
  *
  * ## Why the seed signatures look like `Model.create(...)`
  *
- * Deliberately. Each `seedX({...})` takes the same object shape the Mongoose
- * call it replaces took, with every required field defaulted, so the switch is
- * ONE uniform textual transformation across twenty files rather than twenty
- * bespoke rewrites. A reviewer scanning them can check "every one of these is
- * the same change", and a suite that is NOT that change stands out — which is
- * the property that makes a large diff reviewable at all.
+ * Deliberately. Each `seedX({...})` takes one plain object with every required
+ * field defaulted, so every suite seeds state the same way. A reviewer scanning
+ * them can check "every one of these is the same shape", and a suite that is
+ * NOT stands out.
  *
  * This file references no production code path and no route. It is test
  * infrastructure only: nothing in `src/` outside `__tests__` imports it.
@@ -122,7 +119,7 @@ export function gatewayDb(): Database {
 
 /**
  * Register the per-suite database lifecycle. Call once, at a test file's top
- * level, and it replaces the whole `MongoMemoryServer` block.
+ * level, and it owns the whole create/connect/stop lifecycle.
  *
  * Registration happens while the file is being evaluated, which is what lets a
  * helper own `beforeAll`/`afterAll` on the caller's behalf.

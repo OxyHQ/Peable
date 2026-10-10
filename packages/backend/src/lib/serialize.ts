@@ -25,8 +25,7 @@ import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepositor
  * never selects it — and dates become ISO strings.
  *
  * `id` is the PUBLIC `pi_…`, which is what the wire contract has always
- * carried: the Mongo schema field was itself called `id`, and here the same
- * value lives in `public_id` beside the internal primary key. Emitting
+ * carried; the value lives in `public_id` beside the internal primary key. Emitting
  * `row.id` would put a uuid on a shipped contract.
  */
 export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {

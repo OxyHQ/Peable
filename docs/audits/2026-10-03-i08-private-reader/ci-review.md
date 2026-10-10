@@ -7,7 +7,7 @@ Full log retained (3718lines,641958bytes), hashes in `ci-proof.json`.
 
 All six packages: backend733, SDK115, shared-types34, checkout34, pay130,
 frontend388 =1434 passing tests, zero failures. CI also passed all-package types,
-shared/pay/SDK builds, schema/migration synchronization, Mongo guard and lockfile
+shared/pay/SDK builds, schema/migration synchronization, dependency guard and lockfile
 guard. The image's migrator applied20 existing migrations, readiness passed after2s,
 and the container was stopped cleanly. No deployment/publication occurred.
 

@@ -282,10 +282,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     });
 
     /**
-     * The cursor no longer needs an ObjectId format guard. An id of ANY shape that
-     * does not exist simply pages nothing — which is what the deleted
-     * `mongoose.isValidObjectId` check was really protecting against, expressed by
-     * the lookup itself rather than by a format test.
+     * The cursor needs no id-format guard. An id of ANY shape that does not exist
+     * simply pages nothing, expressed by the lookup itself rather than by a
+     * format test.
      */
     it("pages a merchant's log and tolerates a cursor of any shape", async () => {
       const merchant = await makeMerchant();

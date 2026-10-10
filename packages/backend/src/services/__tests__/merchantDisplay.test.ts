@@ -9,9 +9,8 @@ const XPUB =
  * No database here, deliberately.
  *
  * `resolveMerchantDisplay` is a PURE function over a `MerchantRow` — it reads
- * three fields and calls a synchronous, no-network URL builder. The Mongo
- * version needed a server only because a `Merchant` document could not be
- * constructed without one; a row is an object literal. The identity fields it
+ * three fields and calls a synchronous, no-network URL builder, and a row is
+ * an object literal. The identity fields it
  * reads (`display_name`, `avatar_file_id`, `description`) additionally have no
  * writer at all — no route registers them and `insertMerchant` takes their
  * column defaults — so seeding them would mean writing the columns directly,

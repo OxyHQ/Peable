@@ -190,9 +190,8 @@ describe('POST /v1/social/:username/next_address', () => {
 
     // `findAttributionsForViewer` is the only repository read over this table
     // and it scopes to a viewer, which this assertion deliberately does not —
-    // so the address lookup goes through drizzle directly, as the Mongo read it
-    // replaces did. The stored column is `derivation_index`, spelled `index` in
-    // the Mongo document.
+    // so the address lookup goes through drizzle directly. The stored column is
+    // `derivation_index`.
     const [attribution] = await gatewayDb()
       .select()
       .from(socialSendAttributions)

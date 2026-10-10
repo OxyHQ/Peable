@@ -18,7 +18,7 @@ import { createSocialRouter } from '../social';
  * No bearer token is ever sent, so `oxy.middleware.auth({ optional: true })`
  * returns `next()` with no `req.userId` set without making any network call
  * (see `OxyServices.utility.js`'s `auth()` — a missing token short-circuits
- * before any session lookup) — no MongoMemoryServer or `oxy` mocking is
+ * before any session lookup) — no database or `oxy` mocking is
  * needed to observe the resulting 401.
  */
 let server: Server;

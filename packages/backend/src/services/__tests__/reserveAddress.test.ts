@@ -9,11 +9,7 @@ import {
 } from '../../__tests__/helpers/gatewayTestDatabase';
 
 /**
- * RESCUED from `models/__tests__/models.test.ts`, which the Mongo→Postgres
- * switch deleted along with the models it tested.
- *
- * This one was never a model test either, and losing it would have been the
- * most expensive omission in the switch: `reserveNextAddress` decides which
+ * `reserveNextAddress` decides which
  * address a payer sends real money to. `db/__tests__/derivationIndex.realdb.test.ts`
  * covers the INDEX reservation underneath it — that the counter is claimed
  * atomically — but nothing else covers the DERIVATION built on top, i.e. that

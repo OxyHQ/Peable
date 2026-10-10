@@ -2,13 +2,7 @@ import { test, expect } from 'bun:test';
 import { toBaseUnits, fromBaseUnits } from '../money';
 
 /**
- * These three tests are RESCUED from `models/__tests__/models.test.ts`, which
- * the Mongo→Postgres switch deleted along with the models it tested.
- *
- * They were never model tests. They sat in that file only because it was the
- * one place that already imported `lib/money.ts`, and deleting the file took
- * the ONLY coverage of base-unit conversion with it — invisibly, because the
- * switch's expected test delta made the loss look like part of the deletion.
+ * The ONLY coverage of base-unit conversion.
  *
  * The conversion matters: `toBaseUnits` is what the settlement watcher compares
  * an on-chain payment against, so a rounding or sign bug here decides whether a

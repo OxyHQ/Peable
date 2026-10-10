@@ -40,8 +40,8 @@ useGatewayDatabase();
 
 beforeAll(async () => {
   // The intent now REFERENCES its merchant (`payment_intents_merchant_id_network_fkey`),
-  // so the free-form `merch_throttle_test` string the Mongo fixture used is not
-  // a value the database accepts — the fixture registers a real merchant first.
+  // so a free-form `merch_throttle_test` string is not a value the database
+  // accepts — the fixture registers a real merchant first.
   const merchant = await seedMerchant({
     publicId: 'merch_throttle_test',
     oxyAppId: 'app_throttle_test',

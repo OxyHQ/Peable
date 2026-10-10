@@ -412,10 +412,8 @@ describe('GET /v1/dashboard/applications/:applicationId/webhook_deliveries + red
     // literal, since an earlier PATCH test in this file may have rotated it
     // (order-independence: this must pass regardless of sibling test order).
     const currentMerchant = await findMerchantByAppEnvironment(gatewayDb(), APP_ID, 'development');
-    // `?? undefined`: `webhook_url` is a nullable COLUMN where the Mongoose
-    // field was an optional one, so the expected value's TYPE widened by `null`
-    // while its value did not — an unset webhook compares unequal to the
-    // captured URL exactly as it did before.
+    // `?? undefined`: `webhook_url` is a nullable COLUMN, so an unset webhook
+    // reads as `null` while the captured URL is `undefined`.
     expect(capturedRedeliverFetches.at(-1)).toBe(currentMerchant?.webhookUrl ?? undefined);
   });
 
