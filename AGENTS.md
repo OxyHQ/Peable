@@ -82,7 +82,10 @@ root `devDependencies`). `bun run lint` = `biome check .` over every package plu
 `expo lint` in `packages/frontend`, whose `eslint.config.js` keeps ONLY the
 `eslint-plugin-expo` rules Biome has no equivalent for (`EXPO_PUBLIC_*` reads
 Metro would silently fail to inline). `bun run format` / `bun run lint:fix`
-write Biome's fixes; CI runs `biome ci .`. Type errors are `typecheck`
+write Biome's fixes; CI runs `biome ci --error-on-warnings .`, so a warning
+fails the build: the preset reports `noNonNullAssertion`, `noExplicitAny` and
+the unused-code rules as warnings, and the count is zero. In tests, write
+`must(x)` (`__tests__/helpers/must.ts`), not `x!`. Type errors are `typecheck`
 (`tsc --noEmit`) per package, not lint. `docs/audits/` (recorded evidence) and
 `packages/backend/src/db/migrations/` (drizzle-kit output, checked by CI's
 regenerate-and-diff gate) are excluded from Biome on purpose.

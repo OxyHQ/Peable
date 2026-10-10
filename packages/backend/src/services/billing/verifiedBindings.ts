@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { readOwnedPaidInvoice, readOwnedInvoiceState } from './paidInvoice';
+import { readOwnedInvoiceState } from './paidInvoice';
 import type { Database } from '../../db/postgres';
 import {
   bindBillingObject,

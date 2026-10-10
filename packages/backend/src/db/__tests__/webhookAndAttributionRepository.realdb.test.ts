@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { sql } from 'drizzle-orm';
 import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
 import {
@@ -31,31 +32,35 @@ let suite: SuiteDatabase | undefined;
 
 async function makeMerchant(): Promise<MerchantRow> {
   const unique = uuidv7();
-  return (await insertMerchant(suite!.db, {
-    oxyAppId: `app_${unique}`,
-    environment: 'development',
-    network: 'testnet',
-    xpub: XPUB,
-    publicId: `merch_${unique}`,
-  }))!;
+  return must(
+    await insertMerchant(must(suite).db, {
+      oxyAppId: `app_${unique}`,
+      environment: 'development',
+      network: 'testnet',
+      xpub: XPUB,
+      publicId: `merch_${unique}`,
+    }),
+  );
 }
 
 async function makeIntent(merchant: MerchantRow) {
   const unique = uuidv7();
-  return (await insertPaymentIntent(suite!.db, {
-    publicId: `pi_${unique}`,
-    merchantId: merchant.id,
-    rail: 'faircoin' as const,
-    amount: '100000000',
-    currency: 'FAIR' as const,
-    network: merchant.network,
-    address: `T${unique}`,
-    provider: null,
-    clientSecret: `pi_${unique}_secret_x`,
-    idempotencyKey: unique,
-    metadata: {},
-    expiresAt: new Date(Date.now() + 900_000),
-  }))!;
+  return must(
+    await insertPaymentIntent(must(suite).db, {
+      publicId: `pi_${unique}`,
+      merchantId: merchant.id,
+      rail: 'faircoin' as const,
+      amount: '100000000',
+      currency: 'FAIR' as const,
+      network: merchant.network,
+      address: `T${unique}`,
+      provider: null,
+      clientSecret: `pi_${unique}_secret_x`,
+      idempotencyKey: unique,
+      metadata: {},
+      expiresAt: new Date(Date.now() + 900_000),
+    }),
+  );
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)(
@@ -97,19 +102,19 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       intent: { id: string },
       url = 'https://merchant.example/hook',
     ) {
-      const id = await enqueueWebhook(suite!.db, {
+      const id = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.settled') as never,
         url,
       });
-      await recordDeliveryAttempt(suite!.db, {
+      await recordDeliveryAttempt(must(suite).db, {
         id,
         outcome: { kind: 'delivered' },
         url,
         nextAttemptAt: null,
       });
-      const row = await findDeliveryForMerchant(suite!.db, id, merchant.id);
+      const row = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       if (!row) throw new Error(`makeDelivery: delivery ${id} vanished`);
       return row;
     }
@@ -125,14 +130,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueWebhook(suite!.db, {
+      const id = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.settled') as never,
         url: 'https://merchant.example/hook',
       });
 
-      const row = await findDeliveryForMerchant(suite!.db, id, merchant.id);
+      const row = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       expect(row?.lastStatus).toBe('pending');
       expect(row?.delivered).toBe(false);
       expect(row?.attempts).toBe(0);
@@ -150,35 +155,35 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const okId = await enqueueWebhook(suite!.db, {
+      const okId = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.settled') as never,
         url: 'https://merchant.example/hook',
       });
-      await recordDeliveryAttempt(suite!.db, {
+      await recordDeliveryAttempt(must(suite).db, {
         id: okId,
         outcome: { kind: 'delivered' },
         url: 'https://merchant.example/hook',
         nextAttemptAt: null,
       });
-      const ok = await findDeliveryForMerchant(suite!.db, okId, merchant.id);
+      const ok = await findDeliveryForMerchant(must(suite).db, okId, merchant.id);
       expect(ok?.lastStatus).toBe('delivered');
       expect(ok?.delivered).toBe(true);
 
-      const badId = await enqueueWebhook(suite!.db, {
+      const badId = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.failed') as never,
         url: 'https://merchant.example/hook',
       });
-      await recordDeliveryAttempt(suite!.db, {
+      await recordDeliveryAttempt(must(suite).db, {
         id: badId,
         outcome: { kind: 'refused', reason: 'target responded 410' },
         url: 'https://merchant.example/hook',
         nextAttemptAt: null,
       });
-      const failed = await findDeliveryForMerchant(suite!.db, badId, merchant.id);
+      const failed = await findDeliveryForMerchant(must(suite).db, badId, merchant.id);
       expect(failed?.lastStatus).toBe('failed');
       expect(failed?.delivered).toBe(false);
       expect(failed?.lastError).toBe('target responded 410');
@@ -196,7 +201,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueWebhook(suite!.db, {
+      const id = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.settled') as never,
@@ -204,25 +209,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       });
 
       // Retrying: still pending, still scheduled.
-      await recordDeliveryAttempt(suite!.db, {
+      await recordDeliveryAttempt(must(suite).db, {
         id,
         outcome: { kind: 'retry', reason: 'target responded 503' },
         url: 'https://merchant.example/hook',
         nextAttemptAt: new Date(Date.now() + 5_000),
       });
-      const retrying = await findDeliveryForMerchant(suite!.db, id, merchant.id);
+      const retrying = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       expect(retrying?.lastStatus).toBe('pending');
       expect(retrying?.attempts).toBe(1);
       expect(retrying?.nextAttemptAt).not.toBeNull();
 
       // Budget spent: dead, and unscheduled.
-      await recordDeliveryAttempt(suite!.db, {
+      await recordDeliveryAttempt(must(suite).db, {
         id,
         outcome: { kind: 'retry', reason: 'target responded 503' },
         url: 'https://merchant.example/hook',
         nextAttemptAt: null,
       });
-      const dead = await findDeliveryForMerchant(suite!.db, id, merchant.id);
+      const dead = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       expect(dead?.lastStatus).toBe('dead');
       expect(dead?.attempts).toBe(2);
       expect(dead?.nextAttemptAt).toBeNull();
@@ -231,7 +236,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a pending delivery with no schedule', async () => {
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
-      const id = await enqueueWebhook(suite!.db, {
+      const id = await enqueueWebhook(must(suite).db, {
         merchantId: merchant.id,
         paymentIntentId: intent.id,
         event: eventFor('payment_intent.settled') as never,
@@ -242,7 +247,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       try {
         // The shape no writer produces and every writer must be unable to: still
         // claimable in principle, but with nothing to make it due.
-        await suite!.db.execute(
+        await must(suite).db.execute(
           sql`update webhook_deliveries set next_attempt_at = null where id = ${id}`,
         );
       } catch (error) {
@@ -255,7 +260,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       let raised: unknown;
       try {
-        await enqueueWebhook(suite!.db, {
+        await enqueueWebhook(must(suite).db, {
           merchantId: merchant.id,
           paymentIntentId: uuidv7(),
           event: eventFor('payment_intent.settled') as never,
@@ -275,10 +280,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const intent = await makeIntent(owner);
       const delivery = await makeDelivery(owner, intent, 'https://merchant.example/hook');
 
-      expect((await findDeliveryForMerchant(suite!.db, delivery.id, owner.id))?.id).toBe(
+      expect((await findDeliveryForMerchant(must(suite).db, delivery.id, owner.id))?.id).toBe(
         delivery.id,
       );
-      expect(await findDeliveryForMerchant(suite!.db, delivery.id, stranger.id)).toBeNull();
+      expect(await findDeliveryForMerchant(must(suite).db, delivery.id, stranger.id)).toBeNull();
     });
 
     /**
@@ -293,24 +298,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         await makeDelivery(merchant, intent, 'https://merchant.example/hook');
       }
 
-      const first = await listDeliveriesForMerchant(suite!.db, {
+      const first = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
         limit: 2,
       });
       expect(first.data).toHaveLength(2);
       expect(first.hasMore).toBe(true);
 
-      const second = await listDeliveriesForMerchant(suite!.db, {
+      const second = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
         limit: 2,
-        after: first.data.at(-1)!.id,
+        after: must(first.data.at(-1)).id,
       });
       expect(second.data).toHaveLength(1);
       expect(second.hasMore).toBe(false);
 
       // A 24-char ObjectId hex — the shape the deleted guard used to accept, and
       // which is now simply an id that matches nothing.
-      const legacyShaped = await listDeliveriesForMerchant(suite!.db, {
+      const legacyShaped = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
         limit: 2,
         after: '0'.repeat(24),
@@ -348,7 +353,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         'https://stranger.example/hook',
       );
 
-      const page = await listDeliveriesForMerchant(suite!.db, {
+      const page = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
         limit: 10,
       });
@@ -359,7 +364,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(page.data).toHaveLength(3);
       expect(page.data.map((row) => row.id)).not.toContain(strangerDelivery.id);
       for (const row of page.data) {
-        expect([row.id, row.intentPublicId]).toEqual([row.id, expectedPublicId.get(row.id)!]);
+        expect([row.id, row.intentPublicId]).toEqual([row.id, must(expectedPublicId.get(row.id))]);
       }
     });
 
@@ -368,7 +373,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const sender = uuidv7();
       const recipient = uuidv7();
 
-      const created = await insertSendAttribution(suite!.db, {
+      const created = await insertSendAttribution(must(suite).db, {
         address,
         network: 'testnet',
         senderUserId: sender,
@@ -379,7 +384,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
       // Single-use: a second relationship claiming the same address is refused.
       expect(
-        await insertSendAttribution(suite!.db, {
+        await insertSendAttribution(must(suite).db, {
           address,
           network: 'testnet',
           senderUserId: uuidv7(),
@@ -396,7 +401,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
      * the plain half on its own.
      */
     it("round-trips the paying app's context, and stores nothing when none was named", async () => {
-      const sourced = await insertSendAttribution(suite!.db, {
+      const sourced = await insertSendAttribution(must(suite).db, {
         address: `T${uuidv7()}`,
         network: 'testnet',
         senderUserId: uuidv7(),
@@ -408,7 +413,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       // nothing out of it.
       expect([sourced?.sourceApp, sourced?.sourceRef]).toEqual(['mention', 'post_abc123']);
 
-      const appOnly = await insertSendAttribution(suite!.db, {
+      const appOnly = await insertSendAttribution(must(suite).db, {
         address: `T${uuidv7()}`,
         network: 'testnet',
         senderUserId: uuidv7(),
@@ -420,7 +425,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
       // NULL, never a default: most payments are for nothing in particular, and
       // an invented context would be indistinguishable from one the payer gave.
-      const plain = await insertSendAttribution(suite!.db, {
+      const plain = await insertSendAttribution(must(suite).db, {
         address: `T${uuidv7()}`,
         network: 'testnet',
         senderUserId: uuidv7(),
@@ -439,7 +444,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a source ref that names no app', async () => {
       let raised: unknown;
       try {
-        await suite!.db.execute(sql`
+        await must(suite).db.execute(sql`
         insert into social_send_attributions
           (id, address, network, sender_user_id, recipient_user_id, derivation_index, source_ref)
         values (${uuidv7()}, ${`T${uuidv7()}`}, 'testnet', ${uuidv7()}, ${uuidv7()}, 1, 'post_abc123')
@@ -461,7 +466,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a source ref longer than the published bound', async () => {
       let raised: unknown;
       try {
-        await insertSendAttribution(suite!.db, {
+        await insertSendAttribution(must(suite).db, {
           address: `T${uuidv7()}`,
           network: 'testnet',
           senderUserId: uuidv7(),
@@ -480,7 +485,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a source app longer than the published bound', async () => {
       let raised: unknown;
       try {
-        await insertSendAttribution(suite!.db, {
+        await insertSendAttribution(must(suite).db, {
           address: `T${uuidv7()}`,
           network: 'testnet',
           senderUserId: uuidv7(),
@@ -499,7 +504,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it("refuses an attribution at the recipient's default index", async () => {
       let raised: unknown;
       try {
-        await insertSendAttribution(suite!.db, {
+        await insertSendAttribution(must(suite).db, {
           address: `T${uuidv7()}`,
           network: 'testnet',
           senderUserId: uuidv7(),
@@ -525,7 +530,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const sender = uuidv7();
       const recipient = uuidv7();
       const stranger = uuidv7();
-      await insertSendAttribution(suite!.db, {
+      await insertSendAttribution(must(suite).db, {
         address,
         network: 'testnet',
         senderUserId: sender,
@@ -534,16 +539,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       });
 
       expect(
-        (await findAttributionsForViewer(suite!.db, [address], sender)).map((r) => r.address),
+        (await findAttributionsForViewer(must(suite).db, [address], sender)).map((r) => r.address),
       ).toEqual([address]);
       expect(
-        (await findAttributionsForViewer(suite!.db, [address], recipient)).map((r) => r.address),
+        (await findAttributionsForViewer(must(suite).db, [address], recipient)).map(
+          (r) => r.address,
+        ),
       ).toEqual([address]);
-      expect(await findAttributionsForViewer(suite!.db, [address], stranger)).toEqual([]);
+      expect(await findAttributionsForViewer(must(suite).db, [address], stranger)).toEqual([]);
     });
 
     it('answers an empty address list without a query', async () => {
-      expect(await findAttributionsForViewer(suite!.db, [], uuidv7())).toEqual([]);
+      expect(await findAttributionsForViewer(must(suite).db, [], uuidv7())).toEqual([]);
     });
 
     /**
@@ -563,21 +570,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const received = `T${uuidv7()}`;
       const unrelated = `T${uuidv7()}`;
 
-      await insertSendAttribution(suite!.db, {
+      await insertSendAttribution(must(suite).db, {
         address: sent,
         network: 'testnet',
         senderUserId: viewer,
         recipientUserId: counterparty,
         derivationIndex: 1,
       });
-      await insertSendAttribution(suite!.db, {
+      await insertSendAttribution(must(suite).db, {
         address: received,
         network: 'testnet',
         senderUserId: counterparty,
         recipientUserId: viewer,
         derivationIndex: 2,
       });
-      await insertSendAttribution(suite!.db, {
+      await insertSendAttribution(must(suite).db, {
         address: unrelated,
         network: 'testnet',
         senderUserId: stranger,
@@ -585,7 +592,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         derivationIndex: 3,
       });
 
-      const rows = await listAttributionsForViewer(suite!.db, viewer, 'testnet');
+      const rows = await listAttributionsForViewer(must(suite).db, viewer, 'testnet');
       expect(rows.map((r) => r.address).sort()).toEqual([sent, received].sort());
     });
 
@@ -597,7 +604,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('scopes the viewer listing to one network', async () => {
       const viewer = uuidv7();
       const onTestnet = `T${uuidv7()}`;
-      await insertSendAttribution(suite!.db, {
+      await insertSendAttribution(must(suite).db, {
         address: onTestnet,
         network: 'testnet',
         senderUserId: viewer,
@@ -605,9 +612,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         derivationIndex: 1,
       });
 
-      expect(await listAttributionsForViewer(suite!.db, viewer, 'mainnet')).toEqual([]);
+      expect(await listAttributionsForViewer(must(suite).db, viewer, 'mainnet')).toEqual([]);
       expect(
-        (await listAttributionsForViewer(suite!.db, viewer, 'testnet')).map((r) => r.address),
+        (await listAttributionsForViewer(must(suite).db, viewer, 'testnet')).map((r) => r.address),
       ).toEqual([onTestnet]);
     });
   },

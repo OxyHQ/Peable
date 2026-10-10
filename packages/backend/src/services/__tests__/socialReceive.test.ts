@@ -1,4 +1,5 @@
 import { test, expect, beforeEach, mock } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { oxy as realOxy } from '../../oxy';
 import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
 import type { DidDocument } from '@oxy.so/contracts';
@@ -81,7 +82,7 @@ test('resolveIdentityPublicKey returns null for a keyless (custodial) user', asy
 test("resolveIdentityPublicKey takes the account's own #key-1, not whichever key is listed first", async () => {
   resolveDidMock.mockImplementationOnce(async (userId: string) => {
     const doc = didWithKey(userId, IDENTITY_PUB_A_UNCOMPRESSED_HEX);
-    const accountKey = doc.verificationMethod[0]!;
+    const accountKey = must(doc.verificationMethod[0]);
     return {
       ...doc,
       verificationMethod: [
@@ -95,7 +96,7 @@ test("resolveIdentityPublicKey takes the account's own #key-1, not whichever key
 
   expect(key).not.toBeNull();
   // Same bytes as the account key, which is the one the recipient's device holds.
-  expect(Buffer.from(key!).toString('hex')).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
+  expect(Buffer.from(must(key)).toString('hex')).toBe(IDENTITY_PUB_A_UNCOMPRESSED_HEX);
 });
 
 test('resolveIdentityPublicKey returns null when the document lists no account key', async () => {
@@ -104,7 +105,7 @@ test('resolveIdentityPublicKey returns null when the document lists no account k
     return {
       ...doc,
       verificationMethod: [
-        { ...doc.verificationMethod[0]!, id: `did:web:oxy.so:u:${userId}#device-7` },
+        { ...must(doc.verificationMethod[0]), id: `did:web:oxy.so:u:${userId}#device-7` },
       ],
     };
   });

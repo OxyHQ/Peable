@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { readFile, readdir } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -294,7 +295,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the migrated database', () => {
   });
 
   it('satisfies every schema-wide invariant', async () => {
-    const violations = await findSchemaInvariantViolations(suite!.db, {
+    const violations = await findSchemaInvariantViolations(must(suite).db, {
       minimumTables: ALL_TABLES.length,
       // 92 columns across the seven tables at the time of writing. A floor, not
       // an equality: it must not silently drop to zero on a broken catalogue

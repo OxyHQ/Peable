@@ -1,4 +1,5 @@
 import { createMerchantsRouter } from '../../routes/merchants';
+import { must } from '../helpers/must';
 /** Local-only cross-repository fixture. Synthetic Oxy auth and downstream; actual
  * Peable SDK HTTP, ownership/cohort routes, migrations and durable outboxes.
  * Never imported by boot. Parent sends JSON lines; each response is prefixed. */
@@ -7,7 +8,7 @@ import { createInterface } from 'node:readline';
 import { randomUUID, generateKeyPairSync, sign } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { Peable } from '@peable.to/sdk';
+import { Peable, type BillingRequestOptions } from '@peable.to/sdk';
 import {
   signWebhook,
   canonicalBillingAuthority,
@@ -18,7 +19,8 @@ import { insertMerchant } from '../../db/merchants/merchantRepository';
 import { insertProviderEvent } from '../../db/providers/providerEventRepository';
 import { webhookDeliveries } from '../../db/schema';
 import { createBillingRouter } from '../../routes/billing';
-import { createBillingService } from '../../services/billing/billingService';
+import { type BillingCohort, createBillingService } from '../../services/billing/billingService';
+import type { BillingDeployment, BillingOwner } from '../../services/billing/contracts';
 import { createVerifiedBillingBindings } from '../../services/billing/verifiedBindings';
 import {
   createStripeBillingProvider,
@@ -37,7 +39,7 @@ for (const name of ['DATABASE_URL', 'TEST_DATABASE_URL']) {
     throw new Error('Fixture requires explicit local PostgreSQL');
 }
 const localFetch = globalThis.fetch;
-globalThis.fetch = ((input: any, init: any) => {
+globalThis.fetch = ((input: string | URL | Request, init?: RequestInit) => {
   const url = new URL(
     typeof input === 'string' ? input : input instanceof URL ? input.href : input.url,
   );
@@ -49,15 +51,14 @@ const suite = await createSuiteDatabase();
 let server: ReturnType<ReturnType<typeof express>['listen']> | undefined;
 let billing: Peable['billing'];
 let peable: Peable;
-let cohorts: any;
+let cohorts: BillingCohort[];
 let bindings: ReturnType<typeof createVerifiedBillingBindings>;
 let client: StripeBillingClient;
-let deployment: any;
-let owner: any;
+let deployment: BillingDeployment;
+let owner: BillingOwner;
 let period: { start: number; end: number };
 let store: string;
 let cancelled = false;
-let refund = 0;
 let status = 'active';
 let fixtureNow: number | undefined;
 let currentInvoice = 'in_fixture';
@@ -196,7 +197,7 @@ async function initialize(input: {
       has_more: false,
       data: [
         {
-          id: invoices[id]!.line,
+          id: must(invoices[id]).line,
           invoice: id,
           livemode: true,
           subscription: 'sub_fixture',
@@ -207,7 +208,7 @@ async function initialize(input: {
             subscription_item_details: { subscription: 'sub_fixture', proration: false },
           },
           pricing: { price_details: { price: 'price_fixture' } },
-          period: invoices[id]!.period,
+          period: must(invoices[id]).period,
         },
       ],
     }),
@@ -221,8 +222,8 @@ async function initialize(input: {
           currency: 'usd',
           status: 'paid',
           amount_paid: 2999,
-          payment: { type: 'payment_intent', payment_intent: invoices[id]!.pi },
-          status_transitions: { paid_at: invoices[id]!.period.start },
+          payment: { type: 'payment_intent', payment_intent: must(invoices[id]).pi },
+          status_transitions: { paid_at: must(invoices[id]).period.start },
         },
       ],
     }),
@@ -371,7 +372,7 @@ async function initialize(input: {
   app.use(createBillingRouter({ requireMerchant: auth, service }));
   app.use(createMerchantsRouter({ requireMerchant: auth }));
   server = app.listen(0, '127.0.0.1');
-  await new Promise<void>((resolve) => server!.once('listening', resolve));
+  await new Promise<void>((resolve) => must(server).once('listening', resolve));
   const baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   peable = new Peable({
     baseURL,
@@ -412,18 +413,53 @@ async function initialize(input: {
     observationSecret: 'synthetic-only-secret',
   };
 }
-async function command(message: any) {
+/** What the parent may set between steps; every field is optional. */
+interface FixtureStateInput {
+  cancelAtPeriodEnd?: boolean;
+  period?: { start: string; end: string };
+  renew?: { start: string; end: string; invoiceId?: string };
+  invoiceId?: string;
+  refund?: number;
+  status?: string;
+  type?: string;
+  id?: string;
+  created?: number;
+  enabled?: boolean;
+}
+/**
+ * One JSON line from the parent. The parent is this fixture's only caller and
+ * owns the shape, so the line is cast rather than validated, as before; the
+ * types say which fields each command reads.
+ */
+type FixtureMessage = { id?: unknown } & (
+  | { method: 'initialize'; input: Parameters<typeof initialize>[0] }
+  | { method: 'cancelAtPeriodEnd'; args: [string, BillingRequestOptions] }
+  | { method: 'verifyEvent'; args: [string, string] }
+  | {
+      method:
+        | 'retrieveFinalInvoiceAuthority'
+        | 'retrievePaidInvoice'
+        | 'retrieveInvoiceState'
+        | 'retrieveSubscription';
+      args: [string, string];
+    }
+  | {
+      method: 'setState' | 'observe' | 'relay' | 'retrieveMerchant' | 'deliveries' | 'shutdown';
+      input: FixtureStateInput;
+    }
+);
+async function command(message: FixtureMessage) {
   switch (message.method) {
     case 'initialize':
       return initialize(message.input);
     case 'retrieveMerchant':
       return peable.merchants.retrieve();
     case 'retrieveFinalInvoiceAuthority':
-      return billing.retrieveFinalInvoiceAuthority(...(message.args as [string, string]));
+      return billing.retrieveFinalInvoiceAuthority(...message.args);
     case 'retrievePaidInvoice':
-      return billing.retrievePaidInvoice(...(message.args as [string, string]));
+      return billing.retrievePaidInvoice(...message.args);
     case 'retrieveInvoiceState':
-      return billing.retrieveInvoiceState(...(message.args as [string, string]));
+      return billing.retrieveInvoiceState(...message.args);
     case 'retrieveSubscription':
       return billing.retrieveSubscription(message.args[0]);
     case 'cancelAtPeriodEnd':
@@ -455,7 +491,11 @@ async function command(message: any) {
         };
       }
       const invoiceId = message.input.invoiceId ?? currentInvoice;
-      if (message.input.refund !== undefined) invoices[invoiceId]!.refund = message.input.refund;
+      const invoice = invoices[invoiceId];
+      if (message.input.refund !== undefined) {
+        if (!invoice) throw new Error(`Fixture has no invoice ${invoiceId}`);
+        invoice.refund = message.input.refund;
+      }
       status = message.input.status ?? status;
       return { ok: true, now: observedClock().toISOString() };
     }
@@ -478,7 +518,11 @@ async function command(message: any) {
       });
       if (!id) return { kind: 'duplicate' };
       const options = {
-        deployment: { ...deployment, environment: 'production', apiVersion: STRIPE_API_VERSION },
+        deployment: {
+          ...deployment,
+          environment: 'production' as const,
+          apiVersion: STRIPE_API_VERSION,
+        },
         reader: createOwnedBillingRecurringReader({ db: suite.db, bindings, client }),
         bindOwnedInvoice: createOwnedBillingInvoiceResolver({ db: suite.db, bindings, client }),
       };
@@ -515,15 +559,15 @@ async function command(message: any) {
 }
 const lines = createInterface({ input: process.stdin, crlfDelay: Infinity });
 for await (const line of lines) {
-  let message: any;
+  let message: FixtureMessage | undefined;
   try {
-    message = JSON.parse(line);
+    message = JSON.parse(line) as FixtureMessage;
     const result = await command(message);
-    console.log('OXY_ONE_FIXTURE:' + JSON.stringify({ id: message.id, result }));
+    console.log(`OXY_ONE_FIXTURE:${JSON.stringify({ id: message.id, result })}`);
     if (message.method === 'shutdown') break;
   } catch {
     console.log(
-      'OXY_ONE_FIXTURE:' + JSON.stringify({ id: message?.id, error: 'fixture_command_failed' }),
+      `OXY_ONE_FIXTURE:${JSON.stringify({ id: message?.id, error: 'fixture_command_failed' })}`,
     );
   }
 }

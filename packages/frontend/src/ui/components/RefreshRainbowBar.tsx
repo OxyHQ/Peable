@@ -108,6 +108,7 @@ export function RefreshRainbowBar() {
     >
       {[...RAINBOW_STOPS, ...RAINBOW_STOPS].map((color, index) => (
         <View
+          // biome-ignore lint/suspicious/noArrayIndexKey: the stops repeat by design (two copies for the loop), so the position is the only identity
           key={index}
           style={{ width: BLOCK_WIDTH, height: RAINBOW_BAND_HEIGHT, backgroundColor: color }}
         />

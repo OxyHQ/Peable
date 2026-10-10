@@ -8,6 +8,7 @@
  * failures with the unit suite green.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { paymentIntents, merchants } from '../schema';
@@ -84,7 +85,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
 
-    const settled = await updateIntentState(gatewayDb(), intent!.id, {
+    const settled = await updateIntentState(gatewayDb(), must(intent).id, {
       from: 'created',
       status: 'settled',
     });
@@ -158,7 +159,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
     await expect(
-      updateIntentState(gatewayDb(), intent!.id, {
+      updateIntentState(gatewayDb(), must(intent).id, {
         from: 'created',
         status: 'confirming',
         txid: 'deadbeef',
@@ -208,7 +209,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
   test('the watchable query never returns a card intent', async () => {
     const merchant = await seedMerchant();
     const card = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
-    await updateIntentState(gatewayDb(), card!.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), must(card).id, { from: 'created', status: 'settled' });
 
     const faircoin = await seedIntent(merchant);
     await updateIntentState(gatewayDb(), faircoin.id, {

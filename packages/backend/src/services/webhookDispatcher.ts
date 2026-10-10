@@ -6,7 +6,6 @@ import {
 } from '@oxy.so/core/server';
 import {
   signWebhook,
-  type PaymentIntent,
   type WebhookEvent,
   type WebhookEventPayload,
   type WebhookEventType,

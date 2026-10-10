@@ -45,8 +45,7 @@ function findTranslations(key: string): string[] {
   const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   const re = new RegExp(`["']${escaped}["']\\s*:\\s*(?:"([^"]+)"|'([^']+)')`, 'g');
   const values: string[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(I18N_SOURCE)) !== null) {
+  for (const m of I18N_SOURCE.matchAll(re)) {
     values.push(m[1] ?? m[2]);
   }
   return values;

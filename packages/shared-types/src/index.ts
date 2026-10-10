@@ -8,7 +8,7 @@ export {
   decimalsFor,
   isCurrencyCode,
 } from './money';
-export { type NetworkType } from './network';
+export type { NetworkType } from './network';
 export {
   type PaymentIntentStatus,
   type PaymentIntentRail,
@@ -23,29 +23,29 @@ export {
   CHAIN_ONLY_STATUSES,
   CARD_ONLY_STATUSES,
 } from './paymentIntent';
-export {
-  type WebhookEventType,
-  type WebhookEvent,
-  type WebhookEventPayload,
-  type BillingObservation,
+export type {
+  WebhookEventType,
+  WebhookEvent,
+  WebhookEventPayload,
+  BillingObservation,
 } from './event';
-export { type Dispute, type DisputeEvidence, type DisputeStatus } from './dispute';
-export {
-  type CapabilityStatus,
-  type ConnectedAccount,
-  type Refund,
-  type RefundOrigin,
-  type RefundStatus,
-  type Settlement,
-  type Transfer,
-  type TransferReversal,
-  type TransferReversalStatus,
-  type TransferStatus,
-  type TransferWithReversal,
+export type { Dispute, DisputeEvidence, DisputeStatus } from './dispute';
+export type {
+  CapabilityStatus,
+  ConnectedAccount,
+  Refund,
+  RefundOrigin,
+  RefundStatus,
+  Settlement,
+  Transfer,
+  TransferReversal,
+  TransferReversalStatus,
+  TransferStatus,
+  TransferWithReversal,
 } from './settlement';
-export {
-  type WebhookDelivery,
-  type WebhookDeliveryStatus,
+export type {
+  WebhookDelivery,
+  WebhookDeliveryStatus,
 } from './webhookDelivery';
 export { signWebhook, verifyWebhook } from './webhookSigner';
 export {
@@ -53,16 +53,16 @@ export {
   type Merchant,
   MERCHANT_ENVIRONMENTS,
 } from './merchant';
-export { type MerchantDisplay } from './merchantDisplay';
-export {
-  type PaymentLink,
-  type PublicPaymentLink,
-  type CreatePaymentLinkParams,
+export type { MerchantDisplay } from './merchantDisplay';
+export type {
+  PaymentLink,
+  PublicPaymentLink,
+  CreatePaymentLinkParams,
 } from './paymentLink';
-export {
-  type CheckoutSession,
-  type CheckoutSessionPublic,
-  type CreateCheckoutSessionParams,
+export type {
+  CheckoutSession,
+  CheckoutSessionPublic,
+  CreateCheckoutSessionParams,
 } from './checkoutSession';
 export {
   SOCIAL_SOURCE_APP_MAX_LENGTH,

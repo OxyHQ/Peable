@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { must } from './helpers/must';
 import { eq } from 'drizzle-orm';
 import { merchants, paymentIntents } from '../db/schema';
 import { WatchOnlyViolationError } from '../db/merchants/merchantRepository';
@@ -83,7 +84,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the gateway test harness', () => {
     expect(new Set(merchants_.map((row) => row.publicId)).size).toBe(3);
     expect(new Set(merchants_.map((row) => row.oxyAppId)).size).toBe(3);
 
-    const merchant = merchants_[0]!;
+    const merchant = must(merchants_[0]);
     const intents = [await seedIntent(merchant), await seedIntent(merchant)];
     expect(new Set(intents.map((row) => row.address)).size).toBe(2);
     expect(new Set(intents.map((row) => row.publicId)).size).toBe(2);

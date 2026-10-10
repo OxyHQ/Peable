@@ -89,10 +89,7 @@ export async function configureBillingRuntime(
     throw new Error('Renewal executor requires explicit actor scope');
   const executor =
     parsed.faircoinExecutorRef &&
-    Object.prototype.hasOwnProperty.call(
-      adapters.faircoinExecutors ?? {},
-      parsed.faircoinExecutorRef,
-    )
+    Object.hasOwn(adapters.faircoinExecutors ?? {}, parsed.faircoinExecutorRef)
       ? adapters.faircoinExecutors?.[parsed.faircoinExecutorRef]
       : undefined;
   if (parsed.faircoinExecutorRef && !executor)
@@ -118,18 +115,12 @@ export async function configureBillingRuntime(
       : undefined;
   const selectedTax =
     parsed.taxQuoteAdapterRef &&
-    Object.prototype.hasOwnProperty.call(
-      adapters.taxQuoteCalculators ?? {},
-      parsed.taxQuoteAdapterRef,
-    )
+    Object.hasOwn(adapters.taxQuoteCalculators ?? {}, parsed.taxQuoteAdapterRef)
       ? adapters.taxQuoteCalculators?.[parsed.taxQuoteAdapterRef]
       : undefined;
   const selectedInvoice =
     parsed.finalInvoiceAuthorityAdapterRef &&
-    Object.prototype.hasOwnProperty.call(
-      adapters.finalInvoiceAuthorities ?? {},
-      parsed.finalInvoiceAuthorityAdapterRef,
-    )
+    Object.hasOwn(adapters.finalInvoiceAuthorities ?? {}, parsed.finalInvoiceAuthorityAdapterRef)
       ? adapters.finalInvoiceAuthorities?.[parsed.finalInvoiceAuthorityAdapterRef]
       : undefined;
   if (

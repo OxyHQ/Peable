@@ -8,6 +8,7 @@
  * the schedule CHECK and the lease CHECK have no mocked counterpart.
  */
 import { beforeEach, describe, expect, test } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import type { SafeFetchResult } from '@oxy.so/core/server';
 import { IncomingMessage } from 'node:http';
@@ -347,7 +348,7 @@ describe('the backoff schedule', () => {
     const mid = () => 0.5;
     expect(nextAttemptDelayMs(1, mid)).toBe(5_000);
     expect(nextAttemptDelayMs(2, mid)).toBe(30_000);
-    expect(nextAttemptDelayMs(7, mid)).toBeGreaterThan(nextAttemptDelayMs(6, mid)!);
+    expect(nextAttemptDelayMs(7, mid)).toBeGreaterThan(must(nextAttemptDelayMs(6, mid)));
     // Past the end of the schedule the budget is spent — this is what makes a
     // row `dead` rather than retried forever against an endpoint nobody fixed.
     expect(nextAttemptDelayMs(8, mid)).toBeNull();

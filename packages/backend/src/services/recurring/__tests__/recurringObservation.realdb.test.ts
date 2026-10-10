@@ -3,6 +3,7 @@ import {
   linkProviderObject,
   updateIntentState,
 } from '../../../db/payments/paymentIntentRepository';
+import { must } from '../../../__tests__/helpers/must';
 import { redactProviderPayload } from '../../providers/redact';
 import { relayRecurringObservations } from '../recurringDelivery';
 import { Peable } from '@peable.to/sdk';
@@ -550,9 +551,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
     expect(results.reduce((n, v) => n + v.enqueued, 0)).toBe(1);
     const [delivery] = await gatewayDb().select().from(webhookDeliveries);
     const [privateRow] = await rows();
-    expect(privateRow!.deliveryId).toBe(delivery!.id);
+    expect(must(privateRow).deliveryId).toBe(must(delivery).id);
     const sdk = new Peable({ publicKey: 'synthetic', secret: 'synthetic' });
-    const raw = JSON.stringify(delivery!.payload),
+    const raw = JSON.stringify(must(delivery).payload),
       timestamp = Math.floor(Date.now() / 1000),
       signature = signWebhook('synthetic-only', raw, timestamp);
     expect(sdk.webhooks.constructEvent(raw, signature, 'synthetic-only')).toMatchObject({
@@ -681,7 +682,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
         relayRecurringObservations({ db: gatewayDb(), cohorts: [cohort], enabled: true }),
       ).rejects.toThrow();
       expect(await gatewayDb().select().from(webhookDeliveries)).toHaveLength(0);
-      expect((await rows())[0]!.deliveryId).toBeNull();
+      expect(must((await rows())[0]).deliveryId).toBeNull();
     } finally {
       await gatewayDb().execute(
         sql`DROP TRIGGER fixture_relay_reject ON recurring_observation_outbox`,

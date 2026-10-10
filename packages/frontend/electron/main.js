@@ -8,10 +8,10 @@ const {
   shell,
   nativeTheme,
 } = require('electron');
-const path = require('path');
-const net = require('net');
-const dns = require('dns');
-const fs = require('fs');
+const path = require('node:path');
+const net = require('node:net');
+const dns = require('node:dns');
+const fs = require('node:fs');
 
 const APP_NAME = 'FAIRWallet';
 const APP_ID = 'in.fairco.wallet';

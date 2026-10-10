@@ -1,4 +1,5 @@
 import { findMerchantByAppEnvironment } from '../../../db/merchants/merchantRepository';
+import { must } from '../../../__tests__/helpers/must';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import {
   canonicalBillingAuthority,
@@ -222,7 +223,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         async retrieveSubscription() {
           calls.push({ method: 'retrieve' });
           const snapshot = stripeSubscription(cancelled);
-          snapshot.items.data[0]!.price.id = subscriptionPrice;
+          must(snapshot.items.data[0]).price.id = subscriptionPrice;
           return snapshot;
         },
         async updateSubscription(ref, params, key) {

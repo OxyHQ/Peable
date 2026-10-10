@@ -29,7 +29,7 @@ import {
 import type { BlockHeaderMsg } from './messages';
 
 function hexToBytes(hex: string): Uint8Array {
-  return Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16)));
+  return Uint8Array.from((hex.match(/../g) ?? []).map((b) => parseInt(b, 16)));
 }
 
 interface Vector {

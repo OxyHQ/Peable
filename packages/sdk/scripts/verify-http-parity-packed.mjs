@@ -65,5 +65,5 @@ const evidence = {
   published: false,
   network: 'registry dependency install only; no auth/payment request',
 };
-writeFileSync(resolve(fixture, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
+writeFileSync(resolve(fixture, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
 console.log(JSON.stringify(evidence));

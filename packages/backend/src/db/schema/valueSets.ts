@@ -29,6 +29,7 @@ import type { ProviderId } from '../../services/providers/provider';
  * error otherwise. Type-only, so it costs nothing at runtime and cannot be
  * left unasserted the way an unused `const` can.
  */
+// biome-ignore lint/correctness/noUnusedVariables: TUnion's `extends TListed` constraint IS the assertion; it fails to compile when a member is missing
 type AssertAllListed<TUnion extends TListed, TListed> = true;
 
 /** FairCoin networks. */

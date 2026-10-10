@@ -14,7 +14,7 @@
 
 import { extractAddressFromScript, hexToBytes, type NetworkConfig } from '@fairco.in/core';
 import { parseTx, type ParsedTransaction } from '../p2p/messages';
-import { UTXOSet, type UTXO } from '@peable.to/pay';
+import type { UTXOSet, UTXO } from '@peable.to/pay';
 import type { WalletTransaction } from './wallet-store';
 
 // ---------------------------------------------------------------------------
@@ -114,7 +114,7 @@ export function applyTransactionToWallet(
 
     const existing = utxoSet.get(txid, vout);
     // Never downgrade a confirmed UTXO to unconfirmed on replay.
-    if (existing && existing.confirmed && !confirmed) {
+    if (existing?.confirmed && !confirmed) {
       continue;
     }
 
