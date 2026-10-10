@@ -16,8 +16,11 @@ if (!process.argv.includes('--execute')) {
   process.exit(0);
 }
 const EXPECTED_ACCOUNT = 'acct_1TnXkUQWiCE02OnU';
-const manifestPath = process.env.I08_SANDBOX_MANIFEST;
-assert(manifestPath && resolve(manifestPath).startsWith('/home/nate/Oxy/.agent-evidence/'));
+const manifestPathInput = process.env.I08_SANDBOX_MANIFEST;
+assert(
+  manifestPathInput && resolve(manifestPathInput).startsWith('/home/nate/Oxy/.agent-evidence/'),
+);
+const manifestPath: string = manifestPathInput;
 const admin = new URL(process.env.TEST_DATABASE_URL ?? '');
 assert.equal(admin.hostname, '127.0.0.1');
 assert.equal(admin.port, '5574');
@@ -90,7 +93,7 @@ async function save() {
   } finally {
     await file.close();
   }
-  await rename(filePath, manifestPath!);
+  await rename(filePath, manifestPath);
 }
 async function record(kind: OwnedKind, id: string, customerId?: string) {
   assert(/^[A-Za-z0-9_]+$/.test(id));
@@ -149,9 +152,10 @@ try {
   await platform();
   await passed('test-key-and-platform-account');
   const db = await createSuiteDatabase();
+  const createdDatabaseName = new URL(db.databaseUrl).pathname.slice(1);
   let http: ReturnType<ReturnType<typeof express>['listen']> | undefined;
   try {
-    databaseName = new URL(db.databaseUrl).pathname.slice(1);
+    databaseName = createdDatabaseName;
     await save();
     const merchant = await insertMerchant(db.db, {
       publicId: `merch_${randomUUID().replaceAll('-', '')}`,
@@ -216,9 +220,10 @@ try {
         },
       }),
     );
-    http = app.listen(0, '127.0.0.1');
-    await new Promise<void>((resolve) => http!.once('listening', resolve));
-    const address = http.address();
+    const server = app.listen(0, '127.0.0.1');
+    http = server;
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
     assert(address && typeof address !== 'string');
     const baseURL = `http://127.0.0.1:${address.port}`;
     const sdk = new Peable({ publicKey: runId, secret, baseURL, oxyApiUrl: baseURL });
@@ -372,7 +377,8 @@ try {
       );
       assert.equal(payments.has_more, false);
       assert.equal(payments.data.length, 1);
-      const payment = payments.data[0]!;
+      const [payment] = payments.data;
+      assert(payment);
       assert.equal(payment.livemode, false);
       assert.equal(payment.invoice, invoiceId);
       assert.equal(payment.payment.type, 'payment_intent');
@@ -474,10 +480,11 @@ try {
     process.exitCode = 1;
   } finally {
     try {
-      if (http)
+      const server = http;
+      if (server)
         await new Promise<void>((resolve) => {
-          http!.close(() => resolve());
-          http!.closeAllConnections();
+          server.close(() => resolve());
+          server.closeAllConnections();
         });
     } catch {
       process.exitCode = 1;
@@ -579,9 +586,9 @@ try {
     }
     try {
       await dropSuiteDatabase(db);
-      cleanup.push({ kind: 'database', id: databaseName!, ok: true, readback: 'dropped' });
+      cleanup.push({ kind: 'database', id: createdDatabaseName, ok: true, readback: 'dropped' });
     } catch {
-      cleanup.push({ kind: 'database', id: databaseName!, ok: false });
+      cleanup.push({ kind: 'database', id: createdDatabaseName, ok: false });
       process.exitCode = 1;
     }
     await save().catch(() => {

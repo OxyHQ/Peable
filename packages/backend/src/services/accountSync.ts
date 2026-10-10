@@ -19,7 +19,10 @@
  * provider's rate limit — which, unlike this gateway's own, is shared with
  * every real payment in flight.
  */
-import { findAccountsToSync } from '../db/accounts/connectedAccountRepository';
+import {
+  type ConnectedAccountRow,
+  findAccountsToSync,
+} from '../db/accounts/connectedAccountRepository';
 import { getDb } from '../db/postgres';
 import { refreshConnectedAccount } from './accounts/connectedAccountService';
 import { AccountsUnavailableError } from './accounts/connectedAccountService';
@@ -55,7 +58,7 @@ export interface SyncPassResult {
  */
 export async function runAccountSyncPass(options: SyncPassOptions = {}): Promise<SyncPassResult> {
   const provider = options.provider ?? 'stripe';
-  let accounts;
+  let accounts: readonly ConnectedAccountRow[];
   try {
     accounts = await findAccountsToSync(getDb(), provider, options.batchSize ?? DEFAULT_BATCH_SIZE);
   } catch {
