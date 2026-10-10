@@ -6,7 +6,7 @@
  * and Electron (Node.js `net`) can supply the underlying transport.
  */
 
-import type { NetworkConfig } from "@fairco.in/core";
+import type { NetworkConfig } from '@fairco.in/core';
 import {
   type MessageHeader,
   type VersionPayload,
@@ -19,7 +19,7 @@ import {
   parseVersion,
   serializePing,
   serializeVersion,
-} from "./messages";
+} from './messages';
 
 // ---------------------------------------------------------------------------
 // Socket abstraction
@@ -42,7 +42,7 @@ export interface SocketProvider {
 // Peer types
 // ---------------------------------------------------------------------------
 
-export type PeerState = "disconnected" | "connecting" | "connected" | "handshaking" | "ready";
+export type PeerState = 'disconnected' | 'connecting' | 'connected' | 'handshaking' | 'ready';
 
 export interface PeerConfig {
   host: string;
@@ -61,7 +61,7 @@ export interface PeerEvents {
 // Constants
 // ---------------------------------------------------------------------------
 
-const USER_AGENT = "/FAIRWallet:1.0.0/";
+const USER_AGENT = '/FAIRWallet:1.0.0/';
 
 // Service flag advertised by peers in their `version` message. The wallet is
 // an SPV client and depends on the `filterload` / `filteradd` / `filterclear`
@@ -97,10 +97,10 @@ export class Peer {
 
   private socket: SocketConnection | undefined;
   private recvBuffer: Uint8Array = new Uint8Array(0);
-  private _state: PeerState = "disconnected";
+  private _state: PeerState = 'disconnected';
   private _bestHeight = 0;
   private _services = 0n;
-  private _userAgent = "";
+  private _userAgent = '';
   private _versionNonce = 0n;
 
   private pingTimer: ReturnType<typeof setInterval> | undefined;
@@ -148,11 +148,11 @@ export class Peer {
   // -----------------------------------------------------------------------
 
   connect(): void {
-    if (this._state !== "disconnected") {
+    if (this._state !== 'disconnected') {
       return;
     }
 
-    this._state = "connecting";
+    this._state = 'connecting';
     this.recvBuffer = new Uint8Array(0);
     this.versionReceived = false;
     this.verackReceived = false;
@@ -160,13 +160,13 @@ export class Peer {
     try {
       this.socket = this.socketProvider.connect(this.host, this.port);
     } catch (err) {
-      this._state = "disconnected";
+      this._state = 'disconnected';
       this.events.onError(this, err instanceof Error ? err : new Error(String(err)));
       return;
     }
 
     this.socket.onConnect(() => {
-      this._state = "connected";
+      this._state = 'connected';
       this.startHandshake();
     });
 
@@ -175,7 +175,7 @@ export class Peer {
     });
 
     this.socket.onClose(() => {
-      this.handleDisconnect("connection closed");
+      this.handleDisconnect('connection closed');
     });
 
     this.socket.onError((err: Error) => {
@@ -190,7 +190,7 @@ export class Peer {
       this.socket.destroy();
       this.socket = undefined;
     }
-    this._state = "disconnected";
+    this._state = 'disconnected';
   }
 
   // -----------------------------------------------------------------------
@@ -198,7 +198,7 @@ export class Peer {
   // -----------------------------------------------------------------------
 
   sendMessage(command: string, payload: Uint8Array): void {
-    if (this._state === "disconnected" || this._state === "connecting") {
+    if (this._state === 'disconnected' || this._state === 'connecting') {
       return;
     }
     if (!this.socket) {
@@ -213,7 +213,7 @@ export class Peer {
   // -----------------------------------------------------------------------
 
   private startHandshake(): void {
-    this._state = "handshaking";
+    this._state = 'handshaking';
 
     // Generate a random nonce for our version message
     const nonceBytes = new Uint8Array(8);
@@ -245,18 +245,18 @@ export class Peer {
     };
 
     const payload = serializeVersion(versionPayload);
-    this.sendMessage("version", payload);
+    this.sendMessage('version', payload);
 
     // Set handshake timeout
     this.handshakeTimer = setTimeout(() => {
-      if (this._state === "handshaking") {
-        this.handleDisconnect("handshake timeout");
+      if (this._state === 'handshaking') {
+        this.handleDisconnect('handshake timeout');
       }
     }, HANDSHAKE_TIMEOUT_MS);
   }
 
   private checkHandshakeComplete(): void {
-    if (this.versionReceived && this.verackReceived && this._state === "handshaking") {
+    if (this.versionReceived && this.verackReceived && this._state === 'handshaking') {
       if (this.handshakeTimer !== undefined) {
         clearTimeout(this.handshakeTimer);
         this.handshakeTimer = undefined;
@@ -272,11 +272,11 @@ export class Peer {
       // reconnections. Disconnect cleanly here and let peer-manager pick
       // another candidate from `knownAddresses`.
       if ((this._services & REQUIRED_PEER_SERVICES) !== REQUIRED_PEER_SERVICES) {
-        this.handleDisconnect("peer does not advertise NODE_BLOOM");
+        this.handleDisconnect('peer does not advertise NODE_BLOOM');
         return;
       }
 
-      this._state = "ready";
+      this._state = 'ready';
       this.startPingTimer();
       this.events.onReady(this);
     }
@@ -303,19 +303,19 @@ export class Peer {
       try {
         header = parseHeader(this.recvBuffer);
       } catch {
-        this.handleDisconnect("malformed header");
+        this.handleDisconnect('malformed header');
         return;
       }
 
       // Validate magic
       if (!this.magicMatches(header.magic)) {
-        this.handleDisconnect("magic mismatch");
+        this.handleDisconnect('magic mismatch');
         return;
       }
 
       // Guard against oversized messages
       if (header.payloadSize > MAX_MESSAGE_SIZE) {
-        this.handleDisconnect("message too large");
+        this.handleDisconnect('message too large');
         return;
       }
 
@@ -351,21 +351,21 @@ export class Peer {
 
   private handleMessage(command: string, payload: Uint8Array): void {
     switch (command) {
-      case "version":
+      case 'version':
         this.handleVersion(payload);
         break;
-      case "verack":
+      case 'verack':
         this.handleVerack();
         break;
-      case "ping":
+      case 'ping':
         this.handlePing(payload);
         break;
-      case "pong":
+      case 'pong':
         this.handlePongMessage(payload);
         break;
       default:
         // Forward all other messages to the events handler
-        if (this._state === "ready") {
+        if (this._state === 'ready') {
           this.events.onMessage(this, command, payload);
         }
         break;
@@ -381,11 +381,11 @@ export class Peer {
       this.versionReceived = true;
 
       // Send verack in response
-      this.sendMessage("verack", new Uint8Array(0));
+      this.sendMessage('verack', new Uint8Array(0));
       this.checkHandshakeComplete();
     } catch (err) {
       this.events.onError(this, err instanceof Error ? err : new Error(String(err)));
-      this.handleDisconnect("invalid version message");
+      this.handleDisconnect('invalid version message');
     }
   }
 
@@ -396,7 +396,7 @@ export class Peer {
 
   private handlePing(payload: Uint8Array): void {
     // Reply with pong using the same nonce
-    this.sendMessage("pong", payload);
+    this.sendMessage('pong', payload);
   }
 
   private handlePongMessage(payload: Uint8Array): void {
@@ -414,11 +414,9 @@ export class Peer {
     if (nonce !== this.lastPingNonce) {
       this.events.onError(
         this,
-        new Error(
-          `pong nonce mismatch (expected ${this.lastPingNonce}, got ${nonce})`,
-        ),
+        new Error(`pong nonce mismatch (expected ${this.lastPingNonce}, got ${nonce})`),
       );
-      this.handleDisconnect("pong nonce mismatch");
+      this.handleDisconnect('pong nonce mismatch');
     }
   }
 
@@ -428,14 +426,14 @@ export class Peer {
 
   private startPingTimer(): void {
     this.pingTimer = setInterval(() => {
-      if (this._state !== "ready") {
+      if (this._state !== 'ready') {
         return;
       }
       const nonceBytes = new Uint8Array(8);
       crypto.getRandomValues(nonceBytes);
       const view = new DataView(nonceBytes.buffer, nonceBytes.byteOffset, nonceBytes.byteLength);
       this.lastPingNonce = view.getBigUint64(0, true);
-      this.sendMessage("ping", serializePing(this.lastPingNonce));
+      this.sendMessage('ping', serializePing(this.lastPingNonce));
     }, PING_INTERVAL_MS);
   }
 
@@ -455,7 +453,7 @@ export class Peer {
   }
 
   private handleDisconnect(reason: string): void {
-    if (this._state === "disconnected") {
+    if (this._state === 'disconnected') {
       return;
     }
     this.cleanup();
@@ -463,7 +461,7 @@ export class Peer {
       this.socket.destroy();
       this.socket = undefined;
     }
-    this._state = "disconnected";
+    this._state = 'disconnected';
     this.events.onDisconnect(this, reason);
   }
 }

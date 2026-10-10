@@ -32,8 +32,8 @@
  * not in the routes alone, because the services are also reached from the
  * dashboard path.
  */
-import type { MerchantEnvironment } from "@peable.to/shared-types";
-import { config } from "../../config";
+import type { MerchantEnvironment } from '@peable.to/shared-types';
+import { config } from '../../config';
 
 /**
  * A credential from one environment reaching a deployment serving the other.
@@ -50,9 +50,9 @@ export class EnvironmentModeMismatchError extends Error {
   constructor(environment: MerchantEnvironment, livemode: boolean) {
     super(
       `a '${environment}' credential cannot act on a deployment running in ` +
-        `${livemode ? "live" : "test"} mode`,
+        `${livemode ? 'live' : 'test'} mode`,
     );
-    this.name = "EnvironmentModeMismatchError";
+    this.name = 'EnvironmentModeMismatchError';
     this.environment = environment;
     this.livemode = livemode;
   }
@@ -70,7 +70,7 @@ export function environmentMatchesMode(
   environment: MerchantEnvironment,
   livemode: boolean,
 ): boolean {
-  return (environment === "production") === livemode;
+  return (environment === 'production') === livemode;
 }
 
 /**

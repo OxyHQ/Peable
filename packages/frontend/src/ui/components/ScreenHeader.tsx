@@ -2,10 +2,10 @@
  * ScreenHeader — common header layout with centered title and side actions.
  */
 
-import { View, Text, Pressable } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { t } from "../../i18n";
+import { View, Text, Pressable } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { t } from '../../i18n';
 
 interface ScreenHeaderProps {
   title: string;
@@ -31,14 +31,10 @@ export function ScreenHeader({
       <Pressable
         onPress={onBack}
         className="w-11 h-11 items-center justify-center rounded-full active:bg-surface"
-        accessibilityLabel={t("common.back")}
+        accessibilityLabel={t('common.back')}
         accessibilityRole="button"
       >
-        <MaterialCommunityIcons
-          name="arrow-left"
-          size={24}
-          color={theme.colors.text}
-        />
+        <MaterialCommunityIcons name="arrow-left" size={24} color={theme.colors.text} />
       </Pressable>
     ) : null);
 

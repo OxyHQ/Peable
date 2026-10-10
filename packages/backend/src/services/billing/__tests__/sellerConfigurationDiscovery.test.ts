@@ -1,10 +1,122 @@
-import {expect,it} from 'bun:test';
-import {discoverSellerConfiguration,discoverOwnedInvoiceConfiguration} from '../sellerConfigurationDiscovery';
-import {STRIPE_API_VERSION} from '../../providers/stripe/client';
-import type {StripeBillingClient} from '../stripeBillingProvider';
-const cohort={provider:'stripe' as const,platformAccountId:'acct_fixture',livemode:false,environment:'development' as const,merchantId:'merchant',oxyAppId:'app',evidenceRef:'synthetic-approval'};
-function fixture(){const settings={object:'tax.settings',livemode:false,status:'active',head_office:{address:{line1:'MUST NOT RETURN'}},defaults:{provider:'stripe',tax_behavior:'inclusive',tax_code:'synthetic'}};const page={has_more:false,data:[{id:'taxreg_fixture',object:'tax.registration',livemode:false,country:'US',status:'active',active_from:1,expires_at:null,legalRegistrationNumber:'MUST NOT RETURN'}]};const client={scope:'platform',apiVersion:STRIPE_API_VERSION,livemode:false,account:async()=>({id:'acct_fixture'}),retrieveTaxSettings:async()=>settings,listTaxRegistrations:async()=>page} as unknown as StripeBillingClient;return {client,settings,page};}
-it('discovers configured tax observations without promoting them to seller/issuer/remitter facts or leaking PII',async()=>{const f=fixture();const result=await discoverSellerConfiguration(f.client,cohort);expect(result).toMatchObject({status:'observed',seller:'unverified',invoiceIssuer:'unverified',taxRemitter:'unverified'});expect(JSON.stringify(result)).not.toContain('MUST NOT RETURN');});
-it('rejects wrong scope/mode and incomplete repeated pagination; keeps missing capabilities unconfigured',async()=>{const f=fixture();await expect(discoverSellerConfiguration(f.client,{...cohort,platformAccountId:'wrong'})).rejects.toThrow();f.settings.livemode=true;await expect(discoverSellerConfiguration(f.client,cohort)).rejects.toThrow();f.settings.livemode=false;f.page.has_more=true;await expect(discoverSellerConfiguration(f.client,cohort)).rejects.toThrow('pagination');delete f.client.retrieveTaxSettings;expect(await discoverSellerConfiguration(f.client,cohort)).toMatchObject({status:'unconfigured'});});
+import { expect, it } from 'bun:test';
+import {
+  discoverSellerConfiguration,
+  discoverOwnedInvoiceConfiguration,
+} from '../sellerConfigurationDiscovery';
+import { STRIPE_API_VERSION } from '../../providers/stripe/client';
+import type { StripeBillingClient } from '../stripeBillingProvider';
+const cohort = {
+  provider: 'stripe' as const,
+  platformAccountId: 'acct_fixture',
+  livemode: false,
+  environment: 'development' as const,
+  merchantId: 'merchant',
+  oxyAppId: 'app',
+  evidenceRef: 'synthetic-approval',
+};
+function fixture() {
+  const settings = {
+    object: 'tax.settings',
+    livemode: false,
+    status: 'active',
+    head_office: { address: { line1: 'MUST NOT RETURN' } },
+    defaults: { provider: 'stripe', tax_behavior: 'inclusive', tax_code: 'synthetic' },
+  };
+  const page = {
+    has_more: false,
+    data: [
+      {
+        id: 'taxreg_fixture',
+        object: 'tax.registration',
+        livemode: false,
+        country: 'US',
+        status: 'active',
+        active_from: 1,
+        expires_at: null,
+        legalRegistrationNumber: 'MUST NOT RETURN',
+      },
+    ],
+  };
+  const client = {
+    scope: 'platform',
+    apiVersion: STRIPE_API_VERSION,
+    livemode: false,
+    account: async () => ({ id: 'acct_fixture' }),
+    retrieveTaxSettings: async () => settings,
+    listTaxRegistrations: async () => page,
+  } as unknown as StripeBillingClient;
+  return { client, settings, page };
+}
+it('discovers configured tax observations without promoting them to seller/issuer/remitter facts or leaking PII', async () => {
+  const f = fixture();
+  const result = await discoverSellerConfiguration(f.client, cohort);
+  expect(result).toMatchObject({
+    status: 'observed',
+    seller: 'unverified',
+    invoiceIssuer: 'unverified',
+    taxRemitter: 'unverified',
+  });
+  expect(JSON.stringify(result)).not.toContain('MUST NOT RETURN');
+});
+it('rejects wrong scope/mode and incomplete repeated pagination; keeps missing capabilities unconfigured', async () => {
+  const f = fixture();
+  await expect(
+    discoverSellerConfiguration(f.client, { ...cohort, platformAccountId: 'wrong' }),
+  ).rejects.toThrow();
+  f.settings.livemode = true;
+  await expect(discoverSellerConfiguration(f.client, cohort)).rejects.toThrow();
+  f.settings.livemode = false;
+  f.page.has_more = true;
+  await expect(discoverSellerConfiguration(f.client, cohort)).rejects.toThrow('pagination');
+  delete f.client.retrieveTaxSettings;
+  expect(await discoverSellerConfiguration(f.client, cohort)).toMatchObject({
+    status: 'unconfigured',
+  });
+});
 
-it('reports exact owned invoice issuer/tax-account configuration separately from unverified legal roles',async()=>{const f=fixture();const invoice={id:'in_fixture',customer:'cus_fixture',livemode:false,issuer:{type:'self'},on_behalf_of:null,automatic_tax:{enabled:true,status:'complete',provider:'stripe',liability:{type:'self'}},customer_name:'MUST NOT RETURN'};f.client.retrieveInvoice=async()=>invoice;const bindings={retrieveInvoiceState:async()=>({invoiceId:'in_fixture',paymentIntentId:'pi_fixture',providerCustomerId:'cus_fixture',providerSubscriptionId:'sub_fixture',providerPriceId:'price_fixture',livemode:false})} as unknown as import('../verifiedBindings').VerifiedBillingBindings;const options={client:f.client,bindings,owner:{merchantId:'merchant',oxyAppId:'app',environment:'development' as const},subscriptionId:'sub_fixture',invoiceId:'in_fixture'};expect(await discoverOwnedInvoiceConfiguration(options)).toMatchObject({providerInvoiceIssuer:{type:'self'},legalSeller:'unverified',legalInvoiceIssuer:'unverified',taxRemitter:'unverified'});expect(JSON.stringify(await discoverOwnedInvoiceConfiguration(options))).not.toContain('MUST NOT RETURN');invoice.customer='cus_other';await expect(discoverOwnedInvoiceConfiguration(options)).rejects.toThrow();});
+it('reports exact owned invoice issuer/tax-account configuration separately from unverified legal roles', async () => {
+  const f = fixture();
+  const invoice = {
+    id: 'in_fixture',
+    customer: 'cus_fixture',
+    livemode: false,
+    issuer: { type: 'self' },
+    on_behalf_of: null,
+    automatic_tax: {
+      enabled: true,
+      status: 'complete',
+      provider: 'stripe',
+      liability: { type: 'self' },
+    },
+    customer_name: 'MUST NOT RETURN',
+  };
+  f.client.retrieveInvoice = async () => invoice;
+  const bindings = {
+    retrieveInvoiceState: async () => ({
+      invoiceId: 'in_fixture',
+      paymentIntentId: 'pi_fixture',
+      providerCustomerId: 'cus_fixture',
+      providerSubscriptionId: 'sub_fixture',
+      providerPriceId: 'price_fixture',
+      livemode: false,
+    }),
+  } as unknown as import('../verifiedBindings').VerifiedBillingBindings;
+  const options = {
+    client: f.client,
+    bindings,
+    owner: { merchantId: 'merchant', oxyAppId: 'app', environment: 'development' as const },
+    subscriptionId: 'sub_fixture',
+    invoiceId: 'in_fixture',
+  };
+  expect(await discoverOwnedInvoiceConfiguration(options)).toMatchObject({
+    providerInvoiceIssuer: { type: 'self' },
+    legalSeller: 'unverified',
+    legalInvoiceIssuer: 'unverified',
+    taxRemitter: 'unverified',
+  });
+  expect(JSON.stringify(await discoverOwnedInvoiceConfiguration(options))).not.toContain(
+    'MUST NOT RETURN',
+  );
+  invoice.customer = 'cus_other';
+  await expect(discoverOwnedInvoiceConfiguration(options)).rejects.toThrow();
+});

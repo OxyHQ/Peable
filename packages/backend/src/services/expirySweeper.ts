@@ -58,18 +58,11 @@
  * expired only once that succeeded. `sweepDueCardIntents` carries the argument.
  */
 
-import { getDb } from "../db/postgres";
-import {
-  expireDueIntents,
-  findDueCardIntents,
-} from "../db/payments/paymentIntentRepository";
-import { cancelCardPaymentAtProvider } from "./cardCancellation";
-import { reconcileIntentWithProvider } from "./intentReconciliation";
-import {
-  announceIntentChange,
-  enqueueIntentWebhook,
-  transitionIntent,
-} from "./intentTransition";
+import { getDb } from '../db/postgres';
+import { expireDueIntents, findDueCardIntents } from '../db/payments/paymentIntentRepository';
+import { cancelCardPaymentAtProvider } from './cardCancellation';
+import { reconcileIntentWithProvider } from './intentReconciliation';
+import { announceIntentChange, enqueueIntentWebhook, transitionIntent } from './intentTransition';
 
 const DEFAULT_INTERVAL_MS = 60_000;
 const DEFAULT_BATCH_SIZE = 100;
@@ -103,9 +96,7 @@ export interface ExpirySweepResult {
  * neither is durable, and sending either for a transition that then failed to
  * commit would tell a payer their checkout expired when it did not.
  */
-export async function runExpirySweep(
-  deps: ExpirySweepDeps = {},
-): Promise<ExpirySweepResult> {
+export async function runExpirySweep(deps: ExpirySweepDeps = {}): Promise<ExpirySweepResult> {
   const now = deps.now ?? new Date();
   const limit = deps.batchSize ?? DEFAULT_BATCH_SIZE;
   const db = getDb();
@@ -172,12 +163,12 @@ async function sweepDueCardIntents(
       `cancel:${intent.publicId}`,
     );
 
-    if (cancellation.kind === "settled") {
+    if (cancellation.kind === 'settled') {
       // The payer won. Record what is true; do not expire it.
       await reconcileIntentWithProvider(intent);
       continue;
     }
-    if (cancellation.kind === "unknown" || cancellation.kind === "in_flight") {
+    if (cancellation.kind === 'unknown' || cancellation.kind === 'in_flight') {
       // Unknown: the provider could not be reached, so the payment is still
       // live and nothing may be announced about it. In flight: the provider
       // still has it, and expiring locally is exactly the divergence this pass
@@ -190,9 +181,9 @@ async function sweepDueCardIntents(
     // Now the local transition can be announced truthfully.
     const result = await transitionIntent(intent.id, {
       from: intent.status,
-      status: "expired",
+      status: 'expired',
     });
-    if (result.kind !== "updated") continue;
+    if (result.kind !== 'updated') continue;
     announceIntentChange(result.row);
     expired += 1;
   }

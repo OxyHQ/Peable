@@ -10,28 +10,27 @@
  * at the end of the column.
  */
 
-import type React from "react";
-import { useCallback, useMemo, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
-import * as Clipboard from "expo-clipboard";
-import * as Sharing from "expo-sharing";
-import { File, Paths } from "expo-file-system";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import QRCode from "react-native-qrcode-svg";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { useOxy } from "@oxy.so/services";
-import { useWalletStore } from "../../wallet/wallet-store";
-import { Button, ListItem } from "../components";
-import { t } from "../../i18n";
-import { FONT_PHUDU_BLACK } from "../../utils/fonts";
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import QRCode from 'react-native-qrcode-svg';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { useOxy } from '@oxy.so/services';
+import { useWalletStore } from '../../wallet/wallet-store';
+import { Button, ListItem } from '../components';
+import { t } from '../../i18n';
+import { FONT_PHUDU_BLACK } from '../../utils/fonts';
 
 const CONTENT_MAX_WIDTH = 500;
 const QR_SIZE = 220;
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 function truncateAddress(address: string): string {
   if (address.length <= 16) return address;
@@ -43,11 +42,7 @@ function truncateAddress(address: string): string {
  *   block. Pass false when the host `<Dialog>` already supplies a title, to
  *   avoid a duplicated heading.
  */
-export function ReceiveSheet({
-  heading = true,
-}: {
-  heading?: boolean;
-}): React.JSX.Element {
+export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.JSX.Element {
   const receiveAddress = useWalletStore((s) => s.currentReceiveAddress);
   const addresses = useWalletStore((s) => s.addresses);
   const getNewAddress = useWalletStore((s) => s.getNewAddress);
@@ -75,10 +70,7 @@ export function ReceiveSheet({
 
   const handleCopy = useCallback(async () => {
     await Clipboard.setStringAsync(displayAddress);
-    showMessage(
-      t("receive.addressCopied.title"),
-      t("receive.addressCopied.description"),
-    );
+    showMessage(t('receive.addressCopied.title'), t('receive.addressCopied.description'));
   }, [displayAddress, showMessage]);
 
   const handleNewAddress = useCallback(() => {
@@ -88,29 +80,26 @@ export function ReceiveSheet({
 
   const handleShare = useCallback(async () => {
     const uri = `faircoin:${displayAddress}`;
-    const payload = t("receive.shareMessage", { uri });
+    const payload = t('receive.shareMessage', { uri });
 
     // On platforms without a native share sheet (web, electron) fall back to
     // copying the payment request to the clipboard.
     if (!(await Sharing.isAvailableAsync())) {
       await Clipboard.setStringAsync(payload);
-      showMessage(
-        t("receive.addressCopied.title"),
-        t("receive.addressCopied.description"),
-      );
+      showMessage(t('receive.addressCopied.title'), t('receive.addressCopied.description'));
       return;
     }
 
     // expo-sharing requires a file URI, so write the payment request to a
     // temporary text file in the cache directory and share that.
-    const file = new File(Paths.cache, "peable-payment-request.txt");
+    const file = new File(Paths.cache, 'peable-payment-request.txt');
     if (file.exists) file.delete();
     file.create();
     file.write(payload);
     await Sharing.shareAsync(file.uri, {
-      mimeType: "text/plain",
-      dialogTitle: t("receive.paymentRequestTitle"),
-      UTI: "public.plain-text",
+      mimeType: 'text/plain',
+      dialogTitle: t('receive.paymentRequestTitle'),
+      UTI: 'public.plain-text',
     });
   }, [displayAddress, showMessage]);
 
@@ -122,10 +111,7 @@ export function ReceiveSheet({
   const handleCopyAddress = useCallback(
     async (address: string) => {
       await Clipboard.setStringAsync(address);
-      showMessage(
-        t("receive.addressCopied.title"),
-        t("receive.addressCopied.description"),
-      );
+      showMessage(t('receive.addressCopied.title'), t('receive.addressCopied.description'));
     },
     [showMessage],
   );
@@ -150,19 +136,14 @@ export function ReceiveSheet({
     return (
       <View className="items-center justify-center py-16">
         <ActivityIndicator size="large" color={theme.colors.primary} />
-        <Text className="text-muted-foreground text-sm mt-4">
-          {t("receive.generating")}
-        </Text>
+        <Text className="text-muted-foreground text-sm mt-4">{t('receive.generating')}</Text>
       </View>
     );
   }
 
   return (
     <>
-      <View
-        className="w-full self-center gap-5"
-        style={{ maxWidth: CONTENT_MAX_WIDTH }}
-      >
+      <View className="w-full self-center gap-5" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
         {/* Title (suppressed when a host Dialog already shows one) */}
         {heading ? (
           <View className="items-center pt-2">
@@ -170,10 +151,10 @@ export function ReceiveSheet({
               className="text-foreground"
               style={{ fontFamily: FONT_PHUDU_BLACK, fontSize: 28 }}
             >
-              {t("receive.title")}
+              {t('receive.title')}
             </Text>
             <Text className="text-muted-foreground text-sm mt-1 text-center">
-              {t("receive.subtitle")}
+              {t('receive.subtitle')}
             </Text>
           </View>
         ) : null}
@@ -185,7 +166,7 @@ export function ReceiveSheet({
             see nor spend, and the handle would be an invitation to lose money. */}
         {user?.username && socialReceiveDefaultAddress ? (
           <View className="items-center">
-            <Text className="text-muted-foreground text-sm">{t("receive.payMeAt")}</Text>
+            <Text className="text-muted-foreground text-sm">{t('receive.payMeAt')}</Text>
             <Text className="text-foreground text-lg font-bold mt-0.5">@{user.username}</Text>
           </View>
         ) : null}
@@ -204,7 +185,7 @@ export function ReceiveSheet({
 
         {/* Address — card-less filled surface field */}
         <View>
-          <Text className={SECTION_LABEL}>{t("receive.yourAddress")}</Text>
+          <Text className={SECTION_LABEL}>{t('receive.yourAddress')}</Text>
           <View className="flex-row items-center bg-surface rounded-2xl px-4 py-3.5 mt-2">
             <Pressable onPress={handleCopy} className="flex-1 active:opacity-70">
               <Text className="text-foreground text-sm font-mono" selectable>
@@ -214,13 +195,9 @@ export function ReceiveSheet({
             <Pressable
               onPress={handleCopy}
               className="ml-3 w-9 h-9 rounded-full bg-primary/10 items-center justify-center active:opacity-70"
-              accessibilityLabel={t("receive.copy")}
+              accessibilityLabel={t('receive.copy')}
             >
-              <MaterialCommunityIcons
-                name="content-copy"
-                size={16}
-                color={theme.colors.primary}
-              />
+              <MaterialCommunityIcons name="content-copy" size={16} color={theme.colors.primary} />
             </Pressable>
           </View>
         </View>
@@ -237,7 +214,7 @@ export function ReceiveSheet({
               color={theme.colors.primary}
             />
             <Text className="text-foreground text-sm font-semibold ml-2">
-              {t("receive.new_address")}
+              {t('receive.new_address')}
             </Text>
           </Pressable>
           {addresses.length > 1 ? (
@@ -246,14 +223,14 @@ export function ReceiveSheet({
               className="flex-1 flex-row items-center justify-center bg-surface rounded-full py-3 active:opacity-70"
             >
               <MaterialCommunityIcons
-                name={showAllAddresses ? "chevron-up" : "format-list-bulleted"}
+                name={showAllAddresses ? 'chevron-up' : 'format-list-bulleted'}
                 size={16}
                 color={theme.colors.primary}
               />
               <Text className="text-foreground text-sm font-semibold ml-2">
                 {showAllAddresses
-                  ? t("receive.hideList")
-                  : t("receive.allAddresses", { count: addresses.length })}
+                  ? t('receive.hideList')
+                  : t('receive.allAddresses', { count: addresses.length })}
               </Text>
             </Pressable>
           ) : null}
@@ -267,19 +244,12 @@ export function ReceiveSheet({
                 key={`${item.index}-${item.address}`}
                 title={item.label}
                 subtitle={`#${item.index + 1}`}
-                icon={item.isActive ? "radiobox-marked" : "radiobox-blank"}
-                iconColor={
-                  item.isActive
-                    ? theme.colors.primary
-                    : theme.colors.textSecondary
-                }
-                iconBg={item.isActive ? "bg-primary/10" : "bg-background"}
+                icon={item.isActive ? 'radiobox-marked' : 'radiobox-blank'}
+                iconColor={item.isActive ? theme.colors.primary : theme.colors.textSecondary}
+                iconBg={item.isActive ? 'bg-primary/10' : 'bg-background'}
                 onPress={() => handleSelectAddress(item.address)}
                 trailing={
-                  <Pressable
-                    className="p-1.5"
-                    onPress={() => handleCopyAddress(item.address)}
-                  >
+                  <Pressable className="p-1.5" onPress={() => handleCopyAddress(item.address)}>
                     <MaterialCommunityIcons
                       name="content-copy"
                       size={16}
@@ -297,20 +267,15 @@ export function ReceiveSheet({
         {/* Share (inline at the end — the standalone route / sheet chrome owns
             the surrounding padding, so this is a normal element, not an
             absolutely positioned bottom bar). */}
-        <Button
-          title={t("receive.share")}
-          onPress={handleShare}
-          variant="primary"
-          size="lg"
-        />
+        <Button title={t('receive.share')} onPress={handleShare} variant="primary" size="lg" />
       </View>
 
       <Dialog
         control={messageControl}
         placement="bottom"
-        title={message?.title ?? ""}
-        description={message?.description ?? ""}
-        actions={[{ label: t("common.ok"), onPress: () => setMessage(null) }]}
+        title={message?.title ?? ''}
+        description={message?.description ?? ''}
+        actions={[{ label: t('common.ok'), onPress: () => setMessage(null) }]}
       />
     </>
   );

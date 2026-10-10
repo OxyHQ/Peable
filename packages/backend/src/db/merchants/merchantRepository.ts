@@ -143,14 +143,14 @@ export interface InsertMerchantParams {
  */
 export async function insertMerchant(
   db: DatabaseOrTransaction,
-  params: InsertMerchantParams
+  params: InsertMerchantParams,
 ): Promise<MerchantRow | null> {
   // One capability, two halves. `merchants_chain_fields_agree_check` refuses
   // the mix in the database; this refuses it with a message that names what is
   // missing rather than a constraint name.
   if ((params.network == null) !== (params.xpub == null)) {
     throw new ChainRegistrationError(
-      "accepting FairCoin needs both a network and a watch-only xpub, or neither",
+      'accepting FairCoin needs both a network and a watch-only xpub, or neither',
     );
   }
   if (params.xpub != null && params.network != null) {
@@ -204,7 +204,7 @@ export async function insertMerchant(
 export async function findMerchantByAppEnvironment(
   db: DatabaseOrTransaction,
   oxyAppId: string,
-  environment: OxyServiceEnvironment
+  environment: OxyServiceEnvironment,
 ): Promise<MerchantRow | null> {
   const [row] = await db
     .select(MERCHANT_COLUMNS)
@@ -215,7 +215,7 @@ export async function findMerchantByAppEnvironment(
 
 export async function findMerchantById(
   db: DatabaseOrTransaction,
-  id: string
+  id: string,
 ): Promise<MerchantRow | null> {
   const [row] = await db.select(MERCHANT_COLUMNS).from(merchants).where(eq(merchants.id, id));
   return row ? toMerchantRow(row) : null;
@@ -251,7 +251,7 @@ export async function findMerchantById(
  */
 export async function findMerchantsByIds(
   db: DatabaseOrTransaction,
-  ids: readonly string[]
+  ids: readonly string[],
 ): Promise<MerchantRow[]> {
   if (ids.length === 0) return [];
   const rows = await db
@@ -269,7 +269,7 @@ export async function findMerchantsByIds(
  */
 export async function findWebhookTarget(
   db: DatabaseOrTransaction,
-  merchantId: string
+  merchantId: string,
 ): Promise<{ url: string; secret: string } | null> {
   const [row] = await db
     .select({ url: merchants.webhookUrl, secret: merchants.webhookSecret })
@@ -311,7 +311,7 @@ export interface MerchantPatch {
 export async function updateMerchantSettings(
   db: DatabaseOrTransaction,
   id: string,
-  patch: MerchantPatch
+  patch: MerchantPatch,
 ): Promise<MerchantRow | null> {
   const values: Record<string, string | number | null> = {};
   if (patch.webhookUrl !== undefined) values.webhookUrl = patch.webhookUrl;

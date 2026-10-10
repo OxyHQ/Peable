@@ -8,21 +8,21 @@
  * against a reasonable upper bound rather than asserting zero.
  */
 
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 
 import {
   BLOOM_UPDATE_ALL,
   BLOOM_UPDATE_NONE,
   BLOOM_UPDATE_P2PUBKEY_ONLY,
   BloomFilter,
-} from "./bloom-filter";
+} from './bloom-filter';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-describe("flag constants", () => {
-  test("update modes are 0 / 1 / 2", () => {
+describe('flag constants', () => {
+  test('update modes are 0 / 1 / 2', () => {
     expect(BLOOM_UPDATE_NONE).toBe(0);
     expect(BLOOM_UPDATE_ALL).toBe(1);
     expect(BLOOM_UPDATE_P2PUBKEY_ONLY).toBe(2);
@@ -33,15 +33,15 @@ describe("flag constants", () => {
 // Manual filter
 // ---------------------------------------------------------------------------
 
-describe("BloomFilter (manual size)", () => {
-  test("contains an inserted element", () => {
+describe('BloomFilter (manual size)', () => {
+  test('contains an inserted element', () => {
     const filter = new BloomFilter(64, 10, 0, BLOOM_UPDATE_ALL);
     const element = new Uint8Array([1, 2, 3, 4]);
     filter.insert(element);
     expect(filter.contains(element)).toBe(true);
   });
 
-  test("contains does not false-negative on any inserted element", () => {
+  test('contains does not false-negative on any inserted element', () => {
     const filter = new BloomFilter(512, 10, 0xdeadbeef, BLOOM_UPDATE_ALL);
     const elements: Uint8Array[] = [];
     for (let i = 0; i < 100; i++) {
@@ -56,7 +56,7 @@ describe("BloomFilter (manual size)", () => {
     }
   });
 
-  test("toBytes returns a copy, not the underlying buffer", () => {
+  test('toBytes returns a copy, not the underlying buffer', () => {
     const filter = new BloomFilter(16, 3, 0, BLOOM_UPDATE_ALL);
     filter.insert(new Uint8Array([1, 2, 3]));
     const a = filter.toBytes();
@@ -68,19 +68,19 @@ describe("BloomFilter (manual size)", () => {
     expect(filter.toBytes()[0]).not.toBe(a[0]);
   });
 
-  test("accessors return the constructor arguments", () => {
+  test('accessors return the constructor arguments', () => {
     const filter = new BloomFilter(32, 7, 12345, BLOOM_UPDATE_P2PUBKEY_ONLY);
     expect(filter.getNumHashFuncs()).toBe(7);
     expect(filter.getTweak()).toBe(12345);
     expect(filter.getFlags()).toBe(BLOOM_UPDATE_P2PUBKEY_ONLY);
   });
 
-  test("filter size is clamped to 36000 bytes", () => {
+  test('filter size is clamped to 36000 bytes', () => {
     const filter = new BloomFilter(1_000_000, 1, 0, BLOOM_UPDATE_ALL);
     expect(filter.toBytes().length).toBeLessThanOrEqual(36000);
   });
 
-  test("numHashFuncs is clamped to 50", () => {
+  test('numHashFuncs is clamped to 50', () => {
     const filter = new BloomFilter(32, 500, 0, BLOOM_UPDATE_ALL);
     expect(filter.getNumHashFuncs()).toBeLessThanOrEqual(50);
   });
@@ -90,8 +90,8 @@ describe("BloomFilter (manual size)", () => {
 // BloomFilter.forAddresses
 // ---------------------------------------------------------------------------
 
-describe("BloomFilter.forAddresses", () => {
-  test("empty address list returns a minimal placeholder filter that matches nothing", () => {
+describe('BloomFilter.forAddresses', () => {
+  test('empty address list returns a minimal placeholder filter that matches nothing', () => {
     const filter = BloomFilter.forAddresses([], 0.0001);
     expect(filter.toBytes().length).toBeGreaterThanOrEqual(1);
     expect(filter.getNumHashFuncs()).toBe(0);
@@ -106,13 +106,13 @@ describe("BloomFilter.forAddresses", () => {
     }
   });
 
-  test("a manually constructed 0-hash-func filter matches nothing", () => {
+  test('a manually constructed 0-hash-func filter matches nothing', () => {
     const filter = new BloomFilter(8, 0, 0, BLOOM_UPDATE_ALL);
     expect(filter.contains(new Uint8Array([1, 2, 3, 4]))).toBe(false);
     expect(filter.contains(new Uint8Array(0))).toBe(false);
   });
 
-  test("all inserted elements match", () => {
+  test('all inserted elements match', () => {
     const addresses: Uint8Array[] = [];
     for (let i = 0; i < 50; i++) {
       const el = new Uint8Array(20);
@@ -126,7 +126,7 @@ describe("BloomFilter.forAddresses", () => {
     }
   });
 
-  test("false positive rate stays close to the target", () => {
+  test('false positive rate stays close to the target', () => {
     // Insert a small set of "owned" addresses
     const addresses: Uint8Array[] = [];
     for (let i = 0; i < 20; i++) {
@@ -163,8 +163,8 @@ describe("BloomFilter.forAddresses", () => {
 // Determinism / cross-run stability
 // ---------------------------------------------------------------------------
 
-describe("BloomFilter determinism", () => {
-  test("inserting in different orders gives the same filter bytes", () => {
+describe('BloomFilter determinism', () => {
+  test('inserting in different orders gives the same filter bytes', () => {
     const a = new BloomFilter(64, 5, 0, BLOOM_UPDATE_ALL);
     const b = new BloomFilter(64, 5, 0, BLOOM_UPDATE_ALL);
     const elements = [
@@ -179,7 +179,7 @@ describe("BloomFilter determinism", () => {
     expect(a.toBytes()).toEqual(b.toBytes());
   });
 
-  test("different tweak produces different bit positions", () => {
+  test('different tweak produces different bit positions', () => {
     // Two filters with the same size and same element but different
     // tweaks must produce different filter bytes with high probability.
     // We test a handful of different tweaks to reduce flake risk.
@@ -202,9 +202,9 @@ describe("BloomFilter determinism", () => {
 });
 
 function bytesToHex(bytes: Uint8Array): string {
-  let s = "";
+  let s = '';
   for (let i = 0; i < bytes.length; i++) {
-    s += bytes[i].toString(16).padStart(2, "0");
+    s += bytes[i].toString(16).padStart(2, '0');
   }
   return s;
 }

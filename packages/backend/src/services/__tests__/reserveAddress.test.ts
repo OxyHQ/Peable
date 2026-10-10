@@ -1,12 +1,12 @@
-import { test, expect } from "bun:test";
-import { eq } from "drizzle-orm";
-import { merchants } from "../../db/schema";
-import { reserveNextAddress } from "../reserveAddress";
+import { test, expect } from 'bun:test';
+import { eq } from 'drizzle-orm';
+import { merchants } from '../../db/schema';
+import { reserveNextAddress } from '../reserveAddress';
 import {
   gatewayDb,
   seedMerchant,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
+} from '../../__tests__/helpers/gatewayTestDatabase';
 
 /**
  * RESCUED from `models/__tests__/models.test.ts`, which the Mongo→Postgres
@@ -31,21 +31,21 @@ import {
 
 useGatewayDatabase();
 
-test("reserveNextAddress claims monotonically increasing indexes with distinct addresses", async () => {
+test('reserveNextAddress claims monotonically increasing indexes with distinct addresses', async () => {
   const merchant = await seedMerchant({
-    publicId: "merch_test0000000000000003",
-    oxyAppId: "app_reserve_addresses",
-    environment: "development",
-    network: "testnet",
+    publicId: 'merch_test0000000000000003',
+    oxyAppId: 'app_reserve_addresses',
+    environment: 'development',
+    network: 'testnet',
   });
 
   const first = await reserveNextAddress(merchant.id);
   const second = await reserveNextAddress(merchant.id);
   const third = await reserveNextAddress(merchant.id);
 
-  expect(first).toEqual({ index: 0, address: "TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3" });
-  expect(second).toEqual({ index: 1, address: "TVdQEadb9Yurh3QCBf1vwjZxNySQvHxFmk" });
-  expect(third).toEqual({ index: 2, address: "TRhbVij2oTwETnzpVNDixacseS48FZgsUZ" });
+  expect(first).toEqual({ index: 0, address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3' });
+  expect(second).toEqual({ index: 1, address: 'TVdQEadb9Yurh3QCBf1vwjZxNySQvHxFmk' });
+  expect(third).toEqual({ index: 2, address: 'TRhbVij2oTwETnzpVNDixacseS48FZgsUZ' });
 
   const addresses = new Set([first.address, second.address, third.address]);
   expect(addresses.size).toBe(3);

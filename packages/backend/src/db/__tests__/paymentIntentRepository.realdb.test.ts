@@ -99,7 +99,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
         publicId: `pi_${uuidv7()}`,
         address: `T${uuidv7()}`,
         provider: null,
-      })
+      }),
     );
     expect(second).toBeNull();
 
@@ -114,10 +114,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const shared = uuidv7();
 
     expect(
-      await insertPaymentIntent(suite!.db, intentParams(one.id, { idempotencyKey: shared }))
+      await insertPaymentIntent(suite!.db, intentParams(one.id, { idempotencyKey: shared })),
     ).not.toBeNull();
     expect(
-      await insertPaymentIntent(suite!.db, intentParams(two.id, { idempotencyKey: shared }))
+      await insertPaymentIntent(suite!.db, intentParams(two.id, { idempotencyKey: shared })),
     ).not.toBeNull();
   });
 
@@ -127,13 +127,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    * intent is indistinguishable from a missing one, which is what stops the
    * 404/403 difference leaking that the id exists.
    */
-  it('never returns another merchant\'s intent from the scoped read', async () => {
+  it("never returns another merchant's intent from the scoped read", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
     const created = await insertPaymentIntent(suite!.db, intentParams(owner.id));
 
     expect((await findIntentForMerchant(suite!.db, created!.publicId, owner.id))?.id).toBe(
-      created!.id
+      created!.id,
     );
     expect(await findIntentForMerchant(suite!.db, created!.publicId, stranger.id)).toBeNull();
     // The payer path is deliberately unscoped — it is authorized by the
@@ -188,9 +188,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     } catch (error) {
       raised = error;
     }
-    expect(
-      isCheckViolation(raised, 'payment_intents_broadcast_requires_txid_check')
-    ).toBe(true);
+    expect(isCheckViolation(raised, 'payment_intents_broadcast_requires_txid_check')).toBe(true);
 
     const withTxid = await updateIntentState(suite!.db, created!.id, {
       from: 'created',
@@ -224,7 +222,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const seen: string[] = [];
     let after: string | undefined;
     for (let page = 0; page < 3; page += 1) {
-      const result = await listIntentsForMerchant(suite!.db, { merchantId: merchant.id, limit: 2, after });
+      const result = await listIntentsForMerchant(suite!.db, {
+        merchantId: merchant.id,
+        limit: 2,
+        after,
+      });
       seen.push(...result.data.map((row) => row.publicId));
       expect(result.hasMore).toBe(page < 2);
       after = result.data.at(-1)?.id;
@@ -258,7 +260,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
     const page = await listIntentsForMerchant(suite!.db, { merchantId: merchant.id, limit: 10 });
     expect(page.data.map((row) => row.publicId)).toEqual(
-      [...created].reverse().map((row) => row.publicId)
+      [...created].reverse().map((row) => row.publicId),
     );
   });
 
@@ -298,7 +300,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
       'Tnope',
     ]);
     expect(found.map((row) => row.publicId).sort()).toEqual(
-      [first!.publicId, second!.publicId].sort()
+      [first!.publicId, second!.publicId].sort(),
     );
 
     // The empty input answers empty. That is the behaviour, not the guard: on
@@ -373,7 +375,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
       status: 'failed',
     });
 
-    const failedOnes = (await findWatchableIntents(suite!.db, ['failed'])).map((row) => row.publicId);
+    const failedOnes = (await findWatchableIntents(suite!.db, ['failed'])).map(
+      (row) => row.publicId,
+    );
     expect(failedOnes).toContain(failedWithTxid!.publicId);
     expect(failedOnes).not.toContain(noTxid!.publicId);
   });
@@ -406,13 +410,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    * passes whether or not the predicate is there: the id is unique, so dropping
    * the merchant term still returns exactly one row, and it is the owner's.
    */
-  it('never returns another merchant\'s intent from the by-id scoped read', async () => {
+  it("never returns another merchant's intent from the by-id scoped read", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
     const created = (await insertPaymentIntent(suite!.db, intentParams(owner.id)))!;
 
     expect((await findIntentByIdForMerchant(suite!.db, created.id, owner.id))?.publicId).toBe(
-      created.publicId
+      created.publicId,
     );
     // A foreign row and a missing one are the same answer, so the caller's 404
     // cannot be told from its other 404 — existence does not leak.
@@ -427,7 +431,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     expect(await findIntentByPublicId(suite!.db, `pi_${uuidv7()}`)).toBeNull();
     // `missing`, not `stale`: the compare-and-swap tells "no such row" apart
     // from "the row moved", and only the first is a 404 to a caller.
-    expect(await updateIntentState(suite!.db, uuidv7(), { from: 'created', status: 'expired' }))
-      .toEqual({ kind: 'missing' });
+    expect(
+      await updateIntentState(suite!.db, uuidv7(), { from: 'created', status: 'expired' }),
+    ).toEqual({ kind: 'missing' });
   });
 });

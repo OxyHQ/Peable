@@ -14,20 +14,20 @@
  * memory (see `readPocketUnspentTotal` for the balance-only equivalent).
  */
 
-import type React from "react";
-import { useCallback, useMemo, useState } from "react";
-import { View, Text } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { toast } from "@oxy.so/bloom/toast";
-import { useWalletStore } from "../../wallet/wallet-store";
-import { MAIN_POCKET_ACCOUNT, canDeletePocket, findPocket } from "../../wallet/pockets";
-import { AmountText, Button, EmptyState, PocketAvatar } from "../components";
-import { TransactionItem } from "../components/TransactionItem";
-import { MovePocketSheet } from "./MovePocketSheet";
-import { PocketFormSheet } from "./PocketFormSheet";
-import { t } from "../../i18n";
+import type React from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { toast } from '@oxy.so/bloom/toast';
+import { useWalletStore } from '../../wallet/wallet-store';
+import { MAIN_POCKET_ACCOUNT, canDeletePocket, findPocket } from '../../wallet/pockets';
+import { AmountText, Button, EmptyState, PocketAvatar } from '../components';
+import { TransactionItem } from '../components/TransactionItem';
+import { MovePocketSheet } from './MovePocketSheet';
+import { PocketFormSheet } from './PocketFormSheet';
+import { t } from '../../i18n';
 
 const CONTENT_MAX_WIDTH = 500;
 /** Most recent activity rows shown before the caller navigates to the full list. */
@@ -37,7 +37,7 @@ const ACTIVITY_LIMIT = 8;
  * color, so the initial fallback is drawn in white (matching the hero's other
  * text) instead of a color that would vanish into its own background.
  */
-const HERO_AVATAR_ACCENT = "#ffffff";
+const HERO_AVATAR_ACCENT = '#ffffff';
 
 function DetailAction({
   icon,
@@ -46,7 +46,7 @@ function DetailAction({
   disabled,
   loading,
 }: {
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   label: string;
   onPress: () => void;
   disabled?: boolean;
@@ -121,31 +121,25 @@ export function PocketDetailSheet({
       await deletePocket(account);
       onDone();
     } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : t("pockets.delete.notEmpty"));
+      toast.error(err instanceof Error ? err.message : t('pockets.delete.notEmpty'));
     }
   }, [account, deletePocket, onDone]);
 
   if (!pocket) {
     return (
       <View className="items-center justify-center py-12">
-        <EmptyState icon="wallet-outline" title={t("pockets.move.noDestinations.title")} />
+        <EmptyState icon="wallet-outline" title={t('pockets.move.noDestinations.title')} />
       </View>
     );
   }
 
-  const label = isMain ? t("pockets.mainName") : pocket.name;
+  const label = isMain ? t('pockets.mainName') : pocket.name;
 
   return (
     <View className="w-full self-center" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
       {/* Color hero */}
-      <View
-        className="rounded-3xl p-5 mb-5"
-        style={{ backgroundColor: pocket.color }}
-      >
-        <PocketAvatar
-          pocket={{ ...pocket, color: HERO_AVATAR_ACCENT }}
-          size={56}
-        />
+      <View className="rounded-3xl p-5 mb-5" style={{ backgroundColor: pocket.color }}>
+        <PocketAvatar pocket={{ ...pocket, color: HERO_AVATAR_ACCENT }} size={56} />
         <Text className="text-white/85 text-xs font-semibold uppercase tracking-wide mt-3.5">
           {label}
         </Text>
@@ -162,19 +156,19 @@ export function PocketDetailSheet({
         {isActive ? (
           <DetailAction
             icon="swap-horizontal"
-            label={t("pockets.detail.move")}
+            label={t('pockets.detail.move')}
             onPress={() => moveControl.open()}
           />
         ) : (
           <>
             <DetailAction
               icon="plus"
-              label={t("pockets.detail.add")}
+              label={t('pockets.detail.add')}
               onPress={() => moveControl.open()}
             />
             <DetailAction
               icon="swap-horizontal-bold"
-              label={t("pockets.detail.switch")}
+              label={t('pockets.detail.switch')}
               onPress={handleSwitch}
               loading={switching}
             />
@@ -182,7 +176,7 @@ export function PocketDetailSheet({
         )}
         <DetailAction
           icon="cog-outline"
-          label={t("pockets.detail.manageAction")}
+          label={t('pockets.detail.manageAction')}
           onPress={() => manageControl.open()}
         />
       </View>
@@ -190,7 +184,7 @@ export function PocketDetailSheet({
       {/* Activity — only meaningful for the active Pocket (see file doc). */}
       <View>
         <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">
-          {t("wallet.activity")}
+          {t('wallet.activity')}
         </Text>
         {isActive ? (
           activity.length > 0 ? (
@@ -210,21 +204,21 @@ export function PocketDetailSheet({
           ) : (
             <EmptyState
               icon="swap-vertical"
-              title={t("wallet.activity.empty.title")}
-              subtitle={t("wallet.activity.empty.subtitle")}
+              title={t('wallet.activity.empty.title')}
+              subtitle={t('wallet.activity.empty.subtitle')}
             />
           )
         ) : (
           <EmptyState
             icon="wallet-outline"
-            title={t("pockets.detail.activityUnavailable.title")}
-            subtitle={t("pockets.detail.activityUnavailable.subtitle")}
+            title={t('pockets.detail.activityUnavailable.title')}
+            subtitle={t('pockets.detail.activityUnavailable.subtitle')}
           />
         )}
       </View>
 
       {/* Move / add funds */}
-      <Dialog control={moveControl} placement="bottom" title={t("pockets.move.title")}>
+      <Dialog control={moveControl} placement="bottom" title={t('pockets.move.title')}>
         <MovePocketSheet
           initialToAccount={isActive ? undefined : account}
           onDone={() => moveControl.close()}
@@ -232,7 +226,7 @@ export function PocketDetailSheet({
       </Dialog>
 
       {/* Edit pocket */}
-      <Dialog control={editControl} placement="bottom" title={t("pockets.edit.title")}>
+      <Dialog control={editControl} placement="bottom" title={t('pockets.edit.title')}>
         <PocketFormSheet target={pocket} onDone={() => editControl.close()} />
       </Dialog>
 
@@ -242,17 +236,17 @@ export function PocketDetailSheet({
         placement="bottom"
         title={label}
         actions={[
-          { label: t("pockets.edit.action"), onPress: () => editControl.open() },
+          { label: t('pockets.edit.action'), onPress: () => editControl.open() },
           ...(canDeletePocket(pockets, account)
             ? [
                 {
-                  label: t("common.delete"),
-                  color: "destructive" as const,
+                  label: t('common.delete'),
+                  color: 'destructive' as const,
                   onPress: () => deleteControl.open(),
                 },
               ]
             : []),
-          { label: t("common.cancel"), color: "cancel" as const },
+          { label: t('common.cancel'), color: 'cancel' as const },
         ]}
       />
 
@@ -260,11 +254,11 @@ export function PocketDetailSheet({
       <Dialog
         control={deleteControl}
         placement="bottom"
-        title={t("pockets.delete.title")}
-        description={t("pockets.delete.description", { name: label })}
+        title={t('pockets.delete.title')}
+        description={t('pockets.delete.description', { name: label })}
         actions={[
-          { label: t("common.delete"), color: "destructive", onPress: handleDeleteConfirm },
-          { label: t("common.cancel"), color: "cancel" },
+          { label: t('common.delete'), color: 'destructive', onPress: handleDeleteConfirm },
+          { label: t('common.cancel'), color: 'cancel' },
         ]}
       />
     </View>

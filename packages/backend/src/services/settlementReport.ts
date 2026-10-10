@@ -35,13 +35,13 @@
  * disagree the first time a write is lost. This reads through, so what a
  * merchant sees is what the provider says right now.
  */
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   isSettlementReportingProvider,
   UNKNOWN_SETTLEMENT,
   type ProviderSettlement,
-} from "./providers/provider";
-import { resolveProvider } from "./providers/registry";
+} from './providers/provider';
+import { resolveProvider } from './providers/registry';
 
 /**
  * What the provider says this payment settled to.
@@ -57,10 +57,8 @@ import { resolveProvider } from "./providers/registry";
  * on a merchant's reconciliation endpoint would leak the deployment's own
  * state without telling them anything they can act on.
  */
-export async function reportSettlement(
-  intent: PaymentIntentRow,
-): Promise<ProviderSettlement> {
-  if (intent.rail !== "card" || !intent.provider) {
+export async function reportSettlement(intent: PaymentIntentRow): Promise<ProviderSettlement> {
+  if (intent.rail !== 'card' || !intent.provider) {
     // The chain rail. Coins arrive at the merchant's own address, this gateway
     // never holds them and takes nothing, so there is no fee to report — and
     // reporting `0` would be a claim about a settlement that does not work that

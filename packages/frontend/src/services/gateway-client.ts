@@ -35,10 +35,10 @@ export async function submitTx(
   clientSecret: string,
   txid: string,
 ): Promise<PaymentIntent> {
-  return gateway.client.post<PaymentIntent>(
-    `/v1/payment_intents/${intentId}/submit_tx`,
-    { client_secret: clientSecret, txid },
-  );
+  return gateway.client.post<PaymentIntent>(`/v1/payment_intents/${intentId}/submit_tx`, {
+    client_secret: clientSecret,
+    txid,
+  });
 }
 
 /**
@@ -56,8 +56,12 @@ export class KeylessRecipientError extends Error {
 }
 
 function hasStatus(error: unknown): error is { status: number } {
-  return typeof error === 'object' && error !== null && 'status' in error &&
-    typeof (error as { status: unknown }).status === 'number';
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'status' in error &&
+    typeof (error as { status: unknown }).status === 'number'
+  );
 }
 
 /**
@@ -140,9 +144,7 @@ export async function getSocialReceiveCursor(
  * `GET /v1/social/me/cursor`; see that function for why unwrapping again would
  * yield `undefined`.
  */
-export async function getMyPayments(
-  network: NetworkType,
-): Promise<SocialPaymentsResponse> {
+export async function getMyPayments(network: NetworkType): Promise<SocialPaymentsResponse> {
   return gateway.client.get<SocialPaymentsResponse>('/v1/social/me/payments', {
     params: { network },
   });

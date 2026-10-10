@@ -11,28 +11,28 @@
  * status frozen at whatever it was when the screen was last open.
  */
 
-import { useCallback, useState } from "react";
-import { View, Text, Pressable } from "react-native";
-import { useFocusEffect, useRouter } from "expo-router";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { getDatabase } from "../../wallet/wallet-store";
+import { useCallback, useState } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { getDatabase } from '../../wallet/wallet-store';
 import {
   listBuyOrders,
   needsStatusRefresh,
   updateBuyOrderStatus,
   type BuyHistoryEntry,
-} from "../../wallet/buy-history";
-import { getBuyStatus } from "../../api/buy";
-import type { BuyOrderStatus } from "../../api/buy";
-import { formatFairAmount, t } from "../../i18n";
+} from '../../wallet/buy-history';
+import { getBuyStatus } from '../../api/buy';
+import type { BuyOrderStatus } from '../../api/buy';
+import { formatFairAmount, t } from '../../i18n';
 
 /** How many orders to keep on screen. Older ones stay in the database. */
 const VISIBLE_ORDERS = 5;
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-type ThemeColors = ReturnType<typeof useTheme>["colors"];
+type ThemeColors = ReturnType<typeof useTheme>['colors'];
 
 /** Icon and colour for a status, resolved straight from the theme. */
 function statusStyle(
@@ -40,16 +40,16 @@ function statusStyle(
   colors: ThemeColors,
 ): { icon: IconName; color: string } {
   switch (status) {
-    case "DELIVERED":
-      return { icon: "check-circle", color: colors.primary };
-    case "FAILED":
-      return { icon: "alert-circle", color: colors.error };
-    case "EXPIRED":
-    case "AWAITING_PAYMENT":
-      return { icon: "clock-outline", color: colors.textSecondary };
+    case 'DELIVERED':
+      return { icon: 'check-circle', color: colors.primary };
+    case 'FAILED':
+      return { icon: 'alert-circle', color: colors.error };
+    case 'EXPIRED':
+    case 'AWAITING_PAYMENT':
+      return { icon: 'clock-outline', color: colors.textSecondary };
     default:
       // PAYMENT_DETECTED / SWAPPING / BURNING / DELIVERING — money is moving.
-      return { icon: "progress-clock", color: colors.tint };
+      return { icon: 'progress-clock', color: colors.tint };
   }
 }
 
@@ -105,7 +105,7 @@ export function BuyHistoryList() {
   return (
     <View className="mt-8">
       <Text className="text-muted-foreground text-xs font-semibold uppercase tracking-wider mb-1">
-        {t("buy.history.title")}
+        {t('buy.history.title')}
       </Text>
 
       {orders.map((order, index) => {
@@ -115,23 +115,23 @@ export function BuyHistoryList() {
             key={order.id}
             onPress={() =>
               router.push({
-                pathname: "/buy/quote",
+                pathname: '/buy/quote',
                 params: { orderId: order.id },
               })
             }
             accessibilityRole="button"
-            accessibilityLabel={t("buy.history.openOrder", {
+            accessibilityLabel={t('buy.history.openOrder', {
               amount: formatFairAmount(order.fairAmountSats),
             })}
             className={`flex-row items-center py-3.5 active:opacity-70 ${
-              index === orders.length - 1 ? "" : "border-b border-border"
+              index === orders.length - 1 ? '' : 'border-b border-border'
             }`}
           >
             <MaterialCommunityIcons name={icon} size={22} color={color} />
 
             <View className="flex-1 ml-3">
               <Text className="text-foreground text-[15px] font-medium">
-                {t("buy.history.amount", {
+                {t('buy.history.amount', {
                   amount: formatFairAmount(order.fairAmountSats),
                 })}
               </Text>

@@ -3,19 +3,15 @@
  * Use for grouping related content (settings sections, list groups, etc.).
  */
 
-import { View } from "react-native";
+import { View } from 'react-native';
 
 interface CardProps {
   children: React.ReactNode;
   className?: string;
 }
 
-export function Card({ children, className = "" }: CardProps) {
+export function Card({ children, className = '' }: CardProps) {
   return (
-    <View
-      className={`bg-surface rounded-2xl overflow-hidden ${className}`.trim()}
-    >
-      {children}
-    </View>
+    <View className={`bg-surface rounded-2xl overflow-hidden ${className}`.trim()}>{children}</View>
   );
 }

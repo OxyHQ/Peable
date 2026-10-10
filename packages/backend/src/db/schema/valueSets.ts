@@ -33,10 +33,7 @@ type AssertAllListed<TUnion extends TListed, TListed> = true;
 
 /** FairCoin networks. */
 export const NETWORK_TYPES = ['mainnet', 'testnet'] as const satisfies readonly NetworkType[];
-export type NetworkTypesAreComplete = AssertAllListed<
-  NetworkType,
-  (typeof NETWORK_TYPES)[number]
->;
+export type NetworkTypesAreComplete = AssertAllListed<NetworkType, (typeof NETWORK_TYPES)[number]>;
 
 /** Oxy service-token environments — test/live isolation, re-exported so the CHECK reads from the SDK's own tuple. */
 export const SERVICE_ENVIRONMENTS = OXY_SERVICE_ENVIRONMENTS;
@@ -86,20 +83,14 @@ export type PaymentIntentStatusesAreComplete = AssertAllListed<
  * compile error instead.
  */
 export const PROVIDER_IDS = ['stripe'] as const;
-export type ProvidersAreComplete = AssertAllListed<
-  ProviderId,
-  (typeof PROVIDER_IDS)[number]
->;
+export type ProvidersAreComplete = AssertAllListed<ProviderId, (typeof PROVIDER_IDS)[number]>;
 
 /**
  * Which rail moves a payment (ADR 0001 D1). The discriminator every
  * rail-conditional CHECK in `schema/payments.ts` reads.
  */
 export const RAIL_VALUES = ['faircoin', 'card'] as const satisfies readonly PaymentIntentRail[];
-export type RailsAreComplete = AssertAllListed<
-  PaymentIntentRail,
-  (typeof RAIL_VALUES)[number]
->;
+export type RailsAreComplete = AssertAllListed<PaymentIntentRail, (typeof RAIL_VALUES)[number]>;
 
 /**
  * The statuses only the FairCoin rail can reach, and the statuses only the card
@@ -202,12 +193,7 @@ export const TRANSFER_REVERSAL_STATUSES = ['pending', 'succeeded', 'failed'] as 
  * default: a dispute nobody has classified is one somebody has to act on, and
  * that is the safe direction to be wrong in.
  */
-export const DISPUTE_STATUSES = [
-  'needs_response',
-  'under_review',
-  'won',
-  'lost',
-] as const;
+export const DISPUTE_STATUSES = ['needs_response', 'under_review', 'won', 'lost'] as const;
 export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
 
 /**
@@ -263,9 +249,7 @@ export type WebhookEventTypesAreComplete = AssertAllListed<
 >;
 
 /** Stripe-parity dotted webhook event types. */
-export const WEBHOOK_EVENT_TYPES = Object.keys(
-  WEBHOOK_EVENT_SCOPES
-) as readonly WebhookEventType[];
+export const WEBHOOK_EVENT_TYPES = Object.keys(WEBHOOK_EVENT_SCOPES) as readonly WebhookEventType[];
 
 /**
  * The events whose delivery names a payment — the CHECK's own list.
@@ -275,7 +259,7 @@ export const WEBHOOK_EVENT_TYPES = Object.keys(
  * name does not.
  */
 export const INTENT_WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_TYPES.filter(
-  (type) => WEBHOOK_EVENT_SCOPES[type] === 'intent'
+  (type) => WEBHOOK_EVENT_SCOPES[type] === 'intent',
 );
 
 /**

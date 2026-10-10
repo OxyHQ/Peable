@@ -1,5 +1,5 @@
-import { EXPLORER_BASE_URL as DEFAULT_EXPLORER_BASE_URL } from "@fairco.in/core";
-import type { NetworkType } from "@fairco.in/core";
+import { EXPLORER_BASE_URL as DEFAULT_EXPLORER_BASE_URL } from '@fairco.in/core';
+import type { NetworkType } from '@fairco.in/core';
 
 /**
  * Typed environment reader for the Peable Gateway backend.
@@ -11,12 +11,12 @@ import type { NetworkType } from "@fairco.in/core";
  */
 
 const DEFAULT_PORT = 3001;
-const DEFAULT_NETWORK: NetworkType = "mainnet";
+const DEFAULT_NETWORK: NetworkType = 'mainnet';
 // The hosted checkout page's host (F2.2/F2.3) — see `2026-07-19-fase2-checkout-links.md`.
-const DEFAULT_CHECKOUT_BASE_URL = "https://checkout.peable.to";
+const DEFAULT_CHECKOUT_BASE_URL = 'https://checkout.peable.to';
 // Oxy's API. The `oxy` client (`src/oxy.ts`) is built from `config.oxyApiUrl`,
 // so it and the direct fetches in `services/appMembership.ts` never drift.
-const DEFAULT_OXY_API_URL = "https://api.oxy.so";
+const DEFAULT_OXY_API_URL = 'https://api.oxy.so';
 
 export interface AppConfig {
   /** Base URL of the FairCoin block explorer (no trailing slash). */
@@ -160,7 +160,7 @@ export interface StripeConfig {
 }
 
 /** How a Stripe secret key names its own mode. */
-export type StripeKeyMode = "live" | "test" | "unknown";
+export type StripeKeyMode = 'live' | 'test' | 'unknown';
 
 /**
  * Classify a Stripe secret key.
@@ -172,31 +172,29 @@ export type StripeKeyMode = "live" | "test" | "unknown";
  * `includes('live')` — `sk_test_live_something` is a legal random suffix.
  */
 export function classifyStripeKey(secretKey: string | undefined): StripeKeyMode {
-  if (secretKey === undefined) return "unknown";
-  if (secretKey.startsWith("sk_live_") || secretKey.startsWith("rk_live_")) return "live";
-  if (secretKey.startsWith("sk_test_") || secretKey.startsWith("rk_test_")) return "test";
-  return "unknown";
+  if (secretKey === undefined) return 'unknown';
+  if (secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')) return 'live';
+  if (secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_')) return 'test';
+  return 'unknown';
 }
 
 function readOrigins(raw: string | undefined): string[] {
   if (raw === undefined) return [];
   return raw
-    .split(",")
+    .split(',')
     .map((origin) => origin.trim())
-    .filter((origin) => origin !== "");
+    .filter((origin) => origin !== '');
 }
 
 function readNetwork(raw: string | undefined): NetworkType {
-  if (raw === undefined || raw.trim() === "") return DEFAULT_NETWORK;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_NETWORK;
   const value = raw.trim();
-  if (value === "mainnet" || value === "testnet") return value;
-  throw new Error(
-    `PEABLE_NETWORK must be "mainnet" or "testnet", received "${raw}"`,
-  );
+  if (value === 'mainnet' || value === 'testnet') return value;
+  throw new Error(`PEABLE_NETWORK must be "mainnet" or "testnet", received "${raw}"`);
 }
 
 function readPort(raw: string | undefined): number {
-  if (raw === undefined || raw.trim() === "") return DEFAULT_PORT;
+  if (raw === undefined || raw.trim() === '') return DEFAULT_PORT;
   const value = Number(raw);
   if (!Number.isInteger(value) || value <= 0) {
     throw new Error(`PORT must be a positive integer, received "${raw}"`);
@@ -207,13 +205,13 @@ function readPort(raw: string | undefined): number {
 function readNonEmpty(raw: string | undefined, fallback: string): string {
   if (raw === undefined) return fallback;
   const value = raw.trim();
-  return value === "" ? fallback : value;
+  return value === '' ? fallback : value;
 }
 
 function readOptional(raw: string | undefined): string | undefined {
   if (raw === undefined) return undefined;
   const value = raw.trim();
-  return value === "" ? undefined : value;
+  return value === '' ? undefined : value;
 }
 
 /**
@@ -235,18 +233,18 @@ function readOptional(raw: string | undefined): string | undefined {
  * configuration.
  */
 function resolveStripeEnabled(env: Record<string, string | undefined>): boolean {
-  const asked = readOptional(env.STRIPE_ENABLED) === "true";
+  const asked = readOptional(env.STRIPE_ENABLED) === 'true';
   if (!asked) return false;
   const required = [
-    ["STRIPE_SECRET_KEY", readOptional(env.STRIPE_SECRET_KEY)],
-    ["STRIPE_WEBHOOK_SECRET", readOptional(env.STRIPE_WEBHOOK_SECRET)],
-    ["STRIPE_CONNECT_WEBHOOK_SECRET", readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET)],
+    ['STRIPE_SECRET_KEY', readOptional(env.STRIPE_SECRET_KEY)],
+    ['STRIPE_WEBHOOK_SECRET', readOptional(env.STRIPE_WEBHOOK_SECRET)],
+    ['STRIPE_CONNECT_WEBHOOK_SECRET', readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET)],
   ] as const;
   const missing = required.filter(([, value]) => value === undefined).map(([name]) => name);
   if (missing.length > 0) {
     // Once, at boot, naming what is missing. Not per request, and not silent.
     process.emitWarning(
-      `[Stripe] STRIPE_ENABLED is set but the integration is incomplete; staying OFF. Missing: ${missing.join(", ")}`,
+      `[Stripe] STRIPE_ENABLED is set but the integration is incomplete; staying OFF. Missing: ${missing.join(', ')}`,
     );
     return false;
   }
@@ -255,10 +253,10 @@ function resolveStripeEnabled(env: Record<string, string | undefined>): boolean 
   // before every provider call — is derived from the classification, so a rail
   // turned on with an unclassifiable key would run with both of them answering
   // from a guess.
-  if (classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === "unknown") {
+  if (classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === 'unknown') {
     process.emitWarning(
-      "[Stripe] STRIPE_SECRET_KEY is not a recognised sk_live_/rk_live_/sk_test_/rk_test_ " +
-        "key, so its mode cannot be classified; staying OFF rather than guessing.",
+      '[Stripe] STRIPE_SECRET_KEY is not a recognised sk_live_/rk_live_/sk_test_/rk_test_ ' +
+        'key, so its mode cannot be classified; staying OFF rather than guessing.',
     );
     return false;
   }
@@ -270,30 +268,27 @@ function readRequired(raw: string | undefined, name: string): string {
   if (!value) {
     throw new Error(
       `${name} is required and was not set. The backend is Postgres-native: ` +
-        "every route reads it and the pool is opened at boot. For local " +
-        "development start the server with " +
-        "`docker compose -f docker-compose.postgres.yml up -d`.",
+        'every route reads it and the pool is opened at boot. For local ' +
+        'development start the server with ' +
+        '`docker compose -f docker-compose.postgres.yml up -d`.',
     );
   }
   return value;
 }
 
-export function loadConfig(
-  env: Record<string, string | undefined> = process.env,
-): AppConfig {
+export function loadConfig(env: Record<string, string | undefined> = process.env): AppConfig {
   return {
-    explorerBaseUrl: readNonEmpty(
-      env.EXPLORER_BASE_URL,
-      DEFAULT_EXPLORER_BASE_URL,
-    ),
+    explorerBaseUrl: readNonEmpty(env.EXPLORER_BASE_URL, DEFAULT_EXPLORER_BASE_URL),
     network: readNetwork(env.PEABLE_NETWORK),
-    socialPayNetwork: readNetwork(env.PEABLE_SOCIAL_PAY_NETWORK ?? "testnet"),
-    databaseUrl: readRequired(env.DATABASE_URL, "DATABASE_URL"),
+    socialPayNetwork: readNetwork(env.PEABLE_SOCIAL_PAY_NETWORK ?? 'testnet'),
+    databaseUrl: readRequired(env.DATABASE_URL, 'DATABASE_URL'),
     port: readPort(env.PORT),
     allowedOrigins: readOrigins(env.PEABLE_ALLOWED_ORIGINS),
     checkoutBaseUrl: readNonEmpty(env.PEABLE_CHECKOUT_BASE_URL, DEFAULT_CHECKOUT_BASE_URL),
     oxyApiUrl: readNonEmpty(env.OXY_API_URL, DEFAULT_OXY_API_URL),
-    ...(readOptional(env.PEABLE_BILLING_COHORT) ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) } : {}),
+    ...(readOptional(env.PEABLE_BILLING_COHORT)
+      ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) }
+      : {}),
     stripe: {
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
@@ -307,7 +302,7 @@ export function loadConfig(
       // rather than a `sk_live_` prefix test — a restricted live key
       // (`rk_live_…`) is a live key, and reading it as test drops every live
       // webhook while clearing a development credential to charge live cards.
-      livemode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === "live",
+      livemode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === 'live',
       keyMode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)),
     },
   };

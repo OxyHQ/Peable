@@ -77,13 +77,12 @@ describe('closed value sets', () => {
    * split, which is the thing the CHECK depends on.
    */
   it('splits into payment events and the ones that are not about a payment', () => {
-    const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) =>
-      type.startsWith('payment_intent.')
-    );
+    const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) => type.startsWith('payment_intent.'));
     expect(aboutPayments).toHaveLength(9);
-    expect(
-      WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))
-    ).toEqual(['billing.observation.updated', 'connected_account.updated']);
+    expect(WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))).toEqual([
+      'billing.observation.updated',
+      'connected_account.updated',
+    ]);
   });
 });
 
@@ -144,7 +143,7 @@ describe('the base-unit amount pattern', () => {
       .map((file) => readFileSync(join(migrationsDir, file), 'utf8'))
       .reduce(
         (total, contents) => total + contents.split(`~ '${BASE_UNIT_STRING_PATTERN}'`).length - 1,
-        0
+        0,
       );
     // One per money-carrying COLUMN, which is not one per table:
     // payment_intents, checkout_sessions, payment_links, refunds, disputes and

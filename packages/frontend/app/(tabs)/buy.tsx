@@ -19,38 +19,33 @@
  * safe inset without any absolute positioning or bottom-padding hacks.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import { ScrollView, Text, View } from "react-native";
-import { Redirect, useRouter } from "expo-router";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { parseFairToUnits } from "@fairco.in/core";
-import { Button, EmptyState, ScreenHeader } from "../../src/ui/components";
-import { SafeAreaView } from "../../src/ui/safe-area-view";
-import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
-import { BuyAmountInput } from "../../src/components/buy/AmountInput";
+import { useCallback, useMemo, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
+import { Redirect, useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { parseFairToUnits } from '@fairco.in/core';
+import { Button, EmptyState, ScreenHeader } from '../../src/ui/components';
+import { SafeAreaView } from '../../src/ui/safe-area-view';
+import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
+import { BuyAmountInput } from '../../src/components/buy/AmountInput';
 import {
   PaymentMethodPicker,
   type PaymentMethodOption,
-} from "../../src/components/buy/PaymentMethodPicker";
-import {
-  BuyApiError,
-  requestBuyQuote,
-  type PaymentCurrency,
-} from "../../src/api/buy";
-import { useWalletStore, getDatabase } from "../../src/wallet/wallet-store";
-import { useWalletCapability } from "../../src/wallet/use-wallet-capability";
-import { recordBuyOrder } from "../../src/wallet/buy-history";
-import { BuyHistoryList } from "../../src/ui/components/BuyHistoryList";
-import { useLanguageStore } from "../../src/i18n/store";
-import { t } from "../../src/i18n";
+} from '../../src/components/buy/PaymentMethodPicker';
+import { BuyApiError, requestBuyQuote, type PaymentCurrency } from '../../src/api/buy';
+import { useWalletStore, getDatabase } from '../../src/wallet/wallet-store';
+import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
+import { recordBuyOrder } from '../../src/wallet/buy-history';
+import { BuyHistoryList } from '../../src/ui/components/BuyHistoryList';
+import { useLanguageStore } from '../../src/i18n/store';
+import { t } from '../../src/i18n';
 
 const CONTENT_MAX_WIDTH = 600;
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
-const PRESETS = ["10", "50", "100", "500"] as const;
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
+const PRESETS = ['10', '50', '100', '500'] as const;
 
 /**
  * Build the payment-method list at render time so the labels reflect the
@@ -64,38 +59,38 @@ const PRESETS = ["10", "50", "100", "500"] as const;
 function buildPaymentOptions(): readonly PaymentMethodOption[] {
   return [
     {
-      currency: "USDC_BASE",
-      label: t("buy.payment.usdcBase.label"),
-      description: t("buy.payment.usdcBase.description"),
-      icon: "currency-usd",
+      currency: 'USDC_BASE',
+      label: t('buy.payment.usdcBase.label'),
+      description: t('buy.payment.usdcBase.description'),
+      icon: 'currency-usd',
       recommended: true,
     },
     {
-      currency: "ETH_BASE",
-      label: t("buy.payment.ethBase.label"),
-      description: t("buy.payment.ethBase.description"),
-      icon: "ethereum",
+      currency: 'ETH_BASE',
+      label: t('buy.payment.ethBase.label'),
+      description: t('buy.payment.ethBase.description'),
+      icon: 'ethereum',
       comingSoon: true,
     },
     {
-      currency: "ETH_MAINNET",
-      label: t("buy.payment.ethMainnet.label"),
-      description: t("buy.payment.ethMainnet.description"),
-      icon: "ethereum",
+      currency: 'ETH_MAINNET',
+      label: t('buy.payment.ethMainnet.label'),
+      description: t('buy.payment.ethMainnet.description'),
+      icon: 'ethereum',
       comingSoon: true,
     },
     {
-      currency: "BTC",
-      label: t("buy.payment.btc.label"),
-      description: t("buy.payment.btc.description"),
-      icon: "bitcoin",
+      currency: 'BTC',
+      label: t('buy.payment.btc.label'),
+      description: t('buy.payment.btc.description'),
+      icon: 'bitcoin',
       comingSoon: true,
     },
     {
-      currency: "CARD",
-      label: t("buy.payment.card.label"),
-      description: t("buy.payment.card.description"),
-      icon: "credit-card-outline",
+      currency: 'CARD',
+      label: t('buy.payment.card.label'),
+      description: t('buy.payment.card.description'),
+      icon: 'credit-card-outline',
       comingSoon: true,
     },
   ];
@@ -110,7 +105,7 @@ export default function BuyScreen() {
   // Hidden from a read-only host's rail; this catches a typed or linked URL.
   // `/(tabs)` is inside the same shell, so it cannot bounce back here.
   // Buy delivers to an address derived from the wallet, which needs a key.
-  if (useWalletCapability() === "read-only") return <Redirect href="/(tabs)" />;
+  if (useWalletCapability() === 'read-only') return <Redirect href="/(tabs)" />;
   return <BuyForm />;
 }
 
@@ -122,9 +117,8 @@ function BuyForm() {
   const activeWalletId = useWalletStore((s) => s.activeWalletId);
   const getBuyDeliveryAddress = useWalletStore((s) => s.getBuyDeliveryAddress);
 
-  const [amount, setAmount] = useState("");
-  const [paymentCurrency, setPaymentCurrency] =
-    useState<PaymentCurrency>("USDC_BASE");
+  const [amount, setAmount] = useState('');
+  const [paymentCurrency, setPaymentCurrency] = useState<PaymentCurrency>('USDC_BASE');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -132,19 +126,16 @@ function BuyForm() {
   // and descriptions stay localised at runtime (N-8).
   const language = useLanguageStore((s) => s.language);
   // The translation function reads the store-backed locale outside React.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the translation function reads the store-backed locale outside React, so `language` is the re-derive key
   const paymentOptions = useMemo(() => buildPaymentOptions(), [language]);
 
   const amountSats = useMemo(() => parseFairToUnits(amount), [amount]);
   const canSubmit =
-    amountSats !== null &&
-    amountSats > 0n &&
-    !submitting &&
-    activeWalletId !== null;
+    amountSats !== null && amountSats > 0n && !submitting && activeWalletId !== null;
 
   const handleSubmit = useCallback(async () => {
     if (!activeWalletId) {
-      setError(t("buy.error.watchOnly"));
+      setError(t('buy.error.watchOnly'));
       return;
     }
     if (amountSats === null || amountSats <= 0n) return;
@@ -173,27 +164,27 @@ function BuyForm() {
           paymentCurrency: quote.paymentCurrency,
           paymentAmountFormatted: quote.paymentAmountFormatted,
           paymentSymbol: quote.paymentSymbol,
-          status: "AWAITING_PAYMENT",
+          status: 'AWAITING_PAYMENT',
           createdAt: Math.floor(Date.now() / 1000),
         });
       }
 
       router.push({
-        pathname: "/buy/quote",
+        pathname: '/buy/quote',
         params: { orderId: quote.id },
       });
     } catch (err: unknown) {
       if (err instanceof BuyApiError) {
-        if (err.code === "below_minimum") {
-          setError(t("buy.error.belowMinimum", { min: "1" }));
-        } else if (err.code === "above_maximum") {
-          setError(t("buy.error.aboveMaximum", { max: "1000" }));
-        } else if (err.code === "card_not_configured") {
-          setError(t("buy.error.cardNotConfigured"));
-        } else if (err.code === "pool_quote_failed") {
-          setError(t("buy.error.poolUnavailable"));
-        } else if (err.code === "currency_unavailable") {
-          setError(t("buy.error.currencyUnavailable"));
+        if (err.code === 'below_minimum') {
+          setError(t('buy.error.belowMinimum', { min: '1' }));
+        } else if (err.code === 'above_maximum') {
+          setError(t('buy.error.aboveMaximum', { max: '1000' }));
+        } else if (err.code === 'card_not_configured') {
+          setError(t('buy.error.cardNotConfigured'));
+        } else if (err.code === 'pool_quote_failed') {
+          setError(t('buy.error.poolUnavailable'));
+        } else if (err.code === 'currency_unavailable') {
+          setError(t('buy.error.currencyUnavailable'));
         } else if (err.status >= 500) {
           // A server-side fault. Its `message` is written for whoever operates
           // the bridge, not for the person holding the phone — the live service
@@ -201,49 +192,32 @@ function BuyForm() {
           // for buy flow", which tells a user nothing and leaks how the bridge
           // is built. Only client-side (4xx) messages, which describe something
           // the user can actually change, are shown verbatim below.
-          setError(t("buy.error.unavailable"));
+          setError(t('buy.error.unavailable'));
         } else {
-          setError(t("buy.error.generic", { message: err.message }));
+          setError(t('buy.error.generic', { message: err.message }));
         }
       } else if (err instanceof Error) {
-        setError(t("buy.error.generic", { message: err.message }));
+        setError(t('buy.error.generic', { message: err.message }));
       } else {
-        setError(t("buy.error.network"));
+        setError(t('buy.error.network'));
       }
     } finally {
       setSubmitting(false);
     }
-  }, [
-    activeWalletId,
-    amount,
-    amountSats,
-    getBuyDeliveryAddress,
-    paymentCurrency,
-    router,
-  ]);
+  }, [activeWalletId, amount, amountSats, getBuyDeliveryAddress, paymentCurrency, router]);
 
   if (isWatchOnly) {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
-        <ScreenHeader title={t("buy.title")} />
-        <EmptyState
-          icon="lock"
-          title={t("buy.title")}
-          subtitle={t("buy.error.watchOnly")}
-        />
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+        <ScreenHeader title={t('buy.title')} />
+        <EmptyState icon="lock" title={t('buy.title')} subtitle={t('buy.error.watchOnly')} />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "left", "right"]}
-    >
-      <ScreenHeader title={t("buy.title")} subtitle={t("buy.subtitle")} />
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'left', 'right']}>
+      <ScreenHeader title={t('buy.title')} subtitle={t('buy.subtitle')} />
 
       <ScrollView
         className="flex-1"
@@ -251,20 +225,13 @@ function BuyForm() {
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        <View
-          className="w-full self-center gap-6"
-          style={{ maxWidth: CONTENT_MAX_WIDTH }}
-        >
+        <View className="w-full self-center gap-6" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
           {/* Amount — card-less hero (glyph + Phudu, like the home balance) */}
-          <BuyAmountInput
-            value={amount}
-            onValueChange={setAmount}
-            presets={PRESETS}
-          />
+          <BuyAmountInput value={amount} onValueChange={setAmount} presets={PRESETS} />
 
           {/* Payment method */}
           <View className="gap-2">
-            <Text className={SECTION_LABEL}>{t("buy.method.label")}</Text>
+            <Text className={SECTION_LABEL}>{t('buy.method.label')}</Text>
             <PaymentMethodPicker
               options={paymentOptions}
               value={paymentCurrency}
@@ -276,20 +243,13 @@ function BuyForm() {
           {activeWalletId ? (
             <View className="flex-row items-center gap-3 bg-surface rounded-2xl p-3.5">
               <View className="w-9 h-9 rounded-full bg-primary/10 items-center justify-center">
-                <MaterialCommunityIcons
-                  name="wallet"
-                  size={18}
-                  color={theme.colors.primary}
-                />
+                <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.primary} />
               </View>
               <View className="flex-1">
                 <Text className="text-muted-foreground text-[10px] font-semibold uppercase tracking-wider">
-                  {t("buy.deliveryTo")}
+                  {t('buy.deliveryTo')}
                 </Text>
-                <Text
-                  className="text-foreground text-sm font-semibold"
-                  numberOfLines={1}
-                >
+                <Text className="text-foreground text-sm font-semibold" numberOfLines={1}>
                   {truncateMid(activeWalletId, 6, 6)}
                 </Text>
               </View>
@@ -304,16 +264,12 @@ function BuyForm() {
               color={theme.colors.textSecondary}
               style={{ marginTop: 2 }}
             />
-            <Text className="text-[11px] text-muted-foreground flex-1">
-              {t("buy.disclosure")}
-            </Text>
+            <Text className="text-[11px] text-muted-foreground flex-1">{t('buy.disclosure')}</Text>
           </View>
 
           {error ? (
             <View className="bg-destructive/10 rounded-2xl p-3.5">
-              <Text className="text-destructive text-sm text-center">
-                {error}
-              </Text>
+              <Text className="text-destructive text-sm text-center">{error}</Text>
             </View>
           ) : null}
 
@@ -335,7 +291,7 @@ function BuyForm() {
           style={{ maxWidth: CONTENT_MAX_WIDTH, paddingBottom: bottomInset + 12 }}
         >
           <Button
-            title={t("buy.cta.getInstructions")}
+            title={t('buy.cta.getInstructions')}
             onPress={handleSubmit}
             variant="primary"
             size="lg"

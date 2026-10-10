@@ -65,12 +65,42 @@ export interface PaidPayment {
 }
 
 export type PayState =
-  | { readonly step: 'amount'; readonly attempt: number; readonly input: string; readonly entry: AmountEntry }
-  | { readonly step: 'preparing'; readonly attempt: number; readonly input: string; readonly amountSat: bigint }
-  | { readonly step: 'review'; readonly attempt: number; readonly input: string; readonly reviewed: ReviewedPayment }
-  | { readonly step: 'handoff'; readonly attempt: number; readonly input: string; readonly offer: HandoffOffer }
-  | { readonly step: 'sending'; readonly attempt: number; readonly input: string; readonly reviewed: ReviewedPayment }
-  | { readonly step: 'paid'; readonly attempt: number; readonly input: string; readonly paid: PaidPayment }
+  | {
+      readonly step: 'amount';
+      readonly attempt: number;
+      readonly input: string;
+      readonly entry: AmountEntry;
+    }
+  | {
+      readonly step: 'preparing';
+      readonly attempt: number;
+      readonly input: string;
+      readonly amountSat: bigint;
+    }
+  | {
+      readonly step: 'review';
+      readonly attempt: number;
+      readonly input: string;
+      readonly reviewed: ReviewedPayment;
+    }
+  | {
+      readonly step: 'handoff';
+      readonly attempt: number;
+      readonly input: string;
+      readonly offer: HandoffOffer;
+    }
+  | {
+      readonly step: 'sending';
+      readonly attempt: number;
+      readonly input: string;
+      readonly reviewed: ReviewedPayment;
+    }
+  | {
+      readonly step: 'paid';
+      readonly attempt: number;
+      readonly input: string;
+      readonly paid: PaidPayment;
+    }
   | {
       readonly step: 'failed';
       readonly attempt: number;
@@ -133,7 +163,12 @@ export function payReducer(state: PayState, event: PayEvent): PayState {
 
     case 'prepared':
       if (state.step !== 'preparing' || event.attempt !== state.attempt) return state;
-      return { step: 'review', attempt: state.attempt, input: state.input, reviewed: event.reviewed };
+      return {
+        step: 'review',
+        attempt: state.attempt,
+        input: state.input,
+        reviewed: event.reviewed,
+      };
 
     case 'handoff':
       if (state.step !== 'preparing' || event.attempt !== state.attempt) return state;

@@ -18,14 +18,10 @@
  *     `onReady` is fired exactly once.
  */
 
-import { describe, test, expect } from "bun:test";
-import { Peer, type SocketConnection, type SocketProvider } from "./peer";
-import {
-  buildMessage,
-  serializeVersion,
-  type VersionPayload,
-} from "./messages";
-import { getNetwork } from "@fairco.in/core";
+import { describe, test, expect } from 'bun:test';
+import { Peer, type SocketConnection, type SocketProvider } from './peer';
+import { buildMessage, serializeVersion, type VersionPayload } from './messages';
+import { getNetwork } from '@fairco.in/core';
 
 const NODE_NETWORK = 1n;
 const NODE_BLOOM = 1n << 2n;
@@ -84,10 +80,7 @@ class FakeSocketProvider implements SocketProvider {
   }
 }
 
-function makeVersionFrame(
-  network: ReturnType<typeof getNetwork>,
-  services: bigint,
-): Uint8Array {
+function makeVersionFrame(network: ReturnType<typeof getNetwork>, services: bigint): Uint8Array {
   const payload: VersionPayload = {
     version: network.protocolVersion,
     services,
@@ -95,23 +88,15 @@ function makeVersionFrame(
     addrRecv: { services, ip: new Uint8Array(16), port: 0 },
     addrFrom: { services, ip: new Uint8Array(16), port: 0 },
     nonce: 0x1234_5678_9abc_def0n,
-    userAgent: "/FakePeer:0.0.1/",
+    userAgent: '/FakePeer:0.0.1/',
     startHeight: 100,
     relay: true,
   };
-  return buildMessage(
-    "version",
-    serializeVersion(payload),
-    new Uint8Array(network.magicBytes),
-  );
+  return buildMessage('version', serializeVersion(payload), new Uint8Array(network.magicBytes));
 }
 
 function makeVerackFrame(network: ReturnType<typeof getNetwork>): Uint8Array {
-  return buildMessage(
-    "verack",
-    new Uint8Array(0),
-    new Uint8Array(network.magicBytes),
-  );
+  return buildMessage('verack', new Uint8Array(0), new Uint8Array(network.magicBytes));
 }
 
 interface DriveResult {
@@ -121,13 +106,13 @@ interface DriveResult {
 }
 
 function driveHandshake(remoteServices: bigint): DriveResult {
-  const network = getNetwork("mainnet");
+  const network = getNetwork('mainnet');
   const provider = new FakeSocketProvider();
   let readyCount = 0;
   const disconnectReasons: string[] = [];
 
   const peer = new Peer(
-    { host: "10.0.0.1", port: network.p2pPort, network },
+    { host: '10.0.0.1', port: network.p2pPort, network },
     {
       onReady: () => {
         readyCount++;
@@ -156,29 +141,25 @@ function driveHandshake(remoteServices: bigint): DriveResult {
   return { readyCount, disconnectReasons, socket: sock };
 }
 
-describe("NB-1: NODE_BLOOM gate on the version handshake", () => {
-  test("peer advertising only NODE_NETWORK is disconnected, never reaches ready", () => {
-    const { readyCount, disconnectReasons, socket } = driveHandshake(
-      NODE_NETWORK,
-    );
+describe('NB-1: NODE_BLOOM gate on the version handshake', () => {
+  test('peer advertising only NODE_NETWORK is disconnected, never reaches ready', () => {
+    const { readyCount, disconnectReasons, socket } = driveHandshake(NODE_NETWORK);
     expect(readyCount).toBe(0);
     expect(disconnectReasons.length).toBeGreaterThan(0);
-    expect(disconnectReasons[0]).toContain("NODE_BLOOM");
+    expect(disconnectReasons[0]).toContain('NODE_BLOOM');
     // The socket must be torn down so no further bytes leak through.
     expect(socket.destroyed).toBe(true);
   });
 
-  test("peer advertising NODE_NETWORK + NODE_BLOOM transitions to ready", () => {
-    const { readyCount, disconnectReasons } = driveHandshake(
-      NODE_NETWORK | NODE_BLOOM,
-    );
+  test('peer advertising NODE_NETWORK + NODE_BLOOM transitions to ready', () => {
+    const { readyCount, disconnectReasons } = driveHandshake(NODE_NETWORK | NODE_BLOOM);
     expect(readyCount).toBe(1);
     expect(disconnectReasons).toEqual([]);
   });
 
-  test("peer advertising no services at all is disconnected", () => {
+  test('peer advertising no services at all is disconnected', () => {
     const { readyCount, disconnectReasons } = driveHandshake(0n);
     expect(readyCount).toBe(0);
-    expect(disconnectReasons[0]).toContain("NODE_BLOOM");
+    expect(disconnectReasons[0]).toContain('NODE_BLOOM');
   });
 });

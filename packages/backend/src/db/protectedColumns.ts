@@ -45,7 +45,7 @@ export const PROTECTED_COLUMNS = {
  * right call for every table and stays correct the moment one gains an entry.
  */
 export function publicColumns<T extends PgTable>(
-  table: T
+  table: T,
 ): PublicColumns<T, typeof PROTECTED_COLUMNS> {
   return publicColumnsOf(table, PROTECTED_COLUMNS);
 }

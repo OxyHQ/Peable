@@ -15,14 +15,10 @@
  *     box still appears in development.
  */
 
-import { getItemAsync, setItemAsync, deleteItemAsync } from "../storage/kv-store";
-import {
-  appendCrashEntry,
-  toCrashEntry,
-  type CrashEntry,
-} from "./crash-policy";
+import { getItemAsync, setItemAsync, deleteItemAsync } from '../storage/kv-store';
+import { appendCrashEntry, toCrashEntry, type CrashEntry } from './crash-policy';
 
-const CRASH_LOG_KEY = "fairwallet_crash_log";
+const CRASH_LOG_KEY = 'fairwallet_crash_log';
 
 // ---------------------------------------------------------------------------
 // Persistence
@@ -34,12 +30,12 @@ function parseCrashLog(raw: string | null): CrashEntry[] {
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.filter((item): item is CrashEntry => {
-      if (typeof item !== "object" || item === null) return false;
+      if (typeof item !== 'object' || item === null) return false;
       const candidate = item as Partial<CrashEntry>;
       return (
-        typeof candidate.at === "number" &&
-        typeof candidate.name === "string" &&
-        typeof candidate.message === "string"
+        typeof candidate.at === 'number' &&
+        typeof candidate.name === 'string' &&
+        typeof candidate.message === 'string'
       );
     });
   } catch {
@@ -60,17 +56,11 @@ export async function clearCrashLog(): Promise<void> {
  * Record a crash. Never throws: it runs from an error path, so a storage
  * failure here must not mask the original error.
  */
-export async function recordCrash(
-  error: unknown,
-  fatal: boolean,
-): Promise<void> {
+export async function recordCrash(error: unknown, fatal: boolean): Promise<void> {
   try {
     const entry = toCrashEntry(error, fatal, Math.floor(Date.now() / 1000));
     const existing = await getCrashLog();
-    await setItemAsync(
-      CRASH_LOG_KEY,
-      JSON.stringify(appendCrashEntry(existing, entry)),
-    );
+    await setItemAsync(CRASH_LOG_KEY, JSON.stringify(appendCrashEntry(existing, entry)));
   } catch {
     // Best effort by design.
   }

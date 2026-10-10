@@ -62,8 +62,14 @@ export class TransfersResource {
    * would come from the platform's general balance, which is other merchants'
    * money in flight.
    */
-  create(params: CreateTransferParams, options: { idempotencyKey?: string } = {}): Promise<Transfer> {
-    return this.client.request<Transfer>('POST', '/v1/transfers', { body: params, idempotencyKey: options.idempotencyKey });
+  create(
+    params: CreateTransferParams,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<Transfer> {
+    return this.client.request<Transfer>('POST', '/v1/transfers', {
+      body: params,
+      idempotencyKey: options.idempotencyKey,
+    });
   }
 
   /**
@@ -91,9 +97,7 @@ export class TransfersResource {
       `/v1/transfers/${encodeURIComponent(transferId)}/reversals`,
       {
         body: params,
-        ...(options.idempotencyKey === undefined
-          ? {}
-          : { idempotencyKey: options.idempotencyKey }),
+        ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
       },
     );
   }

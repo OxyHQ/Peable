@@ -99,6 +99,5 @@
 
 html {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent)
-    transparent;
+  scrollbar-color: color-mix(in srgb, var(--muted-foreground) 40%, transparent) transparent;
 }

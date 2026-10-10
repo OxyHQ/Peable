@@ -81,7 +81,13 @@ export type WebhookEventType =
  * something else — which typechecks on both sides and fails only in production.
  */
 /** Wake-up only. Re-read the owner-bound SDK resource; this is never paid or grant authority. */
-export interface BillingObservation { object:'billing_observation';resourceKind:'subscription'|'invoice';resourceId:string;revision:number;observedAt:string; }
+export interface BillingObservation {
+  object: 'billing_observation';
+  resourceKind: 'subscription' | 'invoice';
+  resourceId: string;
+  revision: number;
+  observedAt: string;
+}
 export interface WebhookEventPayload {
   'billing.observation.updated': BillingObservation;
   'payment_intent.confirming': PaymentIntent;

@@ -1,17 +1,17 @@
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import type { CreatePaymentLinkParams } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import { findMerchantById } from "../db/merchants/merchantRepository";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import type { CreatePaymentLinkParams } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import { findMerchantById } from '../db/merchants/merchantRepository';
 import {
   findLinkByPublicId,
   findLinkForMerchant,
   insertPaymentLink,
   listLinksForMerchant,
   updatePaymentLink,
-} from "../db/payments/paymentLinkRepository";
+} from '../db/payments/paymentLinkRepository';
 import {
   createIntent,
   NetworkMismatchError,
@@ -19,14 +19,14 @@ import {
   RailUnavailableError,
   assertRailAvailable,
   resolveRail,
-} from "../services/createIntent";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import { resolveMerchantDisplay } from "../services/merchantDisplay";
-import { newId } from "../lib/ids";
-import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from "../lib/serialize";
-import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
-import { railBodyFields } from "../lib/railSchema";
+} from '../services/createIntent';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import { resolveMerchantDisplay } from '../services/merchantDisplay';
+import { newId } from '../lib/ids';
+import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from '../lib/serialize';
+import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
+import { railBodyFields } from '../lib/railSchema';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -65,10 +65,10 @@ export function createPaymentLinksRouter(deps: {
   const router = Router();
 
   router.post(
-    "/v1/payment_links",
+    '/v1/payment_links',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -78,8 +78,8 @@ export function createPaymentLinksRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -104,11 +104,11 @@ export function createPaymentLinksRouter(deps: {
         assertRailAvailable(resolved.rail);
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, "invalid_request_error", err.message);
+          sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
         if (err instanceof RailUnavailableError) {
-          sendError(res, 503, "api_error", err.message);
+          sendError(res, 503, 'api_error', err.message);
           return;
         }
         throw err;
@@ -118,7 +118,7 @@ export function createPaymentLinksRouter(deps: {
       // column default of true rather than being passed: a caller does not get
       // to mint a link that is already disabled.
       const link = await insertPaymentLink(getDb(), {
-        publicId: newId("link"),
+        publicId: newId('link'),
         merchantId: merchant.id,
         oxyAppId: merchant.oxyAppId,
         environment: merchant.environment,
@@ -135,10 +135,10 @@ export function createPaymentLinksRouter(deps: {
   );
 
   router.get(
-    "/v1/payment_links",
+    '/v1/payment_links',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -148,8 +148,8 @@ export function createPaymentLinksRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
@@ -168,8 +168,8 @@ export function createPaymentLinksRouter(deps: {
           sendError(
             res,
             422,
-            "invalid_request_error",
-            "starting_after references an unknown payment link",
+            'invalid_request_error',
+            'starting_after references an unknown payment link',
           );
           return;
         }
@@ -179,15 +179,15 @@ export function createPaymentLinksRouter(deps: {
       const page = await listLinksForMerchant(db, { merchantId: merchant.id, limit, after });
       const data = page.data.map((link) => toPaymentLinkDTO(link));
 
-      res.status(200).json({ object: "list", data, has_more: page.hasMore });
+      res.status(200).json({ object: 'list', data, has_more: page.hasMore });
     }),
   );
 
   router.get(
-    "/v1/payment_links/:id",
+    '/v1/payment_links/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -198,13 +198,13 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const link = await findLinkForMerchant(getDb(), id, merchant.id);
       if (!link) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
       res.status(200).json(toPaymentLinkDTO(link));
@@ -212,10 +212,10 @@ export function createPaymentLinksRouter(deps: {
   );
 
   router.patch(
-    "/v1/payment_links/:id",
+    '/v1/payment_links/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -225,8 +225,8 @@ export function createPaymentLinksRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -242,13 +242,13 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const link = await updatePaymentLink(getDb(), id, merchant.id, params);
       if (!link) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
       res.status(200).json(toPaymentLinkDTO(link));
@@ -260,7 +260,7 @@ export function createPaymentLinksRouter(deps: {
   // `active: false` links (never 404s an inactive link) so the checkout page
   // can render a "link disabled" state instead of a generic not-found.
   router.get(
-    "/v1/payment_links/:id/public",
+    '/v1/payment_links/:id/public',
     publicRateLimit,
     wrap(async (req, res) => {
       // `noUncheckedIndexedAccess` types `req.params.id` as possibly
@@ -269,19 +269,19 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const db = getDb();
       const link = await findLinkByPublicId(db, id);
       if (!link) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
       const merchant = await findMerchantById(db, link.merchantId);
       if (!merchant) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
       const merchantDisplay = await resolveMerchantDisplay(merchant);
@@ -294,7 +294,7 @@ export function createPaymentLinksRouter(deps: {
   // value comes from the STORED link, never the caller, so a public caller can
   // never mint an intent for an amount/network/merchant it doesn't control.
   router.post(
-    "/v1/payment_links/:id/payment_intent",
+    '/v1/payment_links/:id/payment_intent',
     publicRateLimit,
     wrap(async (req, res) => {
       // `noUncheckedIndexedAccess` types `req.params.id` as possibly
@@ -303,23 +303,23 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const db = getDb();
       const link = await findLinkByPublicId(db, id);
       if (!link) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
       if (!link.active) {
-        sendError(res, 422, "invalid_request_error", "payment link is no longer active");
+        sendError(res, 422, 'invalid_request_error', 'payment link is no longer active');
         return;
       }
       const merchant = await findMerchantById(db, link.merchantId);
       if (!merchant) {
-        sendError(res, 404, "invalid_request_error", "payment link not found");
+        sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
 
@@ -350,13 +350,13 @@ export function createPaymentLinksRouter(deps: {
         // other `createIntent` caller, rather than letting it fall through
         // to a bare 500 if that invariant is ever loosened.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, "invalid_request_error", err.message);
+          sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
         // 503, not 422: the rail is not configured on this deployment, which is
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
-          sendError(res, 503, "api_error", err.message);
+          sendError(res, 503, 'api_error', err.message);
           return;
         }
         // A link created by a development credential, opened against a live

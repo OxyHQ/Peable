@@ -1,7 +1,7 @@
-import { getNetwork } from "@fairco.in/core";
-import { getDb } from "../db/postgres";
-import { reserveNextDerivationIndex } from "../db/merchants/derivationIndex";
-import { deriveIntentAddress } from "./derivation";
+import { getNetwork } from '@fairco.in/core';
+import { getDb } from '../db/postgres';
+import { reserveNextDerivationIndex } from '../db/merchants/derivationIndex';
+import { deriveIntentAddress } from './derivation';
 
 /**
  * Atomically claim the merchant's next derivation index and derive its

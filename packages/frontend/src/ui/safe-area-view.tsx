@@ -1,9 +1,9 @@
 import {
   SafeAreaView as RawSafeAreaView,
   type SafeAreaViewProps,
-} from "react-native-safe-area-context";
-import type { ComponentType } from "react";
-import { styled } from "nativewind";
+} from 'react-native-safe-area-context';
+import type { ComponentType } from 'react';
+import { styled } from 'nativewind';
 
 /**
  * NativeWind 5 / react-native-css do NOT apply `className` to
@@ -15,6 +15,7 @@ import { styled } from "nativewind";
  * (layout utilities and `bg-*` alike) applies again. Import `SafeAreaView` from
  * here instead of directly from `react-native-safe-area-context`.
  */
-export const SafeAreaView: ComponentType<
-  SafeAreaViewProps & { className?: string }
-> = styled(RawSafeAreaView, { className: "style" });
+export const SafeAreaView: ComponentType<SafeAreaViewProps & { className?: string }> = styled(
+  RawSafeAreaView,
+  { className: 'style' },
+);

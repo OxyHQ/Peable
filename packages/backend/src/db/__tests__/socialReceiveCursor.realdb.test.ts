@@ -1,10 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { and, eq } from 'drizzle-orm';
 import { isCheckViolation, isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import {
-  readReservedThrough,
-  reserveNextSocialReceiveIndex,
-} from '../social/receiveCursor';
+import { readReservedThrough, reserveNextSocialReceiveIndex } from '../social/receiveCursor';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX, socialReceiveCursors } from '../schema';
 import { SOCIAL_RECEIVE_FIRST_FRESH_INDEX as SERVICE_FIRST_FRESH_INDEX } from '../../services/socialReceive';
 
@@ -27,8 +24,8 @@ async function nextIndex(oxyUserId: string): Promise<number | undefined> {
     .where(
       and(
         eq(socialReceiveCursors.oxyUserId, oxyUserId),
-        eq(socialReceiveCursors.network, 'testnet')
-      )
+        eq(socialReceiveCursors.network, 'testnet'),
+      ),
     );
   return row?.next;
 }
@@ -90,13 +87,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
 
     const reserved = await Promise.all(
       Array.from({ length: concurrency }, () =>
-        reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A)
-      )
+        reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A),
+      ),
     );
 
     expect(new Set(reserved).size).toBe(concurrency);
     expect([...reserved].sort((a, b) => a - b)).toEqual(
-      Array.from({ length: concurrency }, (_unused, offset) => offset + SOCIAL_RECEIVE_FIRST_FRESH_INDEX)
+      Array.from(
+        { length: concurrency },
+        (_unused, offset) => offset + SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
+      ),
     );
     expect(await nextIndex(oxyUserId)).toBe(concurrency + SOCIAL_RECEIVE_FIRST_FRESH_INDEX);
   });
@@ -107,7 +107,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
 
     await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
     await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
-    const mainnetFirst = await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'mainnet', KEY_A);
+    const mainnetFirst = await reserveNextSocialReceiveIndex(
+      suite!.db,
+      oxyUserId,
+      'mainnet',
+      KEY_A,
+    );
 
     expect(mainnetFirst).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX);
   });
@@ -116,19 +121,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     const oxyUserId = uuidv7();
 
     expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
-      SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1
+      SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1,
     );
 
     await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
     await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
-      2
-    );
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(2);
     // Reading did not advance anything.
-    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(
-      2
-    );
+    expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).reservedThrough).toBe(2);
     expect(await nextIndex(oxyUserId)).toBe(3);
   });
 
@@ -164,9 +165,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     } catch (error) {
       raised = error;
     }
-    expect(
-      isCheckViolation(raised, 'social_receive_cursors_next_derivation_index_check')
-    ).toBe(true);
+    expect(isCheckViolation(raised, 'social_receive_cursors_next_derivation_index_check')).toBe(
+      true,
+    );
   });
 
   it('refuses a network outside the closed set', async () => {
@@ -195,7 +196,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     await reserveNextSocialReceiveIndex(suite!.db, oxyUserId, 'testnet', KEY_A);
 
     expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
-      KEY_A
+      KEY_A,
     );
   });
 
@@ -208,11 +209,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('social receive cursor reservation', ()
     // The counter is untouched by the key changing: it counts addresses.
     expect(second).toBe(SOCIAL_RECEIVE_FIRST_FRESH_INDEX + 1);
     expect((await readReservedThrough(suite!.db, oxyUserId, 'testnet')).identityPublicKey).toBe(
-      KEY_B
+      KEY_B,
     );
   });
 
   it('reports no key for a user who has never had an address reserved', async () => {
-    expect((await readReservedThrough(suite!.db, uuidv7(), 'testnet')).identityPublicKey).toBeNull();
+    expect(
+      (await readReservedThrough(suite!.db, uuidv7(), 'testnet')).identityPublicKey,
+    ).toBeNull();
   });
 });

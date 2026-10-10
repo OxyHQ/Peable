@@ -1,54 +1,47 @@
-import { Router } from "express";
-import type {
-  Request,
-  RequestHandler,
-  Response,
-} from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import { verifySecret } from "@oxy.so/core/server";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
+import { Router } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import { verifySecret } from '@oxy.so/core/server';
+import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import {
   PAYMENT_INTENT_STATUSES,
   canStillBePaid,
   type CreatePaymentIntentParams,
   type PaymentIntentStatus,
-} from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import { findMerchantByAppEnvironment } from "../db/merchants/merchantRepository";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
+} from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import { findMerchantByAppEnvironment } from '../db/merchants/merchantRepository';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
   findIntentByPublicId,
   findIntentForMerchant,
   listIntentsForMerchant,
-} from "../db/payments/paymentIntentRepository";
-import type {
-  IntentStateResult,
-  PaymentIntentRow,
-} from "../db/payments/paymentIntentRepository";
+} from '../db/payments/paymentIntentRepository';
+import type { IntentStateResult, PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   createIntent,
   IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
-} from "../services/createIntent";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import { redactProviderMessage } from "../services/providers/redact";
-import { cancelCardPaymentAtProvider } from "../services/cardCancellation";
-import { reconcileIntentWithProvider } from "../services/intentReconciliation";
-import { resolveClientAction } from "../services/clientAction";
-import { applyEvent } from "../services/intentState";
-import { announceIntentChange, transitionIntent } from "../services/intentTransition";
-import { toPaymentIntentDTO } from "../lib/serialize";
+} from '../services/createIntent';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import { redactProviderMessage } from '../services/providers/redact';
+import { cancelCardPaymentAtProvider } from '../services/cardCancellation';
+import { reconcileIntentWithProvider } from '../services/intentReconciliation';
+import { resolveClientAction } from '../services/clientAction';
+import { applyEvent } from '../services/intentState';
+import { announceIntentChange, transitionIntent } from '../services/intentTransition';
+import { toPaymentIntentDTO } from '../lib/serialize';
 import {
   sendEnvironmentMismatch,
   sendError,
   wrap,
   requireServiceApp,
   requireAuthenticated,
-} from "../lib/http";
-import { railBodyFields } from "../lib/railSchema";
+} from '../lib/http';
+import { railBodyFields } from '../lib/railSchema';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -64,8 +57,8 @@ const MAX_LIST_LIMIT = 100;
  */
 function readClientSecret(req: Request): string | undefined {
   const fromQuery = req.query.client_secret;
-  if (typeof fromQuery === "string" && fromQuery.length > 0) return fromQuery;
-  return req.header("X-Peable-Client-Secret") ?? undefined;
+  if (typeof fromQuery === 'string' && fromQuery.length > 0) return fromQuery;
+  return req.header('X-Peable-Client-Secret') ?? undefined;
 }
 
 /**
@@ -85,14 +78,14 @@ function sendStaleOrMissing(
   res: Parameters<typeof sendError>[0],
   result: Exclude<IntentStateResult, { kind: 'updated' }>,
 ): void {
-  if (result.kind === "missing") {
-    sendError(res, 404, "invalid_request_error", "payment intent not found");
+  if (result.kind === 'missing') {
+    sendError(res, 404, 'invalid_request_error', 'payment intent not found');
     return;
   }
   sendError(
     res,
     409,
-    "invalid_request_error",
+    'invalid_request_error',
     `the payment intent moved to '${result.current}' while this request was in flight`,
   );
 }
@@ -145,15 +138,12 @@ function findMerchantByAppEnv(
  * Exported: `routes/merchants.ts` reuses this unchanged for the merchant-authed
  * GET/PATCH `/v1/merchants/me` routes.
  */
-export async function resolveMerchant(
-  req: Request,
-  res: Response,
-): Promise<MerchantRow | null> {
+export async function resolveMerchant(req: Request, res: Response): Promise<MerchantRow | null> {
   const serviceApp = requireServiceApp(req, res);
   if (!serviceApp) return null;
   const merchant = await findMerchantByAppEnv(serviceApp.appId, serviceApp.environment);
   if (!merchant) {
-    sendError(res, 403, "permission_error", "no merchant registered for this app");
+    sendError(res, 403, 'permission_error', 'no merchant registered for this app');
     return null;
   }
   return merchant;
@@ -180,8 +170,8 @@ export async function resolveMerchantByApp(
     sendError(
       res,
       404,
-      "invalid_request_error",
-      "no merchant registered for this application in this environment",
+      'invalid_request_error',
+      'no merchant registered for this application in this environment',
     );
     return null;
   }
@@ -224,7 +214,7 @@ export async function listPaymentIntentsForMerchant(
       return {
         ok: false,
         status: 422,
-        message: "starting_after references an unknown payment intent",
+        message: 'starting_after references an unknown payment intent',
       };
     }
     after = cursor.id;
@@ -254,22 +244,17 @@ export function createPaymentIntentsRouter(deps: {
   const router = Router();
 
   router.post(
-    "/v1/payment_intents",
+    '/v1/payment_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const idempotencyKey = req.header("Idempotency-Key")?.trim();
+      const idempotencyKey = req.header('Idempotency-Key')?.trim();
       if (!idempotencyKey) {
-        sendError(
-          res,
-          400,
-          "invalid_request_error",
-          "Idempotency-Key header is required",
-        );
+        sendError(res, 400, 'invalid_request_error', 'Idempotency-Key header is required');
         return;
       }
 
@@ -278,8 +263,8 @@ export function createPaymentIntentsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -315,7 +300,7 @@ export function createPaymentIntentsRouter(deps: {
         // describing a payment this gateway cannot make, and neither is a
         // server fault. Which mistake they made is in the message.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, "invalid_request_error", err.message);
+          sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
         // A development or staging credential asking a live deployment for a
@@ -329,14 +314,14 @@ export function createPaymentIntentsRouter(deps: {
         // caller their new payment exists, and they would wait for money
         // against an amount they never asked for.
         if (err instanceof IdempotencyConflictError) {
-          sendError(res, 409, "invalid_request_error", err.message);
+          sendError(res, 409, 'invalid_request_error', err.message);
           return;
         }
         // 503, not 422: the caller cannot fix this by sending different fields.
         // The rail they asked for is not configured on this deployment, and
         // telling them their request was invalid would send them off editing it.
         if (err instanceof RailUnavailableError) {
-          sendError(res, 503, "api_error", err.message);
+          sendError(res, 503, 'api_error', err.message);
           return;
         }
         throw err;
@@ -345,10 +330,10 @@ export function createPaymentIntentsRouter(deps: {
   );
 
   router.get(
-    "/v1/payment_intents",
+    '/v1/payment_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -358,24 +343,24 @@ export function createPaymentIntentsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
 
       const result = await listPaymentIntentsForMerchant(merchant.id, parsed.data);
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       const data = result.data.map((intent) => toPaymentIntentDTO(intent));
-      res.status(200).json({ object: "list", data, has_more: result.hasMore });
+      res.status(200).json({ object: 'list', data, has_more: result.hasMore });
     }),
   );
 
   router.get(
-    "/v1/payment_intents/:id",
+    '/v1/payment_intents/:id',
     optionalServiceAuth,
     wrap(async (req, res) => {
       const { serviceApp } = req as OxyAuthRequest;
@@ -386,7 +371,7 @@ export function createPaymentIntentsRouter(deps: {
       // payer path below need it.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -399,7 +384,7 @@ export function createPaymentIntentsRouter(deps: {
         // scope-checking primitive is invoked manually, scoped to just this
         // branch.
         let scopeGranted = false;
-        oxy.middleware.requireScope("payments:read")(req, res, () => {
+        oxy.middleware.requireScope('payments:read')(req, res, () => {
           scopeGranted = true;
         });
         if (!scopeGranted) return;
@@ -408,7 +393,7 @@ export function createPaymentIntentsRouter(deps: {
         if (!merchant) return;
         const intent = await findIntentForMerchant(getDb(), id, merchant.id);
         if (!intent) {
-          sendError(res, 404, "invalid_request_error", "payment intent not found");
+          sendError(res, 404, 'invalid_request_error', 'payment intent not found');
           return;
         }
 
@@ -429,14 +414,14 @@ export function createPaymentIntentsRouter(deps: {
          * keeps a copy.
          */
         const action =
-          intent.rail === "card" && canStillBePaid(intent.status)
+          intent.rail === 'card' && canStillBePaid(intent.status)
             ? await resolveClientAction(intent)
-            : { kind: "not_applicable" as const };
-        if (action.kind === "ok") res.setHeader("Cache-Control", "no-store");
+            : { kind: 'not_applicable' as const };
+        if (action.kind === 'ok') res.setHeader('Cache-Control', 'no-store');
 
         res.status(200).json({
           ...toPaymentIntentDTO(intent),
-          ...(action.kind === "ok" ? { client_action: action.action } : {}),
+          ...(action.kind === 'ok' ? { client_action: action.action } : {}),
         });
         return;
       }
@@ -456,19 +441,19 @@ export function createPaymentIntentsRouter(deps: {
         sendError(
           res,
           401,
-          "authentication_error",
-          "missing service app credentials or client_secret",
+          'authentication_error',
+          'missing service app credentials or client_secret',
         );
         return;
       }
 
       const intent = await findIntentByPublicId(getDb(), id);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
       if (!verifySecret(clientSecret, intent.clientSecret)) {
-        sendError(res, 403, "permission_error", "invalid client_secret");
+        sendError(res, 403, 'permission_error', 'invalid client_secret');
         return;
       }
       res.status(200).json(toPaymentIntentDTO(intent));
@@ -502,12 +487,12 @@ export function createPaymentIntentsRouter(deps: {
    * over the payment, and nothing here derives one from the other.
    */
   router.post(
-    "/v1/payment_intents/:id/client_action",
+    '/v1/payment_intents/:id/client_action',
     optionalServiceAuth,
     wrap(async (req, res) => {
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -516,7 +501,7 @@ export function createPaymentIntentsRouter(deps: {
 
       if (serviceApp?.appId) {
         let scopeGranted = false;
-        oxy.middleware.requireScope("payments:read")(req, res, () => {
+        oxy.middleware.requireScope('payments:read')(req, res, () => {
           scopeGranted = true;
         });
         if (!scopeGranted) return;
@@ -529,62 +514,62 @@ export function createPaymentIntentsRouter(deps: {
           sendError(
             res,
             401,
-            "authentication_error",
-            "missing service app credentials or client_secret",
+            'authentication_error',
+            'missing service app credentials or client_secret',
           );
           return;
         }
         intent = await findIntentByPublicId(getDb(), id);
         if (intent && !verifySecret(clientSecret, intent.clientSecret)) {
-          sendError(res, 403, "permission_error", "invalid client_secret");
+          sendError(res, 403, 'permission_error', 'invalid client_secret');
           return;
         }
       }
 
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
       // Never cached, never revalidated, and never stored by anything in
       // between. The body carries a credential.
-      res.setHeader("Cache-Control", "no-store");
+      res.setHeader('Cache-Control', 'no-store');
 
       const outcome = await resolveClientAction(intent);
-      if (outcome.kind === "ok") {
-        res.status(200).json({ object: "client_action", ...outcome.action });
+      if (outcome.kind === 'ok') {
+        res.status(200).json({ object: 'client_action', ...outcome.action });
         return;
       }
-      if (outcome.kind === "not_applicable") {
+      if (outcome.kind === 'not_applicable') {
         // The FairCoin rail. The next step is "send coins to `address`", which
         // the intent already says — a 422 rather than an empty 200, so a client
         // that asked the wrong question learns that rather than waiting.
         sendError(
           res,
           422,
-          "invalid_request_error",
-          "this payment needs no client action; its address is on the intent",
+          'invalid_request_error',
+          'this payment needs no client action; its address is on the intent',
         );
         return;
       }
-      if (outcome.kind === "unpayable") {
+      if (outcome.kind === 'unpayable') {
         sendError(
           res,
           409,
-          "invalid_request_error",
+          'invalid_request_error',
           `this payment is '${outcome.status}' and can no longer be paid`,
         );
         return;
       }
-      sendError(res, 503, "api_error", outcome.error);
+      sendError(res, 503, 'api_error', outcome.error);
     }),
   );
 
   router.post(
-    "/v1/payment_intents/:id/reject",
+    '/v1/payment_intents/:id/reject',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -595,25 +580,25 @@ export function createPaymentIntentsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const intent = await findIntentForMerchant(getDb(), id, merchant.id);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
       let nextStatus: PaymentIntentStatus;
       try {
-        nextStatus = applyEvent(intent.status, "reject");
+        nextStatus = applyEvent(intent.status, 'reject');
       } catch (err) {
         sendError(
           res,
           409,
-          "invalid_request_error",
-          err instanceof Error ? err.message : "illegal state transition",
+          'invalid_request_error',
+          err instanceof Error ? err.message : 'illegal state transition',
         );
         return;
       }
@@ -645,20 +630,20 @@ export function createPaymentIntentsRouter(deps: {
         // presents the same key rather than being a second operation.
         `cancel:${intent.publicId}`,
       );
-      if (cancellation.kind === "settled") {
+      if (cancellation.kind === 'settled') {
         const reconciled = await reconcileIntentWithProvider(intent);
         sendError(
           res,
           409,
-          "invalid_request_error",
-          "this payment was completed by the payer before it could be rejected" +
-            (reconciled.kind === "applied" || reconciled.kind === "agreed"
+          'invalid_request_error',
+          'this payment was completed by the payer before it could be rejected' +
+            (reconciled.kind === 'applied' || reconciled.kind === 'agreed'
               ? `; it is '${reconciled.status}'`
-              : ""),
+              : ''),
         );
         return;
       }
-      if (cancellation.kind === "in_flight") {
+      if (cancellation.kind === 'in_flight') {
         // The provider did not cancel it, and still has it in flight. Rejecting
         // locally here is the exact failure this call exists to prevent: the
         // payer can still complete a payment the merchant has been told is
@@ -666,16 +651,16 @@ export function createPaymentIntentsRouter(deps: {
         sendError(
           res,
           409,
-          "invalid_request_error",
+          'invalid_request_error',
           `the provider still has this payment in flight ('${cancellation.status}'); it cannot be rejected yet`,
         );
         return;
       }
-      if (cancellation.kind === "unknown") {
+      if (cancellation.kind === 'unknown') {
         sendError(
           res,
           502,
-          "api_error",
+          'api_error',
           `the payment could not be cancelled at the provider: ${redactProviderMessage(cancellation.error)}`,
         );
         return;
@@ -690,7 +675,7 @@ export function createPaymentIntentsRouter(deps: {
         from: intent.status,
         status: nextStatus,
       });
-      if (rejected.kind !== "updated") {
+      if (rejected.kind !== 'updated') {
         sendStaleOrMissing(res, rejected);
         return;
       }
@@ -702,15 +687,15 @@ export function createPaymentIntentsRouter(deps: {
   // Payer path — NOT merchant-authed. Possession of the intent's `client_secret`
   // is the authorization; the reported txid is handed to the settlement watcher.
   router.post(
-    "/v1/payment_intents/:id/submit_tx",
+    '/v1/payment_intents/:id/submit_tx',
     wrap(async (req, res) => {
       const parsed = submitTxBodySchema.safeParse(req.body);
       if (!parsed.success) {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -721,30 +706,30 @@ export function createPaymentIntentsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const intent = await findIntentByPublicId(getDb(), id);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
       if (!verifySecret(parsed.data.client_secret, intent.clientSecret)) {
-        sendError(res, 403, "permission_error", "invalid client_secret");
+        sendError(res, 403, 'permission_error', 'invalid client_secret');
         return;
       }
 
       let nextStatus: PaymentIntentStatus;
       try {
-        nextStatus = applyEvent(intent.status, "broadcast");
+        nextStatus = applyEvent(intent.status, 'broadcast');
       } catch (err) {
         sendError(
           res,
           409,
-          "invalid_request_error",
-          err instanceof Error ? err.message : "illegal state transition",
+          'invalid_request_error',
+          err instanceof Error ? err.message : 'illegal state transition',
         );
         return;
       }
@@ -762,7 +747,7 @@ export function createPaymentIntentsRouter(deps: {
         status: nextStatus,
         txid: parsed.data.txid,
       });
-      if (broadcast.kind !== "updated") {
+      if (broadcast.kind !== 'updated') {
         sendStaleOrMissing(res, broadcast);
         return;
       }

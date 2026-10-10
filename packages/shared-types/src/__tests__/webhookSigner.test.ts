@@ -26,16 +26,16 @@ test('verifyWebhook rejects a tampered body', () => {
 
 test('verifyWebhook rejects a stale timestamp beyond tolerance', () => {
   const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
-  expect(verifyWebhook(SECRET, RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP + TOLERANCE_SEC + 1)).toBe(
-    false,
-  );
+  expect(
+    verifyWebhook(SECRET, RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP + TOLERANCE_SEC + 1),
+  ).toBe(false);
 });
 
 test('verifyWebhook rejects a future timestamp beyond tolerance', () => {
   const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
-  expect(verifyWebhook(SECRET, RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP - TOLERANCE_SEC - 1)).toBe(
-    false,
-  );
+  expect(
+    verifyWebhook(SECRET, RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP - TOLERANCE_SEC - 1),
+  ).toBe(false);
 });
 
 test('verifyWebhook rejects a header with a wrong v1 signature', () => {

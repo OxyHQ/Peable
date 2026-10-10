@@ -1,11 +1,8 @@
-import { bytesToHex, getNetwork, hexToBytes, deriveSocialReceiveAddress } from "@fairco.in/core";
-import type { NetworkType } from "@fairco.in/core";
-import { oxy } from "../oxy";
-import { getDb } from "../db/postgres";
-import {
-  readReservedThrough,
-  reserveNextSocialReceiveIndex,
-} from "../db/social/receiveCursor";
+import { bytesToHex, getNetwork, hexToBytes, deriveSocialReceiveAddress } from '@fairco.in/core';
+import type { NetworkType } from '@fairco.in/core';
+import { oxy } from '../oxy';
+import { getDb } from '../db/postgres';
+import { readReservedThrough, reserveNextSocialReceiveIndex } from '../db/social/receiveCursor';
 
 /**
  * First index this reservation flow ever hands out. Index 0 is the
@@ -20,13 +17,13 @@ import {
  */
 export const SOCIAL_RECEIVE_FIRST_FRESH_INDEX = 1;
 
-const SECP256K1_VERIFICATION_METHOD_TYPE = "EcdsaSecp256k1VerificationKey2019";
+const SECP256K1_VERIFICATION_METHOD_TYPE = 'EcdsaSecp256k1VerificationKey2019';
 
 /**
  * Fragment of the account's OWN identity key in a DID document. Oxy emits it
  * first (`buildDidDocument`), then any additional linked-device keys.
  */
-const ACCOUNT_KEY_FRAGMENT = "#key-1";
+const ACCOUNT_KEY_FRAGMENT = '#key-1';
 
 /**
  * Resolve `oxyUserId`'s identity secp256k1 public key from their DID document
@@ -39,15 +36,13 @@ const ACCOUNT_KEY_FRAGMENT = "#key-1";
  * payer derives could belong to a key the recipient's device does not hold:
  * money at an address nobody can spend, chosen by list order.
  */
-export async function resolveIdentityPublicKey(
-  oxyUserId: string,
-): Promise<Uint8Array | null> {
+export async function resolveIdentityPublicKey(oxyUserId: string): Promise<Uint8Array | null> {
   const doc = await oxy.identity.resolveDid(oxyUserId);
   const secp256k1 = doc.verificationMethod.filter(
-    (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE && "publicKeyHex" in entry,
+    (entry) => entry.type === SECP256K1_VERIFICATION_METHOD_TYPE && 'publicKeyHex' in entry,
   );
   const vm = secp256k1.find((entry) => entry.id.endsWith(ACCOUNT_KEY_FRAGMENT));
-  if (!vm || !("publicKeyHex" in vm)) {
+  if (!vm || !('publicKeyHex' in vm)) {
     return null;
   }
   return hexToBytes(vm.publicKeyHex);

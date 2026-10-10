@@ -8,7 +8,7 @@
  * multiple wallets, each with its own mnemonic and chain data.
  */
 
-import { create, type StoreApi } from "zustand";
+import { create, type StoreApi } from 'zustand';
 import {
   generateMnemonic,
   validateMnemonic,
@@ -24,35 +24,35 @@ import {
   type NetworkConfig,
   type UTXO as TxUTXO,
   type Transaction,
-} from "@fairco.in/core";
-import type { ParsedTransaction } from "../p2p/messages";
-import { SPVClient } from "../p2p/spv-client";
-import { planRescan, type RescanProgress } from "../p2p/rescan";
-import { DatabaseHeaderStore } from "../p2p/header-store";
-import { createSocketProvider } from "../p2p/socket-provider";
-import { KeyManager } from "@peable.to/pay";
-import { loadWatchAddressesIntoKeyManager } from "./multisig";
-import { resolveMoveDestinationAddress } from "./move-address";
+} from '@fairco.in/core';
+import type { ParsedTransaction } from '../p2p/messages';
+import { SPVClient } from '../p2p/spv-client';
+import { planRescan, type RescanProgress } from '../p2p/rescan';
+import { DatabaseHeaderStore } from '../p2p/header-store';
+import { createSocketProvider } from '../p2p/socket-provider';
+import { KeyManager } from '@peable.to/pay';
+import { loadWatchAddressesIntoKeyManager } from './multisig';
+import { resolveMoveDestinationAddress } from './move-address';
 import {
   XPUB_MARKER_PREFIX,
   resolveWalletSeed,
   getOrDeriveBip39Seed,
   type ResolveWalletSeedDeps,
-} from "./resolve-wallet-seed";
+} from './resolve-wallet-seed';
 import {
   UTXOSet,
   selectInputsForSend,
   estimateSend as computeSendEstimate,
   type UTXO,
   type SendEstimate,
-} from "@peable.to/pay";
+} from '@peable.to/pay';
 import {
   applyTransactionToWallet,
   reconstructWalletTransaction,
   reverseBytesToHex,
-} from "./apply-transaction";
-import { useContactsStore } from "./contacts-store";
-import { UtxoReservation } from "./utxo-reservation";
+} from './apply-transaction';
+import { useContactsStore } from './contacts-store';
+import { UtxoReservation } from './utxo-reservation';
 import {
   saveMnemonic,
   getMnemonic,
@@ -76,16 +76,16 @@ import {
   isWalletBackedUp,
   markWalletBackedUp,
   isFreshlyCreatedWallet,
-} from "../storage/secure-store";
-import type { WalletInfo } from "../storage/secure-store";
-import { Database } from "../storage/database";
+} from '../storage/secure-store';
+import type { WalletInfo } from '../storage/secure-store';
+import { Database } from '../storage/database';
 import {
   OXY_IDENTITY_WALLET_ID,
   SEED_SECRET_PREFIX,
   buildSeedSecret,
   deriveIdentitySeed,
-} from "./identity-wallet";
-import { hasIdentityKeystore } from "./keystore";
+} from './identity-wallet';
+import { hasIdentityKeystore } from './keystore';
 import {
   SOCIAL_RECEIVE_GAP_LIMIT,
   compressedPublicKeyHex,
@@ -93,15 +93,15 @@ import {
   deriveSocialReceiveWatchWindow,
   signSocialReceiveInput,
   computeWindowExtension,
-} from "./social-receive";
-import { getSocialReceiveCursor } from "../services/gateway-client";
+} from './social-receive';
+import { getSocialReceiveCursor } from '../services/gateway-client';
 import {
   getPockets,
   savePockets,
   getActivePocket,
   setActivePocket,
   clearPockets,
-} from "../storage/pockets-store";
+} from '../storage/pockets-store';
 import {
   type PocketInfo,
   MAIN_POCKET_ACCOUNT,
@@ -110,15 +110,15 @@ import {
   updatePocketMeta as updatePocketMetaList,
   removePocket as removePocketList,
   canDeletePocket,
-} from "./pockets";
+} from './pockets';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type FeeLevel = "low" | "medium" | "high";
+export type FeeLevel = 'low' | 'medium' | 'high';
 
-export type IdentityInitResult = "initialized" | "no-identity" | "no-keystore";
+export type IdentityInitResult = 'initialized' | 'no-identity' | 'no-keystore';
 
 /**
  * Discrete P2P network states. Stored on the wallet store as a key (rather
@@ -126,14 +126,14 @@ export type IdentityInitResult = "initialized" | "no-identity" | "no-keystore";
  * language changes without the store re-emitting (U-2).
  */
 export type NetworkStatusKey =
-  | "wallet.network.offline"
-  | "wallet.network.resolvingDns"
-  | "wallet.network.connecting"
-  | "wallet.network.waitingForPeers"
-  | "wallet.network.searchingForPeers"
-  | "wallet.network.connectedSingular"
-  | "wallet.network.connectedPlural"
-  | "wallet.network.error";
+  | 'wallet.network.offline'
+  | 'wallet.network.resolvingDns'
+  | 'wallet.network.connecting'
+  | 'wallet.network.waitingForPeers'
+  | 'wallet.network.searchingForPeers'
+  | 'wallet.network.connectedSingular'
+  | 'wallet.network.connectedPlural'
+  | 'wallet.network.error';
 
 export interface WalletTransaction {
   txid: string;
@@ -141,7 +141,7 @@ export interface WalletTransaction {
   address: string;
   timestamp: number;
   confirmations: number;
-  type: "send" | "receive" | "stake" | "masternode_reward";
+  type: 'send' | 'receive' | 'stake' | 'masternode_reward';
 }
 
 export interface MasternodeUTXO {
@@ -257,11 +257,7 @@ export interface WalletState {
   refreshBalance: () => void;
   getNewAddress: () => string;
   getBuyDeliveryAddress: () => Promise<string>;
-  sendTransaction: (
-    toAddress: string,
-    amount: bigint,
-    feeRate: number,
-  ) => Promise<string>;
+  sendTransaction: (toAddress: string, amount: bigint, feeRate: number) => Promise<string>;
   refreshMasternodeUTXOs: () => void;
   estimateFee: (feeLevel: FeeLevel) => bigint;
   estimateSend: (amount: bigint, feeRate: number) => SendEstimate;
@@ -300,11 +296,7 @@ export interface WalletState {
     updates: { image?: string | null; color?: string; goal?: number | null },
   ) => Promise<void>;
   deletePocket: (account: number) => Promise<void>;
-  moveBetweenPockets: (
-    toAccount: number,
-    amount: bigint,
-    feeRate: number,
-  ) => Promise<string>;
+  moveBetweenPockets: (toAccount: number, amount: bigint, feeRate: number) => Promise<string>;
 
   // Network switching
   switchNetwork: (network: NetworkType) => Promise<void>;
@@ -343,7 +335,7 @@ function generateWalletId(): string {
   crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
@@ -544,7 +536,7 @@ async function setUpSocialReceive(
   const windowKey = await db.getSocialReceiveIdentityKey();
   if (windowKey !== null && windowKey !== identityPublicKey) {
     console.warn(
-      "[social-receive] the persisted window was derived from a different identity key; re-deriving",
+      '[social-receive] the persisted window was derived from a different identity key; re-deriving',
     );
     await db.clearSocialReceiveAddresses();
   }
@@ -591,7 +583,7 @@ async function setUpSocialReceive(
       compressedPublicKeyHex(cursor.identityPublicKey) !== identityPublicKey
     ) {
       console.warn(
-        "[social-receive] this account publishes a different identity key than this device holds; social receive is off",
+        '[social-receive] this account publishes a different identity key than this device holds; social receive is off',
       );
       set({ socialReceiveDefaultAddress: null });
       return;
@@ -602,10 +594,7 @@ async function setUpSocialReceive(
     // above rather than blocking wallet bring-up on a network round-trip.
     // The next successful call to setUpSocialReceive (next unlock/init)
     // retries the resync.
-    console.warn(
-      "[social-receive] cursor resync failed, using local-only watch window:",
-      error,
-    );
+    console.warn('[social-receive] cursor resync failed, using local-only watch window:', error);
   }
   // `reservedThrough === 0` is the endpoint's explicit "no cursor exists
   // yet" sentinel (index 0 is the stable default address and is never
@@ -687,7 +676,14 @@ async function signInputForAddress(
   }
   const socialIndex = socialReceiveAddressIndex.get(utxo.address);
   if (socialIndex !== undefined) {
-    return signSocialReceiveInput(tx, inputIndex, utxo.scriptPubKey, socialIndex, utxo.address, network);
+    return signSocialReceiveInput(
+      tx,
+      inputIndex,
+      utxo.scriptPubKey,
+      socialIndex,
+      utxo.address,
+      network,
+    );
   }
   throw new Error(`Address not found in key manager: ${utxo.address}`);
 }
@@ -698,10 +694,7 @@ async function signInputForAddress(
  * the active one (their UTXO set is not loaded into memory). Opens read-only and
  * always closes.
  */
-async function readPocketUnspentTotal(
-  walletId: string,
-  account: number,
-): Promise<bigint> {
+async function readPocketUnspentTotal(walletId: string, account: number): Promise<bigint> {
   const db = await Database.open(walletId, account);
   try {
     const rows = await db.getUnspentUTXOs();
@@ -715,8 +708,8 @@ async function readPocketUnspentTotal(
 // Incoming transaction processing (SPV receive path)
 // ---------------------------------------------------------------------------
 
-type WalletSet = StoreApi<WalletState>["setState"];
-type WalletGet = StoreApi<WalletState>["getState"];
+type WalletSet = StoreApi<WalletState>['setState'];
+type WalletGet = StoreApi<WalletState>['getState'];
 
 /**
  * Push the current in-memory balance and transaction list into the store and
@@ -757,7 +750,7 @@ async function resolveConfirmation(
   chainTip: number,
 ): Promise<{ blockHeight: number; blockHash: string; confirmations: number }> {
   if (!blockHash || !database) {
-    return { blockHeight: -1, blockHash: "", confirmations: 0 };
+    return { blockHeight: -1, blockHash: '', confirmations: 0 };
   }
 
   const blockHashHex = bytesToHex(blockHash);
@@ -853,12 +846,7 @@ async function processIncomingTransaction(
   // Record which tx spent the UTXO and at what height so a reorg can un-spend
   // it precisely if the spending block is later orphaned.
   for (const debit of result.debited) {
-    await database.markUTXOSpent(
-      debit.txid,
-      debit.vout,
-      txid,
-      confirmation.blockHeight,
-    );
+    await database.markUTXOSpent(debit.txid, debit.vout, txid, confirmation.blockHeight);
   }
 
   // H-4: when our OWN outgoing transaction confirms, the inputs it claims to
@@ -877,11 +865,7 @@ async function processIncomingTransaction(
     for (const input of tx.inputs) {
       const prevTxid = reverseBytesToHex(input.prevTxHash);
       try {
-        await database.updateUTXOSpentHeight(
-          prevTxid,
-          input.prevTxIndex,
-          confirmation.blockHeight,
-        );
+        await database.updateUTXOSpentHeight(prevTxid, input.prevTxIndex, confirmation.blockHeight);
       } catch {
         // Best-effort: a missing row here is normal for inputs we never owned.
       }
@@ -904,14 +888,14 @@ async function processIncomingTransaction(
   // us) nets negative by the amount that left the wallet.
   const net = result.receivedTotal - result.spentTotal;
   if (net !== 0n) {
-    const spentAddress = result.debited[0]?.address ?? "";
+    const spentAddress = result.debited[0]?.address ?? '';
     upsertWalletTransaction(set, {
       txid,
       amount: net,
-      address: net > 0n ? (result.receiveAddresses[0] ?? "") : spentAddress,
+      address: net > 0n ? (result.receiveAddresses[0] ?? '') : spentAddress,
       timestamp: now,
       confirmations: confirmation.confirmations,
-      type: net > 0n ? "receive" : "send",
+      type: net > 0n ? 'receive' : 'send',
     });
   }
 
@@ -954,10 +938,7 @@ async function reloadUtxoSetFromDatabase(): Promise<void> {
  * transactions; we then rebuild the in-memory set and balance from the
  * post-rewind database so nothing reflects the discarded chain.
  */
-async function rewindWalletToHeight(
-  forkHeight: number,
-  set: WalletSet,
-): Promise<void> {
+async function rewindWalletToHeight(forkHeight: number, set: WalletSet): Promise<void> {
   if (!database || !utxoSet) {
     return;
   }
@@ -1064,10 +1045,7 @@ async function runHistoricalRescan(set: WalletSet, get: WalletGet): Promise<void
  * chain tip advances. Promotes any UTXO whose containing block is now known
  * from unconfirmed to confirmed, and refreshes the displayed balance.
  */
-async function reconcileConfirmations(
-  set: WalletSet,
-  get: WalletGet,
-): Promise<void> {
+async function reconcileConfirmations(set: WalletSet, get: WalletGet): Promise<void> {
   if (!utxoSet || !database) {
     return;
   }
@@ -1087,15 +1065,9 @@ async function reconcileConfirmations(
   try {
     const pendingUtxos = await database.getPendingHeightUTXOs();
     for (const pending of pendingUtxos) {
-      const header = await database.getHeaderByHash(
-        hexToBytes(pending.block_hash),
-      );
+      const header = await database.getHeaderByHash(hexToBytes(pending.block_hash));
       if (!header) continue;
-      await database.updateUTXOBlockHeight(
-        pending.txid,
-        pending.vout,
-        header.height,
-      );
+      await database.updateUTXOBlockHeight(pending.txid, pending.vout, header.height);
       const inMemory = utxoSet.get(pending.txid, pending.vout);
       if (inMemory) {
         utxoSet.add({
@@ -1110,9 +1082,7 @@ async function reconcileConfirmations(
     // Same pattern for the history rows (Tx list).
     const pendingTxs = await database.getPendingHeightTransactions();
     for (const pending of pendingTxs) {
-      const header = await database.getHeaderByHash(
-        hexToBytes(pending.block_hash),
-      );
+      const header = await database.getHeaderByHash(hexToBytes(pending.block_hash));
       if (!header) continue;
       const confirmed = header.height <= tip ? 1 : 0;
       await database.updateTransactionConfirmation(
@@ -1216,10 +1186,10 @@ const DEFAULT_WALLET_STATE = {
   chainHeight: 0,
   connectedPeers: 0,
   isSyncing: false,
-  networkStatus: "Offline",
-  networkStatusKey: "wallet.network.offline" as NetworkStatusKey,
+  networkStatus: 'Offline',
+  networkStatusKey: 'wallet.network.offline' as NetworkStatusKey,
   networkStatusData: undefined as Record<string, string | number> | undefined,
-  currentReceiveAddress: "",
+  currentReceiveAddress: '',
   addresses: [] as string[],
   transactions: [] as WalletTransaction[],
   masternodeUTXOs: [] as MasternodeUTXO[],
@@ -1238,14 +1208,14 @@ const DEFAULT_WALLET_STATE = {
  * gets a sensible string; the UI should translate via `networkStatusKey`.
  */
 const NETWORK_STATUS_FALLBACK: Record<NetworkStatusKey, string> = {
-  "wallet.network.offline": "Offline",
-  "wallet.network.resolvingDns": "Resolving DNS seeds...",
-  "wallet.network.connecting": "Connecting to peers...",
-  "wallet.network.waitingForPeers": "Waiting for peers...",
-  "wallet.network.searchingForPeers": "Searching for peers...",
-  "wallet.network.connectedSingular": "Connected to 1 peer",
-  "wallet.network.connectedPlural": "Connected to {count} peers",
-  "wallet.network.error": "P2P error: {message}",
+  'wallet.network.offline': 'Offline',
+  'wallet.network.resolvingDns': 'Resolving DNS seeds...',
+  'wallet.network.connecting': 'Connecting to peers...',
+  'wallet.network.waitingForPeers': 'Waiting for peers...',
+  'wallet.network.searchingForPeers': 'Searching for peers...',
+  'wallet.network.connectedSingular': 'Connected to 1 peer',
+  'wallet.network.connectedPlural': 'Connected to {count} peers',
+  'wallet.network.error': 'P2P error: {message}',
 };
 
 /**
@@ -1292,11 +1262,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   initialized: false,
   loading: false,
   error: null,
-  network: "mainnet",
+  network: 'mainnet',
 
   // Multi-wallet initial state
   activeWalletId: null,
-  activeWalletName: "",
+  activeWalletName: '',
   wallets: [],
   isWatchOnly: false,
   hasBackedUp: false,
@@ -1313,11 +1283,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   chainHeight: 0,
   connectedPeers: 0,
   isSyncing: false,
-  networkStatus: NETWORK_STATUS_FALLBACK["wallet.network.offline"],
-  networkStatusKey: "wallet.network.offline" as NetworkStatusKey,
+  networkStatus: NETWORK_STATUS_FALLBACK['wallet.network.offline'],
+  networkStatusKey: 'wallet.network.offline' as NetworkStatusKey,
   networkStatusData: undefined,
 
-  currentReceiveAddress: "",
+  currentReceiveAddress: '',
   addresses: [],
 
   transactions: [],
@@ -1361,373 +1331,357 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       set({ loading: true, error: null });
 
       try {
-      networkConfig = getNetwork(state.network);
+        networkConfig = getNetwork(state.network);
 
-      // Resolve the wallet + active Pocket once, up front. When `account` is
-      // omitted (boot / unlock / wallet switch) restore the persisted active
-      // Pocket; explicit callers (switchPocket) pass it. Account 0 keeps the
-      // legacy DB file, so pre-Pockets wallets open exactly where they always did.
-      const activeId = walletId ?? (await getActiveWalletId());
-      const resolvedAccount =
-        account ?? (activeId ? await getActivePocket(activeId) : 0);
+        // Resolve the wallet + active Pocket once, up front. When `account` is
+        // omitted (boot / unlock / wallet switch) restore the persisted active
+        // Pocket; explicit callers (switchPocket) pass it. Account 0 keeps the
+        // legacy DB file, so pre-Pockets wallets open exactly where they always did.
+        const activeId = walletId ?? (await getActiveWalletId());
+        const resolvedAccount = account ?? (activeId ? await getActivePocket(activeId) : 0);
 
-      database = await Database.open(activeId ?? undefined, resolvedAccount);
-      if (myEpoch !== lockEpoch) {
-        // Locked while we were opening the database: abandon this task
-        // rather than build wallet state on top of a wallet the user just
-        // locked. `resetWalletInternals` tears down exactly what we've
-        // assigned so far (this database handle) and is a no-op for
-        // anything we haven't reached yet.
-        resetWalletInternals();
-        return;
-      }
-      // A wallet's stored secret is either a BIP39 mnemonic or the watch-only
-      // marker `xpub:<extended public key>`. The marker MUST route to the
-      // public-only KeyManager: feeding it into mnemonicToSeedSync would
-      // silently derive a random spendable keypair (BIP39 doesn't validate),
-      // producing a dangerous fake wallet (review finding C2). Watch-only
-      // wallets have no Pockets, so they always open at account 0.
-      if (mnemonic.startsWith(SEED_SECRET_PREFIX)) {
-        // Identity-derived wallet: the "secret" carries the 32-byte HKDF seed
-        // directly (never persisted, re-derived from the Oxy identity each
-        // boot). Build straight from the seed — no BIP39 detour. Still
-        // account-aware so the identity wallet supports Pockets like any
-        // other wallet.
-        const seed = hexToBytes(mnemonic.slice(SEED_SECRET_PREFIX.length));
-        keyManager = KeyManager.fromSeed(seed, networkConfig, resolvedAccount);
-      } else if (mnemonic.startsWith(XPUB_MARKER_PREFIX)) {
-        const xpub = mnemonic.slice(XPUB_MARKER_PREFIX.length);
-        keyManager = KeyManager.fromXpub(xpub, networkConfig);
-      } else {
-        // Reuse the cached BIP39 seed when present so unlock skips the
-        // multi-second PBKDF2 mnemonic→seed derivation; derive + cache it on the
-        // first run. The seed is shared by every Pocket of this wallet, so it is
-        // keyed by the wallet identity, and the account selects the subtree.
-        const seedCacheId = activeId ?? "default";
-        const seed = await getOrDeriveBip39Seed(seedCacheId, mnemonic, walletSeedDeps);
-        keyManager = KeyManager.fromSeed(seed, networkConfig, resolvedAccount);
-      }
-      if (myEpoch !== lockEpoch) {
-        // Locked while we were deriving keys (the BIP39 branch awaits a
-        // PBKDF2 derivation above). Wipe/close what this task built instead
-        // of leaving key material or a database handle dangling in module
-        // scope behind the lock screen.
-        resetWalletInternals();
-        return;
-      }
-      utxoSet = new UTXOSet();
-
-      // Load persisted UTXOs from database. A UTXO is confirmed iff it was
-      // stored with a real block height (>= 0); mempool receives are stored
-      // with height -1 and remain unconfirmed until their block is seen.
-      await reloadUtxoSetFromDatabase();
-
-      // Restore the BIP44 derivation cursors from persisted state so used
-      // addresses are never re-issued across restarts and the lookahead window
-      // (hence the Bloom filter) keeps watching the right addresses
-      // (SPV_AUDIT.md §4.5). KeyManager.fromMnemonic resets the cursors to 0.
-      const nextExternal = await database.getNextUnusedIndex(false);
-      const nextChange = await database.getNextUnusedIndex(true);
-      keyManager.restoreCursors(nextExternal, nextChange);
-
-      // Restore any multisig watch addresses registered in a previous
-      // session (Layer 1 multisig -- see src/wallet/multisig.ts) so they are
-      // owned and Bloom-filter-watched again immediately, same as the HD
-      // cursor restore just above.
-      await loadWatchAddressesIntoKeyManager(database, keyManager);
-
-      // Load persisted addresses from database
-      const dbAddresses = await database.getAddresses();
-      const addressList = dbAddresses.map((a) => a.address);
-
-      // Get receive address
-      const unused = await database.getUnusedAddress(false);
-      let receiveAddress: string;
-      if (unused) {
-        receiveAddress = unused.address;
-      } else {
-        const derived = keyManager.getNextAddress();
-        await database.insertAddress(
-          derived.address,
-          derived.path,
-          derived.index,
-          false,
-        );
-        receiveAddress = derived.address;
-        addressList.push(derived.address);
-      }
-
-      // Load wallet info. `activeId` was already resolved above (alongside
-      // the active Pocket) so the DB-open path and this lookup agree.
-      const wallets = await getWalletIndex();
-      const activeWallet = activeId
-        ? wallets.find((w) => w.id === activeId)
-        : undefined;
-
-      // Check if this is a watch-only wallet
-      const watchOnly = activeId ? await checkIsWatchOnly(activeId) : false;
-      // Has the user backed up this wallet's recovery phrase? Drives the home
-      // "back up your wallet" reminder. Watch-only wallets have no phrase to
-      // back up, so they never prompt.
-      const backedUp =
-        activeId === OXY_IDENTITY_WALLET_ID
-          ? true
-          : activeId && !watchOnly
-            ? await isWalletBackedUp(activeId)
-            : true;
-
-      // Bring up the social-receive branch (spec §4.3) for the identity
-      // wallet's MAIN Pocket only (account 0) on EVERY initialize() call, not
-      // just the first boot — a PIN unlock, a Pocket switch, or a wallet
-      // switch all tear this module's state down via `resetWalletInternals`
-      // and re-run `initialize()` directly, bypassing `initializeFromIdentity`.
-      // Runs before the Bloom filter is built below so the first filter a peer
-      // sees already covers the social branch. Gating on `resolvedAccount ===
-      // 0` (finding: MEDIUM/LOW) keeps the social-receive window a single set
-      // of addresses established once, on the main Pocket, instead of
-      // re-deriving and persisting the SAME window redundantly into every
-      // other Pocket's own (otherwise-unrelated) DB file. Non-identity
-      // wallets and non-main Pockets skip it; `resetWalletInternals` already
-      // cleared `socialReceiveIdentityPublicKey` / `socialReceiveAddressIndex`
-      // to their empty defaults for them.
-      if (activeId === OXY_IDENTITY_WALLET_ID && resolvedAccount === MAIN_POCKET_ACCOUNT) {
-        await setUpSocialReceive(database, networkConfig, state.network, set);
-      }
-
-      // Reconstruct the persisted transaction history into the display list.
-      // The `transactions` table stores raw_hex + block metadata but not the
-      // derived amount/address/type, so re-derive them the SAME way the SPV
-      // receive path does. Without this, a wallet that received (or sent) FAIR
-      // in a previous session shows an empty Activity list after unlock even
-      // though the balance — restored from the persisted UTXOs above — is
-      // correct. Spent inputs are priced from the full UTXO set (spent rows
-      // survive with their value/address); confirmations use the persisted tip.
-      const historyRows = await database.getTransactions(MAX_HISTORY_ROWS, 0);
-      const prevoutByOutpoint = new Map<
-        string,
-        { value: bigint; address: string }
-      >();
-      for (const row of await database.getAllUTXOs()) {
-        prevoutByOutpoint.set(`${row.txid}:${row.vout}`, {
-          value: BigInt(row.value),
-          address: row.address,
-        });
-      }
-      const persistedTip = (await database.getLatestHeader())?.height ?? 0;
-      const restoredTransactions: WalletTransaction[] = [];
-      for (const row of historyRows) {
-        const reconstructed = reconstructWalletTransaction(
-          row,
-          (address) => keyManager?.ownsAddress(address) ?? false,
-          (prevTxid, vout) => prevoutByOutpoint.get(`${prevTxid}:${vout}`),
-          networkConfig,
-          persistedTip,
-        );
-        if (reconstructed) {
-          restoredTransactions.push(reconstructed);
+        database = await Database.open(activeId ?? undefined, resolvedAccount);
+        if (myEpoch !== lockEpoch) {
+          // Locked while we were opening the database: abandon this task
+          // rather than build wallet state on top of a wallet the user just
+          // locked. `resetWalletInternals` tears down exactly what we've
+          // assigned so far (this database handle) and is a no-op for
+          // anything we haven't reached yet.
+          resetWalletInternals();
+          return;
         }
-      }
+        // A wallet's stored secret is either a BIP39 mnemonic or the watch-only
+        // marker `xpub:<extended public key>`. The marker MUST route to the
+        // public-only KeyManager: feeding it into mnemonicToSeedSync would
+        // silently derive a random spendable keypair (BIP39 doesn't validate),
+        // producing a dangerous fake wallet (review finding C2). Watch-only
+        // wallets have no Pockets, so they always open at account 0.
+        if (mnemonic.startsWith(SEED_SECRET_PREFIX)) {
+          // Identity-derived wallet: the "secret" carries the 32-byte HKDF seed
+          // directly (never persisted, re-derived from the Oxy identity each
+          // boot). Build straight from the seed — no BIP39 detour. Still
+          // account-aware so the identity wallet supports Pockets like any
+          // other wallet.
+          const seed = hexToBytes(mnemonic.slice(SEED_SECRET_PREFIX.length));
+          keyManager = KeyManager.fromSeed(seed, networkConfig, resolvedAccount);
+        } else if (mnemonic.startsWith(XPUB_MARKER_PREFIX)) {
+          const xpub = mnemonic.slice(XPUB_MARKER_PREFIX.length);
+          keyManager = KeyManager.fromXpub(xpub, networkConfig);
+        } else {
+          // Reuse the cached BIP39 seed when present so unlock skips the
+          // multi-second PBKDF2 mnemonic→seed derivation; derive + cache it on the
+          // first run. The seed is shared by every Pocket of this wallet, so it is
+          // keyed by the wallet identity, and the account selects the subtree.
+          const seedCacheId = activeId ?? 'default';
+          const seed = await getOrDeriveBip39Seed(seedCacheId, mnemonic, walletSeedDeps);
+          keyManager = KeyManager.fromSeed(seed, networkConfig, resolvedAccount);
+        }
+        if (myEpoch !== lockEpoch) {
+          // Locked while we were deriving keys (the BIP39 branch awaits a
+          // PBKDF2 derivation above). Wipe/close what this task built instead
+          // of leaving key material or a database handle dangling in module
+          // scope behind the lock screen.
+          resetWalletInternals();
+          return;
+        }
+        utxoSet = new UTXOSet();
 
-      if (myEpoch !== lockEpoch) {
-        // Locked while we were hydrating from disk (persisted UTXOs,
-        // addresses, social-receive window, transaction history — all pure
-        // reads/derivations up to this point). This is the mandatory gate:
-        // never publish `initialized: true` or fire `onReady` (which would
-        // lift the lock screen) for a task that started before the lock.
-        // There is no `await` between this check and the SPV start-up block
-        // below, so passing here also guarantees we won't create a live
-        // SPVClient / peer-update interval behind a locked screen.
-        resetWalletInternals();
-        return;
-      }
-      set({
-        initialized: true,
-        loading: false,
-        currentReceiveAddress: receiveAddress,
-        addresses: addressList,
-        balance: utxoSet.getBalance(),
-        confirmedBalance: utxoSet.getConfirmedBalance(),
-        unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
-        transactions: restoredTransactions,
-        activeWalletId: activeId,
-        activeWalletName: activeWallet?.name ?? "",
-        hasBackedUp: backedUp,
-        wallets,
-        isWatchOnly: watchOnly,
-        activeAccount: resolvedAccount,
-      });
+        // Load persisted UTXOs from database. A UTXO is confirmed iff it was
+        // stored with a real block height (>= 0); mempool receives are stored
+        // with height -1 and remain unconfirmed until their block is seen.
+        await reloadUtxoSetFromDatabase();
 
-      // The wallet is now fully hydrated from persisted SQLite state (cached
-      // balance, UTXOs, addresses, transaction history) with NO network access.
-      // Signal the UI-ready checkpoint HERE so the home renders / the lock
-      // lifts immediately — BEFORE the SPV/P2P startup below. That startup
-      // resolves DNS, connects to peers and syncs headers in the background,
-      // streaming live updates into the store (isSyncing / connectedPeers /
-      // chainHeight / balance) via the existing setters. This is what decouples
-      // "wallet usable" from "fully synced" without changing what sync computes.
-      // It stays INSIDE the serialised init task (N-1): the returned promise
-      // still only resolves after SPV startup, so switch/network/create/import
-      // callers that await it keep their exclusive critical section.
-      onReady?.();
+        // Restore the BIP44 derivation cursors from persisted state so used
+        // addresses are never re-issued across restarts and the lookahead window
+        // (hence the Bloom filter) keeps watching the right addresses
+        // (SPV_AUDIT.md §4.5). KeyManager.fromMnemonic resets the cursors to 0.
+        const nextExternal = await database.getNextUnusedIndex(false);
+        const nextChange = await database.getNextUnusedIndex(true);
+        keyManager.restoreCursors(nextExternal, nextChange);
 
-      // Start SPV client for P2P connectivity
-      try {
-        setNetworkStatus(set, "wallet.network.resolvingDns");
-        const socketProvider = createSocketProvider();
-        const headerStore = new DatabaseHeaderStore(database);
+        // Restore any multisig watch addresses registered in a previous
+        // session (Layer 1 multisig -- see src/wallet/multisig.ts) so they are
+        // owned and Bloom-filter-watched again immediately, same as the HD
+        // cursor restore just above.
+        await loadWatchAddressesIntoKeyManager(database, keyManager);
 
-        // N-5: load the persisted peer cache so the first connection round
-        // doesn't wait on DNS resolution. This also honours user-added peers
-        // from the "Add Peer" screen, which were previously written to DB
-        // but never read by the peer manager.
-        let initialPeers: string[] = [];
-        try {
-          const peerRows = await database.getKnownPeers(50);
-          initialPeers = peerRows.map((row) => row.host);
-        } catch {
-          // best-effort; DNS seeds are the fallback.
+        // Load persisted addresses from database
+        const dbAddresses = await database.getAddresses();
+        const addressList = dbAddresses.map((a) => a.address);
+
+        // Get receive address
+        const unused = await database.getUnusedAddress(false);
+        let receiveAddress: string;
+        if (unused) {
+          receiveAddress = unused.address;
+        } else {
+          const derived = keyManager.getNextAddress();
+          await database.insertAddress(derived.address, derived.path, derived.index, false);
+          receiveAddress = derived.address;
+          addressList.push(derived.address);
         }
 
-        // Only a wallet this app generated can safely skip the chain below the
-        // checkpoint anchor — a restored phrase may have received coins at any
-        // height (see `sync-anchor.ts`).
-        let startFromCheckpoint = false;
-        if (activeId) {
-          try {
-            startFromCheckpoint = await isFreshlyCreatedWallet(activeId);
-          } catch {
-            // Unknown provenance: sync from genesis, never risk hiding funds.
+        // Load wallet info. `activeId` was already resolved above (alongside
+        // the active Pocket) so the DB-open path and this lookup agree.
+        const wallets = await getWalletIndex();
+        const activeWallet = activeId ? wallets.find((w) => w.id === activeId) : undefined;
+
+        // Check if this is a watch-only wallet
+        const watchOnly = activeId ? await checkIsWatchOnly(activeId) : false;
+        // Has the user backed up this wallet's recovery phrase? Drives the home
+        // "back up your wallet" reminder. Watch-only wallets have no phrase to
+        // back up, so they never prompt.
+        const backedUp =
+          activeId === OXY_IDENTITY_WALLET_ID
+            ? true
+            : activeId && !watchOnly
+              ? await isWalletBackedUp(activeId)
+              : true;
+
+        // Bring up the social-receive branch (spec §4.3) for the identity
+        // wallet's MAIN Pocket only (account 0) on EVERY initialize() call, not
+        // just the first boot — a PIN unlock, a Pocket switch, or a wallet
+        // switch all tear this module's state down via `resetWalletInternals`
+        // and re-run `initialize()` directly, bypassing `initializeFromIdentity`.
+        // Runs before the Bloom filter is built below so the first filter a peer
+        // sees already covers the social branch. Gating on `resolvedAccount ===
+        // 0` (finding: MEDIUM/LOW) keeps the social-receive window a single set
+        // of addresses established once, on the main Pocket, instead of
+        // re-deriving and persisting the SAME window redundantly into every
+        // other Pocket's own (otherwise-unrelated) DB file. Non-identity
+        // wallets and non-main Pockets skip it; `resetWalletInternals` already
+        // cleared `socialReceiveIdentityPublicKey` / `socialReceiveAddressIndex`
+        // to their empty defaults for them.
+        if (activeId === OXY_IDENTITY_WALLET_ID && resolvedAccount === MAIN_POCKET_ACCOUNT) {
+          await setUpSocialReceive(database, networkConfig, state.network, set);
+        }
+
+        // Reconstruct the persisted transaction history into the display list.
+        // The `transactions` table stores raw_hex + block metadata but not the
+        // derived amount/address/type, so re-derive them the SAME way the SPV
+        // receive path does. Without this, a wallet that received (or sent) FAIR
+        // in a previous session shows an empty Activity list after unlock even
+        // though the balance — restored from the persisted UTXOs above — is
+        // correct. Spent inputs are priced from the full UTXO set (spent rows
+        // survive with their value/address); confirmations use the persisted tip.
+        const historyRows = await database.getTransactions(MAX_HISTORY_ROWS, 0);
+        const prevoutByOutpoint = new Map<string, { value: bigint; address: string }>();
+        for (const row of await database.getAllUTXOs()) {
+          prevoutByOutpoint.set(`${row.txid}:${row.vout}`, {
+            value: BigInt(row.value),
+            address: row.address,
+          });
+        }
+        const persistedTip = (await database.getLatestHeader())?.height ?? 0;
+        const restoredTransactions: WalletTransaction[] = [];
+        for (const row of historyRows) {
+          const reconstructed = reconstructWalletTransaction(
+            row,
+            (address) => keyManager?.ownsAddress(address) ?? false,
+            (prevTxid, vout) => prevoutByOutpoint.get(`${prevTxid}:${vout}`),
+            networkConfig,
+            persistedTip,
+          );
+          if (reconstructed) {
+            restoredTransactions.push(reconstructed);
           }
         }
 
-        spvClient = new SPVClient({
-          network: networkConfig,
-          socketProvider,
-          headerStore,
-          initialKnownAddresses: initialPeers,
-          startFromCheckpoint,
+        if (myEpoch !== lockEpoch) {
+          // Locked while we were hydrating from disk (persisted UTXOs,
+          // addresses, social-receive window, transaction history — all pure
+          // reads/derivations up to this point). This is the mandatory gate:
+          // never publish `initialized: true` or fire `onReady` (which would
+          // lift the lock screen) for a task that started before the lock.
+          // There is no `await` between this check and the SPV start-up block
+          // below, so passing here also guarantees we won't create a live
+          // SPVClient / peer-update interval behind a locked screen.
+          resetWalletInternals();
+          return;
+        }
+        set({
+          initialized: true,
+          loading: false,
+          currentReceiveAddress: receiveAddress,
+          addresses: addressList,
+          balance: utxoSet.getBalance(),
+          confirmedBalance: utxoSet.getConfirmedBalance(),
+          unconfirmedBalance: utxoSet.getUnconfirmedBalance(),
+          transactions: restoredTransactions,
+          activeWalletId: activeId,
+          activeWalletName: activeWallet?.name ?? '',
+          hasBackedUp: backedUp,
+          wallets,
+          isWatchOnly: watchOnly,
+          activeAccount: resolvedAccount,
         });
 
-        spvClient.setEvents({
-          onTransaction: (tx, txid, blockHash) => {
-            // A peer delivered a transaction matching our Bloom filter.
-            // Process it: credit received outputs, debit spent inputs, and
-            // persist everything so balances survive restarts. The SPV client
-            // calls this synchronously, so fire the async processor and route
-            // any failure into the store's error state (never swallow it).
-            void processIncomingTransaction(tx, txid, blockHash, set, get).catch(
-              (err: unknown) => {
-                const message =
-                  err instanceof Error ? err.message : "Unknown error";
-                set({ error: `Failed to process transaction: ${message}` });
-              },
-            );
-          },
-          onBlockHeader: (header) => {
-            set({ chainHeight: header.height });
-            // A new tip means previously-received UTXOs gained a confirmation.
-            void reconcileConfirmations(set, get).catch(() => {
-              // Confirmation reconciliation is best-effort; a transient failure
-              // here is retried on the next block. Do not surface it as a
-              // wallet error or interrupt sync.
-            });
-          },
-          onPeerReady: (peer) => {
-            // Cache every node that actually completed a handshake. Without
-            // this the `peers` table only ever held manually-added entries and
-            // each cold start had to re-resolve the DNS seeds before it could
-            // dial anything.
-            void database
-              ?.insertPeer(peer.host, peer.port, Number(peer.services))
-              .catch(() => {
+        // The wallet is now fully hydrated from persisted SQLite state (cached
+        // balance, UTXOs, addresses, transaction history) with NO network access.
+        // Signal the UI-ready checkpoint HERE so the home renders / the lock
+        // lifts immediately — BEFORE the SPV/P2P startup below. That startup
+        // resolves DNS, connects to peers and syncs headers in the background,
+        // streaming live updates into the store (isSyncing / connectedPeers /
+        // chainHeight / balance) via the existing setters. This is what decouples
+        // "wallet usable" from "fully synced" without changing what sync computes.
+        // It stays INSIDE the serialised init task (N-1): the returned promise
+        // still only resolves after SPV startup, so switch/network/create/import
+        // callers that await it keep their exclusive critical section.
+        onReady?.();
+
+        // Start SPV client for P2P connectivity
+        try {
+          setNetworkStatus(set, 'wallet.network.resolvingDns');
+          const socketProvider = createSocketProvider();
+          const headerStore = new DatabaseHeaderStore(database);
+
+          // N-5: load the persisted peer cache so the first connection round
+          // doesn't wait on DNS resolution. This also honours user-added peers
+          // from the "Add Peer" screen, which were previously written to DB
+          // but never read by the peer manager.
+          let initialPeers: string[] = [];
+          try {
+            const peerRows = await database.getKnownPeers(50);
+            initialPeers = peerRows.map((row) => row.host);
+          } catch {
+            // best-effort; DNS seeds are the fallback.
+          }
+
+          // Only a wallet this app generated can safely skip the chain below the
+          // checkpoint anchor — a restored phrase may have received coins at any
+          // height (see `sync-anchor.ts`).
+          let startFromCheckpoint = false;
+          if (activeId) {
+            try {
+              startFromCheckpoint = await isFreshlyCreatedWallet(activeId);
+            } catch {
+              // Unknown provenance: sync from genesis, never risk hiding funds.
+            }
+          }
+
+          spvClient = new SPVClient({
+            network: networkConfig,
+            socketProvider,
+            headerStore,
+            initialKnownAddresses: initialPeers,
+            startFromCheckpoint,
+          });
+
+          spvClient.setEvents({
+            onTransaction: (tx, txid, blockHash) => {
+              // A peer delivered a transaction matching our Bloom filter.
+              // Process it: credit received outputs, debit spent inputs, and
+              // persist everything so balances survive restarts. The SPV client
+              // calls this synchronously, so fire the async processor and route
+              // any failure into the store's error state (never swallow it).
+              void processIncomingTransaction(tx, txid, blockHash, set, get).catch(
+                (err: unknown) => {
+                  const message = err instanceof Error ? err.message : 'Unknown error';
+                  set({ error: `Failed to process transaction: ${message}` });
+                },
+              );
+            },
+            onBlockHeader: (header) => {
+              set({ chainHeight: header.height });
+              // A new tip means previously-received UTXOs gained a confirmation.
+              void reconcileConfirmations(set, get).catch(() => {
+                // Confirmation reconciliation is best-effort; a transient failure
+                // here is retried on the next block. Do not surface it as a
+                // wallet error or interrupt sync.
+              });
+            },
+            onPeerReady: (peer) => {
+              // Cache every node that actually completed a handshake. Without
+              // this the `peers` table only ever held manually-added entries and
+              // each cold start had to re-resolve the DNS seeds before it could
+              // dial anything.
+              void database?.insertPeer(peer.host, peer.port, Number(peer.services)).catch(() => {
                 // The cache is an optimisation: DNS seeds remain the fallback.
               });
-          },
-          onReorg: async (forkHeight) => {
-            // A longer chain orphaned the blocks above forkHeight. Roll the
-            // wallet (UTXO set, balance, tx list) back so it never spends or
-            // displays outputs that no longer exist on the winning chain. This
-            // runs before the SPV client stores the new branch.
-            await rewindWalletToHeight(forkHeight, set);
-          },
-          onSyncProgress: (progress) => {
-            set({
-              syncProgress: Math.round(progress * 100),
-              isSyncing: progress < 1,
-            });
-            // Once headers are (nearly) caught up, kick the historical rescan
-            // so funds received before the filter loaded are discovered. The
-            // driver is guarded and resumable, so calling it repeatedly is safe.
-            if (progress >= 1) {
-              void runHistoricalRescan(set, get).catch(() => {
-                // Rescan is best-effort; failures are retried on the next tip
-                // advance and do not surface as wallet errors.
+            },
+            onReorg: async (forkHeight) => {
+              // A longer chain orphaned the blocks above forkHeight. Roll the
+              // wallet (UTXO set, balance, tx list) back so it never spends or
+              // displays outputs that no longer exist on the winning chain. This
+              // runs before the SPV client stores the new branch.
+              await rewindWalletToHeight(forkHeight, set);
+            },
+            onSyncProgress: (progress) => {
+              set({
+                syncProgress: Math.round(progress * 100),
+                isSyncing: progress < 1,
+              });
+              // Once headers are (nearly) caught up, kick the historical rescan
+              // so funds received before the filter loaded are discovered. The
+              // driver is guarded and resumable, so calling it repeatedly is safe.
+              if (progress >= 1) {
+                void runHistoricalRescan(set, get).catch(() => {
+                  // Rescan is best-effort; failures are retried on the next tip
+                  // advance and do not surface as wallet errors.
+                });
+              }
+            },
+          });
+
+          // Load Bloom filter with all wallet addresses. `setUpSocialReceive`
+          // above (identity wallets only) has already populated
+          // `socialReceiveAddressIndex` by this point, so the combined helper
+          // folds the social branch into the FIRST filter a peer ever sees —
+          // no separate post-hoc refresh needed.
+          if (keyManager) {
+            spvClient.setBloomFilter(buildCombinedBloomFilterHashes(keyManager));
+          }
+
+          setNetworkStatus(set, 'wallet.network.connecting');
+          await spvClient.start();
+
+          set({ chainHeight: spvClient.getChainHeight() });
+          setNetworkStatus(set, 'wallet.network.waitingForPeers');
+
+          // Periodic peer count updater. Persist the handle at module scope so
+          // `resetWalletInternals` (lock / switch wallet / change network) can
+          // unconditionally clear it; otherwise a stale interval keeps writing
+          // peer-count and triggering rescans on top of the new wallet (C-1).
+          if (peerUpdateInterval) {
+            clearInterval(peerUpdateInterval);
+            peerUpdateInterval = null;
+          }
+          peerUpdateInterval = setInterval(() => {
+            if (!spvClient) {
+              if (peerUpdateInterval) {
+                clearInterval(peerUpdateInterval);
+                peerUpdateInterval = null;
+              }
+              return;
+            }
+            const count = spvClient.getPeerManager().getReadyPeers().length;
+            set({ connectedPeers: count });
+            if (count === 0) {
+              setNetworkStatus(set, 'wallet.network.searchingForPeers');
+            } else if (count === 1) {
+              setNetworkStatus(set, 'wallet.network.connectedSingular');
+            } else {
+              setNetworkStatus(set, 'wallet.network.connectedPlural', {
+                count,
               });
             }
-          },
-        });
 
-        // Load Bloom filter with all wallet addresses. `setUpSocialReceive`
-        // above (identity wallets only) has already populated
-        // `socialReceiveAddressIndex` by this point, so the combined helper
-        // folds the social branch into the FIRST filter a peer ever sees —
-        // no separate post-hoc refresh needed.
-        if (keyManager) {
-          spvClient.setBloomFilter(buildCombinedBloomFilterHashes(keyManager));
-        }
-
-        setNetworkStatus(set, "wallet.network.connecting");
-        await spvClient.start();
-
-        set({ chainHeight: spvClient.getChainHeight() });
-        setNetworkStatus(set, "wallet.network.waitingForPeers");
-
-        // Periodic peer count updater. Persist the handle at module scope so
-        // `resetWalletInternals` (lock / switch wallet / change network) can
-        // unconditionally clear it; otherwise a stale interval keeps writing
-        // peer-count and triggering rescans on top of the new wallet (C-1).
-        if (peerUpdateInterval) {
-          clearInterval(peerUpdateInterval);
-          peerUpdateInterval = null;
-        }
-        peerUpdateInterval = setInterval(() => {
-          if (!spvClient) {
-            if (peerUpdateInterval) {
-              clearInterval(peerUpdateInterval);
-              peerUpdateInterval = null;
+            // Drive the historical rescan once peers and a chain exist. This
+            // covers the already-synced case (a restored wallet whose headers are
+            // current so `onSyncProgress` never fires). Guarded + resumable, so
+            // the repeated call is a cheap no-op while a scan is in flight or done.
+            if (count > 0) {
+              void runHistoricalRescan(set, get).catch(() => {
+                // Best-effort; retried on the next interval tick.
+              });
             }
-            return;
-          }
-          const count = spvClient.getPeerManager().getReadyPeers().length;
-          set({ connectedPeers: count });
-          if (count === 0) {
-            setNetworkStatus(set, "wallet.network.searchingForPeers");
-          } else if (count === 1) {
-            setNetworkStatus(set, "wallet.network.connectedSingular");
-          } else {
-            setNetworkStatus(set, "wallet.network.connectedPlural", {
-              count,
-            });
-          }
-
-          // Drive the historical rescan once peers and a chain exist. This
-          // covers the already-synced case (a restored wallet whose headers are
-          // current so `onSyncProgress` never fires). Guarded + resumable, so
-          // the repeated call is a cheap no-op while a scan is in flight or done.
-          if (count > 0) {
-            void runHistoricalRescan(set, get).catch(() => {
-              // Best-effort; retried on the next interval tick.
-            });
-          }
-        }, 5000);
-      } catch (spvError: unknown) {
-        const spvMsg =
-          spvError instanceof Error ? spvError.message : "Unknown P2P error";
-        setNetworkStatus(set, "wallet.network.error", { message: spvMsg });
-      }
+          }, 5000);
+        } catch (spvError: unknown) {
+          const spvMsg = spvError instanceof Error ? spvError.message : 'Unknown P2P error';
+          setNetworkStatus(set, 'wallet.network.error', { message: spvMsg });
+        }
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Unknown initialization error";
+        const message = err instanceof Error ? err.message : 'Unknown initialization error';
         set({ loading: false, error: message });
       }
     });
@@ -1746,17 +1700,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // FAIRWallet deleted the create/restore SCREENS, not the capability. What a
     // browser genuinely cannot do is derive THIS seed, and therefore sign.
     if (!hasIdentityKeystore()) {
-      return "no-keystore";
+      return 'no-keystore';
     }
     const seed = await deriveIdentitySeed();
     if (!seed) {
-      return "no-identity";
+      return 'no-identity';
     }
     // `initialize()` itself brings up social receive (gated on
     // `activeId === OXY_IDENTITY_WALLET_ID`, which is always true here) —
     // no separate step needed.
     await get().initialize(buildSeedSecret(seed), OXY_IDENTITY_WALLET_ID, onReady);
-    return "initialized";
+    return 'initialized';
   },
 
   reloadActiveWallet: async (onReady?: () => void): Promise<void> => {
@@ -1773,7 +1727,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       if (await checkIsWatchOnly(activeId)) {
         const marker = await getWalletMnemonic(activeId);
         if (!marker) {
-          throw new Error("Wallet xpub not found");
+          throw new Error('Wallet xpub not found');
         }
         await get().initialize(marker, activeId, onReady);
         return;
@@ -1786,8 +1740,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       const seed = await resolveWalletSeed(activeId, walletSeedDeps);
       await get().initialize(buildSeedSecret(seed), activeId, onReady);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to reload wallet";
+      const message = err instanceof Error ? err.message : 'Failed to reload wallet';
       set({ loading: false, error: message });
     }
   },
@@ -1796,11 +1749,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({ loading: true, error: null });
 
     try {
-      const mnemonic = await get().createNewWallet("Wallet 1");
+      const mnemonic = await get().createNewWallet('Wallet 1');
       return mnemonic;
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to create wallet";
+      const message = err instanceof Error ? err.message : 'Failed to create wallet';
       set({ loading: false, error: message });
       throw new Error(message);
     }
@@ -1814,7 +1766,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       try {
         const trimmed = mnemonic.trim().toLowerCase();
         if (!validateMnemonic(trimmed)) {
-          throw new Error("Invalid mnemonic phrase");
+          throw new Error('Invalid mnemonic phrase');
         }
 
         const walletId = generateWalletId();
@@ -1830,8 +1782,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
         await get().initialize(trimmed, walletId);
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to restore wallet";
+        const message = err instanceof Error ? err.message : 'Failed to restore wallet';
         set({ loading: false, error: message });
         throw new Error(message);
       }
@@ -1868,7 +1819,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   getNewAddress: (): string => {
     if (!keyManager) {
-      throw new Error("Wallet not initialized");
+      throw new Error('Wallet not initialized');
     }
 
     const derived = keyManager.getNextAddress();
@@ -1878,8 +1829,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       database
         .insertAddress(derived.address, derived.path, derived.index, false)
         .catch((err: unknown) => {
-          const message =
-            err instanceof Error ? err.message : "Unknown database error";
+          const message = err instanceof Error ? err.message : 'Unknown database error';
           set({ error: `Failed to persist address: ${message}` });
         });
     }
@@ -1895,10 +1845,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   getBuyDeliveryAddress: async (): Promise<string> => {
     if (!keyManager) {
-      throw new Error("Wallet not initialized");
+      throw new Error('Wallet not initialized');
     }
     if (keyManager.isWatchOnly()) {
-      throw new Error("Watch-only wallet cannot receive bought FAIR");
+      throw new Error('Watch-only wallet cannot receive bought FAIR');
     }
 
     // Bought FAIR is delivered to a NORMAL chain-0 receive address, so it flows
@@ -1909,12 +1859,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const derived = keyManager.getNextAddress();
 
     if (database) {
-      await database.insertAddress(
-        derived.address,
-        derived.path,
-        derived.index,
-        false,
-      );
+      await database.insertAddress(derived.address, derived.path, derived.index, false);
     }
 
     const current = get().addresses;
@@ -1930,11 +1875,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     return derived.address;
   },
 
-  sendTransaction: async (
-    toAddress: string,
-    amount: bigint,
-    feeRate: number,
-  ): Promise<string> => {
+  sendTransaction: async (toAddress: string, amount: bigint, feeRate: number): Promise<string> => {
     set({ loading: true, error: null });
 
     // N-2: capture local references to every module-level dependency the
@@ -1965,10 +1906,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     try {
       if (!localKeyManager || !localDatabase || !localNetworkConfig) {
-        throw new Error("Wallet not initialized");
+        throw new Error('Wallet not initialized');
       }
       if (get().isWatchOnly) {
-        throw new Error("Watch-only wallets cannot send transactions");
+        throw new Error('Watch-only wallets cannot send transactions');
       }
 
       // From here on we hold critical refs; mark in-flight so lockWallet
@@ -2016,9 +1957,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       }));
       const conflict = localReservation.reserve(outpoints);
       if (conflict !== null) {
-        throw new Error(
-          "Selected coins are being spent by another transaction in progress",
-        );
+        throw new Error('Selected coins are being spent by another transaction in progress');
       }
       reservedHere = outpoints;
 
@@ -2044,9 +1983,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Sign each input with the corresponding private key
       for (let i = 0; i < tx.inputs.length; i++) {
         const input = tx.inputs[i];
-        const utxo = selection.selected.find(
-          (u) => u.txid === input.txid && u.vout === input.vout,
-        );
+        const utxo = selection.selected.find((u) => u.txid === input.txid && u.vout === input.vout);
         if (!utxo) {
           throw new Error(`UTXO not found for input ${input.txid}:${input.vout}`);
         }
@@ -2071,14 +2008,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // Without this gate the wallet would silently desync from the network:
       // UTXOs locally spent but still spendable by anyone else on chain.
       if (!localSpvClient) {
-        throw new Error(
-          "Wallet is offline. Connect to peers before sending a transaction.",
-        );
+        throw new Error('Wallet is offline. Connect to peers before sending a transaction.');
       }
       const broadcast = localSpvClient.broadcastTransaction(rawTx);
       if (broadcast.peerCount === 0) {
         throw new Error(
-          "No peers available to relay the transaction. Try again once the wallet is connected.",
+          'No peers available to relay the transaction. Try again once the wallet is connected.',
         );
       }
 
@@ -2100,7 +2035,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         txid,
         raw_hex: bytesToHex(rawTx),
         block_height: -1,
-        block_hash: "",
+        block_hash: '',
         timestamp: now,
         fee: Number(selection.fee),
         confirmed: 0,
@@ -2113,7 +2048,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         address: toAddress,
         timestamp: now,
         confirmations: 0,
-        type: "send",
+        type: 'send',
       };
 
       set((state) => ({
@@ -2130,7 +2065,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       return txid;
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Transaction failed";
+      const msg = err instanceof Error ? err.message : 'Transaction failed';
       set({ loading: false, error: msg });
       throw new Error(msg);
     } finally {
@@ -2165,9 +2100,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       vout: u.vout,
       address: u.address,
       confirmations:
-        state.chainHeight > 0 && u.blockHeight > 0
-          ? state.chainHeight - u.blockHeight + 1
-          : 0,
+        state.chainHeight > 0 && u.blockHeight > 0 ? state.chainHeight - u.blockHeight + 1 : 0,
     }));
 
     set({ masternodeUTXOs: masternodeList });
@@ -2182,9 +2115,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     // Reason over the same confirmed coins (and coin-control selection) that
     // sendTransaction will spend, so the confirmation screen, the Max button,
     // and the insufficient-funds gate all reflect the REAL fee and balance.
-    const candidates: UTXO[] = utxoSet
-      ? utxoSet.getAllUTXOs().filter((u) => u.confirmed)
-      : [];
+    const candidates: UTXO[] = utxoSet ? utxoSet.getAllUTXOs().filter((u) => u.confirmed) : [];
     return computeSendEstimate({
       candidates,
       targetValue: amount,
@@ -2218,14 +2149,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       set({
         ...DEFAULT_WALLET_STATE,
-        network: "mainnet",
+        network: 'mainnet',
         activeWalletId: null,
-        activeWalletName: "",
+        activeWalletName: '',
         wallets: [],
       });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to wipe wallet";
+      const message = err instanceof Error ? err.message : 'Failed to wipe wallet';
       set({ loading: false, error: message });
     }
   },
@@ -2290,18 +2220,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const wallets = await getWalletIndex();
       const activeId = await getActiveWalletId();
-      const activeWallet = activeId
-        ? wallets.find((w) => w.id === activeId)
-        : undefined;
+      const activeWallet = activeId ? wallets.find((w) => w.id === activeId) : undefined;
 
       set({
         wallets,
         activeWalletId: activeId,
-        activeWalletName: activeWallet?.name ?? "",
+        activeWalletName: activeWallet?.name ?? '',
       });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to load wallet list";
+      const message = err instanceof Error ? err.message : 'Failed to load wallet list';
       set({ error: message });
     }
   },
@@ -2349,7 +2276,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // Load the new wallet's mnemonic
         const mnemonic = await getWalletMnemonic(walletId);
         if (!mnemonic) {
-          throw new Error("Wallet mnemonic not found");
+          throw new Error('Wallet mnemonic not found');
         }
 
         // Re-initialize with the new wallet. `initialize` itself queues, but
@@ -2362,8 +2289,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         // a NEW task posted while we still hold the queue.)
         await get().initialize(mnemonic, walletId);
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to switch wallet";
+        const message = err instanceof Error ? err.message : 'Failed to switch wallet';
         set({ loading: false, error: message });
       }
     });
@@ -2422,7 +2348,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       } catch (err: unknown) {
         set({
           loading: false,
-          error: err instanceof Error ? err.message : "Failed to switch pocket",
+          error: err instanceof Error ? err.message : 'Failed to switch pocket',
         });
       }
     });
@@ -2436,7 +2362,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   ): Promise<number> => {
     const walletId = get().activeWalletId;
     if (!walletId) {
-      throw new Error("No active wallet");
+      throw new Error('No active wallet');
     }
     const list = await getPockets(walletId);
     const updated = addPocket(list, name.trim(), image, color, goal, Date.now());
@@ -2469,11 +2395,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (!walletId) return;
     const list = await getPockets(walletId);
     if (!canDeletePocket(list, account)) {
-      throw new Error("This pocket cannot be deleted");
+      throw new Error('This pocket cannot be deleted');
     }
     const total = await readPocketUnspentTotal(walletId, account);
     if (total > 0n) {
-      throw new Error("Move funds out of this pocket before deleting it");
+      throw new Error('Move funds out of this pocket before deleting it');
     }
     await savePockets(walletId, removePocketList(list, account));
     if (get().activeAccount === account) {
@@ -2491,16 +2417,16 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const state = get();
     const walletId = state.activeWalletId;
     if (!walletId) {
-      throw new Error("No active wallet");
+      throw new Error('No active wallet');
     }
     if (state.isWatchOnly) {
-      throw new Error("Watch-only wallets cannot move funds");
+      throw new Error('Watch-only wallets cannot move funds');
     }
     if (toAccount === state.activeAccount) {
-      throw new Error("Choose a different destination pocket");
+      throw new Error('Choose a different destination pocket');
     }
     if (!networkConfig) {
-      throw new Error("Wallet not initialized");
+      throw new Error('Wallet not initialized');
     }
 
     // Identity-wallet-aware: the identity wallet's seed is re-derived from the
@@ -2515,12 +2441,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     let destAddress: string;
     try {
       const nextIndex = await destDb.getNextUnusedIndex(false);
-      const dest = resolveMoveDestinationAddress(
-        seed,
-        networkConfig,
-        toAccount,
-        nextIndex,
-      );
+      const dest = resolveMoveDestinationAddress(seed, networkConfig, toAccount, nextIndex);
       await destDb.insertAddress(dest.address, dest.path, dest.index, false);
       // Mark it used immediately: this address is about to receive the move, so
       // treating it as unused until the destination Pocket next syncs would let
@@ -2590,8 +2511,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       return mnemonic;
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to create new wallet";
+      const message = err instanceof Error ? err.message : 'Failed to create new wallet';
       set({ loading: false, error: message });
       throw new Error(message);
     }
@@ -2603,7 +2523,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const trimmed = mnemonic.trim().toLowerCase();
       if (!validateMnemonic(trimmed)) {
-        throw new Error("Invalid mnemonic phrase");
+        throw new Error('Invalid mnemonic phrase');
       }
 
       const walletId = generateWalletId();
@@ -2632,8 +2552,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       await get().initialize(trimmed, walletId);
       await get().loadWalletList();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to import wallet";
+      const message = err instanceof Error ? err.message : 'Failed to import wallet';
       set({ loading: false, error: message });
       throw new Error(message);
     }
@@ -2686,7 +2605,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             ...DEFAULT_WALLET_STATE,
             network: state.network,
             activeWalletId: null,
-            activeWalletName: "",
+            activeWalletName: '',
             wallets: [],
           });
         }
@@ -2698,8 +2617,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         });
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to delete wallet";
+      const message = err instanceof Error ? err.message : 'Failed to delete wallet';
       set({ loading: false, error: message });
     }
   },
@@ -2716,8 +2634,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         wallets,
       });
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to rename wallet";
+      const message = err instanceof Error ? err.message : 'Failed to rename wallet';
       set({ error: message });
     }
   },
@@ -2773,8 +2690,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       await get().initialize(`${XPUB_MARKER_PREFIX}${trimmedXpub}`, walletId);
       await get().loadWalletList();
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to import watch-only wallet";
+      const message = err instanceof Error ? err.message : 'Failed to import watch-only wallet';
       set({ loading: false, error: message });
       throw new Error(message);
     }
@@ -2843,22 +2759,18 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           if (state.isWatchOnly) {
             const marker = await getWalletMnemonic(state.activeWalletId);
             if (!marker) {
-              throw new Error("Wallet xpub not found");
+              throw new Error('Wallet xpub not found');
             }
             await get().initialize(marker, state.activeWalletId);
           } else {
-            const seed = await resolveWalletSeed(
-              state.activeWalletId,
-              walletSeedDeps,
-            );
+            const seed = await resolveWalletSeed(state.activeWalletId, walletSeedDeps);
             await get().initialize(buildSeedSecret(seed), state.activeWalletId);
           }
         } else {
           set({ loading: false });
         }
       } catch (err: unknown) {
-        const message =
-          err instanceof Error ? err.message : "Failed to switch network";
+        const message = err instanceof Error ? err.message : 'Failed to switch network';
         set({ loading: false, error: message });
       }
     });
@@ -2870,7 +2782,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   exportBackup: async (): Promise<string> => {
     if (!database) {
-      throw new Error("Wallet not initialized");
+      throw new Error('Wallet not initialized');
     }
 
     try {
@@ -2899,15 +2811,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
       return JSON.stringify(backup, null, 2);
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to export backup";
+      const message = err instanceof Error ? err.message : 'Failed to export backup';
       throw new Error(message);
     }
   },
 
   importBackup: async (json: string): Promise<void> => {
     if (!database) {
-      throw new Error("Wallet not initialized");
+      throw new Error('Wallet not initialized');
     }
 
     try {
@@ -2921,20 +2832,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         addressLabels?: { address: string; label: string }[];
       };
 
-      if (typeof backup.version !== "number") {
-        throw new Error("Invalid backup format: missing version");
+      if (typeof backup.version !== 'number') {
+        throw new Error('Invalid backup format: missing version');
       }
 
       // Import contacts
       if (Array.isArray(backup.contacts)) {
         for (const contact of backup.contacts) {
           const id = generateWalletId(); // reuse UUID generator
-          await database.insertContact(
-            id,
-            contact.name,
-            contact.address,
-            contact.notes,
-          );
+          await database.insertContact(id, contact.name, contact.address, contact.notes);
         }
       }
 
@@ -2945,8 +2851,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         }
       }
     } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "Failed to import backup";
+      const message = err instanceof Error ? err.message : 'Failed to import backup';
       throw new Error(message);
     }
   },

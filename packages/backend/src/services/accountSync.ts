@@ -19,12 +19,12 @@
  * provider's rate limit — which, unlike this gateway's own, is shared with
  * every real payment in flight.
  */
-import { findAccountsToSync } from "../db/accounts/connectedAccountRepository";
-import { getDb } from "../db/postgres";
-import { refreshConnectedAccount } from "./accounts/connectedAccountService";
-import { AccountsUnavailableError } from "./accounts/connectedAccountService";
-import { redactProviderMessage } from "./providers/redact";
-import type { ProviderId } from "./providers/provider";
+import { findAccountsToSync } from '../db/accounts/connectedAccountRepository';
+import { getDb } from '../db/postgres';
+import { refreshConnectedAccount } from './accounts/connectedAccountService';
+import { AccountsUnavailableError } from './accounts/connectedAccountService';
+import { redactProviderMessage } from './providers/redact';
+import type { ProviderId } from './providers/provider';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /**
@@ -53,17 +53,11 @@ export interface SyncPassResult {
  * behind it, permanently, because the queue is ordered by sync time and a
  * never-synced failure stays at the front.
  */
-export async function runAccountSyncPass(
-  options: SyncPassOptions = {},
-): Promise<SyncPassResult> {
-  const provider = options.provider ?? "stripe";
+export async function runAccountSyncPass(options: SyncPassOptions = {}): Promise<SyncPassResult> {
+  const provider = options.provider ?? 'stripe';
   let accounts;
   try {
-    accounts = await findAccountsToSync(
-      getDb(),
-      provider,
-      options.batchSize ?? DEFAULT_BATCH_SIZE,
-    );
+    accounts = await findAccountsToSync(getDb(), provider, options.batchSize ?? DEFAULT_BATCH_SIZE);
   } catch {
     return { examined: 0, refreshed: 0, failed: 0 };
   }
@@ -84,7 +78,7 @@ export async function runAccountSyncPass(
       failed += 1;
       process.emitWarning(
         `Peable account sync failed for ${account.publicId}: ${
-          error instanceof Error ? redactProviderMessage(error.message) : "unknown error"
+          error instanceof Error ? redactProviderMessage(error.message) : 'unknown error'
         }`,
       );
     }

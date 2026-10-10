@@ -1,44 +1,44 @@
-import { test, expect, beforeAll, afterAll, beforeEach, describe, mock } from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import { eq } from "drizzle-orm";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
-import { type User } from "@oxy.so/core";
-import { oxy as realOxy } from "../../oxy";
-import { overrideOxy } from "../../__tests__/helpers/oxyOverrides";
-import type { DidDocument } from "@oxy.so/contracts";
+import { test, expect, beforeAll, afterAll, beforeEach, describe, mock } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import { eq } from 'drizzle-orm';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
+import { type User } from '@oxy.so/core';
+import { oxy as realOxy } from '../../oxy';
+import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
+import type { DidDocument } from '@oxy.so/contracts';
 import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
-} from "@peable.to/shared-types";
-import { socialSendAttributions } from "../../db/schema";
+} from '@peable.to/shared-types';
+import { socialSendAttributions } from '../../db/schema';
 import {
   gatewayDb,
   resetGatewayTables,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
+} from '../../__tests__/helpers/gatewayTestDatabase';
 
 const IDENTITY_PUB_A_UNCOMPRESSED_HEX =
-  "046a04ab98d9e4774ad806e302dddeb63bea16b5cb5f223ee77478e861bb583eb336b6fbcb60b5b3d4f1551ac45e5ffc4936466e7d98f6c7c0ec736539f74691a6";
+  '046a04ab98d9e4774ad806e302dddeb63bea16b5cb5f223ee77478e861bb583eb336b6fbcb60b5b3d4f1551ac45e5ffc4936466e7d98f6c7c0ec736539f74691a6';
 
 const PROFILES: Record<string, { id: string; username: string }> = {
-  alice: { id: "user_alice", username: "alice" },
-  keylessbob: { id: "user_keylessbob", username: "keylessbob" },
+  alice: { id: 'user_alice', username: 'alice' },
+  keylessbob: { id: 'user_keylessbob', username: 'keylessbob' },
 };
 
 function didFor(userId: string): DidDocument {
-  const hasKey = userId !== "user_keylessbob";
+  const hasKey = userId !== 'user_keylessbob';
   return {
-    "@context": [],
+    '@context': [],
     id: `did:web:oxy.so:u:${userId}`,
     controller: [],
     verificationMethod: hasKey
       ? [
           {
             id: `did:web:oxy.so:u:${userId}#key-1`,
-            type: "EcdsaSecp256k1VerificationKey2019",
+            type: 'EcdsaSecp256k1VerificationKey2019',
             controller: `did:web:oxy.so:u:${userId}`,
             publicKeyHex: IDENTITY_PUB_A_UNCOMPRESSED_HEX,
           },
@@ -65,15 +65,15 @@ function testProfile(key: string): { id: string; username: string } {
 const getProfileByUsernameMock = mock(async (username: string) => {
   // Simulates a real oxy-api outage/timeout — no `.status` on the error, the
   // same shape a network failure produces. Must NOT be treated as a 404.
-  if (username === "flaky") {
-    throw new Error("network timeout");
+  if (username === 'flaky') {
+    throw new Error('network timeout');
   }
   const profile = PROFILES[username];
   if (!profile) {
     // Real `getProfileByUsername` 404s carry `.status` (set by
     // `OxyServices.base.ts`'s `handleError`) — mirror that shape so
     // `isNotFoundError` in the route under test exercises the real check.
-    const err = new Error("not found") as Error & { status: number };
+    const err = new Error('not found') as Error & { status: number };
     err.status = 404;
     throw err;
   }
@@ -81,27 +81,31 @@ const getProfileByUsernameMock = mock(async (username: string) => {
 });
 const resolveDidMock = mock(async (userId: string) => didFor(userId));
 // `enrichAddresses` resolves counterparty identity through this one.
-const getUsersByIdsMock = mock(async (ids: string[]) =>
-  ids
-    .map((id) => Object.values(PROFILES).find((p) => p.id === id))
-    .filter((p): p is { id: string; username: string } => p !== undefined)
-    .map((p) => ({
-      id: p.id,
-      username: p.username,
-      name: { displayName: p.username.toUpperCase() },
-      avatar: null,
-    })) as unknown as User[],
+const getUsersByIdsMock = mock(
+  async (ids: string[]) =>
+    ids
+      .map((id) => Object.values(PROFILES).find((p) => p.id === id))
+      .filter((p): p is { id: string; username: string } => p !== undefined)
+      .map((p) => ({
+        id: p.id,
+        username: p.username,
+        name: { displayName: p.username.toUpperCase() },
+        avatar: null,
+      })) as unknown as User[],
 );
 
 // `mock.module` is process-wide in bun: only the methods this file needs are
 // replaced; the rest of `oxy` (its middleware included) stays real.
-mock.module("../../oxy", () => ({
-  oxy: overrideOxy(realOxy, { users: { byUsername: getProfileByUsernameMock, getMany: getUsersByIdsMock }, identity: { resolveDid: resolveDidMock } }),
+mock.module('../../oxy', () => ({
+  oxy: overrideOxy(realOxy, {
+    users: { byUsername: getProfileByUsernameMock, getMany: getUsersByIdsMock },
+    identity: { resolveDid: resolveDidMock },
+  }),
 }));
 
-const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX } = await import("../social");
+const { createSocialRouter, NEXT_ADDRESS_PAIR_MAX } = await import('../social');
 
-const TEST_SENDER_ID = "user_test_sender";
+const TEST_SENDER_ID = 'user_test_sender';
 // Honors an `X-Test-User-Id` override so individual tests can authenticate as
 // a caller OTHER than the default sender — needed both for `GET
 // /v1/social/me/cursor` (authenticated as the RECIPIENT, not the sender) and
@@ -109,7 +113,7 @@ const TEST_SENDER_ID = "user_test_sender";
 // test keeps them independent of the shared in-memory limiter state, which
 // — unlike the database tables — `beforeEach` below does not reset).
 const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
-  (req as OxyAuthRequest).userId = req.header("X-Test-User-Id") ?? TEST_SENDER_ID;
+  (req as OxyAuthRequest).userId = req.header('X-Test-User-Id') ?? TEST_SENDER_ID;
   next();
 };
 
@@ -133,10 +137,10 @@ async function postNextAddress(
   senderId?: string,
 ): Promise<{ status: number; body: NextAddressResponse }> {
   const res = await fetch(`${baseUrl}/v1/social/${username}/next_address`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      ...(senderId ? { "X-Test-User-Id": senderId } : {}),
+      'Content-Type': 'application/json',
+      ...(senderId ? { 'X-Test-User-Id': senderId } : {}),
     },
     body: JSON.stringify(body),
   });
@@ -147,9 +151,9 @@ async function getCursor(
   network: string | undefined,
   userId: string,
 ): Promise<{ status: number; body: CursorResponse }> {
-  const query = network ? `?network=${network}` : "";
+  const query = network ? `?network=${network}` : '';
   const res = await fetch(`${baseUrl}/v1/social/me/cursor${query}`, {
-    headers: { "X-Test-User-Id": userId },
+    headers: { 'X-Test-User-Id': userId },
   });
   return { status: res.status, body: (await res.json()) as CursorResponse };
 }
@@ -176,13 +180,13 @@ beforeEach(async () => {
   await resetGatewayTables();
 });
 
-describe("POST /v1/social/:username/next_address", () => {
-  test("reserves a fresh address and records the attribution", async () => {
-    const { status, body } = await postNextAddress("alice", { network: "testnet" });
+describe('POST /v1/social/:username/next_address', () => {
+  test('reserves a fresh address and records the attribution', async () => {
+    const { status, body } = await postNextAddress('alice', { network: 'testnet' });
 
     expect(status).toBe(200);
     expect(body.index).toBe(1);
-    expect(body.address).toBe("TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ");
+    expect(body.address).toBe('TERWsvgi5BFcdDKgpM1PsHMqenLuGggZqQ');
 
     // `findAttributionsForViewer` is the only repository read over this table
     // and it scopes to a viewer, which this assertion deliberately does not —
@@ -192,44 +196,44 @@ describe("POST /v1/social/:username/next_address", () => {
     const [attribution] = await gatewayDb()
       .select()
       .from(socialSendAttributions)
-      .where(eq(socialSendAttributions.address, body.address ?? ""));
+      .where(eq(socialSendAttributions.address, body.address ?? ''));
     expect(attribution?.senderUserId).toBe(TEST_SENDER_ID);
-    expect(attribution?.recipientUserId).toBe("user_alice");
+    expect(attribution?.recipientUserId).toBe('user_alice');
     expect(attribution?.derivationIndex).toBe(1);
   });
 
-  test("second call for the same recipient reserves the next index", async () => {
-    await postNextAddress("alice", { network: "testnet" });
-    const { body } = await postNextAddress("alice", { network: "testnet" });
+  test('second call for the same recipient reserves the next index', async () => {
+    await postNextAddress('alice', { network: 'testnet' });
+    const { body } = await postNextAddress('alice', { network: 'testnet' });
     expect(body.index).toBe(2);
   });
 
-  test("404s for an unknown username", async () => {
-    const { status, body } = await postNextAddress("nobody", { network: "testnet" });
+  test('404s for an unknown username', async () => {
+    const { status, body } = await postNextAddress('nobody', { network: 'testnet' });
     expect(status).toBe(404);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test("409s with type keyless_recipient for a keyless recipient", async () => {
-    const { status, body } = await postNextAddress("keylessbob", { network: "testnet" });
+  test('409s with type keyless_recipient for a keyless recipient', async () => {
+    const { status, body } = await postNextAddress('keylessbob', { network: 'testnet' });
     expect(status).toBe(409);
-    expect(body.error?.type).toBe("keyless_recipient");
+    expect(body.error?.type).toBe('keyless_recipient');
   });
 
   // The wallet refuses mainnet for pay-by-@username, but the wallet is not the
   // only client a bearer token can drive. The deployment decides, and it says so
   // here rather than trusting whoever is calling.
-  test("403s on a network this deployment has not enabled for social pay", async () => {
-    const { status, body } = await postNextAddress("alice", { network: "mainnet" });
+  test('403s on a network this deployment has not enabled for social pay', async () => {
+    const { status, body } = await postNextAddress('alice', { network: 'mainnet' });
 
     expect(status).toBe(403);
-    expect(body.error?.message).toContain("mainnet");
+    expect(body.error?.message).toContain('mainnet');
   });
 
-  test("422s on a malformed network field", async () => {
-    const { status, body } = await postNextAddress("alice", { network: "regtest" });
+  test('422s on a malformed network field', async () => {
+    const { status, body } = await postNextAddress('alice', { network: 'regtest' });
     expect(status).toBe(422);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
   });
 
   /**
@@ -239,34 +243,34 @@ describe("POST /v1/social/:username/next_address", () => {
    */
   test("records the paying app's context on the attribution", async () => {
     const { status, body } = await postNextAddress(
-      "alice",
-      { network: "testnet", source: { app: "mention", ref: "post_abc123" } },
-      "user_source_full_sender",
+      'alice',
+      { network: 'testnet', source: { app: 'mention', ref: 'post_abc123' } },
+      'user_source_full_sender',
     );
     expect(status).toBe(200);
 
     const [attribution] = await gatewayDb()
       .select()
       .from(socialSendAttributions)
-      .where(eq(socialSendAttributions.address, body.address ?? ""));
+      .where(eq(socialSendAttributions.address, body.address ?? ''));
     // Stored verbatim: the ref is opaque to Peable, so anything other than a
     // copy would be the gateway interpreting what its users pay for.
-    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(["mention", "post_abc123"]);
+    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(['mention', 'post_abc123']);
   });
 
-  test("accepts an app that names no single thing, storing a null ref", async () => {
+  test('accepts an app that names no single thing, storing a null ref', async () => {
     const { status, body } = await postNextAddress(
-      "alice",
-      { network: "testnet", source: { app: "mention" } },
-      "user_source_app_only_sender",
+      'alice',
+      { network: 'testnet', source: { app: 'mention' } },
+      'user_source_app_only_sender',
     );
     expect(status).toBe(200);
 
     const [attribution] = await gatewayDb()
       .select()
       .from(socialSendAttributions)
-      .where(eq(socialSendAttributions.address, body.address ?? ""));
-    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(["mention", null]);
+      .where(eq(socialSendAttributions.address, body.address ?? ''));
+    expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual(['mention', null]);
   });
 
   /**
@@ -274,18 +278,18 @@ describe("POST /v1/social/:username/next_address", () => {
    * payment is for nothing in particular. NULL is then the honest record of
    * that, where a default would invent a context the payer never stated.
    */
-  test("leaves both context columns null when the payer names none", async () => {
+  test('leaves both context columns null when the payer names none', async () => {
     const { status, body } = await postNextAddress(
-      "alice",
-      { network: "testnet" },
-      "user_source_absent_sender",
+      'alice',
+      { network: 'testnet' },
+      'user_source_absent_sender',
     );
     expect(status).toBe(200);
 
     const [attribution] = await gatewayDb()
       .select()
       .from(socialSendAttributions)
-      .where(eq(socialSendAttributions.address, body.address ?? ""));
+      .where(eq(socialSendAttributions.address, body.address ?? ''));
     expect([attribution?.sourceApp, attribution?.sourceRef]).toEqual([null, null]);
   });
 
@@ -296,12 +300,12 @@ describe("POST /v1/social/:username/next_address", () => {
    * that reached the derivation would show up here as a different address or a
    * skipped index.
    */
-  test("the context changes neither the index reserved nor the address derived", async () => {
-    const sender = "user_source_neutral_sender";
-    const plain = await postNextAddress("alice", { network: "testnet" }, sender);
+  test('the context changes neither the index reserved nor the address derived', async () => {
+    const sender = 'user_source_neutral_sender';
+    const plain = await postNextAddress('alice', { network: 'testnet' }, sender);
     const sourced = await postNextAddress(
-      "alice",
-      { network: "testnet", source: { app: "mention", ref: "post_1" } },
+      'alice',
+      { network: 'testnet', source: { app: 'mention', ref: 'post_1' } },
       sender,
     );
 
@@ -309,19 +313,19 @@ describe("POST /v1/social/:username/next_address", () => {
     expect(sourced.body.address).not.toBe(plain.body.address);
   });
 
-  test("422s on a source.ref longer than the published bound", async () => {
-    const { status, body } = await postNextAddress("alice", {
-      network: "testnet",
-      source: { app: "mention", ref: "p".repeat(SOCIAL_SOURCE_REF_MAX_LENGTH + 1) },
+  test('422s on a source.ref longer than the published bound', async () => {
+    const { status, body } = await postNextAddress('alice', {
+      network: 'testnet',
+      source: { app: 'mention', ref: 'p'.repeat(SOCIAL_SOURCE_REF_MAX_LENGTH + 1) },
     });
     expect(status).toBe(422);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test("422s on a source.app longer than the published bound", async () => {
-    const { status } = await postNextAddress("alice", {
-      network: "testnet",
-      source: { app: "m".repeat(SOCIAL_SOURCE_APP_MAX_LENGTH + 1) },
+  test('422s on a source.app longer than the published bound', async () => {
+    const { status } = await postNextAddress('alice', {
+      network: 'testnet',
+      source: { app: 'm'.repeat(SOCIAL_SOURCE_APP_MAX_LENGTH + 1) },
     });
     expect(status).toBe(422);
   });
@@ -332,10 +336,10 @@ describe("POST /v1/social/:username/next_address", () => {
    * `social_send_attributions_source_ref_needs_app_check`, because a 422 is a
    * better answer to a caller than a 500 from a constraint.
    */
-  test("422s on a source that names a ref but no app", async () => {
-    const { status } = await postNextAddress("alice", {
-      network: "testnet",
-      source: { ref: "post_abc123" },
+  test('422s on a source that names a ref but no app', async () => {
+    const { status } = await postNextAddress('alice', {
+      network: 'testnet',
+      source: { ref: 'post_abc123' },
     });
     expect(status).toBe(422);
   });
@@ -346,10 +350,10 @@ describe("POST /v1/social/:username/next_address", () => {
    * misspelling of `ref` — would reserve an address, record a context missing
    * the only part the recipient cares about, and answer 200.
    */
-  test("422s on an unknown key inside source rather than silently dropping it", async () => {
-    const { status } = await postNextAddress("alice", {
-      network: "testnet",
-      source: { app: "mention", postId: "post_abc123" },
+  test('422s on an unknown key inside source rather than silently dropping it', async () => {
+    const { status } = await postNextAddress('alice', {
+      network: 'testnet',
+      source: { app: 'mention', postId: 'post_abc123' },
     });
     expect(status).toBe(422);
   });
@@ -359,81 +363,81 @@ describe("POST /v1/social/:username/next_address", () => {
    * reads is exactly where a free-text memo about two users would end up
    * unnoticed.
    */
-  test("422s on a source.ref carrying whitespace-separated prose", async () => {
-    const { status } = await postNextAddress("alice", {
-      network: "testnet",
-      source: { app: "mention", ref: "thanks for the coffee yesterday" },
+  test('422s on a source.ref carrying whitespace-separated prose', async () => {
+    const { status } = await postNextAddress('alice', {
+      network: 'testnet',
+      source: { app: 'mention', ref: 'thanks for the coffee yesterday' },
     });
     expect(status).toBe(422);
   });
 
-  test("502s with type api_error (not 404) when the profile lookup fails upstream", async () => {
-    const { status, body } = await postNextAddress("flaky", { network: "testnet" });
+  test('502s with type api_error (not 404) when the profile lookup fails upstream', async () => {
+    const { status, body } = await postNextAddress('flaky', { network: 'testnet' });
     expect(status).toBe(502);
-    expect(body.error?.type).toBe("api_error");
+    expect(body.error?.type).toBe('api_error');
   });
 });
 
-describe("POST /v1/social/:username/next_address — per-(sender,recipient) anti-grief rate limit", () => {
+describe('POST /v1/social/:username/next_address — per-(sender,recipient) anti-grief rate limit', () => {
   test(`the ${NEXT_ADDRESS_PAIR_MAX + 1}th reservation against the same recipient from the same sender is rate-limited`, async () => {
-    const sender = "user_grief_sender_a";
+    const sender = 'user_grief_sender_a';
     for (let i = 0; i < NEXT_ADDRESS_PAIR_MAX; i++) {
-      const { status } = await postNextAddress("alice", { network: "testnet" }, sender);
+      const { status } = await postNextAddress('alice', { network: 'testnet' }, sender);
       expect(status).toBe(200);
     }
 
-    const { status, body } = await postNextAddress("alice", { network: "testnet" }, sender);
+    const { status, body } = await postNextAddress('alice', { network: 'testnet' }, sender);
     expect(status).toBe(429);
-    expect(body.error?.type).toBe("rate_limit_error");
+    expect(body.error?.type).toBe('rate_limit_error');
   });
 
-  test("the limit is keyed per (sender, recipient) pair — a different sender against the same recipient is unaffected", async () => {
-    const griefer = "user_grief_sender_b";
+  test('the limit is keyed per (sender, recipient) pair — a different sender against the same recipient is unaffected', async () => {
+    const griefer = 'user_grief_sender_b';
     for (let i = 0; i < NEXT_ADDRESS_PAIR_MAX; i++) {
-      await postNextAddress("alice", { network: "testnet" }, griefer);
+      await postNextAddress('alice', { network: 'testnet' }, griefer);
     }
-    const grieferLimited = await postNextAddress("alice", { network: "testnet" }, griefer);
+    const grieferLimited = await postNextAddress('alice', { network: 'testnet' }, griefer);
     expect(grieferLimited.status).toBe(429);
 
     const otherSender = await postNextAddress(
-      "alice",
-      { network: "testnet" },
-      "user_grief_sender_c",
+      'alice',
+      { network: 'testnet' },
+      'user_grief_sender_c',
     );
     expect(otherSender.status).toBe(200);
   });
 });
 
-describe("GET /v1/social/me/cursor", () => {
-  test("returns reservedThrough: 0 for a caller with no cursor yet", async () => {
-    const { status, body } = await getCursor("testnet", "user_cursor_fresh");
+describe('GET /v1/social/me/cursor', () => {
+  test('returns reservedThrough: 0 for a caller with no cursor yet', async () => {
+    const { status, body } = await getCursor('testnet', 'user_cursor_fresh');
     expect(status).toBe(200);
     expect(body.reservedThrough).toBe(0);
   });
 
-  test("returns the highest index ever reserved for the authenticated caller (recipient), not the sender", async () => {
-    const sender = "user_cursor_value_sender";
-    await postNextAddress("alice", { network: "testnet" }, sender);
-    await postNextAddress("alice", { network: "testnet" }, sender);
+  test('returns the highest index ever reserved for the authenticated caller (recipient), not the sender', async () => {
+    const sender = 'user_cursor_value_sender';
+    await postNextAddress('alice', { network: 'testnet' }, sender);
+    await postNextAddress('alice', { network: 'testnet' }, sender);
 
-    const { status, body } = await getCursor("testnet", "user_alice");
+    const { status, body } = await getCursor('testnet', 'user_alice');
     expect(status).toBe(200);
     expect(body.reservedThrough).toBe(2);
   });
 
-  test("is scoped per network — a testnet reservation does not surface under mainnet", async () => {
-    const sender = "user_cursor_network_sender";
-    await postNextAddress("alice", { network: "testnet" }, sender);
+  test('is scoped per network — a testnet reservation does not surface under mainnet', async () => {
+    const sender = 'user_cursor_network_sender';
+    await postNextAddress('alice', { network: 'testnet' }, sender);
 
-    const { status, body } = await getCursor("mainnet", "user_alice");
+    const { status, body } = await getCursor('mainnet', 'user_alice');
     expect(status).toBe(200);
     expect(body.reservedThrough).toBe(0);
   });
 
-  test("422s on a missing network query param", async () => {
-    const { status, body } = await getCursor(undefined, "user_alice");
+  test('422s on a missing network query param', async () => {
+    const { status, body } = await getCursor(undefined, 'user_alice');
     expect(status).toBe(422);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
   });
 });
 
@@ -442,7 +446,7 @@ describe("GET /v1/social/me/cursor", () => {
 interface PaymentsResponse {
   payments?: {
     address: string;
-    direction: "sent" | "received";
+    direction: 'sent' | 'received';
     // `EnrichmentResult`: never null, degrades to `{ kind: 'unknown' }`.
     counterparty: { kind: string; username?: string; displayName?: string };
     // Optional and ABSENT (not null) for a payment nobody gave a context to.
@@ -456,46 +460,46 @@ async function getPayments(
   network: string | undefined,
   userId: string,
 ): Promise<{ status: number; body: PaymentsResponse }> {
-  const query = network ? `?network=${network}` : "";
+  const query = network ? `?network=${network}` : '';
   const res = await fetch(`${baseUrl}/v1/social/me/payments${query}`, {
-    headers: { "X-Test-User-Id": userId },
+    headers: { 'X-Test-User-Id': userId },
   });
   return { status: res.status, body: (await res.json()) as PaymentsResponse };
 }
 
-describe("GET /v1/social/me/payments", () => {
+describe('GET /v1/social/me/payments', () => {
   /**
    * The web build has no key, so it cannot derive its own addresses and cannot
    * use the address-list endpoints. This is the only view it can ask for, and
    * `direction` is the half that cannot come from the address alone.
    */
-  test("returns what the caller sent and received, each with its direction", async () => {
-    await gatewayDb().insert(socialSendAttributions).values([
-      {
-        address: "Tsent000000000000000000000000000000",
-        network: "testnet",
-        senderUserId: testProfile("alice").id,
-        recipientUserId: testProfile("keylessbob").id,
-        derivationIndex: 1,
-      },
-      {
-        address: "Trecv000000000000000000000000000000",
-        network: "testnet",
-        senderUserId: testProfile("keylessbob").id,
-        recipientUserId: testProfile("alice").id,
-        derivationIndex: 2,
-      },
-    ]);
+  test('returns what the caller sent and received, each with its direction', async () => {
+    await gatewayDb()
+      .insert(socialSendAttributions)
+      .values([
+        {
+          address: 'Tsent000000000000000000000000000000',
+          network: 'testnet',
+          senderUserId: testProfile('alice').id,
+          recipientUserId: testProfile('keylessbob').id,
+          derivationIndex: 1,
+        },
+        {
+          address: 'Trecv000000000000000000000000000000',
+          network: 'testnet',
+          senderUserId: testProfile('keylessbob').id,
+          recipientUserId: testProfile('alice').id,
+          derivationIndex: 2,
+        },
+      ]);
 
-    const { status, body } = await getPayments("testnet", testProfile("alice").id);
+    const { status, body } = await getPayments('testnet', testProfile('alice').id);
     expect(status).toBe(200);
-    const byAddress = Object.fromEntries(
-      (body.payments ?? []).map((p) => [p.address, p]),
-    );
-    expect(byAddress["Tsent000000000000000000000000000000"]?.direction).toBe("sent");
-    expect(byAddress["Trecv000000000000000000000000000000"]?.direction).toBe("received");
-    expect(byAddress["Tsent000000000000000000000000000000"]?.counterparty.username).toBe(
-      "keylessbob",
+    const byAddress = Object.fromEntries((body.payments ?? []).map((p) => [p.address, p]));
+    expect(byAddress['Tsent000000000000000000000000000000']?.direction).toBe('sent');
+    expect(byAddress['Trecv000000000000000000000000000000']?.direction).toBe('received');
+    expect(byAddress['Tsent000000000000000000000000000000']?.counterparty.username).toBe(
+      'keylessbob',
     );
   });
 
@@ -503,23 +507,23 @@ describe("GET /v1/social/me/payments", () => {
    * The security property, stated as a test: an attribution names two people,
    * so a caller who is neither must not learn that the payment exists.
    */
-  test("never returns a payment the caller is not party to", async () => {
+  test('never returns a payment the caller is not party to', async () => {
     await gatewayDb().insert(socialSendAttributions).values({
-      address: "Tstranger00000000000000000000000000",
-      network: "testnet",
-      senderUserId: "user_someone_else",
-      recipientUserId: "user_another",
+      address: 'Tstranger00000000000000000000000000',
+      network: 'testnet',
+      senderUserId: 'user_someone_else',
+      recipientUserId: 'user_another',
       derivationIndex: 3,
     });
 
-    const { body } = await getPayments("testnet", testProfile("alice").id);
+    const { body } = await getPayments('testnet', testProfile('alice').id);
     expect((body.payments ?? []).map((p) => p.address)).not.toContain(
-      "Tstranger00000000000000000000000000",
+      'Tstranger00000000000000000000000000',
     );
   });
 
-  test("rejects an unknown network rather than guessing one", async () => {
-    const { status } = await getPayments("dogenet", testProfile("alice").id);
+  test('rejects an unknown network rather than guessing one', async () => {
+    const { status } = await getPayments('dogenet', testProfile('alice').id);
     expect(status).toBe(422);
   });
 
@@ -531,39 +535,41 @@ describe("GET /v1/social/me/payments", () => {
    * Both rows are seeded, because a response that carried the context onto
    * every payment would pass a test that only checked the sourced one.
    */
-  test("carries the context on the payment that has one, and omits it on the one that does not", async () => {
-    await gatewayDb().insert(socialSendAttributions).values([
-      {
-        address: "Ttip0000000000000000000000000000000",
-        network: "testnet",
-        senderUserId: testProfile("keylessbob").id,
-        recipientUserId: testProfile("alice").id,
-        derivationIndex: 1,
-        sourceApp: "mention",
-        sourceRef: "post_abc123",
-      },
-      {
-        address: "Tplain00000000000000000000000000000",
-        network: "testnet",
-        senderUserId: testProfile("keylessbob").id,
-        recipientUserId: testProfile("alice").id,
-        derivationIndex: 2,
-      },
-    ]);
+  test('carries the context on the payment that has one, and omits it on the one that does not', async () => {
+    await gatewayDb()
+      .insert(socialSendAttributions)
+      .values([
+        {
+          address: 'Ttip0000000000000000000000000000000',
+          network: 'testnet',
+          senderUserId: testProfile('keylessbob').id,
+          recipientUserId: testProfile('alice').id,
+          derivationIndex: 1,
+          sourceApp: 'mention',
+          sourceRef: 'post_abc123',
+        },
+        {
+          address: 'Tplain00000000000000000000000000000',
+          network: 'testnet',
+          senderUserId: testProfile('keylessbob').id,
+          recipientUserId: testProfile('alice').id,
+          derivationIndex: 2,
+        },
+      ]);
 
-    const { status, body } = await getPayments("testnet", testProfile("alice").id);
+    const { status, body } = await getPayments('testnet', testProfile('alice').id);
     expect(status).toBe(200);
     const byAddress = Object.fromEntries((body.payments ?? []).map((p) => [p.address, p]));
 
-    expect(byAddress["Ttip0000000000000000000000000000000"]?.source).toEqual({
-      app: "mention",
-      ref: "post_abc123",
+    expect(byAddress['Ttip0000000000000000000000000000000']?.source).toEqual({
+      app: 'mention',
+      ref: 'post_abc123',
     });
     // Absent, not null: `SocialPayment.source` is optional, and a client
     // checking `'source' in payment` must not see a context nobody sent.
-    const plain = byAddress["Tplain00000000000000000000000000000"];
+    const plain = byAddress['Tplain00000000000000000000000000000'];
     expect(plain).toBeDefined();
-    expect(Object.keys(plain ?? {})).not.toContain("source");
+    expect(Object.keys(plain ?? {})).not.toContain('source');
   });
 
   /**
@@ -571,21 +577,23 @@ describe("GET /v1/social/me/payments", () => {
    * and changes nothing about it — same address, same direction, same
    * counterparty as the row without one.
    */
-  test("the context does not affect the address, direction or counterparty", async () => {
-    await gatewayDb().insert(socialSendAttributions).values({
-      address: "Tsourced000000000000000000000000000",
-      network: "testnet",
-      senderUserId: testProfile("alice").id,
-      recipientUserId: testProfile("keylessbob").id,
-      derivationIndex: 1,
-      sourceApp: "mention",
-      sourceRef: "post_xyz",
-    });
+  test('the context does not affect the address, direction or counterparty', async () => {
+    await gatewayDb()
+      .insert(socialSendAttributions)
+      .values({
+        address: 'Tsourced000000000000000000000000000',
+        network: 'testnet',
+        senderUserId: testProfile('alice').id,
+        recipientUserId: testProfile('keylessbob').id,
+        derivationIndex: 1,
+        sourceApp: 'mention',
+        sourceRef: 'post_xyz',
+      });
 
-    const { body } = await getPayments("testnet", testProfile("alice").id);
+    const { body } = await getPayments('testnet', testProfile('alice').id);
     const payment = (body.payments ?? [])[0];
-    expect(payment?.address).toBe("Tsourced000000000000000000000000000");
-    expect(payment?.direction).toBe("sent");
-    expect(payment?.counterparty.username).toBe("keylessbob");
+    expect(payment?.address).toBe('Tsourced000000000000000000000000000');
+    expect(payment?.direction).toBe('sent');
+    expect(payment?.counterparty.username).toBe('keylessbob');
   });
 });

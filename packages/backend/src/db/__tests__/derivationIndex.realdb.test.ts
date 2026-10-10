@@ -120,13 +120,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     const concurrency = 16;
 
     const results = await Promise.all(
-      Array.from({ length: concurrency }, () => reserveNextDerivationIndex(suite!.db, merchantId))
+      Array.from({ length: concurrency }, () => reserveNextDerivationIndex(suite!.db, merchantId)),
     );
     const indices = results.map((result) => result?.index);
 
     expect(new Set(indices).size).toBe(concurrency);
     expect([...indices].sort((a, b) => Number(a) - Number(b))).toEqual(
-      Array.from({ length: concurrency }, (_unused, offset) => offset)
+      Array.from({ length: concurrency }, (_unused, offset) => offset),
     );
 
     const [row] = await suite!.db
@@ -224,7 +224,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
    */
   it('runs against the migrated schema, not an empty database', async () => {
     const rows = await suite!.db.execute(
-      sql`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`
+      sql`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`,
     );
     const names = rows.map((row) => String(row.table_name)).sort();
     expect(names).toEqual([

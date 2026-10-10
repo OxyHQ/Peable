@@ -57,7 +57,7 @@ const UNKNOWN_ADDRESS = 404;
  */
 export async function fetchBalancesSat(
   addresses: readonly string[],
-  network: NetworkType
+  network: NetworkType,
 ): Promise<AddressBalances> {
   const byAddress = new Map<string, bigint>();
   if (addresses.length === 0) return { byAddress, totalSat: 0n };
@@ -70,7 +70,7 @@ export async function fetchBalancesSat(
       if (response.status === UNKNOWN_ADDRESS) return [address, 0n] as const;
       if (!response.ok) {
         throw new Error(
-          `Explorer balance request for ${address} failed: ${String(response.status)} ${response.statusText}`
+          `Explorer balance request for ${address} failed: ${String(response.status)} ${response.statusText}`,
         );
       }
 
@@ -84,7 +84,7 @@ export async function fetchBalancesSat(
         throw new Error(`Explorer balance response for ${address} carried no usable balanceSat`);
       }
       return [address, BigInt(balanceSat)] as const;
-    })
+    }),
   );
 
   let totalSat = 0n;

@@ -26,21 +26,16 @@
  * it is ever paid.
  */
 
-import type React from "react";
-import { useCallback, useMemo, useRef, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from "react-native";
-import { useRouter } from "expo-router";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import * as Clipboard from "expo-clipboard";
-import * as Sharing from "expo-sharing";
-import { File, Paths } from "expo-file-system";
-import {
-  useWalletStore,
-  getDatabase,
-  FEE_RATES,
-  type FeeLevel,
-} from "../../wallet/wallet-store";
-import { useContactsStore } from "../../wallet/contacts-store";
+import type React from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
+import { File, Paths } from 'expo-file-system';
+import { useWalletStore, getDatabase, FEE_RATES, type FeeLevel } from '../../wallet/wallet-store';
+import { useContactsStore } from '../../wallet/contacts-store';
 import {
   AmountInput,
   AmountText,
@@ -48,22 +43,22 @@ import {
   ContactAvatar,
   ListItem,
   EmptyState,
-} from "../components";
-import { FairCoinSymbol } from "../components/FairCoinSymbol";
-import { QRScanner } from "../components/QRScanner";
-import type { ScannedCode } from "../../pay/scanned-code";
-import { ContactPicker } from "../components/ContactPicker";
-import { SocialRecipientPicker, type SocialRecipient } from "../components/SocialRecipientPicker";
-import { UserAvatar } from "../components/UserAvatar";
-import { reserveNextSocialAddress, KeylessRecipientError } from "../../services/gateway-client";
-import { usePrice } from "../../hooks/usePrice";
-import type { RecentRecipientRow, ContactRow } from "../../storage/database";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { Divider } from "@oxy.so/bloom/divider";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { hapticSuccess, hapticError } from "../../utils/haptics";
-import { playSent } from "../../services/sounds";
-import { FONT_PHUDU_BLACK } from "../../utils/fonts";
+} from '../components';
+import { FairCoinSymbol } from '../components/FairCoinSymbol';
+import { QRScanner } from '../components/QRScanner';
+import type { ScannedCode } from '../../pay/scanned-code';
+import { ContactPicker } from '../components/ContactPicker';
+import { SocialRecipientPicker, type SocialRecipient } from '../components/SocialRecipientPicker';
+import { UserAvatar } from '../components/UserAvatar';
+import { reserveNextSocialAddress, KeylessRecipientError } from '../../services/gateway-client';
+import { usePrice } from '../../hooks/usePrice';
+import type { RecentRecipientRow, ContactRow } from '../../storage/database';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Divider } from '@oxy.so/bloom/divider';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { hapticSuccess, hapticError } from '../../utils/haptics';
+import { playSent } from '../../services/sounds';
+import { FONT_PHUDU_BLACK } from '../../utils/fonts';
 import {
   formatFair,
   parseFairToUnits,
@@ -72,23 +67,22 @@ import {
   COIN_TICKER,
   UNITS_PER_COIN,
   explorerTxUrl,
-} from "@fairco.in/core";
-import { t } from "../../i18n";
+} from '@fairco.in/core';
+import { t } from '../../i18n';
 
-const FEE_LEVELS: FeeLevel[] = ["low", "medium", "high"];
+const FEE_LEVELS: FeeLevel[] = ['low', 'medium', 'high'];
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 function getFeeLabel(level: FeeLevel): string {
   switch (level) {
-    case "low":
-      return t("send.fee.low");
-    case "medium":
-      return t("send.fee.medium");
-    case "high":
-      return t("send.fee.high");
+    case 'low':
+      return t('send.fee.low');
+    case 'medium':
+      return t('send.fee.medium');
+    case 'high':
+      return t('send.fee.high');
   }
 }
 
@@ -121,8 +115,8 @@ function truncateAddress(address: string): string {
 }
 
 export function SendSheet({
-  address: initialAddress = "",
-  amount: initialAmount = "",
+  address: initialAddress = '',
+  amount: initialAmount = '',
   recipient: initialRecipient = null,
 }: {
   address?: string;
@@ -149,15 +143,15 @@ export function SendSheet({
   // separators visually while typing and `parseFairToUnits` converts to
   // the bigint smallest-unit count when needed.
   const [amount, setAmount] = useState(initialAmount);
-  const [feeLevel, setFeeLevel] = useState<FeeLevel>("medium");
+  const [feeLevel, setFeeLevel] = useState<FeeLevel>('medium');
   const [showQRScanner, setShowQRScanner] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
   // Person mode unless the caller prefilled a bare address with no identity
   // behind it (a `faircoin:` URI or a QR scan) — that recipient IS the address,
   // and only Address mode renders it, so opening in Person mode would arm the
   // Send button against an address the screen never showed.
-  const [recipientMode, setRecipientMode] = useState<"person" | "address">(
-    initialAddress && !initialRecipient ? "address" : "person",
+  const [recipientMode, setRecipientMode] = useState<'person' | 'address'>(
+    initialAddress && !initialRecipient ? 'address' : 'person',
   );
   const [selectedRecipient, setSelectedRecipient] = useState<SocialRecipient | null>(
     initialRecipient,
@@ -173,18 +167,14 @@ export function SendSheet({
   const reservationRequestIdRef = useRef(0);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-  const [recentRecipients, setRecentRecipients] = useState<
-    RecentRecipientRow[]
-  >([]);
-  const [pendingSaveAddress, setPendingSaveAddress] = useState<string | null>(
-    null,
-  );
+  const [recentRecipients, setRecentRecipients] = useState<RecentRecipientRow[]>([]);
+  const [pendingSaveAddress, setPendingSaveAddress] = useState<string | null>(null);
   const [sentTxid, setSentTxid] = useState<string | null>(null);
   const confirmControl = useDialogControl();
   const saveContactControl = useDialogControl();
   const sentControl = useDialogControl();
 
-  const explorerUrl = sentTxid ? explorerTxUrl(sentTxid) : "";
+  const explorerUrl = sentTxid ? explorerTxUrl(sentTxid) : '';
 
   const handleCopyExplorerLink = useCallback(async () => {
     if (!explorerUrl) return;
@@ -199,14 +189,14 @@ export function SendSheet({
     }
     // Sharing.shareAsync requires a file URI on native, so write the link to
     // a temporary text file in the cache directory and share that.
-    const file = new File(Paths.cache, "peable-tx-link.txt");
+    const file = new File(Paths.cache, 'peable-tx-link.txt');
     if (file.exists) file.delete();
     file.create();
     file.write(explorerUrl);
     await Sharing.shareAsync(file.uri, {
-      mimeType: "text/plain",
-      dialogTitle: t("send.sent.share"),
-      UTI: "public.plain-text",
+      mimeType: 'text/plain',
+      dialogTitle: t('send.sent.share'),
+      UTI: 'public.plain-text',
     });
   }, [explorerUrl]);
 
@@ -219,17 +209,14 @@ export function SendSheet({
   // could diverge from what sendTransaction actually uses).
   const feeRate = FEE_RATES[feeLevel];
 
-  const amountSats = useMemo<bigint | null>(
-    () => parseFairToUnits(amount),
-    [amount],
-  );
+  const amountSats = useMemo<bigint | null>(() => parseFairToUnits(amount), [amount]);
 
   // Real, pre-broadcast estimate computed from the actual coins that would be
   // selected (largest-first, or the coin-control set). `selectedUTXOs` is in the
   // dependency list so the estimate updates when coin control changes.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `selectedUTXOs` is an explicit re-derive key so the estimate updates when coin control changes
   const sendEstimate = useMemo(
     () => estimateSend(amountSats ?? 0n, feeRate),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [estimateSend, amountSats, feeRate, selectedUTXOs],
   );
 
@@ -254,22 +241,18 @@ export function SendSheet({
 
   const validationError = useMemo(() => {
     if (toAddress.length > 0 && toAddress.length < 25) {
-      return t("send.error.addressTooShort");
+      return t('send.error.addressTooShort');
     }
     if (toAddress.length >= 25 && !addressValid) {
-      return t("send.error.invalidAddress");
+      return t('send.error.invalidAddress');
     }
     if (amount.length > 0 && (amountSats === null || amountSats <= 0n)) {
-      return t("send.error.invalidAmount");
+      return t('send.error.invalidAmount');
     }
     // Gate against the REAL fee over confirmed/selected coins, not a flat
     // estimate against the (possibly unconfirmed-inflated) total balance.
-    if (
-      amountSats !== null &&
-      amountSats > 0n &&
-      sendEstimate.insufficientFunds
-    ) {
-      return t("send.error.insufficientBalance");
+    if (amountSats !== null && amountSats > 0n && sendEstimate.insufficientFunds) {
+      return t('send.error.insufficientBalance');
     }
     return null;
   }, [toAddress, addressValid, amount, amountSats, sendEstimate.insufficientFunds]);
@@ -308,20 +291,20 @@ export function SendSheet({
         setToAddress(text.trim());
       }
     } catch {
-      setError(t("send.error.clipboard"));
+      setError(t('send.error.clipboard'));
     }
   }, []);
 
   const handleQRScan = useCallback(
     (code: ScannedCode) => {
-      if (code.kind === "payment-request") {
+      if (code.kind === 'payment-request') {
         // A Peable checkout QR is not an address to send to — it is a whole
         // payment request. Hand it to the approve screen, which is the only
         // place that can report the txid back to the Gateway. Mirrors the
         // deep-link path in app/_layout.tsx.
         const { request } = code;
         router.push({
-          pathname: "/pay/[intent]",
+          pathname: '/pay/[intent]',
           params: {
             intent: request.intentId,
             secret: request.clientSecret,
@@ -368,7 +351,7 @@ export function SendSheet({
     async (recipient: SocialRecipient) => {
       const requestId = ++reservationRequestIdRef.current;
       setSelectedRecipient(recipient);
-      setToAddress("");
+      setToAddress('');
       setKeylessRecipientUsername(null);
       setReservingAddress(true);
       try {
@@ -385,7 +368,7 @@ export function SendSheet({
           setKeylessRecipientUsername(recipient.username);
           setSelectedRecipient(null);
         } else {
-          setError(e instanceof Error ? e.message : t("send.error.failedSend"));
+          setError(e instanceof Error ? e.message : t('send.error.failedSend'));
           setSelectedRecipient(null);
         }
       } finally {
@@ -401,11 +384,11 @@ export function SendSheet({
   const handleClearSelectedRecipient = useCallback(() => {
     reservationRequestIdRef.current += 1;
     setSelectedRecipient(null);
-    setToAddress("");
+    setToAddress('');
     setKeylessRecipientUsername(null);
   }, []);
 
-  const handleRecipientModeChange = useCallback((mode: "person" | "address") => {
+  const handleRecipientModeChange = useCallback((mode: 'person' | 'address') => {
     // Invalidate any in-flight reservation so its continuation discards its
     // result instead of applying it after the user has moved to a different
     // mode (see `handleSelectRecipient`'s staleness guard).
@@ -414,7 +397,7 @@ export function SendSheet({
     setSelectedRecipient(null);
     setKeylessRecipientUsername(null);
     setReservingAddress(false);
-    setToAddress("");
+    setToAddress('');
   }, []);
 
   const handleContactSelect = useCallback((address: string) => {
@@ -422,7 +405,7 @@ export function SendSheet({
   }, []);
 
   const handleClearRecipient = useCallback(() => {
-    setToAddress("");
+    setToAddress('');
   }, []);
 
   const loadInitialData = useCallback(() => {
@@ -448,7 +431,7 @@ export function SendSheet({
     // Max is the largest amount actually sendable: confirmed (or coin-control)
     // coins minus the fee to spend them, never the unconfirmed-inflated balance.
     const maxSats = sendEstimate.maxSendable;
-    setAmount(maxSats > 0n ? formatFair(maxSats) : "");
+    setAmount(maxSats > 0n ? formatFair(maxSats) : '');
   }, [sendEstimate.maxSendable]);
 
   const handleSendPress = useCallback(() => {
@@ -461,7 +444,7 @@ export function SendSheet({
     setError(null);
     try {
       if (amountSats === null || amountSats <= 0n) {
-        setError(t("send.error.invalidAmount"));
+        setError(t('send.error.invalidAmount'));
         return;
       }
       const sentAddress = toAddress;
@@ -469,8 +452,8 @@ export function SendSheet({
       hapticSuccess();
       playSent();
       setSuccess(null);
-      setToAddress("");
-      setAmount("");
+      setToAddress('');
+      setAmount('');
       setSelectedRecipient(null);
       setKeylessRecipientUsername(null);
       setSentTxid(txid);
@@ -479,7 +462,7 @@ export function SendSheet({
       // Recent-recipients / save-as-contact only apply to raw-address sends —
       // a social-receive address is single-use, so saving it as a reusable
       // contact would be misleading (spec §4.3, addr(i>=1) is fresh per payment).
-      if (recipientMode === "address") {
+      if (recipientMode === 'address') {
         const db = getDatabase();
         if (db) {
           db.addRecentRecipient(sentAddress);
@@ -494,8 +477,7 @@ export function SendSheet({
       }
     } catch (e: unknown) {
       hapticError();
-      const msg =
-        e instanceof Error ? e.message : t("send.error.failedSend");
+      const msg = e instanceof Error ? e.message : t('send.error.failedSend');
       setError(msg);
     }
   }, [
@@ -523,8 +505,8 @@ export function SendSheet({
       <View className="items-center justify-center py-16">
         <EmptyState
           icon="lock"
-          title={t("send.watchOnly.title")}
-          subtitle={t("send.watchOnly.subtitle")}
+          title={t('send.watchOnly.title')}
+          subtitle={t('send.watchOnly.subtitle')}
         />
       </View>
     );
@@ -540,10 +522,7 @@ export function SendSheet({
         {/* Hero amount — mirrors the home balance: FairCoin glyph + Phudu number */}
         <View className="items-center pt-2 pb-1">
           <View className="flex-row items-end justify-center w-full px-4">
-            <View
-              className="mr-1.5"
-              style={{ marginBottom: amountFontSize * 0.16 }}
-            >
+            <View className="mr-1.5" style={{ marginBottom: amountFontSize * 0.16 }}>
               <FairCoinSymbol size={Math.round(amountFontSize * 0.6)} />
             </View>
             <AmountInput
@@ -554,7 +533,7 @@ export function SendSheet({
                 paddingVertical: 0,
                 includeFontPadding: false,
               }}
-              placeholder={t("send.amountPlaceholder")}
+              placeholder={t('send.amountPlaceholder')}
               placeholderTextColor={theme.colors.textSecondary}
               value={amount}
               onValueChange={setAmount}
@@ -565,56 +544,54 @@ export function SendSheet({
           <Pressable
             onPress={handleMax}
             className="bg-surface rounded-full px-4 py-1.5 mt-3 active:opacity-70"
-            accessibilityLabel={t("send.maxAccessibility")}
+            accessibilityLabel={t('send.maxAccessibility')}
           >
-            <Text className="text-primary text-xs font-bold tracking-wide">
-              {t("send.max")}
-            </Text>
+            <Text className="text-primary text-xs font-bold tracking-wide">{t('send.max')}</Text>
           </Pressable>
           <Text className="text-muted-foreground text-sm mt-3">
-            {t("send.usdApprox", { amount: usdEquivalent ?? "0.00" })}
+            {t('send.usdApprox', { amount: usdEquivalent ?? '0.00' })}
           </Text>
           <Text className="text-muted-foreground text-xs mt-1">
-            {t("send.available", { amount: formatFair(confirmedBalance) })}
+            {t('send.available', { amount: formatFair(confirmedBalance) })}
           </Text>
         </View>
 
         {/* Recipient — Person (primary) / Address (secondary) toggle, spec §4.4 */}
         <View>
           <View className="flex-row items-center justify-between">
-            <Text className={SECTION_LABEL}>{t("send.sendTo")}</Text>
+            <Text className={SECTION_LABEL}>{t('send.sendTo')}</Text>
             <View className="flex-row bg-surface rounded-full p-0.5">
               <Pressable
-                onPress={() => handleRecipientModeChange("person")}
-                className={`px-3 py-1.5 rounded-full ${recipientMode === "person" ? "bg-primary/15" : ""}`}
+                onPress={() => handleRecipientModeChange('person')}
+                className={`px-3 py-1.5 rounded-full ${recipientMode === 'person' ? 'bg-primary/15' : ''}`}
               >
                 <Text
-                  className={`text-xs font-semibold ${recipientMode === "person" ? "text-primary" : "text-muted-foreground"}`}
+                  className={`text-xs font-semibold ${recipientMode === 'person' ? 'text-primary' : 'text-muted-foreground'}`}
                 >
-                  {t("send.recipientMode.person")}
+                  {t('send.recipientMode.person')}
                 </Text>
               </Pressable>
               <Pressable
-                onPress={() => handleRecipientModeChange("address")}
-                className={`px-3 py-1.5 rounded-full ${recipientMode === "address" ? "bg-primary/15" : ""}`}
+                onPress={() => handleRecipientModeChange('address')}
+                className={`px-3 py-1.5 rounded-full ${recipientMode === 'address' ? 'bg-primary/15' : ''}`}
               >
                 <Text
-                  className={`text-xs font-semibold ${recipientMode === "address" ? "text-primary" : "text-muted-foreground"}`}
+                  className={`text-xs font-semibold ${recipientMode === 'address' ? 'text-primary' : 'text-muted-foreground'}`}
                 >
-                  {t("send.recipientMode.address")}
+                  {t('send.recipientMode.address')}
                 </Text>
               </Pressable>
             </View>
           </View>
 
-          {recipientMode === "person" ? (
+          {recipientMode === 'person' ? (
             <View className="mt-2">
               <View className="bg-surface rounded-2xl px-4 py-3.5">
                 {reservingAddress ? (
                   <View className="flex-row items-center py-1">
                     <ActivityIndicator size="small" color={theme.colors.primary} />
                     <Text className="text-muted-foreground text-sm ml-2">
-                      {t("send.recipientMode.reserving")}
+                      {t('send.recipientMode.reserving')}
                     </Text>
                   </View>
                 ) : selectedRecipient ? (
@@ -640,7 +617,7 @@ export function SendSheet({
                     <Pressable
                       className="p-1.5 rounded-full active:opacity-60"
                       onPress={handleClearSelectedRecipient}
-                      accessibilityLabel={t("send.clearRecipient")}
+                      accessibilityLabel={t('send.clearRecipient')}
                     >
                       <MaterialCommunityIcons
                         name="close-circle"
@@ -655,7 +632,7 @@ export function SendSheet({
                     onPress={handleOpenRecipientPicker}
                   >
                     <Text className="text-muted-foreground text-base">
-                      {t("send.recipientMode.choosePlaceholder")}
+                      {t('send.recipientMode.choosePlaceholder')}
                     </Text>
                     <MaterialCommunityIcons
                       name="account-search"
@@ -669,7 +646,7 @@ export function SendSheet({
               {keylessRecipientUsername ? (
                 <View className="bg-primary/10 rounded-2xl p-3.5 mt-2.5">
                   <Text className="text-foreground text-sm text-center">
-                    {t("send.recipientMode.keyless", { username: keylessRecipientUsername })}
+                    {t('send.recipientMode.keyless', { username: keylessRecipientUsername })}
                   </Text>
                 </View>
               ) : null}
@@ -695,7 +672,7 @@ export function SendSheet({
                     <Pressable
                       className="p-1.5 rounded-full active:opacity-60"
                       onPress={handleClearRecipient}
-                      accessibilityLabel={t("send.clearRecipient")}
+                      accessibilityLabel={t('send.clearRecipient')}
                     >
                       <MaterialCommunityIcons
                         name="close-circle"
@@ -708,7 +685,7 @@ export function SendSheet({
                   <TextInput
                     className="text-foreground text-base"
                     style={{ paddingVertical: 2 }}
-                    placeholder={t("send.addressPlaceholder")}
+                    placeholder={t('send.addressPlaceholder')}
                     placeholderTextColor={theme.colors.textSecondary}
                     value={toAddress}
                     onChangeText={setToAddress}
@@ -730,7 +707,7 @@ export function SendSheet({
                     color={theme.colors.primary}
                   />
                   <Text className="text-primary text-xs ml-1.5 font-semibold">
-                    {t("send.paste")}
+                    {t('send.paste')}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -743,7 +720,7 @@ export function SendSheet({
                     color={theme.colors.primary}
                   />
                   <Text className="text-primary text-xs ml-1.5 font-semibold">
-                    {t("send.scanQR")}
+                    {t('send.scanQR')}
                   </Text>
                 </Pressable>
                 <Pressable
@@ -756,7 +733,7 @@ export function SendSheet({
                     color={theme.colors.primary}
                   />
                   <Text className="text-primary text-xs ml-1.5 font-semibold">
-                    {t("send.contacts")}
+                    {t('send.contacts')}
                   </Text>
                 </Pressable>
               </View>
@@ -765,15 +742,13 @@ export function SendSheet({
         </View>
 
         {validationError && toAddress.length > 0 ? (
-          <Text className="text-destructive text-xs -mt-3 px-1">
-            {validationError}
-          </Text>
+          <Text className="text-destructive text-xs -mt-3 px-1">{validationError}</Text>
         ) : null}
 
         {/* Recent recipients — borderless pills */}
         {recentRecipients.length > 0 ? (
           <View>
-            <Text className={SECTION_LABEL}>{t("send.recent")}</Text>
+            <Text className={SECTION_LABEL}>{t('send.recent')}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -787,18 +762,15 @@ export function SendSheet({
                     key={r.address}
                     onPress={() => handleRecentRecipientPress(r.address)}
                     className={`flex-row items-center rounded-full px-3 py-2 ${
-                      isSelected ? "bg-primary/15" : "bg-surface"
+                      isSelected ? 'bg-primary/15' : 'bg-surface'
                     }`}
                   >
                     <View className="mr-2">
-                      <ContactAvatar
-                        name={contact?.name ?? r.address}
-                        size={28}
-                      />
+                      <ContactAvatar name={contact?.name ?? r.address} size={28} />
                     </View>
                     <Text
                       className={`text-xs font-medium ${
-                        isSelected ? "text-primary" : "text-foreground"
+                        isSelected ? 'text-primary' : 'text-foreground'
                       }`}
                     >
                       {contact?.name ?? truncateAddress(r.address)}
@@ -812,7 +784,7 @@ export function SendSheet({
 
         {/* Fee selector — borderless segmented pills */}
         <View>
-          <Text className={SECTION_LABEL}>{t("send.networkFee")}</Text>
+          <Text className={SECTION_LABEL}>{t('send.networkFee')}</Text>
           <View className="flex-row gap-2 mt-2">
             {FEE_LEVELS.map((level) => {
               const isSelected = feeLevel === level;
@@ -820,21 +792,19 @@ export function SendSheet({
                 <Pressable
                   key={level}
                   className={`flex-1 py-3 items-center ${
-                    isSelected
-                      ? "bg-primary/15 rounded-full"
-                      : "bg-surface rounded-2xl"
+                    isSelected ? 'bg-primary/15 rounded-full' : 'bg-surface rounded-2xl'
                   }`}
                   onPress={() => setFeeLevel(level)}
                 >
                   <Text
                     className={`text-sm font-semibold ${
-                      isSelected ? "text-primary" : "text-foreground"
+                      isSelected ? 'text-primary' : 'text-foreground'
                     }`}
                   >
                     {getFeeLabel(level)}
                   </Text>
                   <Text className="text-muted-foreground text-[10px] mt-0.5">
-                    {t("send.feeUnit", { units: estimateFee(level).toString() })}
+                    {t('send.feeUnit', { units: estimateFee(level).toString() })}
                   </Text>
                 </Pressable>
               );
@@ -860,9 +830,7 @@ export function SendSheet({
         <View className="gap-3">
           {hasAmount ? (
             <View className="flex-row justify-between items-center px-1">
-              <Text className="text-muted-foreground text-xs">
-                {t("send.total")}
-              </Text>
+              <Text className="text-muted-foreground text-xs">{t('send.total')}</Text>
               <AmountText
                 value={totalSats}
                 suffix={` ${COIN_TICKER}`}
@@ -874,7 +842,7 @@ export function SendSheet({
             </View>
           ) : null}
           <Button
-            title={t("send.sendCta")}
+            title={t('send.sendCta')}
             onPress={handleSendPress}
             variant="primary"
             size="lg"
@@ -888,17 +856,17 @@ export function SendSheet({
       <Dialog
         control={confirmControl}
         placement="bottom"
-        title={t("send.confirm.title")}
+        title={t('send.confirm.title')}
         actions={[
-          { label: t("send.confirm.cta"), onPress: handleConfirmSend },
-          { label: t("common.cancel"), color: "cancel" },
+          { label: t('send.confirm.cta'), onPress: handleConfirmSend },
+          { label: t('common.cancel'), color: 'cancel' },
         ]}
       >
         <View className="mt-2">
           <ListItem
-            title={t("send.confirm.to")}
+            title={t('send.confirm.to')}
             subtitle={
-              recipientMode === "person" && selectedRecipient
+              recipientMode === 'person' && selectedRecipient
                 ? `${selectedRecipient.displayName ?? selectedRecipient.username} (@${selectedRecipient.username})`
                 : matchedContact
                   ? matchedContact.name
@@ -907,7 +875,7 @@ export function SendSheet({
             showChevron={false}
           />
           <ListItem
-            title={t("send.confirm.amount")}
+            title={t('send.confirm.amount')}
             value={
               <AmountText
                 value={amountSats ?? 0n}
@@ -919,7 +887,7 @@ export function SendSheet({
             showChevron={false}
           />
           <ListItem
-            title={t("send.confirm.fee")}
+            title={t('send.confirm.fee')}
             value={
               <AmountText
                 value={fee}
@@ -932,7 +900,7 @@ export function SendSheet({
           />
           <Divider style={{ marginHorizontal: 16 }} />
           <ListItem
-            title={t("send.confirm.total")}
+            title={t('send.confirm.total')}
             value={
               <AmountText
                 value={totalSats}
@@ -952,25 +920,22 @@ export function SendSheet({
         control={sentControl}
         onClose={handleSentDismiss}
         placement="bottom"
-        title={t("send.sent.title")}
+        title={t('send.sent.title')}
         actions={[
           {
-            label: t("send.sent.copy"),
+            label: t('send.sent.copy'),
             onPress: handleCopyExplorerLink,
             shouldCloseOnPress: false,
           },
           {
-            label: t("send.sent.share"),
+            label: t('send.sent.share'),
             onPress: handleShareExplorerLink,
             shouldCloseOnPress: false,
           },
-          { label: t("common.done"), color: "cancel" },
+          { label: t('common.done'), color: 'cancel' },
         ]}
       >
-        <Text
-          selectable
-          className="text-muted-foreground text-sm text-center"
-        >
+        <Text selectable className="text-muted-foreground text-sm text-center">
           {explorerUrl}
         </Text>
       </Dialog>
@@ -979,35 +944,31 @@ export function SendSheet({
       <Dialog
         control={saveContactControl}
         placement="bottom"
-        title={t("send.saveContact.title")}
+        title={t('send.saveContact.title')}
         description={
           pendingSaveAddress
-            ? t("send.saveContact.description", {
+            ? t('send.saveContact.description', {
                 address:
                   pendingSaveAddress.length > 16
                     ? `${pendingSaveAddress.slice(0, 8)}...${pendingSaveAddress.slice(-8)}`
                     : pendingSaveAddress,
               })
-            : ""
+            : ''
         }
         actions={[
           {
-            label: t("send.saveContact.cta"),
+            label: t('send.saveContact.cta'),
             onPress: () => {
-              router.push("/contacts");
+              router.push('/contacts');
               setPendingSaveAddress(null);
             },
           },
-          { label: t("common.no"), color: "cancel" },
+          { label: t('common.no'), color: 'cancel' },
         ]}
       />
 
       {/* QR Scanner */}
-      <QRScanner
-        visible={showQRScanner}
-        onScan={handleQRScan}
-        onClose={handleCloseScanner}
-      />
+      <QRScanner visible={showQRScanner} onScan={handleQRScan} onClose={handleCloseScanner} />
 
       {/* Contact Picker */}
       <ContactPicker

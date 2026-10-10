@@ -121,9 +121,7 @@ async function readJsonBody(response: Response): Promise<unknown> {
 /**
  * Factory for the payer-side client core.
  */
-export function createPeableCheckout(
-  opts: CreatePeableCheckoutOptions = {},
-): PeableCheckoutClient {
+export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): PeableCheckoutClient {
   const baseUrl = (opts.gatewayUrl ?? DEFAULT_GATEWAY_URL).replace(/\/$/, '');
 
   async function getPaymentIntent(id: string, clientSecret: string): Promise<PaymentIntent> {
@@ -147,14 +145,11 @@ export function createPeableCheckout(
   async function submitTx(id: string, clientSecret: string, txid: string): Promise<PaymentIntent> {
     let response: Response;
     try {
-      response = await fetch(
-        `${baseUrl}/v1/payment_intents/${encodeURIComponent(id)}/submit_tx`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ client_secret: clientSecret, txid }),
-        },
-      );
+      response = await fetch(`${baseUrl}/v1/payment_intents/${encodeURIComponent(id)}/submit_tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ client_secret: clientSecret, txid }),
+      });
     } catch (cause) {
       throw new PeableApiError(
         `Failed to reach the Peable Gateway at ${baseUrl}: ${
@@ -167,10 +162,7 @@ export function createPeableCheckout(
     return body as PaymentIntent;
   }
 
-  async function getClientAction(
-    id: string,
-    clientSecret: string,
-  ): Promise<PeableClientAction> {
+  async function getClientAction(id: string, clientSecret: string): Promise<PeableClientAction> {
     let response: Response;
     try {
       response = await fetch(

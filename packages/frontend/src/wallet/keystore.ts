@@ -1,4 +1,4 @@
-import { Platform } from "react-native";
+import { Platform } from 'react-native';
 
 /**
  * Whether this host can reach the on-device holder of the Oxy identity key
@@ -10,5 +10,5 @@ import { Platform } from "react-native";
  * the store's identity probe and the shell's capability gate cannot disagree.
  */
 export function hasIdentityKeystore(): boolean {
-  return Platform.OS !== "web";
+  return Platform.OS !== 'web';
 }

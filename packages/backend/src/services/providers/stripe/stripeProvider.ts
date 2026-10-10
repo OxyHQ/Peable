@@ -11,9 +11,9 @@
  * no fee schedule, no order. What crossed is the rail.
  */
 
-import type Stripe from "stripe";
-import type { CurrencyCode } from "@peable.to/shared-types";
-import { config } from "../../../config";
+import type Stripe from 'stripe';
+import type { CurrencyCode } from '@peable.to/shared-types';
+import { config } from '../../../config';
 import {
   cancelStripePaymentIntent,
   captureStripePaymentIntent,
@@ -29,7 +29,7 @@ import {
   retrieveStripePaymentIntent,
   retrieveStripeTransfer,
   updateStripeDispute,
-} from "./client";
+} from './client';
 import {
   ProviderError,
   type AccountHoldingProvider,
@@ -56,11 +56,11 @@ import {
   type RefundRequest,
   type ReverseTransferRequest,
   type SettlingPaymentProvider,
-} from "../provider";
-import { mapPaymentIntentStatus, toProviderEventEnvelope } from "./verify";
+} from '../provider';
+import { mapPaymentIntentStatus, toProviderEventEnvelope } from './verify';
 
 /** Which endpoint a delivery arrived on. The two carry different secrets. */
-export type StripeWebhookScope = "platform" | "connect";
+export type StripeWebhookScope = 'platform' | 'connect';
 
 /**
  * Stripe counts money in the currency's minor unit as a NUMBER; the gateway
@@ -72,15 +72,15 @@ export type StripeWebhookScope = "platform" | "connect";
  * silently stops counting, and a payment amount that crossed it would be sent
  * to Stripe rounded — a real charge for an amount nobody authorised.
  */
-function toStripeAmount(amount: string, stage: "createPayment" | "refund" | "transfer"): number {
+function toStripeAmount(amount: string, stage: 'createPayment' | 'refund' | 'transfer'): number {
   const value = Number(amount);
   if (!Number.isSafeInteger(value)) {
     throw new ProviderError({
-      provider: "stripe",
+      provider: 'stripe',
       stage,
       message: `amount ${amount} cannot be represented exactly as a Stripe amount`,
       retryable: false,
-      code: "amount_not_representable",
+      code: 'amount_not_representable',
     });
   }
   return value;
@@ -94,11 +94,9 @@ function toStripeAmount(amount: string, stage: "createPayment" | "refund" | "tra
  * `typeof x === 'string'` alone would silently answer `undefined` for every
  * expanded read and send a settlement looking for a charge it already had.
  */
-function readChargeId(
-  latestCharge: Stripe.PaymentIntent["latest_charge"],
-): string | undefined {
-  if (typeof latestCharge === "string") return latestCharge;
-  if (typeof latestCharge === "object" && latestCharge !== null) return latestCharge.id;
+function readChargeId(latestCharge: Stripe.PaymentIntent['latest_charge']): string | undefined {
+  if (typeof latestCharge === 'string') return latestCharge;
+  if (typeof latestCharge === 'object' && latestCharge !== null) return latestCharge.id;
   return undefined;
 }
 
@@ -118,23 +116,23 @@ const STRIPE_EVIDENCE_FIELDS: Record<
   keyof DisputeEvidence,
   keyof Stripe.DisputeUpdateParams.Evidence
 > = {
-  productDescription: "product_description",
-  customerName: "customer_name",
-  customerEmailAddress: "customer_email_address",
-  customerPurchaseIp: "customer_purchase_ip",
-  billingAddress: "billing_address",
-  shippingAddress: "shipping_address",
-  shippingCarrier: "shipping_carrier",
-  shippingDate: "shipping_date",
-  shippingTrackingNumber: "shipping_tracking_number",
-  serviceDate: "service_date",
-  accessActivityLog: "access_activity_log",
-  cancellationPolicyDisclosure: "cancellation_policy_disclosure",
-  cancellationRebuttal: "cancellation_rebuttal",
-  duplicateChargeExplanation: "duplicate_charge_explanation",
-  refundPolicyDisclosure: "refund_policy_disclosure",
-  refundRefusalExplanation: "refund_refusal_explanation",
-  uncategorizedText: "uncategorized_text",
+  productDescription: 'product_description',
+  customerName: 'customer_name',
+  customerEmailAddress: 'customer_email_address',
+  customerPurchaseIp: 'customer_purchase_ip',
+  billingAddress: 'billing_address',
+  shippingAddress: 'shipping_address',
+  shippingCarrier: 'shipping_carrier',
+  shippingDate: 'shipping_date',
+  shippingTrackingNumber: 'shipping_tracking_number',
+  serviceDate: 'service_date',
+  accessActivityLog: 'access_activity_log',
+  cancellationPolicyDisclosure: 'cancellation_policy_disclosure',
+  cancellationRebuttal: 'cancellation_rebuttal',
+  duplicateChargeExplanation: 'duplicate_charge_explanation',
+  refundPolicyDisclosure: 'refund_policy_disclosure',
+  refundRefusalExplanation: 'refund_refusal_explanation',
+  uncategorizedText: 'uncategorized_text',
 };
 
 /**
@@ -167,7 +165,7 @@ function toStripeCurrency(currency: string): string {
 function toCapabilityStatus(
   value: Stripe.Account.Capabilities[keyof Stripe.Account.Capabilities] | undefined,
 ): ProviderCapabilityStatus | null {
-  if (value === "active" || value === "pending" || value === "inactive") return value;
+  if (value === 'active' || value === 'pending' || value === 'inactive') return value;
   return null;
 }
 
@@ -178,11 +176,11 @@ export class StripePaymentProvider
     DisputeHandlingProvider,
     SettlementReportingProvider
 {
-  readonly id = "stripe" as const;
+  readonly id = 'stripe' as const;
 
   async createPayment(request: CreatePaymentRequest): Promise<ProviderPaymentResult> {
     const params: Stripe.PaymentIntentCreateParams = {
-      amount: toStripeAmount(request.amount.amount, "createPayment"),
+      amount: toStripeAmount(request.amount.amount, 'createPayment'),
       currency: toStripeCurrency(request.amount.currency),
       // `automatic_payment_methods` rather than a hand-listed set: the methods a
       // payment can offer are a dashboard decision an operator changes without a
@@ -192,9 +190,7 @@ export class StripePaymentProvider
       // Ties every movement of one checkout together at Stripe, so a support
       // conversation can find the charge and its transfers from one id.
       transfer_group: request.intentId,
-      ...(request.onBehalfOf !== undefined
-        ? { on_behalf_of: request.onBehalfOf }
-        : {}),
+      ...(request.onBehalfOf !== undefined ? { on_behalf_of: request.onBehalfOf } : {}),
     };
     const intent = await createStripePaymentIntent(params, request.idempotencyKey);
     return this.toResult(intent);
@@ -211,7 +207,7 @@ export class StripePaymentProvider
    */
   async capture(request: PaymentOperationRequest): Promise<ProviderPaymentResult> {
     const current = await retrieveStripePaymentIntent(request.providerObjectId);
-    if (current.status !== "requires_capture") return this.toResult(current);
+    if (current.status !== 'requires_capture') return this.toResult(current);
     const captured = await captureStripePaymentIntent(
       request.providerObjectId,
       request.idempotencyKey,
@@ -231,7 +227,7 @@ export class StripePaymentProvider
     const refund = await createStripeRefund(
       {
         payment_intent: request.providerObjectId,
-        amount: toStripeAmount(request.amount.amount, "refund"),
+        amount: toStripeAmount(request.amount.amount, 'refund'),
         metadata: { ...request.metadata, peable_refund_id: request.refundId },
       },
       request.idempotencyKey,
@@ -246,7 +242,12 @@ export class StripePaymentProvider
     return {
       providerObjectId: refund.id,
       status: this.refundedPaymentStatus(payment),
-      state: refund.status === "succeeded" ? "succeeded" : refund.status === "failed" ? "failed" : "pending",
+      state:
+        refund.status === 'succeeded'
+          ? 'succeeded'
+          : refund.status === 'failed'
+            ? 'failed'
+            : 'pending',
       ...(refund.failure_reason !== undefined && refund.failure_reason !== null
         ? { failureCode: refund.failure_reason }
         : {}),
@@ -266,7 +267,7 @@ export class StripePaymentProvider
    * satisfies the interface and so the contract suite has something to drive.
    */
   async verifyEvent(input: ProviderEventInput): Promise<ProviderEventEnvelope> {
-    return this.verifyEventForScope(input, "platform");
+    return this.verifyEventForScope(input, 'platform');
   }
 
   /**
@@ -282,18 +283,18 @@ export class StripePaymentProvider
     scope: StripeWebhookScope,
   ): Promise<ProviderEventEnvelope> {
     const secrets = (
-      scope === "platform"
+      scope === 'platform'
         ? [config.stripe.webhookSecret, config.stripe.webhookSecretPrevious]
         : [config.stripe.connectWebhookSecret, config.stripe.connectWebhookSecretPrevious]
     ).filter((secret): secret is string => secret !== undefined);
 
     if (secrets.length === 0) {
       throw new ProviderError({
-        provider: "stripe",
-        stage: "verifyEvent",
+        provider: 'stripe',
+        stage: 'verifyEvent',
         message: `no ${scope} webhook secret is configured`,
         retryable: false,
-        code: "webhook_secret_missing",
+        code: 'webhook_secret_missing',
       });
     }
 
@@ -308,7 +309,7 @@ export class StripePaymentProvider
   async createTransfer(request: CreateTransferRequest): Promise<ProviderTransferResult> {
     const transfer = await createStripeTransfer(
       {
-        amount: toStripeAmount(request.amount.amount, "transfer"),
+        amount: toStripeAmount(request.amount.amount, 'transfer'),
         currency: toStripeCurrency(request.amount.currency),
         destination: request.destinationAccountId,
         transfer_group: request.groupRef,
@@ -330,17 +331,15 @@ export class StripePaymentProvider
     );
     return {
       providerObjectId: transfer.id,
-      status: transfer.reversed ? "reversed" : "paid",
+      status: transfer.reversed ? 'reversed' : 'paid',
     };
   }
 
-  async reverseTransfer(
-    request: ReverseTransferRequest,
-  ): Promise<ProviderTransferReversalResult> {
+  async reverseTransfer(request: ReverseTransferRequest): Promise<ProviderTransferReversalResult> {
     const reversal = await createStripeTransferReversal(
       request.transferObjectId,
       {
-        amount: toStripeAmount(request.amount.amount, "transfer"),
+        amount: toStripeAmount(request.amount.amount, 'transfer'),
         metadata: { ...request.metadata, peable_transfer_id: request.transferId },
       },
       request.idempotencyKey,
@@ -364,7 +363,7 @@ export class StripePaymentProvider
      * costs nothing.
      */
     const expanded = reversal.transfer;
-    if (typeof expanded === "object" && expanded !== null && "amount_reversed" in expanded) {
+    if (typeof expanded === 'object' && expanded !== null && 'amount_reversed' in expanded) {
       return { providerObjectId: reversal.id, totalReversed: String(expanded.amount_reversed) };
     }
 
@@ -421,7 +420,7 @@ export class StripePaymentProvider
     const charge = await retrieveStripeChargeWithBalance(chargeObjectId);
     const balance = charge.balance_transaction;
 
-    if (typeof balance !== "object" || balance === null) {
+    if (typeof balance !== 'object' || balance === null) {
       // Either an unexpanded id — which cannot happen, this asked for the
       // expansion — or no transaction at all, which is an uncaptured or
       // not-yet-settled charge. Neither is "the fee was nothing".
@@ -429,7 +428,7 @@ export class StripePaymentProvider
     }
 
     return {
-      status: balance.status === "available" ? "available" : "pending",
+      status: balance.status === 'available' ? 'available' : 'pending',
       gross: String(balance.amount),
       fee: String(balance.fee),
       net: String(balance.net),
@@ -467,12 +466,12 @@ export class StripePaymentProvider
         // the v1 API carrying `requirement_collection: stripe` — the property
         // that keeps identity documents out of this database, obtained by
         // construction rather than by assertion.
-        dashboard: "express",
+        dashboard: 'express',
         identity: { country: request.country, entity_type: request.businessType },
         defaults: {
           responsibilities: {
-            losses_collector: "application",
-            fees_collector: "application",
+            losses_collector: 'application',
+            fees_collector: 'application',
           },
         },
         configuration: {
@@ -486,11 +485,11 @@ export class StripePaymentProvider
       request.idempotencyKey,
     )) as { id?: unknown };
 
-    if (typeof created.id !== "string") {
+    if (typeof created.id !== 'string') {
       throw new ProviderError({
-        provider: "stripe",
-        stage: "account",
-        message: "Stripe returned no account id",
+        provider: 'stripe',
+        stage: 'account',
+        message: 'Stripe returned no account id',
         retryable: true,
       });
     }
@@ -507,11 +506,11 @@ export class StripePaymentProvider
       account: request.providerAccountId,
       refresh_url: request.refreshUrl,
       return_url: request.returnUrl,
-      type: "account_onboarding",
+      type: 'account_onboarding',
       // Collect what will EVENTUALLY be due, not only what is due now.
       // Otherwise a seller completes onboarding, starts selling, and has payouts
       // interrupted weeks later by a requirement that was always coming.
-      collection_options: { fields: "eventually_due" },
+      collection_options: { fields: 'eventually_due' },
     });
     return { url: link.url, expiresAt: new Date(link.expires_at * 1000) };
   }
@@ -526,7 +525,7 @@ export class StripePaymentProvider
       providerAccountId: account.id,
       payoutsEnabled: account.payouts_enabled === true,
       chargesEnabled: account.charges_enabled === true,
-      transfersCapability: toCapabilityStatus(transfers) ?? "inactive",
+      transfersCapability: toCapabilityStatus(transfers) ?? 'inactive',
       // NULL, not `inactive`, when Stripe reports nothing: never requested is a
       // different fact from declined, and collapsing them makes "why is this
       // seller stuck" unanswerable.
@@ -537,11 +536,12 @@ export class StripePaymentProvider
       eventuallyDue: requirements?.eventually_due ?? [],
       pastDue: requirements?.past_due ?? [],
       pendingVerification: requirements?.pending_verification ?? [],
-      ...(requirements?.disabled_reason
-        ? { disabledReason: requirements.disabled_reason }
-        : {}),
+      ...(requirements?.disabled_reason ? { disabledReason: requirements.disabled_reason } : {}),
       ...(account.default_currency
-        ? { defaultCurrency: account.default_currency.toUpperCase() as ProviderAccountSnapshot["defaultCurrency"] }
+        ? {
+            defaultCurrency:
+              account.default_currency.toUpperCase() as ProviderAccountSnapshot['defaultCurrency'],
+          }
         : {}),
     };
   }
@@ -557,7 +557,7 @@ export class StripePaymentProvider
       // Handed to the payer in the same response and never stored, so it cannot
       // become a credential sitting in a database.
       ...(intent.client_secret
-        ? { clientAction: { kind: "client_secret" as const, value: intent.client_secret } }
+        ? { clientAction: { kind: 'client_secret' as const, value: intent.client_secret } }
         : {}),
       // The CHARGE, which is a different object from the payment and is what a
       // transfer's `source_transaction` names. Absent while the payment has not
@@ -569,14 +569,14 @@ export class StripePaymentProvider
   /** Whether a refund left the payment fully or partially refunded. */
   private refundedPaymentStatus(intent: Stripe.PaymentIntent): ProviderPaymentStatus {
     const charge = intent.latest_charge;
-    if (typeof charge === "object" && charge !== null) {
-      if (charge.refunded) return "refunded";
-      if ((charge.amount_refunded ?? 0) > 0) return "partially_refunded";
+    if (typeof charge === 'object' && charge !== null) {
+      if (charge.refunded) return 'refunded';
+      if ((charge.amount_refunded ?? 0) > 0) return 'partially_refunded';
     }
     // Stripe did not expand the charge. `partially_refunded` is the
     // conservative answer: a refund was created, so SOMETHING came back, and
     // claiming the payment is fully refunded when it is not would stop a later
     // legitimate refund.
-    return "partially_refunded";
+    return 'partially_refunded';
   }
 }

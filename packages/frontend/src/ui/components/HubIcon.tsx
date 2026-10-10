@@ -4,7 +4,7 @@
  * (`viewBox` is Material Symbols' `0 -960 960 960`).
  */
 
-import Svg, { Path } from "react-native-svg";
+import Svg, { Path } from 'react-native-svg';
 
 interface HubIconProps {
   color: string;

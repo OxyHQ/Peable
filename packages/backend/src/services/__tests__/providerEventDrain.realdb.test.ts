@@ -1,6 +1,6 @@
-import {bindRecurringObject} from '../../db/recurring/recurringMirrorRepository';
-import {providerEvents} from '../../db/schema';
-import {sql} from 'drizzle-orm';
+import { bindRecurringObject } from '../../db/recurring/recurringMirrorRepository';
+import { providerEvents } from '../../db/schema';
+import { sql } from 'drizzle-orm';
 /**
  * The drain, end to end: a stored provider event becomes payment state and a
  * merchant's webhook, against a real database.
@@ -11,23 +11,27 @@ import {sql} from 'drizzle-orm';
  * does, what an event this drain does not understand does — and each of those
  * has a wrong answer that loses money or spins forever.
  */
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "bun:test";
-import { eq } from "drizzle-orm";
-import { insertProviderEvent } from "../../db/providers/providerEventRepository";
-import { findProviderEventById } from "../../db/providers/providerEventRepository";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'bun:test';
+import { eq } from 'drizzle-orm';
+import { insertProviderEvent } from '../../db/providers/providerEventRepository';
+import { findProviderEventById } from '../../db/providers/providerEventRepository';
 import {
   findIntentByPublicId,
   linkProviderObject,
-} from "../../db/payments/paymentIntentRepository";
-import { webhookDeliveries } from "../../db/schema";
-import { runProviderEventDrainPass, ProviderEventDeferralError, retryProviderEventDrainDeferral } from "../providerEventDrain";
+} from '../../db/payments/paymentIntentRepository';
+import { webhookDeliveries } from '../../db/schema';
+import {
+  runProviderEventDrainPass,
+  ProviderEventDeferralError,
+  retryProviderEventDrainDeferral,
+} from '../providerEventDrain';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
-import { POSTGRES_TESTS_ENABLED } from "../../db/testDatabase";
+} from '../../__tests__/helpers/gatewayTestDatabase';
+import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
@@ -37,23 +41,23 @@ let counter = 0;
 async function storeEvent(type: string, objectId: string | null): Promise<string> {
   counter += 1;
   const id = await insertProviderEvent(gatewayDb(), {
-    provider: "stripe",
+    provider: 'stripe',
     providerEventId: `evt_${String(counter)}`,
     providerAccountId: null,
     type,
     livemode: false,
-    apiVersion: "2026-07-29.dahlia",
+    apiVersion: '2026-07-29.dahlia',
     objectIds: objectId ? { payment_intent: objectId } : {},
-    payload: { id: `evt_${String(counter)}`, object: "event", type },
+    payload: { id: `evt_${String(counter)}`, object: 'event', type },
   });
-  if (!id) throw new Error("the event was already stored");
+  if (!id) throw new Error('the event was already stored');
   return id;
 }
 
 /** A card intent already linked to a provider object, as after a normal create. */
 async function linkedCardIntent(objectId: string) {
-  const intent = await seedIntent(merchant, { rail: "card", currency: "EUR", amount: "2500" });
-  await linkProviderObject(gatewayDb(), intent.id, "stripe", objectId);
+  const intent = await seedIntent(merchant, { rail: 'card', currency: 'EUR', amount: '2500' });
+  await linkProviderObject(gatewayDb(), intent.id, 'stripe', objectId);
   return intent;
 }
 
@@ -65,7 +69,7 @@ async function deliveriesFor(intentId: string): Promise<string[]> {
   return rows.map((row) => row.eventType);
 }
 
-describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
   useGatewayDatabase();
 
   beforeAll(async () => {
@@ -73,8 +77,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
     // settling a payment and not telling the merchant is the failure this whole
     // rail exists to avoid.
     merchant = await seedMerchant({
-      webhookUrl: "https://merchant.example/hooks",
-      webhookSecret: "whsec_merchant_test",
+      webhookUrl: 'https://merchant.example/hooks',
+      webhookSecret: 'whsec_merchant_test',
     });
   });
 
@@ -88,26 +92,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
   });
 
   it("settles a card payment and enqueues the merchant's event", async () => {
-    const intent = await linkedCardIntent("pi_stripe_settle");
-    await storeEvent("payment_intent.succeeded", "pi_stripe_settle");
+    const intent = await linkedCardIntent('pi_stripe_settle');
+    await storeEvent('payment_intent.succeeded', 'pi_stripe_settle');
 
     const result = await runProviderEventDrainPass();
     expect(result.applied).toBeGreaterThanOrEqual(1);
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe("settled");
-    expect(await deliveriesFor(intent.id)).toContain("payment_intent.settled");
+    expect(after?.status).toBe('settled');
+    expect(await deliveriesFor(intent.id)).toContain('payment_intent.settled');
   });
 
-  it("fails a declined payment and tells the merchant", async () => {
-    const intent = await linkedCardIntent("pi_stripe_declined");
-    await storeEvent("payment_intent.payment_failed", "pi_stripe_declined");
+  it('fails a declined payment and tells the merchant', async () => {
+    const intent = await linkedCardIntent('pi_stripe_declined');
+    await storeEvent('payment_intent.payment_failed', 'pi_stripe_declined');
 
     await runProviderEventDrainPass();
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe("failed");
-    expect(await deliveriesFor(intent.id)).toContain("payment_intent.failed");
+    expect(after?.status).toBe('failed');
+    expect(await deliveriesFor(intent.id)).toContain('payment_intent.failed');
   });
 
   /**
@@ -115,14 +119,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * gateway's own clock running out, and conflating the two would put payments
    * the sweeper never touched into its numbers.
    */
-  it("treats a provider cancellation as a rejection", async () => {
-    const intent = await linkedCardIntent("pi_stripe_canceled");
-    await storeEvent("payment_intent.canceled", "pi_stripe_canceled");
+  it('treats a provider cancellation as a rejection', async () => {
+    const intent = await linkedCardIntent('pi_stripe_canceled');
+    await storeEvent('payment_intent.canceled', 'pi_stripe_canceled');
 
     await runProviderEventDrainPass();
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe("rejected");
+    expect(after?.status).toBe('rejected');
   });
 
   /**
@@ -130,14 +134,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * the intent and enqueue NOTHING. A merchant integrating on Stripe-shaped
    * ergonomics acts on outcomes.
    */
-  it("moves the intent to processing without enqueueing an event", async () => {
-    const intent = await linkedCardIntent("pi_stripe_processing");
-    await storeEvent("payment_intent.processing", "pi_stripe_processing");
+  it('moves the intent to processing without enqueueing an event', async () => {
+    const intent = await linkedCardIntent('pi_stripe_processing');
+    await storeEvent('payment_intent.processing', 'pi_stripe_processing');
 
     await runProviderEventDrainPass();
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe("processing");
+    expect(after?.status).toBe('processing');
     expect(await deliveriesFor(intent.id)).toEqual([]);
   });
 
@@ -149,24 +153,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * `payment_intent.settled`, or a merchant releasing inventory on that event
    * releases it twice.
    */
-  it("absorbs a redelivery without moving the intent or duplicating the event", async () => {
-    const intent = await linkedCardIntent("pi_stripe_redeliver");
-    await storeEvent("payment_intent.succeeded", "pi_stripe_redeliver");
+  it('absorbs a redelivery without moving the intent or duplicating the event', async () => {
+    const intent = await linkedCardIntent('pi_stripe_redeliver');
+    await storeEvent('payment_intent.succeeded', 'pi_stripe_redeliver');
     await runProviderEventDrainPass();
 
     const deliveriesAfterFirst = await deliveriesFor(intent.id);
-    expect(deliveriesAfterFirst).toEqual(["payment_intent.settled"]);
+    expect(deliveriesAfterFirst).toEqual(['payment_intent.settled']);
 
     // The provider sends it again, under a new event id — which is what a
     // redelivery of an already-2xx'd event looks like when the endpoint is
     // reconfigured, so the dedupe index does not catch it.
-    await storeEvent("payment_intent.succeeded", "pi_stripe_redeliver");
+    await storeEvent('payment_intent.succeeded', 'pi_stripe_redeliver');
     const second = await runProviderEventDrainPass();
 
     expect(second.noop).toBeGreaterThanOrEqual(1);
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe("settled");
-    expect(await deliveriesFor(intent.id)).toEqual(["payment_intent.settled"]);
+    expect(after?.status).toBe('settled');
+    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.settled']);
   });
 
   /**
@@ -177,13 +181,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * and Stripe's event beat it by milliseconds. Marking it processed would drop
    * a real settlement on the floor, permanently, with a green build.
    */
-  it("leaves an event for an unlinked payment unprocessed, and applies it once the link lands", async () => {
+  it('leaves an event for an unlinked payment unprocessed, and applies it once the link lands', async () => {
     const intent = await seedIntent(merchant, {
-      rail: "card",
-      currency: "EUR",
-      amount: "2500",
+      rail: 'card',
+      currency: 'EUR',
+      amount: '2500',
     });
-    const eventId = await storeEvent("payment_intent.succeeded", "pi_stripe_racing");
+    const eventId = await storeEvent('payment_intent.succeeded', 'pi_stripe_racing');
 
     const first = await runProviderEventDrainPass();
     expect(first.unmatched).toBeGreaterThanOrEqual(1);
@@ -191,14 +195,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
     // Still unprocessed, and therefore still in the drain's set.
     const stored = await findProviderEventById(gatewayDb(), eventId);
     expect(stored?.processedAt).toBeNull();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("created");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
 
     // The create finishes.
-    await linkProviderObject(gatewayDb(), intent.id, "stripe", "pi_stripe_racing");
+    await linkProviderObject(gatewayDb(), intent.id, 'stripe', 'pi_stripe_racing');
 
     const second = await runProviderEventDrainPass();
     expect(second.applied).toBeGreaterThanOrEqual(1);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
     expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
   });
 
@@ -211,8 +215,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * pass forever, and an operator surface where "unprocessed" stops meaning
    * anything.
    */
-  it("marks an unmapped event handled rather than retrying it forever", async () => {
-    const eventId = await storeEvent("charge.refunded", "pi_stripe_settle");
+  it('marks an unmapped event handled rather than retrying it forever', async () => {
+    const eventId = await storeEvent('charge.refunded', 'pi_stripe_settle');
 
     const result = await runProviderEventDrainPass();
     expect(result.skipped).toBeGreaterThanOrEqual(1);
@@ -232,14 +236,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * A mapped event with no payment id is a bug HERE — the envelope and the map
    * disagree — so it is recorded on the row rather than silently skipped.
    */
-  it("records a failure on a mapped event that names no payment", async () => {
-    const eventId = await storeEvent("payment_intent.succeeded", null);
+  it('records a failure on a mapped event that names no payment', async () => {
+    const eventId = await storeEvent('payment_intent.succeeded', null);
 
     const result = await runProviderEventDrainPass();
     expect(result.failed).toBeGreaterThanOrEqual(1);
 
     const stored = await findProviderEventById(gatewayDb(), eventId);
-    expect(stored?.processingError).toContain("payment_intent");
+    expect(stored?.processingError).toContain('payment_intent');
     // Unprocessed, so an operator can see it.
     expect(stored?.processedAt).toBeNull();
   });
@@ -249,15 +253,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * batch, and a failure that aborted the pass would let a single bad event
    * hold up every settlement after it.
    */
-  it("keeps going past a failure and applies the events behind it", async () => {
-    const intent = await linkedCardIntent("pi_stripe_after_poison");
-    await storeEvent("payment_intent.succeeded", null);
-    await storeEvent("payment_intent.succeeded", "pi_stripe_after_poison");
+  it('keeps going past a failure and applies the events behind it', async () => {
+    const intent = await linkedCardIntent('pi_stripe_after_poison');
+    await storeEvent('payment_intent.succeeded', null);
+    await storeEvent('payment_intent.succeeded', 'pi_stripe_after_poison');
 
     const result = await runProviderEventDrainPass();
     expect(result.failed).toBeGreaterThanOrEqual(1);
     expect(result.applied).toBeGreaterThanOrEqual(1);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
   });
 
   /**
@@ -266,16 +270,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * transition. The drain reads oldest-first and works sequentially, which is
    * what makes this hold.
    */
-  it("applies two events about one payment in the order they arrived", async () => {
-    const intent = await linkedCardIntent("pi_stripe_ordered");
-    await storeEvent("payment_intent.processing", "pi_stripe_ordered");
-    await storeEvent("payment_intent.succeeded", "pi_stripe_ordered");
+  it('applies two events about one payment in the order they arrived', async () => {
+    const intent = await linkedCardIntent('pi_stripe_ordered');
+    await storeEvent('payment_intent.processing', 'pi_stripe_ordered');
+    await storeEvent('payment_intent.succeeded', 'pi_stripe_ordered');
 
     // Asserted on the INTENT, not on the pass's failure count: the shared suite
     // database still holds the deliberately-failing rows the two cases above
     // left, and they are counted by every later pass.
     await runProviderEventDrainPass();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe("settled");
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
   });
 
   /**
@@ -283,47 +287,163 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)("the provider event drain", () => {
    * structural rather than conditional: a faircoin intent carries no provider,
    * so the lookup that finds an intent for a provider object cannot match one.
    */
-  it("cannot reach a faircoin intent", async () => {
-    const chain = await seedIntent(merchant, { rail: "faircoin" });
-    await storeEvent("payment_intent.succeeded", chain.address ?? "unreachable");
+  it('cannot reach a faircoin intent', async () => {
+    const chain = await seedIntent(merchant, { rail: 'faircoin' });
+    await storeEvent('payment_intent.succeeded', chain.address ?? 'unreachable');
 
     const result = await runProviderEventDrainPass();
     expect(result.applied).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), chain.publicId))?.status).toBe("created");
+    expect((await findIntentByPublicId(gatewayDb(), chain.publicId))?.status).toBe('created');
   });
-  it('reaches later recurring and one-off events when every pass is beyond the retry backoff',async()=>{
+  it('reaches later recurring and one-off events when every pass is beyond the retry backoff', async () => {
     // This suite shares rows across its cases: isolate the queue, not the seeded merchant.
-    await gatewayDb().execute(sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`);
-    const deployment={provider:'stripe' as const,platformAccountId:'acct_fixture',livemode:false,environment:'development' as const,apiVersion:'2026-07-29.dahlia'};
-    const blocked:string[]=[];for(let n=0;n<50;n++){const id=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_blocked_${counter}_${n}`,providerAccountId:null,type:'invoice.paid',livemode:false,apiVersion:deployment.apiVersion,objectIds:{invoice:`in_unknown_${n}`},payload:{}});blocked.push(id!);}
-    await bindRecurringObject(gatewayDb(),deployment,{merchantId:merchant.id,providerAccountId:null,kind:'subscription',objectRef:'sub_valid',bindingEvidenceRef:'synthetic-owned'});
-    const valid=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_valid_${counter}`,providerAccountId:null,type:'customer.subscription.updated',livemode:false,apiVersion:deployment.apiVersion,objectIds:{subscription:'sub_valid'},payload:{}});
-    const intent=await linkedCardIntent(`pi_after_blocked_${counter}`);await storeEvent('payment_intent.succeeded',`pi_after_blocked_${counter}`);
-    let time=new Date();const recurring={deployment,reader:{readSnapshot:async()=>({schemaVersion:1,provider:'stripe',platformAccountId:'acct_fixture',providerAccountId:null,livemode:false,objectRef:'sub_valid',apiVersion:deployment.apiVersion,kind:'subscription',status:'active',cancelAtPeriodEnd:false,periods:[{itemRef:'si_valid',start:'2026-10-01T00:00:00Z',end:'2026-11-01T00:00:00Z'}],hasMorePeriods:false})}};
-    const first=await runProviderEventDrainPass({recurring,now:()=>time});expect(first.examined).toBe(50);expect(first.unmatched).toBe(50);
-    time=new Date(time.getTime()+60_001);const second=await runProviderEventDrainPass({recurring,now:()=>time});expect(second.examined).toBe(50);expect(second.applied).toBe(2);expect(second.unmatched).toBe(48);expect((await findProviderEventById(gatewayDb(),valid!))?.processedAt).not.toBeNull();expect((await findIntentByPublicId(gatewayDb(),intent.publicId))?.status).toBe('settled');
-    for(const id of blocked)expect((await findProviderEventById(gatewayDb(),id))?.processedAt).toBeNull();time=new Date(time.getTime()+60_001);expect((await runProviderEventDrainPass({recurring,now:()=>time})).examined).toBe(50);
+    await gatewayDb().execute(
+      sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`,
+    );
+    const deployment = {
+      provider: 'stripe' as const,
+      platformAccountId: 'acct_fixture',
+      livemode: false,
+      environment: 'development' as const,
+      apiVersion: '2026-07-29.dahlia',
+    };
+    const blocked: string[] = [];
+    for (let n = 0; n < 50; n++) {
+      const id = await insertProviderEvent(gatewayDb(), {
+        provider: 'stripe',
+        providerEventId: `evt_blocked_${counter}_${n}`,
+        providerAccountId: null,
+        type: 'invoice.paid',
+        livemode: false,
+        apiVersion: deployment.apiVersion,
+        objectIds: { invoice: `in_unknown_${n}` },
+        payload: {},
+      });
+      blocked.push(id!);
+    }
+    await bindRecurringObject(gatewayDb(), deployment, {
+      merchantId: merchant.id,
+      providerAccountId: null,
+      kind: 'subscription',
+      objectRef: 'sub_valid',
+      bindingEvidenceRef: 'synthetic-owned',
+    });
+    const valid = await insertProviderEvent(gatewayDb(), {
+      provider: 'stripe',
+      providerEventId: `evt_valid_${counter}`,
+      providerAccountId: null,
+      type: 'customer.subscription.updated',
+      livemode: false,
+      apiVersion: deployment.apiVersion,
+      objectIds: { subscription: 'sub_valid' },
+      payload: {},
+    });
+    const intent = await linkedCardIntent(`pi_after_blocked_${counter}`);
+    await storeEvent('payment_intent.succeeded', `pi_after_blocked_${counter}`);
+    let time = new Date();
+    const recurring = {
+      deployment,
+      reader: {
+        readSnapshot: async () => ({
+          schemaVersion: 1,
+          provider: 'stripe',
+          platformAccountId: 'acct_fixture',
+          providerAccountId: null,
+          livemode: false,
+          objectRef: 'sub_valid',
+          apiVersion: deployment.apiVersion,
+          kind: 'subscription',
+          status: 'active',
+          cancelAtPeriodEnd: false,
+          periods: [
+            { itemRef: 'si_valid', start: '2026-10-01T00:00:00Z', end: '2026-11-01T00:00:00Z' },
+          ],
+          hasMorePeriods: false,
+        }),
+      },
+    };
+    const first = await runProviderEventDrainPass({ recurring, now: () => time });
+    expect(first.examined).toBe(50);
+    expect(first.unmatched).toBe(50);
+    time = new Date(time.getTime() + 60_001);
+    const second = await runProviderEventDrainPass({ recurring, now: () => time });
+    expect(second.examined).toBe(50);
+    expect(second.applied).toBe(2);
+    expect(second.unmatched).toBe(48);
+    expect((await findProviderEventById(gatewayDb(), valid!))?.processedAt).not.toBeNull();
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    for (const id of blocked)
+      expect((await findProviderEventById(gatewayDb(), id))?.processedAt).toBeNull();
+    time = new Date(time.getTime() + 60_001);
+    expect((await runProviderEventDrainPass({ recurring, now: () => time })).examined).toBe(50);
   });
 
-  it('reports committed progress on deferral failure and retries scheduling without replaying payment effects', async()=>{
-    await gatewayDb().execute(sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`);
-    const deployment={provider:'stripe' as const,platformAccountId:'acct_fixture',livemode:false,environment:'development' as const,apiVersion:'2026-07-29.dahlia'};
-    const blocked=await insertProviderEvent(gatewayDb(),{provider:'stripe',providerEventId:`evt_deferral_failure_${counter}`,providerAccountId:null,type:'invoice.paid',livemode:false,apiVersion:deployment.apiVersion,objectIds:{invoice:'in_unknown_failure'},payload:{}});
-    const intent=await linkedCardIntent(`pi_deferral_failure_${counter}`);const valid=await storeEvent('payment_intent.succeeded',`pi_deferral_failure_${counter}`);
-    let time=new Date();const recurring={deployment,reader:{readSnapshot:async()=>{throw new Error('Unknown invoice must not read a snapshot');}}};
-    await gatewayDb().execute(sql`CREATE FUNCTION test_fail_event_deferral() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic deferral write failure'; END $$`);
-    await gatewayDb().execute(sql`CREATE TRIGGER test_fail_event_deferral BEFORE UPDATE OF retry_after ON provider_events FOR EACH ROW EXECUTE FUNCTION test_fail_event_deferral()`);
-    let failure:ProviderEventDeferralError|undefined;
-    try { await runProviderEventDrainPass({recurring,now:()=>time}); }
-    catch(error) { expect(error).toBeInstanceOf(ProviderEventDeferralError);failure=error as ProviderEventDeferralError; }
-    finally { await gatewayDb().execute(sql`DROP TRIGGER test_fail_event_deferral ON provider_events`);await gatewayDb().execute(sql`DROP FUNCTION test_fail_event_deferral()`); }
-    expect(failure).toBeDefined();expect(failure!.progress).toMatchObject({examined:2,applied:1,unmatched:1});expect(failure!.pendingEventIds).toEqual([blocked!]);
-    expect((await findProviderEventById(gatewayDb(),valid))?.processedAt).not.toBeNull();expect((await findIntentByPublicId(gatewayDb(),intent.publicId))?.status).toBe('settled');
-    const deliveriesBefore=await gatewayDb().select().from(webhookDeliveries);
-    time=new Date(time.getTime()+60_001);await retryProviderEventDrainDeferral(failure!,{now:()=>time});
-    const row=await gatewayDb().select().from(providerEvents).where(eq(providerEvents.id,blocked!));expect(row[0]?.retryAfter?.getTime()).toBe(time.getTime()+60_000);expect(row[0]?.processedAt).toBeNull();
-    expect((await runProviderEventDrainPass({recurring,now:()=>time})).examined).toBe(0);expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
-    time=new Date(time.getTime()+60_001);expect((await runProviderEventDrainPass({recurring,now:()=>time})).unmatched).toBe(1);expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
+  it('reports committed progress on deferral failure and retries scheduling without replaying payment effects', async () => {
+    await gatewayDb().execute(
+      sql`UPDATE provider_events SET processed_at=now() WHERE processed_at IS NULL`,
+    );
+    const deployment = {
+      provider: 'stripe' as const,
+      platformAccountId: 'acct_fixture',
+      livemode: false,
+      environment: 'development' as const,
+      apiVersion: '2026-07-29.dahlia',
+    };
+    const blocked = await insertProviderEvent(gatewayDb(), {
+      provider: 'stripe',
+      providerEventId: `evt_deferral_failure_${counter}`,
+      providerAccountId: null,
+      type: 'invoice.paid',
+      livemode: false,
+      apiVersion: deployment.apiVersion,
+      objectIds: { invoice: 'in_unknown_failure' },
+      payload: {},
+    });
+    const intent = await linkedCardIntent(`pi_deferral_failure_${counter}`);
+    const valid = await storeEvent('payment_intent.succeeded', `pi_deferral_failure_${counter}`);
+    let time = new Date();
+    const recurring = {
+      deployment,
+      reader: {
+        readSnapshot: async () => {
+          throw new Error('Unknown invoice must not read a snapshot');
+        },
+      },
+    };
+    await gatewayDb().execute(
+      sql`CREATE FUNCTION test_fail_event_deferral() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'synthetic deferral write failure'; END $$`,
+    );
+    await gatewayDb().execute(
+      sql`CREATE TRIGGER test_fail_event_deferral BEFORE UPDATE OF retry_after ON provider_events FOR EACH ROW EXECUTE FUNCTION test_fail_event_deferral()`,
+    );
+    let failure: ProviderEventDeferralError | undefined;
+    try {
+      await runProviderEventDrainPass({ recurring, now: () => time });
+    } catch (error) {
+      expect(error).toBeInstanceOf(ProviderEventDeferralError);
+      failure = error as ProviderEventDeferralError;
+    } finally {
+      await gatewayDb().execute(sql`DROP TRIGGER test_fail_event_deferral ON provider_events`);
+      await gatewayDb().execute(sql`DROP FUNCTION test_fail_event_deferral()`);
+    }
+    expect(failure).toBeDefined();
+    expect(failure!.progress).toMatchObject({ examined: 2, applied: 1, unmatched: 1 });
+    expect(failure!.pendingEventIds).toEqual([blocked!]);
+    expect((await findProviderEventById(gatewayDb(), valid))?.processedAt).not.toBeNull();
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    const deliveriesBefore = await gatewayDb().select().from(webhookDeliveries);
+    time = new Date(time.getTime() + 60_001);
+    await retryProviderEventDrainDeferral(failure!, { now: () => time });
+    const row = await gatewayDb()
+      .select()
+      .from(providerEvents)
+      .where(eq(providerEvents.id, blocked!));
+    expect(row[0]?.retryAfter?.getTime()).toBe(time.getTime() + 60_000);
+    expect(row[0]?.processedAt).toBeNull();
+    expect((await runProviderEventDrainPass({ recurring, now: () => time })).examined).toBe(0);
+    expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
+    time = new Date(time.getTime() + 60_001);
+    expect((await runProviderEventDrainPass({ recurring, now: () => time })).unmatched).toBe(1);
+    expect(await gatewayDb().select().from(webhookDeliveries)).toEqual(deliveriesBefore);
   });
-
 });

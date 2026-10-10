@@ -6,25 +6,25 @@
  * check the owner", which is the shape that leaks one marketplace's sellers to
  * another the day someone forgets the second half.
  */
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import { getDb } from "../db/postgres";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import { getDb } from '../db/postgres';
 import {
   findAccountByExternalRef,
   findAccountByPublicId,
   listAccountsForMerchant,
-} from "../db/accounts/connectedAccountRepository";
+} from '../db/accounts/connectedAccountRepository';
 import {
   AccountsUnavailableError,
   createAccountLink,
   ensureConnectedAccount,
   refreshConnectedAccount,
-} from "../services/accounts/connectedAccountService";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import { ProviderError } from "../services/providers/provider";
-import { toConnectedAccountDTO } from "../lib/serializeSettlement";
+} from '../services/accounts/connectedAccountService';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import { ProviderError } from '../services/providers/provider';
+import { toConnectedAccountDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
   requireProviderMode,
@@ -32,8 +32,8 @@ import {
   sendError,
   sendProviderError,
   wrap,
-} from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
+} from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
 
 /** How many accounts one list call returns when the caller does not say. */
 const DEFAULT_LIST_LIMIT = 25;
@@ -58,7 +58,7 @@ const createAccountBodySchema = z.object({
   externalRef: z.string().min(1).max(255),
   /** ISO-3166-1 alpha-2. Case-insensitive in; upper-cased before storage. */
   country: z.string().length(2),
-  businessType: z.enum(["individual", "company"]),
+  businessType: z.enum(['individual', 'company']),
 });
 
 const accountLinkBodySchema = z.object({
@@ -66,9 +66,7 @@ const accountLinkBodySchema = z.object({
   returnUrl: z.string().url(),
 });
 
-export function createConnectedAccountsRouter(deps: {
-  requireMerchant: RequestHandler;
-}): Router {
+export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
 
@@ -81,10 +79,10 @@ export function createConnectedAccountsRouter(deps: {
    * deleted and "did I just open a second one" is a question they will ask.
    */
   router.post(
-    "/v1/connected_accounts",
+    '/v1/connected_accounts',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -92,7 +90,12 @@ export function createConnectedAccountsRouter(deps: {
 
       const parsed = createAccountBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(res, 422, "invalid_request_error", parsed.error.issues[0]?.message ?? "invalid body");
+        sendError(
+          res,
+          422,
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid body',
+        );
         return;
       }
 
@@ -107,7 +110,7 @@ export function createConnectedAccountsRouter(deps: {
         res.status(created ? 201 : 200).json(toConnectedAccountDTO(account));
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {
@@ -125,10 +128,10 @@ export function createConnectedAccountsRouter(deps: {
 
   /** Every seller this merchant has onboarded. */
   router.get(
-    "/v1/connected_accounts",
+    '/v1/connected_accounts',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -138,8 +141,8 @@ export function createConnectedAccountsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
@@ -158,8 +161,8 @@ export function createConnectedAccountsRouter(deps: {
           sendError(
             res,
             422,
-            "invalid_request_error",
-            "starting_after references an unknown connected account",
+            'invalid_request_error',
+            'starting_after references an unknown connected account',
           );
           return;
         }
@@ -176,7 +179,7 @@ export function createConnectedAccountsRouter(deps: {
       // return at most 100 sellers with nothing saying there were more, and a
       // caller reconciling against it concludes the rest are gone.
       res.status(200).json({
-        object: "list",
+        object: 'list',
         data: page.data.map(toConnectedAccountDTO),
         has_more: page.hasMore,
       });
@@ -192,10 +195,10 @@ export function createConnectedAccountsRouter(deps: {
    * recovery possible without a list scan.
    */
   router.get(
-    "/v1/connected_accounts/by_ref/:externalRef",
+    '/v1/connected_accounts/by_ref/:externalRef',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -204,13 +207,13 @@ export function createConnectedAccountsRouter(deps: {
       // even though Express guarantees it is present on a matched route.
       const { externalRef } = req.params;
       if (!externalRef) {
-        sendError(res, 422, "invalid_request_error", "externalRef is required");
+        sendError(res, 422, 'invalid_request_error', 'externalRef is required');
         return;
       }
 
       const account = await findAccountByExternalRef(getDb(), merchant.id, externalRef);
       if (!account) {
-        sendError(res, 404, "invalid_request_error", "connected account not found");
+        sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
       res.status(200).json(toConnectedAccountDTO(account));
@@ -218,23 +221,23 @@ export function createConnectedAccountsRouter(deps: {
   );
 
   router.get(
-    "/v1/connected_accounts/:accountId",
+    '/v1/connected_accounts/:accountId',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, "invalid_request_error", "accountId is required");
+        sendError(res, 422, 'invalid_request_error', 'accountId is required');
         return;
       }
 
       const account = await findAccountByPublicId(getDb(), merchant.id, accountId);
       if (!account) {
-        sendError(res, 404, "invalid_request_error", "connected account not found");
+        sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
       res.status(200).json(toConnectedAccountDTO(account));
@@ -250,10 +253,10 @@ export function createConnectedAccountsRouter(deps: {
    * this is for a seller staring at a dashboard.
    */
   router.post(
-    "/v1/connected_accounts/:accountId/refresh",
+    '/v1/connected_accounts/:accountId/refresh',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -261,23 +264,25 @@ export function createConnectedAccountsRouter(deps: {
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, "invalid_request_error", "accountId is required");
+        sendError(res, 422, 'invalid_request_error', 'accountId is required');
         return;
       }
 
       const account = await findAccountByPublicId(getDb(), merchant.id, accountId);
       if (!account) {
-        sendError(res, 404, "invalid_request_error", "connected account not found");
+        sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
 
       try {
         res
           .status(200)
-          .json(toConnectedAccountDTO(await refreshConnectedAccount(account, merchant.environment)));
+          .json(
+            toConnectedAccountDTO(await refreshConnectedAccount(account, merchant.environment)),
+          );
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {
@@ -301,10 +306,10 @@ export function createConnectedAccountsRouter(deps: {
    * follows it — and the failure looks like the seller's fault.
    */
   router.post(
-    "/v1/connected_accounts/:accountId/account_links",
+    '/v1/connected_accounts/:accountId/account_links',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -312,19 +317,24 @@ export function createConnectedAccountsRouter(deps: {
 
       const parsed = accountLinkBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(res, 422, "invalid_request_error", parsed.error.issues[0]?.message ?? "invalid body");
+        sendError(
+          res,
+          422,
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid body',
+        );
         return;
       }
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, "invalid_request_error", "accountId is required");
+        sendError(res, 422, 'invalid_request_error', 'accountId is required');
         return;
       }
 
       const account = await findAccountByPublicId(getDb(), merchant.id, accountId);
       if (!account) {
-        sendError(res, 404, "invalid_request_error", "connected account not found");
+        sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
 
@@ -336,13 +346,13 @@ export function createConnectedAccountsRouter(deps: {
           returnUrl: parsed.data.returnUrl,
         });
         res.status(201).json({
-          object: "account_link",
+          object: 'account_link',
           url: link.url,
           expiresAt: link.expiresAt.toISOString(),
         });
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {

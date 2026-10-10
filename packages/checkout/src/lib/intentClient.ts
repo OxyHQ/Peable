@@ -43,9 +43,6 @@ export function submitTx(id: string, clientSecret: string, txid: string): Promis
  * a credential on a polled response is one in a browser cache and in every
  * intermediary's log.
  */
-export function getClientAction(
-  id: string,
-  clientSecret: string,
-): Promise<PeableClientAction> {
+export function getClientAction(id: string, clientSecret: string): Promise<PeableClientAction> {
   return client.getClientAction(id, clientSecret);
 }

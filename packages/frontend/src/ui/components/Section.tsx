@@ -3,8 +3,8 @@
  * Renders a muted header followed by children wrapped in a Card.
  */
 
-import { View, Text } from "react-native";
-import { Card } from "./Card";
+import { View, Text } from 'react-native';
+import { Card } from './Card';
 
 interface SectionProps {
   title?: string;
@@ -12,7 +12,7 @@ interface SectionProps {
   className?: string;
 }
 
-export function Section({ title, children, className = "" }: SectionProps) {
+export function Section({ title, children, className = '' }: SectionProps) {
   return (
     <View className={className}>
       {title ? (

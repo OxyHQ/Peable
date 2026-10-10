@@ -21,9 +21,9 @@
  *     case, not the passing one.
  */
 
-import Stripe from "stripe";
-import { config } from "../../../config";
-import { ProviderError, type ProviderStage } from "../provider";
+import Stripe from 'stripe';
+import { config } from '../../../config';
+import { ProviderError, type ProviderStage } from '../provider';
 
 /**
  * The Stripe API release train this integration is written against.
@@ -32,7 +32,7 @@ import { ProviderError, type ProviderStage } from "../provider";
  * shapes while the migration is in flight. Changing it means re-verifying every
  * event fixture, deliberately.
  */
-export const STRIPE_API_VERSION = "2026-07-29.dahlia" as const;
+export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
 
 let client: Stripe | undefined;
 
@@ -48,9 +48,9 @@ export function getStripeClient(): Stripe {
   const secretKey = config.stripe.secretKey;
   if (!secretKey) {
     throw new Error(
-      "Stripe is not configured: STRIPE_SECRET_KEY is absent. This is reachable " +
-        "only by bypassing `resolveProvider`, which returns undefined for a rail " +
-        "this deployment has not enabled.",
+      'Stripe is not configured: STRIPE_SECRET_KEY is absent. This is reachable ' +
+        'only by bypassing `resolveProvider`, which returns undefined for a rail ' +
+        'this deployment has not enabled.',
     );
   }
   client = new Stripe(secretKey, {
@@ -60,7 +60,7 @@ export function getStripeClient(): Stripe {
     apiVersion: STRIPE_API_VERSION,
     // Named so a Stripe support conversation can identify this integration in
     // their request logs without the operator guessing.
-    appInfo: { name: "Peable Gateway", url: "https://peable.to" },
+    appInfo: { name: 'Peable Gateway', url: 'https://peable.to' },
   });
   return client;
 }
@@ -97,7 +97,7 @@ export function toProviderError(error: unknown, stage: ProviderStage): ProviderE
       error instanceof Stripe.errors.StripeSignatureVerificationError ||
       error instanceof Stripe.errors.StripeIdempotencyError;
     return new ProviderError({
-      provider: "stripe",
+      provider: 'stripe',
       stage,
       message: error.message,
       retryable: !permanent,
@@ -106,7 +106,7 @@ export function toProviderError(error: unknown, stage: ProviderStage): ProviderE
   }
 
   return new ProviderError({
-    provider: "stripe",
+    provider: 'stripe',
     stage,
     message: error instanceof Error ? error.message : String(error),
     retryable: true,
@@ -130,13 +130,13 @@ export function createStripePaymentIntent(
   params: Stripe.PaymentIntentCreateParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
-  return call("createPayment", (stripe) =>
+  return call('createPayment', (stripe) =>
     stripe.paymentIntents.create(params, { idempotencyKey }),
   );
 }
 
 export function retrieveStripePaymentIntent(id: string): Promise<Stripe.PaymentIntent> {
-  return call("getStatus", (stripe) => stripe.paymentIntents.retrieve(id));
+  return call('getStatus', (stripe) => stripe.paymentIntents.retrieve(id));
 }
 
 export function cancelStripePaymentIntent(
@@ -147,14 +147,14 @@ export function cancelStripePaymentIntent(
   // parameter. Passing it as the second argument type-checks in some SDK
   // versions and silently sends it as a field Stripe ignores — so the retry
   // that this key exists to make safe would create a second effect.
-  return call("cancel", (stripe) => stripe.paymentIntents.cancel(id, {}, { idempotencyKey }));
+  return call('cancel', (stripe) => stripe.paymentIntents.cancel(id, {}, { idempotencyKey }));
 }
 
 export function captureStripePaymentIntent(
   id: string,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
-  return call("capture", (stripe) => stripe.paymentIntents.capture(id, {}, { idempotencyKey }));
+  return call('capture', (stripe) => stripe.paymentIntents.capture(id, {}, { idempotencyKey }));
 }
 
 // ---------------------------------------------------------------------------
@@ -165,11 +165,11 @@ export function createStripeRefund(
   params: Stripe.RefundCreateParams,
   idempotencyKey: string,
 ): Promise<Stripe.Refund> {
-  return call("refund", (stripe) => stripe.refunds.create(params, { idempotencyKey }));
+  return call('refund', (stripe) => stripe.refunds.create(params, { idempotencyKey }));
 }
 
 export function retrieveStripeRefund(id: string): Promise<Stripe.Refund> {
-  return call("refund", (stripe) => stripe.refunds.retrieve(id));
+  return call('refund', (stripe) => stripe.refunds.retrieve(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -180,7 +180,7 @@ export function createStripeTransfer(
   params: Stripe.TransferCreateParams,
   idempotencyKey: string,
 ): Promise<Stripe.Transfer> {
-  return call("transfer", (stripe) => stripe.transfers.create(params, { idempotencyKey }));
+  return call('transfer', (stripe) => stripe.transfers.create(params, { idempotencyKey }));
 }
 
 export function createStripeTransferReversal(
@@ -188,13 +188,13 @@ export function createStripeTransferReversal(
   params: Stripe.TransferCreateReversalParams,
   idempotencyKey: string,
 ): Promise<Stripe.TransferReversal> {
-  return call("transfer", (stripe) =>
+  return call('transfer', (stripe) =>
     stripe.transfers.createReversal(transferId, params, { idempotencyKey }),
   );
 }
 
 export function retrieveStripeTransfer(id: string): Promise<Stripe.Transfer> {
-  return call("transfer", (stripe) => stripe.transfers.retrieve(id));
+  return call('transfer', (stripe) => stripe.transfers.retrieve(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -214,7 +214,7 @@ export function updateStripeDispute(
   params: Stripe.DisputeUpdateParams,
   idempotencyKey: string,
 ): Promise<Stripe.Dispute> {
-  return call("dispute", (stripe) => stripe.disputes.update(id, params, { idempotencyKey }));
+  return call('dispute', (stripe) => stripe.disputes.update(id, params, { idempotencyKey }));
 }
 
 // ---------------------------------------------------------------------------
@@ -234,8 +234,8 @@ export function updateStripeDispute(
  * `pending`, never as zero fees.
  */
 export function retrieveStripeChargeWithBalance(id: string): Promise<Stripe.Charge> {
-  return call("settlement", (stripe) =>
-    stripe.charges.retrieve(id, { expand: ["balance_transaction"] }),
+  return call('settlement', (stripe) =>
+    stripe.charges.retrieve(id, { expand: ['balance_transaction'] }),
   );
 }
 
@@ -261,8 +261,8 @@ export function createStripeConnectedAccountV2(
   body: Record<string, unknown>,
   idempotencyKey: string,
 ): Promise<unknown> {
-  return call("account", (stripe) =>
-    stripe.rawRequest("POST", "/v2/core/accounts", body, {
+  return call('account', (stripe) =>
+    stripe.rawRequest('POST', '/v2/core/accounts', body, {
       idempotencyKey,
     } as Stripe.RequestOptions),
   );
@@ -279,13 +279,13 @@ export function createStripeConnectedAccountV2(
  * loses its inputs.
  */
 export function retrieveStripeAccount(id: string): Promise<Stripe.Account> {
-  return call("account", (stripe) => stripe.accounts.retrieve(id));
+  return call('account', (stripe) => stripe.accounts.retrieve(id));
 }
 
 export function createStripeAccountLink(
   params: Stripe.AccountLinkCreateParams,
 ): Promise<Stripe.AccountLink> {
-  return call("account", (stripe) => stripe.accountLinks.create(params));
+  return call('account', (stripe) => stripe.accountLinks.create(params));
 }
 
 // ---------------------------------------------------------------------------
@@ -320,14 +320,14 @@ export async function constructStripeEvent(
     }
   }
   throw new ProviderError({
-    provider: "stripe",
-    stage: "verifyEvent",
+    provider: 'stripe',
+    stage: 'verifyEvent',
     message:
-      lastError instanceof Error ? lastError.message : "webhook signature verification failed",
+      lastError instanceof Error ? lastError.message : 'webhook signature verification failed',
     // NEVER retryable. A bad signature is not a transient condition, and
     // retrying one is how a forged event eventually gets a lucky window.
     retryable: false,
-    code: "invalid_signature",
+    code: 'invalid_signature',
   });
 }
 
@@ -340,22 +340,51 @@ export function stripeBillingClient() {
     apiVersion: STRIPE_API_VERSION,
     livemode: config.stripe.livemode,
     account: () => getStripeClient().accounts.retrieve(null, {}, requestOptions),
-    createCustomer: (params: Stripe.CustomerCreateParams, key: string) => getStripeClient().customers.create(params, { ...requestOptions, idempotencyKey: key }),
-    createCheckout: (params: Stripe.Checkout.SessionCreateParams, key: string) => getStripeClient().checkout.sessions.create(params, { ...requestOptions, idempotencyKey: key }),
-    createPortal: (params: Stripe.BillingPortal.SessionCreateParams, key: string) => getStripeClient().billingPortal.sessions.create(params, { ...requestOptions, idempotencyKey: key }),
-    retrieveSubscription: (ref: string) => getStripeClient().subscriptions.retrieve(ref, {}, requestOptions),
-    updateSubscription: (ref: string, params: Stripe.SubscriptionUpdateParams, key: string) => getStripeClient().subscriptions.update(ref, params, { ...requestOptions, idempotencyKey: key }),
-    retrieveCustomer: (ref: string) => getStripeClient().customers.retrieve(ref, {}, requestOptions),
+    createCustomer: (params: Stripe.CustomerCreateParams, key: string) =>
+      getStripeClient().customers.create(params, { ...requestOptions, idempotencyKey: key }),
+    createCheckout: (params: Stripe.Checkout.SessionCreateParams, key: string) =>
+      getStripeClient().checkout.sessions.create(params, {
+        ...requestOptions,
+        idempotencyKey: key,
+      }),
+    createPortal: (params: Stripe.BillingPortal.SessionCreateParams, key: string) =>
+      getStripeClient().billingPortal.sessions.create(params, {
+        ...requestOptions,
+        idempotencyKey: key,
+      }),
+    retrieveSubscription: (ref: string) =>
+      getStripeClient().subscriptions.retrieve(ref, {}, requestOptions),
+    updateSubscription: (ref: string, params: Stripe.SubscriptionUpdateParams, key: string) =>
+      getStripeClient().subscriptions.update(ref, params, {
+        ...requestOptions,
+        idempotencyKey: key,
+      }),
+    retrieveCustomer: (ref: string) =>
+      getStripeClient().customers.retrieve(ref, {}, requestOptions),
     retrievePrice: (ref: string) => getStripeClient().prices.retrieve(ref, {}, requestOptions),
-    listCheckoutsForSubscription: (ref: string) => getStripeClient().checkout.sessions.list({ subscription: ref, limit: 2 }, requestOptions),
-    retrieveCheckout: (ref: string) => getStripeClient().checkout.sessions.retrieve(ref, {}, requestOptions),
-    retrieveTaxSettings:()=>getStripeClient().tax.settings.retrieve({},requestOptions),
-    listTaxRegistrations:(startingAfter?:string)=>getStripeClient().tax.registrations.list({limit:100,...(startingAfter?{starting_after:startingAfter}:{})},requestOptions),
-    retrieveInvoice:(ref:string)=>getStripeClient().invoices.retrieve(ref,{},requestOptions),
-    listInvoiceLines:(ref:string)=>getStripeClient().invoices.listLineItems(ref,{limit:2},requestOptions),
-    listInvoicePayments:(ref:string)=>getStripeClient().invoicePayments.list({invoice:ref,limit:2},requestOptions),
-    listChargeRefunds:(charge:string,startingAfter?:string)=>getStripeClient().refunds.list({charge,limit:100,...(startingAfter?{starting_after:startingAfter}:{})},requestOptions),
-    retrievePaidPaymentIntent:(ref:string)=>getStripeClient().paymentIntents.retrieve(ref,{expand:["latest_charge"]},requestOptions),
-    retrievePortalConfiguration: (ref: string) => getStripeClient().billingPortal.configurations.retrieve(ref, {}, requestOptions),
+    listCheckoutsForSubscription: (ref: string) =>
+      getStripeClient().checkout.sessions.list({ subscription: ref, limit: 2 }, requestOptions),
+    retrieveCheckout: (ref: string) =>
+      getStripeClient().checkout.sessions.retrieve(ref, {}, requestOptions),
+    retrieveTaxSettings: () => getStripeClient().tax.settings.retrieve({}, requestOptions),
+    listTaxRegistrations: (startingAfter?: string) =>
+      getStripeClient().tax.registrations.list(
+        { limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) },
+        requestOptions,
+      ),
+    retrieveInvoice: (ref: string) => getStripeClient().invoices.retrieve(ref, {}, requestOptions),
+    listInvoiceLines: (ref: string) =>
+      getStripeClient().invoices.listLineItems(ref, { limit: 2 }, requestOptions),
+    listInvoicePayments: (ref: string) =>
+      getStripeClient().invoicePayments.list({ invoice: ref, limit: 2 }, requestOptions),
+    listChargeRefunds: (charge: string, startingAfter?: string) =>
+      getStripeClient().refunds.list(
+        { charge, limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) },
+        requestOptions,
+      ),
+    retrievePaidPaymentIntent: (ref: string) =>
+      getStripeClient().paymentIntents.retrieve(ref, { expand: ['latest_charge'] }, requestOptions),
+    retrievePortalConfiguration: (ref: string) =>
+      getStripeClient().billingPortal.configurations.retrieve(ref, {}, requestOptions),
   };
 }

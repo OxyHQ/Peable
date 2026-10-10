@@ -21,14 +21,14 @@
  * through once.
  */
 
-import { OXY_IDENTITY_WALLET_ID } from "./identity-wallet";
+import { OXY_IDENTITY_WALLET_ID } from './identity-wallet';
 
 /**
  * Prefix stored in place of a mnemonic for watch-only wallets:
  * `xpub:<account-level extended public key>`. `initialize` routes any secret
  * with this prefix to the public-only KeyManager (no private keys derived).
  */
-export const XPUB_MARKER_PREFIX = "xpub:";
+export const XPUB_MARKER_PREFIX = 'xpub:';
 
 export interface ResolveWalletSeedDeps {
   deriveIdentitySeed: () => Promise<Uint8Array | null>;
@@ -47,7 +47,7 @@ export interface ResolveWalletSeedDeps {
 export async function getOrDeriveBip39Seed(
   cacheId: string,
   mnemonic: string,
-  deps: Pick<ResolveWalletSeedDeps, "getCachedWalletSeed" | "cacheWalletSeed" | "deriveSeed">,
+  deps: Pick<ResolveWalletSeedDeps, 'getCachedWalletSeed' | 'cacheWalletSeed' | 'deriveSeed'>,
 ): Promise<Uint8Array> {
   const cached = await deps.getCachedWalletSeed(cacheId);
   if (cached) return cached;
@@ -63,7 +63,7 @@ export async function resolveWalletSeed(
   if (walletId === OXY_IDENTITY_WALLET_ID) {
     const seed = await deps.deriveIdentitySeed();
     if (!seed) {
-      throw new Error("Oxy identity unavailable — cannot resolve wallet seed");
+      throw new Error('Oxy identity unavailable — cannot resolve wallet seed');
     }
     return seed;
   }
@@ -75,10 +75,10 @@ export async function resolveWalletSeed(
 
   const mnemonic = await deps.getWalletMnemonic(walletId);
   if (!mnemonic) {
-    throw new Error("Wallet mnemonic not found");
+    throw new Error('Wallet mnemonic not found');
   }
   if (mnemonic.startsWith(XPUB_MARKER_PREFIX)) {
-    throw new Error("Watch-only wallets have no spending seed");
+    throw new Error('Watch-only wallets have no spending seed');
   }
 
   return getOrDeriveBip39Seed(walletId, mnemonic, deps);

@@ -14,34 +14,33 @@
  * inputs — no surface boxes, no borders around row groups.
  */
 
-import { useCallback, useState } from "react";
-import { View, Text, TextInput, ScrollView } from "react-native";
-import { Switch } from "@oxy.so/bloom/switch";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { SafeAreaView } from "../src/ui/safe-area-view";
-import { useRouter, useFocusEffect } from "expo-router";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { ListItem, ScreenHeader } from "../src/ui/components";
-import { t } from "../src/i18n";
+import { useCallback, useState } from 'react';
+import { View, Text, TextInput, ScrollView } from 'react-native';
+import { Switch } from '@oxy.so/bloom/switch';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { SafeAreaView } from '../src/ui/safe-area-view';
+import { useRouter, useFocusEffect } from 'expo-router';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { ListItem, ScreenHeader } from '../src/ui/components';
+import { t } from '../src/i18n';
 import {
   getNotificationPrefs,
   setNotificationPrefs,
   DEFAULT_NOTIFICATION_SERVER_URL,
   type NotificationEvent,
   type NotificationPrefs,
-} from "../src/services/notification-settings";
-import { initNotifications } from "../src/services/notifications";
+} from '../src/services/notification-settings';
+import { initNotifications } from '../src/services/notifications';
 
-const CONTENT_MAX_WIDTH_CLASS = "w-full max-w-[600px] mx-auto";
+const CONTENT_MAX_WIDTH_CLASS = 'w-full max-w-[600px] mx-auto';
 
 /** Selectable confirmation depths, cycled on tap (BIP44 default 1). */
 const CONFIRMATION_OPTIONS = [1, 2, 3, 6];
 
 /** Uppercase section header — matches the main Settings screen's section labels. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 interface EventRow {
   event: NotificationEvent;
@@ -51,19 +50,19 @@ interface EventRow {
 
 const EVENT_ROWS: EventRow[] = [
   {
-    event: "incoming_pending",
-    labelKey: "notificationsSettings.events.incomingPending",
-    icon: "arrow-down-circle-outline",
+    event: 'incoming_pending',
+    labelKey: 'notificationsSettings.events.incomingPending',
+    icon: 'arrow-down-circle-outline',
   },
   {
-    event: "incoming_confirmed",
-    labelKey: "notificationsSettings.events.incomingConfirmed",
-    icon: "arrow-down-circle",
+    event: 'incoming_confirmed',
+    labelKey: 'notificationsSettings.events.incomingConfirmed',
+    icon: 'arrow-down-circle',
   },
   {
-    event: "outgoing_confirmed",
-    labelKey: "notificationsSettings.events.outgoingConfirmed",
-    icon: "arrow-up-circle",
+    event: 'outgoing_confirmed',
+    labelKey: 'notificationsSettings.events.outgoingConfirmed',
+    icon: 'arrow-up-circle',
   },
 ];
 
@@ -87,12 +86,8 @@ function SettingsSection({
   return (
     <View className="mb-6">
       <Text className={`${SECTION_LABEL} mb-1 px-4`}>{title}</Text>
-      <View>
-        {children}
-      </View>
-      {footer ? (
-        <Text className="text-muted-foreground text-xs mt-2 px-4">{footer}</Text>
-      ) : null}
+      <View>{children}</View>
+      {footer ? <Text className="text-muted-foreground text-xs mt-2 px-4">{footer}</Text> : null}
     </View>
   );
 }
@@ -103,9 +98,7 @@ export default function NotificationsSettingsScreen() {
   const colors = theme.colors;
 
   const [enabled, setEnabled] = useState(false);
-  const [serverUrlDraft, setServerUrlDraft] = useState(
-    DEFAULT_NOTIFICATION_SERVER_URL,
-  );
+  const [serverUrlDraft, setServerUrlDraft] = useState(DEFAULT_NOTIFICATION_SERVER_URL);
   const [confirmations, setConfirmations] = useState(1);
   const [events, setEvents] = useState<NotificationEvent[]>([]);
 
@@ -178,28 +171,19 @@ export default function NotificationsSettingsScreen() {
       const set = new Set(events);
       if (on) set.add(event);
       else set.delete(event);
-      const ordered = EVENT_ROWS.map((row) => row.event).filter((e) =>
-        set.has(e),
-      );
+      const ordered = EVENT_ROWS.map((row) => row.event).filter((e) => set.has(e));
       void persist({ events: ordered });
     },
     [events, persist],
   );
 
   const isDefaultServer =
-    serverUrlDraft.trim().replace(/\/+$/, "") ===
-    DEFAULT_NOTIFICATION_SERVER_URL;
+    serverUrlDraft.trim().replace(/\/+$/, '') === DEFAULT_NOTIFICATION_SERVER_URL;
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "bottom", "left", "right"]}
-    >
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
       <View className={`flex-1 ${CONTENT_MAX_WIDTH_CLASS}`}>
-        <ScreenHeader
-          title={t("notificationsSettings.title")}
-          onBack={handleBack}
-        />
+        <ScreenHeader title={t('notificationsSettings.title')} onBack={handleBack} />
 
         <ScrollView
           className="flex-1"
@@ -211,18 +195,13 @@ export default function NotificationsSettingsScreen() {
               Settings screen's identity hero row. */}
           <View className="mb-6">
             <ListItem
-              title={t("notificationsSettings.enable.title")}
-              subtitle={t("notificationsSettings.enable.description")}
+              title={t('notificationsSettings.enable.title')}
+              subtitle={t('notificationsSettings.enable.description')}
               icon="bell-ring"
               iconColor={colors.primary}
               iconBg="bg-primary/10"
               showChevron={false}
-              trailing={
-                <Switch
-                  checked={enabled}
-                  onCheckedChange={handleToggleEnabled}
-                />
-              }
+              trailing={<Switch checked={enabled} onCheckedChange={handleToggleEnabled} />}
               isLast
             />
           </View>
@@ -231,14 +210,12 @@ export default function NotificationsSettingsScreen() {
             <>
               {/* Notification server (privacy dial) */}
               <SettingsSection
-                title={t("notificationsSettings.server.group")}
-                footer={t("notificationsSettings.server.hint")}
+                title={t('notificationsSettings.server.group')}
+                footer={t('notificationsSettings.server.hint')}
               >
-                <View
-                  className={`px-4 py-3.5 ${isDefaultServer ? "" : "border-b border-border"}`}
-                >
+                <View className={`px-4 py-3.5 ${isDefaultServer ? '' : 'border-b border-border'}`}>
                   <Text className="text-muted-foreground text-xs mb-2">
-                    {t("notificationsSettings.server.label")}
+                    {t('notificationsSettings.server.label')}
                   </Text>
                   <TextInput
                     className="bg-background text-foreground text-base rounded-2xl px-4 py-3.5"
@@ -256,7 +233,7 @@ export default function NotificationsSettingsScreen() {
                 </View>
                 {isDefaultServer ? null : (
                   <ListItem
-                    title={t("notificationsSettings.server.reset")}
+                    title={t('notificationsSettings.server.reset')}
                     icon="backup-restore"
                     iconColor={colors.primary}
                     iconBg="bg-primary/10"
@@ -267,13 +244,11 @@ export default function NotificationsSettingsScreen() {
               </SettingsSection>
 
               {/* Confirmation depth */}
-              <SettingsSection
-                title={t("notificationsSettings.confirmations.group")}
-              >
+              <SettingsSection title={t('notificationsSettings.confirmations.group')}>
                 <ListItem
-                  title={t("notificationsSettings.confirmations.title")}
-                  subtitle={t("notificationsSettings.confirmations.description")}
-                  value={t("notificationsSettings.confirmations.value", {
+                  title={t('notificationsSettings.confirmations.title')}
+                  subtitle={t('notificationsSettings.confirmations.description')}
+                  value={t('notificationsSettings.confirmations.value', {
                     count: confirmations,
                   })}
                   icon="layers-triple"
@@ -285,9 +260,7 @@ export default function NotificationsSettingsScreen() {
               </SettingsSection>
 
               {/* Per-event switches */}
-              <SettingsSection
-                title={t("notificationsSettings.events.group")}
-              >
+              <SettingsSection title={t('notificationsSettings.events.group')}>
                 {EVENT_ROWS.map((row, idx) => (
                   <ListItem
                     key={row.event}

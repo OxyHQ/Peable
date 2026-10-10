@@ -1,9 +1,9 @@
-import { oxy } from "../oxy";
-import type { MerchantDisplay } from "@peable.to/shared-types";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
+import { oxy } from '../oxy';
+import type { MerchantDisplay } from '@peable.to/shared-types';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
 
 /** Neutral fallback shown when a merchant hasn't set a `displayName`. */
-const DEFAULT_MERCHANT_NAME = "Peable merchant";
+const DEFAULT_MERCHANT_NAME = 'Peable merchant';
 
 /**
  * Resolve the public, secret-free merchant identity that a payer-facing
@@ -20,14 +20,10 @@ const DEFAULT_MERCHANT_NAME = "Peable merchant";
  * caller-facing contract is `Promise<MerchantDisplay>` (matches
  * `MerchantDisplay`'s doc comment: "resolved server-side").
  */
-export async function resolveMerchantDisplay(
-  merchant: MerchantRow,
-): Promise<MerchantDisplay> {
+export async function resolveMerchantDisplay(merchant: MerchantRow): Promise<MerchantDisplay> {
   return {
     name: merchant.displayName ?? DEFAULT_MERCHANT_NAME,
-    avatarUrl: merchant.avatarFileId
-      ? oxy.assets.publicUrl(merchant.avatarFileId, "thumb")
-      : null,
+    avatarUrl: merchant.avatarFileId ? oxy.assets.publicUrl(merchant.avatarFileId, 'thumb') : null,
     description: merchant.description ?? null,
   };
 }

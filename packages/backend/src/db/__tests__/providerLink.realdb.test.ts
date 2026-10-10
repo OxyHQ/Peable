@@ -49,7 +49,7 @@ function cardIntent(overrides: Partial<InsertPaymentIntentParams> = {}): InsertP
 }
 
 function faircoinIntent(
-  overrides: Partial<InsertPaymentIntentParams> = {}
+  overrides: Partial<InsertPaymentIntentParams> = {},
 ): InsertPaymentIntentParams {
   const unique = uuidv7();
   return {

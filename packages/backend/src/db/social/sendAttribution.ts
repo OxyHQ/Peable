@@ -41,7 +41,10 @@ const ATTRIBUTION_COLUMNS = {
   updatedAt: socialSendAttributions.updatedAt,
 } as const;
 
-function toAttributionRow(row: { network: string; [key: string]: unknown }): SocialSendAttributionRow {
+function toAttributionRow(row: {
+  network: string;
+  [key: string]: unknown;
+}): SocialSendAttributionRow {
   return { ...row, network: row.network as NetworkType } as unknown as SocialSendAttributionRow;
 }
 
@@ -75,7 +78,7 @@ export interface InsertAttributionParams {
  */
 export async function insertSendAttribution(
   db: DatabaseOrTransaction,
-  params: InsertAttributionParams
+  params: InsertAttributionParams,
 ): Promise<SocialSendAttributionRow | null> {
   try {
     const [row] = await db
@@ -121,7 +124,7 @@ export async function insertSendAttribution(
 export async function findAttributionsForViewer(
   db: DatabaseOrTransaction,
   addresses: readonly string[],
-  viewerUserId: string
+  viewerUserId: string,
 ): Promise<SocialSendAttributionRow[]> {
   if (addresses.length === 0) return [];
   const rows = await db
@@ -132,9 +135,9 @@ export async function findAttributionsForViewer(
         inArray(socialSendAttributions.address, [...addresses]),
         or(
           eq(socialSendAttributions.senderUserId, viewerUserId),
-          eq(socialSendAttributions.recipientUserId, viewerUserId)
-        )
-      )
+          eq(socialSendAttributions.recipientUserId, viewerUserId),
+        ),
+      ),
     );
   return rows.map(toAttributionRow);
 }
@@ -158,7 +161,7 @@ export async function listAttributionsForViewer(
   db: DatabaseOrTransaction,
   viewerUserId: string,
   network: NetworkType,
-  limit = 100
+  limit = 100,
 ): Promise<SocialSendAttributionRow[]> {
   const rows = await db
     .select(ATTRIBUTION_COLUMNS)
@@ -168,9 +171,9 @@ export async function listAttributionsForViewer(
         eq(socialSendAttributions.network, network),
         or(
           eq(socialSendAttributions.senderUserId, viewerUserId),
-          eq(socialSendAttributions.recipientUserId, viewerUserId)
-        )
-      )
+          eq(socialSendAttributions.recipientUserId, viewerUserId),
+        ),
+      ),
     )
     .orderBy(desc(socialSendAttributions.createdAt))
     .limit(limit);

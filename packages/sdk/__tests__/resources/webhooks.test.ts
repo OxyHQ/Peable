@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'bun:test';
-import { signWebhook, type WebhookEvent, type WebhookEventPayload, type WebhookEventType, type Dispute, type ConnectedAccount } from '@peable.to/shared-types';
+import {
+  signWebhook,
+  type WebhookEvent,
+  type WebhookEventPayload,
+  type WebhookEventType,
+  type Dispute,
+  type ConnectedAccount,
+} from '@peable.to/shared-types';
 import { WebhooksResource } from '../../src/resources/webhooks';
 import { PeableSignatureVerificationError } from '../../src/core/errors';
 
@@ -16,7 +23,7 @@ const EVENT: WebhookEvent = {
       id: 'pi_1',
       object: 'payment_intent',
       status: 'settled',
-  rail: 'faircoin',
+      rail: 'faircoin',
       amount: '100000',
       currency: 'FAIR',
       network: 'testnet',
@@ -121,19 +128,36 @@ describe('WebhooksResource.constructEvent', () => {
   });
 });
 
-
 // Full published payloads, matching backend intentTransition's three producers.
 const dispute: Dispute = {
-  id: 'dp_fixture', object: 'dispute', paymentIntentId: 'pi_1', amount: '100',
-  currency: 'EUR', status: 'needs_response', reason: null, evidenceDueAt: null,
-  evidenceSubmittedAt: null, createdAt: EVENT.created, updatedAt: EVENT.created,
+  id: 'dp_fixture',
+  object: 'dispute',
+  paymentIntentId: 'pi_1',
+  amount: '100',
+  currency: 'EUR',
+  status: 'needs_response',
+  reason: null,
+  evidenceDueAt: null,
+  evidenceSubmittedAt: null,
+  createdAt: EVENT.created,
+  updatedAt: EVENT.created,
 };
 const account: ConnectedAccount = {
-  id: 'ca_fixture', object: 'connected_account', externalRef: 'store_fixture',
-  country: 'ES', defaultCurrency: 'EUR', payable: false, payoutsEnabled: false,
-  chargesEnabled: false, transfersCapability: 'pending', cardPaymentsCapability: null,
+  id: 'ca_fixture',
+  object: 'connected_account',
+  externalRef: 'store_fixture',
+  country: 'ES',
+  defaultCurrency: 'EUR',
+  payable: false,
+  payoutsEnabled: false,
+  chargesEnabled: false,
+  transfersCapability: 'pending',
+  cardPaymentsCapability: null,
   requirements: { currentlyDue: 1, eventuallyDue: 1, pastDue: 0, pendingVerification: 0 },
-  disabledReasonCodes: [], lastSyncedAt: null, createdAt: EVENT.created, updatedAt: EVENT.created,
+  disabledReasonCodes: [],
+  lastSyncedAt: null,
+  createdAt: EVENT.created,
+  updatedAt: EVENT.created,
 };
 const payloads = {
   'payment_intent.confirming': EVENT.data.object,
@@ -146,28 +170,73 @@ const payloads = {
   'payment_intent.disputed': dispute,
   'payment_intent.dispute_closed': { ...dispute, status: 'won' },
   'connected_account.updated': account,
-  'billing.observation.updated':{object:'billing_observation',resourceKind:'invoice',resourceId:'in_fixture',revision:1,observedAt:EVENT.created},
+  'billing.observation.updated': {
+    object: 'billing_observation',
+    resourceKind: 'invoice',
+    resourceId: 'in_fixture',
+    revision: 1,
+    observedAt: EVENT.created,
+  },
 } satisfies WebhookEventPayload;
 
 describe('published event family parity', () => {
   for (const type of Object.keys(payloads) as WebhookEventType[]) {
     test(`accepts signed ${type} without replacing its resource`, () => {
-      const expected = { id: `evt_${type}`, object: 'event', type, created: EVENT.created,
-        data: { object: payloads[type] } };
+      const expected = {
+        id: `evt_${type}`,
+        object: 'event',
+        type,
+        created: EVENT.created,
+        data: { object: payloads[type] },
+      };
       const raw = JSON.stringify(expected);
       const timestamp = Math.floor(Date.now() / 1000);
       const resource = new WebhooksResource();
-      expect(JSON.stringify(resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET))).toBe(raw);
-      expect(() => resource.constructEvent(raw, signWebhook('wrong', raw, timestamp), SECRET)).toThrow(PeableSignatureVerificationError);
-      expect(() => resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp - 301), SECRET)).toThrow(PeableSignatureVerificationError);
-      expect(() => resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp + 301), SECRET)).toThrow(PeableSignatureVerificationError);
+      expect(
+        JSON.stringify(resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET)),
+      ).toBe(raw);
+      expect(() =>
+        resource.constructEvent(raw, signWebhook('wrong', raw, timestamp), SECRET),
+      ).toThrow(PeableSignatureVerificationError);
+      expect(() =>
+        resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp - 301), SECRET),
+      ).toThrow(PeableSignatureVerificationError);
+      expect(() =>
+        resource.constructEvent(raw, signWebhook(SECRET, raw, timestamp + 301), SECRET),
+      ).toThrow(PeableSignatureVerificationError);
     });
   }
-  test.each(['unknown.event', 'transfer.created', 'toString', '__proto__'])('rejects signed unknown type %s', type => {
-    const raw = JSON.stringify({ ...EVENT, type });
-    const timestamp = Math.floor(Date.now() / 1000);
-    expect(() => new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET)).toThrow(PeableSignatureVerificationError);
-  });
+  test.each(['unknown.event', 'transfer.created', 'toString', '__proto__'])(
+    'rejects signed unknown type %s',
+    (type) => {
+      const raw = JSON.stringify({ ...EVENT, type });
+      const timestamp = Math.floor(Date.now() / 1000);
+      expect(() =>
+        new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET),
+      ).toThrow(PeableSignatureVerificationError);
+    },
+  );
 });
 
-test('rejects signed malformed recurring wake-ups rather than treating them as paid evidence',()=>{const timestamp=Math.floor(Date.now()/1000);for(const mutation of [{revision:0},{revision:1.5},{resourceKind:'payer'},{resourceId:''},{observedAt:'invalid'},{amountPaid:'2999'}]){const raw=JSON.stringify({id:'evt_fixture',object:'event',type:'billing.observation.updated',created:EVENT.created,data:{object:{...payloads['billing.observation.updated'],...mutation}}});expect(()=>new WebhooksResource().constructEvent(raw,signWebhook(SECRET,raw,timestamp),SECRET)).toThrow(PeableSignatureVerificationError);}});
+test('rejects signed malformed recurring wake-ups rather than treating them as paid evidence', () => {
+  const timestamp = Math.floor(Date.now() / 1000);
+  for (const mutation of [
+    { revision: 0 },
+    { revision: 1.5 },
+    { resourceKind: 'payer' },
+    { resourceId: '' },
+    { observedAt: 'invalid' },
+    { amountPaid: '2999' },
+  ]) {
+    const raw = JSON.stringify({
+      id: 'evt_fixture',
+      object: 'event',
+      type: 'billing.observation.updated',
+      created: EVENT.created,
+      data: { object: { ...payloads['billing.observation.updated'], ...mutation } },
+    });
+    expect(() =>
+      new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET),
+    ).toThrow(PeableSignatureVerificationError);
+  }
+});

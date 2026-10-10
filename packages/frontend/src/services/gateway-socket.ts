@@ -29,14 +29,11 @@ interface ClientToServerEvents {
  * session. The `auth` callback is re-read on every (re)connect, so a rotated
  * token is always sent fresh rather than captured stale at construction.
  */
-const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(
-  GATEWAY_SOCKET_URL,
-  {
-    transports: ['websocket'],
-    autoConnect: false,
-    auth: (cb) => cb({ token: oxyServices.session.accessToken ?? '' }),
-  },
-);
+const socket: Socket<ServerToClientEvents, ClientToServerEvents> = io(GATEWAY_SOCKET_URL, {
+  transports: ['websocket'],
+  autoConnect: false,
+  auth: (cb) => cb({ token: oxyServices.session.accessToken ?? '' }),
+});
 
 /** Handle returned by {@link subscribeToIntent} to stop receiving updates. */
 export interface IntentSubscription {
@@ -58,9 +55,7 @@ export async function subscribeToIntent(
   onUpdate: (intent: PaymentIntent) => void,
 ): Promise<IntentSubscription> {
   if (!oxyServices.session.accessToken) {
-    throw new Error(
-      'Cannot subscribe to a payment intent while signed out of Oxy',
-    );
+    throw new Error('Cannot subscribe to a payment intent while signed out of Oxy');
   }
 
   if (!socket.connected) {

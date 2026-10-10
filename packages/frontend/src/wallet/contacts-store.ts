@@ -3,8 +3,8 @@
  * Uses the Database class for persistence.
  */
 
-import { create } from "zustand";
-import { Database, type ContactRow } from "../storage/database";
+import { create } from 'zustand';
+import { Database, type ContactRow } from '../storage/database';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,12 +21,7 @@ interface ContactsState {
    */
   reset: () => void;
   loadContacts: (db: Database) => Promise<void>;
-  addContact: (
-    db: Database,
-    name: string,
-    address: string,
-    notes: string,
-  ) => Promise<void>;
+  addContact: (db: Database, name: string, address: string, notes: string) => Promise<void>;
   updateContact: (
     db: Database,
     id: string,
@@ -36,10 +31,7 @@ interface ContactsState {
   ) => Promise<void>;
   deleteContact: (db: Database, id: string) => Promise<void>;
   searchContacts: (db: Database, query: string) => Promise<ContactRow[]>;
-  getContactByAddress: (
-    db: Database,
-    address: string,
-  ) => Promise<ContactRow | null>;
+  getContactByAddress: (db: Database, address: string) => Promise<ContactRow | null>;
 }
 
 // ---------------------------------------------------------------------------
@@ -51,9 +43,7 @@ function generateContactId(): string {
   crypto.getRandomValues(bytes);
   bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
   bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
-  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
-    "",
-  );
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
@@ -79,12 +69,7 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
     }
   },
 
-  addContact: async (
-    db: Database,
-    name: string,
-    address: string,
-    notes: string,
-  ): Promise<void> => {
+  addContact: async (db: Database, name: string, address: string, notes: string): Promise<void> => {
     const id = generateContactId();
     await db.insertContact(id, name, address, notes);
     await get().loadContacts(db);
@@ -106,17 +91,11 @@ export const useContactsStore = create<ContactsState>((set, get) => ({
     await get().loadContacts(db);
   },
 
-  searchContacts: async (
-    db: Database,
-    query: string,
-  ): Promise<ContactRow[]> => {
+  searchContacts: async (db: Database, query: string): Promise<ContactRow[]> => {
     return db.searchContacts(query);
   },
 
-  getContactByAddress: async (
-    db: Database,
-    address: string,
-  ): Promise<ContactRow | null> => {
+  getContactByAddress: async (db: Database, address: string): Promise<ContactRow | null> => {
     return db.getContactByAddress(address);
   },
 }));

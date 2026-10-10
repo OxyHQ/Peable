@@ -1,5 +1,5 @@
-import { OxyServer } from "@oxy.so/core/server";
-import { config } from "./config";
+import { OxyServer } from '@oxy.so/core/server';
+import { config } from './config';
 
 /**
  * The gateway's one Oxy client: user lookups, and the Express / Socket.IO

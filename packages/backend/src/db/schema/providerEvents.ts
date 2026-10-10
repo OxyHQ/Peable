@@ -57,7 +57,7 @@ export const providerEvents = pgTable(
      */
     processedAt: timestamptz(),
     /** Explicit recurring drain deferral; NULL remains immediately eligible. */
-    retryAfter:timestamptz(),
+    retryAfter: timestamptz(),
     /** Why processing failed, when it did. Operator-facing. */
     processingError: text(),
     createdAt: createdAt(),
@@ -98,13 +98,10 @@ export const providerEvents = pgTable(
       .on(table.createdAt)
       .where(sql`${table.processedAt} is null`),
     check('provider_events_provider_check', sql.raw(`provider in (${inList(PROVIDER_IDS)})`)),
-    check(
-      'provider_events_payload_object_check',
-      sql`jsonb_typeof(${table.payload}) = 'object'`
-    ),
+    check('provider_events_payload_object_check', sql`jsonb_typeof(${table.payload}) = 'object'`),
     check(
       'provider_events_object_ids_object_check',
-      sql`jsonb_typeof(${table.objectIds}) = 'object'`
+      sql`jsonb_typeof(${table.objectIds}) = 'object'`,
     ),
-  ]
+  ],
 );

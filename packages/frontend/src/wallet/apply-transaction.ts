@@ -12,14 +12,10 @@
  * React Native / SQLite environment.
  */
 
-import {
-  extractAddressFromScript,
-  hexToBytes,
-  type NetworkConfig,
-} from "@fairco.in/core";
-import { parseTx, type ParsedTransaction } from "../p2p/messages";
-import { UTXOSet, type UTXO } from "@peable.to/pay";
-import type { WalletTransaction } from "./wallet-store";
+import { extractAddressFromScript, hexToBytes, type NetworkConfig } from '@fairco.in/core';
+import { parseTx, type ParsedTransaction } from '../p2p/messages';
+import { UTXOSet, type UTXO } from '@peable.to/pay';
+import type { WalletTransaction } from './wallet-store';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -69,9 +65,9 @@ export interface ApplyTransactionResult {
  * txid used as the UTXO map key throughout the wallet.
  */
 export function reverseBytesToHex(bytes: Uint8Array): string {
-  let hex = "";
+  let hex = '';
   for (let i = bytes.length - 1; i >= 0; i--) {
-    hex += bytes[i].toString(16).padStart(2, "0");
+    hex += bytes[i].toString(16).padStart(2, '0');
   }
   return hex;
 }
@@ -225,27 +221,27 @@ export function reconstructWalletTransaction(
   const tx = parseTx(hexToBytes(row.raw_hex));
 
   let receivedTotal = 0n;
-  let firstReceiveAddress = "";
+  let firstReceiveAddress = '';
   for (const output of tx.outputs) {
     const address = extractAddressFromScript(output.script, network);
     if (!address || !ownsAddress(address)) {
       continue;
     }
-    if (firstReceiveAddress === "") {
+    if (firstReceiveAddress === '') {
       firstReceiveAddress = address;
     }
     receivedTotal += output.value;
   }
 
   let spentTotal = 0n;
-  let firstSpentAddress = "";
+  let firstSpentAddress = '';
   for (const input of tx.inputs) {
     const prevTxid = reverseBytesToHex(input.prevTxHash);
     const prevout = lookupPrevout(prevTxid, input.prevTxIndex);
     if (!prevout) {
       continue;
     }
-    if (firstSpentAddress === "") {
+    if (firstSpentAddress === '') {
       firstSpentAddress = prevout.address;
     }
     spentTotal += prevout.value;
@@ -256,8 +252,7 @@ export function reconstructWalletTransaction(
     return null;
   }
 
-  const confirmations =
-    row.block_height >= 0 ? Math.max(0, chainHeight - row.block_height + 1) : 0;
+  const confirmations = row.block_height >= 0 ? Math.max(0, chainHeight - row.block_height + 1) : 0;
 
   return {
     txid: row.txid,
@@ -265,6 +260,6 @@ export function reconstructWalletTransaction(
     address: net > 0n ? firstReceiveAddress : firstSpentAddress,
     timestamp: row.timestamp,
     confirmations,
-    type: net > 0n ? "receive" : "send",
+    type: net > 0n ? 'receive' : 'send',
   };
 }

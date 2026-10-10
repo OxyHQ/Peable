@@ -1,12 +1,12 @@
-import type { NextFunction, Request, Response, RequestHandler } from "express";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
-import type { MerchantEnvironment } from "@peable.to/shared-types";
+import type { NextFunction, Request, Response, RequestHandler } from 'express';
+import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
+import type { MerchantEnvironment } from '@peable.to/shared-types';
 import {
   EnvironmentModeMismatchError,
   assertEnvironmentMatchesProvider,
-} from "../services/providers/environmentGuard";
-import { ProviderError } from "../services/providers/provider";
-import { redactProviderMessage } from "../services/providers/redact";
+} from '../services/providers/environmentGuard';
+import { ProviderError } from '../services/providers/provider';
+import { redactProviderMessage } from '../services/providers/redact';
 
 /**
  * Turn a provider failure into an HTTP answer without leaking its text raw.
@@ -31,18 +31,13 @@ export function sendProviderError(res: Response, error: ProviderError): void {
   sendError(
     res,
     error.retryable ? 502 : 422,
-    error.retryable ? "api_error" : "invalid_request_error",
+    error.retryable ? 'api_error' : 'invalid_request_error',
     redactProviderMessage(error.message),
   );
 }
 
 /** Stripe-ish error envelope: `{ error: { type, message } }`. */
-export function sendError(
-  res: Response,
-  status: number,
-  type: string,
-  message: string,
-): void {
+export function sendError(res: Response, status: number, type: string, message: string): void {
   res.status(status).json({ error: { type, message } });
 }
 
@@ -69,7 +64,7 @@ export interface ResolvedServiceApp {
 export function requireServiceApp(req: Request, res: Response): ResolvedServiceApp | null {
   const { serviceApp } = req as OxyAuthRequest;
   if (!serviceApp?.appId || !serviceApp.environment) {
-    sendError(res, 401, "authentication_error", "missing service app credentials");
+    sendError(res, 401, 'authentication_error', 'missing service app credentials');
     return null;
   }
   return { appId: serviceApp.appId, environment: serviceApp.environment };
@@ -103,10 +98,7 @@ export const requireAuthenticated: RequestHandler = (req, res, next) => {
  * `if (!requireProviderMode(...)) return;` — the same shape `resolveMerchant`
  * already uses.
  */
-export function requireProviderMode(
-  environment: MerchantEnvironment,
-  res: Response,
-): boolean {
+export function requireProviderMode(environment: MerchantEnvironment, res: Response): boolean {
   try {
     assertEnvironmentMatchesProvider(environment);
     return true;
@@ -132,5 +124,5 @@ export function requireProviderMode(
  * fails on one that answers anything else.
  */
 export function sendEnvironmentMismatch(res: Response, message: string): void {
-  sendError(res, 403, "permission_error", message);
+  sendError(res, 403, 'permission_error', message);
 }

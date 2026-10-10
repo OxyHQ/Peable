@@ -31,6 +31,6 @@
  * social pay too (`PEABLE_SOCIAL_PAY_NETWORK`), so a client that flips alone
  * only earns a 403.
  */
-import type { NetworkType } from "@fairco.in/core";
+import type { NetworkType } from '@fairco.in/core';
 
-export const SOCIAL_PAY_NETWORK: NetworkType = "testnet";
+export const SOCIAL_PAY_NETWORK: NetworkType = 'testnet';

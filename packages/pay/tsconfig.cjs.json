@@ -14,9 +14,7 @@
     "incremental": false,
     "tsBuildInfoFile": "node_modules/.cache/tsbuildinfo/cjs/.tsbuildinfo"
   },
-  "include": [
-    "src"
-  ],
+  "include": ["src"],
   "exclude": [
     "node_modules",
     "dist",

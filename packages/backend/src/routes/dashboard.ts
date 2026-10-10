@@ -1,38 +1,38 @@
-import { Router } from "express";
-import type { Request, RequestHandler, Response } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
+import { Router } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
 import {
   createOxyAuthMiddleware,
   getRequiredOxyUserId,
   OXY_SERVICE_ENVIRONMENTS,
-} from "@oxy.so/core/server";
-import type { OxyAuthRequest, OxyServiceEnvironment } from "@oxy.so/core/server";
-import { getDb } from "../db/postgres";
-import { findIntentForMerchant } from "../db/payments/paymentIntentRepository";
+} from '@oxy.so/core/server';
+import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
+import { getDb } from '../db/postgres';
+import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
   findDeliveryForMerchant,
   listDeliveriesForMerchant,
-} from "../db/webhooks/webhookDeliveryRepository";
+} from '../db/webhooks/webhookDeliveryRepository';
 import {
   assertAppMembership as realAssertAppMembership,
   type AppMembershipResult,
-} from "../services/appMembership";
-import type { SafeFetchFn } from "../services/webhookDispatcher";
+} from '../services/appMembership';
+import type { SafeFetchFn } from '../services/webhookDispatcher';
 import {
   createMerchantBodySchema,
   patchMerchantBodySchema,
   registerMerchant,
   applyMerchantPatch,
-} from "./merchants";
+} from './merchants';
 import {
   resolveMerchantByApp,
   listQuerySchema,
   listPaymentIntentsForMerchant,
-} from "./paymentIntents";
-import { redeliverWebhookDelivery } from "./webhookDeliveries";
-import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from "../lib/serialize";
-import { sendError, wrap } from "../lib/http";
+} from './paymentIntents';
+import { redeliverWebhookDelivery } from './webhookDeliveries';
+import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
+import { sendError, wrap } from '../lib/http';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -54,8 +54,8 @@ function resolveEnvironment(req: Request, res: Response): OxyServiceEnvironment 
     sendError(
       res,
       422,
-      "invalid_request_error",
-      "a valid environment query parameter is required (development | staging | production)",
+      'invalid_request_error',
+      'a valid environment query parameter is required (development | staging | production)',
     );
     return null;
   }
@@ -90,7 +90,7 @@ async function resolveDashboardAccess(
     // `req.userId` (`OxyServices.utility.ts`). Guarded so a future change to
     // that contract (or a misconfigured test stub) fails closed instead of
     // forwarding an empty `Authorization` header to oxy-api.
-    sendError(res, 401, "authentication_error", "missing bearer token");
+    sendError(res, 401, 'authentication_error', 'missing bearer token');
     return null;
   }
 
@@ -100,7 +100,7 @@ async function resolveDashboardAccess(
   // `routes/social.ts` uses for `:username`.
   const { applicationId } = req.params;
   if (!applicationId) {
-    sendError(res, 422, "invalid_request_error", "applicationId is required");
+    sendError(res, 422, 'invalid_request_error', 'applicationId is required');
     return null;
   }
 
@@ -110,7 +110,7 @@ async function resolveDashboardAccess(
     accessToken,
   );
   if (!allowed) {
-    sendError(res, 403, "permission_error", "you are not a member of this application");
+    sendError(res, 403, 'permission_error', 'you are not a member of this application');
     return null;
   }
 
@@ -138,14 +138,13 @@ export function createDashboardRouter(deps?: {
   assertAppMembership?: typeof realAssertAppMembership;
   safeFetch?: SafeFetchFn;
 }): Router {
-  const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
+  const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const assertAppMembership = deps?.assertAppMembership ?? realAssertAppMembership;
   const safeFetch = deps?.safeFetch;
   const router = Router();
 
   router.get(
-    "/v1/dashboard/applications/:applicationId/merchant",
+    '/v1/dashboard/applications/:applicationId/merchant',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -158,7 +157,7 @@ export function createDashboardRouter(deps?: {
   );
 
   router.post(
-    "/v1/dashboard/applications/:applicationId/merchant",
+    '/v1/dashboard/applications/:applicationId/merchant',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -169,15 +168,15 @@ export function createDashboardRouter(deps?: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
 
       const result = await registerMerchant(access.applicationId, access.environment, parsed.data);
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       res.status(201).json(toMerchantDTO(result.merchant));
@@ -185,7 +184,7 @@ export function createDashboardRouter(deps?: {
   );
 
   router.patch(
-    "/v1/dashboard/applications/:applicationId/merchant",
+    '/v1/dashboard/applications/:applicationId/merchant',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -199,14 +198,14 @@ export function createDashboardRouter(deps?: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
       const updated = await applyMerchantPatch(merchant, parsed.data);
       if (!updated) {
-        sendError(res, 404, "invalid_request_error", "merchant not found");
+        sendError(res, 404, 'invalid_request_error', 'merchant not found');
         return;
       }
       res.status(200).json(toMerchantDTO(updated));
@@ -214,7 +213,7 @@ export function createDashboardRouter(deps?: {
   );
 
   router.get(
-    "/v1/dashboard/applications/:applicationId/payment_intents",
+    '/v1/dashboard/applications/:applicationId/payment_intents',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -228,24 +227,24 @@ export function createDashboardRouter(deps?: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
 
       const result = await listPaymentIntentsForMerchant(merchant.id, parsed.data);
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       const data = result.data.map((intent) => toPaymentIntentDTO(intent));
-      res.status(200).json({ object: "list", data, has_more: result.hasMore });
+      res.status(200).json({ object: 'list', data, has_more: result.hasMore });
     }),
   );
 
   router.get(
-    "/v1/dashboard/applications/:applicationId/payment_intents/:id",
+    '/v1/dashboard/applications/:applicationId/payment_intents/:id',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -260,13 +259,13 @@ export function createDashboardRouter(deps?: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const intent = await findIntentForMerchant(getDb(), id, merchant.id);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
       res.status(200).json(toPaymentIntentDTO(intent));
@@ -274,7 +273,7 @@ export function createDashboardRouter(deps?: {
   );
 
   router.get(
-    "/v1/dashboard/applications/:applicationId/webhook_deliveries",
+    '/v1/dashboard/applications/:applicationId/webhook_deliveries',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -288,8 +287,8 @@ export function createDashboardRouter(deps?: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
@@ -308,8 +307,8 @@ export function createDashboardRouter(deps?: {
           sendError(
             res,
             422,
-            "invalid_request_error",
-            "starting_after references an unknown webhook delivery",
+            'invalid_request_error',
+            'starting_after references an unknown webhook delivery',
           );
           return;
         }
@@ -328,12 +327,12 @@ export function createDashboardRouter(deps?: {
       const data = page.data.map((delivery) =>
         toWebhookDeliveryDTO(delivery, delivery.intentPublicId),
       );
-      res.status(200).json({ object: "list", data, has_more: page.hasMore });
+      res.status(200).json({ object: 'list', data, has_more: page.hasMore });
     }),
   );
 
   router.post(
-    "/v1/dashboard/applications/:applicationId/webhook_deliveries/:id/redeliver",
+    '/v1/dashboard/applications/:applicationId/webhook_deliveries/:id/redeliver',
     requireOxyUser,
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
@@ -344,13 +343,13 @@ export function createDashboardRouter(deps?: {
 
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
-        sendError(res, result.status, "invalid_request_error", result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
       res.status(200).json(toWebhookDeliveryDTO(result.delivery, result.intentPublicId));

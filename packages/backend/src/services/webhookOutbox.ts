@@ -6,16 +6,16 @@
  * `payment_outboxes` dispatcher, and on the settlement watcher next door: an
  * `.unref()`-ed timer that cannot hold a test run or the event loop open.
  */
-import { randomUUID } from "node:crypto";
-import { getDb } from "../db/postgres";
-import { findWebhookTarget } from "../db/merchants/merchantRepository";
+import { randomUUID } from 'node:crypto';
+import { getDb } from '../db/postgres';
+import { findWebhookTarget } from '../db/merchants/merchantRepository';
 import {
   claimDueDeliveries,
   recordDeliveryAttempt,
   releaseDeliveryClaim,
   type ClaimedDeliveryRow,
-} from "../db/webhooks/webhookOutboxRepository";
-import { attemptDelivery, type SafeFetchFn } from "./webhookDispatcher";
+} from '../db/webhooks/webhookOutboxRepository';
+import { attemptDelivery, type SafeFetchFn } from './webhookDispatcher';
 
 /**
  * The backoff schedule, in milliseconds, one entry per elapsed attempt.
@@ -93,9 +93,7 @@ export interface OutboxPassResult {
  * unanticipated way must not abort the pass and strand the rest of the batch
  * holding leases.
  */
-export async function runWebhookOutboxPass(
-  deps: OutboxPassDeps = {},
-): Promise<OutboxPassResult> {
+export async function runWebhookOutboxPass(deps: OutboxPassDeps = {}): Promise<OutboxPassResult> {
   const db = getDb();
   const leaseOwner = randomUUID();
   const now = deps.now ?? new Date();
@@ -114,8 +112,8 @@ export async function runWebhookOutboxPass(
   for (const row of claimed) {
     try {
       const outcome = await deliverOne(row, deps, now);
-      if (outcome === "delivered") delivered += 1;
-      else if (outcome === "retry") retrying += 1;
+      if (outcome === 'delivered') delivered += 1;
+      else if (outcome === 'retry') retrying += 1;
       else terminal += 1;
     } catch (error) {
       // The row keeps its lease and becomes claimable again when that expires.
@@ -136,7 +134,7 @@ async function deliverOne(
   row: ClaimedDeliveryRow,
   deps: OutboxPassDeps,
   now: Date,
-): Promise<"delivered" | "retry" | "terminal"> {
+): Promise<'delivered' | 'retry' | 'terminal'> {
   const db = getDb();
 
   // Re-read the target rather than trusting the row's snapshot: a merchant who
@@ -150,9 +148,9 @@ async function deliverOne(
     // queue that no configuration can ever drain.
     await releaseDeliveryClaim(db, row.id, {
       nextAttemptAt: null,
-      reason: "merchant has no webhook endpoint configured",
+      reason: 'merchant has no webhook endpoint configured',
     });
-    return "terminal";
+    return 'terminal';
   }
 
   const outcome = await attemptDelivery(
@@ -162,7 +160,7 @@ async function deliverOne(
   );
 
   const delayMs =
-    outcome.kind === "retry"
+    outcome.kind === 'retry'
       ? nextAttemptDelayMs(row.attempts + 1, deps.random ?? Math.random)
       : null;
 
@@ -173,8 +171,8 @@ async function deliverOne(
     nextAttemptAt: delayMs === null ? null : new Date(now.getTime() + delayMs),
   });
 
-  if (outcome.kind === "delivered") return "delivered";
-  return delayMs === null ? "terminal" : "retry";
+  if (outcome.kind === 'delivered') return 'delivered';
+  return delayMs === null ? 'terminal' : 'retry';
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

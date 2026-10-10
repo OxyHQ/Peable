@@ -140,7 +140,7 @@ export const paymentIntents = pgTable(
     // rather than reading first.
     uniqueIndex('payment_intents_merchant_id_idempotency_key_key').on(
       table.merchantId,
-      table.idempotencyKey
+      table.idempotencyKey,
     ),
     // The list route filters and paginates by merchant; the compound unique
     // above is keyed on `idempotency_key` second and cannot serve it.
@@ -200,7 +200,7 @@ export const paymentIntents = pgTable(
     }).onDelete('restrict'),
     check(
       'payment_intents_status_check',
-      sql.raw(`status in (${inList(PAYMENT_INTENT_STATUS_VALUES)})`)
+      sql.raw(`status in (${inList(PAYMENT_INTENT_STATUS_VALUES)})`),
     ),
     check('payment_intents_rail_check', sql.raw(`rail in (${inList(RAIL_VALUES)})`)),
     check('payment_intents_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
@@ -217,11 +217,11 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_rail_currency_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`
+      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`,
     ),
     check(
       'payment_intents_network_check',
-      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`)
+      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
     /**
      * The FairCoin rail's own requirement, in the one place a write that
@@ -231,7 +231,7 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_faircoin_requires_chain_fields_check',
-      sql`${table.rail} <> 'faircoin' or (${table.address} is not null and ${table.network} is not null)`
+      sql`${table.rail} <> 'faircoin' or (${table.address} is not null and ${table.network} is not null)`,
     ),
     /**
      * And the converse, which is not decoration: a card payment that carried an
@@ -241,7 +241,7 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_card_has_no_chain_fields_check',
-      sql`${table.rail} <> 'card' or (${table.address} is null and ${table.network} is null and ${table.txid} is null and ${table.confirmations} = 0)`
+      sql`${table.rail} <> 'card' or (${table.address} is null and ${table.network} is null and ${table.txid} is null and ${table.confirmations} = 0)`,
     ),
     /**
      * ADR 0001 D5: the four chain states describe a transaction on a blockchain
@@ -252,17 +252,15 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_chain_statuses_are_faircoin_check',
-      sql.raw(
-        `status not in (${inList(CHAIN_ONLY_STATUSES)}) or rail = 'faircoin'`
-      )
+      sql.raw(`status not in (${inList(CHAIN_ONLY_STATUSES)}) or rail = 'faircoin'`),
     ),
     check(
       'payment_intents_card_statuses_are_card_check',
-      sql.raw(`status not in (${inList(CARD_ONLY_STATUSES)}) or rail = 'card'`)
+      sql.raw(`status not in (${inList(CARD_ONLY_STATUSES)}) or rail = 'card'`),
     ),
     check(
       'payment_intents_provider_check',
-      sql.raw(`provider is null or provider in (${inList(PROVIDER_IDS)})`)
+      sql.raw(`provider is null or provider in (${inList(PROVIDER_IDS)})`),
     ),
     /**
      * The rail decides whether there is a provider, in both directions.
@@ -275,11 +273,11 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_card_requires_provider_check',
-      sql`${table.rail} <> 'card' or ${table.provider} is not null`
+      sql`${table.rail} <> 'card' or ${table.provider} is not null`,
     ),
     check(
       'payment_intents_faircoin_has_no_provider_check',
-      sql`${table.rail} <> 'faircoin' or (${table.provider} is null and ${table.providerObjectId} is null and ${table.providerChargeId} is null)`
+      sql`${table.rail} <> 'faircoin' or (${table.provider} is null and ${table.providerObjectId} is null and ${table.providerChargeId} is null)`,
     ),
     /**
      * An object id without a provider names an object in no numbering system —
@@ -295,7 +293,7 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_provider_object_needs_provider_check',
-      sql`${table.providerObjectId} is null or ${table.provider} is not null`
+      sql`${table.providerObjectId} is null or ${table.provider} is not null`,
     ),
     check('payment_intents_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     check('payment_intents_confirmations_check', sql`${table.confirmations} >= 0`),
@@ -326,9 +324,9 @@ export const paymentIntents = pgTable(
      */
     check(
       'payment_intents_broadcast_requires_txid_check',
-      sql`${table.rail} <> 'faircoin' or ${table.status} not in ('broadcast', 'confirming', 'settled') or ${table.txid} is not null`
+      sql`${table.rail} <> 'faircoin' or ${table.status} not in ('broadcast', 'confirming', 'settled') or ${table.txid} is not null`,
     ),
-  ]
+  ],
 );
 
 /**
@@ -399,31 +397,31 @@ export const checkoutSessions = pgTable(
     }).onDelete('restrict'),
     check(
       'checkout_sessions_environment_check',
-      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`)
+      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`),
     ),
     check('checkout_sessions_rail_check', sql.raw(`rail in (${inList(RAIL_VALUES)})`)),
     check('checkout_sessions_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
     check(
       'checkout_sessions_network_check',
-      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`)
+      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
     check(
       'checkout_sessions_rail_network_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.network} is not null)`
+      sql`(${table.rail} = 'faircoin') = (${table.network} is not null)`,
     ),
     // Same rule as `payment_intents_rail_currency_agrees_check`, for the same
     // reason: these rows carry the price a payer will be shown, and a rail that
     // disagreed with the currency would show one and charge the other.
     check(
       'checkout_sessions_rail_currency_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`
+      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`,
     ),
     check('checkout_sessions_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     check(
       'checkout_sessions_metadata_object_check',
-      sql`jsonb_typeof(${table.metadata}) = 'object'`
+      sql`jsonb_typeof(${table.metadata}) = 'object'`,
     ),
-  ]
+  ],
 );
 
 /**
@@ -471,26 +469,26 @@ export const paymentLinks = pgTable(
     }).onDelete('restrict'),
     check(
       'payment_links_environment_check',
-      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`)
+      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`),
     ),
     check('payment_links_rail_check', sql.raw(`rail in (${inList(RAIL_VALUES)})`)),
     check('payment_links_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
     check(
       'payment_links_network_check',
-      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`)
+      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
     check(
       'payment_links_rail_network_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.network} is not null)`
+      sql`(${table.rail} = 'faircoin') = (${table.network} is not null)`,
     ),
     // Same rule as `payment_intents_rail_currency_agrees_check`, for the same
     // reason: these rows carry the price a payer will be shown, and a rail that
     // disagreed with the currency would show one and charge the other.
     check(
       'payment_links_rail_currency_agrees_check',
-      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`
+      sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`,
     ),
     check('payment_links_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     check('payment_links_metadata_object_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
-  ]
+  ],
 );

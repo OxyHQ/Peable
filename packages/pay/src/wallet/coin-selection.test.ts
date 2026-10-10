@@ -11,24 +11,15 @@
  * confirmation screen shows the fee that actually gets built.
  */
 
-import { describe, test, expect } from "bun:test";
-import {
-  UNITS_PER_COIN,
-  getNetwork,
-  buildTransaction,
-  type UTXO as TxUTXO,
-} from "@fairco.in/core";
-import type { UTXO } from "./utxo-set";
-import {
-  selectInputsForSend,
-  estimateSend,
-  estimateFeeForInputs,
-} from "./coin-selection";
+import { describe, test, expect } from 'bun:test';
+import { UNITS_PER_COIN, getNetwork, buildTransaction, type UTXO as TxUTXO } from '@fairco.in/core';
+import type { UTXO } from './utxo-set';
+import { selectInputsForSend, estimateSend, estimateFeeForInputs } from './coin-selection';
 
-const MAINNET = getNetwork("mainnet");
+const MAINNET = getNetwork('mainnet');
 // A real, valid FairCoin mainnet P2PKH address (recipient + change reuse it;
 // only the script size matters for fee parity, which is identical for P2PKH).
-const ADDR = "FQVANvQqVsLwkwBnAJ5oPDYrqcfXLak7Bf";
+const ADDR = 'FQVANvQqVsLwkwBnAJ5oPDYrqcfXLak7Bf';
 
 /** The actual fee buildTransaction charges for the given inputs + amount. */
 function builtFee(selected: UTXO[], amount: bigint, feePerByte: number): bigint {
@@ -56,11 +47,7 @@ function builtFee(selected: UTXO[], amount: bigint, feePerByte: number): bigint 
 
 const ONE_FAIR = UNITS_PER_COIN;
 
-function utxo(
-  txid: string,
-  value: bigint,
-  confirmed = true,
-): UTXO {
+function utxo(txid: string, value: bigint, confirmed = true): UTXO {
   return {
     txid,
     vout: 0,
@@ -76,19 +63,19 @@ const FEE_PER_BYTE = 5;
 
 // A wallet with many confirmed coins of varying size.
 const MANY: UTXO[] = [
-  utxo("a", 1n * ONE_FAIR),
-  utxo("b", 2n * ONE_FAIR),
-  utxo("c", 5n * ONE_FAIR),
-  utxo("d", 10n * ONE_FAIR),
-  utxo("e", 50n * ONE_FAIR),
+  utxo('a', 1n * ONE_FAIR),
+  utxo('b', 2n * ONE_FAIR),
+  utxo('c', 5n * ONE_FAIR),
+  utxo('d', 10n * ONE_FAIR),
+  utxo('e', 50n * ONE_FAIR),
 ];
 
 // ---------------------------------------------------------------------------
 // C3: a send spends only what is needed, not the whole wallet
 // ---------------------------------------------------------------------------
 
-describe("C3: selection spends only what is needed", () => {
-  test("sending a small amount from many coins picks ONE large input", () => {
+describe('C3: selection spends only what is needed', () => {
+  test('sending a small amount from many coins picks ONE large input', () => {
     // Need 3 FAIR. Largest-first should grab the 50-FAIR coin alone.
     const result = selectInputsForSend({
       candidates: MANY,
@@ -97,18 +84,16 @@ describe("C3: selection spends only what is needed", () => {
     });
 
     expect(result.selected.length).toBe(1);
-    expect(result.selected[0].txid).toBe("e");
+    expect(result.selected[0].txid).toBe('e');
     // It did NOT sweep all five coins.
     expect(result.selected.length).toBeLessThan(MANY.length);
     // Change is returned to the wallet (not swept into the recipient/fee).
     expect(result.change).toBeGreaterThan(0n);
     // Total in == amount + fee + change (value is conserved).
-    expect(result.selected[0].value).toBe(
-      3n * ONE_FAIR + result.fee + result.change,
-    );
+    expect(result.selected[0].value).toBe(3n * ONE_FAIR + result.fee + result.change);
   });
 
-  test("a larger amount pulls in additional inputs largest-first", () => {
+  test('a larger amount pulls in additional inputs largest-first', () => {
     // Need 58 FAIR; 50 alone is not enough, so 50 + 10 are taken.
     const result = selectInputsForSend({
       candidates: MANY,
@@ -116,7 +101,7 @@ describe("C3: selection spends only what is needed", () => {
       feePerByte: FEE_PER_BYTE,
     });
     const ids = result.selected.map((u) => u.txid).sort();
-    expect(ids).toEqual(["d", "e"]);
+    expect(ids).toEqual(['d', 'e']);
   });
 });
 
@@ -124,11 +109,11 @@ describe("C3: selection spends only what is needed", () => {
 // C4: unconfirmed outputs are never spent
 // ---------------------------------------------------------------------------
 
-describe("C4: unconfirmed UTXOs are excluded from selection", () => {
-  test("a huge unconfirmed coin is ignored; selection uses confirmed coins", () => {
+describe('C4: unconfirmed UTXOs are excluded from selection', () => {
+  test('a huge unconfirmed coin is ignored; selection uses confirmed coins', () => {
     const candidates: UTXO[] = [
-      utxo("confirmed-small", 5n * ONE_FAIR, true),
-      utxo("unconfirmed-huge", 1000n * ONE_FAIR, false),
+      utxo('confirmed-small', 5n * ONE_FAIR, true),
+      utxo('unconfirmed-huge', 1000n * ONE_FAIR, false),
     ];
 
     const result = selectInputsForSend({
@@ -138,12 +123,12 @@ describe("C4: unconfirmed UTXOs are excluded from selection", () => {
     });
 
     expect(result.selected.length).toBe(1);
-    expect(result.selected[0].txid).toBe("confirmed-small");
+    expect(result.selected[0].txid).toBe('confirmed-small');
     expect(result.selected.every((u) => u.confirmed)).toBe(true);
   });
 
-  test("only an unconfirmed coin available => insufficient funds (never spent)", () => {
-    const candidates: UTXO[] = [utxo("unconfirmed", 100n * ONE_FAIR, false)];
+  test('only an unconfirmed coin available => insufficient funds (never spent)', () => {
+    const candidates: UTXO[] = [utxo('unconfirmed', 100n * ONE_FAIR, false)];
     expect(() =>
       selectInputsForSend({
         candidates,
@@ -158,48 +143,48 @@ describe("C4: unconfirmed UTXOs are excluded from selection", () => {
 // H1: coin control is honoured exactly
 // ---------------------------------------------------------------------------
 
-describe("H1: coin control spends exactly the chosen outpoints", () => {
-  test("only the selected outpoints are used, even if larger coins exist", () => {
+describe('H1: coin control spends exactly the chosen outpoints', () => {
+  test('only the selected outpoints are used, even if larger coins exist', () => {
     // Pick coins 'a' (1) and 'b' (2) explicitly; 'e' (50) must NOT be touched.
     const result = selectInputsForSend({
       candidates: MANY,
       targetValue: 2n * ONE_FAIR,
       feePerByte: FEE_PER_BYTE,
       coinControl: [
-        { txid: "a", vout: 0 },
-        { txid: "b", vout: 0 },
+        { txid: 'a', vout: 0 },
+        { txid: 'b', vout: 0 },
       ],
     });
 
     const ids = result.selected.map((u) => u.txid).sort();
-    expect(ids).toEqual(["a", "b"]);
+    expect(ids).toEqual(['a', 'b']);
     // The big coin was never selected.
-    expect(result.selected.some((u) => u.txid === "e")).toBe(false);
+    expect(result.selected.some((u) => u.txid === 'e')).toBe(false);
   });
 
-  test("coin control that cannot cover amount + fee throws insufficient", () => {
+  test('coin control that cannot cover amount + fee throws insufficient', () => {
     expect(() =>
       selectInputsForSend({
         candidates: MANY,
         targetValue: 2n * ONE_FAIR,
         feePerByte: FEE_PER_BYTE,
         // Only the 1-FAIR coin selected, but we need 2 FAIR + fee.
-        coinControl: [{ txid: "a", vout: 0 }],
+        coinControl: [{ txid: 'a', vout: 0 }],
       }),
     ).toThrow(/Insufficient funds in selected coins/);
   });
 
-  test("coin control referencing an unconfirmed/unknown outpoint throws", () => {
+  test('coin control referencing an unconfirmed/unknown outpoint throws', () => {
     const candidates: UTXO[] = [
-      utxo("confirmed", 10n * ONE_FAIR, true),
-      utxo("pending", 10n * ONE_FAIR, false),
+      utxo('confirmed', 10n * ONE_FAIR, true),
+      utxo('pending', 10n * ONE_FAIR, false),
     ];
     expect(() =>
       selectInputsForSend({
         candidates,
         targetValue: 1n * ONE_FAIR,
         feePerByte: FEE_PER_BYTE,
-        coinControl: [{ txid: "pending", vout: 0 }],
+        coinControl: [{ txid: 'pending', vout: 0 }],
       }),
     ).toThrow(/unavailable or unconfirmed/);
   });
@@ -209,8 +194,8 @@ describe("H1: coin control spends exactly the chosen outpoints", () => {
 // H2: estimateSend returns the real fee (fee shown == fee built)
 // ---------------------------------------------------------------------------
 
-describe("H2: estimateSend reports the real fee and balance", () => {
-  test("the estimated fee equals the fee selectInputsForSend charges", () => {
+describe('H2: estimateSend reports the real fee and balance', () => {
+  test('the estimated fee equals the fee selectInputsForSend charges', () => {
     const amount = 3n * ONE_FAIR;
     const est = estimateSend({
       candidates: MANY,
@@ -230,11 +215,11 @@ describe("H2: estimateSend reports the real fee and balance", () => {
     expect(est.fee).toBe(estimateFeeForInputs(built.selected.length, FEE_PER_BYTE));
   });
 
-  test("maxSendable excludes unconfirmed coins and nets out the fee", () => {
+  test('maxSendable excludes unconfirmed coins and nets out the fee', () => {
     const candidates: UTXO[] = [
-      utxo("c1", 10n * ONE_FAIR, true),
-      utxo("c2", 20n * ONE_FAIR, true),
-      utxo("u1", 999n * ONE_FAIR, false), // must be ignored
+      utxo('c1', 10n * ONE_FAIR, true),
+      utxo('c2', 20n * ONE_FAIR, true),
+      utxo('u1', 999n * ONE_FAIR, false), // must be ignored
     ];
     const est = estimateSend({
       candidates,
@@ -255,7 +240,7 @@ describe("H2: estimateSend reports the real fee and balance", () => {
     expect(built.selected.length).toBe(2);
   });
 
-  test("an uncoverable amount surfaces as insufficientFunds, not a throw", () => {
+  test('an uncoverable amount surfaces as insufficientFunds, not a throw', () => {
     const est = estimateSend({
       candidates: MANY, // 68 FAIR confirmed total
       targetValue: 1000n * ONE_FAIR,
@@ -266,12 +251,12 @@ describe("H2: estimateSend reports the real fee and balance", () => {
     expect(est.total).toBeNull();
   });
 
-  test("coin control narrows maxSendable to the selected coins only", () => {
+  test('coin control narrows maxSendable to the selected coins only', () => {
     const est = estimateSend({
       candidates: MANY,
       targetValue: 0n,
       feePerByte: FEE_PER_BYTE,
-      coinControl: [{ txid: "a", vout: 0 }], // 1 FAIR coin only
+      coinControl: [{ txid: 'a', vout: 0 }], // 1 FAIR coin only
     });
     const feeForOne = estimateFeeForInputs(1, FEE_PER_BYTE);
     expect(est.maxSendable).toBe(1n * ONE_FAIR - feeForOne);
@@ -283,10 +268,10 @@ describe("H2: estimateSend reports the real fee and balance", () => {
 // unit, including the dust-change edge case where the change output is dropped.
 // ---------------------------------------------------------------------------
 
-describe("H2: fee parity with buildTransaction (dustThreshold)", () => {
+describe('H2: fee parity with buildTransaction (dustThreshold)', () => {
   const DUST = MAINNET.minRelayFee; // 10_000
 
-  test("normal change: reported fee == built fee", () => {
+  test('normal change: reported fee == built fee', () => {
     const amount = 3n * ONE_FAIR;
     const sel = selectInputsForSend({
       candidates: MANY,
@@ -298,13 +283,13 @@ describe("H2: fee parity with buildTransaction (dustThreshold)", () => {
     expect(sel.fee).toBe(builtFee(sel.selected, amount, FEE_PER_BYTE));
   });
 
-  test("dust change is absorbed into the fee, matching buildTransaction", () => {
+  test('dust change is absorbed into the fee, matching buildTransaction', () => {
     // One coin sized so change would land just inside the dust band (<= DUST):
     // baseFee(1 input) = 226*5 = 1130; pick change target = 5000 (< 10000).
     const amount = 1n * ONE_FAIR;
     const baseFee = estimateFeeForInputs(1, FEE_PER_BYTE);
     const coinValue = amount + baseFee + 5000n; // change would be 5000 (dust)
-    const candidates: UTXO[] = [utxo("dustcoin", coinValue)];
+    const candidates: UTXO[] = [utxo('dustcoin', coinValue)];
 
     const sel = selectInputsForSend({
       candidates,
@@ -320,11 +305,11 @@ describe("H2: fee parity with buildTransaction (dustThreshold)", () => {
     expect(sel.fee).toBe(builtFee(sel.selected, amount, FEE_PER_BYTE));
   });
 
-  test("estimateSend reports the same dust-absorbed fee the build will charge", () => {
+  test('estimateSend reports the same dust-absorbed fee the build will charge', () => {
     const amount = 1n * ONE_FAIR;
     const baseFee = estimateFeeForInputs(1, FEE_PER_BYTE);
     const coinValue = amount + baseFee + 5000n;
-    const candidates: UTXO[] = [utxo("dustcoin", coinValue)];
+    const candidates: UTXO[] = [utxo('dustcoin', coinValue)];
 
     const est = estimateSend({
       candidates,

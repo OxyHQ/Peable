@@ -41,7 +41,9 @@ const DISPUTE_COLUMNS = {
   updatedAt: disputes.updatedAt,
 } as const;
 
-function toRow(row: typeof DISPUTE_COLUMNS extends never ? never : Record<string, unknown>): DisputeRow {
+function toRow(
+  row: typeof DISPUTE_COLUMNS extends never ? never : Record<string, unknown>,
+): DisputeRow {
   return { ...row, status: row.status as DisputeStatus } as DisputeRow;
 }
 
@@ -116,7 +118,11 @@ export async function upsertDispute(
         updatedAt: new Date(),
       },
     })
-    .returning({ ...DISPUTE_COLUMNS, createdAt: disputes.createdAt, updatedAt: disputes.updatedAt });
+    .returning({
+      ...DISPUTE_COLUMNS,
+      createdAt: disputes.createdAt,
+      updatedAt: disputes.updatedAt,
+    });
 
   if (!row) {
     // Unreachable: `on conflict do update` always returns a row, unlike
@@ -187,9 +193,7 @@ export async function findDisputeByProviderObject(
   const [row] = await db
     .select(DISPUTE_COLUMNS)
     .from(disputes)
-    .where(
-      and(eq(disputes.provider, provider), eq(disputes.providerObjectId, providerObjectId)),
-    )
+    .where(and(eq(disputes.provider, provider), eq(disputes.providerObjectId, providerObjectId)))
     .limit(1);
   return row ? toRow(row) : null;
 }

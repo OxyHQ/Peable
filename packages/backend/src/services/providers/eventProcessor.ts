@@ -18,44 +18,51 @@
  * made from `object_ids` and `type`, which the ingress derived at verification
  * time and which redaction never touches.
  */
-import { observeRecurringEvent, recurringEventKind, type ObservationOutcome } from '../recurring/recurringObservation';
+import {
+  observeRecurringEvent,
+  recurringEventKind,
+  type ObservationOutcome,
+} from '../recurring/recurringObservation';
 import type { RecurringObservationOptions } from '../recurring/contracts';
-import type { ProviderEventRow } from "../../db/providers/providerEventRepository";
+import type { ProviderEventRow } from '../../db/providers/providerEventRepository';
 import {
   markProviderEventFailed,
   markProviderEventProcessed,
-} from "../../db/providers/providerEventRepository";
+} from '../../db/providers/providerEventRepository';
 import {
   findIntentById,
   findIntentByProviderCharge,
   findIntentByProviderObject,
   type PaymentIntentRow,
-} from "../../db/payments/paymentIntentRepository";
+} from '../../db/payments/paymentIntentRepository';
 import {
   applyRefundState,
   findRefundByProviderObject,
   importProviderRefund,
   type RefundStatus,
-} from "../../db/refunds/refundRepository";
-import { newId } from "../../lib/ids";
-import { applyRefundToIntent } from "../refunds/refundService";
-import { findAccountByProviderAccountId } from "../../db/accounts/connectedAccountRepository";
-import { applyTransferReversal, findTransferByProviderObject } from "../../db/transfers/transferRepository";
-import { refreshConnectedAccount } from "../accounts/connectedAccountService";
-import { getDb } from "../../db/postgres";
-import { applyEvent, type IntentEvent } from "../intentState";
-import { reconcileIntentWithProvider } from "../intentReconciliation";
+} from '../../db/refunds/refundRepository';
+import { newId } from '../../lib/ids';
+import { applyRefundToIntent } from '../refunds/refundService';
+import { findAccountByProviderAccountId } from '../../db/accounts/connectedAccountRepository';
+import {
+  applyTransferReversal,
+  findTransferByProviderObject,
+} from '../../db/transfers/transferRepository';
+import { refreshConnectedAccount } from '../accounts/connectedAccountService';
+import { getDb } from '../../db/postgres';
+import { applyEvent, type IntentEvent } from '../intentState';
+import { reconcileIntentWithProvider } from '../intentReconciliation';
 import {
   announceIntentChange,
   enqueueDisputeWebhook,
   enqueueIntentWebhook,
   transitionIntent,
-} from "../intentTransition";
-import { upsertDispute } from "../../db/disputes/disputeRepository";
-import { toDisputeDTO } from "../../lib/serialize";
-import type { DisputeStatus } from "../../db/schema/valueSets";
-import { redactProviderMessage } from "./redact";
-import type { ProviderId } from "./provider";
+} from '../intentTransition';
+import { upsertDispute } from '../../db/disputes/disputeRepository';
+import { toDisputeDTO } from '../../lib/serialize';
+import type { DisputeStatus } from '../../db/schema/valueSets';
+import { redactProviderMessage } from './redact';
+import type { ProviderId } from './provider';
 
 /**
  * Which provider event types move a payment, and where to.
@@ -78,24 +85,24 @@ import type { ProviderId } from "./provider";
  * trusts over the code beneath it.
  */
 const INTENT_EVENT_FOR: Readonly<Record<string, IntentEvent>> = {
-  "payment_intent.succeeded": "card_settled",
-  "payment_intent.payment_failed": "card_failed",
-  "payment_intent.canceled": "card_canceled",
-  "payment_intent.processing": "card_processing",
-  "payment_intent.requires_action": "card_requires_action",
+  'payment_intent.succeeded': 'card_settled',
+  'payment_intent.payment_failed': 'card_failed',
+  'payment_intent.canceled': 'card_canceled',
+  'payment_intent.processing': 'card_processing',
+  'payment_intent.requires_action': 'card_requires_action',
   // Stripe's name for "the payer has to do something" on some API versions.
   // Listed alongside rather than instead of: which one arrives depends on the
   // account's API version, and a gateway that pinned only one would silently
   // stop showing SCA challenges when Stripe changed the name.
-  "payment_intent.amount_capturable_updated": "card_processing",
+  'payment_intent.amount_capturable_updated': 'card_processing',
 };
 
 /** Which key in `object_ids` names the payment this event is about. */
-const PAYMENT_OBJECT_KEY = "payment_intent";
+const PAYMENT_OBJECT_KEY = 'payment_intent';
 /** ...the connected account. */
-const ACCOUNT_OBJECT_KEY = "account";
+const ACCOUNT_OBJECT_KEY = 'account';
 /** ...the transfer. */
-const TRANSFER_OBJECT_KEY = "transfer";
+const TRANSFER_OBJECT_KEY = 'transfer';
 
 /**
  * Account events that mean "re-read this account".
@@ -106,10 +113,10 @@ const TRANSFER_OBJECT_KEY = "transfer";
  * redacted — which it is — and then it would work partially, which is worse.
  */
 const ACCOUNT_REFRESH_EVENTS: ReadonlySet<string> = new Set([
-  "account.updated",
-  "account.application.authorized",
-  "account.application.deauthorized",
-  "capability.updated",
+  'account.updated',
+  'account.application.authorized',
+  'account.application.deauthorized',
+  'capability.updated',
 ]);
 
 /**
@@ -121,14 +128,14 @@ const ACCOUNT_REFRESH_EVENTS: ReadonlySet<string> = new Set([
  * which is the disagreement a merchant reconciles against and cannot explain.
  */
 const REFUND_EVENTS: ReadonlySet<string> = new Set([
-  "charge.refunded",
-  "refund.updated",
-  "refund.created",
+  'charge.refunded',
+  'refund.updated',
+  'refund.created',
   // `refund.failed` was ABSENT, and its absence is the expensive half. A bank
   // can reject a refund days after the provider accepted it; without this
   // event the row stays `succeeded`, the payment stays `refunded`, and the
   // merchant's books say money went back that is still with them.
-  "refund.failed",
+  'refund.failed',
 ]);
 
 /**
@@ -144,9 +151,9 @@ const REFUND_EVENTS: ReadonlySet<string> = new Set([
  * reason to mark a payment's refund dead.
  */
 function toRefundStatus(status: unknown): RefundStatus | null {
-  if (status === "succeeded") return "succeeded";
-  if (status === "failed" || status === "canceled") return "failed";
-  if (status === "pending" || status === "requires_action") return "pending";
+  if (status === 'succeeded') return 'succeeded';
+  if (status === 'failed' || status === 'canceled') return 'failed';
+  if (status === 'pending' || status === 'requires_action') return 'pending';
   return null;
 }
 
@@ -165,8 +172,8 @@ function toRefundStatus(status: unknown): RefundStatus | null {
  * funds on a dispute it later lost would silently mark it `won`.
  */
 const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
-  "charge.dispute.created": "needs_response",
-  "charge.dispute.updated": "under_review",
+  'charge.dispute.created': 'needs_response',
+  'charge.dispute.updated': 'under_review',
   // `charge.dispute.closed` is deliberately ABSENT from the values here and
   // present as a key with no default — it closes a dispute the merchant may
   // have WON or LOST, and the two are only distinguishable from the payload's
@@ -175,7 +182,7 @@ const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
   // half of a coin flip to land on by default: a merchant told they won a
   // dispute they lost does not reconcile, does not re-bill, and finds out from
   // their balance.
-  "charge.dispute.closed": "needs_response",
+  'charge.dispute.closed': 'needs_response',
 };
 
 /**
@@ -197,17 +204,17 @@ const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
  */
 function toDisputeStatus(status: unknown): DisputeStatus | null {
   switch (status) {
-    case "warning_needs_response":
-    case "needs_response":
-      return "needs_response";
-    case "warning_under_review":
-    case "under_review":
-    case "warning_closed":
-      return "under_review";
-    case "won":
-      return "won";
-    case "lost":
-      return "lost";
+    case 'warning_needs_response':
+    case 'needs_response':
+      return 'needs_response';
+    case 'warning_under_review':
+    case 'under_review':
+    case 'warning_closed':
+      return 'under_review';
+    case 'won':
+      return 'won';
+    case 'lost':
+      return 'lost';
     default:
       return null;
   }
@@ -215,21 +222,21 @@ function toDisputeStatus(status: unknown): DisputeStatus | null {
 
 /** Transfer events that carry a cumulative reversed total. */
 const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
-  "transfer.reversed",
-  "transfer.updated",
+  'transfer.reversed',
+  'transfer.updated',
 ]);
 
 export type ProcessOutcome =
   /** The intent moved. */
-  | { readonly kind: "applied"; readonly intentId: string; readonly status: string }
+  | { readonly kind: 'applied'; readonly intentId: string; readonly status: string }
   /** Authentic, understood, and the intent is already there. A provider redelivery. */
-  | { readonly kind: "noop"; readonly intentId: string }
+  | { readonly kind: 'noop'; readonly intentId: string }
   /** An event type this drain does not act on. Handled, not failed. */
-  | { readonly kind: "no_mapping" }
+  | { readonly kind: 'no_mapping' }
   /** The event names an object no intent claims. */
-  | { readonly kind: "unmatched" }
+  | { readonly kind: 'unmatched' }
   /** Something went wrong. The row keeps its error and stays in the drain's set. */
-  | { readonly kind: "failed"; readonly error: string };
+  | { readonly kind: 'failed'; readonly error: string };
 
 /**
  * Interpret one event and apply it.
@@ -238,7 +245,10 @@ export type ProcessOutcome =
  * stop the rows behind it. A failure is recorded on the row and reported.
  */
 export function processProviderEvent(event: ProviderEventRow): Promise<ProcessOutcome>;
-export function processProviderEvent(event: ProviderEventRow, recurring: RecurringObservationOptions): Promise<ProcessOutcome | ObservationOutcome>;
+export function processProviderEvent(
+  event: ProviderEventRow,
+  recurring: RecurringObservationOptions,
+): Promise<ProcessOutcome | ObservationOutcome>;
 export async function processProviderEvent(
   event: ProviderEventRow,
   recurring?: RecurringObservationOptions,
@@ -246,9 +256,13 @@ export async function processProviderEvent(
   // No production caller supplies this option. Without it legacy no_mapping
   // behavior is preserved, including historical recurring events marked handled.
   if (recurring && recurringEventKind(event.type)) {
-    const observation=await observeRecurringEvent(event.id,recurring);
+    const observation = await observeRecurringEvent(event.id, recurring);
     // Unowned refund wake-ups still belong to the existing one-off processor.
-    if(observation.kind!=='unmatched'||!(event.type==='charge.refunded'||event.type.startsWith('refund.')))return observation;
+    if (
+      observation.kind !== 'unmatched' ||
+      !(event.type === 'charge.refunded' || event.type.startsWith('refund.'))
+    )
+      return observation;
   }
   const db = getDb();
 
@@ -269,7 +283,7 @@ export async function processProviderEvent(
     const intentEvent = INTENT_EVENT_FOR[event.type];
     if (!intentEvent) {
       await markProviderEventProcessed(db, event.id);
-      return { kind: "no_mapping" };
+      return { kind: 'no_mapping' };
     }
 
     const objectId = event.objectIds[PAYMENT_OBJECT_KEY];
@@ -277,14 +291,10 @@ export async function processProviderEvent(
       // Mapped to an intent event but carrying no payment id: the envelope and
       // the map disagree, which is a bug here rather than at the provider.
       await markProviderEventFailed(db, event.id, `no ${PAYMENT_OBJECT_KEY} id on a ${event.type}`);
-      return { kind: "failed", error: `no ${PAYMENT_OBJECT_KEY} id on a ${event.type}` };
+      return { kind: 'failed', error: `no ${PAYMENT_OBJECT_KEY} id on a ${event.type}` };
     }
 
-    const intent = await findIntentByProviderObject(
-      db,
-      event.provider as ProviderId,
-      objectId,
-    );
+    const intent = await findIntentByProviderObject(db, event.provider as ProviderId, objectId);
     if (!intent) {
       /**
        * No intent claims this object, and that is NOT marked processed.
@@ -300,7 +310,7 @@ export async function processProviderEvent(
        * operator, which is the right outcome for an event about money nobody
        * here can account for.
        */
-      return { kind: "unmatched" };
+      return { kind: 'unmatched' };
     }
 
     // Already there. A provider redelivering a `succeeded` for a settled
@@ -330,44 +340,44 @@ export async function processProviderEvent(
        * `payment_failed` is "still succeeded", and the event is handled.
        */
       const reconciled = await reconcileIntentWithProvider(intent);
-      if (reconciled.kind === "applied" || reconciled.kind === "agreed") {
+      if (reconciled.kind === 'applied' || reconciled.kind === 'agreed') {
         await markProviderEventProcessed(db, event.id);
-        return reconciled.kind === "applied"
-          ? { kind: "applied", intentId: intent.id, status: reconciled.status }
-          : { kind: "noop", intentId: intent.id };
+        return reconciled.kind === 'applied'
+          ? { kind: 'applied', intentId: intent.id, status: reconciled.status }
+          : { kind: 'noop', intentId: intent.id };
       }
       // The provider's own truth is not reachable from this row either — a
       // settled payment the provider now calls cancelled, say. Recorded and
       // left for an operator rather than forced: money is involved and no
       // transition here can describe what happened.
       const message =
-        reconciled.kind === "irreconcilable"
+        reconciled.kind === 'irreconcilable'
           ? reconciled.error
           : `a ${event.type} cannot act on an intent that is '${intent.status}'`;
       await markProviderEventFailed(db, event.id, redactProviderMessage(message));
-      return { kind: "failed", error: message };
+      return { kind: 'failed', error: message };
     }
 
     if (target === intent.status) {
       await markProviderEventProcessed(db, event.id);
-      return { kind: "noop", intentId: intent.id };
+      return { kind: 'noop', intentId: intent.id };
     }
 
     const result = await transitionIntent(intent.id, {
       from: intent.status,
       status: target,
     });
-    if (result.kind !== "updated") {
+    if (result.kind !== 'updated') {
       // The row moved between the read and the update — which this comment has
       // always claimed and which only became true when `updateIntentState`
       // grew its compare-and-swap. Not marked processed: the next pass re-reads
       // and either applies the event or finds the intent already there.
       return {
-        kind: "failed",
+        kind: 'failed',
         error:
-          result.kind === "stale"
+          result.kind === 'stale'
             ? `the intent moved to '${result.current}' underneath the update`
-            : "the intent vanished underneath the update",
+            : 'the intent vanished underneath the update',
       };
     }
     const updated = result.row;
@@ -376,15 +386,15 @@ export async function processProviderEvent(
     // Outside the transition's transaction, and after it — a socket frame is
     // not durable and must never be sent for a change that did not commit.
     announceIntentChange(updated);
-    return { kind: "applied", intentId: updated.id, status: updated.status };
+    return { kind: 'applied', intentId: updated.id, status: updated.status };
   } catch (error) {
     // Redacted before it is stored: a provider's message quotes the input back,
     // and this column is operator-facing.
     const message = redactProviderMessage(
-      error instanceof Error ? error.message : "unknown processing error",
+      error instanceof Error ? error.message : 'unknown processing error',
     );
     await markProviderEventFailed(db, event.id, message).catch(() => undefined);
-    return { kind: "failed", error: message };
+    return { kind: 'failed', error: message };
   }
 }
 
@@ -404,7 +414,7 @@ async function handleAccountEvent(
   const providerAccountId = event.objectIds[ACCOUNT_OBJECT_KEY] ?? event.providerAccountId;
   if (!providerAccountId) {
     await markProviderEventFailed(db, event.id, `no ${ACCOUNT_OBJECT_KEY} id on a ${event.type}`);
-    return { kind: "failed", error: `no ${ACCOUNT_OBJECT_KEY} id on a ${event.type}` };
+    return { kind: 'failed', error: `no ${ACCOUNT_OBJECT_KEY} id on a ${event.type}` };
   }
 
   const account = await findAccountByProviderAccountId(
@@ -422,12 +432,12 @@ async function handleAccountEvent(
      * different platform integration on the same Stripe account — resolves the
      * same way from here: it stays, visibly, for an operator.
      */
-    return { kind: "unmatched" };
+    return { kind: 'unmatched' };
   }
 
   await refreshConnectedAccount(account);
   await markProviderEventProcessed(db, event.id);
-  return { kind: "applied", intentId: account.id, status: "account_refreshed" };
+  return { kind: 'applied', intentId: account.id, status: 'account_refreshed' };
 }
 
 /**
@@ -445,7 +455,7 @@ async function handleTransferEvent(
   const transferObjectId = event.objectIds[TRANSFER_OBJECT_KEY];
   if (!transferObjectId) {
     await markProviderEventFailed(db, event.id, `no ${TRANSFER_OBJECT_KEY} id on a ${event.type}`);
-    return { kind: "failed", error: `no ${TRANSFER_OBJECT_KEY} id on a ${event.type}` };
+    return { kind: 'failed', error: `no ${TRANSFER_OBJECT_KEY} id on a ${event.type}` };
   }
 
   const transfer = await findTransferByProviderObject(
@@ -453,7 +463,7 @@ async function handleTransferEvent(
     event.provider as ProviderId,
     transferObjectId,
   );
-  if (!transfer) return { kind: "unmatched" };
+  if (!transfer) return { kind: 'unmatched' };
 
   const total = readReversedTotal(event.payload);
   if (total === null) {
@@ -461,7 +471,7 @@ async function handleTransferEvent(
     // rather than skipped: it means the allow-list and this handler disagree,
     // which is a bug here and not at the provider.
     await markProviderEventFailed(db, event.id, `no usable amount_reversed on a ${event.type}`);
-    return { kind: "failed", error: `no usable amount_reversed on a ${event.type}` };
+    return { kind: 'failed', error: `no usable amount_reversed on a ${event.type}` };
   }
 
   const updated = await applyTransferReversal(db, transfer.id, total);
@@ -469,8 +479,8 @@ async function handleTransferEvent(
   // `null` means the stored total was already at least this one — an
   // out-of-order delivery, which is ordinary and not a failure.
   return updated
-    ? { kind: "applied", intentId: updated.id, status: updated.status }
-    : { kind: "noop", intentId: transfer.id };
+    ? { kind: 'applied', intentId: updated.id, status: updated.status }
+    : { kind: 'noop', intentId: transfer.id };
 }
 
 /**
@@ -483,11 +493,11 @@ async function handleTransferEvent(
  */
 function readReversedTotal(payload: Record<string, unknown>): string | null {
   const data = payload.data;
-  if (typeof data !== "object" || data === null) return null;
+  if (typeof data !== 'object' || data === null) return null;
   const object = (data as Record<string, unknown>).object;
-  if (typeof object !== "object" || object === null) return null;
+  if (typeof object !== 'object' || object === null) return null;
   const value = (object as Record<string, unknown>).amount_reversed;
-  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) return null;
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) return null;
   return String(value);
 }
 
@@ -526,14 +536,12 @@ async function handleRefundEvent(
     // the refund that produced this charge event arrives as its own
     // `refund.created`/`refund.updated`, and those are what import it.
     const chargeId = event.objectIds.charge;
-    const byCharge = chargeId
-      ? await findIntentByProviderCharge(db, provider, chargeId)
-      : null;
+    const byCharge = chargeId ? await findIntentByProviderCharge(db, provider, chargeId) : null;
     if (byCharge) await applyRefundToIntent(byCharge);
     await markProviderEventProcessed(db, event.id);
     return byCharge
-      ? { kind: "applied", intentId: byCharge.id, status: byCharge.status }
-      : { kind: "no_mapping" };
+      ? { kind: 'applied', intentId: byCharge.id, status: byCharge.status }
+      : { kind: 'no_mapping' };
   }
 
   const detail = readRefundDetail(event.payload);
@@ -541,16 +549,16 @@ async function handleRefundEvent(
 
   if (!refund) {
     const imported = await importRefundFromEvent(db, event, refundObjectId, detail);
-    if (!imported) return { kind: "unmatched" };
+    if (!imported) return { kind: 'unmatched' };
     const status = await applyRefundToIntent(imported.intent);
     await markProviderEventProcessed(db, event.id);
-    return { kind: "applied", intentId: imported.intent.id, status };
+    return { kind: 'applied', intentId: imported.intent.id, status };
   }
 
   const intent = await findIntentById(db, refund.paymentIntentId);
   if (!intent) {
-    await markProviderEventFailed(db, event.id, "the refund names an intent that cannot be read");
-    return { kind: "failed", error: "the refund names an intent that cannot be read" };
+    await markProviderEventFailed(db, event.id, 'the refund names an intent that cannot be read');
+    return { kind: 'failed', error: 'the refund names an intent that cannot be read' };
   }
 
   // The row FIRST, from the provider's own word, and the payment afterwards
@@ -563,7 +571,7 @@ async function handleRefundEvent(
 
   const status = await applyRefundToIntent(intent);
   await markProviderEventProcessed(db, event.id);
-  return { kind: "applied", intentId: intent.id, status };
+  return { kind: 'applied', intentId: intent.id, status };
 }
 
 /** What a refund payload says, narrowed to what a row needs. */
@@ -586,14 +594,14 @@ interface RefundDetail {
 function readRefundDetail(payload: Record<string, unknown>): RefundDetail {
   const empty: RefundDetail = { amount: null, status: null, failureCode: null };
   const data = payload.data;
-  if (typeof data !== "object" || data === null) return empty;
+  if (typeof data !== 'object' || data === null) return empty;
   const object = (data as Record<string, unknown>).object;
-  if (typeof object !== "object" || object === null) return empty;
+  if (typeof object !== 'object' || object === null) return empty;
   const fields = object as Record<string, unknown>;
 
   const rawAmount = fields.amount;
   const amount =
-    typeof rawAmount === "number" && Number.isSafeInteger(rawAmount) && rawAmount > 0
+    typeof rawAmount === 'number' && Number.isSafeInteger(rawAmount) && rawAmount > 0
       ? String(rawAmount)
       : null;
 
@@ -601,7 +609,7 @@ function readRefundDetail(payload: Record<string, unknown>): RefundDetail {
   return {
     amount,
     status: toRefundStatus(fields.status),
-    failureCode: typeof failure === "string" && failure.length > 0 ? failure : null,
+    failureCode: typeof failure === 'string' && failure.length > 0 ? failure : null,
   };
 }
 
@@ -632,7 +640,7 @@ async function importRefundFromEvent(
   if (!intent) return null;
 
   await importProviderRefund(db, {
-    publicId: newId("re"),
+    publicId: newId('re'),
     merchantId: intent.merchantId,
     paymentIntentId: intent.id,
     amount: detail.amount,
@@ -642,7 +650,7 @@ async function importRefundFromEvent(
     // Defaults to `pending` rather than `succeeded` when the payload says
     // nothing: claiming money came back is the answer that is expensive to be
     // wrong about, and the next `refund.updated` corrects it.
-    status: detail.status ?? "pending",
+    status: detail.status ?? 'pending',
   });
   return { intent };
 }
@@ -686,26 +694,26 @@ async function handleDisputeEvent(
   if (!disputeObjectId) {
     // Mapped as a dispute event and carrying no dispute id: the envelope and
     // the map disagree, which is a bug here rather than at the provider.
-    await markProviderEventFailed(db, event.id, "the dispute event names no dispute");
-    return { kind: "failed", error: "the dispute event names no dispute" };
+    await markProviderEventFailed(db, event.id, 'the dispute event names no dispute');
+    return { kind: 'failed', error: 'the dispute event names no dispute' };
   }
 
   const intentObjectId = event.objectIds[PAYMENT_OBJECT_KEY];
   if (!intentObjectId) {
-    await markProviderEventFailed(db, event.id, "the dispute event names no payment");
-    return { kind: "failed", error: "the dispute event names no payment" };
+    await markProviderEventFailed(db, event.id, 'the dispute event names no payment');
+    return { kind: 'failed', error: 'the dispute event names no payment' };
   }
 
   const provider = event.provider as ProviderId;
   const intent = await findIntentByProviderObject(db, provider, intentObjectId);
   // The ONE place refund semantics still apply: retryable, because a dispute
   // arriving inside the two-step create's window finds no intent yet.
-  if (!intent) return { kind: "unmatched" };
+  if (!intent) return { kind: 'unmatched' };
 
   const detail = readDisputeDetail(event.payload);
   if (!detail) {
-    await markProviderEventFailed(db, event.id, "the dispute event carries no amount");
-    return { kind: "failed", error: "the dispute event carries no amount" };
+    await markProviderEventFailed(db, event.id, 'the dispute event carries no amount');
+    return { kind: 'failed', error: 'the dispute event carries no amount' };
   }
 
   /**
@@ -718,22 +726,22 @@ async function handleDisputeEvent(
    * default: a merchant told they won does not reconcile, does not re-bill, and
    * finds out from their balance.
    */
-  const closing = event.type === "charge.dispute.closed";
-  const status = detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? "needs_response";
+  const closing = event.type === 'charge.dispute.closed';
+  const status = detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? 'needs_response';
 
-  if (closing && status !== "won" && status !== "lost") {
+  if (closing && status !== 'won' && status !== 'lost') {
     // A close with no readable outcome is recorded and left VISIBLE rather than
     // guessed. The drain retries it, and a redelivery carrying a readable
     // status resolves it; if none ever comes, an operator has a row naming the
     // dispute rather than a merchant with a wrong answer.
     const message = `a ${event.type} carried no recognisable outcome`;
     await markProviderEventFailed(db, event.id, message);
-    return { kind: "failed", error: message };
+    return { kind: 'failed', error: message };
   }
 
   // A closed dispute has no deadline left to meet, and the CHECK refuses the
   // combination — so the status decides the column rather than the payload.
-  const closed = status === "won" || status === "lost";
+  const closed = status === 'won' || status === 'lost';
 
   /**
    * The row and the merchant's notification commit TOGETHER (ADR 0001 D7).
@@ -768,14 +776,14 @@ async function handleDisputeEvent(
         tx,
         intent,
         toDisputeDTO(upserted.dispute, intent.publicId),
-        upserted.created ? "payment_intent.disputed" : "payment_intent.dispute_closed",
+        upserted.created ? 'payment_intent.disputed' : 'payment_intent.dispute_closed',
       );
     }
     return upserted;
   });
 
   await markProviderEventProcessed(db, event.id);
-  return { kind: "applied", intentId: intent.id, status: dispute.status };
+  return { kind: 'applied', intentId: intent.id, status: dispute.status };
 }
 
 /** What a dispute payload says, narrowed to what the row needs. */
@@ -808,24 +816,23 @@ interface DisputeDetail {
  */
 function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | null {
   const data = payload.data;
-  if (typeof data !== "object" || data === null) return null;
+  if (typeof data !== 'object' || data === null) return null;
   const object = (data as Record<string, unknown>).object;
-  if (typeof object !== "object" || object === null) return null;
+  if (typeof object !== 'object' || object === null) return null;
   const fields = object as Record<string, unknown>;
 
   const amount = fields.amount;
-  if (typeof amount !== "number" || !Number.isSafeInteger(amount) || amount <= 0) return null;
+  if (typeof amount !== 'number' || !Number.isSafeInteger(amount) || amount <= 0) return null;
 
-  const reason = typeof fields.reason === "string" && fields.reason.length > 0
-    ? fields.reason
-    : null;
+  const reason =
+    typeof fields.reason === 'string' && fields.reason.length > 0 ? fields.reason : null;
 
   // Seconds since the epoch, as every provider timestamp in this payload is.
   const due = fields.evidence_details;
   let evidenceDueAt: Date | null = null;
-  if (typeof due === "object" && due !== null) {
+  if (typeof due === 'object' && due !== null) {
     const by = (due as Record<string, unknown>).due_by;
-    if (typeof by === "number" && Number.isSafeInteger(by) && by > 0) {
+    if (typeof by === 'number' && Number.isSafeInteger(by) && by > 0) {
       evidenceDueAt = new Date(by * 1000);
     }
   }

@@ -8,25 +8,20 @@
  * setInterval owned by the parent screen.
  */
 
-import { useCallback, useMemo } from "react";
-import { View, Text, Pressable, ActivityIndicator } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import QRCode from "react-native-qrcode-svg";
-import * as Clipboard from "expo-clipboard";
-import { useTheme } from "@oxy.so/bloom/theme";
-import type {
-  BuyOrderStatus,
-  BuyQuoteResponse,
-  BuyStatusResponse,
-} from "../../api/buy";
-import { hapticImpact } from "../../utils/haptics";
-import { t } from "../../i18n";
+import { useCallback, useMemo } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import QRCode from 'react-native-qrcode-svg';
+import * as Clipboard from 'expo-clipboard';
+import { useTheme } from '@oxy.so/bloom/theme';
+import type { BuyOrderStatus, BuyQuoteResponse, BuyStatusResponse } from '../../api/buy';
+import { hapticImpact } from '../../utils/haptics';
+import { t } from '../../i18n';
 
 const QR_SIZE = 220;
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 interface PaymentInstructionsProps {
   quote: BuyQuoteResponse;
@@ -38,14 +33,14 @@ interface PaymentInstructionsProps {
 }
 
 function formatCountdown(seconds: number): string {
-  if (seconds <= 0) return "0:00";
+  if (seconds <= 0) return '0:00';
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, "0")}`;
+  return `${m}:${String(s).padStart(2, '0')}`;
 }
 
 interface StatusVisual {
-  icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+  icon: React.ComponentProps<typeof MaterialCommunityIcons>['name'];
   iconColor: string;
   title: string;
   subtitle: string;
@@ -63,82 +58,82 @@ function describeStatus(
 ): StatusVisual {
   switch (status) {
     case null:
-    case "AWAITING_PAYMENT":
+    case 'AWAITING_PAYMENT':
       return {
-        icon: "timer-sand",
+        icon: 'timer-sand',
         iconColor: warning,
-        title: t("buy.status.awaiting.title"),
-        subtitle: t("buy.status.awaiting.subtitle"),
+        title: t('buy.status.awaiting.title'),
+        subtitle: t('buy.status.awaiting.subtitle'),
         showSpinner: false,
         isTerminal: false,
         isError: false,
       };
-    case "PAYMENT_DETECTED":
+    case 'PAYMENT_DETECTED':
       return {
-        icon: "progress-clock",
+        icon: 'progress-clock',
         iconColor: primary,
-        title: t("buy.status.detected.title"),
-        subtitle: t("buy.status.detected.subtitle"),
+        title: t('buy.status.detected.title'),
+        subtitle: t('buy.status.detected.subtitle'),
         showSpinner: true,
         isTerminal: false,
         isError: false,
       };
-    case "SWAPPING":
+    case 'SWAPPING':
       return {
-        icon: "swap-horizontal-bold",
+        icon: 'swap-horizontal-bold',
         iconColor: primary,
-        title: t("buy.status.swapping.title"),
-        subtitle: t("buy.status.swapping.subtitle"),
+        title: t('buy.status.swapping.title'),
+        subtitle: t('buy.status.swapping.subtitle'),
         showSpinner: true,
         isTerminal: false,
         isError: false,
       };
-    case "BURNING":
+    case 'BURNING':
       return {
-        icon: "fire",
+        icon: 'fire',
         iconColor: primary,
-        title: t("buy.status.burning.title"),
-        subtitle: t("buy.status.burning.subtitle"),
+        title: t('buy.status.burning.title'),
+        subtitle: t('buy.status.burning.subtitle'),
         showSpinner: true,
         isTerminal: false,
         isError: false,
       };
-    case "DELIVERING":
+    case 'DELIVERING':
       return {
-        icon: "send-circle",
+        icon: 'send-circle',
         iconColor: primary,
-        title: t("buy.status.delivering.title"),
-        subtitle: t("buy.status.delivering.subtitle"),
+        title: t('buy.status.delivering.title'),
+        subtitle: t('buy.status.delivering.subtitle'),
         showSpinner: true,
         isTerminal: false,
         isError: false,
       };
-    case "DELIVERED":
+    case 'DELIVERED':
       return {
-        icon: "check-circle",
+        icon: 'check-circle',
         iconColor: primary,
-        title: t("buy.status.delivered.title"),
-        subtitle: t("buy.status.delivered.subtitle"),
+        title: t('buy.status.delivered.title'),
+        subtitle: t('buy.status.delivered.subtitle'),
         showSpinner: false,
         isTerminal: true,
         isError: false,
       };
-    case "EXPIRED":
+    case 'EXPIRED':
       return {
-        icon: "clock-alert",
+        icon: 'clock-alert',
         iconColor: warning,
-        title: t("buy.status.expired.title"),
-        subtitle: t("buy.status.expired.subtitle"),
+        title: t('buy.status.expired.title'),
+        subtitle: t('buy.status.expired.subtitle'),
         showSpinner: false,
         isTerminal: true,
         isError: false,
       };
-    case "FAILED":
+    case 'FAILED':
       return {
-        icon: "alert-circle",
+        icon: 'alert-circle',
         iconColor: destructive,
-        title: t("buy.status.failed.title"),
-        subtitle: errorMessage ?? t("buy.status.failed.subtitle"),
+        title: t('buy.status.failed.title'),
+        subtitle: errorMessage ?? t('buy.status.failed.subtitle'),
         showSpinner: false,
         isTerminal: true,
         isError: true,
@@ -167,7 +162,7 @@ export function PaymentInstructions({
     [status, theme],
   );
 
-  const qrPayload = quote.paymentAddress ?? "";
+  const qrPayload = quote.paymentAddress ?? '';
   const showQr = qrPayload.length > 0 && !visual.isTerminal;
 
   const copyAddress = useCallback(async () => {
@@ -208,31 +203,23 @@ export function PaymentInstructions({
       {quote.paymentAddress ? (
         <View>
           <Text className={SECTION_LABEL}>
-            {t("buy.instructions.sendTo", {
+            {t('buy.instructions.sendTo', {
               network: quote.paymentNetworkLabel,
               symbol: quote.paymentSymbol,
             })}
           </Text>
           <View className="bg-surface rounded-2xl px-4 py-3.5 mt-2 flex-row items-center">
             <Pressable onPress={copyAddress} className="flex-1 active:opacity-70">
-              <Text
-                className="text-foreground text-sm font-mono"
-                selectable
-                numberOfLines={2}
-              >
+              <Text className="text-foreground text-sm font-mono" selectable numberOfLines={2}>
                 {quote.paymentAddress}
               </Text>
             </Pressable>
             <Pressable
               onPress={copyAddress}
               className="ml-3 w-9 h-9 rounded-full bg-primary/10 items-center justify-center active:opacity-70"
-              accessibilityLabel={t("common.copy")}
+              accessibilityLabel={t('common.copy')}
             >
-              <MaterialCommunityIcons
-                name="content-copy"
-                size={16}
-                color={theme.colors.primary}
-              />
+              <MaterialCommunityIcons name="content-copy" size={16} color={theme.colors.primary} />
             </Pressable>
           </View>
         </View>
@@ -240,29 +227,19 @@ export function PaymentInstructions({
 
       {/* Amount — card-less: section label above a filled surface field */}
       <View>
-        <Text className={SECTION_LABEL}>
-          {t("buy.instructions.exactAmount")}
-        </Text>
+        <Text className={SECTION_LABEL}>{t('buy.instructions.exactAmount')}</Text>
         <View className="bg-surface rounded-2xl px-4 py-3.5 mt-2 flex-row items-center">
           <Pressable onPress={copyAmount} className="flex-1 active:opacity-70">
-            <Text
-              className="text-foreground text-xl font-semibold"
-              selectable
-              numberOfLines={1}
-            >
+            <Text className="text-foreground text-xl font-semibold" selectable numberOfLines={1}>
               {quote.paymentAmountFormatted} {quote.paymentSymbol}
             </Text>
           </Pressable>
           <Pressable
             onPress={copyAmount}
             className="ml-3 w-9 h-9 rounded-full bg-primary/10 items-center justify-center active:opacity-70"
-            accessibilityLabel={t("common.copy")}
+            accessibilityLabel={t('common.copy')}
           >
-            <MaterialCommunityIcons
-              name="content-copy"
-              size={16}
-              color={theme.colors.primary}
-            />
+            <MaterialCommunityIcons name="content-copy" size={16} color={theme.colors.primary} />
           </Pressable>
         </View>
       </View>
@@ -277,7 +254,7 @@ export function PaymentInstructions({
             style={{ marginTop: 2 }}
           />
           <Text className="text-xs text-muted-foreground flex-1">
-            {t("buy.instructions.networkWarning", {
+            {t('buy.instructions.networkWarning', {
               network: quote.paymentNetworkLabel,
               symbol: quote.paymentSymbol,
             })}
@@ -294,32 +271,24 @@ export function PaymentInstructions({
           {visual.showSpinner ? (
             <ActivityIndicator color={visual.iconColor} />
           ) : (
-            <MaterialCommunityIcons
-              name={visual.icon}
-              size={22}
-              color={visual.iconColor}
-            />
+            <MaterialCommunityIcons name={visual.icon} size={22} color={visual.iconColor} />
           )}
         </View>
         <View className="flex-1">
-          <Text className="text-foreground text-sm font-semibold">
-            {visual.title}
-          </Text>
-          <Text className="text-muted-foreground text-xs mt-0.5">
-            {visual.subtitle}
-          </Text>
+          <Text className="text-foreground text-sm font-semibold">{visual.title}</Text>
+          <Text className="text-muted-foreground text-xs mt-0.5">{visual.subtitle}</Text>
         </View>
         {!visual.isTerminal ? (
           <View className="items-end">
             <Text className="text-muted-foreground text-[10px] uppercase tracking-wider font-semibold">
-              {t("buy.instructions.expiresIn")}
+              {t('buy.instructions.expiresIn')}
             </Text>
             <Text
               className="text-sm font-semibold"
               style={{
                 color:
                   secondsRemaining < 60
-                    ? theme.colors.warning ?? theme.colors.textSecondary
+                    ? (theme.colors.warning ?? theme.colors.textSecondary)
                     : theme.colors.text,
               }}
             >

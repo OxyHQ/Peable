@@ -30,10 +30,7 @@ import {
   findDeliveryForMerchant,
   type WebhookDeliveryRow,
 } from '../../db/webhooks/webhookDeliveryRepository';
-import {
-  enqueueWebhook,
-  recordDeliveryAttempt,
-} from '../../db/webhooks/webhookOutboxRepository';
+import { enqueueWebhook, recordDeliveryAttempt } from '../../db/webhooks/webhookOutboxRepository';
 import { toPaymentIntentDTO } from '../../lib/serialize';
 import * as schema from '../../db/schema';
 import type { Database } from '../../db/postgres';
@@ -117,7 +114,7 @@ let suite: SuiteDatabase | undefined;
 export function gatewayDb(): Database {
   if (!suite) {
     throw new Error(
-      'gatewayDb() called before the database was created — did the suite call useGatewayDatabase() at top level?'
+      'gatewayDb() called before the database was created — did the suite call useGatewayDatabase() at top level?',
     );
   }
   return suite.db;
@@ -173,14 +170,14 @@ const OWNED_TABLES: readonly string[] = (Object.values(schema) as unknown[])
 export async function resetGatewayTables(): Promise<void> {
   if (OWNED_TABLES.length === 0) {
     throw new Error(
-      'resetGatewayTables: the schema barrel exported no tables, so a reset would silently empty nothing'
+      'resetGatewayTables: the schema barrel exported no tables, so a reset would silently empty nothing',
     );
   }
   await gatewayDb().execute(
     sql`truncate ${sql.join(
       OWNED_TABLES.map((name) => sql.identifier(name)),
-      sql`, `
-    )} restart identity`
+      sql`, `,
+    )} restart identity`,
   );
 }
 
@@ -220,7 +217,7 @@ export async function seedMerchant(values: SeedMerchantValues = {}): Promise<Mer
   });
   if (!row) {
     throw new Error(
-      `seedMerchant: a merchant already exists for (${values.oxyAppId ?? '<generated>'}, ${values.environment ?? 'development'})`
+      `seedMerchant: a merchant already exists for (${values.oxyAppId ?? '<generated>'}, ${values.environment ?? 'development'})`,
     );
   }
   return row;
@@ -245,7 +242,7 @@ const DEFAULT_EXPIRY_MS = 15 * 60 * 1000;
 
 export async function seedIntent(
   merchant: MerchantRow,
-  values: SeedIntentValues = {}
+  values: SeedIntentValues = {},
 ): Promise<PaymentIntentRow> {
   const unique = uuidv7();
   // The rail decides whether the chain fields mean anything, so it is resolved
@@ -263,8 +260,10 @@ export async function seedIntent(
     // Defaults to the MERCHANT's network, never a literal: the composite
     // reference refuses a mismatch, so a hard-coded default here would make
     // every mainnet-merchant suite fail on a foreign key instead of its subject.
-    network: values.network !== undefined ? values.network : rail === 'faircoin' ? merchant.network : null,
-    address: values.address !== undefined ? values.address : rail === 'faircoin' ? `T${unique}` : null,
+    network:
+      values.network !== undefined ? values.network : rail === 'faircoin' ? merchant.network : null,
+    address:
+      values.address !== undefined ? values.address : rail === 'faircoin' ? `T${unique}` : null,
     // Follows the rail for the same reason the chain fields do:
     // `payment_intents_card_requires_provider_check` refuses a card intent with
     // no provider, and `..._faircoin_has_no_provider_check` refuses a chain one
@@ -293,7 +292,7 @@ export interface SeedLinkValues {
 
 export async function seedLink(
   merchant: MerchantRow,
-  values: SeedLinkValues = {}
+  values: SeedLinkValues = {},
 ): Promise<PaymentLinkRow> {
   const unique = uuidv7();
   const rail = values.rail ?? 'faircoin';
@@ -325,7 +324,7 @@ export interface SeedSessionValues {
 export async function seedSession(
   merchant: MerchantRow,
   intent: PaymentIntentRow,
-  values: SeedSessionValues = {}
+  values: SeedSessionValues = {},
 ): Promise<CheckoutSessionRow> {
   const unique = uuidv7();
   const row = await insertCheckoutSession(gatewayDb(), {
@@ -392,7 +391,7 @@ export interface SeedDeliveryValues {
 export async function seedDelivery(
   merchant: MerchantRow,
   intent: PaymentIntentRow,
-  values: SeedDeliveryValues = {}
+  values: SeedDeliveryValues = {},
 ): Promise<WebhookDeliveryRow> {
   const url = values.url ?? merchant.webhookUrl ?? 'https://merchant.example/hook';
   const eventType = values.eventType ?? 'payment_intent.settled';
@@ -440,7 +439,7 @@ export interface SeedAttributionValues {
 }
 
 export async function seedAttribution(
-  values: SeedAttributionValues = {}
+  values: SeedAttributionValues = {},
 ): Promise<SocialSendAttributionRow> {
   const unique = uuidv7();
   const row = await insertSendAttribution(gatewayDb(), {

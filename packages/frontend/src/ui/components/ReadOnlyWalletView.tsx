@@ -25,27 +25,27 @@
  * amounts still sitting unswept, and says whose number it is.
  */
 
-import { View, Text, ScrollView, ActivityIndicator } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useQuery } from "@tanstack/react-query";
-import { useAuth } from "@oxy.so/services";
-import { useTheme } from "@oxy.so/bloom/theme";
-import type { SocialPayment } from "@peable.to/shared-types";
-import { SOCIAL_PAY_NETWORK } from "../../pay/social-network";
-import { getMyPayments } from "../../services/gateway-client";
-import { fetchBalancesSat } from "../../services/explorer-address";
-import { SafeAreaView } from "../safe-area-view";
-import { useTabScreenBottomInset } from "../navigation/tabs";
-import { Badge } from "./Badge";
-import { ProfileQRCard } from "./ProfileQRCard";
-import { UserAvatar } from "./UserAvatar";
-import { t, formatFairAmount } from "../../i18n";
+import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '@oxy.so/services';
+import { useTheme } from '@oxy.so/bloom/theme';
+import type { SocialPayment } from '@peable.to/shared-types';
+import { SOCIAL_PAY_NETWORK } from '../../pay/social-network';
+import { getMyPayments } from '../../services/gateway-client';
+import { fetchBalancesSat } from '../../services/explorer-address';
+import { SafeAreaView } from '../safe-area-view';
+import { useTabScreenBottomInset } from '../navigation/tabs';
+import { Badge } from './Badge';
+import { ProfileQRCard } from './ProfileQRCard';
+import { UserAvatar } from './UserAvatar';
+import { t, formatFairAmount } from '../../i18n';
 
 const HEADER_AVATAR_SIZE = 32;
 
 function counterpartyName(payment: SocialPayment): string {
   const { displayName, username } = payment.counterparty;
-  return displayName ?? (username ? `@${username}` : t("readOnly.history.unknownParty"));
+  return displayName ?? (username ? `@${username}` : t('readOnly.history.unknownParty'));
 }
 
 function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSat?: bigint }) {
@@ -53,9 +53,9 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
   return (
     <View className="px-4 py-3 border-b border-border">
       <Text className="text-foreground text-base">
-        {payment.direction === "sent"
-          ? t("readOnly.history.sent", { name })
-          : t("readOnly.history.received", { name })}
+        {payment.direction === 'sent'
+          ? t('readOnly.history.sent', { name })
+          : t('readOnly.history.received', { name })}
       </Text>
       <Text className="text-muted-foreground text-xs mt-1">
         {new Date(payment.createdAt).toLocaleDateString()}
@@ -65,7 +65,7 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
           the payment never happened. */}
       {unspentSat !== undefined && unspentSat > 0n ? (
         <Text className="text-muted-foreground text-xs mt-1">
-          {t("readOnly.history.unclaimed", { amount: formatFairAmount(unspentSat) })}
+          {t('readOnly.history.unclaimed', { amount: formatFairAmount(unspentSat) })}
         </Text>
       ) : null}
     </View>
@@ -80,8 +80,12 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
 function MissingHandle() {
   return (
     <View className="flex-1 bg-background items-center justify-center px-8">
-      <Text className="text-foreground text-2xl text-center mb-3">{t("onboarding.webFallbackTitle")}</Text>
-      <Text className="text-muted-foreground text-base text-center">{t("onboarding.webFallbackSubtitle")}</Text>
+      <Text className="text-foreground text-2xl text-center mb-3">
+        {t('onboarding.webFallbackTitle')}
+      </Text>
+      <Text className="text-muted-foreground text-base text-center">
+        {t('onboarding.webFallbackSubtitle')}
+      </Text>
     </View>
   );
 }
@@ -92,9 +96,11 @@ export function ReadOnlyReceiveView() {
   if (!user?.username) return <MissingHandle />;
   return (
     <View className="items-center py-4">
-      <Text className="text-foreground text-2xl font-semibold text-center">{t("receive.title")}</Text>
+      <Text className="text-foreground text-2xl font-semibold text-center">
+        {t('receive.title')}
+      </Text>
       <Text className="text-muted-foreground text-sm text-center mt-2 mb-8 leading-5 max-w-sm">
-        {t("profile.self")}
+        {t('profile.self')}
       </Text>
       <ProfileQRCard username={user.username} />
     </View>
@@ -116,7 +122,7 @@ export function ReadOnlyWalletView() {
   const network = SOCIAL_PAY_NETWORK;
 
   const payments = useQuery({
-    queryKey: ["read-only-payments", network],
+    queryKey: ['read-only-payments', network],
     queryFn: () => getMyPayments(network),
   });
 
@@ -126,7 +132,7 @@ export function ReadOnlyWalletView() {
   // party, and a history that already loaded must not disappear because the
   // chain read failed. This one is allowed to be absent.
   const balances = useQuery({
-    queryKey: ["read-only-balances", network, addresses],
+    queryKey: ['read-only-balances', network, addresses],
     queryFn: () => fetchBalancesSat(addresses, network),
     enabled: addresses.length > 0,
   });
@@ -136,16 +142,16 @@ export function ReadOnlyWalletView() {
   return (
     <View className="flex-1 bg-background">
       {/* ---- Header: same shape as the wallet home, with the capability named ---- */}
-      <SafeAreaView edges={["top"]}>
+      <SafeAreaView edges={['top']}>
         <View className="px-4 pt-3 pb-2 flex-row items-center justify-between">
           <View className="flex-row items-center">
             <View className="w-9 h-9 rounded-xl bg-primary items-center justify-center mr-2.5">
               <MaterialCommunityIcons name="wallet" size={18} color={theme.colors.background} />
             </View>
-            <Text className="text-foreground text-xl font-semibold">{t("wallet.defaultName")}</Text>
+            <Text className="text-foreground text-xl font-semibold">{t('wallet.defaultName')}</Text>
           </View>
           <View className="flex-row items-center gap-3">
-            <Badge text={t("readOnly.badge")} variant="neutral" size="sm" />
+            <Badge text={t('readOnly.badge')} variant="neutral" size="sm" />
             <UserAvatar
               avatarFileId={user.avatar ?? undefined}
               displayName={user.name?.displayName ?? undefined}
@@ -170,27 +176,27 @@ export function ReadOnlyWalletView() {
               color={theme.colors.textSecondary}
             />
             <Text className="text-muted-foreground text-sm leading-5 ml-3 flex-1">
-              {t("readOnly.notice")}
+              {t('readOnly.notice')}
             </Text>
           </View>
         </View>
 
         {/* ---- Activity ---- */}
         <Text className="text-muted-foreground text-xs font-semibold uppercase px-4 mb-1">
-          {t("wallet.activity")}
+          {t('wallet.activity')}
         </Text>
         <Text className="text-muted-foreground text-xs leading-4 px-4 mb-2">
-          {t("readOnly.balanceNote")}
+          {t('readOnly.balanceNote')}
         </Text>
 
         {payments.isPending ? <ActivityIndicator className="mt-4" /> : null}
 
         {payments.isError ? (
-          <Text className="text-destructive text-sm px-4">{t("readOnly.history.error")}</Text>
+          <Text className="text-destructive text-sm px-4">{t('readOnly.history.error')}</Text>
         ) : null}
 
         {payments.data && payments.data.payments.length === 0 ? (
-          <Text className="text-muted-foreground text-sm px-4">{t("readOnly.history.empty")}</Text>
+          <Text className="text-muted-foreground text-sm px-4">{t('readOnly.history.empty')}</Text>
         ) : null}
 
         {payments.data?.payments.map((payment) => (

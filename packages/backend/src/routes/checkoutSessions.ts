@@ -1,32 +1,32 @@
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import { verifySecret } from "@oxy.so/core/server";
-import type { CreateCheckoutSessionParams } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import { findMerchantById } from "../db/merchants/merchantRepository";
-import { findIntentById } from "../db/payments/paymentIntentRepository";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import { verifySecret } from '@oxy.so/core/server';
+import type { CreateCheckoutSessionParams } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import { findMerchantById } from '../db/merchants/merchantRepository';
+import { findIntentById } from '../db/payments/paymentIntentRepository';
 import {
   findSessionByIntentId,
   findSessionByPublicId,
   findSessionForMerchant,
   insertCheckoutSession,
-} from "../db/payments/checkoutSessionRepository";
+} from '../db/payments/checkoutSessionRepository';
 import {
   createIntent,
   IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
-} from "../services/createIntent";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import { resolveMerchantDisplay } from "../services/merchantDisplay";
-import { newId } from "../lib/ids";
-import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from "../lib/serialize";
-import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
-import { railBodyFields } from "../lib/railSchema";
+} from '../services/createIntent';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import { resolveMerchantDisplay } from '../services/merchantDisplay';
+import { newId } from '../lib/ids';
+import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from '../lib/serialize';
+import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
+import { railBodyFields } from '../lib/railSchema';
 
 const createBodySchema = z.object({
   ...railBodyFields,
@@ -50,10 +50,10 @@ export function createCheckoutSessionsRouter(deps: {
   const router = Router();
 
   router.post(
-    "/v1/checkout_sessions",
+    '/v1/checkout_sessions',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -63,8 +63,8 @@ export function createCheckoutSessionsRouter(deps: {
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -89,7 +89,7 @@ export function createCheckoutSessionsRouter(deps: {
        * has never been required here and making it so would break every
        * integration that has not sent one.
        */
-      const idempotencyKey = req.header("Idempotency-Key")?.trim();
+      const idempotencyKey = req.header('Idempotency-Key')?.trim();
 
       try {
         const { intent, reused } = await createIntent({
@@ -126,7 +126,7 @@ export function createCheckoutSessionsRouter(deps: {
         // its meaning is not. The public id still reaches the wire, from
         // `toCheckoutSessionDTO`, which reads it off the intent.
         const session = await insertCheckoutSession(getDb(), {
-          publicId: newId("cs"),
+          publicId: newId('cs'),
           merchantId: merchant.id,
           oxyAppId: merchant.oxyAppId,
           environment: merchant.environment,
@@ -166,7 +166,7 @@ export function createCheckoutSessionsRouter(deps: {
         res.status(201).json(toCheckoutSessionDTO(session, intent));
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, "invalid_request_error", err.message);
+          sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
         if (err instanceof EnvironmentModeMismatchError) {
@@ -174,13 +174,13 @@ export function createCheckoutSessionsRouter(deps: {
           return;
         }
         if (err instanceof IdempotencyConflictError) {
-          sendError(res, 409, "invalid_request_error", err.message);
+          sendError(res, 409, 'invalid_request_error', err.message);
           return;
         }
         // 503, not 422: the rail is not configured on this deployment, which is
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
-          sendError(res, 503, "api_error", err.message);
+          sendError(res, 503, 'api_error', err.message);
           return;
         }
         throw err;
@@ -189,10 +189,10 @@ export function createCheckoutSessionsRouter(deps: {
   );
 
   router.get(
-    "/v1/checkout_sessions/:id",
+    '/v1/checkout_sessions/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -203,14 +203,14 @@ export function createCheckoutSessionsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const db = getDb();
       const session = await findSessionForMerchant(db, id, merchant.id);
       if (!session) {
-        sendError(res, 404, "invalid_request_error", "checkout session not found");
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
       // By PRIMARY KEY, and deliberately unscoped: the session that names it
@@ -218,7 +218,7 @@ export function createCheckoutSessionsRouter(deps: {
       // would be a second authority for a decision already made.
       const intent = await findIntentById(db, session.paymentIntentId);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "checkout session not found");
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
       res.status(200).json(toCheckoutSessionDTO(session, intent));
@@ -230,7 +230,7 @@ export function createCheckoutSessionsRouter(deps: {
   // `X-Peable-Client-Secret` header — mirrors `GET /v1/payment_intents/:id`).
   // Never leaks `merchant`/`paymentIntent` without a proven secret.
   router.get(
-    "/v1/checkout_sessions/:id/public",
+    '/v1/checkout_sessions/:id/public',
     publicRateLimit,
     wrap(async (req, res) => {
       // `noUncheckedIndexedAccess` types `req.params.id` as possibly
@@ -239,41 +239,41 @@ export function createCheckoutSessionsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, "invalid_request_error", "id is required");
+        sendError(res, 422, 'invalid_request_error', 'id is required');
         return;
       }
 
       const db = getDb();
       const session = await findSessionByPublicId(db, id);
       if (!session) {
-        sendError(res, 404, "invalid_request_error", "checkout session not found");
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
       // Unscoped by primary key: this path proves its right to the row by
       // presenting the wrapped intent's `client_secret`, verified below.
       const intent = await findIntentById(db, session.paymentIntentId);
       if (!intent) {
-        sendError(res, 404, "invalid_request_error", "checkout session not found");
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
 
       const clientSecretParam = req.query.client_secret;
       const clientSecret =
-        typeof clientSecretParam === "string"
+        typeof clientSecretParam === 'string'
           ? clientSecretParam
-          : req.header("X-Peable-Client-Secret");
+          : req.header('X-Peable-Client-Secret');
       if (!clientSecret) {
-        sendError(res, 401, "authentication_error", "missing client_secret");
+        sendError(res, 401, 'authentication_error', 'missing client_secret');
         return;
       }
       if (!verifySecret(clientSecret, intent.clientSecret)) {
-        sendError(res, 403, "permission_error", "invalid client_secret");
+        sendError(res, 403, 'permission_error', 'invalid client_secret');
         return;
       }
 
       const merchant = await findMerchantById(db, session.merchantId);
       if (!merchant) {
-        sendError(res, 404, "invalid_request_error", "checkout session not found");
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
       const merchantDisplay = await resolveMerchantDisplay(merchant);

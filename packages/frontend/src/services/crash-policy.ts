@@ -32,7 +32,7 @@ export interface CrashEntry {
 // Redaction
 // ---------------------------------------------------------------------------
 
-const REDACTED = "[redacted]";
+const REDACTED = '[redacted]';
 
 // 12–24 space-separated lowercase words: a BIP39 mnemonic. Requires 11+ words
 // so ordinary English prose in an error message survives intact.
@@ -63,17 +63,13 @@ export function redactSecrets(text: string): string {
 // ---------------------------------------------------------------------------
 
 /** Build a redacted, storable entry from an arbitrary thrown value. */
-export function toCrashEntry(
-  error: unknown,
-  fatal: boolean,
-  at: number,
-): CrashEntry {
+export function toCrashEntry(error: unknown, fatal: boolean, at: number): CrashEntry {
   const isError = error instanceof Error;
   return {
     at,
     name: isError ? error.name : typeof error,
     message: redactSecrets(isError ? error.message : String(error)),
-    stack: redactSecrets(isError ? (error.stack ?? "") : ""),
+    stack: redactSecrets(isError ? (error.stack ?? '') : ''),
     fatal,
   };
 }

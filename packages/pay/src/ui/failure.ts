@@ -88,7 +88,8 @@ const LOCAL_SEND_GUARDS = [
 
 const INSUFFICIENT_FUNDS = /insufficient funds/i;
 const NO_FEE_RATE = /fee estimate|feeperbyte must be/i;
-const UNAVAILABLE = /network request failed|fetch failed|failed to fetch|timeout|econnrefused|HTTP 5\d\d/i;
+const UNAVAILABLE =
+  /network request failed|fetch failed|failed to fetch|timeout|econnrefused|HTTP 5\d\d/i;
 
 /**
  * The one entry point. `stage` is not optional because the same message means

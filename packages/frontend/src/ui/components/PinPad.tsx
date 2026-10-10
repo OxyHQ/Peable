@@ -7,11 +7,11 @@
  *   - Backspace/Delete → onBackspace
  */
 
-import { useCallback, useEffect } from "react";
-import { View, Text, Pressable, Platform } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { hapticSelection, hapticImpact } from "../../utils/haptics";
+import { useCallback, useEffect } from 'react';
+import { View, Text, Pressable, Platform } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { hapticSelection, hapticImpact } from '../../utils/haptics';
 
 interface PinPadProps {
   onDigit: (digit: string) => void;
@@ -23,10 +23,10 @@ interface PinPadProps {
 }
 
 const ROWS: readonly (readonly string[])[] = [
-  ["1", "2", "3"],
-  ["4", "5", "6"],
-  ["7", "8", "9"],
-  ["bio", "0", "back"],
+  ['1', '2', '3'],
+  ['4', '5', '6'],
+  ['7', '8', '9'],
+  ['bio', '0', 'back'],
 ];
 
 export function PinPad({
@@ -61,23 +61,23 @@ export function PinPad({
   // Keyboard support (web/electron only). RN native doesn't expose global
   // keyboard events; native screens already use on-screen PinPad touches.
   useEffect(() => {
-    if (Platform.OS !== "web") return;
+    if (Platform.OS !== 'web') return;
     if (disabled) return;
 
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
 
-      if (event.key >= "0" && event.key <= "9") {
+      if (event.key >= '0' && event.key <= '9') {
         event.preventDefault();
         handleDigit(event.key);
-      } else if (event.key === "Backspace" || event.key === "Delete") {
+      } else if (event.key === 'Backspace' || event.key === 'Delete') {
         event.preventDefault();
         handleBack();
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [disabled, handleDigit, handleBack]);
 
   return (
@@ -85,7 +85,7 @@ export function PinPad({
       {ROWS.map((row, rowIdx) => (
         <View key={`pad-row-${rowIdx}`} className="flex-row justify-center gap-6 mb-4">
           {row.map((key) => {
-            if (key === "bio") {
+            if (key === 'bio') {
               if (biometricButton) {
                 return (
                   <View key="biometric" className="w-18 h-18 items-center justify-center">
@@ -96,7 +96,7 @@ export function PinPad({
               return <View key="empty" className="w-18 h-18" />;
             }
 
-            if (key === "back") {
+            if (key === 'back') {
               return (
                 <Pressable
                   key="backspace"
@@ -117,7 +117,7 @@ export function PinPad({
               <Pressable
                 key={`key-${key}`}
                 className={`w-18 h-18 rounded-full items-center justify-center ${
-                  disabled ? "opacity-30" : "active:bg-primary/10"
+                  disabled ? 'opacity-30' : 'active:bg-primary/10'
                 }`}
                 onPress={() => handleDigit(key)}
                 disabled={disabled}

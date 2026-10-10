@@ -12,24 +12,20 @@
  * the full `app/pockets.tsx` management screen.
  */
 
-import type React from "react";
-import { useCallback, useState } from "react";
-import { View, Text, Pressable, ActivityIndicator, StyleSheet } from "react-native";
-import { useRouter } from "expo-router";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { useWalletStore } from "../../wallet/wallet-store";
-import { MAIN_POCKET_ACCOUNT } from "../../wallet/pockets";
-import { ListItem, AmountText, PocketAvatar } from "../components";
-import { t } from "../../i18n";
+import type React from 'react';
+import { useCallback, useState } from 'react';
+import { View, Text, Pressable, ActivityIndicator, StyleSheet } from 'react-native';
+import { useRouter } from 'expo-router';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { useWalletStore } from '../../wallet/wallet-store';
+import { MAIN_POCKET_ACCOUNT } from '../../wallet/pockets';
+import { ListItem, AmountText, PocketAvatar } from '../components';
+import { t } from '../../i18n';
 
 const CONTENT_MAX_WIDTH = 500;
 
-export function PocketSwitcherSheet({
-  onDone,
-}: {
-  onDone: () => void;
-}): React.JSX.Element {
+export function PocketSwitcherSheet({ onDone }: { onDone: () => void }): React.JSX.Element {
   const pockets = useWalletStore((s) => s.pockets);
   const activeAccount = useWalletStore((s) => s.activeAccount);
   const pocketBalances = useWalletStore((s) => s.pocketBalances);
@@ -42,9 +38,7 @@ export function PocketSwitcherSheet({
   // spinner and gates concurrent taps so a double-press can't kick off two
   // switches (the store serialises internally, but blocking here keeps the
   // UI honest).
-  const [switchingAccount, setSwitchingAccount] = useState<number | null>(
-    null,
-  );
+  const [switchingAccount, setSwitchingAccount] = useState<number | null>(null);
 
   const handleSelect = useCallback(
     async (account: number) => {
@@ -62,7 +56,7 @@ export function PocketSwitcherSheet({
 
   const handleManage = useCallback(() => {
     onDone();
-    router.push("/pockets");
+    router.push('/pockets');
   }, [onDone, router]);
 
   return (
@@ -82,9 +76,7 @@ export function PocketSwitcherSheet({
           const isActive = pocket.account === activeAccount;
           const isSwitching = pocket.account === switchingAccount;
           const label =
-            pocket.account === MAIN_POCKET_ACCOUNT
-              ? t("pockets.mainName")
-              : pocket.name;
+            pocket.account === MAIN_POCKET_ACCOUNT ? t('pockets.mainName') : pocket.name;
           return (
             <Pressable
               key={pocket.account}
@@ -93,7 +85,10 @@ export function PocketSwitcherSheet({
               style={
                 idx === pockets.length - 1
                   ? undefined
-                  : { borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: theme.colors.border }
+                  : {
+                      borderBottomWidth: StyleSheet.hairlineWidth,
+                      borderBottomColor: theme.colors.border,
+                    }
               }
             >
               <View className="mr-3">
@@ -126,12 +121,7 @@ export function PocketSwitcherSheet({
 
       {/* Manage pockets — jumps to the full management screen */}
       <View className="bg-surface rounded-2xl overflow-hidden">
-        <ListItem
-          icon="cog-outline"
-          title={t("pockets.manage")}
-          onPress={handleManage}
-          isLast
-        />
+        <ListItem icon="cog-outline" title={t('pockets.manage')} onPress={handleManage} isLast />
       </View>
     </View>
   );

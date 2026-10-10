@@ -1,10 +1,10 @@
-import { getNormalizedUserHandle } from "@oxy.so/core";
-import { oxy } from "../oxy";
-import type { EnrichmentResult } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import { findIntentsByAddresses } from "../db/payments/paymentIntentRepository";
-import { findMerchantsByIds } from "../db/merchants/merchantRepository";
-import { findAttributionsForViewer } from "../db/social/sendAttribution";
+import { getNormalizedUserHandle } from '@oxy.so/core';
+import { oxy } from '../oxy';
+import type { EnrichmentResult } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import { findIntentsByAddresses } from '../db/payments/paymentIntentRepository';
+import { findMerchantsByIds } from '../db/merchants/merchantRepository';
+import { findAttributionsForViewer } from '../db/social/sendAttribution';
 
 /** Hard cap on a single enrichment batch — enforced by the `POST /v1/enrich` route (Task 9). */
 export const ENRICH_MAX_ADDRESSES = 50;
@@ -27,7 +27,7 @@ export async function enrichAddresses(
 ): Promise<Record<string, EnrichmentResult>> {
   const result: Record<string, EnrichmentResult> = {};
   for (const address of addresses) {
-    result[address] = { kind: "unknown" };
+    result[address] = { kind: 'unknown' };
   }
   if (addresses.length === 0) {
     return result;
@@ -58,7 +58,7 @@ export async function enrichAddresses(
     const merchant = merchantById.get(merchantId);
     if (!merchant) continue;
     result[address] = {
-      kind: "merchant",
+      kind: 'merchant',
       displayName: merchant.displayName ?? undefined,
       avatarFileId: merchant.avatarFileId ?? undefined,
       description: merchant.description ?? undefined,
@@ -92,7 +92,7 @@ export async function enrichAddresses(
         if (!profile) continue;
         const handle = getNormalizedUserHandle(profile) ?? profile.username;
         result[address] = {
-          kind: "user",
+          kind: 'user',
           displayName: profile.name.displayName ?? handle,
           avatarFileId: profile.avatar ?? undefined,
           username: profile.username,

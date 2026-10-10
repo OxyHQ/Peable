@@ -16,18 +16,18 @@
  * runs until `start()` is called, so importing this module has no side effects.
  */
 
-import { EXPLORER_BASE_URL, type NetworkType } from "@fairco.in/core";
-import { queryClient } from "./query-client";
-import { type NetworkStats } from "./market";
+import { EXPLORER_BASE_URL, type NetworkType } from '@fairco.in/core';
+import { queryClient } from './query-client';
+import { type NetworkStats } from './market';
 import {
   SUBSCRIBED_EVENTS,
   parseTipUpdate,
   parseServerError,
   type TipUpdate,
-} from "./explorer-events";
+} from './explorer-events';
 
 /** Explorer WS endpoint, derived from the HTTP base (http→ws, https→wss). */
-const WS_URL = `${EXPLORER_BASE_URL.replace(/^http/, "ws")}/api/ws`;
+const WS_URL = `${EXPLORER_BASE_URL.replace(/^http/, 'ws')}/api/ws`;
 
 /** How often to send an application ping while connected. */
 const HEARTBEAT_MS = 25_000;
@@ -37,13 +37,13 @@ const INITIAL_RECONNECT_MS = 1_000;
 const MAX_RECONNECT_MS = 30_000;
 
 type OutgoingMessage =
-  | { type: "subscribe"; network: NetworkType; events: readonly string[] }
-  | { type: "change-network"; network: NetworkType }
-  | { type: "ping"; network: NetworkType };
+  | { type: 'subscribe'; network: NetworkType; events: readonly string[] }
+  | { type: 'change-network'; network: NetworkType }
+  | { type: 'ping'; network: NetworkType };
 
 class ExplorerSocketController {
   private ws: WebSocket | null = null;
-  private network: NetworkType = "mainnet";
+  private network: NetworkType = 'mainnet';
   private started = false;
   private reconnectDelay = INITIAL_RECONNECT_MS;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -68,7 +68,7 @@ class ExplorerSocketController {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       // Move the server-side connection and re-assert our subscriptions; the
       // Explorer filters broadcasts by the connection's current network.
-      this.send({ type: "change-network", network });
+      this.send({ type: 'change-network', network });
       this.sendSubscribe();
     }
   }
@@ -81,7 +81,7 @@ class ExplorerSocketController {
     if (ws) {
       this.detach(ws);
       this.ws = null;
-      ws.close(1000, "client stop");
+      ws.close(1000, 'client stop');
     }
     this.reconnectDelay = INITIAL_RECONNECT_MS;
   }
@@ -90,8 +90,7 @@ class ExplorerSocketController {
     if (!this.started) return;
     if (
       this.ws &&
-      (this.ws.readyState === WebSocket.CONNECTING ||
-        this.ws.readyState === WebSocket.OPEN)
+      (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN)
     ) {
       return;
     }
@@ -110,7 +109,7 @@ class ExplorerSocketController {
       this.reconnectDelay = INITIAL_RECONNECT_MS;
       this.lastActivityAt = Date.now();
       // Align the connection's network, then subscribe to the events we act on.
-      this.send({ type: "change-network", network: this.network });
+      this.send({ type: 'change-network', network: this.network });
       this.sendSubscribe();
       this.startHeartbeat();
     };
@@ -133,7 +132,7 @@ class ExplorerSocketController {
   }
 
   private handleMessage(payload: unknown): void {
-    const raw = typeof payload === "string" ? payload : null;
+    const raw = typeof payload === 'string' ? payload : null;
     if (raw === null) return;
 
     let frame: unknown;
@@ -152,15 +151,13 @@ class ExplorerSocketController {
 
     const serverError = parseServerError(frame);
     if (serverError) {
-      console.warn(
-        `[explorer-socket] server error ${serverError.code}: ${serverError.message}`,
-      );
+      console.warn(`[explorer-socket] server error ${serverError.code}: ${serverError.message}`);
     }
     // Any other frame (ping/pong, subscribe acks, network-stats) needs no action.
   }
 
   private applyTip(tip: TipUpdate): void {
-    const queryKey = ["networkStats", tip.network] as const;
+    const queryKey = ['networkStats', tip.network] as const;
     // Optimistically bump the height so the ticker advances the instant a block
     // lands; only patch an existing snapshot — never invent one before the first
     // HTTP load. The invalidate then pulls the canonical stats from /api/stats.
@@ -178,7 +175,7 @@ class ExplorerSocketController {
 
   private sendSubscribe(): void {
     this.send({
-      type: "subscribe",
+      type: 'subscribe',
       network: this.network,
       events: SUBSCRIBED_EVENTS,
     });
@@ -194,7 +191,7 @@ class ExplorerSocketController {
         this.reconnectNow();
         return;
       }
-      this.send({ type: "ping", network: this.network });
+      this.send({ type: 'ping', network: this.network });
     }, HEARTBEAT_MS);
   }
 

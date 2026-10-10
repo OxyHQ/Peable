@@ -9,14 +9,14 @@ import type {
   PublicPaymentLink,
   SocialPaymentSource,
   WebhookDelivery,
-} from "@peable.to/shared-types";
-import { config } from "../config";
-import type { MerchantRow } from "../db/merchants/merchantRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
-import type { PaymentLinkRow } from "../db/payments/paymentLinkRepository";
-import type { CheckoutSessionRow } from "../db/payments/checkoutSessionRepository";
-import type { DisputeRow } from "../db/disputes/disputeRepository";
-import type { WebhookDeliveryRow } from "../db/webhooks/webhookDeliveryRepository";
+} from '@peable.to/shared-types';
+import { config } from '../config';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import type { PaymentLinkRow } from '../db/payments/paymentLinkRepository';
+import type { CheckoutSessionRow } from '../db/payments/checkoutSessionRepository';
+import type { DisputeRow } from '../db/disputes/disputeRepository';
+import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
 
 /**
  * Serialize a persisted PaymentIntent row to its public `PaymentIntent` DTO
@@ -32,7 +32,7 @@ import type { WebhookDeliveryRow } from "../db/webhooks/webhookDeliveryRepositor
 export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
   return {
     id: row.publicId,
-    object: "payment_intent",
+    object: 'payment_intent',
     status: row.status,
     rail: row.rail,
     amount: row.amount,
@@ -62,7 +62,7 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
 export function toMerchantDTO(row: MerchantRow): Merchant {
   return {
     id: row.publicId,
-    object: "merchant",
+    object: 'merchant',
     oxyAppId: row.oxyAppId,
     environment: row.environment,
     network: row.network,
@@ -103,7 +103,7 @@ export function toWebhookDeliveryDTO(
 ): WebhookDelivery {
   return {
     id: row.id,
-    object: "webhook_delivery",
+    object: 'webhook_delivery',
     merchantId: row.merchantId,
     intentId: intentPublicId,
     eventId: row.eventId,
@@ -116,9 +116,7 @@ export function toWebhookDeliveryDTO(
     // "there is nothing to say", and a `lastError: null` on a delivered
     // delivery reads like an error field a consumer has to check.
     ...(row.lastError !== null ? { lastError: row.lastError } : {}),
-    ...(row.nextAttemptAt !== null
-      ? { nextAttemptAt: row.nextAttemptAt.toISOString() }
-      : {}),
+    ...(row.nextAttemptAt !== null ? { nextAttemptAt: row.nextAttemptAt.toISOString() } : {}),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -132,7 +130,7 @@ export function toWebhookDeliveryDTO(
 export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
   return {
     id: row.publicId,
-    object: "payment_link",
+    object: 'payment_link',
     amount: row.amount,
     currency: row.currency,
     rail: row.rail,
@@ -159,7 +157,7 @@ export function toPublicPaymentLinkDTO(
 ): PublicPaymentLink {
   return {
     id: row.publicId,
-    object: "payment_link",
+    object: 'payment_link',
     amount: row.amount,
     currency: row.currency,
     rail: row.rail,
@@ -184,7 +182,7 @@ export function toCheckoutSessionDTO(
 ): CheckoutSession {
   return {
     id: row.publicId,
-    object: "checkout_session",
+    object: 'checkout_session',
     paymentIntentId: intent.publicId,
     clientSecret: intent.clientSecret,
     amount: row.amount,
@@ -215,7 +213,7 @@ export function toCheckoutSessionPublicDTO(
 ): CheckoutSessionPublic {
   return {
     id: row.publicId,
-    object: "checkout_session",
+    object: 'checkout_session',
     successUrl: row.successUrl ?? undefined,
     cancelUrl: row.cancelUrl ?? undefined,
     merchant,
@@ -245,9 +243,7 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
     status: row.status,
     reason: row.reason,
     evidenceDueAt: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
-    evidenceSubmittedAt: row.evidenceSubmittedAt
-      ? row.evidenceSubmittedAt.toISOString()
-      : null,
+    evidenceSubmittedAt: row.evidenceSubmittedAt ? row.evidenceSubmittedAt.toISOString() : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };

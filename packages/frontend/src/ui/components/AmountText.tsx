@@ -8,12 +8,12 @@
  * renders a row (number + icon), so give it a numeric `symbolSize`.
  */
 
-import { Text, View, type TextProps } from "react-native";
-import { NumericFormat } from "react-number-format";
-import { UNITS_PER_COIN } from "@fairco.in/core";
-import { FairCoinSymbol } from "./FairCoinSymbol";
+import { Text, View, type TextProps } from 'react-native';
+import { NumericFormat } from 'react-number-format';
+import { UNITS_PER_COIN } from '@fairco.in/core';
+import { FairCoinSymbol } from './FairCoinSymbol';
 
-export interface AmountTextProps extends Omit<TextProps, "children"> {
+export interface AmountTextProps extends Omit<TextProps, 'children'> {
   /** Amount in smallest units (m⊜). */
   value: bigint;
   /** Whether to keep trailing decimal zeros (default: false → trimmed). */
@@ -42,8 +42,8 @@ function unitsToDecimalString(value: bigint): string {
   const abs = negative ? -value : value;
   const whole = abs / UNITS_PER_COIN;
   const frac = abs % UNITS_PER_COIN;
-  const fracStr = frac.toString().padStart(8, "0");
-  return `${negative ? "-" : ""}${whole.toString()}.${fracStr}`;
+  const fracStr = frac.toString().padStart(8, '0');
+  return `${negative ? '-' : ''}${whole.toString()}.${fracStr}`;
 }
 
 export function AmountText({
@@ -64,9 +64,7 @@ export function AmountText({
     // zeros (and a bare trailing dot) so read-only amounts render compactly
     // (`0` not `0.00000000`, `1.5` not `1.50000000`). Only zeros AFTER the
     // decimal point are removed — the whole part is never touched.
-    decimalString = decimalString
-      .replace(/(\.\d*?)0+$/, "$1")
-      .replace(/\.$/, "");
+    decimalString = decimalString.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
   }
 
   // In symbol mode, drop Android's extra font padding so the number's box bottom
@@ -94,7 +92,7 @@ export function AmountText({
   if (!symbol) return numberText;
 
   return (
-    <View style={{ flexDirection: "row", alignItems: "flex-end" }}>
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
       {numberText}
       <View style={{ marginLeft: symbolSize * 0.25, marginBottom: symbolSize * 0.28 }}>
         <FairCoinSymbol size={symbolSize} color={symbolColor} />

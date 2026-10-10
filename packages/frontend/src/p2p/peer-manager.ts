@@ -5,9 +5,9 @@
  * rotation, reconnection, and dispatches incoming messages.
  */
 
-import type { NetworkConfig } from "@fairco.in/core";
-import { resolveDNSSeeds, type NativeDnsResolver } from "./dns-seeds";
-import { Peer, type PeerConfig, type PeerEvents, type SocketProvider } from "./peer";
+import type { NetworkConfig } from '@fairco.in/core';
+import { resolveDNSSeeds, type NativeDnsResolver } from './dns-seeds';
+import { Peer, type PeerConfig, type PeerEvents, type SocketProvider } from './peer';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,7 +21,7 @@ import { Peer, type PeerConfig, type PeerEvents, type SocketProvider } from "./p
  */
 export interface PeerManagerEvent {
   /** What happened: a transport/protocol error, or a peer disconnect. */
-  readonly type: "peer-error" | "peer-disconnect";
+  readonly type: 'peer-error' | 'peer-disconnect';
   /** The peer's `host:port` identifier. */
   readonly peer: string;
   /** Human-readable detail (the error message or disconnect reason). */
@@ -178,7 +178,7 @@ export class PeerManager {
    */
   broadcast(command: string, payload: Uint8Array): void {
     for (const peer of this.peers.values()) {
-      if (peer.state === "ready") {
+      if (peer.state === 'ready') {
         peer.sendMessage(command, payload);
       }
     }
@@ -229,7 +229,7 @@ export class PeerManager {
    * Get all ready peers.
    */
   getReadyPeers(): Peer[] {
-    return Array.from(this.peers.values()).filter((p) => p.state === "ready");
+    return Array.from(this.peers.values()).filter((p) => p.state === 'ready');
   }
 
   /**
@@ -282,10 +282,7 @@ export class PeerManager {
 
   private async discoverPeers(): Promise<void> {
     try {
-      const addresses = await resolveDNSSeeds(
-        this.network.dnsSeeds,
-        this.nativeDnsResolver,
-      );
+      const addresses = await resolveDNSSeeds(this.network.dnsSeeds, this.nativeDnsResolver);
       for (const addr of addresses) {
         this.knownAddresses.add(addr);
       }
@@ -360,7 +357,7 @@ export class PeerManager {
         const fails = (this.failedAddresses.get(peer.host) ?? 0) + 1;
         this.failedAddresses.set(peer.host, fails);
         this.emitEvent({
-          type: "peer-disconnect",
+          type: 'peer-disconnect',
           peer: peer.id,
           detail: reason,
         });
@@ -369,7 +366,7 @@ export class PeerManager {
         // Fail tracking is handled by the disconnect that follows; surface the
         // error to telemetry so connectivity problems are observable (L6).
         this.emitEvent({
-          type: "peer-error",
+          type: 'peer-error',
           peer: peer.id,
           detail: error.message,
         });
@@ -434,7 +431,7 @@ export function selectSendTarget<T extends SendCandidate>(
   cursor: number,
   minBestHeight: number,
 ): { peer: T; nextCursor: number } | undefined {
-  const ready = peers.filter((peer) => peer.state === "ready");
+  const ready = peers.filter((peer) => peer.state === 'ready');
   if (ready.length === 0) return undefined;
 
   const eligible = ready.filter((peer) => peer.bestHeight >= minBestHeight);

@@ -122,7 +122,7 @@ export const transfers = pgTable(
     check('transfers_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     check(
       'transfers_amount_reversed_check',
-      sql.raw(`amount_reversed ~ '${BASE_UNIT_STRING_PATTERN}'`)
+      sql.raw(`amount_reversed ~ '${BASE_UNIT_STRING_PATTERN}'`),
     ),
     /**
      * More cannot come back than went out.
@@ -134,7 +134,7 @@ export const transfers = pgTable(
      */
     check(
       'transfers_reversed_within_amount_check',
-      sql`${table.amountReversed}::numeric <= ${table.amount}::numeric`
+      sql`${table.amountReversed}::numeric <= ${table.amount}::numeric`,
     ),
     /**
      * A fully-reversed transfer has reversed everything, and a partially
@@ -149,15 +149,15 @@ export const transfers = pgTable(
       sql`(${table.status} <> 'reversed' or ${table.amountReversed}::numeric = ${table.amount}::numeric)
           and (${table.status} <> 'partially_reversed'
                or (${table.amountReversed}::numeric > 0
-                   and ${table.amountReversed}::numeric < ${table.amount}::numeric))`
+                   and ${table.amountReversed}::numeric < ${table.amount}::numeric))`,
     ),
     /** A paid or reversed transfer HAS a provider object; a pending one may not yet. */
     check(
       'transfers_settled_has_provider_object_check',
       sql`${table.status} = 'pending' or ${table.status} = 'failed'
-          or ${table.providerObjectId} is not null`
+          or ${table.providerObjectId} is not null`,
     ),
-  ]
+  ],
 );
 
 /**
@@ -222,15 +222,9 @@ export const transferReversals = pgTable(
      * ONE reversal per (merchant, their reference). The whole point of the
      * table: an amount is not an identity, and this is.
      */
-    unique('transfer_reversals_merchant_external_ref_key').on(
-      table.merchantId,
-      table.externalRef
-    ),
+    unique('transfer_reversals_merchant_external_ref_key').on(table.merchantId, table.externalRef),
     /** One row per provider object, so an inbound event maps to exactly one. */
-    unique('transfer_reversals_provider_object_key').on(
-      table.provider,
-      table.providerObjectId
-    ),
+    unique('transfer_reversals_provider_object_key').on(table.provider, table.providerObjectId),
     /** "What came back off this settlement, and when?" */
     index('transfer_reversals_transfer_idx').on(table.transferId),
     foreignKey({
@@ -243,23 +237,14 @@ export const transferReversals = pgTable(
       columns: [table.transferId],
       foreignColumns: [transfers.id],
     }).onDelete('restrict'),
-    check(
-      'transfer_reversals_provider_check',
-      sql.raw(`provider in (${inList(PROVIDER_IDS)})`)
-    ),
+    check('transfer_reversals_provider_check', sql.raw(`provider in (${inList(PROVIDER_IDS)})`)),
     check(
       'transfer_reversals_status_check',
-      sql.raw(`status in (${inList(TRANSFER_REVERSAL_STATUSES)})`)
+      sql.raw(`status in (${inList(TRANSFER_REVERSAL_STATUSES)})`),
     ),
-    check(
-      'transfer_reversals_currency_check',
-      sql.raw(`currency in (${inList(CURRENCY_CODES)})`)
-    ),
+    check('transfer_reversals_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
     check('transfer_reversals_external_ref_check', sql`length(${table.externalRef}) > 0`),
-    check(
-      'transfer_reversals_amount_check',
-      sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)
-    ),
+    check('transfer_reversals_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     /**
      * A reversal of nothing is not a reversal.
      *
@@ -271,7 +256,7 @@ export const transferReversals = pgTable(
     /** A succeeded reversal HAS a provider object; a pending or failed one may not. */
     check(
       'transfer_reversals_succeeded_has_provider_object_check',
-      sql`${table.status} <> 'succeeded' or ${table.providerObjectId} is not null`
+      sql`${table.status} <> 'succeeded' or ${table.providerObjectId} is not null`,
     ),
-  ]
+  ],
 );

@@ -11,20 +11,20 @@
  * the default system sound.
  */
 
-import * as Notifications from "expo-notifications";
-import { Platform } from "react-native";
-import { t } from "../i18n";
-import { COIN_TICKER, formatFair } from "@fairco.in/core";
+import * as Notifications from 'expo-notifications';
+import { Platform } from 'react-native';
+import { t } from '../i18n';
+import { COIN_TICKER, formatFair } from '@fairco.in/core';
 
 // Bump the suffix whenever the channel's sound/importance changes: Android
 // channels are IMMUTABLE once created, so an in-place edit is silently ignored
 // and the old sound sticks. A new id forces a fresh channel; the legacy id is
 // deleted on init (see LEGACY_TRANSACTIONS_CHANNEL_IDS).
-const TRANSACTIONS_CHANNEL_ID = "transactions-v2";
-const LEGACY_TRANSACTIONS_CHANNEL_IDS = ["transactions"] as const;
-const SYNC_CHANNEL_ID = "sync";
+const TRANSACTIONS_CHANNEL_ID = 'transactions-v2';
+const LEGACY_TRANSACTIONS_CHANNEL_IDS = ['transactions'] as const;
+const SYNC_CHANNEL_ID = 'sync';
 /** Fixed id so each progress update REPLACES the ongoing notification, not stacks. */
-const SYNC_NOTIFICATION_ID = "fairwallet-sync-progress";
+const SYNC_NOTIFICATION_ID = 'fairwallet-sync-progress';
 
 /**
  * Android notification channels, each created independently in
@@ -37,9 +37,9 @@ const ANDROID_CHANNELS: readonly (readonly [string, Notifications.NotificationCh
   [
     TRANSACTIONS_CHANNEL_ID,
     {
-      name: "Transactions",
+      name: 'Transactions',
       importance: Notifications.AndroidImportance.DEFAULT,
-      sound: "received",
+      sound: 'received',
       vibrationPattern: [0, 250, 250, 250],
       enableVibrate: true,
     },
@@ -47,7 +47,7 @@ const ANDROID_CHANNELS: readonly (readonly [string, Notifications.NotificationCh
   [
     SYNC_CHANNEL_ID,
     {
-      name: "Sync status",
+      name: 'Sync status',
       importance: Notifications.AndroidImportance.LOW,
       sound: undefined,
       enableVibrate: false,
@@ -78,7 +78,7 @@ export function initNotifications(): Promise<void> {
         });
       }
 
-      if (Platform.OS === "android") {
+      if (Platform.OS === 'android') {
         // Drop superseded channels so their stale sound/importance doesn't
         // linger in the OS settings list next to the live one.
         for (const legacyId of LEGACY_TRANSACTIONS_CHANNEL_IDS) {
@@ -112,7 +112,7 @@ export function initNotifications(): Promise<void> {
         handleNotification: async (notification) => {
           // The ongoing sync-progress notification must never banner or sound —
           // it updates continuously. Everything else (received payments) does.
-          const isSync = notification.request.content.data?.type === "sync";
+          const isSync = notification.request.content.data?.type === 'sync';
           return {
             shouldShowBanner: !isSync,
             shouldShowList: true,
@@ -149,23 +149,20 @@ export async function scheduleReceivedNotification(
       // notifications for one incoming tx. Omitted only if a caller has no txid.
       identifier: txid ? `received-${txid}` : undefined,
       content: {
-        title: t("notifications.received.title"),
-        body: t("notifications.received.body", {
+        title: t('notifications.received.title'),
+        body: t('notifications.received.body', {
           amount: formatFair(amountValue),
           ticker: COIN_TICKER,
         }),
         // Android ignores this — the sound comes from the channel selected via
         // the trigger below. iOS plays the bundled custom sound by filename
         // (must be listed in the expo-notifications `sounds` array in app.json).
-        sound: Platform.OS === "ios" ? "received.mp3" : undefined,
+        sound: Platform.OS === 'ios' ? 'received.mp3' : undefined,
       },
       // Android: `{ channelId }` still fires immediately, but routes through the
       // `transactions` channel so the notification uses its custom `received`
       // sound. iOS has no channels — `null` fires immediately.
-      trigger:
-        Platform.OS === "android"
-          ? { channelId: TRANSACTIONS_CHANNEL_ID }
-          : null,
+      trigger: Platform.OS === 'android' ? { channelId: TRANSACTIONS_CHANNEL_ID } : null,
     });
   } catch {
     // Scheduling failed (no permission, web fallback, etc). Sound playback
@@ -194,20 +191,17 @@ export async function scheduleSentConfirmedNotification(
       // distinctly so a send-confirmed alert never collides with a received one.
       identifier: txid ? `sent-${txid}` : undefined,
       content: {
-        title: t("notifications.sent.confirmed.title"),
-        body: t("notifications.sent.confirmed.body", {
+        title: t('notifications.sent.confirmed.title'),
+        body: t('notifications.sent.confirmed.body', {
           amount: formatFair(amountValue),
           ticker: COIN_TICKER,
         }),
         // iOS plays the bundled custom sound by filename (must be listed in the
         // expo-notifications `sounds` array in app.json). Android ignores this —
         // the sound comes from the `transactions` channel selected below.
-        sound: Platform.OS === "ios" ? "sent.mp3" : undefined,
+        sound: Platform.OS === 'ios' ? 'sent.mp3' : undefined,
       },
-      trigger:
-        Platform.OS === "android"
-          ? { channelId: TRANSACTIONS_CHANNEL_ID }
-          : null,
+      trigger: Platform.OS === 'android' ? { channelId: TRANSACTIONS_CHANNEL_ID } : null,
     });
   } catch {
     // Scheduling failed (no permission, web fallback, etc). Non-fatal.
@@ -232,12 +226,12 @@ export async function presentSyncNotification(
     await Notifications.scheduleNotificationAsync({
       identifier: SYNC_NOTIFICATION_ID,
       content: {
-        title: t("notifications.sync.title"),
-        body: t("notifications.sync.body", {
+        title: t('notifications.sync.title'),
+        body: t('notifications.sync.body', {
           progress,
           block: blockHeight.toLocaleString(),
         }),
-        data: { type: "sync" },
+        data: { type: 'sync' },
         sticky: true,
         autoDismiss: false,
         priority: Notifications.AndroidNotificationPriority.LOW,

@@ -41,31 +41,31 @@
  * depends on it is a rule with a silent hole.
  */
 const ALLOWED_KEYS: ReadonlySet<string> = new Set([
-  "id",
-  "object",
-  "type",
-  "status",
-  "reason",
-  "code",
-  "declinecode",
-  "failurecode",
-  "failuremessage",
+  'id',
+  'object',
+  'type',
+  'status',
+  'reason',
+  'code',
+  'declinecode',
+  'failurecode',
+  'failuremessage',
   // Stripe's own name for why a refund did not go through. Absent from this
   // list, it stored as `"[redacted]"` — so a failed refund's reason was
   // unreadable in the one table a support query looks at, and the handler that
   // wanted it could not tell "no reason given" from "we dropped it".
-  "failurereason",
-  "outcome",
-  "networkstatus",
-  "amount",
-  "amountcaptured",
-  "amountrefunded",
-  "amountreceived",
-  "amountreversed",
-  "currency",
-  "created",
-  "availableon",
-  "arrivaldate",
+  'failurereason',
+  'outcome',
+  'networkstatus',
+  'amount',
+  'amountcaptured',
+  'amountrefunded',
+  'amountreceived',
+  'amountreversed',
+  'currency',
+  'created',
+  'availableon',
+  'arrivaldate',
   /**
    * A dispute's evidence DEADLINE — `evidence_details.due_by`.
    *
@@ -80,25 +80,25 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
    * It is a scalar timestamp with no personal data in it, which is the same
    * ground `created` and `arrival_date` are here on.
    */
-  "dueby",
-  "livemode",
-  "paymentintent",
-  "charge",
-  "transfer",
-  "transfergroup",
-  "sourcetransaction",
-  "refund",
-  "dispute",
-  "payout",
-  "account",
-  "balancetransaction",
-  "reversed",
+  'dueby',
+  'livemode',
+  'paymentintent',
+  'charge',
+  'transfer',
+  'transfergroup',
+  'sourcetransaction',
+  'refund',
+  'dispute',
+  'payout',
+  'account',
+  'balancetransaction',
+  'reversed',
   // The gateway's own correlation keys, carried in provider metadata. Without
   // these an event can only be matched by provider object id, which is exactly
   // the lookup that fails when the object was created by a call that timed out.
-  "peableintentid",
-  "peabletransferid",
-  "peableaccountid",
+  'peableintentid',
+  'peabletransferid',
+  'peableaccountid',
 ]);
 
 /** How deep to walk before giving up. A provider envelope is nested 3–4 levels. */
@@ -111,16 +111,16 @@ const MAX_ARRAY_LENGTH = 20;
 const MAX_STRING_LENGTH = 256;
 
 /** The marker left where a value was dropped, so a reader sees the hole. */
-const REDACTED = "[redacted]";
+const REDACTED = '[redacted]';
 
 /** `payment_intent` and `paymentIntent` both normalize to `paymentintent`. */
 function normalizeKey(key: string): string {
-  return key.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return key.toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
 /** Whether a value is a plain object worth walking into. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /**
@@ -131,10 +131,10 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
  * jsonb column could not store it anyway.
  */
 function redactScalar(value: unknown): unknown {
-  if (typeof value === "string") {
+  if (typeof value === 'string') {
     return value.length > MAX_STRING_LENGTH ? `${value.slice(0, MAX_STRING_LENGTH)}…` : value;
   }
-  if (typeof value === "number" || typeof value === "boolean" || value === null) {
+  if (typeof value === 'number' || typeof value === 'boolean' || value === null) {
     return value;
   }
   return REDACTED;

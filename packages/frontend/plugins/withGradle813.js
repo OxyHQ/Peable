@@ -10,28 +10,28 @@
  * gradle-wrapper.properties file.
  */
 
-const { withGradleProperties } = require("expo/config-plugins");
-const fs = require("fs");
-const path = require("path");
+const { withGradleProperties } = require('expo/config-plugins');
+const fs = require('fs');
+const path = require('path');
 
 function withGradle813(config) {
   return withGradleProperties(config, (config) => {
     const projectRoot = config.modRequest.projectRoot;
     const wrapperProps = path.join(
       projectRoot,
-      "android",
-      "gradle",
-      "wrapper",
-      "gradle-wrapper.properties"
+      'android',
+      'gradle',
+      'wrapper',
+      'gradle-wrapper.properties',
     );
 
     if (fs.existsSync(wrapperProps)) {
-      let content = fs.readFileSync(wrapperProps, "utf-8");
+      let content = fs.readFileSync(wrapperProps, 'utf-8');
       content = content.replace(
         /distributionUrl=.*gradle-[\d.]+-bin\.zip/,
-        "distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip"
+        'distributionUrl=https\\://services.gradle.org/distributions/gradle-8.13-bin.zip',
       );
-      fs.writeFileSync(wrapperProps, content, "utf-8");
+      fs.writeFileSync(wrapperProps, content, 'utf-8');
     }
 
     return config;

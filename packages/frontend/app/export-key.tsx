@@ -5,39 +5,33 @@
  * Presented as a modal from settings.
  */
 
-import { useCallback, useMemo, useState } from "react";
-import { View, Text, TextInput, ScrollView, Pressable } from "react-native";
-import { SafeAreaView } from "../src/ui/safe-area-view";
-import { useRouter } from "expo-router";
-import * as Clipboard from "expo-clipboard";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useWalletStore } from "../src/wallet/wallet-store";
-import { verifyPin } from "../src/storage/secure-store";
-import { encryptBIP38, getNetwork } from "@fairco.in/core";
-import { KeyManager } from "@peable.to/pay";
-import {
-  Button,
-  ListItem,
-  EmptyState,
-  ScreenHeader,
-} from "../src/ui/components";
-import { PinDots } from "../src/ui/components/PinDots";
-import { PinPad } from "../src/ui/components/PinPad";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { toast } from "@oxy.so/bloom/toast";
-import { t } from "../src/i18n";
+import { useCallback, useMemo, useState } from 'react';
+import { View, Text, TextInput, ScrollView, Pressable } from 'react-native';
+import { SafeAreaView } from '../src/ui/safe-area-view';
+import { useRouter } from 'expo-router';
+import * as Clipboard from 'expo-clipboard';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useWalletStore } from '../src/wallet/wallet-store';
+import { verifyPin } from '../src/storage/secure-store';
+import { encryptBIP38, getNetwork } from '@fairco.in/core';
+import { KeyManager } from '@peable.to/pay';
+import { Button, ListItem, EmptyState, ScreenHeader } from '../src/ui/components';
+import { PinDots } from '../src/ui/components/PinDots';
+import { PinPad } from '../src/ui/components/PinPad';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { toast } from '@oxy.so/bloom/toast';
+import { t } from '../src/i18n';
 
 const PIN_LENGTH = 6;
 
 /** Uppercase section label — matches the home screen's section headers. */
-const SECTION_LABEL =
-  "text-muted-foreground text-xs font-semibold uppercase tracking-wider";
+const SECTION_LABEL = 'text-muted-foreground text-xs font-semibold uppercase tracking-wider';
 
 // ---------------------------------------------------------------------------
 // Step type for the export flow
 // ---------------------------------------------------------------------------
 
-type ExportStep = "pin" | "select" | "passphrase" | "result";
+type ExportStep = 'pin' | 'select' | 'passphrase' | 'result';
 
 // ---------------------------------------------------------------------------
 // Main screen
@@ -49,13 +43,13 @@ export default function ExportKeyScreen() {
   const network = useWalletStore((s) => s.network);
   const theme = useTheme();
 
-  const [step, setStep] = useState<ExportStep>("pin");
-  const [pin, setPin] = useState("");
+  const [step, setStep] = useState<ExportStep>('pin');
+  const [pin, setPin] = useState('');
   const [pinError, setPinError] = useState<string | null>(null);
   const [pinVerifying, setPinVerifying] = useState(false);
   const [selectedAddress, setSelectedAddress] = useState<string | null>(null);
-  const [passphrase, setPassphrase] = useState("");
-  const [confirmPassphrase, setConfirmPassphrase] = useState("");
+  const [passphrase, setPassphrase] = useState('');
+  const [confirmPassphrase, setConfirmPassphrase] = useState('');
   const [encryptedKey, setEncryptedKey] = useState<string | null>(null);
   const [encrypting, setEncrypting] = useState(false);
 
@@ -77,17 +71,17 @@ export default function ExportKeyScreen() {
           verifyPin(next)
             .then((correct) => {
               if (correct) {
-                setPin("");
-                setStep("select");
+                setPin('');
+                setStep('select');
               } else {
-                setPinError(t("exportKey.verifyPin.wrong"));
-                setPin("");
+                setPinError(t('exportKey.verifyPin.wrong'));
+                setPin('');
               }
               setPinVerifying(false);
             })
             .catch(() => {
-              setPinError(t("exportKey.verifyPin.failed"));
-              setPin("");
+              setPinError(t('exportKey.verifyPin.failed'));
+              setPin('');
               setPinVerifying(false);
             });
         }
@@ -110,7 +104,7 @@ export default function ExportKeyScreen() {
 
   const handleSelectAddress = useCallback((address: string) => {
     setSelectedAddress(address);
-    setStep("passphrase");
+    setStep('passphrase');
   }, []);
 
   // ---------------------------------------------------------------------------
@@ -119,18 +113,16 @@ export default function ExportKeyScreen() {
 
   const passphraseError = useMemo(() => {
     if (passphrase.length > 0 && passphrase.length < 8) {
-      return t("exportKey.passphrase.error.tooShort");
+      return t('exportKey.passphrase.error.tooShort');
     }
     if (confirmPassphrase.length > 0 && passphrase !== confirmPassphrase) {
-      return t("exportKey.passphrase.error.mismatch");
+      return t('exportKey.passphrase.error.mismatch');
     }
     return null;
   }, [passphrase, confirmPassphrase]);
 
   const canEncrypt =
-    passphrase.length >= 8 &&
-    passphrase === confirmPassphrase &&
-    selectedAddress !== null;
+    passphrase.length >= 8 && passphrase === confirmPassphrase && selectedAddress !== null;
 
   const handleEncrypt = useCallback(async () => {
     if (!canEncrypt || !selectedAddress) return;
@@ -143,10 +135,10 @@ export default function ExportKeyScreen() {
     let privateKey: Uint8Array | null = null;
     try {
       const networkConfig = getNetwork(network);
-      const { getMnemonic } = await import("../src/storage/secure-store");
+      const { getMnemonic } = await import('../src/storage/secure-store');
       const mnemonic = await getMnemonic();
       if (!mnemonic) {
-        toast.error(t("exportKey.error.noMnemonic"));
+        toast.error(t('exportKey.error.noMnemonic'));
         return;
       }
 
@@ -154,8 +146,8 @@ export default function ExportKeyScreen() {
       // hold no private keys. Never feed that into mnemonicToSeedSync (it would
       // derive a random, unrelated keypair — review finding C2); there is simply
       // nothing to export.
-      if (mnemonic.startsWith("xpub:")) {
-        toast.error(t("exportKey.error.noPrivateKey"));
+      if (mnemonic.startsWith('xpub:')) {
+        toast.error(t('exportKey.error.noPrivateKey'));
         return;
       }
 
@@ -164,7 +156,7 @@ export default function ExportKeyScreen() {
       try {
         privateKey = km.getPrivateKeyForAddress(selectedAddress);
       } catch {
-        toast.error(t("exportKey.error.noPrivateKey"));
+        toast.error(t('exportKey.error.noPrivateKey'));
         return;
       }
 
@@ -176,10 +168,10 @@ export default function ExportKeyScreen() {
       );
 
       setEncryptedKey(encrypted);
-      setStep("result");
+      setStep('result');
     } catch (err: unknown) {
       const errorMessage =
-        err instanceof Error ? err.message : t("exportKey.error.encryptionFailed");
+        err instanceof Error ? err.message : t('exportKey.error.encryptionFailed');
       toast.error(errorMessage);
     } finally {
       if (privateKey) {
@@ -207,7 +199,7 @@ export default function ExportKeyScreen() {
   const handleCopyEncrypted = useCallback(async () => {
     if (encryptedKey) {
       await Clipboard.setStringAsync(encryptedKey);
-      toast.success(t("exportKey.result.copied.description"));
+      toast.success(t('exportKey.result.copied.description'));
     }
   }, [encryptedKey]);
 
@@ -215,32 +207,23 @@ export default function ExportKeyScreen() {
   // Render
   // ---------------------------------------------------------------------------
 
-  if (step === "pin") {
+  if (step === 'pin') {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
         <View className="flex-1 items-center justify-center px-8">
           <Text className="text-foreground text-xl font-bold mb-2">
-            {t("exportKey.verifyPin.title")}
+            {t('exportKey.verifyPin.title')}
           </Text>
           <Text className="text-muted-foreground text-sm mb-6 text-center">
-            {t("exportKey.verifyPin.subtitle")}
+            {t('exportKey.verifyPin.subtitle')}
           </Text>
 
           <View className="mb-4">
-            <PinDots
-              length={PIN_LENGTH}
-              filled={pin.length}
-              error={pinError !== null}
-            />
+            <PinDots length={PIN_LENGTH} filled={pin.length} error={pinError !== null} />
           </View>
 
           {pinError ? (
-            <Text className="text-destructive text-xs text-center mb-3">
-              {pinError}
-            </Text>
+            <Text className="text-destructive text-xs text-center mb-3">{pinError}</Text>
           ) : null}
 
           <PinPad
@@ -255,15 +238,12 @@ export default function ExportKeyScreen() {
     );
   }
 
-  if (step === "select") {
+  if (step === 'select') {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
         <ScreenHeader
-          title={t("exportKey.select.title")}
-          subtitle={t("exportKey.select.subtitle")}
+          title={t('exportKey.select.title')}
+          subtitle={t('exportKey.select.subtitle')}
           onBack={() => router.back()}
         />
         <ScrollView
@@ -275,8 +255,8 @@ export default function ExportKeyScreen() {
             <View className="px-4">
               <EmptyState
                 icon="key-remove"
-                title={t("exportKey.select.empty.title")}
-                subtitle={t("exportKey.select.empty.subtitle")}
+                title={t('exportKey.select.empty.title')}
+                subtitle={t('exportKey.select.empty.subtitle')}
               />
             </View>
           ) : (
@@ -298,16 +278,13 @@ export default function ExportKeyScreen() {
     );
   }
 
-  if (step === "passphrase") {
+  if (step === 'passphrase') {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
         <ScreenHeader
-          title={t("exportKey.passphrase.title")}
-          subtitle={t("exportKey.passphrase.subtitle")}
-          onBack={() => setStep("select")}
+          title={t('exportKey.passphrase.title')}
+          subtitle={t('exportKey.passphrase.subtitle')}
+          onBack={() => setStep('select')}
         />
         <ScrollView
           className="flex-1"
@@ -317,12 +294,10 @@ export default function ExportKeyScreen() {
         >
           <View className="gap-5 mt-4 mb-4">
             <View>
-              <Text className={SECTION_LABEL}>
-                {t("exportKey.passphrase.label")}
-              </Text>
+              <Text className={SECTION_LABEL}>{t('exportKey.passphrase.label')}</Text>
               <TextInput
                 className="bg-surface rounded-2xl px-4 py-3.5 text-foreground text-base mt-2"
-                placeholder={t("exportKey.passphrase.placeholder")}
+                placeholder={t('exportKey.passphrase.placeholder')}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={passphrase}
                 onChangeText={setPassphrase}
@@ -333,12 +308,10 @@ export default function ExportKeyScreen() {
             </View>
 
             <View>
-              <Text className={SECTION_LABEL}>
-                {t("exportKey.passphrase.confirmLabel")}
-              </Text>
+              <Text className={SECTION_LABEL}>{t('exportKey.passphrase.confirmLabel')}</Text>
               <TextInput
                 className="bg-surface rounded-2xl px-4 py-3.5 text-foreground text-base mt-2"
-                placeholder={t("exportKey.passphrase.confirmPlaceholder")}
+                placeholder={t('exportKey.passphrase.confirmPlaceholder')}
                 placeholderTextColor={theme.colors.textSecondary}
                 value={confirmPassphrase}
                 onChangeText={setConfirmPassphrase}
@@ -350,9 +323,7 @@ export default function ExportKeyScreen() {
 
             {passphraseError ? (
               <View className="bg-destructive/10 rounded-2xl p-3.5">
-                <Text className="text-destructive text-sm text-center">
-                  {passphraseError}
-                </Text>
+                <Text className="text-destructive text-sm text-center">{passphraseError}</Text>
               </View>
             ) : null}
           </View>
@@ -360,8 +331,8 @@ export default function ExportKeyScreen() {
           <Button
             title={
               encrypting
-                ? t("exportKey.passphrase.encrypting")
-                : t("exportKey.passphrase.encryptCta")
+                ? t('exportKey.passphrase.encrypting')
+                : t('exportKey.passphrase.encryptCta')
             }
             onPress={handleEncrypt}
             variant="primary"
@@ -375,13 +346,10 @@ export default function ExportKeyScreen() {
 
   // Result step
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "bottom", "left", "right"]}
-    >
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
       <ScreenHeader
-        title={t("exportKey.result.title")}
-        subtitle={t("exportKey.result.subtitle")}
+        title={t('exportKey.result.title')}
+        subtitle={t('exportKey.result.subtitle')}
         onBack={() => router.back()}
       />
       <ScrollView
@@ -392,35 +360,28 @@ export default function ExportKeyScreen() {
         {/* Encrypted key display — card-less bordered surface, tap to copy */}
         <Pressable onPress={handleCopyEncrypted}>
           <View className="bg-surface rounded-2xl p-4 mt-4 mb-4">
-            <Text
-              className="text-primary text-sm text-center font-mono"
-              selectable
-            >
+            <Text className="text-primary text-sm text-center font-mono" selectable>
               {encryptedKey}
             </Text>
           </View>
         </Pressable>
 
         <Button
-          title={t("exportKey.result.copyCta")}
+          title={t('exportKey.result.copyCta')}
           onPress={handleCopyEncrypted}
           variant="primary"
           icon={
-            <MaterialCommunityIcons
-              name="content-copy"
-              size={18}
-              color={theme.colors.background}
-            />
+            <MaterialCommunityIcons name="content-copy" size={18} color={theme.colors.background} />
           }
         />
 
         {/* Warning — borderless tinted strip */}
         <View className="bg-yellow-400/10 rounded-2xl p-4 mt-6">
           <Text className="text-yellow-400 text-sm font-semibold mb-1">
-            {t("exportKey.warning.title")}
+            {t('exportKey.warning.title')}
           </Text>
           <Text className="text-yellow-400/80 text-xs leading-5">
-            {t("exportKey.warning.description")}
+            {t('exportKey.warning.description')}
           </Text>
         </View>
       </ScrollView>

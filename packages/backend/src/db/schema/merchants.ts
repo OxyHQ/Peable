@@ -108,7 +108,7 @@ export const merchants = pgTable(
       table.id,
       table.oxyAppId,
       table.environment,
-      table.network
+      table.network,
     ),
     /**
      * The network-free half of the identity above — the target of the companion
@@ -124,15 +124,15 @@ export const merchants = pgTable(
     unique('merchants_id_oxy_app_id_environment_key').on(
       table.id,
       table.oxyAppId,
-      table.environment
+      table.environment,
     ),
     check(
       'merchants_environment_check',
-      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`)
+      sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`),
     ),
     check(
       'merchants_network_check',
-      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`)
+      sql.raw(`network is null or network in (${inList(NETWORK_TYPES)})`),
     ),
     /**
      * A merchant accepts FairCoin with BOTH halves, or with neither.
@@ -146,7 +146,7 @@ export const merchants = pgTable(
      */
     check(
       'merchants_chain_fields_agree_check',
-      sql`(${table.network} is null) = (${table.xpub} is null)`
+      sql`(${table.network} is null) = (${table.xpub} is null)`,
     ),
     check('merchants_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
     /**
@@ -158,7 +158,7 @@ export const merchants = pgTable(
      */
     check(
       'merchants_livemode_agrees_check',
-      sql`${table.livemode} = (${table.environment} = 'production')`
+      sql`${table.livemode} = (${table.environment} = 'production')`,
     ),
     // The create and update schemas both validate `.positive()`; this is that
     // range, in the one place a write that skipped them still has to pass.
@@ -168,5 +168,5 @@ export const merchants = pgTable(
     // either field alone, so that constraint would refuse a currently-legal
     // write; the incoherent state is reachable and already handled, by
     // `routes/webhookDeliveries.ts` refusing to send when either is missing.
-  ]
+  ],
 );

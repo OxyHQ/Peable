@@ -10,11 +10,11 @@
  * CompactSize varints, big-endian port in network addresses).
  */
 
-import { sha256 } from "@noble/hashes/sha256";
-import * as secp256k1 from "@noble/secp256k1";
+import { sha256 } from '@noble/hashes/sha256';
+import * as secp256k1 from '@noble/secp256k1';
 
-import { BufferWriter, bytesToHex } from "@fairco.in/core";
-import { ipv4ToMappedIPv6 } from "./messages";
+import { BufferWriter, bytesToHex } from '@fairco.in/core';
+import { ipv4ToMappedIPv6 } from './messages';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -195,7 +195,7 @@ function buildBroadcastSignatureMessage(
 function derEncodeInteger(n: bigint): Uint8Array {
   let hex = n.toString(16);
   if (hex.length % 2 !== 0) {
-    hex = "0" + hex;
+    hex = '0' + hex;
   }
   const bytes: number[] = [];
   for (let i = 0; i < hex.length; i += 2) {
@@ -227,10 +227,7 @@ function derEncodeSignature(r: bigint, s: bigint): Uint8Array {
 /**
  * Sign a message hash with a private key and return a DER-encoded signature.
  */
-function signMessageHash(
-  messageHash: Uint8Array,
-  privateKey: Uint8Array,
-): Uint8Array {
+function signMessageHash(messageHash: Uint8Array, privateKey: Uint8Array): Uint8Array {
   const signature = secp256k1.sign(messageHash, privateKey);
   const normalizedSig = signature.hasHighS() ? signature.normalizeS() : signature;
   return derEncodeSignature(normalizedSig.r, normalizedSig.s);

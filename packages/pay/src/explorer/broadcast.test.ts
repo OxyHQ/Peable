@@ -8,8 +8,12 @@ afterEach(() => {
 });
 
 function respondsWith(body: unknown, status = 200): void {
-  globalThis.fetch = mock(async () =>
-    new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }),
+  globalThis.fetch = mock(
+    async () =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'content-type': 'application/json' },
+      }),
   ) as unknown as typeof fetch;
 }
 

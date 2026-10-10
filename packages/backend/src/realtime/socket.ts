@@ -1,12 +1,12 @@
 import { observeEcosystemSocket } from '../ecosystemActivity';
-import { isIP } from "node:net";
-import type { Server, Socket } from "socket.io";
-import { oxy } from "../oxy";
-import { verifySecret } from "@oxy.so/core/server";
-import { getDb } from "../db/postgres";
-import { findIntentByPublicId } from "../db/payments/paymentIntentRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
-import { toPaymentIntentDTO } from "../lib/serialize";
+import { isIP } from 'node:net';
+import type { Server, Socket } from 'socket.io';
+import { oxy } from '../oxy';
+import { verifySecret } from '@oxy.so/core/server';
+import { getDb } from '../db/postgres';
+import { findIntentByPublicId } from '../db/payments/paymentIntentRepository';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import { toPaymentIntentDTO } from '../lib/serialize';
 
 /** Realtime room a single intent's updates are broadcast to. */
 export function intentRoom(id: string): string {
@@ -14,10 +14,7 @@ export function intentRoom(id: string): string {
 }
 
 /** Socket.io connection-authentication middleware `(socket, next) => …`. */
-export type SocketAuth = (
-  socket: unknown,
-  next: (err?: Error) => void,
-) => void | Promise<void>;
+export type SocketAuth = (socket: unknown, next: (err?: Error) => void) => void | Promise<void>;
 
 export interface SocketDeps {
   /**
@@ -46,10 +43,9 @@ export interface SocketDeps {
  */
 export function optionalSocketAuth(requireIdentity: SocketAuth): SocketAuth {
   return (socket, next) => {
-    const handshake = (socket as { handshake?: { auth?: { token?: unknown } } })
-      .handshake;
+    const handshake = (socket as { handshake?: { auth?: { token?: unknown } } }).handshake;
     const token = handshake?.auth?.token;
-    if (typeof token !== "string" || token.length === 0) {
+    if (typeof token !== 'string' || token.length === 0) {
       next();
       return;
     }
@@ -63,9 +59,9 @@ interface SubscribeRequest {
 }
 
 function parseSubscribe(payload: unknown): SubscribeRequest | null {
-  if (typeof payload !== "object" || payload === null) return null;
+  if (typeof payload !== 'object' || payload === null) return null;
   const { intentId, clientSecret } = payload as Record<string, unknown>;
-  if (typeof intentId !== "string" || typeof clientSecret !== "string") {
+  if (typeof intentId !== 'string' || typeof clientSecret !== 'string') {
     return null;
   }
   return { intentId, clientSecret };
@@ -156,7 +152,7 @@ export const IP_CONNECT_MAX = 20;
 export const SUBSCRIBE_WINDOW_MS = 60_000;
 export const SUBSCRIBE_MAX_PER_WINDOW = 20;
 
-const FORWARDED_FOR_HEADER = "x-forwarded-for";
+const FORWARDED_FOR_HEADER = 'x-forwarded-for';
 
 function looksLikeIp(candidate: string): boolean {
   return isIP(candidate) !== 0;
@@ -195,13 +191,13 @@ export function resolveClientIp(socket: unknown): string {
     }
   ).handshake;
   const forwardedFor = handshake?.headers?.[FORWARDED_FOR_HEADER];
-  const header = Array.isArray(forwardedFor) ? forwardedFor.join(",") : forwardedFor;
-  const parts = header?.split(",") ?? [];
+  const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor;
+  const parts = header?.split(',') ?? [];
   const rightmost = parts[parts.length - 1]?.trim();
   if (rightmost !== undefined && looksLikeIp(rightmost)) {
     return rightmost;
   }
-  return handshake?.address ?? "unknown";
+  return handshake?.address ?? 'unknown';
 }
 
 /**
@@ -215,7 +211,7 @@ export function resolveClientIp(socket: unknown): string {
 export function ipConnectionThrottle(limiter: FixedWindowLimiter): SocketAuth {
   return (socket, next) => {
     if (!limiter.consume(resolveClientIp(socket))) {
-      next(new Error("too many connections — try again shortly"));
+      next(new Error('too many connections — try again shortly'));
       return;
     }
     next();
@@ -275,10 +271,7 @@ export function initSocket(io: Server, deps: SocketDeps = {}): void {
   activeIo = io;
   const identityAuth: SocketAuth = deps.socketAuth ?? oxySocketAuth();
   const ipConnectLimiter = new FixedWindowLimiter(IP_CONNECT_WINDOW_MS, IP_CONNECT_MAX);
-  const subscribeLimiter = new FixedWindowLimiter(
-    SUBSCRIBE_WINDOW_MS,
-    SUBSCRIBE_MAX_PER_WINDOW,
-  );
+  const subscribeLimiter = new FixedWindowLimiter(SUBSCRIBE_WINDOW_MS, SUBSCRIBE_MAX_PER_WINDOW);
 
   // Swept on a shared interval — unref'd so it never keeps the event loop
   // (or a test run) alive, matching `SettlementWatcher`'s convention.
@@ -291,37 +284,31 @@ export function initSocket(io: Server, deps: SocketDeps = {}): void {
   io.use(ipConnectionThrottle(ipConnectLimiter));
   io.use(optionalSocketAuth(identityAuth));
 
-  io.on("connection", (socket: Socket) => {
+  io.on('connection', (socket: Socket) => {
     observeEcosystemSocket(socket);
-    socket.on(
-      "subscribe",
-      async (payload: unknown, ack?: (result: { ok: boolean }) => void) => {
-        // Keyed by `socket.id` (unique per connection, assigned by
-        // socket.io) — independent of the per-IP connection throttle above.
-        if (!subscribeLimiter.consume(socket.id)) {
-          ack?.({ ok: false });
-          return;
-        }
+    socket.on('subscribe', async (payload: unknown, ack?: (result: { ok: boolean }) => void) => {
+      // Keyed by `socket.id` (unique per connection, assigned by
+      // socket.io) — independent of the per-IP connection throttle above.
+      if (!subscribeLimiter.consume(socket.id)) {
+        ack?.({ ok: false });
+        return;
+      }
 
-        const request = parseSubscribe(payload);
-        if (request === null) {
-          ack?.({ ok: false });
-          return;
-        }
+      const request = parseSubscribe(payload);
+      if (request === null) {
+        ack?.({ ok: false });
+        return;
+      }
 
-        const intent = await findIntentByPublicId(getDb(), request.intentId);
-        if (
-          intent === null ||
-          !verifySecret(request.clientSecret, intent.clientSecret)
-        ) {
-          ack?.({ ok: false });
-          return;
-        }
+      const intent = await findIntentByPublicId(getDb(), request.intentId);
+      if (intent === null || !verifySecret(request.clientSecret, intent.clientSecret)) {
+        ack?.({ ok: false });
+        return;
+      }
 
-        await socket.join(intentRoom(request.intentId));
-        ack?.({ ok: true });
-      },
-    );
+      await socket.join(intentRoom(request.intentId));
+      ack?.({ ok: true });
+    });
   });
 }
 
@@ -334,9 +321,6 @@ export function initSocket(io: Server, deps: SocketDeps = {}): void {
  * nobody is ever in — a silent, total loss of realtime updates that no type
  * error and no unit test of either function alone would show.
  */
-export function emitIntentUpdate(
-  io: Server,
-  intent: PaymentIntentRow,
-): void {
-  io.to(intentRoom(intent.publicId)).emit("intent.updated", toPaymentIntentDTO(intent));
+export function emitIntentUpdate(io: Server, intent: PaymentIntentRow): void {
+  io.to(intentRoom(intent.publicId)).emit('intent.updated', toPaymentIntentDTO(intent));
 }

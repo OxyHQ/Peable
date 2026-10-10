@@ -9,15 +9,15 @@
  * `bg-primary/15`, inactive `bg-surface` — matching the app's card-less look.
  */
 
-import { useMemo } from "react";
-import { View, Text, Pressable } from "react-native";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { parseFairToUnits, UNITS_PER_COIN } from "@fairco.in/core";
-import { AmountInput } from "../../ui/components/AmountInput";
-import { FairCoinSymbol } from "../../ui/components/FairCoinSymbol";
-import { FONT_PHUDU_BLACK } from "../../utils/fonts";
-import { t } from "../../i18n";
-import { usePrice } from "../../hooks/usePrice";
+import { useMemo } from 'react';
+import { View, Text, Pressable } from 'react-native';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { parseFairToUnits, UNITS_PER_COIN } from '@fairco.in/core';
+import { AmountInput } from '../../ui/components/AmountInput';
+import { FairCoinSymbol } from '../../ui/components/FairCoinSymbol';
+import { FONT_PHUDU_BLACK } from '../../utils/fonts';
+import { t } from '../../i18n';
+import { usePrice } from '../../hooks/usePrice';
 
 const AMOUNT_FONT_SIZE_MAX = 44;
 const AMOUNT_FONT_SIZE_MIN = 22;
@@ -40,11 +40,7 @@ interface BuyAmountInputProps {
   presets?: readonly string[];
 }
 
-export function BuyAmountInput({
-  value,
-  onValueChange,
-  presets,
-}: BuyAmountInputProps) {
+export function BuyAmountInput({ value, onValueChange, presets }: BuyAmountInputProps) {
   const theme = useTheme();
   const amountSats = useMemo(() => parseFairToUnits(value), [value]);
 
@@ -62,10 +58,7 @@ export function BuyAmountInput({
     <View className="items-center pt-4 pb-2">
       {/* Hero amount — FairCoin glyph + Phudu number, like the home balance */}
       <View className="flex-row items-end justify-center w-full px-4">
-        <View
-          className="mr-1.5"
-          style={{ marginBottom: amountFontSize * 0.16 }}
-        >
+        <View className="mr-1.5" style={{ marginBottom: amountFontSize * 0.16 }}>
           <FairCoinSymbol size={Math.round(amountFontSize * 0.6)} />
         </View>
         <AmountInput
@@ -86,7 +79,7 @@ export function BuyAmountInput({
       </View>
       {usdEquivalent ? (
         <Text className="text-muted-foreground text-sm mt-2">
-          {t("buy.usdApprox", { amount: usdEquivalent })}
+          {t('buy.usdApprox', { amount: usdEquivalent })}
         </Text>
       ) : null}
       {presets && presets.length > 0 ? (
@@ -97,13 +90,11 @@ export function BuyAmountInput({
               <Pressable
                 key={preset}
                 onPress={() => onValueChange(preset)}
-                className={`rounded-full px-4 py-2 ${
-                  selected ? "bg-primary/15" : "bg-surface"
-                }`}
+                className={`rounded-full px-4 py-2 ${selected ? 'bg-primary/15' : 'bg-surface'}`}
               >
                 <Text
                   className={`text-xs font-semibold ${
-                    selected ? "text-primary" : "text-foreground"
+                    selected ? 'text-primary' : 'text-foreground'
                   }`}
                 >
                   {preset}

@@ -36,10 +36,10 @@ interface DoHResponse {
 // (/faircoin Core:3.0.5/, NODE_BLOOM). The fcnode1..3 hosts are included so the
 // wallet picks them up automatically once their P2P port is opened.
 const FALLBACK_PEERS: readonly string[] = [
-  "187.33.154.215", // fcexplorer — verified live, serves filtered blocks
-  "80.240.127.240", // fcnode1
-  "187.33.155.242", // fcnode2
-  "187.33.156.120", // fcnode3
+  '187.33.154.215', // fcexplorer — verified live, serves filtered blocks
+  '80.240.127.240', // fcnode1
+  '187.33.155.242', // fcnode2
+  '187.33.156.120', // fcnode3
 ];
 
 // ---------------------------------------------------------------------------
@@ -47,8 +47,8 @@ const FALLBACK_PEERS: readonly string[] = [
 // ---------------------------------------------------------------------------
 
 const DOH_ENDPOINTS: readonly string[] = [
-  "https://cloudflare-dns.com/dns-query",
-  "https://dns.google/resolve",
+  'https://cloudflare-dns.com/dns-query',
+  'https://dns.google/resolve',
 ];
 
 /**
@@ -60,23 +60,23 @@ async function resolveViaDoH(hostname: string): Promise<string[]> {
     try {
       const url = `${endpoint}?name=${encodeURIComponent(hostname)}&type=A`;
       const response = await fetch(url, {
-        headers: { Accept: "application/dns-json" },
+        headers: { Accept: 'application/dns-json' },
       });
 
       if (!response.ok) {
         continue;
       }
 
-      const json: DoHResponse = await response.json() as DoHResponse;
+      const json: DoHResponse = (await response.json()) as DoHResponse;
 
       if (!json.Answer || json.Answer.length === 0) {
         continue;
       }
 
       // Type 1 = A record (IPv4)
-      const ipv4Addresses = json.Answer
-        .filter((answer: DoHAnswer) => answer.type === 1)
-        .map((answer: DoHAnswer) => answer.data);
+      const ipv4Addresses = json.Answer.filter((answer: DoHAnswer) => answer.type === 1).map(
+        (answer: DoHAnswer) => answer.data,
+      );
 
       if (ipv4Addresses.length > 0) {
         return ipv4Addresses;
@@ -126,7 +126,7 @@ export async function resolveDNSSeeds(
   );
 
   for (const result of results) {
-    if (result.status === "fulfilled") {
+    if (result.status === 'fulfilled') {
       for (const addr of result.value) {
         allAddresses.add(addr);
       }

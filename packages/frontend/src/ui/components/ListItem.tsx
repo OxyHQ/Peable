@@ -8,12 +8,12 @@
  * inter-row hairline — are composed on top.
  */
 
-import { View, Text, StyleSheet } from "react-native";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { Item } from "@oxy.so/bloom/item";
+import { View, Text, StyleSheet } from 'react-native';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { Item } from '@oxy.so/bloom/item';
 
-type IconName = React.ComponentProps<typeof MaterialCommunityIcons>["name"];
+type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
 interface ListItemProps {
   title: string;
@@ -41,7 +41,7 @@ export function ListItem({
   value,
   icon,
   iconColor,
-  iconBg = "bg-primary/10",
+  iconBg = 'bg-primary/10',
   onPress,
   onLongPress,
   trailing,
@@ -54,9 +54,7 @@ export function ListItem({
   const shouldShowChevron = showChevron ?? onPress !== undefined;
 
   const leading = icon ? (
-    <View
-      className={`w-9 h-9 rounded-full items-center justify-center ${iconBg}`}
-    >
+    <View className={`w-9 h-9 rounded-full items-center justify-center ${iconBg}`}>
       <MaterialCommunityIcons name={icon} size={18} color={resolvedIconColor} />
     </View>
   ) : undefined;
@@ -64,18 +62,14 @@ export function ListItem({
   const hasTrailing = value != null || trailing != null || shouldShowChevron;
   const trailingContent = hasTrailing ? (
     <View className="flex-row items-center">
-      {typeof value === "string" ? (
+      {typeof value === 'string' ? (
         <Text className="text-muted-foreground text-sm mr-2">{value}</Text>
       ) : value ? (
         <View className="mr-2">{value}</View>
       ) : null}
       {trailing}
       {shouldShowChevron ? (
-        <MaterialCommunityIcons
-          name="chevron-right"
-          size={20}
-          color={theme.colors.textSecondary}
-        />
+        <MaterialCommunityIcons name="chevron-right" size={20} color={theme.colors.textSecondary} />
       ) : null}
     </View>
   ) : undefined;

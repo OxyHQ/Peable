@@ -33,29 +33,26 @@
  * reserving on page load would spend that budget on link clicks.
  */
 
-import { useCallback, useState } from "react";
-import { View, Text, ActivityIndicator, Platform, Linking, ScrollView } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import { useQuery } from "@tanstack/react-query";
-import Constants from "expo-constants";
-import { useAuth } from "@oxy.so/services";
-import { isNotFoundError } from "@oxy.so/core";
-import { SafeAreaView } from "../../src/ui/safe-area-view";
-import { NotFoundScreen } from "../../src/ui/components/NotFoundScreen";
-import { ScreenHeader } from "../../src/ui/components/ScreenHeader";
-import { UserAvatar } from "../../src/ui/components/UserAvatar";
-import { ProfileQRCard } from "../../src/ui/components/ProfileQRCard";
-import { Button } from "../../src/ui/components/Button";
-import { oxyServices } from "../../src/services/oxy-services";
-import { reserveNextSocialAddress, KeylessRecipientError } from "../../src/services/gateway-client";
-import { useWalletStore } from "../../src/wallet/wallet-store";
-import { useTabScreenBottomInset } from "../../src/ui/navigation/tabs";
-import {
-  parseProfileHandle,
-  decideProfilePayAction,
-} from "../../src/pay/profile-route";
-import { FONT_PHUDU_BLACK } from "../../src/utils/fonts";
-import { t } from "../../src/i18n";
+import { useCallback, useState } from 'react';
+import { View, Text, ActivityIndicator, Platform, Linking, ScrollView } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
+import Constants from 'expo-constants';
+import { useAuth } from '@oxy.so/services';
+import { isNotFoundError } from '@oxy.so/core';
+import { SafeAreaView } from '../../src/ui/safe-area-view';
+import { NotFoundScreen } from '../../src/ui/components/NotFoundScreen';
+import { ScreenHeader } from '../../src/ui/components/ScreenHeader';
+import { UserAvatar } from '../../src/ui/components/UserAvatar';
+import { ProfileQRCard } from '../../src/ui/components/ProfileQRCard';
+import { Button } from '../../src/ui/components/Button';
+import { oxyServices } from '../../src/services/oxy-services';
+import { reserveNextSocialAddress, KeylessRecipientError } from '../../src/services/gateway-client';
+import { useWalletStore } from '../../src/wallet/wallet-store';
+import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
+import { parseProfileHandle, decideProfilePayAction } from '../../src/pay/profile-route';
+import { FONT_PHUDU_BLACK } from '../../src/utils/fonts';
+import { t } from '../../src/i18n';
 
 /** Matches ReceiveSheet's address QR, so the two read as one app. */
 
@@ -74,8 +71,8 @@ const AVATAR_SIZE = 96;
  */
 function appScheme(): string | null {
   const scheme = Constants.expoConfig?.scheme;
-  if (typeof scheme === "string") return scheme;
-  if (Array.isArray(scheme) && typeof scheme[0] === "string") return scheme[0];
+  if (typeof scheme === 'string') return scheme;
+  if (Array.isArray(scheme) && typeof scheme[0] === 'string') return scheme[0];
   return null;
 }
 
@@ -105,7 +102,7 @@ function ProfileScreen({ handle }: { handle: string }) {
     isPending,
     error,
   } = useQuery({
-    queryKey: ["oxyProfileByUsername", handle],
+    queryKey: ['oxyProfileByUsername', handle],
     queryFn: () => oxyServices.users.byUsername(handle),
     staleTime: PROFILE_STALE_TIME_MS,
     // A missing handle is an answer, not a transient failure — retrying a 404
@@ -117,7 +114,7 @@ function ProfileScreen({ handle }: { handle: string }) {
 
   const handleBack = useCallback(() => {
     if (router.canGoBack()) router.back();
-    else router.replace("/(tabs)");
+    else router.replace('/(tabs)');
   }, [router]);
 
   /**
@@ -133,20 +130,20 @@ function ProfileScreen({ handle }: { handle: string }) {
     try {
       const reservation = await reserveNextSocialAddress(profile.username, network);
       router.push({
-        pathname: "/(tabs)/send",
+        pathname: '/(tabs)/send',
         params: {
           address: reservation.address,
           recipientId: profile.id,
           recipientUsername: profile.username,
-          recipientDisplayName: profile.name.displayName ?? "",
-          recipientAvatarFileId: profile.avatar ?? "",
+          recipientDisplayName: profile.name.displayName ?? '',
+          recipientAvatarFileId: profile.avatar ?? '',
         },
       });
     } catch (e: unknown) {
       setPayError(
         e instanceof KeylessRecipientError
-          ? t("profile.error.keyless", { username: profile.username })
-          : t("profile.error.reserve"),
+          ? t('profile.error.keyless', { username: profile.username })
+          : t('profile.error.reserve'),
       );
     } finally {
       setReserving(false);
@@ -162,7 +159,7 @@ function ProfileScreen({ handle }: { handle: string }) {
   }, [handle]);
 
   const handleGoHome = useCallback(() => {
-    router.replace("/(tabs)");
+    router.replace('/(tabs)');
   }, [router]);
 
   const handleSignIn = useCallback(() => {
@@ -171,7 +168,7 @@ function ProfileScreen({ handle }: { handle: string }) {
 
   if (isPending) {
     return (
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
         <ScreenHeader title={`@${handle}`} onBack={handleBack} />
         <View className="flex-1 items-center justify-center">
           <ActivityIndicator size="large" />
@@ -183,20 +180,25 @@ function ProfileScreen({ handle }: { handle: string }) {
   if (!profile) {
     const missing = isNotFoundError(error);
     return (
-      <SafeAreaView className="flex-1 bg-background" edges={["top", "bottom", "left", "right"]}>
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
         <ScreenHeader title={`@${handle}`} onBack={handleBack} />
         <View className="flex-1 items-center justify-center px-8">
           <Text
             className="text-foreground text-center mb-3"
             style={{ fontFamily: FONT_PHUDU_BLACK, fontSize: 24 }}
           >
-            {missing ? t("profile.notFound.title", { username: handle }) : t("profile.error.title")}
+            {missing ? t('profile.notFound.title', { username: handle }) : t('profile.error.title')}
           </Text>
           <Text className="text-muted-foreground text-base text-center mb-8 leading-6">
-            {missing ? t("profile.notFound.description") : t("profile.error.description")}
+            {missing ? t('profile.notFound.description') : t('profile.error.description')}
           </Text>
           <View className="w-full max-w-xs">
-            <Button title={t("notFound.goHome")} onPress={handleGoHome} variant="secondary" size="lg" />
+            <Button
+              title={t('notFound.goHome')}
+              onPress={handleGoHome}
+              variant="secondary"
+              size="lg"
+            />
           </View>
         </View>
       </SafeAreaView>
@@ -205,7 +207,7 @@ function ProfileScreen({ handle }: { handle: string }) {
 
   const displayName = profile.name.displayName ?? profile.username;
   const action = decideProfilePayAction({
-    isWeb: Platform.OS === "web",
+    isWeb: Platform.OS === 'web',
     isAuthResolved,
     isAuthenticated,
     isSelf: user?.id === profile.id,
@@ -214,7 +216,7 @@ function ProfileScreen({ handle }: { handle: string }) {
   });
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={["top", "left", "right"]}>
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'left', 'right']}>
       <ScreenHeader title={`@${profile.username}`} onBack={handleBack} />
 
       {/* Scrolls, and clears the floating tab bar: the self branch's QR card
@@ -293,31 +295,31 @@ function PayAction({
   onGoHome: () => void;
 }) {
   switch (action.kind) {
-    case "loading":
+    case 'loading':
       return <ActivityIndicator />;
 
-    case "self":
+    case 'self':
       return (
         <View className="items-center">
           <Text className="text-muted-foreground text-base text-center mb-5">
-            {t("profile.self")}
+            {t('profile.self')}
           </Text>
           <ProfileQRCard username={username} />
         </View>
       );
 
-    case "web":
+    case 'web':
       return (
         <View>
           <Text className="text-foreground text-base text-center mb-2">
-            {t("profile.web.title")}
+            {t('profile.web.title')}
           </Text>
           <Text className="text-muted-foreground text-sm text-center mb-6 leading-5">
-            {t("profile.web.description", { name: displayName })}
+            {t('profile.web.description', { name: displayName })}
           </Text>
           {appScheme() ? (
             <Button
-              title={t("profile.web.openApp")}
+              title={t('profile.web.openApp')}
               onPress={onOpenApp}
               variant="primary"
               size="lg"
@@ -327,41 +329,41 @@ function PayAction({
         </View>
       );
 
-    case "signin":
+    case 'signin':
       return (
         <View>
           <Text className="text-muted-foreground text-sm text-center mb-6 leading-5">
-            {t("profile.signIn.description", { username })}
+            {t('profile.signIn.description', { username })}
           </Text>
-          <Button title={t("pay.signIn")} onPress={onSignIn} variant="primary" size="lg" />
+          <Button title={t('pay.signIn')} onPress={onSignIn} variant="primary" size="lg" />
           <TestnetNote />
         </View>
       );
 
-    case "wallet-not-ready":
+    case 'wallet-not-ready':
       return (
         <View>
           <Text className="text-muted-foreground text-sm text-center mb-6 leading-5">
-            {t("profile.walletNotReady")}
+            {t('profile.walletNotReady')}
           </Text>
-          <Button title={t("notFound.goHome")} onPress={onGoHome} variant="primary" size="lg" />
+          <Button title={t('notFound.goHome')} onPress={onGoHome} variant="primary" size="lg" />
         </View>
       );
 
-    case "mainnet-blocked":
+    case 'mainnet-blocked':
       return (
         <View className="bg-surface rounded-2xl p-4">
           <Text className="text-foreground text-sm text-center leading-5">
-            {t("profile.mainnetBlocked", { username })}
+            {t('profile.mainnetBlocked', { username })}
           </Text>
         </View>
       );
 
-    case "send":
+    case 'send':
       return (
         <View>
           <Button
-            title={reserving ? t("profile.reserving") : t("profile.send", { name: displayName })}
+            title={reserving ? t('profile.reserving') : t('profile.send', { name: displayName })}
             onPress={onSend}
             variant="primary"
             size="lg"
@@ -384,7 +386,7 @@ function PayAction({
 function TestnetNote() {
   return (
     <Text className="text-muted-foreground text-xs text-center mt-4 leading-4">
-      {t("profile.testnetOnly")}
+      {t('profile.testnetOnly')}
     </Text>
   );
 }

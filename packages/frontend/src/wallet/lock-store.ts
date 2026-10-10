@@ -13,7 +13,7 @@
  * locked (PIN set) or unlocks it (no PIN / no wallet).
  */
 
-import { create } from "zustand";
+import { create } from 'zustand';
 
 export interface LockState {
   /** True while the app is locked; authenticated UI must not be shown. */
@@ -85,9 +85,7 @@ export const useLockStore = create<LockState>((set, get) => ({
     set({ pendingDeepLink: { url, capturedAt: Date.now() } });
   },
 
-  consumePendingDeepLink: (
-    maxAgeMs: number = DEFAULT_DEEP_LINK_MAX_AGE_MS,
-  ): string | null => {
+  consumePendingDeepLink: (maxAgeMs: number = DEFAULT_DEEP_LINK_MAX_AGE_MS): string | null => {
     const entry = get().pendingDeepLink;
     set({ pendingDeepLink: null });
     if (!entry) return null;

@@ -85,7 +85,7 @@ function callOf(requests: CapturedRequest[]): CapturedRequest | undefined {
 }
 
 describe('ConnectedAccountsResource', () => {
-  test('creates a seller account by the merchant\'s own reference', async () => {
+  test("creates a seller account by the merchant's own reference", async () => {
     const { fetch: fetchImpl, requests } = gateway(ACCOUNT, 201);
     const resource = new ConnectedAccountsResource(buildTestClient(fetchImpl));
 
@@ -185,9 +185,7 @@ describe('TransfersResource', () => {
       amount: '500',
       externalRef: 'leg_b',
     });
-    expect(callOf(withRef.requests)?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/transfers/tr_1/reversals`,
-    );
+    expect(callOf(withRef.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/transfers/tr_1/reversals`);
   });
 });
 
@@ -221,9 +219,7 @@ describe('RefundsResource', () => {
     const list = await resource.listForPaymentIntent('pi_1');
 
     expect(list.remainingRefundable).toBe('7500');
-    expect(callOf(requests)?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/refunds`,
-    );
+    expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/refunds`);
   });
 });
 
@@ -254,9 +250,7 @@ describe('settlement reporting', () => {
     expect(settlement.status).toBe('unknown');
     expect(settlement.fee).toBeNull();
     expect(settlement.net).toBeNull();
-    expect(callOf(requests)?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/settlement`,
-    );
+    expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/settlement`);
   });
 });
 
@@ -306,8 +300,6 @@ describe('MerchantsResource and DisputesResource', () => {
     await resource.listForPaymentIntent('pi_1');
 
     expect(callOf(requests)?.method).toBe('GET');
-    expect(callOf(requests)?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/disputes`,
-    );
+    expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/disputes`);
   });
 });

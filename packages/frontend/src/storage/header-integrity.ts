@@ -14,8 +14,8 @@
  * re-hashing the tip on every launch forever, with no way to ever retire it.
  */
 
-import { hashBlockHeader, bytesEqual } from "@fairco.in/core";
-import type { BlockHeaderRow } from "./database";
+import { hashBlockHeader, bytesEqual } from '@fairco.in/core';
+import type { BlockHeaderRow } from './database';
 
 /**
  * Bump when the header hash function changes. Stores written under an older
@@ -45,8 +45,8 @@ export function headerMatchesItsHash(row: BlockHeaderRow): boolean {
 export function planHeaderRepair(
   storedVersion: number,
   tip: BlockHeaderRow | null,
-): "up-to-date" | "verified" | "wipe" {
-  if (storedVersion >= HEADER_HASH_VERSION) return "up-to-date";
-  if (!tip || tip.height === 0) return "verified";
-  return headerMatchesItsHash(tip) ? "verified" : "wipe";
+): 'up-to-date' | 'verified' | 'wipe' {
+  if (storedVersion >= HEADER_HASH_VERSION) return 'up-to-date';
+  if (!tip || tip.height === 0) return 'verified';
+  return headerMatchesItsHash(tip) ? 'verified' : 'wipe';
 }

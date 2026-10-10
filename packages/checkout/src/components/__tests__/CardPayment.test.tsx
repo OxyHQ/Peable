@@ -182,9 +182,7 @@ test('shows a decline and leaves the form usable', async () => {
   });
 
   expect(screen.getByRole('alert').textContent).toBe('Your card was declined.');
-  expect((screen.getByRole('button', { name: 'Pay' }) as HTMLButtonElement).disabled).toBe(
-    false,
-  );
+  expect((screen.getByRole('button', { name: 'Pay' }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 /**
@@ -193,7 +191,7 @@ test('shows a decline and leaves the form usable', async () => {
  * broken.
  */
 test('says so when the credential cannot be obtained', async () => {
-  clientAction = new Error('this payment is \'settled\' and can no longer be paid');
+  clientAction = new Error("this payment is 'settled' and can no longer be paid");
   render(<CardPayment intent={cardIntent()} />);
 
   const alert = await screen.findByRole('alert');
@@ -230,7 +228,5 @@ test('offers the form for every status a card payment can still be paid from', (
   expect(isPayableCardIntent(cardIntent({ status: 'settled' }))).toBe(false);
   expect(isPayableCardIntent(cardIntent({ status: 'expired' }))).toBe(false);
   // ...and never the other rail, whose payer is told an address instead.
-  expect(isPayableCardIntent(cardIntent({ rail: 'faircoin', status: 'created' }))).toBe(
-    false,
-  );
+  expect(isPayableCardIntent(cardIntent({ rail: 'faircoin', status: 'created' }))).toBe(false);
 });

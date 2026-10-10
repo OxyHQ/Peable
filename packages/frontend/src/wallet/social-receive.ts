@@ -23,10 +23,10 @@ import {
   createP2PKHScriptSig,
   deriveSocialReceiveAddress,
   publicKeyToAddress,
-} from "@fairco.in/core";
-import type { NetworkConfig, Transaction } from "@fairco.in/core";
-import { Point } from "@noble/secp256k1";
-import { KeyManager as IdentityKeyManager } from "@oxy.so/core/crypto";
+} from '@fairco.in/core';
+import type { NetworkConfig, Transaction } from '@fairco.in/core';
+import { Point } from '@noble/secp256k1';
+import { KeyManager as IdentityKeyManager } from '@oxy.so/core/crypto';
 
 /**
  * How many unused social-receive addresses stay watched beyond the highest
@@ -42,7 +42,7 @@ export const SOCIAL_RECEIVE_GAP_LIMIT = 20;
  * encodings of one key as strings would call them different keys.
  */
 export function compressedPublicKeyHex(publicKey: string | Uint8Array): string {
-  const hex = typeof publicKey === "string" ? publicKey.toLowerCase() : bytesToHex(publicKey);
+  const hex = typeof publicKey === 'string' ? publicKey.toLowerCase() : bytesToHex(publicKey);
   return Point.fromHex(hex).toHex(true);
 }
 
@@ -91,7 +91,11 @@ export function deriveSocialReceiveWatchWindow(
  * P2PKH input the scriptCode is the previous output's scriptPubKey, and the
  * digest is byte-identical to what `signInput` signs.
  */
-export function p2pkhSigHash(tx: Transaction, inputIndex: number, scriptPubKey: Uint8Array): Uint8Array {
+export function p2pkhSigHash(
+  tx: Transaction,
+  inputIndex: number,
+  scriptPubKey: Uint8Array,
+): Uint8Array {
   return computeMultisigSigHash(tx, inputIndex, scriptPubKey, SIGHASH_ALL);
 }
 
@@ -112,11 +116,13 @@ export async function signSocialReceiveInput(
   const sighash = bytesToHex(p2pkhSigHash(tx, inputIndex, scriptPubKey));
   const signed = await IdentityKeyManager.signSocialReceive(index, sighash);
   if (!signed) {
-    throw new Error("Cannot sign for a social-receive address without the Oxy identity");
+    throw new Error('Cannot sign for a social-receive address without the Oxy identity');
   }
   const childPublicKey = hexToBytes(signed.publicKey);
   if (publicKeyToAddress(childPublicKey, network) !== address) {
-    throw new Error("The Oxy identity signed with a key that does not own this social-receive address");
+    throw new Error(
+      'The Oxy identity signed with a key that does not own this social-receive address',
+    );
   }
   const der = hexToBytes(signed.signature);
   const signature = new Uint8Array(der.length + 1);

@@ -9,9 +9,9 @@
  * Drawn with react-native-svg so the ring inherits the theme colour.
  */
 
-import type { ReactNode } from "react";
-import { View } from "react-native";
-import Svg, { Circle } from "react-native-svg";
+import type { ReactNode } from 'react';
+import { View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 
 interface ConfirmationRingProps {
   /** Fill fraction; clamped to 0..1. */
@@ -36,17 +36,10 @@ export function ConfirmationRing({
   const circumference = 2 * Math.PI * radius;
 
   return (
-    <View
-      style={{ width: size, height: size }}
-      className="items-center justify-center"
-    >
+    <View style={{ width: size, height: size }} className="items-center justify-center">
       {/* Settled (p >= 1): no ring at all — just the centred icon. */}
       {p < 1 ? (
-        <Svg
-          width={size}
-          height={size}
-          style={{ position: "absolute", top: 0, left: 0 }}
-        >
+        <Svg width={size} height={size} style={{ position: 'absolute', top: 0, left: 0 }}>
           {/* Track */}
           <Circle
             cx={center}

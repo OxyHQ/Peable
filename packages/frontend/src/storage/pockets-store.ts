@@ -7,15 +7,11 @@
  * "main" Pocket at account 0, so pre-Pockets wallets need no migration.
  */
 
-import { getItemAsync, setItemAsync, deleteItemAsync } from "./kv-store";
-import {
-  type PocketInfo,
-  MAIN_POCKET_ACCOUNT,
-  normalizePockets,
-} from "../wallet/pockets";
+import { getItemAsync, setItemAsync, deleteItemAsync } from './kv-store';
+import { type PocketInfo, MAIN_POCKET_ACCOUNT, normalizePockets } from '../wallet/pockets';
 
-const POCKETS_PREFIX = "fairwallet_pockets_";
-const ACTIVE_POCKET_PREFIX = "fairwallet_active_pocket_";
+const POCKETS_PREFIX = 'fairwallet_pockets_';
+const ACTIVE_POCKET_PREFIX = 'fairwallet_active_pocket_';
 
 /** The Pocket registry for a wallet (always contains the main Pocket). */
 export async function getPockets(walletId: string): Promise<PocketInfo[]> {
@@ -31,14 +27,8 @@ export async function getPockets(walletId: string): Promise<PocketInfo[]> {
 }
 
 /** Persist the Pocket registry for a wallet. */
-export async function savePockets(
-  walletId: string,
-  pockets: PocketInfo[],
-): Promise<void> {
-  await setItemAsync(
-    `${POCKETS_PREFIX}${walletId}`,
-    JSON.stringify(normalizePockets(pockets)),
-  );
+export async function savePockets(walletId: string, pockets: PocketInfo[]): Promise<void> {
+  await setItemAsync(`${POCKETS_PREFIX}${walletId}`, JSON.stringify(normalizePockets(pockets)));
 }
 
 /** The active Pocket (BIP44 account index) for a wallet; defaults to main (0). */
@@ -50,10 +40,7 @@ export async function getActivePocket(walletId: string): Promise<number> {
 }
 
 /** Set the active Pocket for a wallet. */
-export async function setActivePocket(
-  walletId: string,
-  account: number,
-): Promise<void> {
+export async function setActivePocket(walletId: string, account: number): Promise<void> {
   await setItemAsync(`${ACTIVE_POCKET_PREFIX}${walletId}`, String(account));
 }
 

@@ -1,5 +1,5 @@
-import { test, expect, afterEach } from "bun:test";
-import { fetchBalancesSat } from "./explorer-address";
+import { test, expect, afterEach } from 'bun:test';
+import { fetchBalancesSat } from './explorer-address';
 
 // Shape pinned against the LIVE endpoint (probed 2026-09-06):
 //   GET https://explorer.fairco.in/api/address/:address?network=mainnet
@@ -13,25 +13,28 @@ function respondPerAddress(balances: Record<string, number | null>): { calls: st
   const handler = async (input: RequestInfo | URL) => {
     const url = String(input);
     calls.push(url);
-    const address = decodeURIComponent(url.split("/api/address/")[1]?.split("?")[0] ?? "");
+    const address = decodeURIComponent(url.split('/api/address/')[1]?.split('?')[0] ?? '');
     const balanceSat = balances[address];
     if (balanceSat === null || balanceSat === undefined) {
       return new Response(JSON.stringify({}), { status: 404 });
     }
     return new Response(
-      JSON.stringify({ addressInfo: { address, balanceSat, txCount: 1, utxos: [] }, network: "mainnet" }),
-      { status: 200, headers: { "content-type": "application/json" } },
+      JSON.stringify({
+        addressInfo: { address, balanceSat, txCount: 1, utxos: [] },
+        network: 'mainnet',
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } },
     );
   };
   globalThis.fetch = Object.assign(handler, { preconnect: realFetch.preconnect });
   return { calls };
 }
 
-test("sums the balances of every address it is given", async () => {
+test('sums the balances of every address it is given', async () => {
   respondPerAddress({ Fa: 100, Fb: 250 });
-  const result = await fetchBalancesSat(["Fa", "Fb"], "mainnet");
+  const result = await fetchBalancesSat(['Fa', 'Fb'], 'mainnet');
   expect(result.totalSat).toBe(350n);
-  expect(result.byAddress.get("Fb")).toBe(250n);
+  expect(result.byAddress.get('Fb')).toBe(250n);
 });
 
 /**
@@ -39,16 +42,16 @@ test("sums the balances of every address it is given", async () => {
  * pays it. Treating that as an error would make a wallet with ONE unused
  * address fail to show any balance at all.
  */
-test("counts an address the explorer does not know as zero, not an error", async () => {
+test('counts an address the explorer does not know as zero, not an error', async () => {
   respondPerAddress({ Fa: 100, Funused: null });
-  const result = await fetchBalancesSat(["Fa", "Funused"], "mainnet");
+  const result = await fetchBalancesSat(['Fa', 'Funused'], 'mainnet');
   expect(result.totalSat).toBe(100n);
-  expect(result.byAddress.get("Funused")).toBe(0n);
+  expect(result.byAddress.get('Funused')).toBe(0n);
 });
 
-test("makes no request at all for an empty address list", async () => {
+test('makes no request at all for an empty address list', async () => {
   const { calls } = respondPerAddress({});
-  const result = await fetchBalancesSat([], "mainnet");
+  const result = await fetchBalancesSat([], 'mainnet');
   expect(result.totalSat).toBe(0n);
   expect(calls).toEqual([]);
 });
@@ -57,14 +60,14 @@ test("makes no request at all for an empty address list", async () => {
  * The network must reach the query string: mainnet and testnet are different
  * chains, and asking the wrong one answers a confident, wrong balance.
  */
-test("asks the explorer for the requested network", async () => {
+test('asks the explorer for the requested network', async () => {
   const { calls } = respondPerAddress({ Ta: 7 });
-  await fetchBalancesSat(["Ta"], "testnet");
-  expect(calls[0]).toContain("network=testnet");
+  await fetchBalancesSat(['Ta'], 'testnet');
+  expect(calls[0]).toContain('network=testnet');
 });
 
 /** Answer with one status for every address, whatever it is. */
-function respondWith(status: number, body = "{}"): void {
+function respondWith(status: number, body = '{}'): void {
   const handler = async () => new Response(body, { status });
   globalThis.fetch = Object.assign(handler, { preconnect: realFetch.preconnect });
 }
@@ -83,14 +86,14 @@ function respondWith(status: number, body = "{}"): void {
  * that actually happen: a rate limit under a wallet with many addresses, and an
  * explorer restart.
  */
-test("throws on a rate limit rather than reporting a zero balance", async () => {
+test('throws on a rate limit rather than reporting a zero balance', async () => {
   respondWith(429);
-  expect(fetchBalancesSat(["Fa"], "mainnet")).rejects.toThrow(/429/);
+  expect(fetchBalancesSat(['Fa'], 'mainnet')).rejects.toThrow(/429/);
 });
 
-test("throws on an explorer outage rather than reporting a zero balance", async () => {
+test('throws on an explorer outage rather than reporting a zero balance', async () => {
   respondWith(503);
-  expect(fetchBalancesSat(["Fa"], "mainnet")).rejects.toThrow(/503/);
+  expect(fetchBalancesSat(['Fa'], 'mainnet')).rejects.toThrow(/503/);
 });
 
 /**
@@ -98,9 +101,9 @@ test("throws on an explorer outage rather than reporting a zero balance", async 
  * is an answer we do not understand, and guessing the most alarming possible
  * number from it is not a safe default.
  */
-test("throws on a successful response with no usable balanceSat", async () => {
-  respondWith(200, JSON.stringify({ addressInfo: { balanceSat: "not-a-number" } }));
-  expect(fetchBalancesSat(["Fa"], "mainnet")).rejects.toThrow(/balanceSat/);
+test('throws on a successful response with no usable balanceSat', async () => {
+  respondWith(200, JSON.stringify({ addressInfo: { balanceSat: 'not-a-number' } }));
+  expect(fetchBalancesSat(['Fa'], 'mainnet')).rejects.toThrow(/balanceSat/);
 });
 
 /**
@@ -110,9 +113,9 @@ test("throws on a successful response with no usable balanceSat", async () => {
  * function reads `balanceSat` and never the unbounded cumulative totals beside
  * it, one of which is already within 1.3x of that ceiling.
  */
-test("throws rather than reporting a balance JSON.parse has already rounded", async () => {
+test('throws rather than reporting a balance JSON.parse has already rounded', async () => {
   respondWith(200, `{"addressInfo":{"balanceSat":${String(Number.MAX_SAFE_INTEGER)}0}}`);
-  expect(fetchBalancesSat(["Fa"], "mainnet")).rejects.toThrow(/balanceSat/);
+  expect(fetchBalancesSat(['Fa'], 'mainnet')).rejects.toThrow(/balanceSat/);
 });
 
 /**
@@ -121,9 +124,9 @@ test("throws rather than reporting a balance JSON.parse has already rounded", as
  * still answer zero, which is the behaviour the original over-broad `0n` was
  * protecting and which this change must not lose.
  */
-test("still answers zero for the one case that means zero", async () => {
+test('still answers zero for the one case that means zero', async () => {
   respondPerAddress({ Funused: null });
-  const result = await fetchBalancesSat(["Funused"], "mainnet");
-  expect(result.byAddress.get("Funused")).toBe(0n);
+  const result = await fetchBalancesSat(['Funused'], 'mainnet');
+  expect(result.byAddress.get('Funused')).toBe(0n);
   expect(result.totalSat).toBe(0n);
 });

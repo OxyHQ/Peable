@@ -3,7 +3,7 @@
  * Polls the Explorer API for current price data and caches it locally.
  */
 
-import { EXPLORER_BASE_URL } from "@fairco.in/core";
+import { EXPLORER_BASE_URL } from '@fairco.in/core';
 
 const EXPLORER_API = EXPLORER_BASE_URL;
 const PRICE_POLL_INTERVAL = 60_000; // 1 minute

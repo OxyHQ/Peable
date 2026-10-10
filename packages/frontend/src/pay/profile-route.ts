@@ -6,10 +6,10 @@
  * renderer, mirroring `wallet/entry-route.ts` for `app/index.tsx`.
  */
 
-import { isValidUsername } from "@oxy.so/contracts";
-import type { NetworkType } from "@fairco.in/core";
-import { PROFILE_WEB_ORIGIN } from "../config";
-import { SOCIAL_PAY_NETWORK } from "./social-network";
+import { isValidUsername } from '@oxy.so/contracts';
+import type { NetworkType } from '@fairco.in/core';
+import { PROFILE_WEB_ORIGIN } from '../config';
+import { SOCIAL_PAY_NETWORK } from './social-network';
 
 /**
  * Read the Oxy handle out of the route's `[username]` segment.
@@ -23,11 +23,9 @@ import { SOCIAL_PAY_NETWORK } from "./social-network";
  * identity API can actually be asked about, and everything else 404s locally
  * without a round trip.
  */
-export function parseProfileHandle(
-  segment: string | string[] | undefined,
-): string | null {
+export function parseProfileHandle(segment: string | string[] | undefined): string | null {
   const raw = Array.isArray(segment) ? segment[0] : segment;
-  if (typeof raw !== "string" || !raw.startsWith("@")) return null;
+  if (typeof raw !== 'string' || !raw.startsWith('@')) return null;
   const handle = raw.slice(1);
   return isValidUsername(handle) ? handle : null;
 }
@@ -59,13 +57,13 @@ export function parseProfileHandle(
  * state until then, so this never sees a not-yet-known `false`.
  */
 export type ProfilePayAction =
-  | { kind: "loading" }
-  | { kind: "self" }
-  | { kind: "web" }
-  | { kind: "signin" }
-  | { kind: "wallet-not-ready" }
-  | { kind: "mainnet-blocked" }
-  | { kind: "send" };
+  | { kind: 'loading' }
+  | { kind: 'self' }
+  | { kind: 'web' }
+  | { kind: 'signin' }
+  | { kind: 'wallet-not-ready' }
+  | { kind: 'mainnet-blocked' }
+  | { kind: 'send' };
 
 export function decideProfilePayAction(input: {
   isWeb: boolean;
@@ -75,21 +73,20 @@ export function decideProfilePayAction(input: {
   walletInitialized: boolean;
   network: NetworkType;
 }): ProfilePayAction {
-  const { isWeb, isAuthResolved, isAuthenticated, isSelf, walletInitialized, network } =
-    input;
+  const { isWeb, isAuthResolved, isAuthenticated, isSelf, walletInitialized, network } = input;
 
-  if (!isAuthResolved) return { kind: "loading" };
+  if (!isAuthResolved) return { kind: 'loading' };
 
   // Before the platform split: "this is you" is the useful answer in a browser
   // too, and it is true regardless of whether a wallet could exist there.
-  if (isAuthenticated && isSelf) return { kind: "self" };
+  if (isAuthenticated && isSelf) return { kind: 'self' };
 
   // A browser cannot hold the on-device identity key the wallet seed derives
   // from, so no amount of signing in changes the answer.
-  if (isWeb) return { kind: "web" };
+  if (isWeb) return { kind: 'web' };
 
-  if (!isAuthenticated) return { kind: "signin" };
-  if (!walletInitialized) return { kind: "wallet-not-ready" };
+  if (!isAuthenticated) return { kind: 'signin' };
+  if (!walletInitialized) return { kind: 'wallet-not-ready' };
 
   // Last, so a testnet wallet that is merely signed out still reads "sign in"
   // rather than a network warning it cannot act on.
@@ -97,9 +94,9 @@ export function decideProfilePayAction(input: {
   // The constant, not the literal: `ReadOnlyWalletView` asks the gateway for
   // payments on the same network this gate lets people send on, and when the
   // two were written separately they disagreed.
-  if (network !== SOCIAL_PAY_NETWORK) return { kind: "mainnet-blocked" };
+  if (network !== SOCIAL_PAY_NETWORK) return { kind: 'mainnet-blocked' };
 
-  return { kind: "send" };
+  return { kind: 'send' };
 }
 
 /**

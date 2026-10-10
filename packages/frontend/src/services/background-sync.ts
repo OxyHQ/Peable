@@ -29,10 +29,10 @@
  * outside of React. That work is tracked separately.
  */
 
-import * as TaskManager from "expo-task-manager";
-import * as BackgroundTask from "expo-background-task";
+import * as TaskManager from 'expo-task-manager';
+import * as BackgroundTask from 'expo-background-task';
 
-export const BACKGROUND_TASK_NAME = "fairwallet-bg-sync";
+export const BACKGROUND_TASK_NAME = 'fairwallet-bg-sync';
 
 // Must be defined at module scope so the task is registered with the JS
 // runtime before React mounts. The body is intentionally a stub — see the

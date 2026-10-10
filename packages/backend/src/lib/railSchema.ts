@@ -1,9 +1,5 @@
-import { z } from "zod";
-import {
-  CURRENCY_CODES,
-  PAYMENT_INTENT_RAILS,
-  isBaseUnitString,
-} from "@peable.to/shared-types";
+import { z } from 'zod';
+import { CURRENCY_CODES, PAYMENT_INTENT_RAILS, isBaseUnitString } from '@peable.to/shared-types';
 
 /**
  * The rail/amount/currency/network fragment every creating route shares.
@@ -22,9 +18,7 @@ import {
  * its `RailMismatchError` into a 422.
  */
 export const railBodyFields = {
-  amount: z
-    .string()
-    .refine(isBaseUnitString, "amount must be a minor-unit integer string"),
+  amount: z.string().refine(isBaseUnitString, 'amount must be a minor-unit integer string'),
   /**
    * Optional, defaulting to `faircoin` in the service. Absent means the rail
    * this gateway shipped with, so every integration written before ADR 0001
@@ -42,5 +36,5 @@ export const railBodyFields = {
    * but with a different message. Making it conditionally required in zod would
    * need a refinement that duplicates the rail rules the service owns.
    */
-  network: z.enum(["mainnet", "testnet"]).optional(),
+  network: z.enum(['mainnet', 'testnet']).optional(),
 } as const;

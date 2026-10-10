@@ -20,28 +20,22 @@
  * TEXT evidence only, and nothing is stored. `services/disputeEvidence.ts`
  * carries both arguments.
  */
-import { Router } from "express";
-import type { RequestHandler } from "express";
-import { z } from "zod";
-import { oxy } from "../oxy";
-import { getDb } from "../db/postgres";
-import {
-  findIntentById,
-  findIntentByPublicId,
-} from "../db/payments/paymentIntentRepository";
-import {
-  findDisputeByPublicId,
-  listDisputesForIntent,
-} from "../db/disputes/disputeRepository";
+import { Router } from 'express';
+import type { RequestHandler } from 'express';
+import { z } from 'zod';
+import { oxy } from '../oxy';
+import { getDb } from '../db/postgres';
+import { findIntentById, findIntentByPublicId } from '../db/payments/paymentIntentRepository';
+import { findDisputeByPublicId, listDisputesForIntent } from '../db/disputes/disputeRepository';
 import {
   DisputeNotAnswerableError,
   DisputesUnanswerableError,
   submitDisputeEvidence,
-} from "../services/disputeEvidence";
-import { EnvironmentModeMismatchError } from "../services/providers/environmentGuard";
-import type { DisputeEvidence } from "@peable.to/shared-types";
-import { ProviderError } from "../services/providers/provider";
-import { toDisputeDTO } from "../lib/serialize";
+} from '../services/disputeEvidence';
+import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
+import type { DisputeEvidence } from '@peable.to/shared-types';
+import { ProviderError } from '../services/providers/provider';
+import { toDisputeDTO } from '../lib/serialize';
 import {
   requireAuthenticated,
   requireProviderMode,
@@ -49,8 +43,8 @@ import {
   sendError,
   sendProviderError,
   wrap,
-} from "../lib/http";
-import { resolveMerchant } from "./paymentIntents";
+} from '../lib/http';
+import { resolveMerchant } from './paymentIntents';
 
 /**
  * How long one evidence field may be.
@@ -106,17 +100,17 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
   const { requireMerchant } = deps;
 
   router.get(
-    "/v1/payment_intents/:intentId/disputes",
+    '/v1/payment_intents/:intentId/disputes',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:read"),
+    oxy.middleware.requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
       const { intentId } = req.params;
       if (!intentId) {
-        sendError(res, 422, "invalid_request_error", "intentId is required");
+        sendError(res, 422, 'invalid_request_error', 'intentId is required');
         return;
       }
 
@@ -125,13 +119,13 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
       // ONE 404 for both "does not exist" and "is not yours": distinguishing
       // them tells a caller whether another merchant's `pi_…` is real.
       if (!intent || intent.merchantId !== merchant.id) {
-        sendError(res, 404, "invalid_request_error", "payment intent not found");
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
       const rows = await listDisputesForIntent(db, intent.id);
       res.status(200).json({
-        object: "list",
+        object: 'list',
         data: rows.map((row) => toDisputeDTO(row, intent.publicId)),
       });
     }),
@@ -150,10 +144,10 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
    * that. Files are out of scope, explicitly — see the service.
    */
   router.post(
-    "/v1/disputes/:disputeId/evidence",
+    '/v1/disputes/:disputeId/evidence',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope("payments:write"),
+    oxy.middleware.requireScope('payments:write'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -163,7 +157,7 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
 
       const { disputeId } = req.params;
       if (!disputeId) {
-        sendError(res, 422, "invalid_request_error", "disputeId is required");
+        sendError(res, 422, 'invalid_request_error', 'disputeId is required');
         return;
       }
 
@@ -172,8 +166,8 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid body',
         );
         return;
       }
@@ -181,7 +175,7 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
       const db = getDb();
       const dispute = await findDisputeByPublicId(db, merchant.id, disputeId);
       if (!dispute) {
-        sendError(res, 404, "invalid_request_error", "dispute not found");
+        sendError(res, 404, 'invalid_request_error', 'dispute not found');
         return;
       }
       const intent = await findIntentById(db, dispute.paymentIntentId);
@@ -208,11 +202,11 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
           // 409: the request is well-formed and the dispute is simply not in a
           // state that accepts it — closed, or past its deadline. Neither is
           // fixable by editing the body, which a 422 would suggest.
-          sendError(res, 409, "invalid_request_error", error.message);
+          sendError(res, 409, 'invalid_request_error', error.message);
           return;
         }
         if (error instanceof DisputesUnanswerableError) {
-          sendError(res, 503, "api_error", error.message);
+          sendError(res, 503, 'api_error', error.message);
           return;
         }
         if (error instanceof EnvironmentModeMismatchError) {

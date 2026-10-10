@@ -31,10 +31,7 @@ export class PaymentLinksResource {
   }
 
   retrieve(id: string): Promise<PaymentLink> {
-    return this.client.request<PaymentLink>(
-      'GET',
-      `/v1/payment_links/${encodeURIComponent(id)}`,
-    );
+    return this.client.request<PaymentLink>('GET', `/v1/payment_links/${encodeURIComponent(id)}`);
   }
 
   list(params: PaymentLinkListParams = {}): Promise<PaymentLinkList> {

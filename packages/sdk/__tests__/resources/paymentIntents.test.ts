@@ -3,7 +3,11 @@ import type { PaymentIntent } from '@peable.to/shared-types';
 import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
 import { PeableInvalidRequestError } from '../../src/core/errors';
 import { createMockFetch } from '../support/mockFetch';
-import { buildTestClient, serviceTokenMintResponse, TEST_GATEWAY_URL } from '../support/testGateway';
+import {
+  buildTestClient,
+  serviceTokenMintResponse,
+  TEST_GATEWAY_URL,
+} from '../support/testGateway';
 
 const SAMPLE_INTENT: PaymentIntent = {
   id: 'pi_1',

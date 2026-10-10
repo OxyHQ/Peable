@@ -7,45 +7,28 @@
  * it pauses when the user navigates away.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from "react-native";
-import {
-  useFocusEffect,
-  useLocalSearchParams,
-  useRouter,
-} from "expo-router";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
-import * as WebBrowser from "expo-web-browser";
-import { Dialog, useDialogControl } from "@oxy.so/bloom/dialog";
-import { useTheme } from "@oxy.so/bloom/theme";
-import { toast } from "@oxy.so/bloom/toast";
-import MaterialCommunityIcons from "@expo/vector-icons/MaterialCommunityIcons";
-import { explorerTxUrl } from "@fairco.in/core";
-import {
-  Button,
-  EmptyState,
-  ScreenHeader,
-} from "../../src/ui/components";
-import { SafeAreaView } from "../../src/ui/safe-area-view";
-import { PaymentInstructions } from "../../src/components/buy/PaymentInstructions";
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, ScrollView, Text, View } from 'react-native';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as WebBrowser from 'expo-web-browser';
+import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
+import { useTheme } from '@oxy.so/bloom/theme';
+import { toast } from '@oxy.so/bloom/toast';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { explorerTxUrl } from '@fairco.in/core';
+import { Button, EmptyState, ScreenHeader } from '../../src/ui/components';
+import { SafeAreaView } from '../../src/ui/safe-area-view';
+import { PaymentInstructions } from '../../src/components/buy/PaymentInstructions';
 import {
   BuyApiError,
   getBuyStatus,
   type BuyQuoteResponse,
   type BuyStatusResponse,
-} from "../../src/api/buy";
-import { getDatabase } from "../../src/wallet/wallet-store";
-import {
-  isTerminalBuyStatus,
-  updateBuyOrderStatus,
-} from "../../src/wallet/buy-history";
-import { t } from "../../src/i18n";
+} from '../../src/api/buy';
+import { getDatabase } from '../../src/wallet/wallet-store';
+import { isTerminalBuyStatus, updateBuyOrderStatus } from '../../src/wallet/buy-history';
+import { t } from '../../src/i18n';
 
 const CONTENT_MAX_WIDTH = 600;
 const POLL_INTERVAL_MS = 5000;
@@ -61,12 +44,12 @@ const POLL_INTERVAL_MS = 5000;
  */
 function quoteFromStatus(status: BuyStatusResponse): BuyQuoteResponse {
   const decimals = 6;
-  const symbol = "USDC";
+  const symbol = 'USDC';
   // i18n-keyed labels for the synthesised quote so a cold-load via a shared
   // link still renders localised strings in the PaymentInstructions sheet
   // (N-8). The status endpoint omits these fields, so we synthesise; the
   // values are translated at the call site, not captured at module load.
-  const networkLabel = t("buy.quote.networkLabel.base");
+  const networkLabel = t('buy.quote.networkLabel.base');
   return {
     id: status.id,
     fairAmountSats: status.fairAmountSats,
@@ -80,7 +63,7 @@ function quoteFromStatus(status: BuyStatusResponse): BuyQuoteResponse {
     paymentNetworkLabel: networkLabel,
     cardPaymentUrl: null,
     paymentExpiresAt: status.paymentExpiresAt,
-    estimatedDeliveryTime: t("buy.quote.estimatedDelivery"),
+    estimatedDeliveryTime: t('buy.quote.estimatedDelivery'),
     feeBreakdown: { uniswapBps: 0, bridgeBps: 0, slippageBufferBps: 0 },
   };
 }
@@ -97,7 +80,7 @@ function formatBigintDecimal(raw: string, decimals: number): string {
   const whole = value / denom;
   const frac = value % denom;
   if (frac === 0n) return whole.toString();
-  const fracStr = frac.toString().padStart(decimals, "0").replace(/0+$/, "");
+  const fracStr = frac.toString().padStart(decimals, '0').replace(/0+$/, '');
   return `${whole.toString()}.${fracStr}`;
 }
 
@@ -135,11 +118,11 @@ export default function BuyQuoteScreen() {
       return fresh;
     } catch (err: unknown) {
       if (err instanceof BuyApiError && err.status === 404) {
-        setError(t("buy.error.generic", { message: err.message }));
+        setError(t('buy.error.generic', { message: err.message }));
       } else if (err instanceof Error) {
-        setError(t("buy.error.network"));
+        setError(t('buy.error.network'));
       } else {
-        setError(t("buy.error.network"));
+        setError(t('buy.error.network'));
       }
       return null;
     }
@@ -194,12 +177,10 @@ export default function BuyQuoteScreen() {
     return Math.max(0, Math.floor((expiry - now) / 1000));
   }, [status, now]);
 
-  const isFailed = status?.status === "FAILED";
-  const isDelivered = status?.status === "DELIVERED";
+  const isFailed = status?.status === 'FAILED';
+  const isDelivered = status?.status === 'DELIVERED';
   const explorerUrl =
-    isDelivered && status?.fairDeliveryTxId
-      ? explorerTxUrl(status.fairDeliveryTxId)
-      : "";
+    isDelivered && status?.fairDeliveryTxId ? explorerTxUrl(status.fairDeliveryTxId) : '';
 
   const handleViewTx = useCallback(async () => {
     if (!explorerUrl) return;
@@ -215,27 +196,21 @@ export default function BuyQuoteScreen() {
   }, [router]);
 
   const handleCopiedAddress = useCallback(() => {
-    toast.success(t("buy.instructions.copiedAddress"));
+    toast.success(t('buy.instructions.copiedAddress'));
   }, []);
 
   const handleCopiedAmount = useCallback(() => {
-    toast.success(t("buy.instructions.copiedAmount"));
+    toast.success(t('buy.instructions.copiedAmount'));
   }, []);
 
   if (!orderId) {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
-        <ScreenHeader
-          title={t("buy.title")}
-          onBack={() => router.back()}
-        />
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+        <ScreenHeader title={t('buy.title')} onBack={() => router.back()} />
         <EmptyState
           icon="alert-circle"
-          title={t("notFound.title")}
-          subtitle={t("notFound.description")}
+          title={t('notFound.title')}
+          subtitle={t('notFound.description')}
         />
       </SafeAreaView>
     );
@@ -243,11 +218,8 @@ export default function BuyQuoteScreen() {
 
   if (loading && !status) {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
-        <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+        <ScreenHeader title={t('buy.title')} onBack={() => router.back()} />
         <View className="flex-1 items-center justify-center px-6">
           <ActivityIndicator size="large" color={theme.colors.primary} />
         </View>
@@ -257,29 +229,20 @@ export default function BuyQuoteScreen() {
 
   if (!quoteShape || !status) {
     return (
-      <SafeAreaView
-        className="flex-1 bg-background"
-        edges={["top", "bottom", "left", "right"]}
-      >
-        <ScreenHeader title={t("buy.title")} onBack={() => router.back()} />
+      <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom', 'left', 'right']}>
+        <ScreenHeader title={t('buy.title')} onBack={() => router.back()} />
         <EmptyState
           icon="alert-circle"
-          title={t("notFound.title")}
-          subtitle={error ?? t("notFound.description")}
+          title={t('notFound.title')}
+          subtitle={error ?? t('notFound.description')}
         />
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView
-      className="flex-1 bg-background"
-      edges={["top", "left", "right"]}
-    >
-      <ScreenHeader
-        title={t("buy.instructions.title")}
-        onBack={() => router.back()}
-      />
+    <SafeAreaView className="flex-1 bg-background" edges={['top', 'left', 'right']}>
+      <ScreenHeader title={t('buy.instructions.title')} onBack={() => router.back()} />
       <ScrollView
         className="flex-1"
         contentContainerClassName="pb-6 gap-4"
@@ -289,10 +252,7 @@ export default function BuyQuoteScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View
-          className="w-full self-center gap-4"
-          style={{ maxWidth: CONTENT_MAX_WIDTH }}
-        >
+        <View className="w-full self-center gap-4" style={{ maxWidth: CONTENT_MAX_WIDTH }}>
           <PaymentInstructions
             quote={quoteShape}
             status={status}
@@ -306,10 +266,8 @@ export default function BuyQuoteScreen() {
               the popup). Always null until business KYC. */}
           {quoteShape.cardPaymentUrl ? (
             <Button
-              title={t("buy.instructions.openCardWebview")}
-              onPress={() =>
-                WebBrowser.openBrowserAsync(quoteShape.cardPaymentUrl ?? "")
-              }
+              title={t('buy.instructions.openCardWebview')}
+              onPress={() => WebBrowser.openBrowserAsync(quoteShape.cardPaymentUrl ?? '')}
               variant="secondary"
               size="md"
             />
@@ -317,17 +275,13 @@ export default function BuyQuoteScreen() {
 
           {error ? (
             <View className="bg-destructive/10 rounded-2xl p-3.5">
-              <Text className="text-destructive text-sm text-center">
-                {error}
-              </Text>
+              <Text className="text-destructive text-sm text-center">{error}</Text>
             </View>
           ) : null}
 
           {isFailed && status.errorMessage ? (
             <View className="bg-destructive/10 rounded-2xl p-3.5">
-              <Text className="text-destructive text-sm text-center">
-                {status.errorMessage}
-              </Text>
+              <Text className="text-destructive text-sm text-center">{status.errorMessage}</Text>
             </View>
           ) : null}
         </View>
@@ -343,7 +297,7 @@ export default function BuyQuoteScreen() {
         >
           {isDelivered ? (
             <Button
-              title={t("buy.instructions.viewTx")}
+              title={t('buy.instructions.viewTx')}
               onPress={handleViewTx}
               variant="primary"
               size="lg"
@@ -363,7 +317,7 @@ export default function BuyQuoteScreen() {
               accessibilityRole="button"
             >
               <Text className="text-foreground text-sm font-semibold">
-                {t("buy.instructions.cancel")}
+                {t('buy.instructions.cancel')}
               </Text>
             </Pressable>
           )}
@@ -373,11 +327,11 @@ export default function BuyQuoteScreen() {
       <Dialog
         control={cancelControl}
         placement="bottom"
-        title={t("buy.instructions.cancel")}
-        description={t("buy.status.expired.subtitle")}
+        title={t('buy.instructions.cancel')}
+        description={t('buy.status.expired.subtitle')}
         actions={[
-          { label: t("buy.instructions.cancel"), onPress: handleConfirmCancel },
-          { label: t("common.cancel"), color: "cancel" },
+          { label: t('buy.instructions.cancel'), onPress: handleConfirmCancel },
+          { label: t('common.cancel'), color: 'cancel' },
         ]}
       />
     </SafeAreaView>

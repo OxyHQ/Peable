@@ -6,33 +6,26 @@
  * at staging deployments without a rebuild.
  */
 
-import Constants from "expo-constants";
+import Constants from 'expo-constants';
 
-const DEFAULT_BRIDGE_BASE_URL = "https://bridge.fairco.in";
+const DEFAULT_BRIDGE_BASE_URL = 'https://bridge.fairco.in';
 
 function getBridgeBaseUrl(): string {
-  const extra = Constants.expoConfig?.extra as
-    | { bridgeBaseUrl?: string }
-    | undefined;
+  const extra = Constants.expoConfig?.extra as { bridgeBaseUrl?: string } | undefined;
   return extra?.bridgeBaseUrl ?? DEFAULT_BRIDGE_BASE_URL;
 }
 
-export type PaymentCurrency =
-  | "USDC_BASE"
-  | "ETH_BASE"
-  | "ETH_MAINNET"
-  | "BTC"
-  | "CARD";
+export type PaymentCurrency = 'USDC_BASE' | 'ETH_BASE' | 'ETH_MAINNET' | 'BTC' | 'CARD';
 
 export type BuyOrderStatus =
-  | "AWAITING_PAYMENT"
-  | "PAYMENT_DETECTED"
-  | "SWAPPING"
-  | "BURNING"
-  | "DELIVERING"
-  | "DELIVERED"
-  | "FAILED"
-  | "EXPIRED";
+  | 'AWAITING_PAYMENT'
+  | 'PAYMENT_DETECTED'
+  | 'SWAPPING'
+  | 'BURNING'
+  | 'DELIVERING'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'EXPIRED';
 
 export interface BuyQuoteRequest {
   /** FAIR amount as a decimal string (e.g. "100" or "12.5"). */
@@ -115,18 +108,15 @@ async function parseErrorBody(response: Response): Promise<BridgeErrorBody> {
 
 async function bridgePost<T>(path: string, body: unknown): Promise<T> {
   const response = await fetch(`${getBridgeBaseUrl()}${path}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!response.ok) {
     const err = await parseErrorBody(response);
     const code = err.code ?? err.error ?? null;
     const message =
-      err.message ??
-      err.reason ??
-      err.error ??
-      `Bridge API error: ${response.status}`;
+      err.message ?? err.reason ?? err.error ?? `Bridge API error: ${response.status}`;
     throw new BuyApiError(message, response.status, code);
   }
   return (await response.json()) as T;
@@ -138,10 +128,7 @@ async function bridgeGet<T>(path: string): Promise<T> {
     const err = await parseErrorBody(response);
     const code = err.code ?? err.error ?? null;
     const message =
-      err.message ??
-      err.reason ??
-      err.error ??
-      `Bridge API error: ${response.status}`;
+      err.message ?? err.reason ?? err.error ?? `Bridge API error: ${response.status}`;
     throw new BuyApiError(message, response.status, code);
   }
   return (await response.json()) as T;
@@ -151,10 +138,8 @@ async function bridgeGet<T>(path: string): Promise<T> {
  * Request a fresh buy quote. The bridge allocates a per-order payment
  * address (or a card-payment URL) and locks the price for the TTL window.
  */
-export function requestBuyQuote(
-  body: BuyQuoteRequest,
-): Promise<BuyQuoteResponse> {
-  return bridgePost<BuyQuoteResponse>("/api/buy/quote", body);
+export function requestBuyQuote(body: BuyQuoteRequest): Promise<BuyQuoteResponse> {
+  return bridgePost<BuyQuoteResponse>('/api/buy/quote', body);
 }
 
 /**

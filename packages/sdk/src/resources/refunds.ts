@@ -51,7 +51,10 @@ export class RefundsResource {
    * arrives.
    */
   create(params: CreateRefundParams, options: { idempotencyKey?: string } = {}): Promise<Refund> {
-    return this.client.request<Refund>('POST', '/v1/refunds', { body: params, idempotencyKey: options.idempotencyKey });
+    return this.client.request<Refund>('POST', '/v1/refunds', {
+      body: params,
+      idempotencyKey: options.idempotencyKey,
+    });
   }
 
   /**

@@ -1,10 +1,10 @@
-import { Router } from "express";
-import type { Request, RequestHandler } from "express";
-import { z } from "zod";
-import { rateLimit } from "express-rate-limit";
-import { isNotFoundError } from "@oxy.so/core";
-import { oxy } from "../oxy";
-import { createOxyAuthMiddleware, getRequiredOxyUserId } from "@oxy.so/core/server";
+import { Router } from 'express';
+import type { Request, RequestHandler } from 'express';
+import { z } from 'zod';
+import { rateLimit } from 'express-rate-limit';
+import { isNotFoundError } from '@oxy.so/core';
+import { oxy } from '../oxy';
+import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
 import {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
@@ -13,17 +13,14 @@ import {
   type SocialPayment,
   type SocialPaymentsResponse,
   type SocialReceiveCursorResponse,
-} from "@peable.to/shared-types";
-import { config } from "../config";
-import { reserveNextSocialAddress, getReservedThrough } from "../services/socialReceive";
-import { getDb } from "../db/postgres";
-import {
-  insertSendAttribution,
-  listAttributionsForViewer,
-} from "../db/social/sendAttribution";
-import { ENRICH_MAX_ADDRESSES, enrichAddresses } from "../services/enrichment";
-import { sendError, wrap } from "../lib/http";
-import { toSocialPaymentSource } from "../lib/serialize";
+} from '@peable.to/shared-types';
+import { config } from '../config';
+import { reserveNextSocialAddress, getReservedThrough } from '../services/socialReceive';
+import { getDb } from '../db/postgres';
+import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
+import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
+import { sendError, wrap } from '../lib/http';
+import { toSocialPaymentSource } from '../lib/serialize';
 
 /**
  * Optional, display-only context for one social payment: which app the payer
@@ -53,25 +50,24 @@ const paymentSourceSchema = z
       .string()
       .min(1)
       .max(SOCIAL_SOURCE_APP_MAX_LENGTH)
-      .regex(/^[a-z0-9][a-z0-9._-]*$/, "source.app must be a lowercase app slug"),
+      .regex(/^[a-z0-9][a-z0-9._-]*$/, 'source.app must be a lowercase app slug'),
     ref: z
       .string()
       .min(1)
       .max(SOCIAL_SOURCE_REF_MAX_LENGTH)
-      .regex(/^[\x21-\x7e]+$/, "source.ref must be an opaque id, without spaces")
+      .regex(/^[\x21-\x7e]+$/, 'source.ref must be an opaque id, without spaces')
       .optional(),
   })
   .strict();
 
 const nextAddressBodySchema = z.object({
-  network: z.enum(["mainnet", "testnet"]),
+  network: z.enum(['mainnet', 'testnet']),
   source: paymentSourceSchema.optional(),
 });
 
 /** True only when `A` and `B` are the SAME type, not merely assignable to each other. */
-type Exact<A, B> = (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2
-  ? true
-  : false;
+type Exact<A, B> =
+  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 /** Fails to compile when its argument is anything but `true`. */
 type AssertTrue<T extends true> = T;
 
@@ -93,11 +89,11 @@ export type NextAddressBodyIsTheContract = AssertTrue<
 >;
 
 const cursorQuerySchema = z.object({
-  network: z.enum(["mainnet", "testnet"]),
+  network: z.enum(['mainnet', 'testnet']),
 });
 
 const paymentsQuerySchema = z.object({
-  network: z.enum(["mainnet", "testnet"]),
+  network: z.enum(['mainnet', 'testnet']),
 });
 
 /**
@@ -134,8 +130,7 @@ interface PairRateLimitedRequest extends Request {
  * session, distinct from the merchant service-auth `paymentIntents.ts` uses.
  */
 export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
-  const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
+  const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const router = Router();
 
   // Built once per router (so tests building a fresh router via
@@ -148,19 +143,19 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
     limit: NEXT_ADDRESS_PAIR_MAX,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => (req as PairRateLimitedRequest).socialNextAddressPairKey ?? "unknown",
+    keyGenerator: (req) => (req as PairRateLimitedRequest).socialNextAddressPairKey ?? 'unknown',
     handler: (_req, res) => {
       sendError(
         res,
         429,
-        "rate_limit_error",
-        "too many address reservations for this recipient — try again shortly",
+        'rate_limit_error',
+        'too many address reservations for this recipient — try again shortly',
       );
     },
   });
 
   router.post(
-    "/v1/social/:username/next_address",
+    '/v1/social/:username/next_address',
     requireOxyUser,
     wrap(async (req, res) => {
       const senderUserId = getRequiredOxyUserId(req);
@@ -170,8 +165,8 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid request body",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid request body',
         );
         return;
       }
@@ -185,7 +180,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         sendError(
           res,
           403,
-          "invalid_request_error",
+          'invalid_request_error',
           `paying by @username is not enabled on ${network}`,
         );
         return;
@@ -193,7 +188,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const { username } = req.params;
       if (!username) {
-        sendError(res, 422, "invalid_request_error", "username is required");
+        sendError(res, 422, 'invalid_request_error', 'username is required');
         return;
       }
 
@@ -202,7 +197,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         recipient = await oxy.users.byUsername(username);
       } catch (err) {
         if (isNotFoundError(err)) {
-          sendError(res, 404, "invalid_request_error", "recipient not found");
+          sendError(res, 404, 'invalid_request_error', 'recipient not found');
           return;
         }
         // Anything other than a genuine 404 (network failure, oxy-api 5xx,
@@ -213,12 +208,12 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         process.emitWarning(
           `Peable social-send profile lookup failed for @${username}: ${message}`,
         );
-        sendError(res, 502, "api_error", "failed to resolve recipient — try again");
+        sendError(res, 502, 'api_error', 'failed to resolve recipient — try again');
         return;
       }
 
       if (recipient.id === senderUserId) {
-        sendError(res, 422, "invalid_request_error", "cannot pay yourself");
+        sendError(res, 422, 'invalid_request_error', 'cannot pay yourself');
         return;
       }
 
@@ -239,12 +234,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       // address with no attribution row.
       const reservation = await reserveNextSocialAddress(recipient.id, network);
       if (!reservation) {
-        sendError(
-          res,
-          409,
-          "keyless_recipient",
-          "recipient has not set up an Oxy identity yet",
-        );
+        sendError(res, 409, 'keyless_recipient', 'recipient has not set up an Oxy identity yet');
         return;
       }
 
@@ -271,7 +261,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
   );
 
   router.get(
-    "/v1/social/me/cursor",
+    '/v1/social/me/cursor',
     requireOxyUser,
     wrap(async (req, res) => {
       const oxyUserId = getRequiredOxyUserId(req);
@@ -281,8 +271,8 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
@@ -317,7 +307,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
    * would silently return rows with `unknown` counterparties.
    */
   router.get(
-    "/v1/social/me/payments",
+    '/v1/social/me/payments',
     requireOxyUser,
     wrap(async (req, res) => {
       const oxyUserId = getRequiredOxyUserId(req);
@@ -327,8 +317,8 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         sendError(
           res,
           422,
-          "invalid_request_error",
-          parsed.error.issues[0]?.message ?? "invalid query",
+          'invalid_request_error',
+          parsed.error.issues[0]?.message ?? 'invalid query',
         );
         return;
       }
@@ -346,8 +336,8 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const payments: SocialPayment[] = rows.map((row) => ({
         address: row.address,
-        direction: row.senderUserId === oxyUserId ? "sent" : "received",
-        counterparty: enriched[row.address] ?? { kind: "unknown" },
+        direction: row.senderUserId === oxyUserId ? 'sent' : 'received',
+        counterparty: enriched[row.address] ?? { kind: 'unknown' },
         // Display-only, like `counterparty`, and handed back exactly as the
         // paying app sent it: `toSocialPaymentSource` copies the two columns
         // and reads into neither. Omitted entirely for a payment nobody gave

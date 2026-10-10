@@ -37,7 +37,9 @@ test('a failed request throws an Error whose message never contains a client_sec
   expect(message).not.toContain('client_secret');
   expect(message).not.toContain('leaked_secret_value');
   expect(message).not.toContain('?');
-  expect(message).toBe('Gateway request to /v1/checkout_sessions/cs_1/public failed with status 403');
+  expect(message).toBe(
+    'Gateway request to /v1/checkout_sessions/cs_1/public failed with status 403',
+  );
 });
 
 test('a failed POST throws an Error identifying the path and status', async () => {

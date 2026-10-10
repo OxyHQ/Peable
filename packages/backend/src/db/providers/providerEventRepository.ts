@@ -8,7 +8,7 @@
  * actually sent; a row that can be edited says only what someone last thought
  * the provider sent.
  */
-import { and, asc, eq, isNull, sql,lte,or,inArray } from 'drizzle-orm';
+import { and, asc, eq, isNull, sql, lte, or, inArray } from 'drizzle-orm';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { providerEvents } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -72,7 +72,7 @@ export interface InsertProviderEventParams {
  */
 export async function insertProviderEvent(
   db: DatabaseOrTransaction,
-  params: InsertProviderEventParams
+  params: InsertProviderEventParams,
 ): Promise<string | null> {
   try {
     const [row] = await db
@@ -101,9 +101,12 @@ export async function insertProviderEvent(
 /** By primary key — the drain's lookup once it has claimed an id. */
 export async function findProviderEventById(
   db: DatabaseOrTransaction,
-  id: string
+  id: string,
 ): Promise<ProviderEventRow | null> {
-  const [row] = await db.select(EVENT_COLUMNS).from(providerEvents).where(eq(providerEvents.id, id));
+  const [row] = await db
+    .select(EVENT_COLUMNS)
+    .from(providerEvents)
+    .where(eq(providerEvents.id, id));
   return (row as ProviderEventRow | undefined) ?? null;
 }
 
@@ -115,7 +118,7 @@ export async function findProviderEventByIdentity(
   db: DatabaseOrTransaction,
   provider: string,
   providerAccountId: string | null,
-  providerEventId: string
+  providerEventId: string,
 ): Promise<ProviderEventRow | null> {
   const [row] = await db
     .select(EVENT_COLUMNS)
@@ -127,8 +130,8 @@ export async function findProviderEventByIdentity(
         // here, and `null = null` is NULL in SQL, so an `eq` would never match
         // the very rows the platform endpoint writes.
         sql`${providerEvents.providerAccountId} is not distinct from ${providerAccountId}`,
-        eq(providerEvents.providerEventId, providerEventId)
-      )
+        eq(providerEvents.providerEventId, providerEventId),
+      ),
     );
   return (row as ProviderEventRow | undefined) ?? null;
 }
@@ -146,15 +149,24 @@ export async function findProviderEventByIdentity(
 export async function findUnprocessedProviderEvents(
   db: DatabaseOrTransaction,
   limit: number,
-  options?:{dueAt:Date}
+  options?: { dueAt: Date },
 ): Promise<readonly ProviderEventRow[]> {
   const rows = await db
     .select(EVENT_COLUMNS)
     .from(providerEvents)
-    .where(and(isNull(providerEvents.processedAt),options?or(isNull(providerEvents.retryAfter),lte(providerEvents.retryAfter,options.dueAt)):undefined))
+    .where(
+      and(
+        isNull(providerEvents.processedAt),
+        options
+          ? or(isNull(providerEvents.retryAfter), lte(providerEvents.retryAfter, options.dueAt))
+          : undefined,
+      ),
+    )
     .orderBy(
-      options ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`) : asc(providerEvents.createdAt),
-      asc(providerEvents.id)
+      options
+        ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`)
+        : asc(providerEvents.createdAt),
+      asc(providerEvents.id),
     )
     .limit(limit);
   return rows as readonly ProviderEventRow[];
@@ -168,7 +180,7 @@ export async function findUnprocessedProviderEvents(
  */
 export async function markProviderEventProcessed(
   db: DatabaseOrTransaction,
-  id: string
+  id: string,
 ): Promise<void> {
   await db
     .update(providerEvents)
@@ -184,7 +196,7 @@ export async function markProviderEventProcessed(
 export async function markProviderEventFailed(
   db: DatabaseOrTransaction,
   id: string,
-  error: string
+  error: string,
 ): Promise<void> {
   await db.update(providerEvents).set({ processingError: error }).where(eq(providerEvents.id, id));
 }
@@ -192,7 +204,15 @@ export async function markProviderEventFailed(
 /** Deferral never changes the authenticated envelope or marks an event completed.
  * Called after the whole explicit recurring pass, so a slow blocked batch cannot
  * become due again before the pass ends. Default drain never reads this column. */
-export async function deferProviderEvents(db:DatabaseOrTransaction,ids:readonly string[],retryAfter:Date){
- if(!ids.length)return;if(!Number.isFinite(retryAfter.getTime()))throw new Error('Invalid event retry time');
- await db.update(providerEvents).set({retryAfter}).where(and(inArray(providerEvents.id,[...ids]),isNull(providerEvents.processedAt)));
+export async function deferProviderEvents(
+  db: DatabaseOrTransaction,
+  ids: readonly string[],
+  retryAfter: Date,
+) {
+  if (!ids.length) return;
+  if (!Number.isFinite(retryAfter.getTime())) throw new Error('Invalid event retry time');
+  await db
+    .update(providerEvents)
+    .set({ retryAfter })
+    .where(and(inArray(providerEvents.id, [...ids]), isNull(providerEvents.processedAt)));
 }

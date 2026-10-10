@@ -45,9 +45,9 @@
  * refused before any database access, and a duplicate costs one insert that
  * converges on an index.
  */
-import express, { Router, type Request, type Response } from "express";
-import { ingestProviderDelivery, type IngressResult } from "../services/providers/ingress";
-import type { StripeWebhookScope } from "../services/providers/stripe/stripeProvider";
+import express, { Router, type Request, type Response } from 'express';
+import { ingestProviderDelivery, type IngressResult } from '../services/providers/ingress';
+import type { StripeWebhookScope } from '../services/providers/stripe/stripeProvider';
 
 /**
  * Hard cap on a buffered delivery.
@@ -57,22 +57,22 @@ import type { StripeWebhookScope } from "../services/providers/stripe/stripeProv
  * an unauthenticated caller can make this endpoint allocate, which is why it is
  * here rather than relying on a rate limiter that cannot safely be applied.
  */
-const RAW_BODY_LIMIT = "1mb";
+const RAW_BODY_LIMIT = '1mb';
 
 /** Turn an ingress result into the HTTP answer. */
 function respond(res: Response, result: IngressResult): void {
   switch (result.kind) {
-    case "accepted":
-    case "duplicate":
+    case 'accepted':
+    case 'duplicate':
       // 200 means STORED. Never processed — see `services/providers/ingress.ts`.
-      res.status(200).json({ received: true, duplicate: result.kind === "duplicate" });
+      res.status(200).json({ received: true, duplicate: result.kind === 'duplicate' });
       return;
-    case "ignored":
+    case 'ignored':
       // Authentic and correctly refused. 200 so Stripe stops retrying something
       // that will never be accepted; the `ignored` field says which condition.
       res.status(200).json({ received: false, ignored: result.reason });
       return;
-    case "rejected":
+    case 'rejected':
       // 400 and nothing persisted. Not 401: Stripe treats any non-2xx as a
       // failed delivery and retries either way, and a 400 reads correctly in the
       // dashboard as "this endpoint refused the request" rather than implying a
@@ -85,9 +85,9 @@ function respond(res: Response, result: IngressResult): void {
 /** One endpoint's handler. Both scopes run identical code with a different secret. */
 function handleDelivery(scope: StripeWebhookScope) {
   return async (req: Request, res: Response): Promise<void> => {
-    const signature = req.get("Stripe-Signature");
-    if (signature === undefined || signature === "") {
-      res.status(400).json({ received: false, error: "missing_signature" });
+    const signature = req.get('Stripe-Signature');
+    if (signature === undefined || signature === '') {
+      res.status(400).json({ received: false, error: 'missing_signature' });
       return;
     }
 
@@ -100,7 +100,7 @@ function handleDelivery(scope: StripeWebhookScope) {
         signature,
         scope,
       },
-      "stripe",
+      'stripe',
     );
     respond(res, result);
   };
@@ -126,15 +126,15 @@ export function createProviderWebhooksRouter(): Router {
    * which reads in the dashboard as Stripe's problem.
    */
   router.post(
-    "/v1/webhooks/stripe/connect",
-    express.raw({ type: "*/*", limit: RAW_BODY_LIMIT }),
-    handleDelivery("connect"),
+    '/v1/webhooks/stripe/connect',
+    express.raw({ type: '*/*', limit: RAW_BODY_LIMIT }),
+    handleDelivery('connect'),
   );
 
   router.post(
-    "/v1/webhooks/stripe",
-    express.raw({ type: "*/*", limit: RAW_BODY_LIMIT }),
-    handleDelivery("platform"),
+    '/v1/webhooks/stripe',
+    express.raw({ type: '*/*', limit: RAW_BODY_LIMIT }),
+    handleDelivery('platform'),
   );
 
   // NO `express.json()` is mounted on this router, and none may ever be.

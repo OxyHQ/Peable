@@ -9,8 +9,7 @@
 
 // Oxy identity platform API. Owns the device-first session that OxyProvider
 // restores on cold boot.
-export const OXY_BASE_URL =
-  process.env.EXPO_PUBLIC_OXY_BASE_URL ?? 'https://api.oxy.so';
+export const OXY_BASE_URL = process.env.EXPO_PUBLIC_OXY_BASE_URL ?? 'https://api.oxy.so';
 
 // Peable's registered Oxy OAuth client id (ApplicationCredential publicKey),
 // reused from the Peable Console client. Required by @oxy.so/services for the
@@ -25,8 +24,7 @@ export const OXY_AUTH_REDIRECT_URI =
 
 // Peable Gateway backend (payment intents, submit-tx). RP backend addressed by
 // a linked client that re-mints the Oxy token from the device secret.
-export const GATEWAY_API_URL =
-  process.env.EXPO_PUBLIC_GATEWAY_API_URL ?? 'https://api.peable.to';
+export const GATEWAY_API_URL = process.env.EXPO_PUBLIC_GATEWAY_API_URL ?? 'https://api.peable.to';
 
 // Gateway realtime (Socket.IO) — live payment-intent status updates.
 export const GATEWAY_SOCKET_URL =
@@ -44,5 +42,4 @@ export const APP_DISPLAY_NAME = 'Peable';
  * profile page is served by Cloudflare Pages at the apex while the gateway
  * lives on `api.peable.to`, so the two move independently.
  */
-export const PROFILE_WEB_ORIGIN =
-  process.env.EXPO_PUBLIC_PROFILE_WEB_ORIGIN ?? 'https://peable.to';
+export const PROFILE_WEB_ORIGIN = process.env.EXPO_PUBLIC_PROFILE_WEB_ORIGIN ?? 'https://peable.to';

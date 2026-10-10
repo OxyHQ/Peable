@@ -158,7 +158,7 @@ export const disputes = pgTable(
      */
     check(
       'disputes_closed_has_no_deadline_check',
-      sql`${table.status} not in ('won', 'lost') or ${table.evidenceDueAt} is null`
+      sql`${table.status} not in ('won', 'lost') or ${table.evidenceDueAt} is null`,
     ),
     /**
      * The operator read this exists for: what is still owed a response.
@@ -175,5 +175,5 @@ export const disputes = pgTable(
     index('disputes_unanswered_idx')
       .on(table.evidenceDueAt)
       .where(sql`${table.evidenceSubmittedAt} is null`),
-  ]
+  ],
 );

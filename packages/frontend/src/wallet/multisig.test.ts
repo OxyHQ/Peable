@@ -15,7 +15,7 @@
  * the decoded spend summary alongside the partial signature -- the mandatory
  * anti-blind-signing requirement -- so the assertions below unwrap `.partial`.
  */
-import { describe, test, expect } from "bun:test";
+import { describe, test, expect } from 'bun:test';
 import {
   hexToBytes,
   bytesToHex,
@@ -28,20 +28,20 @@ import {
   deserializeTransaction,
   serializeTransaction,
   type BuildMultisigSpendParams,
-} from "@fairco.in/core";
+} from '@fairco.in/core';
 import {
   buildMultisigSendDraft,
   exportSigningRequest,
   decodeMultisigSpend,
   signMultisigSendRequest,
   finalizeMultisigSend,
-} from "./multisig";
+} from './multisig';
 
-const PRIV1 = hexToBytes("01".repeat(32));
-const PRIV3 = hexToBytes("03".repeat(32));
-const PUB1 = hexToBytes("031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f");
-const PUB2 = hexToBytes("024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766");
-const PUB3 = hexToBytes("02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337");
+const PRIV1 = hexToBytes('01'.repeat(32));
+const PRIV3 = hexToBytes('03'.repeat(32));
+const PUB1 = hexToBytes('031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f');
+const PUB2 = hexToBytes('024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d0766');
+const PUB3 = hexToBytes('02531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe337');
 const REDEEM_SCRIPT = createMultisigRedeemScript(2, [PUB1, PUB2, PUB3]);
 const MULTISIG_ADDRESS = multisigAddress(REDEEM_SCRIPT, MAINNET);
 const PUB2_ADDRESS = encodeAddress(hash160(PUB2), MAINNET.pubKeyHash);
@@ -51,7 +51,7 @@ function baseParams(): BuildMultisigSpendParams {
   return {
     utxos: [
       {
-        txid: "bb".repeat(32),
+        txid: 'bb'.repeat(32),
         vout: 0,
         value: INPUT_VALUE,
         scriptPubKey: createP2SHScript(hash160(REDEEM_SCRIPT)),
@@ -65,23 +65,23 @@ function baseParams(): BuildMultisigSpendParams {
   };
 }
 
-describe("buildMultisigSendDraft", () => {
-  test("produces the exact real unsigned draft", () => {
+describe('buildMultisigSendDraft', () => {
+  test('produces the exact real unsigned draft', () => {
     const draft = buildMultisigSendDraft(baseParams());
     expect(draft.tx.outputs[0].value).toBe(4_000_000n);
     expect(draft.tx.outputs[1].value).toBe(5_996_230n);
     expect(bytesToHex(draft.redeemScript)).toBe(bytesToHex(REDEEM_SCRIPT));
   });
 
-  test("rejects a draft spanning more than one multisig UTXO", () => {
+  test('rejects a draft spanning more than one multisig UTXO', () => {
     const params = baseParams();
     params.utxos = [...params.utxos, { ...params.utxos[0], vout: 1 }];
     expect(() => buildMultisigSendDraft(params)).toThrow(/exactly one/);
   });
 });
 
-describe("decodeMultisigSpend (anti-blind-signing)", () => {
-  test("decodes every recipient/change output and the fee for confirmation", () => {
+describe('decodeMultisigSpend (anti-blind-signing)', () => {
+  test('decodes every recipient/change output and the fee for confirmation', () => {
     const request = exportSigningRequest(buildMultisigSendDraft(baseParams()));
     const summary = decodeMultisigSpend(request, [INPUT_VALUE], MAINNET);
 
@@ -95,21 +95,21 @@ describe("decodeMultisigSpend (anti-blind-signing)", () => {
     expect(summary.inputCount).toBe(1);
   });
 
-  test("rejects a mismatched out-of-band input-value count", () => {
+  test('rejects a mismatched out-of-band input-value count', () => {
     const request = exportSigningRequest(buildMultisigSendDraft(baseParams()));
     expect(() => decodeMultisigSpend(request, [INPUT_VALUE, INPUT_VALUE], MAINNET)).toThrow(
       /expected 1 input value/,
     );
   });
 
-  test("rejects a request whose outputs exceed the provided input value", () => {
+  test('rejects a request whose outputs exceed the provided input value', () => {
     const request = exportSigningRequest(buildMultisigSendDraft(baseParams()));
     expect(() => decodeMultisigSpend(request, [1_000n], MAINNET)).toThrow(/over-spend/);
   });
 });
 
-describe("exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend", () => {
-  test("two independent cosigner devices produce the exact real finalized transaction", () => {
+describe('exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend', () => {
+  test('two independent cosigner devices produce the exact real finalized transaction', () => {
     const draft = buildMultisigSendDraft(baseParams());
     const request = exportSigningRequest(draft);
 
@@ -124,24 +124,24 @@ describe("exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend"
 
     expect(signed1.partial.pubkey).toBe(PUB1);
     expect(bytesToHex(signed1.partial.signature)).toBe(
-      "30450221009fb3526a098539a06a31cdf549f22b851025b8fca09d377b85592c0af1a3603a022063a1a91a073e65a4290ddb042122d42c959088424ae64aa344db8dac85272dc201",
+      '30450221009fb3526a098539a06a31cdf549f22b851025b8fca09d377b85592c0af1a3603a022063a1a91a073e65a4290ddb042122d42c959088424ae64aa344db8dac85272dc201',
     );
     expect(bytesToHex(signed3.partial.signature)).toBe(
-      "3044022036cf948a33d4bb0decc58a4df0617a1e23666df7b0a8ee6ae9c820b138f16dcf0220050f3cf171c492acae16432a83be20760a8a5e37df2c9b4993b5f102d9255b8701",
+      '3044022036cf948a33d4bb0decc58a4df0617a1e23666df7b0a8ee6ae9c820b138f16dcf0220050f3cf171c492acae16432a83be20760a8a5e37df2c9b4993b5f102d9255b8701',
     );
 
     const { rawTx, txid } = finalizeMultisigSend(draft, [signed1.partial, signed3.partial]);
     expect(bytesToHex(rawTx)).toBe(
-      "0100000001bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb00000000fdfd00004830450221009fb3526a098539a06a31cdf549f22b851025b8fca09d377b85592c0af1a3603a022063a1a91a073e65a4290ddb042122d42c959088424ae64aa344db8dac85272dc201473044022036cf948a33d4bb0decc58a4df0617a1e23666df7b0a8ee6ae9c820b138f16dcf0220050f3cf171c492acae16432a83be20760a8a5e37df2c9b4993b5f102d9255b87014c695221031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f21024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33753aeffffffff0200093d00000000001976a914ebc0ee0b2ab9e8277a600c251475e22a3241a1c188acc67e5b000000000017a914ae79902ae33900b679c76ced8576362e4abb15e88700000000",
+      '0100000001bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb00000000fdfd00004830450221009fb3526a098539a06a31cdf549f22b851025b8fca09d377b85592c0af1a3603a022063a1a91a073e65a4290ddb042122d42c959088424ae64aa344db8dac85272dc201473044022036cf948a33d4bb0decc58a4df0617a1e23666df7b0a8ee6ae9c820b138f16dcf0220050f3cf171c492acae16432a83be20760a8a5e37df2c9b4993b5f102d9255b87014c695221031b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f21024d4b6cd1361032ca9bd2aeb9d900aa4d45d9ead80ac9423374c451a7254d07662102531fe6068134503d2723133227c867ac8fa6c83c537e9a44c3c5bdbdcb1fe33753aeffffffff0200093d00000000001976a914ebc0ee0b2ab9e8277a600c251475e22a3241a1c188acc67e5b000000000017a914ae79902ae33900b679c76ced8576362e4abb15e88700000000',
     );
-    expect(txid).toBe("aac86bdcb7ec8ed28a9322e2c078a9d730d52613576ae3f7f7db623788c4a241");
+    expect(txid).toBe('aac86bdcb7ec8ed28a9322e2c078a9d730d52613576ae3f7f7db623788c4a241');
 
     // The finalized transaction round-trips through the wire format.
     const parsed = deserializeTransaction(rawTx);
     expect(bytesToHex(serializeTransaction(parsed))).toBe(bytesToHex(rawTx));
   });
 
-  test("the serialized signing request carries no private key material", () => {
+  test('the serialized signing request carries no private key material', () => {
     const request = exportSigningRequest(buildMultisigSendDraft(baseParams()));
     const requestJson = JSON.stringify(request);
     expect(requestJson).not.toContain(bytesToHex(PRIV1));
@@ -149,8 +149,8 @@ describe("exportSigningRequest / signMultisigSendRequest / finalizeMultisigSend"
   });
 });
 
-describe("finalizeMultisigSend verifies partial signatures at combine time", () => {
-  test("rejects a partial signature mislabeled with the wrong cosigner pubkey", () => {
+describe('finalizeMultisigSend verifies partial signatures at combine time', () => {
+  test('rejects a partial signature mislabeled with the wrong cosigner pubkey', () => {
     const draft = buildMultisigSendDraft(baseParams());
     const request = exportSigningRequest(draft);
     const signed1 = signMultisigSendRequest(request, PRIV1, PUB1, [INPUT_VALUE], MAINNET);
@@ -166,7 +166,7 @@ describe("finalizeMultisigSend verifies partial signatures at combine time", () 
     expect(() => finalizeMultisigSend(draft, [signed1.partial, signed3.partial])).not.toThrow();
   });
 
-  test("rejects a corrupted partial signature", () => {
+  test('rejects a corrupted partial signature', () => {
     const draft = buildMultisigSendDraft(baseParams());
     const request = exportSigningRequest(draft);
     const signed1 = signMultisigSendRequest(request, PRIV1, PUB1, [INPUT_VALUE], MAINNET);
@@ -181,8 +181,8 @@ describe("finalizeMultisigSend verifies partial signatures at combine time", () 
   });
 });
 
-describe("finalizeMultisigSend rejects a non-single-input draft (audit M1)", () => {
-  test("throws instead of silently dropping inputs 1..n from the finalized tx", () => {
+describe('finalizeMultisigSend rejects a non-single-input draft (audit M1)', () => {
+  test('throws instead of silently dropping inputs 1..n from the finalized tx', () => {
     const draft = buildMultisigSendDraft(baseParams());
     const request = exportSigningRequest(draft);
     const signed1 = signMultisigSendRequest(request, PRIV1, PUB1, [INPUT_VALUE], MAINNET);

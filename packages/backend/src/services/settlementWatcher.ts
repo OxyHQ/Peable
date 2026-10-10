@@ -1,12 +1,12 @@
-import type { PaymentIntentStatus } from "@peable.to/shared-types";
-import { getDb } from "../db/postgres";
-import { findWatchableIntents } from "../db/payments/paymentIntentRepository";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
-import { findMerchantById } from "../db/merchants/merchantRepository";
-import { toBaseUnits } from "../lib/money";
-import { applyEvent } from "./intentState";
-import { transitionIntent } from "./intentTransition";
-import { verifyPayment } from "./explorer";
+import type { PaymentIntentStatus } from '@peable.to/shared-types';
+import { getDb } from '../db/postgres';
+import { findWatchableIntents } from '../db/payments/paymentIntentRepository';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import { findMerchantById } from '../db/merchants/merchantRepository';
+import { toBaseUnits } from '../lib/money';
+import { applyEvent } from './intentState';
+import { transitionIntent } from './intentTransition';
+import { verifyPayment } from './explorer';
 
 /**
  * How often the fallback poller re-checks the chain for in-flight intents. The
@@ -20,10 +20,10 @@ const POLL_INTERVAL_MS = 5_000;
  * Intents that require settlement tracking sit in exactly these two states with
  * a payer-reported `txid`. Terminal/pre-broadcast intents are never polled.
  */
-const WATCHABLE_STATUSES: readonly PaymentIntentStatus[] = ["broadcast", "confirming"];
+const WATCHABLE_STATUSES: readonly PaymentIntentStatus[] = ['broadcast', 'confirming'];
 
 export interface WatcherDeps {
-  getTransaction: typeof import("./explorer").getTransaction;
+  getTransaction: typeof import('./explorer').getTransaction;
   /**
    * Invoked once per actual status change, with the intent AS PERSISTED by
    * that change — the row `transitionIntent` returned, never the pre-update
@@ -46,23 +46,22 @@ export interface WatcherDeps {
  * `confirming`), so a state that has not moved returns unchanged.
  */
 function nextStatusFor(
-  current: "broadcast" | "confirming",
+  current: 'broadcast' | 'confirming',
   paid: boolean,
   confirmations: number,
   requiredConfirmations: number,
 ): PaymentIntentStatus {
   if (!paid) {
-    return applyEvent(current, "underpaid");
+    return applyEvent(current, 'underpaid');
   }
 
-  const confirming =
-    current === "broadcast" ? applyEvent(current, "mempool_seen") : current;
+  const confirming = current === 'broadcast' ? applyEvent(current, 'mempool_seen') : current;
 
   if (confirmations < requiredConfirmations) {
     return confirming;
   }
 
-  return applyEvent(confirming, "confirmed");
+  return applyEvent(confirming, 'confirmed');
 }
 
 /**
@@ -100,7 +99,7 @@ export class SettlementWatcher {
     if (txid === null || address === null || network === null) return;
 
     const current = intent.status;
-    if (current !== "broadcast" && current !== "confirming") return;
+    if (current !== 'broadcast' && current !== 'confirming') return;
 
     const tx = await this.deps.getTransaction(txid, network);
     // Not yet visible on-chain — this is the "not the right tx yet" case; skip
@@ -111,11 +110,7 @@ export class SettlementWatcher {
     const merchant = await findMerchantById(db, intent.merchantId);
     const requiredConfirmations = merchant?.requiredConfirmations ?? 1;
 
-    const { paid, confirmations } = verifyPayment(
-      tx,
-      address,
-      toBaseUnits(intent.amount),
-    );
+    const { paid, confirmations } = verifyPayment(tx, address, toBaseUnits(intent.amount));
 
     const next = nextStatusFor(current, paid, confirmations, requiredConfirmations);
     if (next === current) return;
@@ -148,9 +143,7 @@ export class SettlementWatcher {
       this.check().catch((error: unknown) => {
         // A single failed poll must not crash the process or become an
         // unhandled rejection; surface it and let the next tick retry.
-        process.emitWarning(
-          error instanceof Error ? error : new Error(String(error)),
-        );
+        process.emitWarning(error instanceof Error ? error : new Error(String(error)));
       });
     }, POLL_INTERVAL_MS);
     this.timer.unref?.();

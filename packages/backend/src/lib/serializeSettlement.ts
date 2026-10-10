@@ -73,7 +73,7 @@ export type TransferDTO = Transfer;
 export function toTransferDTO(
   row: TransferRow,
   connectedAccountPublicId: string,
-  paymentIntentPublicId: string
+  paymentIntentPublicId: string,
 ): TransferDTO {
   return {
     id: row.publicId,

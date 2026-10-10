@@ -1,4 +1,13 @@
-const { app, BrowserWindow, Menu, ipcMain, safeStorage, protocol, shell, nativeTheme } = require('electron');
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  ipcMain,
+  safeStorage,
+  protocol,
+  shell,
+  nativeTheme,
+} = require('electron');
 const path = require('path');
 const net = require('net');
 const dns = require('dns');
@@ -267,9 +276,7 @@ function buildAppMenu() {
     submenu: [
       { role: 'minimize' },
       { role: 'zoom' },
-      ...(isMac
-        ? [{ type: 'separator' }, { role: 'front' }]
-        : [{ role: 'close' }]),
+      ...(isMac ? [{ type: 'separator' }, { role: 'front' }] : [{ role: 'close' }]),
     ],
   });
 
@@ -286,8 +293,7 @@ function buildAppMenu() {
       },
       {
         label: 'Report Issue',
-        click: () =>
-          shell.openExternal('https://github.com/FairCoinOfficial/FAIRWallet/issues'),
+        click: () => shell.openExternal('https://github.com/FairCoinOfficial/FAIRWallet/issues'),
       },
       ...(isMac
         ? []

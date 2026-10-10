@@ -6,9 +6,9 @@
  * keeping it out of the component makes it testable without standing up React
  * Native and expo-camera.
  */
-import { parseFairCoinURI } from "@fairco.in/core";
-import { parsePaymentRequest } from "./payment-request";
-import type { ParsedPaymentRequest } from "./payment-request";
+import { parseFairCoinURI } from '@fairco.in/core';
+import { parsePaymentRequest } from './payment-request';
+import type { ParsedPaymentRequest } from './payment-request';
 
 /**
  * A single `string` return could only ever mean "an address", which is why the
@@ -17,12 +17,12 @@ import type { ParsedPaymentRequest } from "./payment-request";
  */
 export type ScannedCode =
   | {
-      kind: "address";
+      kind: 'address';
       address: string;
       /** Decimal FAIR from a `faircoin:` URI's `amount`, when it carried one. */
       amount?: string;
     }
-  | { kind: "payment-request"; request: ParsedPaymentRequest };
+  | { kind: 'payment-request'; request: ParsedPaymentRequest };
 
 /**
  * Classify a scanned QR string. Supports, in order:
@@ -42,23 +42,23 @@ export function parseScannedData(data: string): ScannedCode | null {
 
   const request = parsePaymentRequest(trimmed);
   if (request) {
-    return { kind: "payment-request", request };
+    return { kind: 'payment-request', request };
   }
 
   const uri = parseFairCoinURI(trimmed);
   if (uri) {
     return uri.amount === null
-      ? { kind: "address", address: uri.address }
-      : { kind: "address", address: uri.address, amount: uri.amount };
+      ? { kind: 'address', address: uri.address }
+      : { kind: 'address', address: uri.address, amount: uri.amount };
   }
 
   // Raw address starting with F (mainnet) or T (testnet)
   if (
-    (trimmed.startsWith("F") || trimmed.startsWith("T")) &&
+    (trimmed.startsWith('F') || trimmed.startsWith('T')) &&
     trimmed.length >= 25 &&
     trimmed.length <= 36
   ) {
-    return { kind: "address", address: trimmed };
+    return { kind: 'address', address: trimmed };
   }
 
   return null;

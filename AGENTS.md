@@ -74,8 +74,18 @@ The named root shortcuts only cover `frontend`, `backend` and `shared-types`.
 **`checkout` and `sdk` have no root shortcut**: reach them with
 `bun run --filter @peable.to/checkout <script>` (`dev` is `vite`, `build` is
 `vite build`) and `bun run --filter @peable.to/sdk <script>`, or run the script from
-inside the package. The unnamed root scripts (`dev`, `build`, `test`, `lint`)
-use `--filter '*'` and do cover all five.
+inside the package. The unnamed root scripts (`dev`, `build`, `test`) use
+`--filter '*'` and do cover all five.
+
+**Formatting and linting are Biome** (root `biome.json`, Biome pinned in the
+root `devDependencies`). `bun run lint` = `biome check .` over every package plus
+`expo lint` in `packages/frontend`, whose `eslint.config.js` keeps ONLY the
+`eslint-plugin-expo` rules Biome has no equivalent for (`EXPO_PUBLIC_*` reads
+Metro would silently fail to inline). `bun run format` / `bun run lint:fix`
+write Biome's fixes; CI runs `biome ci .`. Type errors are `typecheck`
+(`tsc --noEmit`) per package, not lint. `docs/audits/` (recorded evidence) and
+`packages/backend/src/db/migrations/` (drizzle-kit output, checked by CI's
+regenerate-and-diff gate) are excluded from Biome on purpose.
 
 Root `postinstall` builds `shared-types`, so a fresh `bun install` leaves its
 `dist/` present. Both published packages build cjs + esm + types separately;

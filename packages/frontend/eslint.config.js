@@ -1,50 +1,32 @@
-// https://docs.expo.dev/guides/using-eslint/
+// Minimal ESLint config: Biome (root `biome.json`) does all general linting and
+// formatting. This file keeps only the Expo rules Biome has no equivalent for,
+// and `expo lint` runs it (`bun run lint` at the root runs both).
+//
+// - `expo/no-env-var-destructuring` / `expo/no-dynamic-env-var`: Metro inlines
+//   `process.env.EXPO_PUBLIC_*` only when it is read as a static member
+//   expression. A destructured or computed read silently becomes `undefined`
+//   in the bundle.
+// - `expo/use-dom-exports`: a `'use dom'` component file must export exactly
+//   one default React component.
 const { defineConfig } = require('eslint/config');
-const expoConfig = require("eslint-config-expo/flat");
+const tsParser = require('@typescript-eslint/parser');
+const expo = require('eslint-plugin-expo');
 
 module.exports = defineConfig([
-  expoConfig,
   {
-    ignores: ["dist/*", "android/*", "ios/*"],
+    ignores: ['dist/*', 'android/*', 'ios/*'],
   },
   {
-    files: [
-      "app/(tabs)/index.tsx",
-      "src/ui/components/SuggestionStack.tsx",
-      "src/ui/sheets/SendReceiveSheet.tsx",
-    ],
-    rules: {
-      // React's generic ref rules do not model Reanimated SharedValue worklets.
-      "react-hooks/immutability": "off",
-      "react-hooks/refs": "off",
-    },
-  },
-  {
-    // The Electron main/preload processes are CommonJS Node, not the Expo
-    // bundle: they legitimately use `__dirname`, `Buffer` and friends.
-    files: ["electron/**/*.js"],
+    files: ['**/*.{js,jsx,mjs,cjs,ts,tsx}'],
     languageOptions: {
-      globals: {
-        __dirname: "readonly",
-        __filename: "readonly",
-        Buffer: "readonly",
-        process: "readonly",
-        module: "writable",
-        require: "readonly",
-      },
+      parser: tsParser,
+      parserOptions: { ecmaFeatures: { jsx: true } },
     },
-  },
-  {
-    files: [
-      "src/p2p/socket-provider.ts",
-      "src/services/push-handler.ts",
-      "src/services/push-registration.ts",
-      "src/storage/kv-store.ts",
-      "src/utils/haptics.ts",
-    ],
+    plugins: { expo },
     rules: {
-      // These native-only modules load optional platform implementations lazily.
-      "@typescript-eslint/no-require-imports": "off",
+      'expo/no-env-var-destructuring': 'error',
+      'expo/no-dynamic-env-var': 'error',
+      'expo/use-dom-exports': 'error',
     },
   },
 ]);

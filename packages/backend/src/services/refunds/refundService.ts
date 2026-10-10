@@ -6,7 +6,7 @@
  * sum of succeeded refund rows. A stored total on the payment would be a second
  * home for the same fact, and the two disagree the first time a write is lost.
  */
-import type { CurrencyCode, MerchantEnvironment } from "@peable.to/shared-types";
+import type { CurrencyCode, MerchantEnvironment } from '@peable.to/shared-types';
 import {
   findRefundByExternalRef,
   insertRefund,
@@ -16,22 +16,22 @@ import {
   sumCommittedRefunds,
   sumSucceededRefunds,
   type RefundRow,
-} from "../../db/refunds/refundRepository";
-import type { PaymentIntentRow } from "../../db/payments/paymentIntentRepository";
-import { getDb } from "../../db/postgres";
-import { newId } from "../../lib/ids";
-import { applyEvent } from "../intentState";
-import { announceIntentChange, transitionIntent } from "../intentTransition";
-import { assertEnvironmentMatchesProvider } from "../providers/environmentGuard";
-import { ProviderError, type PaymentProvider } from "../providers/provider";
-import { redactProviderMessage } from "../providers/redact";
-import { resolveProvider } from "../providers/registry";
+} from '../../db/refunds/refundRepository';
+import type { PaymentIntentRow } from '../../db/payments/paymentIntentRepository';
+import { getDb } from '../../db/postgres';
+import { newId } from '../../lib/ids';
+import { applyEvent } from '../intentState';
+import { announceIntentChange, transitionIntent } from '../intentTransition';
+import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard';
+import { ProviderError, type PaymentProvider } from '../providers/provider';
+import { redactProviderMessage } from '../providers/redact';
+import { resolveProvider } from '../providers/registry';
 
 /** The payment cannot be refunded from where it stands. */
 export class PaymentNotRefundableError extends Error {
   constructor(status: string) {
     super(`a refund needs a settled payment; this one is '${status}'`);
-    this.name = "PaymentNotRefundableError";
+    this.name = 'PaymentNotRefundableError';
   }
 }
 
@@ -39,7 +39,7 @@ export class PaymentNotRefundableError extends Error {
 export class RefundExceedsRemainingError extends Error {
   constructor(requested: string, remaining: string) {
     super(`a refund of ${requested} exceeds the ${remaining} still refundable on this payment`);
-    this.name = "RefundExceedsRemainingError";
+    this.name = 'RefundExceedsRemainingError';
   }
 }
 
@@ -47,7 +47,7 @@ export class RefundExceedsRemainingError extends Error {
 export class RefundsUnavailableError extends Error {
   constructor(message: string) {
     super(message);
-    this.name = "RefundsUnavailableError";
+    this.name = 'RefundsUnavailableError';
   }
 }
 
@@ -104,7 +104,7 @@ function requireRefundProvider(intent: PaymentIntentRow): PaymentProvider {
     // gateway never held those funds, so it has nothing to send back — not a
     // gap, a different rail.
     throw new RefundsUnavailableError(
-      "this payment did not settle through a provider this gateway can refund from",
+      'this payment did not settle through a provider this gateway can refund from',
     );
   }
   const provider = resolveProvider(intent.provider);
@@ -130,7 +130,7 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
   // authorization decision, and a wrong-mode credential must not be able to
   // learn whether a payment is settled by reading which refusal it gets.
   assertEnvironmentMatchesProvider(input.environment);
-  if (intent.status !== "settled" && intent.status !== "partially_refunded") {
+  if (intent.status !== 'settled' && intent.status !== 'partially_refunded') {
     throw new PaymentNotRefundableError(intent.status);
   }
   const provider = requireRefundProvider(intent);
@@ -150,7 +150,7 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
    * pending refunds, so charging it again would refuse every resume.
    */
   const existing = await findRefundByExternalRef(db, input.merchantId, input.externalRef);
-  if (existing && (existing.providerObjectId !== null || existing.status === "failed")) {
+  if (existing && (existing.providerObjectId !== null || existing.status === 'failed')) {
     return { refund: existing, created: false, paymentStatus: intent.status };
   }
 
@@ -164,7 +164,7 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
   const inserted =
     existing ??
     (await insertRefund(db, {
-      publicId: newId("re"),
+      publicId: newId('re'),
       merchantId: input.merchantId,
       paymentIntentId: intent.id,
       externalRef: input.externalRef,
@@ -186,7 +186,7 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
   try {
     const result = await provider.refund({
       intentId: intent.publicId,
-      providerObjectId: intent.providerObjectId ?? "",
+      providerObjectId: intent.providerObjectId ?? '',
       refundId: inserted.publicId,
       // From the ROW, not the request. A resume re-sends the amount the
       // interrupted attempt reserved; taking it from the request would let a
@@ -216,15 +216,15 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
      * matched on (`refunds_provider_object_key`), so a pending refund with no
      * id stored is one whose eventual outcome arrives as `unmatched`.
      */
-    if (result.state === "succeeded") {
+    if (result.state === 'succeeded') {
       settled = (await markRefundSucceeded(db, inserted.id, result.providerObjectId)) ?? inserted;
       moved = true;
-    } else if (result.state === "failed") {
+    } else if (result.state === 'failed') {
       settled =
         (await markRefundFailed(
           db,
           inserted.id,
-          result.failureCode ?? "the provider refused the refund",
+          result.failureCode ?? 'the provider refused the refund',
           result.providerObjectId,
         )) ?? inserted;
     } else {
@@ -238,11 +238,7 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
       // A PERMANENT refusal is recorded and reported. A retryable one is left
       // `pending` and rethrown: marking it failed would tell the merchant the
       // payer's money is not coming when the next attempt would have sent it.
-      const failed = await markRefundFailed(
-        db,
-        inserted.id,
-        redactProviderMessage(error.message),
-      );
+      const failed = await markRefundFailed(db, inserted.id, redactProviderMessage(error.message));
       return {
         refund: failed ?? inserted,
         created: true,
@@ -280,9 +276,9 @@ export async function createRefund(input: CreateRefundInput): Promise<CreateRefu
  * this function inventing a settlement.
  */
 const REFUND_AFFECTED_STATUSES: ReadonlySet<string> = new Set([
-  "settled",
-  "partially_refunded",
-  "refunded",
+  'settled',
+  'partially_refunded',
+  'refunded',
 ]);
 
 export async function applyRefundToIntent(intent: PaymentIntentRow): Promise<string> {
@@ -291,10 +287,10 @@ export async function applyRefundToIntent(intent: PaymentIntentRow): Promise<str
   const refunded = BigInt(await sumSucceededRefunds(getDb(), intent.id));
   const event =
     refunded <= 0n
-      ? "refund_voided"
+      ? 'refund_voided'
       : refunded >= BigInt(intent.amount)
-        ? "refund_full"
-        : "refund_partial";
+        ? 'refund_full'
+        : 'refund_partial';
 
   // `applyEvent` short-circuits when the intent is already at the target, which
   // is what makes a second partial refund of an already partially-refunded
@@ -306,7 +302,7 @@ export async function applyRefundToIntent(intent: PaymentIntentRow): Promise<str
   // The caller is told the status it still has, not the one it wanted. A refund
   // recomputes from the SUM, so the next call over these same rows reaches the
   // right target from wherever the row actually ended up.
-  if (result.kind !== "updated") return intent.status;
+  if (result.kind !== 'updated') return intent.status;
   announceIntentChange(result.row);
   return result.row.status;
 }

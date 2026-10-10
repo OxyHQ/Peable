@@ -45,13 +45,13 @@ import { fetchChainTip } from './explorer/chain-tip';
 export interface ChainAccess {
   readonly fetchAddressInfo?: (
     addresses: readonly string[],
-    network: NetworkType
+    network: NetworkType,
   ) => Promise<Map<string, AddressInfo>>;
   readonly fetchFeePerByte?: (network: NetworkType) => Promise<number>;
   readonly fetchChainTip?: (network: NetworkType) => Promise<number>;
   readonly broadcastTransaction?: (
     rawTransactionHex: string,
-    network: NetworkType
+    network: NetworkType,
   ) => Promise<string>;
 }
 
@@ -134,7 +134,7 @@ export interface WalletBalance {
  */
 export async function sendPayment(
   request: PaymentRequest,
-  chain: ChainAccess = {}
+  chain: ChainAccess = {},
 ): Promise<PaymentResult> {
   const { seed, network, to, amountSat } = request;
   const networkConfig = getNetwork(network);
@@ -201,7 +201,7 @@ export async function sendPayment(
  */
 export async function quotePayment(
   request: QuoteRequest,
-  chain: ChainAccess = {}
+  chain: ChainAccess = {},
 ): Promise<PaymentQuote> {
   const { seed, network, amountSat } = request;
   const networkConfig = getNetwork(network);
@@ -241,7 +241,7 @@ export async function quotePayment(
  */
 export async function readBalance(
   wallet: WalletRef,
-  chain: ChainAccess = {}
+  chain: ChainAccess = {},
 ): Promise<WalletBalance> {
   const keyManager = KeyManager.fromSeed(wallet.seed, getNetwork(wallet.network));
   try {
@@ -288,10 +288,9 @@ export async function readBalance(
 async function resolveFeePerByte(
   requested: number | undefined,
   network: NetworkType,
-  chain: ChainAccess
+  chain: ChainAccess,
 ): Promise<number> {
-  const rate =
-    requested ?? (await (chain.fetchFeePerByte ?? fetchFeePerByte)(network));
+  const rate = requested ?? (await (chain.fetchFeePerByte ?? fetchFeePerByte)(network));
   if (!Number.isFinite(rate) || rate <= 0) {
     throw new Error(`feePerByte must be a positive number, got ${rate}`);
   }
@@ -311,7 +310,7 @@ function resolveMinConfirmations(requested: number | undefined): number {
   if (!Number.isInteger(requested) || requested < 1) {
     throw new Error(
       `minConfirmations must be an integer of at least 1, got ${requested}` +
-        ' — an unconfirmed output is not spendable'
+        ' — an unconfirmed output is not spendable',
     );
   }
   return requested;
@@ -320,7 +319,7 @@ function resolveMinConfirmations(requested: number | undefined): number {
 async function discover(
   keyManager: KeyManager,
   network: NetworkType,
-  chain: ChainAccess
+  chain: ChainAccess,
 ): Promise<UTXO[]> {
   return await discoverUtxos(keyManager, network, chain.fetchAddressInfo ?? fetchAddressInfo);
 }
@@ -328,7 +327,7 @@ async function discover(
 async function loadSpendable(
   keyManager: KeyManager,
   wallet: WalletRef,
-  chain: ChainAccess
+  chain: ChainAccess,
 ): Promise<UTXO[]> {
   return await filterSpendable(await discover(keyManager, wallet.network, chain), wallet, chain);
 }
@@ -343,7 +342,7 @@ async function loadSpendable(
 async function filterSpendable(
   discovered: readonly UTXO[],
   wallet: WalletRef,
-  chain: ChainAccess
+  chain: ChainAccess,
 ): Promise<UTXO[]> {
   const minConfirmations = resolveMinConfirmations(wallet.minConfirmations);
   const confirmed = discovered.filter((utxo) => utxo.confirmed);
@@ -369,7 +368,7 @@ function feePaidBy(transaction: Transaction, selection: SelectedInputs): bigint 
   const actual = totalIn - totalOut;
   if (actual !== selection.fee) {
     throw new Error(
-      `Refusing to send: transaction pays ${actual} but selection quoted ${selection.fee}`
+      `Refusing to send: transaction pays ${actual} but selection quoted ${selection.fee}`,
     );
   }
   return actual;
@@ -390,7 +389,7 @@ function feePaidBy(transaction: Transaction, selection: SelectedInputs): bigint 
 function signEveryInput(
   transaction: Transaction,
   selected: readonly UTXO[],
-  keyManager: KeyManager
+  keyManager: KeyManager,
 ): void {
   for (let i = 0; i < transaction.inputs.length; i++) {
     const input = transaction.inputs[i]!;
@@ -407,7 +406,7 @@ function signEveryInput(
         transaction,
         i,
         utxo.scriptPubKey,
-        keyManager.getPrivateKeyForAddress(utxo.address)
+        keyManager.getPrivateKeyForAddress(utxo.address),
       ),
     };
   }

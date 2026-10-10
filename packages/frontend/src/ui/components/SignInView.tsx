@@ -9,19 +9,23 @@
  * (error #185) — which is what `peable.to/settings` did signed out.
  */
 
-import { View, Text } from "react-native";
-import { useAuth } from "@oxy.so/services";
-import { Button } from "./Button";
-import { t } from "../../i18n";
+import { View, Text } from 'react-native';
+import { useAuth } from '@oxy.so/services';
+import { Button } from './Button';
+import { t } from '../../i18n';
 
 export function SignInView() {
   const { signIn } = useAuth();
   return (
     <View className="flex-1 bg-background items-center justify-center px-8">
-      <Text className="text-foreground text-2xl text-center mb-3">{t("onboarding.signInTitle")}</Text>
-      <Text className="text-muted-foreground text-base text-center mb-8">{t("onboarding.signInSubtitle")}</Text>
+      <Text className="text-foreground text-2xl text-center mb-3">
+        {t('onboarding.signInTitle')}
+      </Text>
+      <Text className="text-muted-foreground text-base text-center mb-8">
+        {t('onboarding.signInSubtitle')}
+      </Text>
       <View className="w-full">
-        <Button title={t("pay.signIn")} onPress={() => void signIn()} variant="primary" size="lg" />
+        <Button title={t('pay.signIn')} onPress={() => void signIn()} variant="primary" size="lg" />
       </View>
     </View>
   );

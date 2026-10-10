@@ -10,13 +10,10 @@
  * - Compound indexes for common multi-column query patterns
  */
 
-import * as SQLite from "expo-sqlite";
-import { databaseFileName } from "./db-name";
-import {
-  HEADER_BLOB_MIGRATION_SQL,
-  needsHeaderBlobMigration,
-} from "./header-blob-migration";
-import { HEADER_HASH_VERSION, planHeaderRepair } from "./header-integrity";
+import * as SQLite from 'expo-sqlite';
+import { databaseFileName } from './db-name';
+import { HEADER_BLOB_MIGRATION_SQL, needsHeaderBlobMigration } from './header-blob-migration';
+import { HEADER_HASH_VERSION, planHeaderRepair } from './header-integrity';
 
 // ---------------------------------------------------------------------------
 // Row types
@@ -312,11 +309,11 @@ const SCHEMA_SQL = `
  */
 const UTXO_MIGRATION_COLUMNS: readonly { name: string; ddl: string }[] = [
   {
-    name: "spent_height",
-    ddl: "ALTER TABLE utxos ADD COLUMN spent_height INTEGER NOT NULL DEFAULT 0",
+    name: 'spent_height',
+    ddl: 'ALTER TABLE utxos ADD COLUMN spent_height INTEGER NOT NULL DEFAULT 0',
   },
   {
-    name: "spent_txid",
+    name: 'spent_txid',
     ddl: "ALTER TABLE utxos ADD COLUMN spent_txid TEXT NOT NULL DEFAULT ''",
   },
 ];
@@ -374,12 +371,12 @@ export class Database {
 
     const tip = await this.getLatestHeader();
     const plan = planHeaderRepair(storedVersion, tip);
-    if (plan === "up-to-date") return;
+    if (plan === 'up-to-date') return;
 
-    if (plan === "wipe") {
-      await this.db.runAsync("DELETE FROM block_headers");
+    if (plan === 'wipe') {
+      await this.db.runAsync('DELETE FROM block_headers');
       // The rescan is described in heights of a chain that no longer exists.
-      await this.db.runAsync("DELETE FROM rescan_state");
+      await this.db.runAsync('DELETE FROM rescan_state');
     }
 
     await this.db.runAsync(
@@ -405,7 +402,7 @@ export class Database {
       "SELECT name, type FROM pragma_table_info('block_headers')",
     );
     // Absent table → nothing to migrate; already BLOB → nothing to do.
-    const hashColumn = columns.find((c) => c.name === "hash");
+    const hashColumn = columns.find((c) => c.name === 'hash');
     if (!needsHeaderBlobMigration(hashColumn?.type)) return;
 
     await this.db.withTransactionAsync(async () => {
@@ -417,7 +414,7 @@ export class Database {
     // cannot run inside a transaction, hence its position here. Best-effort:
     // the data is already correct, reclaiming space is not worth failing boot.
     try {
-      await this.db.execAsync("VACUUM");
+      await this.db.execAsync('VACUUM');
     } catch {
       // Left for the next VACUUM opportunity.
     }
@@ -447,7 +444,7 @@ export class Database {
     // schema batch (which runs before this migration) would fail the whole batch
     // with "no such column: spent_height" and abort wallet initialization.
     await this.db.execAsync(
-      "CREATE INDEX IF NOT EXISTS idx_utxos_spent_height ON utxos(spent_height)",
+      'CREATE INDEX IF NOT EXISTS idx_utxos_spent_height ON utxos(spent_height)',
     );
   }
 
@@ -517,14 +514,14 @@ export class Database {
 
   async getLatestHeader(): Promise<BlockHeaderRow | null> {
     const row = await this.db.getFirstAsync<BlockHeaderRow>(
-      "SELECT * FROM block_headers ORDER BY height DESC LIMIT 1",
+      'SELECT * FROM block_headers ORDER BY height DESC LIMIT 1',
     );
     return row ?? null;
   }
 
   async getHeaderByHeight(height: number): Promise<BlockHeaderRow | null> {
     const row = await this.db.getFirstAsync<BlockHeaderRow>(
-      "SELECT * FROM block_headers WHERE height = ?",
+      'SELECT * FROM block_headers WHERE height = ?',
       height,
     );
     return row ?? null;
@@ -532,7 +529,7 @@ export class Database {
 
   async getHeaderByHash(hash: Uint8Array): Promise<BlockHeaderRow | null> {
     const row = await this.db.getFirstAsync<BlockHeaderRow>(
-      "SELECT * FROM block_headers WHERE hash = ?",
+      'SELECT * FROM block_headers WHERE hash = ?',
       hash,
     );
     return row ?? null;
@@ -540,7 +537,7 @@ export class Database {
 
   async getHeaderCount(): Promise<number> {
     const row = await this.db.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(*) as count FROM block_headers",
+      'SELECT COUNT(*) as count FROM block_headers',
     );
     return row?.count ?? 0;
   }
@@ -566,18 +563,15 @@ export class Database {
 
   async getTransaction(txid: string): Promise<TransactionRow | null> {
     const row = await this.db.getFirstAsync<TransactionRow>(
-      "SELECT * FROM transactions WHERE txid = ?",
+      'SELECT * FROM transactions WHERE txid = ?',
       txid,
     );
     return row ?? null;
   }
 
-  async getTransactions(
-    limit: number,
-    offset: number,
-  ): Promise<TransactionRow[]> {
+  async getTransactions(limit: number, offset: number): Promise<TransactionRow[]> {
     return this.db.getAllAsync<TransactionRow>(
-      "SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+      'SELECT * FROM transactions ORDER BY timestamp DESC LIMIT ? OFFSET ?',
       limit,
       offset,
     );
@@ -641,7 +635,7 @@ export class Database {
       utxo.spent ?? 0,
       utxo.block_height,
       utxo.spent_height ?? 0,
-      utxo.spent_txid ?? "",
+      utxo.spent_txid ?? '',
     );
   }
 
@@ -652,11 +646,11 @@ export class Database {
   async markUTXOSpent(
     txid: string,
     vout: number,
-    spendingTxid = "",
+    spendingTxid = '',
     spentHeight = -1,
   ): Promise<void> {
     await this.db.runAsync(
-      "UPDATE utxos SET spent = 1, spent_txid = ?, spent_height = ? WHERE txid = ? AND vout = ?",
+      'UPDATE utxos SET spent = 1, spent_txid = ?, spent_height = ? WHERE txid = ? AND vout = ?',
       spendingTxid,
       spentHeight,
       txid,
@@ -665,9 +659,7 @@ export class Database {
   }
 
   async getUnspentUTXOs(): Promise<UTXORow[]> {
-    return this.db.getAllAsync<UTXORow>(
-      "SELECT * FROM utxos WHERE spent = 0",
-    );
+    return this.db.getAllAsync<UTXORow>('SELECT * FROM utxos WHERE spent = 0');
   }
 
   /**
@@ -678,7 +670,7 @@ export class Database {
    * reconstruction reads the full set through this method.
    */
   async getAllUTXOs(): Promise<UTXORow[]> {
-    return this.db.getAllAsync<UTXORow>("SELECT * FROM utxos");
+    return this.db.getAllAsync<UTXORow>('SELECT * FROM utxos');
   }
 
   /**
@@ -687,13 +679,9 @@ export class Database {
    * containing header was known (block_height was persisted as -1) and we
    * later learn the real height (H-3).
    */
-  async updateUTXOBlockHeight(
-    txid: string,
-    vout: number,
-    blockHeight: number,
-  ): Promise<void> {
+  async updateUTXOBlockHeight(txid: string, vout: number, blockHeight: number): Promise<void> {
     await this.db.runAsync(
-      "UPDATE utxos SET block_height = ? WHERE txid = ? AND vout = ?",
+      'UPDATE utxos SET block_height = ? WHERE txid = ? AND vout = ?',
       blockHeight,
       txid,
       vout,
@@ -710,11 +698,7 @@ export class Database {
    * Deliberately scoped to `spent = 1 AND spent_height < 0` so it can never
    * touch unspent rows or overwrite an already-resolved spend height.
    */
-  async updateUTXOSpentHeight(
-    txid: string,
-    vout: number,
-    spentHeight: number,
-  ): Promise<void> {
+  async updateUTXOSpentHeight(txid: string, vout: number, spentHeight: number): Promise<void> {
     await this.db.runAsync(
       `UPDATE utxos SET spent_height = ?
         WHERE txid = ? AND vout = ? AND spent = 1 AND spent_height < 0`,
@@ -730,9 +714,7 @@ export class Database {
    * block_hash recorded for that tx in the `transactions` table, so the caller
    * can attempt to resolve the real height once the header lands.
    */
-  async getPendingHeightUTXOs(): Promise<
-    { txid: string; vout: number; block_hash: string }[]
-  > {
+  async getPendingHeightUTXOs(): Promise<{ txid: string; vout: number; block_hash: string }[]> {
     return this.db.getAllAsync<{
       txid: string;
       vout: number;
@@ -753,9 +735,7 @@ export class Database {
    * the confirmation-reconciler to promote unconfirmed history rows once the
    * header lands.
    */
-  async getPendingHeightTransactions(): Promise<
-    { txid: string; block_hash: string }[]
-  > {
+  async getPendingHeightTransactions(): Promise<{ txid: string; block_hash: string }[]> {
     return this.db.getAllAsync<{ txid: string; block_hash: string }>(
       `SELECT txid, block_hash FROM transactions
         WHERE block_height < 0
@@ -766,17 +746,17 @@ export class Database {
 
   async getUnspentUTXOsForAddress(address: string): Promise<UTXORow[]> {
     return this.db.getAllAsync<UTXORow>(
-      "SELECT * FROM utxos WHERE spent = 0 AND address = ?",
+      'SELECT * FROM utxos WHERE spent = 0 AND address = ?',
       address,
     );
   }
 
   async getUTXOCount(): Promise<{ total: number; unspent: number }> {
     const total = await this.db.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(*) as count FROM utxos",
+      'SELECT COUNT(*) as count FROM utxos',
     );
     const unspent = await this.db.getFirstAsync<{ count: number }>(
-      "SELECT COUNT(*) as count FROM utxos WHERE spent = 0",
+      'SELECT COUNT(*) as count FROM utxos WHERE spent = 0',
     );
     return {
       total: total?.count ?? 0,
@@ -817,13 +797,13 @@ export class Database {
 
     await this.db.withTransactionAsync(async () => {
       const createdAbove = await this.db.getFirstAsync<{ count: number }>(
-        "SELECT COUNT(*) as count FROM utxos WHERE block_height > ?",
+        'SELECT COUNT(*) as count FROM utxos WHERE block_height > ?',
         forkHeight,
       );
       deletedUtxos = createdAbove?.count ?? 0;
 
       const spentAbove = await this.db.getFirstAsync<{ count: number }>(
-        "SELECT COUNT(*) as count FROM utxos WHERE spent = 1 AND spent_height > ?",
+        'SELECT COUNT(*) as count FROM utxos WHERE spent = 1 AND spent_height > ?',
         forkHeight,
       );
       restoredUtxos = spentAbove?.count ?? 0;
@@ -837,29 +817,20 @@ export class Database {
       );
 
       // 1. Delete outputs created in orphaned blocks.
-      await this.db.runAsync(
-        "DELETE FROM utxos WHERE block_height > ?",
-        forkHeight,
-      );
+      await this.db.runAsync('DELETE FROM utxos WHERE block_height > ?', forkHeight);
 
       // Orphaned transactions: drop them. If they re-confirm on the new chain
       // the merkle-block receive path re-inserts them.
-      await this.db.runAsync(
-        "DELETE FROM transactions WHERE block_height > ?",
-        forkHeight,
-      );
+      await this.db.runAsync('DELETE FROM transactions WHERE block_height > ?', forkHeight);
 
       const headerCount = await this.db.getFirstAsync<{ count: number }>(
-        "SELECT COUNT(*) as count FROM block_headers WHERE height > ?",
+        'SELECT COUNT(*) as count FROM block_headers WHERE height > ?',
         forkHeight,
       );
       deletedHeaders = headerCount?.count ?? 0;
 
       // 3. Delete orphaned headers.
-      await this.db.runAsync(
-        "DELETE FROM block_headers WHERE height > ?",
-        forkHeight,
-      );
+      await this.db.runAsync('DELETE FROM block_headers WHERE height > ?', forkHeight);
     });
 
     return { deletedUtxos, restoredUtxos, deletedHeaders };
@@ -870,10 +841,7 @@ export class Database {
    * Used by the SPV client when accepting a longer competing branch.
    */
   async deleteHeadersAboveHeight(height: number): Promise<void> {
-    await this.db.runAsync(
-      "DELETE FROM block_headers WHERE height > ?",
-      height,
-    );
+    await this.db.runAsync('DELETE FROM block_headers WHERE height > ?', height);
   }
 
   // -----------------------------------------------------------------------
@@ -882,7 +850,7 @@ export class Database {
 
   async getRescanState(): Promise<RescanStateRow | null> {
     const row = await this.db.getFirstAsync<RescanStateRow>(
-      "SELECT * FROM rescan_state WHERE id = 1",
+      'SELECT * FROM rescan_state WHERE id = 1',
     );
     return row ?? null;
   }
@@ -928,35 +896,26 @@ export class Database {
   }
 
   async getAddresses(): Promise<AddressRow[]> {
-    return this.db.getAllAsync<AddressRow>(
-      "SELECT * FROM addresses ORDER BY is_change, index_num",
-    );
+    return this.db.getAllAsync<AddressRow>('SELECT * FROM addresses ORDER BY is_change, index_num');
   }
 
   async getUnusedAddress(isChange: boolean): Promise<AddressRow | null> {
     const row = await this.db.getFirstAsync<AddressRow>(
-      "SELECT * FROM addresses WHERE is_change = ? AND used = 0 ORDER BY index_num ASC LIMIT 1",
+      'SELECT * FROM addresses WHERE is_change = ? AND used = 0 ORDER BY index_num ASC LIMIT 1',
       isChange ? 1 : 0,
     );
     return row ?? null;
   }
 
   async markAddressUsed(address: string): Promise<void> {
-    await this.db.runAsync(
-      "UPDATE addresses SET used = 1 WHERE address = ?",
-      address,
-    );
+    await this.db.runAsync('UPDATE addresses SET used = 1 WHERE address = ?', address);
   }
 
   // -----------------------------------------------------------------------
   // Watch addresses (non-HD, e.g. multisig)
   // -----------------------------------------------------------------------
 
-  async insertWatchAddress(
-    address: string,
-    redeemScript: string,
-    label: string,
-  ): Promise<void> {
+  async insertWatchAddress(address: string, redeemScript: string, label: string): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
     await this.db.runAsync(
       `INSERT OR IGNORE INTO watch_addresses (address, redeem_script, label, created_at)
@@ -970,7 +929,7 @@ export class Database {
 
   async getWatchAddresses(): Promise<WatchAddressRow[]> {
     return this.db.getAllAsync<WatchAddressRow>(
-      "SELECT * FROM watch_addresses ORDER BY created_at",
+      'SELECT * FROM watch_addresses ORDER BY created_at',
     );
   }
 
@@ -981,7 +940,7 @@ export class Database {
    */
   async getNextUnusedIndex(isChange: boolean): Promise<number> {
     const row = await this.db.getFirstAsync<{ max_used: number | null }>(
-      "SELECT MAX(index_num) as max_used FROM addresses WHERE is_change = ? AND used = 1",
+      'SELECT MAX(index_num) as max_used FROM addresses WHERE is_change = ? AND used = 1',
       isChange ? 1 : 0,
     );
     if (row?.max_used == null) {
@@ -1000,9 +959,7 @@ export class Database {
    * makes this idempotent: re-deriving and re-inserting an already-persisted
    * index is a safe no-op, so callers never need to check existence first.
    */
-  async insertSocialReceiveAddresses(
-    rows: { index: number; address: string }[],
-  ): Promise<void> {
+  async insertSocialReceiveAddresses(rows: { index: number; address: string }[]): Promise<void> {
     if (rows.length === 0) return;
     await this.db.withTransactionAsync(async () => {
       const stmt = await this.db.prepareAsync(
@@ -1021,13 +978,13 @@ export class Database {
 
   async getSocialReceiveAddresses(): Promise<SocialReceiveAddressRow[]> {
     return this.db.getAllAsync<SocialReceiveAddressRow>(
-      "SELECT * FROM social_receive_addresses ORDER BY index_num ASC",
+      'SELECT * FROM social_receive_addresses ORDER BY index_num ASC',
     );
   }
 
   async markSocialReceiveAddressUsed(address: string): Promise<void> {
     await this.db.runAsync(
-      "UPDATE social_receive_addresses SET used = 1 WHERE address = ?",
+      'UPDATE social_receive_addresses SET used = 1 WHERE address = ?',
       address,
     );
   }
@@ -1040,7 +997,7 @@ export class Database {
    */
   async getHighestUsedSocialReceiveIndex(): Promise<number> {
     const row = await this.db.getFirstAsync<{ max_used: number | null }>(
-      "SELECT MAX(index_num) as max_used FROM social_receive_addresses WHERE used = 1",
+      'SELECT MAX(index_num) as max_used FROM social_receive_addresses WHERE used = 1',
     );
     return row?.max_used ?? -1;
   }
@@ -1077,18 +1034,14 @@ export class Database {
    * (finding: network-scope the social-receive window, MEDIUM).
    */
   async clearSocialReceiveAddresses(): Promise<void> {
-    await this.db.runAsync("DELETE FROM social_receive_addresses");
+    await this.db.runAsync('DELETE FROM social_receive_addresses');
   }
 
   // -----------------------------------------------------------------------
   // Peers
   // -----------------------------------------------------------------------
 
-  async insertPeer(
-    host: string,
-    port: number,
-    services: number,
-  ): Promise<void> {
+  async insertPeer(host: string, port: number, services: number): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
     await this.db.runAsync(
       `INSERT OR REPLACE INTO peers
@@ -1150,14 +1103,14 @@ export class Database {
 
   async getBuyOrders(limit: number): Promise<BuyOrderRow[]> {
     return this.db.getAllAsync<BuyOrderRow>(
-      "SELECT * FROM buy_orders ORDER BY created_at DESC LIMIT ?",
+      'SELECT * FROM buy_orders ORDER BY created_at DESC LIMIT ?',
       limit,
     );
   }
 
   async getKnownPeers(limit: number): Promise<PeerRow[]> {
     return this.db.getAllAsync<PeerRow>(
-      "SELECT * FROM peers ORDER BY last_success DESC LIMIT ?",
+      'SELECT * FROM peers ORDER BY last_success DESC LIMIT ?',
       limit,
     );
   }
@@ -1166,12 +1119,7 @@ export class Database {
   // Contacts
   // -----------------------------------------------------------------------
 
-  async insertContact(
-    id: string,
-    name: string,
-    address: string,
-    notes: string,
-  ): Promise<void> {
+  async insertContact(id: string, name: string, address: string, notes: string): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
     await this.db.runAsync(
       `INSERT INTO contacts (id, name, address, notes, created_at, updated_at)
@@ -1185,12 +1133,7 @@ export class Database {
     );
   }
 
-  async updateContact(
-    id: string,
-    name: string,
-    address: string,
-    notes: string,
-  ): Promise<void> {
+  async updateContact(id: string, name: string, address: string, notes: string): Promise<void> {
     const now = Math.floor(Date.now() / 1000);
     await this.db.runAsync(
       `UPDATE contacts SET name = ?, address = ?, notes = ?, updated_at = ?
@@ -1204,18 +1147,16 @@ export class Database {
   }
 
   async deleteContact(id: string): Promise<void> {
-    await this.db.runAsync("DELETE FROM contacts WHERE id = ?", id);
+    await this.db.runAsync('DELETE FROM contacts WHERE id = ?', id);
   }
 
   async getContacts(): Promise<ContactRow[]> {
-    return this.db.getAllAsync<ContactRow>(
-      "SELECT * FROM contacts ORDER BY name ASC",
-    );
+    return this.db.getAllAsync<ContactRow>('SELECT * FROM contacts ORDER BY name ASC');
   }
 
   async getContactByAddress(address: string): Promise<ContactRow | null> {
     const row = await this.db.getFirstAsync<ContactRow>(
-      "SELECT * FROM contacts WHERE address = ? LIMIT 1",
+      'SELECT * FROM contacts WHERE address = ? LIMIT 1',
       address,
     );
     return row ?? null;
@@ -1226,7 +1167,7 @@ export class Database {
    * Escapes LIKE wildcards in user input to prevent unintended matches.
    */
   async searchContacts(query: string): Promise<ContactRow[]> {
-    const escaped = query.replace(/[%_]/g, "\\$&");
+    const escaped = query.replace(/[%_]/g, '\\$&');
     const pattern = `%${escaped}%`;
     return this.db.getAllAsync<ContactRow>(
       "SELECT * FROM contacts WHERE name LIKE ? ESCAPE '\\' OR address LIKE ? ESCAPE '\\' ORDER BY name ASC",
@@ -1252,7 +1193,7 @@ export class Database {
 
   async getTxNote(txid: string): Promise<string | null> {
     const row = await this.db.getFirstAsync<TxNoteRow>(
-      "SELECT * FROM tx_notes WHERE txid = ?",
+      'SELECT * FROM tx_notes WHERE txid = ?',
       txid,
     );
     return row?.note ?? null;
@@ -1275,7 +1216,7 @@ export class Database {
 
   async getAddressLabel(address: string): Promise<string | null> {
     const row = await this.db.getFirstAsync<AddressLabelRow>(
-      "SELECT * FROM address_labels WHERE address = ?",
+      'SELECT * FROM address_labels WHERE address = ?',
       address,
     );
     return row?.label ?? null;
@@ -1301,7 +1242,7 @@ export class Database {
 
   async getRecentRecipients(limit: number): Promise<RecentRecipientRow[]> {
     return this.db.getAllAsync<RecentRecipientRow>(
-      "SELECT * FROM recent_recipients ORDER BY last_used DESC LIMIT ?",
+      'SELECT * FROM recent_recipients ORDER BY last_used DESC LIMIT ?',
       limit,
     );
   }

@@ -1,32 +1,26 @@
-import {
-  test,
-  expect,
-  beforeAll,
-  afterAll,
-  describe,
-} from "bun:test";
-import type { AddressInfo } from "node:net";
-import type { Server } from "node:http";
-import express from "express";
-import type { RequestHandler } from "express";
-import { and, eq, sql } from "drizzle-orm";
-import type { OxyAuthRequest } from "@oxy.so/core/server";
-import { merchants, paymentIntents } from "../../db/schema";
-import { findIntentByPublicId } from "../../db/payments/paymentIntentRepository";
+import { test, expect, beforeAll, afterAll, describe } from 'bun:test';
+import type { AddressInfo } from 'node:net';
+import type { Server } from 'node:http';
+import express from 'express';
+import type { RequestHandler } from 'express';
+import { and, eq, sql } from 'drizzle-orm';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
+import { merchants, paymentIntents } from '../../db/schema';
+import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import {
   gatewayDb,
   seedMerchant,
   useGatewayDatabase,
-} from "../../__tests__/helpers/gatewayTestDatabase";
-import { createPaymentIntentsRouter } from "../paymentIntents";
+} from '../../__tests__/helpers/gatewayTestDatabase';
+import { createPaymentIntentsRouter } from '../paymentIntents';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
 // (m/44'/1'/0' neutered) — public-key-only, cannot spend. Index 0 derives the
 // address asserted below.
 const XPUB =
-  "DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn";
-const FIRST_ADDRESS = "TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3";
-const TEST_APP_ID = "app_test";
+  'DRKVrRr8WgU4mARJnCLAp77sKJ5h5K79VH8sredx2qPY8BUKogTYqoAXdTAzzvS5MgBDGGWb2Zoa2AwzoLRsbGGkBm1q2r7QSfRYWCizWfvMfPZn';
+const FIRST_ADDRESS = 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3';
+const TEST_APP_ID = 'app_test';
 
 // Test stub for the merchant auth middleware: bypass real Oxy service tokens by
 // populating `req.serviceApp` directly (exactly what `oxy.middleware.service()`
@@ -34,12 +28,12 @@ const TEST_APP_ID = "app_test";
 const stubRequireMerchant: RequestHandler = (req, _res, next) => {
   (req as OxyAuthRequest).serviceApp = {
     appId: TEST_APP_ID,
-    appName: "t",
-    scopes: ["payments:read", "payments:write"],
-    credentialId: "c",
-    ownerAccountId: "owner",
-    environment: "development",
-    tier: "external",
+    appName: 't',
+    scopes: ['payments:read', 'payments:write'],
+    credentialId: 'c',
+    ownerAccountId: 'owner',
+    environment: 'development',
+    tier: 'external',
   };
   next();
 };
@@ -52,15 +46,15 @@ const stubRequireMerchant: RequestHandler = (req, _res, next) => {
 // (`GET /v1/payment_intents/:id`) passes by default; the dedicated
 // missing-scope test below builds its own stub without it.
 const stubOptionalServiceAuth: RequestHandler = (req, _res, next) => {
-  if (req.header("Authorization")) {
+  if (req.header('Authorization')) {
     (req as OxyAuthRequest).serviceApp = {
       appId: TEST_APP_ID,
-      appName: "t",
-      scopes: ["payments:read"],
-      credentialId: "c",
-      ownerAccountId: "owner",
-      environment: "development",
-      tier: "external",
+      appName: 't',
+      scopes: ['payments:read'],
+      credentialId: 'c',
+      ownerAccountId: 'owner',
+      environment: 'development',
+      tier: 'external',
     };
   }
   next();
@@ -102,7 +96,7 @@ async function countIntentsByIdempotencyKey(idempotencyKey: string): Promise<num
     .select({ n: sql<number>`count(*)::int` })
     .from(paymentIntents)
     .where(eq(paymentIntents.idempotencyKey, idempotencyKey));
-  if (!row) throw new Error("count(*) returned no row");
+  if (!row) throw new Error('count(*) returned no row');
   return row.n;
 }
 
@@ -110,15 +104,15 @@ async function createIntent(
   idempotencyKey: string,
 ): Promise<{ status: number; body: IntentResponse }> {
   const res = await fetch(`${baseUrl}/v1/payment_intents`, {
-    method: "POST",
+    method: 'POST',
     headers: {
-      "Content-Type": "application/json",
-      "Idempotency-Key": idempotencyKey,
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
     },
     body: JSON.stringify({
-      amount: "150000000",
-      network: "testnet",
-      metadata: { orderId: "o1" },
+      amount: '150000000',
+      network: 'testnet',
+      metadata: { orderId: 'o1' },
     }),
   });
   return { status: res.status, body: await readJson(res) };
@@ -128,13 +122,13 @@ useGatewayDatabase();
 
 beforeAll(async () => {
   await seedMerchant({
-    publicId: "merch_test0000000000000001",
+    publicId: 'merch_test0000000000000001',
     oxyAppId: TEST_APP_ID,
-    environment: "development",
-    network: "testnet",
+    environment: 'development',
+    network: 'testnet',
     xpub: XPUB,
-    webhookUrl: "https://example.test/webhook",
-    webhookSecret: "whsec_test",
+    webhookUrl: 'https://example.test/webhook',
+    webhookSecret: 'whsec_test',
   });
 
   const app = express();
@@ -157,8 +151,8 @@ afterAll(async () => {
   });
 });
 
-describe("POST /v1/payment_intents", () => {
-  test("creates an intent (201) with a pi_ id, derived address and client_secret", async () => {
+describe('POST /v1/payment_intents', () => {
+  test('creates an intent (201) with a pi_ id, derived address and client_secret', async () => {
     // Order-independence: this is the only test in the file that asserts an
     // EXACT derived address (`FIRST_ADDRESS` = index 0 of `XPUB`). The
     // merchant's `nextDerivationIndex` is shared, monotonically-incrementing
@@ -169,84 +163,79 @@ describe("POST /v1/payment_intents", () => {
     await gatewayDb()
       .update(merchants)
       .set({ nextDerivationIndex: 0 })
-      .where(
-        and(
-          eq(merchants.oxyAppId, TEST_APP_ID),
-          eq(merchants.environment, "development"),
-        ),
-      );
+      .where(and(eq(merchants.oxyAppId, TEST_APP_ID), eq(merchants.environment, 'development')));
 
-    const { status, body } = await createIntent("idem-create-1");
+    const { status, body } = await createIntent('idem-create-1');
 
     expect(status).toBe(201);
     expect(body.id).toMatch(/^pi_[0-9a-f]{24}$/);
-    expect(body.object).toBe("payment_intent");
-    expect(body.status).toBe("created");
-    expect(body.amount).toBe("150000000");
-    expect(body.currency).toBe("FAIR");
-    expect(body.network).toBe("testnet");
+    expect(body.object).toBe('payment_intent');
+    expect(body.status).toBe('created');
+    expect(body.amount).toBe('150000000');
+    expect(body.currency).toBe('FAIR');
+    expect(body.network).toBe('testnet');
     expect(body.address).toBe(FIRST_ADDRESS);
-    expect(body.metadata.orderId).toBe("o1");
+    expect(body.metadata.orderId).toBe('o1');
     expect(body.txid).toBeNull();
-    expect(typeof body.client_secret).toBe("string");
+    expect(typeof body.client_secret).toBe('string');
     expect(body.client_secret?.startsWith(`${body.id}_secret_`)).toBe(true);
     expect(body.client_secret).toBe(body.clientSecret);
   });
 
-  test("replaying the same Idempotency-Key returns the SAME intent, not a new one", async () => {
-    const first = await createIntent("idem-replay");
-    const second = await createIntent("idem-replay");
+  test('replaying the same Idempotency-Key returns the SAME intent, not a new one', async () => {
+    const first = await createIntent('idem-replay');
+    const second = await createIntent('idem-replay');
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
     expect(second.body.id).toBe(first.body.id);
     expect(second.body.address).toBe(first.body.address);
 
-    const count = await countIntentsByIdempotencyKey("idem-replay");
+    const count = await countIntentsByIdempotencyKey('idem-replay');
     expect(count).toBe(1);
   });
 
-  test("missing Idempotency-Key → 400", async () => {
+  test('missing Idempotency-Key → 400', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: "150000000", network: "testnet" }),
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ amount: '150000000', network: 'testnet' }),
     });
     expect(res.status).toBe(400);
     const body = await readJson(res);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test("a non-integer amount → 422", async () => {
+  test('a non-integer amount → 422', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": "idem-bad-amount",
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'idem-bad-amount',
       },
-      body: JSON.stringify({ amount: "1.5", network: "testnet" }),
+      body: JSON.stringify({ amount: '1.5', network: 'testnet' }),
     });
     expect(res.status).toBe(422);
   });
 
   test("network mismatched against the merchant's own network -> 422, no address ever derived", async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents`, {
-      method: "POST",
+      method: 'POST',
       headers: {
-        "Content-Type": "application/json",
-        "Idempotency-Key": "idem-network-mismatch",
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'idem-network-mismatch',
       },
-      body: JSON.stringify({ amount: "150000000", network: "mainnet" }),
+      body: JSON.stringify({ amount: '150000000', network: 'mainnet' }),
     });
     expect(res.status).toBe(422);
     const body = await readJson(res);
-    expect(body.error?.type).toBe("invalid_request_error");
+    expect(body.error?.type).toBe('invalid_request_error');
 
-    const count = await countIntentsByIdempotencyKey("idem-network-mismatch");
+    const count = await countIntentsByIdempotencyKey('idem-network-mismatch');
     expect(count).toBe(0);
   });
 
-  test("no service app credentials at all -> 401", async () => {
+  test('no service app credentials at all -> 401', async () => {
     const app = express();
     app.use(express.json());
     app.use(
@@ -258,17 +247,14 @@ describe("POST /v1/payment_intents", () => {
     const noAuthServer = app.listen(0);
     const noAuthAddress = noAuthServer.address() as AddressInfo;
     try {
-      const res = await fetch(
-        `http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": "idem-create-noauth",
-          },
-          body: JSON.stringify({ amount: "150000000", network: "testnet" }),
+      const res = await fetch(`http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-create-noauth',
         },
-      );
+        body: JSON.stringify({ amount: '150000000', network: 'testnet' }),
+      });
       expect(res.status).toBe(401);
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -277,16 +263,16 @@ describe("POST /v1/payment_intents", () => {
     }
   });
 
-  test("a credential without payments:write is rejected (403)", async () => {
+  test('a credential without payments:write is rejected (403)', async () => {
     const noScopeRequireMerchant: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: TEST_APP_ID,
-        appName: "t",
-        scopes: ["payments:read"],
-        credentialId: "c",
-        ownerAccountId: "owner",
-        environment: "development",
-        tier: "external",
+        appName: 't',
+        scopes: ['payments:read'],
+        credentialId: 'c',
+        ownerAccountId: 'owner',
+        environment: 'development',
+        tier: 'external',
       };
       next();
     };
@@ -301,17 +287,14 @@ describe("POST /v1/payment_intents", () => {
     const noScopeServer = app.listen(0);
     const noScopeAddress = noScopeServer.address() as AddressInfo;
     try {
-      const res = await fetch(
-        `http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Idempotency-Key": "idem-create-noscope",
-          },
-          body: JSON.stringify({ amount: "150000000", network: "testnet" }),
+      const res = await fetch(`http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': 'idem-create-noscope',
         },
-      );
+        body: JSON.stringify({ amount: '150000000', network: 'testnet' }),
+      });
       expect(res.status).toBe(403);
     } finally {
       await new Promise<void>((resolve, reject) => {
@@ -321,11 +304,11 @@ describe("POST /v1/payment_intents", () => {
   });
 });
 
-describe("GET /v1/payment_intents/:id", () => {
+describe('GET /v1/payment_intents/:id', () => {
   test("returns the merchant's own intent (merchant-authed)", async () => {
-    const created = await createIntent("idem-get");
+    const created = await createIntent('idem-get');
     const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}`, {
-      headers: { Authorization: "Bearer test" },
+      headers: { Authorization: 'Bearer test' },
     });
     expect(res.status).toBe(200);
     const body = await readJson(res);
@@ -333,15 +316,15 @@ describe("GET /v1/payment_intents/:id", () => {
     expect(body.address).toBe(created.body.address);
   });
 
-  test("merchant-authed, unknown id -> 404", async () => {
+  test('merchant-authed, unknown id -> 404', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents/pi_does_not_exist`, {
-      headers: { Authorization: "Bearer test" },
+      headers: { Authorization: 'Bearer test' },
     });
     expect(res.status).toBe(404);
   });
 
-  test("payer-authed via ?client_secret= query param (no Authorization header)", async () => {
-    const created = await createIntent("idem-get-payer-query");
+  test('payer-authed via ?client_secret= query param (no Authorization header)', async () => {
+    const created = await createIntent('idem-get-payer-query');
     const res = await fetch(
       `${baseUrl}/v1/payment_intents/${created.body.id}?client_secret=${created.body.client_secret}`,
     );
@@ -350,42 +333,42 @@ describe("GET /v1/payment_intents/:id", () => {
     expect(body.id).toBe(created.body.id);
   });
 
-  test("payer-authed via X-Peable-Client-Secret header (no Authorization header)", async () => {
-    const created = await createIntent("idem-get-payer-header");
+  test('payer-authed via X-Peable-Client-Secret header (no Authorization header)', async () => {
+    const created = await createIntent('idem-get-payer-header');
     const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}`, {
-      headers: { "X-Peable-Client-Secret": created.body.client_secret ?? "" },
+      headers: { 'X-Peable-Client-Secret': created.body.client_secret ?? '' },
     });
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.id).toBe(created.body.id);
   });
 
-  test("payer path, wrong client_secret -> 403", async () => {
-    const created = await createIntent("idem-get-payer-wrong");
+  test('payer path, wrong client_secret -> 403', async () => {
+    const created = await createIntent('idem-get-payer-wrong');
     const res = await fetch(
       `${baseUrl}/v1/payment_intents/${created.body.id}?client_secret=pi_wrong_secret`,
     );
     expect(res.status).toBe(403);
   });
 
-  test("no Authorization header and no client_secret -> 401", async () => {
-    const created = await createIntent("idem-get-neither");
+  test('no Authorization header and no client_secret -> 401', async () => {
+    const created = await createIntent('idem-get-neither');
     const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}`);
     expect(res.status).toBe(401);
   });
 
-  test("merchant-authed WITHOUT payments:read -> 403 (F2.0 gateway-review finding)", async () => {
-    const created = await createIntent("idem-get-noscope");
+  test('merchant-authed WITHOUT payments:read -> 403 (F2.0 gateway-review finding)', async () => {
+    const created = await createIntent('idem-get-noscope');
     const noReadScopeOptionalServiceAuth: RequestHandler = (req, _res, next) => {
-      if (req.header("Authorization")) {
+      if (req.header('Authorization')) {
         (req as OxyAuthRequest).serviceApp = {
           appId: TEST_APP_ID,
-          appName: "t",
-          scopes: ["payments:write"],
-          credentialId: "c",
-          ownerAccountId: "owner",
-          environment: "development",
-          tier: "external",
+          appName: 't',
+          scopes: ['payments:write'],
+          credentialId: 'c',
+          ownerAccountId: 'owner',
+          environment: 'development',
+          tier: 'external',
         };
       }
       next();
@@ -403,7 +386,7 @@ describe("GET /v1/payment_intents/:id", () => {
     try {
       const res = await fetch(
         `http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents/${created.body.id}`,
-        { headers: { Authorization: "Bearer test" } },
+        { headers: { Authorization: 'Bearer test' } },
       );
       expect(res.status).toBe(403);
     } finally {
@@ -419,63 +402,56 @@ describe("GET /v1/payment_intents/:id", () => {
   // merchant branch's new `payments:read` gate.
 });
 
-describe("POST /v1/payment_intents/:id/submit_tx (payer path)", () => {
-  test("the right client_secret sets txid and moves to broadcast", async () => {
-    const created = await createIntent("idem-submit-ok");
-    const res = await fetch(
-      `${baseUrl}/v1/payment_intents/${created.body.id}/submit_tx`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_secret: created.body.client_secret,
-          txid: "a".repeat(64),
-        }),
-      },
-    );
+describe('POST /v1/payment_intents/:id/submit_tx (payer path)', () => {
+  test('the right client_secret sets txid and moves to broadcast', async () => {
+    const created = await createIntent('idem-submit-ok');
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/submit_tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_secret: created.body.client_secret,
+        txid: 'a'.repeat(64),
+      }),
+    });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.txid).toBe("a".repeat(64));
-    expect(body.status).toBe("broadcast");
+    expect(body.txid).toBe('a'.repeat(64));
+    expect(body.status).toBe('broadcast');
   });
 
-  test("a wrong client_secret → 403 and does not mutate the intent", async () => {
-    const created = await createIntent("idem-submit-bad");
-    const res = await fetch(
-      `${baseUrl}/v1/payment_intents/${created.body.id}/submit_tx`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          client_secret: "pi_wrong_secret",
-          txid: "b".repeat(64),
-        }),
-      },
-    );
+  test('a wrong client_secret → 403 and does not mutate the intent', async () => {
+    const created = await createIntent('idem-submit-bad');
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/submit_tx`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_secret: 'pi_wrong_secret',
+        txid: 'b'.repeat(64),
+      }),
+    });
     expect(res.status).toBe(403);
 
     // `created.body.id` is the WIRE id (`pi_…`), which Postgres stores as
     // `public_id` — the internal primary key is a uuid no response carries.
     const reloaded = await findIntentByPublicId(gatewayDb(), created.body.id);
     expect(reloaded?.txid).toBeNull();
-    expect(reloaded?.status).toBe("created");
+    expect(reloaded?.status).toBe('created');
   });
 });
 
-describe("POST /v1/payment_intents/:id/reject", () => {
-  test("moves the intent to rejected", async () => {
-    const created = await createIntent("idem-reject");
-    const res = await fetch(
-      `${baseUrl}/v1/payment_intents/${created.body.id}/reject`,
-      { method: "POST" },
-    );
+describe('POST /v1/payment_intents/:id/reject', () => {
+  test('moves the intent to rejected', async () => {
+    const created = await createIntent('idem-reject');
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, {
+      method: 'POST',
+    });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.status).toBe("rejected");
+    expect(body.status).toBe('rejected');
   });
 
-  test("no service app credentials at all -> 401", async () => {
-    const created = await createIntent("idem-reject-noauth");
+  test('no service app credentials at all -> 401', async () => {
+    const created = await createIntent('idem-reject-noauth');
     const app = express();
     app.use(express.json());
     app.use(
@@ -489,7 +465,7 @@ describe("POST /v1/payment_intents/:id/reject", () => {
     try {
       const res = await fetch(
         `http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents/${created.body.id}/reject`,
-        { method: "POST" },
+        { method: 'POST' },
       );
       expect(res.status).toBe(401);
     } finally {
@@ -499,17 +475,17 @@ describe("POST /v1/payment_intents/:id/reject", () => {
     }
   });
 
-  test("a credential without payments:write is rejected (403)", async () => {
-    const created = await createIntent("idem-reject-noscope");
+  test('a credential without payments:write is rejected (403)', async () => {
+    const created = await createIntent('idem-reject-noscope');
     const noScopeRequireMerchant: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: TEST_APP_ID,
-        appName: "t",
-        scopes: ["payments:read"],
-        credentialId: "c",
-        ownerAccountId: "owner",
-        environment: "development",
-        tier: "external",
+        appName: 't',
+        scopes: ['payments:read'],
+        credentialId: 'c',
+        ownerAccountId: 'owner',
+        environment: 'development',
+        tier: 'external',
       };
       next();
     };
@@ -526,13 +502,13 @@ describe("POST /v1/payment_intents/:id/reject", () => {
     try {
       const res = await fetch(
         `http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents/${created.body.id}/reject`,
-        { method: "POST" },
+        { method: 'POST' },
       );
       expect(res.status).toBe(403);
 
       // The WIRE id again — `public_id` in Postgres, not the primary key.
       const reloaded = await findIntentByPublicId(gatewayDb(), created.body.id);
-      expect(reloaded?.status).toBe("created");
+      expect(reloaded?.status).toBe('created');
     } finally {
       await new Promise<void>((resolve, reject) => {
         noScopeServer.close((err) => (err ? reject(err) : resolve()));
@@ -541,33 +517,37 @@ describe("POST /v1/payment_intents/:id/reject", () => {
   });
 });
 
-describe("GET /v1/payment_intents (list)", () => {
+describe('GET /v1/payment_intents (list)', () => {
   test("lists the merchant's own intents, newest first, respecting limit", async () => {
-    await createIntent("idem-list-1");
-    await createIntent("idem-list-2");
-    await createIntent("idem-list-3");
+    await createIntent('idem-list-1');
+    await createIntent('idem-list-2');
+    await createIntent('idem-list-3');
 
     const res = await fetch(`${baseUrl}/v1/payment_intents?limit=2`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { object: string; data: IntentResponse[]; has_more: boolean };
-    expect(body.object).toBe("list");
+    const body = (await res.json()) as {
+      object: string;
+      data: IntentResponse[];
+      has_more: boolean;
+    };
+    expect(body.object).toBe('list');
     expect(body.data).toHaveLength(2);
     expect(body.has_more).toBe(true);
   });
 
-  test("filters by status", async () => {
-    const created = await createIntent("idem-list-status");
-    await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, { method: "POST" });
+  test('filters by status', async () => {
+    const created = await createIntent('idem-list-status');
+    await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, { method: 'POST' });
 
     const res = await fetch(`${baseUrl}/v1/payment_intents?status=rejected`);
     const body = (await res.json()) as { data: IntentResponse[] };
-    expect(body.data.every((intent) => intent.status === "rejected")).toBe(true);
+    expect(body.data.every((intent) => intent.status === 'rejected')).toBe(true);
     expect(body.data.some((intent) => intent.id === created.body.id)).toBe(true);
   });
 
-  test("paginates via starting_after", async () => {
-    const first = await createIntent("idem-page-1");
-    const second = await createIntent("idem-page-2");
+  test('paginates via starting_after', async () => {
+    const first = await createIntent('idem-page-1');
+    const second = await createIntent('idem-page-2');
 
     const page1 = await fetch(`${baseUrl}/v1/payment_intents?limit=1`);
     const page1Body = (await page1.json()) as { data: IntentResponse[] };
@@ -586,12 +566,12 @@ describe("GET /v1/payment_intents (list)", () => {
     expect(page2Body.data[0]?.id).toBe(first.body.id);
   });
 
-  test("an unknown starting_after -> 422", async () => {
+  test('an unknown starting_after -> 422', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents?starting_after=pi_does_not_exist`);
     expect(res.status).toBe(422);
   });
 
-  test("no service app credentials at all -> 401", async () => {
+  test('no service app credentials at all -> 401', async () => {
     const app = express();
     app.use(express.json());
     app.use(
@@ -603,9 +583,7 @@ describe("GET /v1/payment_intents (list)", () => {
     const noAuthServer = app.listen(0);
     const noAuthAddress = noAuthServer.address() as AddressInfo;
     try {
-      const res = await fetch(
-        `http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents`,
-      );
+      const res = await fetch(`http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents`);
       expect(res.status).toBe(401);
     } finally {
       await new Promise<void>((resolve, reject) => {

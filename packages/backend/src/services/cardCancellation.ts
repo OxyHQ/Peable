@@ -25,62 +25,62 @@
  * for an intent belongs to the caller, so "what happens when a cancellation
  * loses" is written where the transition is, not once per call site.
  */
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   isRetryableProviderError,
   ProviderError,
   type PaymentProvider,
   type ProviderPaymentStatus,
-} from "./providers/provider";
-import { resolveProvider } from "./providers/registry";
+} from './providers/provider';
+import { resolveProvider } from './providers/registry';
 
 export type CardCancellation =
   /** The provider reports the payment cancelled. Nothing can be charged. */
-  | { readonly kind: "canceled" }
+  | { readonly kind: 'canceled' }
   /**
    * The payer got there first. The payment SUCCEEDED and no cancellation is
    * possible — the caller must reconcile to settlement rather than announce a
    * cancellation it cannot deliver.
    */
-  | { readonly kind: "settled" }
+  | { readonly kind: 'settled' }
   /**
    * The provider reports the payment still in flight — `processing`, or an SCA
    * challenge the payer is in the middle of. Cancelling would abandon a payment
    * that may be about to succeed, and the provider often refuses it outright.
    */
-  | { readonly kind: "in_flight"; readonly status: ProviderPaymentStatus }
+  | { readonly kind: 'in_flight'; readonly status: ProviderPaymentStatus }
   /**
    * There is nothing at a provider to cancel: a FairCoin intent, a card intent
    * whose create never linked, or a deployment with the rail switched off.
    */
-  | { readonly kind: "nothing_to_cancel" }
+  | { readonly kind: 'nothing_to_cancel' }
   /**
    * The provider could not be reached, or answered something transient. The
    * caller must NOT announce a cancellation: the payment is still live and its
    * state is unknown.
    */
-  | { readonly kind: "unknown"; readonly error: string };
+  | { readonly kind: 'unknown'; readonly error: string };
 
 /** Map the provider's vocabulary onto what a cancellation attempt concluded. */
 function fromProviderStatus(status: ProviderPaymentStatus): CardCancellation {
   switch (status) {
-    case "canceled":
-      return { kind: "canceled" };
-    case "succeeded":
-    case "refunded":
-    case "partially_refunded":
+    case 'canceled':
+      return { kind: 'canceled' };
+    case 'succeeded':
+    case 'refunded':
+    case 'partially_refunded':
       // Refunded means it succeeded and then some came back. Either way the
       // payer paid, which is the fact the caller has to act on.
-      return { kind: "settled" };
-    case "failed":
+      return { kind: 'settled' };
+    case 'failed':
       // A declined payment is not cancelled, and treating it as cancelled would
       // let a caller announce a cancellation for a payment the payer can still
       // retry on the same object.
-      return { kind: "in_flight", status };
-    case "created":
-    case "requires_action":
-    case "processing":
-      return { kind: "in_flight", status };
+      return { kind: 'in_flight', status };
+    case 'created':
+    case 'requires_action':
+    case 'processing':
+      return { kind: 'in_flight', status };
   }
 }
 
@@ -94,9 +94,9 @@ export async function cancelCardPaymentAtProvider(
   intent: PaymentIntentRow,
   idempotencyKey: string,
 ): Promise<CardCancellation> {
-  if (!intent.provider || !intent.providerObjectId) return { kind: "nothing_to_cancel" };
+  if (!intent.provider || !intent.providerObjectId) return { kind: 'nothing_to_cancel' };
   const provider = resolveProvider(intent.provider);
-  if (!provider) return { kind: "nothing_to_cancel" };
+  if (!provider) return { kind: 'nothing_to_cancel' };
 
   try {
     const result = await provider.cancel({
@@ -118,8 +118,8 @@ export async function cancelCardPaymentAtProvider(
       return readCurrentState(provider, intent, error);
     }
     return {
-      kind: "unknown",
-      error: error instanceof Error ? error.message : "the provider could not be reached",
+      kind: 'unknown',
+      error: error instanceof Error ? error.message : 'the provider could not be reached',
     };
   }
 }
@@ -131,14 +131,14 @@ async function readCurrentState(
   cause: unknown,
 ): Promise<CardCancellation> {
   try {
-    const current = await provider.getStatus(intent.providerObjectId ?? "");
+    const current = await provider.getStatus(intent.providerObjectId ?? '');
     return fromProviderStatus(current.status);
   } catch (error) {
     // The refusal and the re-read both failed. The FIRST error is the useful
     // one — it is what the provider said about the operation that was actually
     // attempted — and the second is almost always the same fault repeated.
     return {
-      kind: "unknown",
+      kind: 'unknown',
       error:
         cause instanceof ProviderError
           ? cause.message

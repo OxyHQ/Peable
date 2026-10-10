@@ -57,7 +57,7 @@ export const socialReceiveCursors = pgTable(
   (table) => [
     uniqueIndex('social_receive_cursors_oxy_user_id_network_key').on(
       table.oxyUserId,
-      table.network
+      table.network,
     ),
     check('social_receive_cursors_network_check', sql.raw(`network in (${inList(NETWORK_TYPES)})`)),
     // Index 0 is never handed out here, so the counter never points below the
@@ -73,9 +73,9 @@ export const socialReceiveCursors = pgTable(
     // to get wrong the moment a bound becomes a named constant.
     check(
       'social_receive_cursors_next_derivation_index_check',
-      sql.raw(`next_derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`)
+      sql.raw(`next_derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`),
     ),
-  ]
+  ],
 );
 
 /**
@@ -129,14 +129,14 @@ export const socialSendAttributions = pgTable(
     uniqueIndex('social_send_attributions_address_network_key').on(table.address, table.network),
     check(
       'social_send_attributions_network_check',
-      sql.raw(`network in (${inList(NETWORK_TYPES)})`)
+      sql.raw(`network in (${inList(NETWORK_TYPES)})`),
     ),
     // An attribution only ever describes a RESERVED address, and index 0 is
     // never reserved — it is the recipient's default address, which belongs to
     // no single payment relationship and must not acquire one here.
     check(
       'social_send_attributions_derivation_index_check',
-      sql.raw(`derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`)
+      sql.raw(`derivation_index >= ${SOCIAL_RECEIVE_FIRST_FRESH_INDEX}`),
     ),
     // A `ref` is meaningful only inside the app that minted it, so a ref with
     // no app names nothing anybody could ever resolve. Checked against the only
@@ -147,7 +147,7 @@ export const socialSendAttributions = pgTable(
     // satisfied by NULL.
     check(
       'social_send_attributions_source_ref_needs_app_check',
-      sql.raw(`source_ref is null or source_app is not null`)
+      sql.raw(`source_ref is null or source_app is not null`),
     ),
     // The length bounds the route validates, restated where they are true of
     // the DATA rather than of one code path. `source_ref` is opaque — nothing
@@ -162,14 +162,14 @@ export const socialSendAttributions = pgTable(
     check(
       'social_send_attributions_source_app_length_check',
       sql.raw(
-        `source_app is null or char_length(source_app) between 1 and ${SOCIAL_SOURCE_APP_MAX_LENGTH}`
-      )
+        `source_app is null or char_length(source_app) between 1 and ${SOCIAL_SOURCE_APP_MAX_LENGTH}`,
+      ),
     ),
     check(
       'social_send_attributions_source_ref_length_check',
       sql.raw(
-        `source_ref is null or char_length(source_ref) between 1 and ${SOCIAL_SOURCE_REF_MAX_LENGTH}`
-      )
+        `source_ref is null or char_length(source_ref) between 1 and ${SOCIAL_SOURCE_REF_MAX_LENGTH}`,
+      ),
     ),
-  ]
+  ],
 );

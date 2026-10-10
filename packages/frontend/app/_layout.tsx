@@ -11,53 +11,53 @@
  * This ensures no flash of wrong colors on native UI chrome.
  */
 
-import "../src/crypto-polyfill";
-import "../global.css";
+import '../src/crypto-polyfill';
+import '../global.css';
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { AppState, type AppStateStatus, Platform, View } from "react-native";
-import { Stack, useRouter } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import * as SplashScreen from "expo-splash-screen";
-import { useFonts } from "expo-font";
-import * as Linking from "expo-linking";
-import * as Notifications from "expo-notifications";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
-import { KeyboardProvider as NativeKeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider } from "react-native-safe-area-context";
-import { OxyProvider } from "@oxy.so/services";
-import { BloomThemeProvider, useBloomTheme } from "@oxy.so/bloom/theme";
-import { ToastOutlet } from "@oxy.so/bloom/toast";
-import type { ThemeMode } from "@oxy.so/bloom/theme";
-import { ImageResolverProvider } from "@oxy.so/bloom/image-resolver";
-import { parseFairCoinURI } from "@fairco.in/core";
-import { parsePaymentRequest } from "../src/pay/payment-request";
-import { queryClient } from "../src/services/query-client";
-import { oxyServices } from "../src/services/oxy-services";
-import { OXY_CLIENT_ID, OXY_AUTH_REDIRECT_URI } from "../src/config";
-import { useExplorerRealtime } from "../src/hooks/useExplorerRealtime";
-import { useWalletStore } from "../src/wallet/wallet-store";
-import { useLockStore } from "../src/wallet/lock-store";
-import { LockGate } from "../src/ui/components/LockGate";
-import { ErrorBoundary } from "../src/ui/components/ErrorBoundary";
-import { installCrashHandler } from "../src/services/crash-log";
-import { getAutoLockTimeout } from "../src/storage/secure-store";
-import { SUPPORTED_LANGUAGES } from "../src/i18n";
-import { useLanguageStore } from "../src/i18n/store";
-import { getItemAsync, setItemAsync } from "../src/storage/kv-store";
-import { startTxNotifier } from "../src/services/tx-notifier";
-import { startSyncNotifier } from "../src/services/sync-notifier";
-import { startPushRegistration } from "../src/services/push-registration";
-import { handleIncomingPush } from "../src/services/push-handler";
-import { registerBackgroundSync } from "../src/services/background-sync";
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { AppState, type AppStateStatus, Platform, View } from 'react-native';
+import { Stack, useRouter } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import * as SplashScreen from 'expo-splash-screen';
+import { useFonts } from 'expo-font';
+import * as Linking from 'expo-linking';
+import * as Notifications from 'expo-notifications';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
+import { KeyboardProvider as NativeKeyboardProvider } from 'react-native-keyboard-controller';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { OxyProvider } from '@oxy.so/services';
+import { BloomThemeProvider, useBloomTheme } from '@oxy.so/bloom/theme';
+import { ToastOutlet } from '@oxy.so/bloom/toast';
+import type { ThemeMode } from '@oxy.so/bloom/theme';
+import { ImageResolverProvider } from '@oxy.so/bloom/image-resolver';
+import { parseFairCoinURI } from '@fairco.in/core';
+import { parsePaymentRequest } from '../src/pay/payment-request';
+import { queryClient } from '../src/services/query-client';
+import { oxyServices } from '../src/services/oxy-services';
+import { OXY_CLIENT_ID, OXY_AUTH_REDIRECT_URI } from '../src/config';
+import { useExplorerRealtime } from '../src/hooks/useExplorerRealtime';
+import { useWalletStore } from '../src/wallet/wallet-store';
+import { useLockStore } from '../src/wallet/lock-store';
+import { LockGate } from '../src/ui/components/LockGate';
+import { ErrorBoundary } from '../src/ui/components/ErrorBoundary';
+import { installCrashHandler } from '../src/services/crash-log';
+import { getAutoLockTimeout } from '../src/storage/secure-store';
+import { SUPPORTED_LANGUAGES } from '../src/i18n';
+import { useLanguageStore } from '../src/i18n/store';
+import { getItemAsync, setItemAsync } from '../src/storage/kv-store';
+import { startTxNotifier } from '../src/services/tx-notifier';
+import { startSyncNotifier } from '../src/services/sync-notifier';
+import { startPushRegistration } from '../src/services/push-registration';
+import { handleIncomingPush } from '../src/services/push-handler';
+import { registerBackgroundSync } from '../src/services/background-sync';
 
 // react-native-keyboard-controller ships no web build — its KeyboardControllerView
 // is a native-only component that breaks the flex height chain on web and leaves
 // all scrollables with 0 bounded height. Web has no virtual keyboard anyway, so
 // we pass children straight through.
 const KeyboardProvider =
-  Platform.OS === "web"
+  Platform.OS === 'web'
     ? ({ children }: { children: React.ReactNode }) => <>{children}</>
     : NativeKeyboardProvider;
 
@@ -67,10 +67,10 @@ const KeyboardProvider =
 // app actually ships a translation catalog for (`translated: true`) may be
 // declared "supported"; anything else would make Oxy resolve to a language
 // this app can't render, so it falls back to `DEFAULT_LANGUAGE` instead.
-const TRANSLATED_LANGUAGE_CODES = SUPPORTED_LANGUAGES.filter(
-  (lang) => lang.translated,
-).map((lang) => lang.code);
-const DEFAULT_LANGUAGE = "en";
+const TRANSLATED_LANGUAGE_CODES = SUPPORTED_LANGUAGES.filter((lang) => lang.translated).map(
+  (lang) => lang.code,
+);
+const DEFAULT_LANGUAGE = 'en';
 
 // Capture uncaught JS errors before anything else runs, so a crash during the
 // module-scope startup below is still recorded.
@@ -99,7 +99,7 @@ SplashScreen.preventAutoHideAsync().catch(() => {
   // Ignore if activity not available yet (Android dev client reload)
 });
 
-const THEME_MODE_KEY = "fairwallet_theme_mode";
+const THEME_MODE_KEY = 'fairwallet_theme_mode';
 
 // Read the persisted theme at module scope, alongside `languageInitPromise`, so
 // the storage round-trip is already in flight before the first render instead of
@@ -116,9 +116,7 @@ function useDeepLinkHandler() {
   const initialized = useWalletStore((s) => s.initialized);
   const locked = useLockStore((s) => s.locked);
   const queueDeepLink = useLockStore((s) => s.queueDeepLink);
-  const consumePendingDeepLink = useLockStore(
-    (s) => s.consumePendingDeepLink,
-  );
+  const consumePendingDeepLink = useLockStore((s) => s.consumePendingDeepLink);
 
   const navigateFromUrl = useCallback(
     (url: string) => {
@@ -128,7 +126,7 @@ function useDeepLinkHandler() {
       const payment = parsePaymentRequest(url);
       if (payment) {
         router.push({
-          pathname: "/pay/[intent]",
+          pathname: '/pay/[intent]',
           params: {
             intent: payment.intentId,
             secret: payment.clientSecret,
@@ -142,8 +140,8 @@ function useDeepLinkHandler() {
       const parsed = parseFairCoinURI(url);
       if (parsed) {
         router.push({
-          pathname: "/(tabs)/send",
-          params: { address: parsed.address, amount: parsed.amount ?? "" },
+          pathname: '/(tabs)/send',
+          params: { address: parsed.address, amount: parsed.amount ?? '' },
         });
       }
     },
@@ -171,7 +169,7 @@ function useDeepLinkHandler() {
   // M6: the previous ref-in-render registration never removed the listener,
   // leaking a subscription on every remount).
   useEffect(() => {
-    const subscription = Linking.addEventListener("url", handleDeepLink);
+    const subscription = Linking.addEventListener('url', handleDeepLink);
     let cancelled = false;
     Linking.getInitialURL().then((url) => {
       if (url && !cancelled) handleDeepLink({ url });
@@ -204,16 +202,13 @@ function useDeepLinkHandler() {
  */
 function usePushNotificationHandler() {
   useEffect(() => {
-    const subscription = Notifications.addNotificationReceivedListener(
-      (notification) => {
-        const data = notification.request.content.data;
-        const txid = data?.txid;
-        if (typeof txid !== "string" || txid.length === 0) return;
-        const event =
-          typeof data?.event === "string" ? data.event : "incoming_confirmed";
-        void handleIncomingPush({ txid, event });
-      },
-    );
+    const subscription = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data;
+      const txid = data?.txid;
+      if (typeof txid !== 'string' || txid.length === 0) return;
+      const event = typeof data?.event === 'string' ? data.event : 'incoming_confirmed';
+      void handleIncomingPush({ txid, event });
+    });
     return () => {
       subscription.remove();
     };
@@ -229,9 +224,9 @@ function useAutoLock() {
   const handleStateChange = useCallback(
     (state: AppStateStatus) => {
       if (!initialized) return;
-      if (state === "background" || state === "inactive") {
+      if (state === 'background' || state === 'inactive') {
         backgroundTime.current = Date.now();
-      } else if (state === "active" && backgroundTime.current !== null) {
+      } else if (state === 'active' && backgroundTime.current !== null) {
         const elapsed = Date.now() - backgroundTime.current;
         backgroundTime.current = null;
         getAutoLockTimeout().then((min) => {
@@ -252,7 +247,7 @@ function useAutoLock() {
 
   // Attach the AppState listener in an effect with teardown (review finding M6).
   useEffect(() => {
-    const subscription = AppState.addEventListener("change", handleStateChange);
+    const subscription = AppState.addEventListener('change', handleStateChange);
     return () => {
       subscription.remove();
     };
@@ -269,13 +264,13 @@ export default function RootLayout() {
   usePushNotificationHandler();
 
   const [fontsLoaded] = useFonts({
-    "Phudu-Light": require("../assets/fonts/Phudu-Light.ttf"),
-    "Phudu-Regular": require("../assets/fonts/Phudu-Regular.ttf"),
-    "Phudu-Bold": require("../assets/fonts/Phudu-Bold.ttf"),
-    "Phudu-Black": require("../assets/fonts/Phudu-Black.ttf"),
+    'Phudu-Light': require('../assets/fonts/Phudu-Light.ttf'),
+    'Phudu-Regular': require('../assets/fonts/Phudu-Regular.ttf'),
+    'Phudu-Bold': require('../assets/fonts/Phudu-Bold.ttf'),
+    'Phudu-Black': require('../assets/fonts/Phudu-Black.ttf'),
   });
 
-  const [mode, setMode] = useState<ThemeMode>("dark");
+  const [mode, setMode] = useState<ThemeMode>('dark');
   const [themeReady, setThemeReady] = useState(false);
   const [languageReady, setLanguageReady] = useState(false);
   const language = useLanguageStore((s) => s.language);
@@ -284,7 +279,7 @@ export default function RootLayout() {
     let active = true;
     themeModePromise.then((stored) => {
       if (!active) return;
-      if (stored === "light" || stored === "dark" || stored === "system") {
+      if (stored === 'light' || stored === 'dark' || stored === 'system') {
         setMode(stored);
       }
       setThemeReady(true);
@@ -312,7 +307,7 @@ export default function RootLayout() {
   }, []);
 
   const handleLanguageError = useCallback((error: unknown, locale: string) => {
-    console.warn("Failed to follow the Oxy-resolved language", error, locale);
+    console.warn('Failed to follow the Oxy-resolved language', error, locale);
     setLanguageReady(true);
   }, []);
 
@@ -347,10 +342,7 @@ export default function RootLayout() {
                       and around AppContent so a throw in any screen is contained
                       instead of unmounting the app to a black screen. */}
                   <ErrorBoundary>
-                  <AppContent
-                    key={language}
-                    ready={fontsLoaded && themeReady && languageReady}
-                  />
+                    <AppContent key={language} ready={fontsLoaded && themeReady && languageReady} />
                   </ErrorBoundary>
                   {/* Global toast outlet (Bloom + sonner-native). Sibling of the
                       app content so toasts survive the language-key remount and
@@ -384,28 +376,31 @@ function AppContent({ ready }: { ready: boolean }) {
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={theme.isDark ? "light" : "dark"} />
+      <StatusBar style={theme.isDark ? 'light' : 'dark'} />
       <Stack
         screenOptions={{
           headerStyle: { backgroundColor: theme.colors.background },
           headerTintColor: theme.colors.tint,
           headerTitleStyle: { color: theme.colors.text },
           contentStyle: { backgroundColor: theme.colors.background },
-          animation: "slide_from_right",
+          animation: 'slide_from_right',
         }}
       >
         <Stack.Screen name="index" options={{ headerShown: false }} />
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
         <Stack.Screen name="lock" options={{ headerShown: false, gestureEnabled: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="masternode" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="pockets" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="contacts" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="export-key" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="coin-control" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="peers" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="chain" options={{ headerShown: false, presentation: "modal" }} />
-        <Stack.Screen name="notifications-settings" options={{ headerShown: false, presentation: "modal" }} />
+        <Stack.Screen name="masternode" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="pockets" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="contacts" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="export-key" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="coin-control" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="peers" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen name="chain" options={{ headerShown: false, presentation: 'modal' }} />
+        <Stack.Screen
+          name="notifications-settings"
+          options={{ headerShown: false, presentation: 'modal' }}
+        />
         <Stack.Screen name="transaction/[txid]" options={{ headerShown: false }} />
         <Stack.Screen name="pay/[intent]" options={{ headerShown: false }} />
         <Stack.Screen name="buy" options={{ headerShown: false }} />

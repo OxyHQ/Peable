@@ -11,7 +11,10 @@ import {
 describe('errorFromResponse', () => {
   test('maps a nested Gateway envelope (sendError shape) using error.type/message', () => {
     const err = errorFromResponse(422, {
-      error: { type: 'invalid_request_error', message: 'amount must be a base-unit integer string' },
+      error: {
+        type: 'invalid_request_error',
+        message: 'amount must be a base-unit integer string',
+      },
     });
     expect(err).toBeInstanceOf(PeableInvalidRequestError);
     expect(err).toBeInstanceOf(PeableError);
@@ -93,7 +96,9 @@ describe('errorFromResponse', () => {
   });
 
   test('PeableError subclasses are also instanceof Error', () => {
-    const err = errorFromResponse(404, { error: { type: 'invalid_request_error', message: 'not found' } });
+    const err = errorFromResponse(404, {
+      error: { type: 'invalid_request_error', message: 'not found' },
+    });
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe('PeableInvalidRequestError');
   });

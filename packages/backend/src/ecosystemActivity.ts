@@ -34,7 +34,8 @@ let activity: ReturnType<typeof createEcosystemTraffic> | undefined;
  */
 export function canStartEcosystemActivity(): boolean {
   const pair =
-    Boolean(process.env.OXY_SERVICE_API_KEY?.trim()) && Boolean(process.env.OXY_SERVICE_API_SECRET?.trim());
+    Boolean(process.env.OXY_SERVICE_API_KEY?.trim()) &&
+    Boolean(process.env.OXY_SERVICE_API_SECRET?.trim());
   return pair || canAttestWorkloadIdentity();
 }
 
@@ -58,7 +59,9 @@ export const ecosystemActivityMiddleware: RequestHandler = (request, response, n
   else next();
 };
 
-export function observeEcosystemSocket(socket: Parameters<ReturnType<typeof createEcosystemTraffic>['observeSocket']>[0]): void {
+export function observeEcosystemSocket(
+  socket: Parameters<ReturnType<typeof createEcosystemTraffic>['observeSocket']>[0],
+): void {
   activity?.observeSocket(socket);
 }
 

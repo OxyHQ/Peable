@@ -27,14 +27,14 @@
  * and returns the second, and the direction is one-way: nothing derives one
  * from the other, and the provider's is read live and never stored.
  */
-import { canStillBePaid } from "@peable.to/shared-types";
-import { config } from "../config";
-import type { PaymentIntentRow } from "../db/payments/paymentIntentRepository";
-import type { ProviderClientAction } from "./providers/provider";
-import { resolveProvider } from "./providers/registry";
+import { canStillBePaid } from '@peable.to/shared-types';
+import { config } from '../config';
+import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
+import type { ProviderClientAction } from './providers/provider';
+import { resolveProvider } from './providers/registry';
 
 export interface ClientActionResult {
-  readonly kind: ProviderClientAction["kind"];
+  readonly kind: ProviderClientAction['kind'];
   readonly value: string;
   /**
    * The provider's PUBLISHABLE key, when this deployment has one.
@@ -48,13 +48,13 @@ export interface ClientActionResult {
 }
 
 export type ClientActionOutcome =
-  | { readonly kind: "ok"; readonly action: ClientActionResult }
+  | { readonly kind: 'ok'; readonly action: ClientActionResult }
   /** This rail has no client action — FairCoin tells the payer an address instead. */
-  | { readonly kind: "not_applicable" }
+  | { readonly kind: 'not_applicable' }
   /** The payment is over. Handing out a credential for it would be handing out nothing. */
-  | { readonly kind: "unpayable"; readonly status: string }
+  | { readonly kind: 'unpayable'; readonly status: string }
   /** The rail is off on this deployment, or the provider could not be reached. */
-  | { readonly kind: "unavailable"; readonly error: string };
+  | { readonly kind: 'unavailable'; readonly error: string };
 
 /**
  * Read the payer's next step from the provider, live.
@@ -63,21 +63,19 @@ export type ClientActionOutcome =
  * a stored client secret is one that appears in every backup and every support
  * query, and it stays valid.
  */
-export async function resolveClientAction(
-  intent: PaymentIntentRow,
-): Promise<ClientActionOutcome> {
-  if (intent.rail !== "card" || !intent.provider) return { kind: "not_applicable" };
+export async function resolveClientAction(intent: PaymentIntentRow): Promise<ClientActionOutcome> {
+  if (intent.rail !== 'card' || !intent.provider) return { kind: 'not_applicable' };
 
   // A payment nobody can pay any more has no next step, and answering one would
   // be worse than answering nothing: a checkout that receives a credential
   // renders a card form over a payment that is already settled, expired or
   // rejected.
-  if (!canStillBePaid(intent.status)) return { kind: "unpayable", status: intent.status };
+  if (!canStillBePaid(intent.status)) return { kind: 'unpayable', status: intent.status };
 
   const provider = resolveProvider(intent.provider);
   if (!provider) {
     return {
-      kind: "unavailable",
+      kind: 'unavailable',
       error: `the ${intent.provider} rail is not configured on this deployment`,
     };
   }
@@ -87,8 +85,8 @@ export async function resolveClientAction(
     // has no key to replay, so it reports honestly rather than creating a
     // second payment the merchant does not know about.
     return {
-      kind: "unavailable",
-      error: "this payment was never completed at the provider; create it again",
+      kind: 'unavailable',
+      error: 'this payment was never completed at the provider; create it again',
     };
   }
 
@@ -107,23 +105,21 @@ export async function resolveClientAction(
     result = await provider.getStatus(intent.providerObjectId);
   } catch (error) {
     return {
-      kind: "unavailable",
+      kind: 'unavailable',
       error:
-        error instanceof Error
-          ? error.message
-          : "the payment could not be read from the provider",
+        error instanceof Error ? error.message : 'the payment could not be read from the provider',
     };
   }
 
   if (!result.clientAction) {
     return {
-      kind: "unavailable",
-      error: "the provider offered no way to confirm this payment",
+      kind: 'unavailable',
+      error: 'the provider offered no way to confirm this payment',
     };
   }
 
   return {
-    kind: "ok",
+    kind: 'ok',
     action: {
       kind: result.clientAction.kind,
       value: result.clientAction.value,

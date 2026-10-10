@@ -6,13 +6,13 @@
  * (mockup: image avatar + goal bar per card).
  */
 
-import { View, Text, Pressable } from "react-native";
-import { UNITS_PER_COIN } from "@fairco.in/core";
-import { AmountText } from "./AmountText";
-import { Badge } from "./Badge";
-import { PocketAvatar } from "./PocketAvatar";
-import { MAIN_POCKET_ACCOUNT, type PocketInfo } from "../../wallet/pockets";
-import { t } from "../../i18n";
+import { View, Text, Pressable } from 'react-native';
+import { UNITS_PER_COIN } from '@fairco.in/core';
+import { AmountText } from './AmountText';
+import { Badge } from './Badge';
+import { PocketAvatar } from './PocketAvatar';
+import { MAIN_POCKET_ACCOUNT, type PocketInfo } from '../../wallet/pockets';
+import { t } from '../../i18n';
 
 function formatGoalAmount(value: number): string {
   return value.toLocaleString(undefined, { maximumFractionDigits: 8 });
@@ -26,7 +26,7 @@ interface PocketCardProps {
 
 export function PocketCard({ pocket, balance, onPress }: PocketCardProps) {
   const isMain = pocket.account === MAIN_POCKET_ACCOUNT;
-  const label = isMain ? t("pockets.mainName") : pocket.name;
+  const label = isMain ? t('pockets.mainName') : pocket.name;
   const balanceFair = Number(balance) / Number(UNITS_PER_COIN);
   const goalPercent =
     pocket.goal && pocket.goal > 0
@@ -44,17 +44,14 @@ export function PocketCard({ pocket, balance, onPress }: PocketCardProps) {
 
       <View className="flex-1 min-w-0 mr-3">
         <View className="flex-row items-center gap-2">
-          <Text
-            className="text-foreground text-[15.5px] font-semibold"
-            numberOfLines={1}
-          >
+          <Text className="text-foreground text-[15.5px] font-semibold" numberOfLines={1}>
             {label}
           </Text>
-          {isMain ? <Badge text={t("pockets.mainBadge")} size="sm" /> : null}
+          {isMain ? <Badge text={t('pockets.mainBadge')} size="sm" /> : null}
         </View>
         {isMain && goalPercent === null ? (
           <Text className="text-muted-foreground text-xs mt-0.5" numberOfLines={1}>
-            {t("pockets.mainSubtitle")}
+            {t('pockets.mainSubtitle')}
           </Text>
         ) : null}
 
@@ -71,7 +68,7 @@ export function PocketCard({ pocket, balance, onPress }: PocketCardProps) {
             </View>
             <View className="flex-row justify-between mt-1.5">
               <Text className="text-muted-foreground text-[11px]">
-                {t("pockets.goal.progress", {
+                {t('pockets.goal.progress', {
                   current: formatGoalAmount(balanceFair),
                   target: formatGoalAmount(pocket.goal ?? 0),
                 })}
@@ -86,9 +83,7 @@ export function PocketCard({ pocket, balance, onPress }: PocketCardProps) {
 
       <View className="items-end">
         <AmountText value={balance} className="text-foreground text-base font-bold" />
-        <Text className="text-muted-foreground text-[11px] font-semibold mt-0.5">
-          FAIR
-        </Text>
+        <Text className="text-muted-foreground text-[11px] font-semibold mt-0.5">FAIR</Text>
       </View>
     </Pressable>
   );

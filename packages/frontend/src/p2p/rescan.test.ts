@@ -12,13 +12,8 @@
  * (re-)discovered without double-counting.
  */
 
-import { describe, test, expect } from "bun:test";
-import {
-  Rescanner,
-  planRescan,
-  type RescanCallbacks,
-  type RescanProgress,
-} from "./rescan";
+import { describe, test, expect } from 'bun:test';
+import { Rescanner, planRescan, type RescanCallbacks, type RescanProgress } from './rescan';
 
 // ---------------------------------------------------------------------------
 // A fake SPV/header environment for the Rescanner.
@@ -30,10 +25,7 @@ interface FakeEnv {
   persisted: RescanProgress[];
 }
 
-function makeEnv(
-  tipHeight: number,
-  opts: { hasPeer?: boolean; stopAfter?: number } = {},
-): FakeEnv {
+function makeEnv(tipHeight: number, opts: { hasPeer?: boolean; stopAfter?: number } = {}): FakeEnv {
   const requestedHeights: number[][] = [];
   const persisted: RescanProgress[] = [];
   const hasPeer = opts.hasPeer ?? true;
@@ -67,8 +59,7 @@ function makeEnv(
     waitForWindow: async () => {
       // no-op in tests
     },
-    isRunning: () =>
-      opts.stopAfter === undefined ? true : requestCount < opts.stopAfter,
+    isRunning: () => (opts.stopAfter === undefined ? true : requestCount < opts.stopAfter),
   };
 
   return { callbacks, requestedHeights, persisted };
@@ -78,8 +69,8 @@ function makeEnv(
 // Rescanner
 // ---------------------------------------------------------------------------
 
-describe("Rescanner", () => {
-  test("scans every block in the range across windows", async () => {
+describe('Rescanner', () => {
+  test('scans every block in the range across windows', async () => {
     const env = makeEnv(450);
     const scanner = new Rescanner(env.callbacks, 200);
     const result = await scanner.run(0, 450);
@@ -95,7 +86,7 @@ describe("Rescanner", () => {
     expect(env.requestedHeights.length).toBe(3);
   });
 
-  test("persists progress after each window for resumability", async () => {
+  test('persists progress after each window for resumability', async () => {
     const env = makeEnv(450);
     const scanner = new Rescanner(env.callbacks, 200);
     await scanner.run(0, 450);
@@ -106,7 +97,7 @@ describe("Rescanner", () => {
     expect(env.persisted[env.persisted.length - 1].completed).toBe(true);
   });
 
-  test("resumes from a persisted next-height and does not re-request earlier blocks", async () => {
+  test('resumes from a persisted next-height and does not re-request earlier blocks', async () => {
     const env = makeEnv(450);
     const scanner = new Rescanner(env.callbacks, 200);
     // Resume as if [0..399] were already scanned.
@@ -118,7 +109,7 @@ describe("Rescanner", () => {
     expect(Math.max(...all)).toBe(450);
   });
 
-  test("stops and persists without completing when no peer is available", async () => {
+  test('stops and persists without completing when no peer is available', async () => {
     const env = makeEnv(450, { hasPeer: false });
     const scanner = new Rescanner(env.callbacks, 200);
     const result = await scanner.run(0, 450);
@@ -128,7 +119,7 @@ describe("Rescanner", () => {
     expect(env.persisted[env.persisted.length - 1].completed).toBe(false);
   });
 
-  test("an empty range completes immediately", async () => {
+  test('an empty range completes immediately', async () => {
     const env = makeEnv(-1);
     const scanner = new Rescanner(env.callbacks, 200);
     const result = await scanner.run(5, 4);
@@ -136,7 +127,7 @@ describe("Rescanner", () => {
     expect(env.requestedHeights.length).toBe(0);
   });
 
-  test("refuses to run two scans concurrently", async () => {
+  test('refuses to run two scans concurrently', async () => {
     const env = makeEnv(1000);
     const scanner = new Rescanner(env.callbacks, 100);
     const first = scanner.run(0, 1000);
@@ -149,13 +140,13 @@ describe("Rescanner", () => {
 // planRescan
 // ---------------------------------------------------------------------------
 
-describe("planRescan", () => {
-  test("starts from the birthday when nothing is persisted", () => {
+describe('planRescan', () => {
+  test('starts from the birthday when nothing is persisted', () => {
     const plan = planRescan(null, 0, 500);
     expect(plan).toEqual({ startHeight: 0, resumeFrom: 0, targetHeight: 500 });
   });
 
-  test("resumes an incomplete scan and extends to the new tip", () => {
+  test('resumes an incomplete scan and extends to the new tip', () => {
     const persisted: RescanProgress = {
       startHeight: 0,
       nextHeight: 300,
@@ -166,7 +157,7 @@ describe("planRescan", () => {
     expect(plan).toEqual({ startHeight: 0, resumeFrom: 300, targetHeight: 600 });
   });
 
-  test("does nothing when a completed scan already covers the tip", () => {
+  test('does nothing when a completed scan already covers the tip', () => {
     const persisted: RescanProgress = {
       startHeight: 0,
       nextHeight: 501,
@@ -176,7 +167,7 @@ describe("planRescan", () => {
     expect(planRescan(persisted, 0, 500)).toBeNull();
   });
 
-  test("catches up only the new range after a completed scan", () => {
+  test('catches up only the new range after a completed scan', () => {
     const persisted: RescanProgress = {
       startHeight: 0,
       nextHeight: 501,
@@ -191,7 +182,7 @@ describe("planRescan", () => {
     });
   });
 
-  test("returns null when the tip is below the birthday", () => {
+  test('returns null when the tip is below the birthday', () => {
     expect(planRescan(null, 1000, 500)).toBeNull();
   });
 });
