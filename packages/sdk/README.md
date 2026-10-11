@@ -1,3 +1,13 @@
+### Authenticating without a key pair
+
+SDK 0.2.5-oxy-one.0 accepts `tokenProvider: { getToken(), invalidate() }` on
+`new Peable(...)` in place of `publicKey` + `secret`, for a workload that already
+holds an Oxy identity (workload identity, for instance) and so has no
+ApplicationCredential to hand over. The SDK then mints nothing: every Gateway
+request carries `getToken()`'s result as the bearer, and a 401 calls
+`invalidate()` before the one existing retry. Passing both, or neither, throws at
+construction. The credential path is unchanged.
+
 
 ### HTTP deadlines and existing operation keys
 

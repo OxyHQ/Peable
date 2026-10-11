@@ -22,8 +22,9 @@ export type {
   EnsureBillingCustomerParams,
 } from '@peable.to/shared-types';
 // Server entry (`@peable.to/sdk`) — the merchant-authed SDK. Configured with a
-// confidential `ApplicationCredential` (`{publicKey, secret}`); mints and
-// caches an Oxy service token, and exposes Stripe-ergonomics resource
+// confidential `ApplicationCredential` (`{publicKey, secret}`), from which it
+// mints and caches an Oxy service token, or with a caller-supplied
+// `tokenProvider` that already holds one; exposes Stripe-ergonomics resource
 // namespaces over the Gateway REST contract.
 //
 // Deliberately never imports `socket.io-client` or `./browser/*` — the
@@ -75,7 +76,10 @@ export class Peable {
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
-    const tokenProvider = createServiceTokenProvider(config);
+    const tokenProvider =
+      config.tokenProvider !== undefined
+        ? config.tokenProvider
+        : createServiceTokenProvider(config);
     const client = createRestClient(
       { baseURL: resolved.baseURL, requestTimeoutMs: resolved.requestTimeoutMs },
       tokenProvider,
@@ -98,7 +102,12 @@ export class Peable {
   }
 }
 
-export type { PeableConfig, ResolvedPeableConfig } from './core/config';
+export type {
+  PeableConfig,
+  PeableCredentialConfig,
+  PeableTokenProviderConfig,
+  ResolvedPeableConfig,
+} from './core/config';
 export { DEFAULT_GATEWAY_BASE_URL, DEFAULT_OXY_API_URL } from './core/config';
 
 export {

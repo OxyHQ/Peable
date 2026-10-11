@@ -4,7 +4,7 @@
 // validates at the Gateway. Caches the token until near expiry and re-mints
 // reactively when `RestClient` sees a 401 (see `client.ts`).
 
-import { resolveConfig, type PeableConfig } from './config';
+import { resolveConfig, type PeableCredentialConfig } from './config';
 import { errorFromResponse, PeableApiError } from './errors';
 
 /** Path (relative to `oxyApiUrl`) of oxy-api's service-token mint endpoint. */
@@ -51,7 +51,7 @@ async function readJsonBody(response: Response): Promise<unknown> {
 }
 
 export function createServiceTokenProvider(
-  cfg: PeableConfig,
+  cfg: PeableCredentialConfig,
   deps: { fetch?: typeof fetch } = {},
 ): ServiceTokenProvider {
   const resolved = resolveConfig(cfg);
