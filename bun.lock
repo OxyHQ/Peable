@@ -46,7 +46,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@fairco.in/core": "0.5.0",
-        "@oxy.so/telemetry": "1.2.0",
         "@peable.to/sdk": "*",
         "@peable.to/shared-types": "*",
         "qr-creator": "^1.0.0",
@@ -79,7 +78,6 @@
         "@oxy.so/contracts": "4.9.0",
         "@oxy.so/core": "4.2.0",
         "@oxy.so/services": "11.1.0",
-        "@oxy.so/telemetry": "1.2.0",
         "@peable.to/pay": "workspace:^",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
