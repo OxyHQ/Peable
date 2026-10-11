@@ -197,7 +197,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.2.4-oxy-one.0",
+      "version": "0.2.5-oxy-one.0",
       "dependencies": {
         "@peable.to/shared-types": "workspace:0.3.2-oxy-one.0",
         "qrcode-generator": "^2.0.4",
