@@ -44,8 +44,9 @@ recurring behavior, a published SDK version or production reachability.
 
 ## Inactive observation candidate — 2026-10-03
 
-A separate [local mirror milestone](../audits/2026-10-03-i08-recurring-observation/README.md)
-adds two SQL tables and an internal opt-in projection of already stored events.
+A separate local mirror milestone (its evidence bundle was retired from the tree
+and remains in git history at `57c8823`) adds two SQL tables and an internal
+opt-in projection of already stored events.
 Explicit merchant/application/environment/provider-account bindings, strict
 subscription/invoice-period snapshots and state+internal-outbox+processedAt are
 transactional. There is no remote reader, dispatcher or default activation.
@@ -58,8 +59,9 @@ contracts and historical no_mapping/backfill handling require review before any
 activation. ADR0009, recurring lifecycle, commercial/MoR approval, SDK publication,
 consumer adoption and controlled migration remain pending; #87 stays open.
 
-A subsequent [private reader candidate](../audits/2026-10-03-i08-private-reader/README.md)
-normalizes Stripe22.4 subscription/items and a narrow explicit-subscription invoice
+A subsequent private reader candidate (its evidence bundle was retired from the
+tree and remains in git history at `57c8823`) normalizes Stripe22.4
+subscription/items and a narrow explicit-subscription invoice
 shape using an injected read-only client. Local bounded pagination, identity checks,
 abort/deadline and real-SQL observer composition are covered (63 focal;733 backend).
 It accepts inclusive invoice point periods while retaining positive subscription
