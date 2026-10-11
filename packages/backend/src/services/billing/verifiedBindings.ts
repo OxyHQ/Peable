@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { readOwnedPaidInvoice, readOwnedInvoiceState } from './paidInvoice';
+import { readOwnedInvoiceState } from './paidInvoice';
 import type { Database } from '../../db/postgres';
 import {
   bindBillingObject,
@@ -255,6 +255,45 @@ export function createVerifiedBillingBindings(options: {
           },
         );
       return value;
+    },
+    /** A checkout quote authorizes the initial invoice only. Subsequent periods
+     * require a separate fresh quote lifecycle, which is intentionally unavailable. */
+    async verifyInitialInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
+      await authorize(owner);
+      const binding = await requireBillingBinding(
+        db,
+        deployment,
+        owner,
+        'subscription',
+        subscriptionRef,
+      );
+      if (!client.retrieveInvoice) throw new BillingError('not_found', 404);
+      const invoice = z
+        .object({
+          id: z.literal(invoiceRef),
+          customer: z.string(),
+          livemode: z.literal(deployment.livemode),
+          billing_reason: z.literal('subscription_create'),
+          parent: z.object({
+            type: z.literal('subscription_details'),
+            subscription_details: z.object({ subscription: z.literal(subscriptionRef) }),
+          }),
+        })
+        .safeParse(await client.retrieveInvoice(invoiceRef));
+      if (
+        !invoice.success ||
+        invoice.data.customer !==
+          (
+            await requireBillingBindingById(
+              db,
+              deployment,
+              owner,
+              'customer',
+              binding.customerBindingId ?? '',
+            )
+          ).providerRef
+      )
+        throw new BillingError('reconciliation_required');
     },
     async retrievePaidInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
       const { state, chargeId, amountRefunded, ...paid } = await this.retrieveInvoiceState(

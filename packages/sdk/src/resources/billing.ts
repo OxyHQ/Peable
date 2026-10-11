@@ -35,6 +35,9 @@ export class BillingResource {
       idempotencyKey: options.idempotencyKey,
     });
   }
+  /** Pass the complete signed taxQuote to opt into fiscal checkout. Peable validates
+   * its pinned authority and retains immutable evidence before creating a session.
+   * Existing callers without a quote remain on their explicitly enabled legacy path. */
   createCheckoutSession(
     params: CreateBillingCheckoutParams,
     options: BillingRequestOptions,

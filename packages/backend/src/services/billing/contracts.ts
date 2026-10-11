@@ -36,11 +36,54 @@ export const billingReturnUrl = z
 export const ensureCustomerSchema = z
   .object({ storeId: billingReference, storeName: z.string().min(1).max(200) })
   .strict();
+export const billingTaxQuoteSchema = z
+  .object({
+    schemaVersion: z.literal(1),
+    source: z
+      .object({
+        merchantId: billingReference,
+        appId: billingReference,
+        storeId: billingReference,
+        planId: billingReference,
+        mode: z.enum(['test', 'live']),
+        environment: z.enum(['development', 'staging', 'production']),
+      })
+      .strict(),
+    quote: z
+      .object({
+        id: billingReference,
+        currency: z.string().regex(/^[A-Z]{3}$/),
+        grossMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        netMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        taxMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        taxTreatment: z.enum(['inclusive', 'exclusive']),
+        sellerId: billingReference,
+        invoiceIssuerId: billingReference,
+        taxRemitterId: billingReference,
+        taxServiceRef: billingReference,
+        country: z.string().regex(/^[A-Z]{2}$/),
+        coverageEvidenceId: billingReference,
+        taxRateEvidenceId: billingReference,
+        customerLocationEvidenceId: billingReference,
+        quotedAt: z.string().datetime(),
+        expiresAt: z.string().datetime(),
+      })
+      .strict(),
+    signature: z
+      .object({
+        algorithm: z.literal('Ed25519'),
+        keyId: billingReference,
+        value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
+      })
+      .strict(),
+  })
+  .strict();
 export const checkoutSchema = z
   .object({
     providerCustomerId: customerRef,
     providerPriceId: priceRef,
     trialDays: z.number().int().min(0).max(730),
+    taxQuote: billingTaxQuoteSchema.optional(),
     returnUrl: billingReturnUrl,
     storeId: billingReference,
     planId: billingReference,
