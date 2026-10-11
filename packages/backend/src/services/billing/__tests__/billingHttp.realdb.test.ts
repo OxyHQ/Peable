@@ -1,7 +1,11 @@
+import type { BillingTaxQuoteCalculator } from '../tax-quote';
+import type { BillingTaxCheckoutAdapter } from '../tax-checkout';
 import { findMerchantByAppEnvironment } from '../../../db/merchants/merchantRepository';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import {
   canonicalBillingAuthority,
+  canonicalBillingTaxQuote,
+  type BillingTaxQuote,
   type BillingFinalInvoiceAuthority,
 } from '@peable.to/shared-types';
 import type { FinalInvoiceAuthorityReader } from '../invoice-authority';
@@ -98,6 +102,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     let accountId: string;
     let failCustomer: boolean;
     let cancelled: boolean;
+    let taxCalculator: BillingTaxQuoteCalculator | undefined;
+    let taxCheckoutAdapter: BillingTaxCheckoutAdapter | undefined;
     let finalAuthorityReader: FinalInvoiceAuthorityReader | undefined;
     let time: Date;
     let client: StripeBillingClient;
@@ -222,7 +228,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         async retrieveSubscription() {
           calls.push({ method: 'retrieve' });
           const snapshot = stripeSubscription(cancelled);
-          snapshot.items.data[0]!.price.id = subscriptionPrice;
+          const item = snapshot.items.data[0];
+          if (!item) throw new Error('Missing subscription item');
+          item.price.id = subscriptionPrice;
           return snapshot;
         },
         async updateSubscription(ref, params, key) {
@@ -273,7 +281,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         now: () => time,
       });
       const cohorts: BillingCohort[] = [
-        { ...owner, ...deployment, evidenceRef: 'fixture:approved-cohort' },
+        {
+          ...owner,
+          ...deployment,
+          evidenceRef: 'fixture:approved-cohort',
+        },
       ];
       verified = createVerifiedBillingBindings({
         db: gatewayDb(),
@@ -283,12 +295,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         now: () => time,
       });
       finalAuthorityReader = undefined;
+      taxCalculator = undefined;
+      taxCheckoutAdapter = undefined;
       const service = createBillingService({
         db: gatewayDb(),
         provider,
         cohorts,
         verifiedBindings: verified,
         now: () => time,
+        get taxQuoteCalculator() {
+          return taxCalculator;
+        },
+        get taxCheckoutAdapter() {
+          return taxCheckoutAdapter;
+        },
         get finalInvoiceAuthority() {
           return finalAuthorityReader;
         },
@@ -332,6 +352,558 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),
       );
+    });
+    function configurePaidEvidence() {
+      const invoice = {
+        id: 'in_one',
+        billing_reason: 'subscription_create',
+        customer: 'cus_one',
+        livemode: false,
+        status: 'paid',
+        pre_payment_credit_notes_amount: 0,
+        post_payment_credit_notes_amount: 0,
+        currency: 'usd',
+        total: 2999,
+        amount_paid: 2999,
+        amount_due: 2999,
+        amount_remaining: 0,
+        total_excluding_tax: 2500,
+        parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_one' } },
+      };
+      client.listChargeRefunds = async () => ({ has_more: false, data: [] });
+      client.retrieveInvoice = async () => invoice;
+      client.listInvoiceLines = async () => ({
+        has_more: false,
+        data: [
+          {
+            id: 'il_one',
+            invoice: 'in_one',
+            livemode: false,
+            subscription: 'sub_one',
+            quantity: 1,
+            amount: 2500,
+            parent: {
+              type: 'subscription_item_details',
+              subscription_item_details: { subscription: 'sub_one', proration: false },
+            },
+            pricing: { price_details: { price: 'price_one' } },
+            period: { start: 1791028800, end: 1793707200 },
+          },
+        ],
+      });
+      client.listInvoicePayments = async () => ({
+        has_more: false,
+        data: [
+          {
+            id: 'inpay_one',
+            invoice: 'in_one',
+            livemode: false,
+            currency: 'usd',
+            status: 'paid',
+            amount_paid: 2999,
+            payment: { type: 'payment_intent', payment_intent: 'pi_one' },
+            status_transitions: { paid_at: 1791028800 },
+          },
+        ],
+      });
+      client.retrievePaidPaymentIntent = async () => ({
+        id: 'pi_one',
+        customer: 'cus_one',
+        livemode: false,
+        currency: 'usd',
+        status: 'succeeded',
+        amount_received: 2999,
+        latest_charge: {
+          id: 'ch_one',
+          payment_intent: 'pi_one',
+          customer: 'cus_one',
+          currency: 'usd',
+          livemode: false,
+          paid: true,
+          captured: true,
+          amount_captured: 2999,
+          amount_refunded: 0,
+          refunded: false,
+          disputed: false,
+        },
+      });
+      return invoice;
+    }
+    async function fiscalFixture(quoteLifetimeMs = 60_000) {
+      time = new Date();
+      await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:quoted' });
+      await bindBillingObject(gatewayDb(), deployment, owner, {
+        kind: 'price',
+        providerRef: checkout.providerPriceId,
+        planRef: checkout.planId,
+        bindingEvidenceRef: 'fixture:quoted-price',
+      });
+      const keys = generateKeyPairSync('ed25519');
+      const verificationKeys = {
+        fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
+      };
+      const product = {
+        configurationApproved: true,
+        planId: checkout.planId,
+        currency: 'USD',
+        grossMinorUnits: 2999,
+        taxTreatment: 'inclusive',
+        sellerId: 'seller_fixture',
+        invoiceIssuerId: 'issuer_fixture',
+        taxRemitterId: 'remitter_fixture',
+        taxServiceRef: 'tax_fixture',
+        allowedCountries: ['RO'],
+        coverageEvidenceId: 'coverage_fixture',
+      };
+      const location = {
+        id: 'location_fixture',
+        storeId: checkout.storeId,
+        appId: owner.oxyAppId,
+        mode: 'test',
+        environment: owner.environment,
+        country: 'RO',
+        observedAt: time.toISOString(),
+        expiresAt: new Date(time.getTime() + 300_000).toISOString(),
+      };
+      const offer = {
+        providerPriceId: checkout.providerPriceId,
+        planId: checkout.planId,
+        offerId: 'offer_fixture',
+        offerVersion: 1,
+        interval: 'month' as const,
+        intervalCount: 1 as const,
+        currency: 'USD',
+        grossMinorUnits: 2999,
+        taxTreatment: 'inclusive' as const,
+      };
+      const resign = (quote: BillingTaxQuote) => {
+        quote.signature.value = sign(
+          null,
+          Buffer.from(canonicalBillingTaxQuote(quote)),
+          keys.privateKey,
+        ).toString('base64url');
+        return quote;
+      };
+      taxCalculator = {
+        verificationKeys,
+        async resolveProduct() {
+          return product;
+        },
+        async readCustomerLocation() {
+          return location;
+        },
+        async calculate({ source }) {
+          return resign({
+            schemaVersion: 1,
+            source,
+            quote: {
+              id: 'quote_fixture',
+              currency: 'USD',
+              grossMinorUnits: 2999,
+              netMinorUnits: 2500,
+              taxMinorUnits: 499,
+              taxTreatment: 'inclusive',
+              sellerId: 'seller_fixture',
+              invoiceIssuerId: 'issuer_fixture',
+              taxRemitterId: 'remitter_fixture',
+              taxServiceRef: 'tax_fixture',
+              country: 'RO',
+              coverageEvidenceId: 'coverage_fixture',
+              taxRateEvidenceId: 'rate_fixture',
+              customerLocationEvidenceId: location.id,
+              quotedAt: time.toISOString(),
+              expiresAt: new Date(time.getTime() + quoteLifetimeMs).toISOString(),
+            },
+            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+          });
+        },
+      };
+      let invoiceMutation = (_authority: BillingFinalInvoiceAuthority) => {};
+      finalAuthorityReader = {
+        verificationKeys,
+        async read({ owner: actor, merchantPublicId, invoice: paid, taxCheckoutSnapshot }) {
+          if (!taxCheckoutSnapshot) throw new Error('Missing persisted checkout quote');
+          const quote = taxCheckoutSnapshot.taxQuote.quote;
+          const authority: BillingFinalInvoiceAuthority = {
+            schemaVersion: 1,
+            source: {
+              invoiceId: paid.invoiceId,
+              paymentIntentId: paid.paymentIntentId,
+              customerId: paid.providerCustomerId,
+              subscriptionId: paid.providerSubscriptionId,
+              priceId: paid.providerPriceId,
+              planId: paid.planId,
+              merchantId: merchantPublicId,
+              appId: actor.oxyAppId,
+              mode: 'test',
+              environment: actor.environment,
+            },
+            invoice: {
+              platform: 'peable',
+              currency: quote.currency,
+              grossMinorUnits: quote.grossMinorUnits,
+              netMinorUnits: quote.netMinorUnits,
+              taxMinorUnits: quote.taxMinorUnits,
+              merchantFeeMinorUnits: 0,
+              taxTreatment: quote.taxTreatment,
+              sellerId: quote.sellerId,
+              invoiceIssuerId: quote.invoiceIssuerId,
+              taxQuoteId: quote.id,
+              customerLocationEvidenceId: quote.customerLocationEvidenceId,
+              taxRateEvidenceId: quote.taxRateEvidenceId,
+              context: {
+                payerAccountId: paid.storeId,
+                beneficiaryAccountId: paid.storeId,
+                providerSubscriptionId: paid.providerSubscriptionId,
+                offerId: taxCheckoutSnapshot.offer.offerId,
+                offerVersion: taxCheckoutSnapshot.offer.offerVersion,
+                periodStart: paid.periodStart,
+                periodEnd: paid.periodEnd,
+                mode: 'test',
+                environment: actor.environment,
+              },
+              issuedAt: time.toISOString(),
+              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+            },
+            method: 'card',
+            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+          };
+          invoiceMutation(authority);
+          authority.signature.value = sign(
+            null,
+            Buffer.from(canonicalBillingAuthority(authority)),
+            keys.privateKey,
+          ).toString('base64url');
+          return authority;
+        },
+      };
+      taxCheckoutAdapter = {
+        async resolveOffer() {
+          return offer;
+        },
+        async createCheckout(input, key) {
+          calls.push({ method: 'quotedCheckout', params: input, key });
+          return {
+            providerObjectRef: 'cs_test_a11fixture',
+            providerCustomerId: checkout.providerCustomerId,
+            livemode: false,
+            url: 'https://example.invalid/quoted-checkout',
+            expiresAt: input.snapshot.taxQuote.quote.expiresAt,
+          };
+        },
+      };
+      const fiscalSdk = new Peable({
+        baseURL: base,
+        oxyApiUrl: base,
+        publicKey: 'fixture-public',
+        secret: 'fixture-secret',
+        taxQuoteAuthorityKeys: verificationKeys,
+        invoiceAuthorityKeys: verificationKeys,
+      }).billing;
+      const quote = await fiscalSdk.createTaxQuote({
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+        customerLocationEvidenceId: location.id,
+      });
+      return {
+        quote,
+        offer,
+        location,
+        product,
+        resign,
+        fiscalSdk,
+        setInvoiceMutation(fn: typeof invoiceMutation) {
+          invoiceMutation = fn;
+        },
+      };
+    }
+    it('persists the signed inclusive quote through the real HTTP SDK boundary and rejects reuse under another key', async () => {
+      const fixture = await fiscalFixture();
+      const input = { ...checkout, taxQuote: fixture.quote };
+      const first = await fixture.fiscalSdk.createCheckoutSession(input, {
+        idempotencyKey: 'quoted:one',
+      });
+      expect(
+        await fixture.fiscalSdk.createCheckoutSession(input, { idempotencyKey: 'quoted:one' }),
+      ).toEqual(first);
+      expect(
+        (await request('/v1/billing/checkout_sessions', 'owner', input, 'quoted:two')).status,
+      ).toBe(409);
+      const row = (await gatewayDb().select().from(billingOperations)).find(
+        (value) => value.operation === 'checkout',
+      );
+      expect(row?.taxCheckoutSnapshot?.taxQuote).toEqual(fixture.quote);
+      expect(row?.taxCheckoutSnapshot?.offer).toEqual(fixture.offer);
+      const replacementQuote = structuredClone(fixture.quote);
+      replacementQuote.quote.taxRateEvidenceId = 'rate_replacement';
+      fixture.resign(replacementQuote);
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: replacementQuote },
+            'quoted:one',
+          )
+        ).status,
+      ).toBe(409);
+      fixture.offer.offerVersion++;
+      expect(
+        (await request('/v1/billing/checkout_sessions', 'owner', input, 'quoted:one')).status,
+      ).toBe(409);
+      expect(calls.filter((value) => value.method === 'quotedCheckout')).toHaveLength(1);
+      expect(calls.filter((value) => value.method === 'checkout')).toHaveLength(0);
+    });
+    it('refuses signed foreign actors, expiry, price/offer drift and tampering before any checkout effect', async () => {
+      const fixture = await fiscalFixture();
+      const mutations = [
+        (quote: BillingTaxQuote) => {
+          quote.source.merchantId = 'merch_other';
+        },
+        (quote: BillingTaxQuote) => {
+          quote.source.appId = 'app_other';
+        },
+        (quote: BillingTaxQuote) => {
+          quote.source.storeId = 'store:other';
+        },
+        (quote: BillingTaxQuote) => {
+          quote.source.planId = 'plan:other';
+        },
+        (quote: BillingTaxQuote) => {
+          quote.source.environment = 'production';
+          quote.source.mode = 'live';
+        },
+        (quote: BillingTaxQuote) => {
+          quote.quote.expiresAt = time.toISOString();
+        },
+        (quote: BillingTaxQuote) => {
+          quote.quote.netMinorUnits++;
+        },
+        (quote: BillingTaxQuote) => {
+          quote.quote.sellerId = 'seller_other';
+        },
+      ];
+      for (const mutate of mutations) {
+        const quote = structuredClone(fixture.quote);
+        mutate(quote);
+        fixture.resign(quote);
+        expect(
+          (
+            await request(
+              '/v1/billing/checkout_sessions',
+              'owner',
+              { ...checkout, taxQuote: quote },
+              'quoted:bad',
+            )
+          ).status,
+        ).not.toBe(200);
+      }
+      const tampered = structuredClone(fixture.quote);
+      tampered.quote.taxRateEvidenceId = 'rate_other';
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: tampered },
+            'quoted:tampered',
+          )
+        ).status,
+      ).toBe(502);
+      fixture.offer.grossMinorUnits++;
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: fixture.quote },
+            'quoted:price',
+          )
+        ).status,
+      ).toBe(409);
+      fixture.offer.grossMinorUnits--;
+      fixture.offer.providerPriceId = 'price_other';
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: fixture.quote },
+            'quoted:offer',
+          )
+        ).status,
+      ).toBe(409);
+      expect(
+        calls.filter((value) => ['checkout', 'quotedCheckout'].includes(value.method)),
+      ).toHaveLength(0);
+    });
+    it('closes quoted checkout when the trusted adapter is absent and preserves legacy checkout explicitly', async () => {
+      const fixture = await fiscalFixture();
+      taxCheckoutAdapter = undefined;
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: fixture.quote },
+            'quoted:disabled',
+          )
+        ).status,
+      ).toBe(404);
+      expect(calls.filter((value) => value.method === 'checkout')).toHaveLength(0);
+      client.createCheckout = async () => ({
+        id: 'cs_test_a11fixture',
+        customer: 'cus_one',
+        mode: 'subscription',
+        livemode: false,
+        url: 'https://example.invalid/legacy-checkout',
+        expires_at: Math.floor(time.getTime() / 1000) + 3600,
+      });
+      expect(
+        await sdk().createCheckoutSession(checkout, { idempotencyKey: 'legacy:allowed' }),
+      ).toMatchObject({ id: 'cs_test_a11fixture' });
+    });
+    it('verifies final invoice fiscal fields against the persisted checkout even after quote expiry', async () => {
+      const fixture = await fiscalFixture(1000);
+      await fixture.fiscalSdk.createCheckoutSession(
+        { ...checkout, taxQuote: fixture.quote },
+        { idempotencyKey: 'quoted:invoice' },
+      );
+      hasCheckout = true;
+      expect(await sdk().retrieveCheckout('cs_test_a11fixture')).toMatchObject({
+        subscription: { providerSubscriptionId: 'sub_one' },
+      });
+      const providerInvoice = configurePaidEvidence();
+      await new Promise((resolve) => setTimeout(resolve, 1100));
+      time = new Date();
+      fixture.product.invoiceIssuerId = 'current_unrelated_issuer';
+      expect(
+        await fixture.fiscalSdk.retrieveFinalInvoiceAuthority('sub_one', 'in_one'),
+      ).toMatchObject({
+        invoice: {
+          taxQuoteId: fixture.quote.quote.id,
+          invoiceIssuerId: 'issuer_fixture',
+          context: { offerVersion: 1 },
+        },
+      });
+      for (const mutation of [
+        (authority: BillingFinalInvoiceAuthority) => {
+          authority.invoice.taxQuoteId = 'quote_other';
+        },
+        (authority: BillingFinalInvoiceAuthority) => {
+          authority.invoice.customerLocationEvidenceId = 'location_other';
+        },
+        (authority: BillingFinalInvoiceAuthority) => {
+          authority.invoice.sellerId = 'seller_other';
+        },
+        (authority: BillingFinalInvoiceAuthority) => {
+          authority.invoice.taxRateEvidenceId = 'rate_other';
+        },
+        (authority: BillingFinalInvoiceAuthority) => {
+          authority.invoice.context.offerVersion++;
+        },
+      ]) {
+        fixture.setInvoiceMutation(mutation);
+        expect(
+          (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one')).status,
+        ).toBe(502);
+      }
+      expect(
+        (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one', 'other'))
+          .status,
+      ).toBe(404);
+      fixture.setInvoiceMutation(() => {});
+      providerInvoice.billing_reason = 'subscription_cycle';
+      expect(
+        (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one')).status,
+      ).toBe(409);
+    });
+    it('claims a signed quote once under concurrent keys before any provider effect', async () => {
+      const fixture = await fiscalFixture();
+      const originalAdapter = taxCheckoutAdapter;
+      if (!originalAdapter) throw new Error('Missing adapter');
+      let release = () => {};
+      let entered = () => {};
+      const paused = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      const dispatched = new Promise<void>((resolve) => {
+        entered = resolve;
+      });
+      taxCheckoutAdapter = {
+        ...originalAdapter,
+        async createCheckout(input, key) {
+          entered();
+          await paused;
+          return originalAdapter.createCheckout(input, key);
+        },
+      };
+      const input = { ...checkout, taxQuote: fixture.quote };
+      const first = request(
+        '/v1/billing/checkout_sessions',
+        'owner',
+        input,
+        'quoted:concurrent-one',
+      );
+      try {
+        await dispatched;
+        expect(
+          (await request('/v1/billing/checkout_sessions', 'owner', input, 'quoted:concurrent-two'))
+            .status,
+        ).toBe(409);
+        expect(
+          (await request('/v1/billing/checkout_sessions', 'owner', input, 'quoted:concurrent-one'))
+            .status,
+        ).toBe(409);
+      } finally {
+        release();
+      }
+      expect((await first).status).toBe(200);
+      expect(calls.filter((value) => value.method === 'quotedCheckout')).toHaveLength(1);
+    });
+    it('refuses expiry during deployment verification without dispatch and enforces quote-required cohorts', async () => {
+      const fixture = await fiscalFixture();
+      const account = client.account;
+      client.account = async () => {
+        time = new Date(time.getTime() + 120_000);
+        return account();
+      };
+      expect(
+        (
+          await request(
+            '/v1/billing/checkout_sessions',
+            'owner',
+            { ...checkout, taxQuote: fixture.quote },
+            'quoted:expired-before-dispatch',
+          )
+        ).status,
+      ).toBe(409);
+      expect(
+        calls.filter((value) => ['checkout', 'quotedCheckout'].includes(value.method)),
+      ).toHaveLength(0);
+      const service = createBillingService({
+        db: gatewayDb(),
+        provider: createStripeBillingProvider(deployment, client, {
+          portalConfigurationRef: 'bpc_one',
+        }),
+        cohorts: [
+          { ...owner, ...deployment, evidenceRef: 'fixture:quote-required', requireTaxQuote: true },
+        ],
+      });
+      await expect(
+        service.createCheckoutSession(owner, checkout, 'quoted:missing'),
+      ).rejects.toThrow('not_found');
+      await expect(
+        configureBillingRuntime(
+          gatewayDb(),
+          JSON.stringify({
+            deployment,
+            portalConfigurationRef: 'bpc_one',
+            cohorts: [{ ...owner, evidenceRef: 'fixture:quote-required', requireTaxQuote: true }],
+          }),
+          client,
+        ),
+      ).rejects.toThrow('Quote-required cohort');
     });
     it('executes five SDK methods with store/receipt references and no Connect or financial decisions', async () => {
       expect(await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' })).toEqual(
@@ -779,7 +1351,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(enabled?.observations?.bindOwnedInvoice).toBeFunction();
       expect(enabled?.relay?.enabled).toBe(true);
       expect(enabled?.relay?.cohorts).toEqual([
-        { ...owner, ...deployment, evidenceRef: 'fixture:cohort' },
+        { ...owner, ...deployment, evidenceRef: 'fixture:cohort', requireTaxQuote: false },
       ]);
       await bindRecurringObject(
         gatewayDb(),
@@ -864,78 +1436,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
     it('serves paid-period evidence via scoped SDK with exact merchant isolation', async () => {
       await bindSubscription();
-      const invoice = {
-        id: 'in_one',
-        customer: 'cus_one',
-        livemode: false,
-        status: 'paid',
-        pre_payment_credit_notes_amount: 0,
-        post_payment_credit_notes_amount: 0,
-        currency: 'usd',
-        total: 2999,
-        amount_paid: 2999,
-        amount_due: 2999,
-        amount_remaining: 0,
-        total_excluding_tax: 2500,
-        parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_one' } },
-      };
-      client.listChargeRefunds = async () => ({ has_more: false, data: [] });
-      client.retrieveInvoice = async () => invoice;
-      client.listInvoiceLines = async () => ({
-        has_more: false,
-        data: [
-          {
-            id: 'il_one',
-            invoice: 'in_one',
-            livemode: false,
-            subscription: 'sub_one',
-            quantity: 1,
-            amount: 2500,
-            parent: {
-              type: 'subscription_item_details',
-              subscription_item_details: { subscription: 'sub_one', proration: false },
-            },
-            pricing: { price_details: { price: 'price_one' } },
-            period: { start: 1791028800, end: 1793707200 },
-          },
-        ],
-      });
-      client.listInvoicePayments = async () => ({
-        has_more: false,
-        data: [
-          {
-            id: 'inpay_one',
-            invoice: 'in_one',
-            livemode: false,
-            currency: 'usd',
-            status: 'paid',
-            amount_paid: 2999,
-            payment: { type: 'payment_intent', payment_intent: 'pi_one' },
-            status_transitions: { paid_at: 1791028800 },
-          },
-        ],
-      });
-      client.retrievePaidPaymentIntent = async () => ({
-        id: 'pi_one',
-        customer: 'cus_one',
-        livemode: false,
-        currency: 'usd',
-        status: 'succeeded',
-        amount_received: 2999,
-        latest_charge: {
-          id: 'ch_one',
-          payment_intent: 'pi_one',
-          customer: 'cus_one',
-          currency: 'usd',
-          livemode: false,
-          paid: true,
-          captured: true,
-          amount_captured: 2999,
-          amount_refunded: 0,
-          refunded: false,
-          disputed: false,
-        },
-      });
+      const invoice = configurePaidEvidence();
       expect(await sdk().retrievePaidInvoice('sub_one', 'in_one')).toMatchObject({
         invoiceId: 'in_one',
         storeId: 'store:one',

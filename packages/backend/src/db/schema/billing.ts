@@ -1,3 +1,4 @@
+import type { BillingTaxCheckoutSnapshot } from '../../services/billing/tax-checkout';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -95,6 +96,9 @@ export const billingOperations = pgTable(
     operation: text({ enum: BILLING_OPERATIONS }).notNull(),
     idempotencyKey: text().notNull(),
     requestDigest: text().notNull(),
+    /** Immutable fiscal checkout evidence; legacy operations intentionally have none. */
+    taxQuoteRef: text(),
+    taxCheckoutSnapshot: jsonb().$type<BillingTaxCheckoutSnapshot>(),
     /** Only ensure_customer: prevents another key creating a second customer after a timeout. */
     subjectClaimRef: text(),
     remoteIdempotencyKey: text().notNull(),
@@ -138,6 +142,19 @@ export const billingOperations = pgTable(
     uniqueIndex('billing_operations_checkout_ref_key')
       .on(table.provider, table.platformAccountId, table.livemode, table.providerObjectRef)
       .where(sql`${table.operation} = 'checkout' and ${table.providerObjectRef} is not null`),
+    uniqueIndex('billing_operations_tax_quote_key')
+      .on(
+        table.provider,
+        table.platformAccountId,
+        table.livemode,
+        table.merchantId,
+        table.taxQuoteRef,
+      )
+      .where(sql`${table.taxQuoteRef} is not null`),
+    check(
+      'billing_operations_tax_quote_shape_check',
+      sql`(${table.taxQuoteRef} is null and ${table.taxCheckoutSnapshot} is null) or (${table.operation} = 'checkout' and ${table.taxQuoteRef} is not null and ${table.taxCheckoutSnapshot} is not null and jsonb_typeof(${table.taxCheckoutSnapshot}) = 'object' and coalesce(${table.taxCheckoutSnapshot}->'taxQuote'->'quote'->>'id' = ${table.taxQuoteRef}, false))`,
+    ),
     check(
       'billing_operations_checkout_bindings_check',
       sql`(${table.operation} = 'checkout' and ${table.customerBindingId} is not null and ${table.priceBindingId} is not null) or (${table.operation} <> 'checkout' and ${table.customerBindingId} is null and ${table.priceBindingId} is null)`,

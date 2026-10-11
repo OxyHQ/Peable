@@ -19,6 +19,9 @@ export interface EnsureBillingCustomerParams {
   storeName: string;
 }
 export interface CreateBillingCheckoutParams {
+  /** Opt-in fiscal checkout. The full signed quote is immutable and single-use.
+   * Requires a trusted Peable adapter capable of applying these exact amounts. */
+  taxQuote?: BillingTaxQuote;
   providerCustomerId: string;
   providerPriceId: string;
   trialDays: number;
