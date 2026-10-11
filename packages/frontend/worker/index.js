@@ -1,5 +1,3 @@
-import { observeEdgeRequest } from '@oxy.so/telemetry/edge';
-
 const assetWorker = {
   fetch(request, env) {
     return env.ASSETS.fetch(request);
@@ -8,12 +6,6 @@ const assetWorker = {
 
 export default {
   fetch(request, env, ctx) {
-    return observeEdgeRequest({
-      service: 'peable',
-      request,
-      env,
-      ctx,
-      next: () => assetWorker.fetch(request, env, ctx),
-    });
+    return assetWorker.fetch(request, env, ctx);
   },
 };
