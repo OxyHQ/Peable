@@ -11,8 +11,12 @@ import { Peable } from '@peable.to/sdk';
 import {
   signWebhook,
   canonicalBillingAuthority,
+  canonicalBillingTaxQuote,
+  type BillingTaxQuote,
   type BillingFinalInvoiceAuthority,
 } from '@peable.to/shared-types';
+import type { BillingTaxQuoteCalculator } from '../../services/billing/tax-quote';
+import type { BillingTaxCheckoutAdapter } from '../../services/billing/tax-checkout';
 import { createSuiteDatabase, dropSuiteDatabase } from '../../db/testDatabase';
 import { insertMerchant } from '../../db/merchants/merchantRepository';
 import { insertProviderEvent } from '../../db/providers/providerEventRepository';
@@ -45,7 +49,7 @@ globalThis.fetch = ((input: any, init: any) => {
     throw new Error('Fixture refuses external network');
   return localFetch(input, init);
 }) as typeof fetch;
-const suite = await createSuiteDatabase();
+let suite = await createSuiteDatabase();
 let server: ReturnType<ReturnType<typeof express>['listen']> | undefined;
 let billing: Peable['billing'];
 let peable: Peable;
@@ -61,6 +65,7 @@ let refund = 0;
 let status = 'active';
 let fixtureNow: number | undefined;
 let currentInvoice = 'in_fixture';
+let quotedCheckoutDispatches = 0;
 const invoices: Record<
   string,
   {
@@ -80,7 +85,26 @@ async function initialize(input: {
   periodEnd: string;
   offerId?: string;
   offerVersion?: number;
+  fiscalCheckout?: boolean;
 }) {
+  if (server) {
+    await new Promise<void>((resolve) => server?.close(() => resolve()));
+    await dropSuiteDatabase(suite);
+    suite = await createSuiteDatabase();
+  }
+  cancelled = false;
+  status = 'active';
+  fixtureNow = undefined;
+  currentInvoice = 'in_fixture';
+  quotedCheckoutDispatches = 0;
+  for (const id of Object.keys(invoices)) delete invoices[id];
+  if (
+    input.fiscalCheckout &&
+    (!input.offerId || !Number.isSafeInteger(input.offerVersion) || (input.offerVersion ?? 0) < 1)
+  )
+    throw new Error('Fiscal fixture requires exact registered offer');
+  const offerId = input.offerId ?? 'fixture-offer';
+  const offerVersion = input.offerVersion ?? 1;
   store = input.accountId;
   period = { start: Date.parse(input.periodStart) / 1000, end: Date.parse(input.periodEnd) / 1000 };
   if (!Number.isInteger(period.start) || !Number.isInteger(period.end))
@@ -102,7 +126,14 @@ async function initialize(input: {
   if (!merchant) throw new Error('Merchant fixture missing');
   owner = { merchantId: merchant.id, oxyAppId: merchant.oxyAppId, environment: 'production' };
   deployment = { provider: 'stripe', platformAccountId: 'acct_fixture', livemode: true };
-  cohorts = [{ ...owner, ...deployment, evidenceRef: 'synthetic-local-review' }];
+  cohorts = [
+    {
+      ...owner,
+      ...deployment,
+      evidenceRef: 'synthetic-local-review',
+      requireTaxQuote: input.fiscalCheckout === true,
+    },
+  ];
   const sub = () => ({
     id: 'sub_fixture',
     customer: 'cus_fixture',
@@ -131,6 +162,7 @@ async function initialize(input: {
     customer: 'cus_fixture',
     livemode: true,
     status: 'paid',
+    billing_reason: id === 'in_fixture' ? 'subscription_create' : 'subscription_cycle',
     pre_payment_credit_notes_amount: 0,
     post_payment_credit_notes_amount: 0,
     currency: 'usd',
@@ -285,15 +317,116 @@ async function initialize(input: {
   const invoiceAuthorityKeys = {
     fixture: signingKeys.publicKey.export({ type: 'spki', format: 'pem' }).toString(),
   };
+  const taxQuoteCalculator: BillingTaxQuoteCalculator = {
+    verificationKeys: invoiceAuthorityKeys,
+    async resolveProduct(actor, planId) {
+      if (actor.merchantId !== owner.merchantId || planId !== input.planId)
+        throw new Error('Foreign fixture product');
+      return {
+        configurationApproved: true,
+        planId,
+        currency: 'USD',
+        grossMinorUnits: 2999,
+        taxTreatment: 'inclusive',
+        sellerId: 'synthetic-seller',
+        invoiceIssuerId: 'synthetic-issuer',
+        taxRemitterId: 'synthetic-remitter',
+        taxServiceRef: 'synthetic-tax-service',
+        allowedCountries: ['RO'],
+        coverageEvidenceId: 'synthetic-coverage',
+      };
+    },
+    async readCustomerLocation(actor, evidenceId) {
+      if (actor.merchantId !== owner.merchantId || evidenceId !== 'synthetic-location')
+        throw new Error('Foreign fixture location');
+      return {
+        id: evidenceId,
+        storeId: store,
+        appId: owner.oxyAppId,
+        mode: 'live',
+        environment: 'production',
+        country: 'RO',
+        observedAt: observedClock().toISOString(),
+        expiresAt: new Date(observedClock().getTime() + 300000).toISOString(),
+      };
+    },
+    async calculate({ source }) {
+      const quote: BillingTaxQuote = {
+        schemaVersion: 1,
+        source,
+        quote: {
+          id: `quote_${randomUUID()}`,
+          currency: 'USD',
+          grossMinorUnits: 2999,
+          netMinorUnits: 2500,
+          taxMinorUnits: 499,
+          taxTreatment: 'inclusive',
+          sellerId: 'synthetic-seller',
+          invoiceIssuerId: 'synthetic-issuer',
+          taxRemitterId: 'synthetic-remitter',
+          taxServiceRef: 'synthetic-tax-service',
+          country: 'RO',
+          coverageEvidenceId: 'synthetic-coverage',
+          taxRateEvidenceId: 'synthetic-rate',
+          customerLocationEvidenceId: 'synthetic-location',
+          quotedAt: observedClock().toISOString(),
+          expiresAt: new Date(observedClock().getTime() + 240000).toISOString(),
+        },
+        signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+      };
+      quote.signature.value = sign(
+        null,
+        Buffer.from(canonicalBillingTaxQuote(quote)),
+        signingKeys.privateKey,
+      ).toString('base64url');
+      return quote;
+    },
+  };
+  const taxCheckoutAdapter: BillingTaxCheckoutAdapter = {
+    async resolveOffer(actor, priceId) {
+      if (actor.merchantId !== owner.merchantId || priceId !== 'price_fixture')
+        throw new Error('Foreign fixture offer');
+      return {
+        providerPriceId: priceId,
+        planId: input.planId,
+        offerId,
+        offerVersion,
+        interval: 'month',
+        intervalCount: 1,
+        currency: 'USD',
+        grossMinorUnits: 2999,
+        taxTreatment: 'inclusive',
+      };
+    },
+    async createCheckout(value) {
+      if (
+        value.owner.merchantId !== owner.merchantId ||
+        value.checkout.storeId !== store ||
+        value.checkout.providerCustomerId !== 'cus_fixture'
+      )
+        throw new Error('Foreign fixture checkout');
+      quotedCheckoutDispatches++;
+      return {
+        providerObjectRef: 'cs_live_fixture',
+        providerCustomerId: 'cus_fixture',
+        livemode: true,
+        url: 'https://example.invalid/synthetic-quoted-checkout',
+        expiresAt: value.snapshot.taxQuote.quote.expiresAt,
+      };
+    },
+  };
   const service = createBillingService({
     db: suite.db,
     provider,
     cohorts,
     verifiedBindings: bindings,
     now: observedClock,
+    ...(input.fiscalCheckout ? { taxQuoteCalculator, taxCheckoutAdapter } : {}),
     finalInvoiceAuthority: {
       verificationKeys: invoiceAuthorityKeys,
-      async read({ owner: authorityOwner, merchantPublicId, invoice: paid }) {
+      async read({ owner: authorityOwner, merchantPublicId, invoice: paid, taxCheckoutSnapshot }) {
+        if (input.fiscalCheckout && !taxCheckoutSnapshot)
+          throw new Error('Fiscal fixture requires persisted signed quote');
         const clock = observedClock();
         const authority: BillingFinalInvoiceAuthority = {
           schemaVersion: 1,
@@ -319,15 +452,15 @@ async function initialize(input: {
             taxTreatment: 'inclusive',
             sellerId: 'synthetic-seller',
             invoiceIssuerId: 'synthetic-issuer',
-            taxQuoteId: 'synthetic-tax',
+            taxQuoteId: taxCheckoutSnapshot?.taxQuote.quote.id ?? 'synthetic-tax',
             customerLocationEvidenceId: 'synthetic-location',
             taxRateEvidenceId: 'synthetic-rate',
             context: {
               payerAccountId: paid.storeId,
               beneficiaryAccountId: paid.storeId,
               providerSubscriptionId: paid.providerSubscriptionId,
-              offerId: input.offerId ?? 'fixture-offer',
-              offerVersion: input.offerVersion ?? 1,
+              offerId,
+              offerVersion,
               periodStart: paid.periodStart,
               periodEnd: paid.periodEnd,
               mode: 'live',
@@ -379,6 +512,7 @@ async function initialize(input: {
     publicKey: 'synthetic',
     secret: 'synthetic',
     invoiceAuthorityKeys,
+    taxQuoteAuthorityKeys: invoiceAuthorityKeys,
   });
   billing = peable.billing;
   await billing.ensureCustomer(
@@ -390,22 +524,24 @@ async function initialize(input: {
     planId: input.planId,
     evidenceRef: 'synthetic-approved-price',
   });
-  const checkout = await billing.createCheckoutSession(
-    {
-      storeId: store,
-      planId: input.planId,
-      providerCustomerId: 'cus_fixture',
-      providerPriceId: 'price_fixture',
-      trialDays: 0,
-      returnUrl: 'https://example.invalid/return',
-    },
-    { idempotencyKey: 'fixture-checkout' },
-  );
-  const correlation = await billing.retrieveCheckout(checkout.id);
+  const checkout = input.fiscalCheckout
+    ? undefined
+    : await billing.createCheckoutSession(
+        {
+          storeId: store,
+          planId: input.planId,
+          providerCustomerId: 'cus_fixture',
+          providerPriceId: 'price_fixture',
+          trialDays: 0,
+          returnUrl: 'https://example.invalid/return',
+        },
+        { idempotencyKey: 'fixture-checkout' },
+      );
+  const correlation = checkout ? await billing.retrieveCheckout(checkout.id) : null;
   return {
     merchantId: merchant.publicId,
     appId: owner.oxyAppId,
-    checkoutId: checkout.id,
+    checkoutId: checkout?.id ?? null,
     correlation,
     baseURL,
     invoiceAuthorityKeys,
@@ -416,6 +552,8 @@ async function command(message: any) {
   switch (message.method) {
     case 'initialize':
       return initialize(message.input);
+    case 'checkoutDispatchCount':
+      return { dispatches: quotedCheckoutDispatches };
     case 'retrieveMerchant':
       return peable.merchants.retrieve();
     case 'retrieveFinalInvoiceAuthority':
