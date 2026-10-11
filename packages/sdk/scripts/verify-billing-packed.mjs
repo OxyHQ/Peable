@@ -113,6 +113,32 @@ execFileSync(
   ],
   { cwd: fixture, stdio: 'pipe' },
 );
+for (const [source, target] of [
+  ['packed-tax-quote-contract.ts', 'quote-contract.ts'],
+  ['packed-tax-quote-runtime.cjs', 'quote-runtime.cjs'],
+])
+  writeFileSync(
+    resolve(fixture, target),
+    readFileSync(resolve(root, 'packages/sdk/scripts', source), 'utf8'),
+  );
+execFileSync(nodeBinary, ['quote-runtime.cjs'], { cwd: fixture, stdio: 'pipe' });
+execFileSync(
+  nodeBinary,
+  [
+    resolve(root, 'node_modules/typescript/bin/tsc'),
+    '--noEmit',
+    '--strict',
+    '--skipLibCheck',
+    '--target',
+    'ES2022',
+    '--module',
+    'NodeNext',
+    '--moduleResolution',
+    'NodeNext',
+    'quote-contract.ts',
+  ],
+  { cwd: fixture, stdio: 'pipe' },
+);
 const hash = (path) => createHash('sha256').update(readFileSync(path)).digest('hex');
 const proof = {
   fixture,
@@ -126,6 +152,8 @@ const proof = {
     'Node ESM load and ten billing methods',
     'Public runtime: mocked billing transport/token caching/encoded refs/idempotency/signed observation/checkout entry',
     'TypeScript strict NodeNext public declarations',
+    'Public CreateBillingCheckoutParams.taxQuote declaration with official BillingTaxQuote',
+    'Packed SDK full signed taxQuote HTTP body and exact personal-checkout Idempotency-Key; mocked fetch opens no sockets',
     'SDK exact candidate shared-types dependency matches source manifest',
   ],
   published: false,
