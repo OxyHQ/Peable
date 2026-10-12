@@ -35,6 +35,7 @@ export function WalletTabBar({
   // index is not a bar index — resolve the focused route by name instead. That
   // keeps the highlight right through deep links and the Android back gesture.
   const focusedRouteName = state.routes[state.index]?.name;
+  // biome-ignore lint/complexity/useIndexOf: the route name is a plain string (or undefined) and indexOf on WalletTabName[] refuses it without a cast
   const activeIndex = tabs.findIndex((name) => name === focusedRouteName);
 
   const handleIndexChange = useCallback(

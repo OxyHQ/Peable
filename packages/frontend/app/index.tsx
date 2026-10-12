@@ -110,7 +110,7 @@ export default function IndexScreen() {
     // the gate now asks about capability, not about `initialized`.
     case 'read-only':
       return <Redirect href="/(tabs)" />;
-    case 'loading':
+    // 'loading', and anything else not yet decided.
     default:
       return (
         <View className="flex-1 bg-background items-center justify-center">

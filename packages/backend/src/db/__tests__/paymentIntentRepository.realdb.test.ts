@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
 import {
   findIntentByIdForMerchant,
@@ -28,7 +29,7 @@ let suite: SuiteDatabase | undefined;
 
 async function makeMerchant(network: 'testnet' | 'mainnet' = 'testnet') {
   const unique = uuidv7();
-  const merchant = await insertMerchant(suite!.db, {
+  const merchant = await insertMerchant(must(suite).db, {
     oxyAppId: `app_${unique}`,
     // A mainnet merchant needs a production environment (the test/live firewall
     // lives in the route, but the schema's composite reference still requires
@@ -38,7 +39,7 @@ async function makeMerchant(network: 'testnet' | 'mainnet' = 'testnet') {
     xpub: XPUB,
     publicId: `merch_${unique}`,
   });
-  return merchant!;
+  return must(merchant);
 }
 
 function intentParams(merchantId: string, overrides: Record<string, unknown> = {}) {
@@ -72,7 +73,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
   it('mints an intent with server-decided initial state', async () => {
     const merchant = await makeMerchant();
-    const created = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
+    const created = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
 
     expect(created?.status).toBe('created');
     expect(created?.currency).toBe('FAIR');
@@ -90,10 +91,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   it('refuses a duplicate idempotency key for the same merchant', async () => {
     const merchant = await makeMerchant();
     const params = intentParams(merchant.id);
-    expect(await insertPaymentIntent(suite!.db, params)).not.toBeNull();
+    expect(await insertPaymentIntent(must(suite).db, params)).not.toBeNull();
 
     const second = await insertPaymentIntent(
-      suite!.db,
+      must(suite).db,
       intentParams(merchant.id, {
         idempotencyKey: params.idempotencyKey,
         publicId: `pi_${uuidv7()}`,
@@ -103,7 +104,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     );
     expect(second).toBeNull();
 
-    const winner = await findIntentByIdempotencyKey(suite!.db, merchant.id, params.idempotencyKey);
+    const winner = await findIntentByIdempotencyKey(
+      must(suite).db,
+      merchant.id,
+      params.idempotencyKey,
+    );
     expect(winner?.publicId).toBe(params.publicId);
   });
 
@@ -114,10 +119,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const shared = uuidv7();
 
     expect(
-      await insertPaymentIntent(suite!.db, intentParams(one.id, { idempotencyKey: shared })),
+      await insertPaymentIntent(must(suite).db, intentParams(one.id, { idempotencyKey: shared })),
     ).not.toBeNull();
     expect(
-      await insertPaymentIntent(suite!.db, intentParams(two.id, { idempotencyKey: shared })),
+      await insertPaymentIntent(must(suite).db, intentParams(two.id, { idempotencyKey: shared })),
     ).not.toBeNull();
   });
 
@@ -130,15 +135,19 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   it("never returns another merchant's intent from the scoped read", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
-    const created = await insertPaymentIntent(suite!.db, intentParams(owner.id));
+    const created = await insertPaymentIntent(must(suite).db, intentParams(owner.id));
 
-    expect((await findIntentForMerchant(suite!.db, created!.publicId, owner.id))?.id).toBe(
-      created!.id,
-    );
-    expect(await findIntentForMerchant(suite!.db, created!.publicId, stranger.id)).toBeNull();
+    expect(
+      (await findIntentForMerchant(must(suite).db, must(created).publicId, owner.id))?.id,
+    ).toBe(must(created).id);
+    expect(
+      await findIntentForMerchant(must(suite).db, must(created).publicId, stranger.id),
+    ).toBeNull();
     // The payer path is deliberately unscoped — it is authorized by the
     // client_secret instead, which is why the two are separate functions.
-    expect((await findIntentByPublicId(suite!.db, created!.publicId))?.id).toBe(created!.id);
+    expect((await findIntentByPublicId(must(suite).db, must(created).publicId))?.id).toBe(
+      must(created).id,
+    );
   });
 
   /**
@@ -150,7 +159,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant('testnet');
     let raised: unknown;
     try {
-      await insertPaymentIntent(suite!.db, intentParams(merchant.id, { network: 'mainnet' }));
+      await insertPaymentIntent(must(suite).db, intentParams(merchant.id, { network: 'mainnet' }));
     } catch (error) {
       raised = error;
     }
@@ -162,7 +171,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     for (const amount of ['01', '1.5', '-1', '']) {
       let raised: unknown;
       try {
-        await insertPaymentIntent(suite!.db, intentParams(merchant.id, { amount }));
+        await insertPaymentIntent(must(suite).db, intentParams(merchant.id, { amount }));
       } catch (error) {
         raised = error;
       }
@@ -180,17 +189,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    */
   it('refuses a broadcast state with no transaction id', async () => {
     const merchant = await makeMerchant();
-    const created = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
+    const created = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
 
     let raised: unknown;
     try {
-      await updateIntentState(suite!.db, created!.id, { from: 'created', status: 'broadcast' });
+      await updateIntentState(must(suite).db, must(created).id, {
+        from: 'created',
+        status: 'broadcast',
+      });
     } catch (error) {
       raised = error;
     }
     expect(isCheckViolation(raised, 'payment_intents_broadcast_requires_txid_check')).toBe(true);
 
-    const withTxid = await updateIntentState(suite!.db, created!.id, {
+    const withTxid = await updateIntentState(must(suite).db, must(created).id, {
       from: 'created',
       status: 'broadcast',
       txid: 'a'.repeat(64),
@@ -216,13 +228,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const created: PaymentIntentRow[] = [];
     for (let index = 0; index < 6; index += 1) {
-      created.push((await insertPaymentIntent(suite!.db, intentParams(merchant.id)))!);
+      created.push(must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id))));
     }
 
     const seen: string[] = [];
     let after: string | undefined;
     for (let page = 0; page < 3; page += 1) {
-      const result = await listIntentsForMerchant(suite!.db, {
+      const result = await listIntentsForMerchant(must(suite).db, {
         merchantId: merchant.id,
         limit: 2,
         after,
@@ -253,11 +265,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const merchant = await makeMerchant();
     const created: PaymentIntentRow[] = [];
     for (let index = 0; index < 4; index += 1) {
-      created.push((await insertPaymentIntent(suite!.db, intentParams(merchant.id)))!);
+      created.push(must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id))));
       await Bun.sleep(2);
     }
 
-    const page = await listIntentsForMerchant(suite!.db, { merchantId: merchant.id, limit: 10 });
+    const page = await listIntentsForMerchant(must(suite).db, {
+      merchantId: merchant.id,
+      limit: 10,
+    });
     expect(page.data.map((row) => row.publicId)).toEqual(
       [...created].reverse().map((row) => row.publicId),
     );
@@ -266,46 +281,46 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   it('filters a page by status and excludes other merchants', async () => {
     const merchant = await makeMerchant();
     const stranger = await makeMerchant();
-    const settled = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, settled!.id, {
+    const settled = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(settled).id, {
       from: 'created',
       status: 'broadcast',
       txid: 'b'.repeat(64),
     });
-    await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await insertPaymentIntent(suite!.db, intentParams(stranger.id));
+    await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await insertPaymentIntent(must(suite).db, intentParams(stranger.id));
 
-    const page = await listIntentsForMerchant(suite!.db, {
+    const page = await listIntentsForMerchant(must(suite).db, {
       merchantId: merchant.id,
       status: 'broadcast',
       limit: 10,
     });
-    expect(page.data.map((row) => row.publicId)).toEqual([settled!.publicId]);
+    expect(page.data.map((row) => row.publicId)).toEqual([must(settled).publicId]);
     expect(page.hasMore).toBe(false);
   });
 
   it('resolves intents by address, and answers an empty input without a query', async () => {
     const merchant = await makeMerchant();
-    const first = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    const second = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
+    const first = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    const second = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
 
     // Non-null assertions rather than a guard: `intentParams` builds faircoin
     // intents, and `payment_intents_faircoin_requires_chain_fields_check`
     // refuses one without an address, so a null here would mean the constraint
     // is gone — which this suite should fail on, loudly.
-    const found = await findIntentsByAddresses(suite!.db, [
-      first!.address!,
-      second!.address!,
+    const found = await findIntentsByAddresses(must(suite).db, [
+      must(must(first).address),
+      must(must(second).address),
       'Tnope',
     ]);
     expect(found.map((row) => row.publicId).sort()).toEqual(
-      [first!.publicId, second!.publicId].sort(),
+      [must(first).publicId, must(second).publicId].sort(),
     );
 
     // The empty input answers empty. That is the behaviour, not the guard: on
     // drizzle-orm 0.45.2 `inArray(col, [])` renders `where false`, so the
     // short-circuit saves a round trip rather than avoiding a syntax error.
-    expect(await findIntentsByAddresses(suite!.db, [])).toEqual([]);
+    expect(await findIntentsByAddresses(must(suite).db, [])).toEqual([]);
   });
 
   /**
@@ -316,8 +331,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    */
   it('selects only in-flight intents that carry a transaction id', async () => {
     const merchant = await makeMerchant();
-    const watchable = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, watchable!.id, {
+    const watchable = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(watchable).id, {
       from: 'created',
       status: 'broadcast',
       txid: 'c'.repeat(64),
@@ -332,53 +347,59 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     // broadcast/confirming/settled row UNREPRESENTABLE. `approved → failed` is
     // the one legal transition into a queryable status that no writer pairs
     // with a txid — which is exactly why `failed` is outside that CHECK.
-    const noTxid = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, noTxid!.id, {
+    const noTxid = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(noTxid).id, {
       from: 'created',
       status: 'awaiting_approval',
     });
-    await updateIntentState(suite!.db, noTxid!.id, {
+    await updateIntentState(must(suite).db, must(noTxid).id, {
       from: 'awaiting_approval',
       status: 'approved',
     });
-    await updateIntentState(suite!.db, noTxid!.id, { from: 'approved', status: 'failed' });
+    await updateIntentState(must(suite).db, must(noTxid).id, {
+      from: 'approved',
+      status: 'failed',
+    });
     // Carrying a txid is not enough either: settled is terminal.
-    const terminal = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, terminal!.id, {
+    const terminal = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(terminal).id, {
       from: 'created',
       status: 'broadcast',
       txid: 'd'.repeat(64),
     });
-    await updateIntentState(suite!.db, terminal!.id, { from: 'broadcast', status: 'confirming' });
-    await updateIntentState(suite!.db, terminal!.id, {
+    await updateIntentState(must(suite).db, must(terminal).id, {
+      from: 'broadcast',
+      status: 'confirming',
+    });
+    await updateIntentState(must(suite).db, must(terminal).id, {
       from: 'confirming',
       status: 'settled',
       confirmations: 6,
     });
 
-    const found = await findWatchableIntents(suite!.db, ['broadcast', 'confirming']);
+    const found = await findWatchableIntents(must(suite).db, ['broadcast', 'confirming']);
     const ids = found.map((row) => row.publicId);
-    expect(ids).toContain(watchable!.publicId);
-    expect(ids).not.toContain(terminal!.publicId);
+    expect(ids).toContain(must(watchable).publicId);
+    expect(ids).not.toContain(must(terminal).publicId);
 
     // The txid predicate, exercised on the only status where it can matter.
     // Querying `failed` returns the txid-less row if `isNotNull` is dropped.
-    const failedWithTxid = await insertPaymentIntent(suite!.db, intentParams(merchant.id));
-    await updateIntentState(suite!.db, failedWithTxid!.id, {
+    const failedWithTxid = await insertPaymentIntent(must(suite).db, intentParams(merchant.id));
+    await updateIntentState(must(suite).db, must(failedWithTxid).id, {
       from: 'created',
       status: 'broadcast',
       txid: 'e'.repeat(64),
     });
-    await updateIntentState(suite!.db, failedWithTxid!.id, {
+    await updateIntentState(must(suite).db, must(failedWithTxid).id, {
       from: 'broadcast',
       status: 'failed',
     });
 
-    const failedOnes = (await findWatchableIntents(suite!.db, ['failed'])).map(
+    const failedOnes = (await findWatchableIntents(must(suite).db, ['failed'])).map(
       (row) => row.publicId,
     );
-    expect(failedOnes).toContain(failedWithTxid!.publicId);
-    expect(failedOnes).not.toContain(noTxid!.publicId);
+    expect(failedOnes).toContain(must(failedWithTxid).publicId);
+    expect(failedOnes).not.toContain(must(noTxid).publicId);
   });
 
   /**
@@ -393,11 +414,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
    */
   it('resolves an intent by its internal id, and never by its public id', async () => {
     const merchant = await makeMerchant();
-    const created = (await insertPaymentIntent(suite!.db, intentParams(merchant.id)))!;
+    const created = must(await insertPaymentIntent(must(suite).db, intentParams(merchant.id)));
 
-    expect((await findIntentById(suite!.db, created.id))?.publicId).toBe(created.publicId);
-    expect(await findIntentById(suite!.db, created.publicId)).toBeNull();
-    expect(await findIntentById(suite!.db, uuidv7())).toBeNull();
+    expect((await findIntentById(must(suite).db, created.id))?.publicId).toBe(created.publicId);
+    expect(await findIntentById(must(suite).db, created.publicId)).toBeNull();
+    expect(await findIntentById(must(suite).db, uuidv7())).toBeNull();
   });
 
   /**
@@ -412,26 +433,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
   it("never returns another merchant's intent from the by-id scoped read", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
-    const created = (await insertPaymentIntent(suite!.db, intentParams(owner.id)))!;
+    const created = must(await insertPaymentIntent(must(suite).db, intentParams(owner.id)));
 
-    expect((await findIntentByIdForMerchant(suite!.db, created.id, owner.id))?.publicId).toBe(
+    expect((await findIntentByIdForMerchant(must(suite).db, created.id, owner.id))?.publicId).toBe(
       created.publicId,
     );
     // A foreign row and a missing one are the same answer, so the caller's 404
     // cannot be told from its other 404 — existence does not leak.
-    expect(await findIntentByIdForMerchant(suite!.db, created.id, stranger.id)).toBeNull();
-    expect(await findIntentByIdForMerchant(suite!.db, uuidv7(), owner.id)).toBeNull();
+    expect(await findIntentByIdForMerchant(must(suite).db, created.id, stranger.id)).toBeNull();
+    expect(await findIntentByIdForMerchant(must(suite).db, uuidv7(), owner.id)).toBeNull();
     // The mix-up the identical signatures invite, priced: handing the scoped
     // by-id read a `pi_…` matches nothing. It never returns a different intent.
-    expect(await findIntentByIdForMerchant(suite!.db, created.publicId, owner.id)).toBeNull();
+    expect(await findIntentByIdForMerchant(must(suite).db, created.publicId, owner.id)).toBeNull();
   });
 
   it('returns null for an unknown intent rather than throwing', async () => {
-    expect(await findIntentByPublicId(suite!.db, `pi_${uuidv7()}`)).toBeNull();
+    expect(await findIntentByPublicId(must(suite).db, `pi_${uuidv7()}`)).toBeNull();
     // `missing`, not `stale`: the compare-and-swap tells "no such row" apart
     // from "the row moved", and only the first is a 404 to a caller.
     expect(
-      await updateIntentState(suite!.db, uuidv7(), { from: 'created', status: 'expired' }),
+      await updateIntentState(must(suite).db, uuidv7(), { from: 'created', status: 'expired' }),
     ).toEqual({ kind: 'missing' });
   });
 });

@@ -25,7 +25,7 @@ import { findIntentById, type PaymentIntentRow } from '../db/payments/paymentInt
 import { getDb } from '../db/postgres';
 import { applyEvent, type IntentEvent } from './intentState';
 import { announceIntentChange, transitionIntent } from './intentTransition';
-import type { ProviderPaymentStatus } from './providers/provider';
+import type { ProviderPaymentResult, ProviderPaymentStatus } from './providers/provider';
 import { resolveProvider } from './providers/registry';
 
 /**
@@ -81,7 +81,7 @@ export async function reconcileIntentWithProvider(
   const provider = resolveProvider(intent.provider);
   if (!provider) return { kind: 'unreadable' };
 
-  let current;
+  let current: ProviderPaymentResult;
   try {
     current = await provider.getStatus(intent.providerObjectId);
   } catch (error) {

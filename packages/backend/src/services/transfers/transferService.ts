@@ -38,6 +38,7 @@ import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard'
 import {
   isSettlingProvider,
   ProviderError,
+  type ProviderTransferReversalResult,
   type SettlingPaymentProvider,
 } from '../providers/provider';
 import { redactProviderMessage } from '../providers/redact';
@@ -401,7 +402,7 @@ export async function reverseTransfer(input: ReverseTransferInput): Promise<Reve
     return { transfer, reversal: existing, created: false };
   }
 
-  let result;
+  let result: ProviderTransferReversalResult;
   try {
     result = await provider.reverseTransfer({
       transferId: transfer.publicId,

@@ -65,5 +65,5 @@ const evidence = {
   resolution: 'npm registry SDK0.2.2; shared-types0.3.0 transitive; no overrides',
   network: 'registry dependency install only; no auth/payment request',
 };
-writeFileSync(resolve(fixture, 'evidence.json'), JSON.stringify(evidence, null, 2) + '\n');
+writeFileSync(resolve(fixture, 'evidence.json'), `${JSON.stringify(evidence, null, 2)}\n`);
 console.log(JSON.stringify(evidence));

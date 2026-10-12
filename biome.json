@@ -40,41 +40,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "complexity": {
-        "noFlatMapIdentity": "warn",
-        "noUselessContinue": "warn",
-        "noUselessSwitchCase": "warn",
-        "useArrowFunction": "warn",
-        "useIndexOf": "warn",
-        "useLiteralKeys": "warn",
-        "useOptionalChain": "warn"
-      },
-      "correctness": {
-        "noPrecisionLoss": "warn",
-        "noUnusedFunctionParameters": "warn",
-        "noUnusedImports": "warn",
-        "noUnusedPrivateClassMembers": "warn",
-        "noUnusedVariables": "warn"
-      },
-      "style": {
-        "noNonNullAssertion": "warn",
-        "useConst": "warn",
-        "useExportType": "warn",
-        "useImportType": "warn",
-        "useNodejsImportProtocol": "warn",
-        "useTemplate": "warn"
-      },
-      "suspicious": {
-        "noApproximativeNumericConstant": "warn",
-        "noArrayIndexKey": "warn",
-        "noAssignInExpressions": "warn",
-        "noExplicitAny": "warn",
-        "noGlobalIsNan": "warn",
-        "noImplicitAnyLet": "warn",
-        "noPrototypeBuiltins": "warn",
-        "noTemplateCurlyInString": "warn"
-      }
+      "preset": "recommended"
     }
   },
   "overrides": [

@@ -35,7 +35,6 @@ class FakeSocket implements SocketConnection {
   readonly written: Uint8Array[] = [];
   private connectCb: (() => void) | undefined;
   private dataCb: ((data: Uint8Array) => void) | undefined;
-  private closeCb: (() => void) | undefined;
   destroyed = false;
 
   onConnect(cb: () => void): void {
@@ -44,8 +43,8 @@ class FakeSocket implements SocketConnection {
   onData(cb: (data: Uint8Array) => void): void {
     this.dataCb = cb;
   }
-  onClose(cb: () => void): void {
-    this.closeCb = cb;
+  onClose(_cb: () => void): void {
+    /* no test here emits `close` (see destroy below) */
   }
   onError(_cb: (err: Error) => void): void {
     /* no-op for these tests */

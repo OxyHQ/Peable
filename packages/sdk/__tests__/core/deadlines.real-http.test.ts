@@ -112,7 +112,7 @@ describe('HTTP deadline and existing intent propagation', () => {
       const mint = request.url === '/auth/service-token';
       if (!mint)
         seen.push({
-          path: request.url!,
+          path: request.url ?? '',
           key: request.headers['idempotency-key'] as string | undefined,
           body: body ? JSON.parse(body) : null,
         });

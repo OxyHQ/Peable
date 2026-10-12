@@ -1,4 +1,5 @@
 import { it, expect } from 'bun:test';
+import { must } from '../../../__tests__/helpers/must';
 import type Stripe from 'stripe';
 import { readOwnedPaidInvoice, readOwnedInvoiceState } from '../paidInvoice';
 import type { StripeBillingClient } from '../stripeBillingProvider';
@@ -157,7 +158,7 @@ it('reads exact captured cash refund totals and keeps the paid-only surface clos
     chargeId: 'ch_one',
   });
   await expect(readOwnedPaidInvoice(f.client, expected)).rejects.toThrow();
-  f.refunds.data[0]!.amount = 2999;
+  must(f.refunds.data[0]).amount = 2999;
   f.intent.latest_charge.amount_refunded = 2999;
   f.intent.latest_charge.refunded = true;
   expect(await readOwnedInvoiceState(f.client, expected)).toMatchObject({

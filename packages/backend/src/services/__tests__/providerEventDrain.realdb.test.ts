@@ -1,4 +1,5 @@
 import { bindRecurringObject } from '../../db/recurring/recurringMirrorRepository';
+import { must } from '../../__tests__/helpers/must';
 import { providerEvents } from '../../db/schema';
 import { sql } from 'drizzle-orm';
 /**
@@ -319,7 +320,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
         objectIds: { invoice: `in_unknown_${n}` },
         payload: {},
       });
-      blocked.push(id!);
+      blocked.push(must(id));
     }
     await bindRecurringObject(gatewayDb(), deployment, {
       merchantId: merchant.id,
@@ -370,7 +371,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     expect(second.examined).toBe(50);
     expect(second.applied).toBe(2);
     expect(second.unmatched).toBe(48);
-    expect((await findProviderEventById(gatewayDb(), valid!))?.processedAt).not.toBeNull();
+    expect((await findProviderEventById(gatewayDb(), must(valid)))?.processedAt).not.toBeNull();
     expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
     for (const id of blocked)
       expect((await findProviderEventById(gatewayDb(), id))?.processedAt).toBeNull();
@@ -427,17 +428,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
       await gatewayDb().execute(sql`DROP FUNCTION test_fail_event_deferral()`);
     }
     expect(failure).toBeDefined();
-    expect(failure!.progress).toMatchObject({ examined: 2, applied: 1, unmatched: 1 });
-    expect(failure!.pendingEventIds).toEqual([blocked!]);
+    expect(must(failure).progress).toMatchObject({ examined: 2, applied: 1, unmatched: 1 });
+    expect(must(failure).pendingEventIds).toEqual([must(blocked)]);
     expect((await findProviderEventById(gatewayDb(), valid))?.processedAt).not.toBeNull();
     expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
     const deliveriesBefore = await gatewayDb().select().from(webhookDeliveries);
     time = new Date(time.getTime() + 60_001);
-    await retryProviderEventDrainDeferral(failure!, { now: () => time });
+    await retryProviderEventDrainDeferral(must(failure), { now: () => time });
     const row = await gatewayDb()
       .select()
       .from(providerEvents)
-      .where(eq(providerEvents.id, blocked!));
+      .where(eq(providerEvents.id, must(blocked)));
     expect(row[0]?.retryAfter?.getTime()).toBe(time.getTime() + 60_000);
     expect(row[0]?.processedAt).toBeNull();
     expect((await runProviderEventDrainPass({ recurring, now: () => time })).examined).toBe(0);

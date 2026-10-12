@@ -124,8 +124,9 @@ export async function observeRecurringEvent(
             ),
           )
           .limit(2);
-        if (matches.length !== 1) return { kind: 'unmatched' };
-        objectRef = matches[0]!.objectRef;
+        const [match] = matches;
+        if (matches.length !== 1 || !match) return { kind: 'unmatched' };
+        objectRef = match.objectRef;
         // Only an exact owned recurring lineage selects this version contract.
         // Unowned refunds retain the existing one-off processor's compatibility.
         if (event.apiVersion !== deployment.apiVersion)
@@ -142,16 +143,18 @@ export async function observeRecurringEvent(
           ),
         )
         .for('update');
-      if (!mirror && kind === 'invoice' && !refundEvent && options.bindOwnedInvoice) {
+      const { bindOwnedInvoice } = options;
+      const ownedObjectRef = objectRef;
+      if (!mirror && kind === 'invoice' && !refundEvent && bindOwnedInvoice) {
         await readBounded(
           options,
           { deployment, providerAccountId: event.providerAccountId, kind, objectRef },
           (signal) =>
-            options.bindOwnedInvoice!({
+            bindOwnedInvoice({
               deployment,
               providerAccountId: event.providerAccountId,
               kind,
-              objectRef: objectRef!,
+              objectRef: ownedObjectRef,
               signal,
             }),
         );

@@ -5,7 +5,7 @@ import {
   EnvironmentModeMismatchError,
   assertEnvironmentMatchesProvider,
 } from '../services/providers/environmentGuard';
-import { ProviderError } from '../services/providers/provider';
+import type { ProviderError } from '../services/providers/provider';
 import { redactProviderMessage } from '../services/providers/redact';
 
 /**

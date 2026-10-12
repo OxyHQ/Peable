@@ -30,7 +30,7 @@
 import { canStillBePaid } from '@peable.to/shared-types';
 import { config } from '../config';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
-import type { ProviderClientAction } from './providers/provider';
+import type { ProviderClientAction, ProviderPaymentResult } from './providers/provider';
 import { resolveProvider } from './providers/registry';
 
 export interface ClientActionResult {
@@ -100,7 +100,7 @@ export async function resolveClientAction(intent: PaymentIntentRow): Promise<Cli
    * an integrator polling for a settlement would see their own integration
    * break while the payment was fine.
    */
-  let result;
+  let result: ProviderPaymentResult;
   try {
     result = await provider.getStatus(intent.providerObjectId);
   } catch (error) {

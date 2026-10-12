@@ -11,8 +11,8 @@
  */
 
 const { withGradleProperties } = require('expo/config-plugins');
-const fs = require('fs');
-const path = require('path');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function withGradle813(config) {
   return withGradleProperties(config, (config) => {

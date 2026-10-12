@@ -16,8 +16,11 @@ export const BLOOM_UPDATE_NONE = 0;
 export const BLOOM_UPDATE_ALL = 1;
 export const BLOOM_UPDATE_P2PUBKEY_ONLY = 2;
 
-const LN2_SQUARED = 0.4804530139182014246671025263266649717305529515945455;
-const LN2 = 0.6931471805599453094172321214581765680755001343602552;
+// Bitcoin Core's LN2SQUARED and LN2 (bloom.cpp), written as the doubles their
+// long decimal literals round to, so the filter sizes match Core's bit for bit.
+// LN2_SQUARED is NOT Math.LN2 ** 2, which is one ulp lower.
+const LN2_SQUARED = 0.48045301391820144;
+const LN2 = Math.LN2;
 const MAX_BLOOM_FILTER_SIZE = 36000; // bytes
 const MAX_HASH_FUNCS = 50;
 const MURMURHASH_SEED_MULTIPLIER = 0xfba4c795;

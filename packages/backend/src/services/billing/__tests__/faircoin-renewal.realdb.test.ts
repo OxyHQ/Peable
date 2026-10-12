@@ -485,7 +485,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     if (!adminUrl || !database || typeof database.name !== 'string')
       throw new Error('Expected disposable database');
     const url = new URL(adminUrl);
-    url.pathname = '/' + database.name;
+    url.pathname = `/${database.name}`;
     const dedicated = createDatabase({ databaseUrl: url.toString(), schema, client: { max: 1 } });
     const [backend] = await dedicated.db.execute(sql`select pg_backend_pid() as pid`);
     if (!backend || typeof backend.pid !== 'number') throw new Error('Expected dedicated backend');

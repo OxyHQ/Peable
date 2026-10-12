@@ -19,7 +19,7 @@
 import { getDb } from '../../db/postgres';
 import { insertProviderEvent } from '../../db/providers/providerEventRepository';
 import { config } from '../../config';
-import { ProviderError, type ProviderId } from './provider';
+import { ProviderError, type ProviderEventEnvelope, type ProviderId } from './provider';
 import { resolveProvider } from './registry';
 import type { StripeWebhookScope } from './stripe/stripeProvider';
 import { StripePaymentProvider } from './stripe/stripeProvider';
@@ -66,7 +66,7 @@ export async function ingestProviderDelivery(
     };
   }
 
-  let envelope;
+  let envelope: ProviderEventEnvelope;
   try {
     // The scope decides WHICH secrets are tried. Accepting either endpoint's
     // secret on either endpoint would mean a leaked platform secret could forge

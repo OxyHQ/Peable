@@ -18,7 +18,7 @@
 
 import { EXPLORER_BASE_URL, type NetworkType } from '@fairco.in/core';
 import { queryClient } from './query-client';
-import { type NetworkStats } from './market';
+import type { NetworkStats } from './market';
 import {
   SUBSCRIBED_EVENTS,
   parseTipUpdate,

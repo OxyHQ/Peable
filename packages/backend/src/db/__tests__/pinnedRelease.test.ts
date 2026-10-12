@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { mkdtempSync, readFileSync, writeFileSync, chmodSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -160,9 +161,9 @@ function fixture(scenario = 'success', zero = false) {
 }
 function rolloutEnv(outputs: Record<string, string>) {
   return {
-    TASK_DEFINITION: outputs.task_definition!,
-    ROLLBACK_TASK_DEFINITION: outputs.rollback_task_definition!,
-    PREVIOUS_IMAGE: outputs.previous_image!,
+    TASK_DEFINITION: must(outputs.task_definition),
+    ROLLBACK_TASK_DEFINITION: must(outputs.rollback_task_definition),
+    PREVIOUS_IMAGE: must(outputs.previous_image),
   };
 }
 describe('pinned ECS release', () => {
@@ -173,12 +174,12 @@ describe('pinned ECS release', () => {
       on: { workflow_dispatch: { inputs: { sync_secrets: { default: boolean } } } };
       jobs: Record<string, { if: string; steps: { name?: string; if?: string; run?: string }[] }>;
     };
-    expect(workflow.jobs.gate!.if).toBe("github.ref == 'refs/heads/main'");
-    expect(workflow.jobs.deploy!.if).toBe("github.ref == 'refs/heads/main'");
-    const gate = workflow.jobs.gate!.steps[0]!.run!;
+    expect(must(workflow.jobs.gate).if).toBe("github.ref == 'refs/heads/main'");
+    expect(must(workflow.jobs.deploy).if).toBe("github.ref == 'refs/heads/main'");
+    const gate = must(must(must(workflow.jobs.gate).steps[0]).run);
     expect(gate).toContain('head_sha=$SHA');
     expect(gate).not.toContain('EVENT');
-    const steps = workflow.jobs.deploy!.steps;
+    const steps = must(workflow.jobs.deploy).steps;
     expect(workflow.on.workflow_dispatch.inputs.sync_secrets.default).toBe(false);
     expect(steps.find((step) => step.name?.startsWith('Sync GitHub secrets'))?.if).toBe(
       "github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true",
@@ -231,8 +232,8 @@ describe('pinned ECS release', () => {
       const state = f.state();
       const original = state.definitions['arn:td:old'].taskDefinition;
       for (const arn of [out.task_definition, out.rollback_task_definition]) {
-        const copied = state.definitions[arn!].taskDefinition;
-        expect(state.definitions[arn!].tags).toEqual([{ key: 'app', value: 'peable' }]);
+        const copied = state.definitions[must(arn)].taskDefinition;
+        expect(state.definitions[must(arn)].tags).toEqual([{ key: 'app', value: 'peable' }]);
         expect(copied.executionRoleArn).toBe(original.executionRoleArn);
         expect(copied.taskRoleArn).toBe(original.taskRoleArn);
         expect(copied.containerDefinitions[0].secrets).toEqual(
@@ -243,7 +244,7 @@ describe('pinned ECS release', () => {
         );
       }
       expect(
-        state.definitions[out.rollback_task_definition!].taskDefinition.containerDefinitions[0]
+        state.definitions[must(out.rollback_task_definition)].taskDefinition.containerDefinitions[0]
           .image,
       ).toBe(`${repository}@${oldDigest}`);
       expect(f.run('rollout', rolloutEnv(out)).exitCode).toBe(0);
@@ -355,8 +356,8 @@ describe('pinned ECS release', () => {
       });
       f.setState(state);
       expect(f.run('cleanup').exitCode).toBe(0);
-      expect(f.state().definitions[out.task_definition!].taskDefinition.status).toBe('ACTIVE');
-      expect(f.state().definitions[out.rollback_task_definition!].taskDefinition.status).toBe(
+      expect(f.state().definitions[must(out.task_definition)].taskDefinition.status).toBe('ACTIVE');
+      expect(f.state().definitions[must(out.rollback_task_definition)].taskDefinition.status).toBe(
         'INACTIVE',
       );
     } finally {

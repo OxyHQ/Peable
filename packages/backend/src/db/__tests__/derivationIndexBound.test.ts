@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { HDKey } from '@scure/bip32';
 import { MAX_SOCIAL_RECEIVE_INDEX, deriveSocialReceiveAddress, getNetwork } from '@fairco.in/core';
 import { MAX_DERIVATION_INDEX } from '../schema/valueSets';
@@ -46,10 +47,10 @@ describe('the derivation index bound', () => {
     const network = getNetwork('testnet');
     // One below the boundary derives; the boundary itself does not.
     expect(
-      typeof deriveSocialReceiveAddress(identityPublicKey!, MAX_DERIVATION_INDEX, network),
+      typeof deriveSocialReceiveAddress(must(identityPublicKey), MAX_DERIVATION_INDEX, network),
     ).toBe('string');
     expect(() =>
-      deriveSocialReceiveAddress(identityPublicKey!, HARDENED_OFFSET, network),
+      deriveSocialReceiveAddress(must(identityPublicKey), HARDENED_OFFSET, network),
     ).toThrow();
   });
 

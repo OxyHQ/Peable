@@ -106,20 +106,18 @@ describe('deriveSocialReceiveWatchWindow', () => {
   test('a different identity is a different set of addresses', () => {
     const other = realOxyCrypto.deriveSocialReceiveKey('bb'.repeat(32), 0).publicKey;
     const [first] = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 0, 1, TESTNET);
-    expect(deriveSocialReceiveWatchWindow(other, 0, 1, TESTNET)[0]!.address).not.toBe(
-      first!.address,
-    );
+    const [second] = deriveSocialReceiveWatchWindow(other, 0, 1, TESTNET);
+    expect(first).toBeDefined();
+    expect(second).toBeDefined();
+    expect(second?.address).not.toBe(first?.address);
   });
 });
 
 describe('signSocialReceiveInput', () => {
-  const [{ address: SOCIAL_ADDR_1 }] = deriveSocialReceiveWatchWindow(
-    IDENTITY_PUB_A,
-    1,
-    1,
-    TESTNET,
-  );
-  const scriptPubKey = createP2PKHScript(decodeAddress(SOCIAL_ADDR_1!).hash);
+  const [slot1] = deriveSocialReceiveWatchWindow(IDENTITY_PUB_A, 1, 1, TESTNET);
+  if (!slot1) throw new Error('expected one derived social receive address');
+  const SOCIAL_ADDR_1 = slot1.address;
+  const scriptPubKey = createP2PKHScript(decodeAddress(SOCIAL_ADDR_1).hash);
   const tx = buildTransaction({
     utxos: [{ txid: '11'.repeat(32), vout: 0, value: 1_000_000n, scriptPubKey }],
     recipients: [{ address: 'TGW3g56Q5PvpA8UangXnzX6va2MkfaRx5r', value: 400_000n }],
@@ -130,7 +128,7 @@ describe('signSocialReceiveInput', () => {
 
   test('is byte-identical to signing locally with the child key', async () => {
     holderKey = IDENTITY_KEY_A;
-    const remote = await signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET);
+    const remote = await signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET);
     const childKey = deriveSocialReceiveSpendingKey(hexToBytes(IDENTITY_KEY_A), 1);
     expect(remote).toEqual(signInput(tx, 0, scriptPubKey, childKey));
     // The holder was asked for child 1 over the input's sighash, never for a key.
@@ -140,7 +138,7 @@ describe('signSocialReceiveInput', () => {
   test('throws when no identity holder answers', async () => {
     holderKey = null;
     await expect(
-      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET),
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
     ).rejects.toThrow(/without the Oxy identity/);
     holderKey = IDENTITY_KEY_A;
   });
@@ -148,7 +146,7 @@ describe('signSocialReceiveInput', () => {
   test('refuses a signature from a key that does not own the address', async () => {
     holderKey = 'bb'.repeat(32);
     await expect(
-      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1!, TESTNET),
+      signSocialReceiveInput(tx, 0, scriptPubKey, 1, SOCIAL_ADDR_1, TESTNET),
     ).rejects.toThrow(/does not own/);
     holderKey = IDENTITY_KEY_A;
   });

@@ -19,6 +19,7 @@ import {
   RailUnavailableError,
   assertRailAvailable,
   resolveRail,
+  type ResolvedRail,
 } from '../services/createIntent';
 import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
@@ -94,7 +95,7 @@ export function createPaymentLinksRouter(deps: {
       // rules a link must satisfy are exactly the rules its future intents must
       // satisfy — and a link storing a combination `createIntent` would refuse
       // is a price a payer can see and can never pay.
-      let resolved;
+      let resolved: ResolvedRail;
       try {
         resolved = resolveRail(merchant, params);
         // ...and the same argument one step further: a link is a URL a merchant

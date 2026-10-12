@@ -84,5 +84,5 @@ const proof = {
     'npm registry SDK0.2.0 only; transitive shared-types0.3.0, no tarball/file/workspace overrides',
   network: 'Registry installation only; no Oxy/Peable/Stripe requests',
 };
-writeFileSync(resolve(fixture, 'evidence.json'), JSON.stringify(proof, null, 2) + '\n');
+writeFileSync(resolve(fixture, 'evidence.json'), `${JSON.stringify(proof, null, 2)}\n`);
 console.log(JSON.stringify(proof, null, 2));

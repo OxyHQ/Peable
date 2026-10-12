@@ -16,6 +16,7 @@
  * depends on is not on the allow-list.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 
 const providerCalls: string[] = [];
 
@@ -195,7 +196,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
     // `applyRefundToIntent` decides the transition from the status it is handed.
     const settled = await findIntentByPublicId(gatewayDb(), intent.publicId);
     const { applyRefundToIntent } = await import('../refunds/refundService');
-    expect(await applyRefundToIntent(settled!)).toBe('refunded');
+    expect(await applyRefundToIntent(must(settled))).toBe('refunded');
 
     const eventId = await storeEvent(
       'refund.failed',

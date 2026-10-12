@@ -765,7 +765,7 @@ export function ipv4ToMappedIPv6(ipv4Str: string): Uint8Array {
   // Bytes 12-15: IPv4 octets
   for (let i = 0; i < 4; i++) {
     const octet = parseInt(parts[i], 10);
-    if (octet < 0 || octet > 255 || isNaN(octet)) {
+    if (octet < 0 || octet > 255 || Number.isNaN(octet)) {
       throw new Error(`Invalid IPv4 octet: ${parts[i]}`);
     }
     result[12 + i] = octet;

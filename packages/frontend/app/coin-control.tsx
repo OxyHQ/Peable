@@ -207,12 +207,12 @@ export default function CoinControlScreen() {
             />
           ) : (
             <View className="gap-2 mt-2">
-              {utxos.map((utxo, idx) => {
+              {utxos.map((utxo) => {
                 const key = `${utxo.txid}:${utxo.vout}`;
                 const isSelected = selected.has(key);
                 return (
                   <Pressable
-                    key={`utxo-${idx}-${key}`}
+                    key={key}
                     onPress={() => handleToggle(utxo.txid, utxo.vout)}
                     className={`flex-row items-center rounded-2xl px-4 py-3.5 active:opacity-80 ${
                       isSelected ? 'bg-primary/15' : 'bg-surface'

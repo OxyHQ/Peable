@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { eq, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { isCheckViolation, isUniqueViolation, sqlStateOf } from '@oxy.so/db';
@@ -33,21 +34,23 @@ async function insertMerchant(overrides: Partial<typeof merchants.$inferInsert> 
   // a failure of the code under test.
   const id = uuidv7();
   const environment = overrides.environment ?? 'development';
-  await suite!.db.insert(merchants).values({
-    id,
-    publicId: `merch_${id}`,
-    oxyAppId: `app_${id}`,
-    environment,
-    network: 'testnet',
-    xpub: 'xpub-watch-only-fixture',
-    // DERIVED here exactly as `insertMerchant` derives it, because this is a
-    // raw insert that bypasses the repository and
-    // `merchants_livemode_agrees_check` refuses the pair disagreeing. A
-    // fixture that hard-coded `false` would fail on that constraint for every
-    // `production` override, which reads as a failure of the code under test.
-    livemode: environment === 'production',
-    ...overrides,
-  });
+  await must(suite)
+    .db.insert(merchants)
+    .values({
+      id,
+      publicId: `merch_${id}`,
+      oxyAppId: `app_${id}`,
+      environment,
+      network: 'testnet',
+      xpub: 'xpub-watch-only-fixture',
+      // DERIVED here exactly as `insertMerchant` derives it, because this is a
+      // raw insert that bypasses the repository and
+      // `merchants_livemode_agrees_check` refuses the pair disagreeing. A
+      // fixture that hard-coded `false` would fail on that constraint for every
+      // `production` override, which reads as a failure of the code under test.
+      livemode: environment === 'production',
+      ...overrides,
+    });
   return id;
 }
 
@@ -64,15 +67,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
   it('returns the PRE-increment index and advances the counter', async () => {
     const merchantId = await insertMerchant();
 
-    const reserved = await reserveNextDerivationIndex(suite!.db, merchantId);
+    const reserved = await reserveNextDerivationIndex(must(suite).db, merchantId);
 
     expect(reserved).not.toBeNull();
     expect(reserved?.index).toBe(0);
     expect(reserved?.xpub).toBe('xpub-watch-only-fixture');
     expect(reserved?.network).toBe('testnet');
 
-    const [row] = await suite!.db
-      .select({ next: merchants.nextDerivationIndex })
+    const [row] = await must(suite)
+      .db.select({ next: merchants.nextDerivationIndex })
       .from(merchants)
       .where(eq(merchants.id, merchantId));
     expect(row?.next).toBe(1);
@@ -92,9 +95,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
   it('hands out consecutive indices as NUMBERS, never strings', async () => {
     const merchantId = await insertMerchant();
 
-    const first = await reserveNextDerivationIndex(suite!.db, merchantId);
-    const second = await reserveNextDerivationIndex(suite!.db, merchantId);
-    const third = await reserveNextDerivationIndex(suite!.db, merchantId);
+    const first = await reserveNextDerivationIndex(must(suite).db, merchantId);
+    const second = await reserveNextDerivationIndex(must(suite).db, merchantId);
+    const third = await reserveNextDerivationIndex(must(suite).db, merchantId);
 
     expect([first?.index, second?.index, third?.index]).toEqual([0, 1, 2]);
     expect(typeof first?.index).toBe('number');
@@ -120,7 +123,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     const concurrency = 16;
 
     const results = await Promise.all(
-      Array.from({ length: concurrency }, () => reserveNextDerivationIndex(suite!.db, merchantId)),
+      Array.from({ length: concurrency }, () =>
+        reserveNextDerivationIndex(must(suite).db, merchantId),
+      ),
     );
     const indices = results.map((result) => result?.index);
 
@@ -129,15 +134,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       Array.from({ length: concurrency }, (_unused, offset) => offset),
     );
 
-    const [row] = await suite!.db
-      .select({ next: merchants.nextDerivationIndex })
+    const [row] = await must(suite)
+      .db.select({ next: merchants.nextDerivationIndex })
       .from(merchants)
       .where(eq(merchants.id, merchantId));
     expect(row?.next).toBe(concurrency);
   });
 
   it('reserves nothing and returns null for an unknown merchant', async () => {
-    expect(await reserveNextDerivationIndex(suite!.db, uuidv7())).toBeNull();
+    expect(await reserveNextDerivationIndex(must(suite).db, uuidv7())).toBeNull();
   });
 
   /**
@@ -150,7 +155,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
 
     let raised: unknown;
     try {
-      await reserveNextDerivationIndex(suite!.db, merchantId);
+      await reserveNextDerivationIndex(must(suite).db, merchantId);
     } catch (error) {
       raised = error;
     }
@@ -162,8 +167,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     // read as a passing check anywhere the wrapper text happened to match.
     expect(sqlStateOf(raised)).toBe(NUMERIC_VALUE_OUT_OF_RANGE);
 
-    const [row] = await suite!.db
-      .select({ next: merchants.nextDerivationIndex })
+    const [row] = await must(suite)
+      .db.select({ next: merchants.nextDerivationIndex })
       .from(merchants)
       .where(eq(merchants.id, merchantId));
     expect(row?.next).toBe(MAX_DERIVATION_INDEX);
@@ -200,20 +205,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
    */
   it('restamps updated_at', async () => {
     const merchantId = await insertMerchant();
-    const [before] = await suite!.db
-      .select({ updatedAt: merchants.updatedAt })
+    const [before] = await must(suite)
+      .db.select({ updatedAt: merchants.updatedAt })
       .from(merchants)
       .where(eq(merchants.id, merchantId));
 
     await Bun.sleep(5);
-    await reserveNextDerivationIndex(suite!.db, merchantId);
+    await reserveNextDerivationIndex(must(suite).db, merchantId);
 
-    const [after] = await suite!.db
-      .select({ updatedAt: merchants.updatedAt })
+    const [after] = await must(suite)
+      .db.select({ updatedAt: merchants.updatedAt })
       .from(merchants)
       .where(eq(merchants.id, merchantId));
 
-    expect(after!.updatedAt.getTime()).toBeGreaterThan(before!.updatedAt.getTime());
+    expect(must(after).updatedAt.getTime()).toBeGreaterThan(must(before).updatedAt.getTime());
   });
 
   /**
@@ -223,7 +228,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
    * something else could pass while testing the wrong schema.
    */
   it('runs against the migrated schema, not an empty database', async () => {
-    const rows = await suite!.db.execute(
+    const rows = await must(suite).db.execute(
       sql`select table_name from information_schema.tables where table_schema = 'public' and table_type = 'BASE TABLE'`,
     );
     const names = rows.map((row) => String(row.table_name)).sort();

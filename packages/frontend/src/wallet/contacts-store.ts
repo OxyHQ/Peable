@@ -4,7 +4,7 @@
  */
 
 import { create } from 'zustand';
-import { Database, type ContactRow } from '../storage/database';
+import type { Database, ContactRow } from '../storage/database';
 
 // ---------------------------------------------------------------------------
 // Types

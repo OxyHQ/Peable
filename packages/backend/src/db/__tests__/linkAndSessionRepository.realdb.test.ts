@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
+import { must } from '../../__tests__/helpers/must';
 import { isCheckViolation, isForeignKeyViolation, uuidv7 } from '@oxy.so/db';
 import { insertMerchant, type MerchantRow } from '../merchants/merchantRepository';
 import { insertPaymentIntent } from '../payments/paymentIntentRepository';
@@ -29,13 +30,15 @@ let suite: SuiteDatabase | undefined;
 
 async function makeMerchant(): Promise<MerchantRow> {
   const unique = uuidv7();
-  return (await insertMerchant(suite!.db, {
-    oxyAppId: `app_${unique}`,
-    environment: 'development',
-    network: 'testnet',
-    xpub: XPUB,
-    publicId: `merch_${unique}`,
-  }))!;
+  return must(
+    await insertMerchant(must(suite).db, {
+      oxyAppId: `app_${unique}`,
+      environment: 'development',
+      network: 'testnet',
+      xpub: XPUB,
+      publicId: `merch_${unique}`,
+    }),
+  );
 }
 
 function linkParams(merchant: MerchantRow, overrides: Record<string, unknown> = {}) {
@@ -56,20 +59,22 @@ function linkParams(merchant: MerchantRow, overrides: Record<string, unknown> = 
 
 async function makeIntent(merchant: MerchantRow) {
   const unique = uuidv7();
-  return (await insertPaymentIntent(suite!.db, {
-    publicId: `pi_${unique}`,
-    merchantId: merchant.id,
-    rail: 'faircoin' as const,
-    amount: '250000000',
-    currency: 'FAIR' as const,
-    network: merchant.network,
-    address: `T${unique}`,
-    provider: null,
-    clientSecret: `pi_${unique}_secret_x`,
-    idempotencyKey: unique,
-    metadata: {},
-    expiresAt: new Date(Date.now() + 900_000),
-  }))!;
+  return must(
+    await insertPaymentIntent(must(suite).db, {
+      publicId: `pi_${unique}`,
+      merchantId: merchant.id,
+      rail: 'faircoin' as const,
+      amount: '250000000',
+      currency: 'FAIR' as const,
+      network: merchant.network,
+      address: `T${unique}`,
+      provider: null,
+      clientSecret: `pi_${unique}_secret_x`,
+      idempotencyKey: unique,
+      metadata: {},
+      expiresAt: new Date(Date.now() + 900_000),
+    }),
+  );
 }
 
 function sessionParams(
@@ -105,7 +110,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
 
   it('creates a link with its merchant identity', async () => {
     const merchant = await makeMerchant();
-    const link = await insertPaymentLink(suite!.db, linkParams(merchant));
+    const link = await insertPaymentLink(must(suite).db, linkParams(merchant));
 
     expect(link.active).toBe(true);
     expect(link.oxyAppId).toBe(merchant.oxyAppId);
@@ -124,7 +129,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
 
     let raised: unknown;
     try {
-      await insertPaymentLink(suite!.db, linkParams(merchant, { oxyAppId: stranger.oxyAppId }));
+      await insertPaymentLink(
+        must(suite).db,
+        linkParams(merchant, { oxyAppId: stranger.oxyAppId }),
+      );
     } catch (error) {
       raised = error;
     }
@@ -135,7 +143,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const merchant = await makeMerchant();
     let raised: unknown;
     try {
-      await insertPaymentLink(suite!.db, linkParams(merchant, { network: 'mainnet' }));
+      await insertPaymentLink(must(suite).db, linkParams(merchant, { network: 'mainnet' }));
     } catch (error) {
       raised = error;
     }
@@ -146,7 +154,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const merchant = await makeMerchant();
     let raised: unknown;
     try {
-      await insertPaymentLink(suite!.db, linkParams(merchant, { amount: '1.5' }));
+      await insertPaymentLink(must(suite).db, linkParams(merchant, { amount: '1.5' }));
     } catch (error) {
       raised = error;
     }
@@ -157,11 +165,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
   it('scopes the merchant link read but not the public one', async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
-    const link = await insertPaymentLink(suite!.db, linkParams(owner));
+    const link = await insertPaymentLink(must(suite).db, linkParams(owner));
 
-    expect((await findLinkForMerchant(suite!.db, link.publicId, owner.id))?.id).toBe(link.id);
-    expect(await findLinkForMerchant(suite!.db, link.publicId, stranger.id)).toBeNull();
-    expect((await findLinkByPublicId(suite!.db, link.publicId))?.id).toBe(link.id);
+    expect((await findLinkForMerchant(must(suite).db, link.publicId, owner.id))?.id).toBe(link.id);
+    expect(await findLinkForMerchant(must(suite).db, link.publicId, stranger.id)).toBeNull();
+    expect((await findLinkByPublicId(must(suite).db, link.publicId))?.id).toBe(link.id);
   });
 
   /**
@@ -173,14 +181,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
   it("never lets one merchant patch another merchant's link", async () => {
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
-    const link = await insertPaymentLink(suite!.db, linkParams(owner));
+    const link = await insertPaymentLink(must(suite).db, linkParams(owner));
 
     expect(
-      await updatePaymentLink(suite!.db, link.publicId, stranger.id, { active: false }),
+      await updatePaymentLink(must(suite).db, link.publicId, stranger.id, { active: false }),
     ).toBeNull();
-    expect((await findLinkByPublicId(suite!.db, link.publicId))?.active).toBe(true);
+    expect((await findLinkByPublicId(must(suite).db, link.publicId))?.active).toBe(true);
 
-    const patched = await updatePaymentLink(suite!.db, link.publicId, owner.id, {
+    const patched = await updatePaymentLink(must(suite).db, link.publicId, owner.id, {
       active: false,
       successUrl: 'https://shop.example/thanks',
     });
@@ -193,12 +201,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
   it('filters a link page by active and excludes other merchants', async () => {
     const merchant = await makeMerchant();
     const stranger = await makeMerchant();
-    const live = await insertPaymentLink(suite!.db, linkParams(merchant));
-    const retired = await insertPaymentLink(suite!.db, linkParams(merchant));
-    await updatePaymentLink(suite!.db, retired.publicId, merchant.id, { active: false });
-    await insertPaymentLink(suite!.db, linkParams(stranger));
+    const live = await insertPaymentLink(must(suite).db, linkParams(merchant));
+    const retired = await insertPaymentLink(must(suite).db, linkParams(merchant));
+    await updatePaymentLink(must(suite).db, retired.publicId, merchant.id, { active: false });
+    await insertPaymentLink(must(suite).db, linkParams(stranger));
 
-    const page = await listLinksForMerchant(suite!.db, {
+    const page = await listLinksForMerchant(must(suite).db, {
       merchantId: merchant.id,
       active: true,
       limit: 10,
@@ -210,7 +218,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
   it('creates a session around an intent', async () => {
     const merchant = await makeMerchant();
     const intent = await makeIntent(merchant);
-    const session = await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id));
+    const session = await insertCheckoutSession(must(suite).db, sessionParams(merchant, intent.id));
 
     expect(session?.paymentIntentId).toBe(intent.id);
     // The client secret lives on the intent and nowhere else — there is no
@@ -228,16 +236,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const merchant = await makeMerchant();
     const intent = await makeIntent(merchant);
     expect(
-      await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id)),
+      await insertCheckoutSession(must(suite).db, sessionParams(merchant, intent.id)),
     ).not.toBeNull();
-    expect(await insertCheckoutSession(suite!.db, sessionParams(merchant, intent.id))).toBeNull();
+    expect(
+      await insertCheckoutSession(must(suite).db, sessionParams(merchant, intent.id)),
+    ).toBeNull();
   });
 
   it('refuses a session pointing at an intent that does not exist', async () => {
     const merchant = await makeMerchant();
     let raised: unknown;
     try {
-      await insertCheckoutSession(suite!.db, sessionParams(merchant, uuidv7()));
+      await insertCheckoutSession(must(suite).db, sessionParams(merchant, uuidv7()));
     } catch (error) {
       raised = error;
     }
@@ -250,28 +260,32 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const owner = await makeMerchant();
     const stranger = await makeMerchant();
     const intent = await makeIntent(owner);
-    const session = await insertCheckoutSession(suite!.db, sessionParams(owner, intent.id));
+    const session = await insertCheckoutSession(must(suite).db, sessionParams(owner, intent.id));
 
-    expect((await findSessionForMerchant(suite!.db, session!.publicId, owner.id))?.id).toBe(
-      session!.id,
+    expect(
+      (await findSessionForMerchant(must(suite).db, must(session).publicId, owner.id))?.id,
+    ).toBe(must(session).id);
+    expect(
+      await findSessionForMerchant(must(suite).db, must(session).publicId, stranger.id),
+    ).toBeNull();
+    expect((await findSessionByPublicId(must(suite).db, must(session).publicId))?.id).toBe(
+      must(session).id,
     );
-    expect(await findSessionForMerchant(suite!.db, session!.publicId, stranger.id)).toBeNull();
-    expect((await findSessionByPublicId(suite!.db, session!.publicId))?.id).toBe(session!.id);
   });
 
   it("lists only the caller's sessions", async () => {
     const merchant = await makeMerchant();
     const stranger = await makeMerchant();
     const mine = await insertCheckoutSession(
-      suite!.db,
+      must(suite).db,
       sessionParams(merchant, (await makeIntent(merchant)).id),
     );
     await insertCheckoutSession(
-      suite!.db,
+      must(suite).db,
       sessionParams(stranger, (await makeIntent(stranger)).id),
     );
 
-    const rows = await listSessionsForMerchant(suite!.db, merchant.id, 10);
-    expect(rows.map((row) => row.publicId)).toEqual([mine!.publicId]);
+    const rows = await listSessionsForMerchant(must(suite).db, merchant.id, 10);
+    expect(rows.map((row) => row.publicId)).toEqual([must(mine).publicId]);
   });
 });

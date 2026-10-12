@@ -975,7 +975,7 @@ async function rewindWalletToHeight(forkHeight: number, set: WalletSet): Promise
  * Best-effort and re-entrancy-guarded: the periodic trigger calls this whenever
  * headers advance, but only one scan runs at a time.
  */
-async function runHistoricalRescan(set: WalletSet, get: WalletGet): Promise<void> {
+async function runHistoricalRescan(_set: WalletSet, get: WalletGet): Promise<void> {
   if (rescanDriverRunning || !database || !spvClient) {
     return;
   }

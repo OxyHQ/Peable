@@ -82,8 +82,8 @@ export function PinPad({
 
   return (
     <View className="w-full items-center">
-      {ROWS.map((row, rowIdx) => (
-        <View key={`pad-row-${rowIdx}`} className="flex-row justify-center gap-6 mb-4">
+      {ROWS.map((row) => (
+        <View key={row.join('')} className="flex-row justify-center gap-6 mb-4">
           {row.map((key) => {
             if (key === 'bio') {
               if (biometricButton) {

@@ -391,8 +391,7 @@ function signEveryInput(
   selected: readonly UTXO[],
   keyManager: KeyManager,
 ): void {
-  for (let i = 0; i < transaction.inputs.length; i++) {
-    const input = transaction.inputs[i]!;
+  for (const [i, input] of transaction.inputs.entries()) {
     const utxo = selected.find((u) => u.txid === input.txid && u.vout === input.vout);
     if (!utxo) {
       throw new Error(`No selected UTXO for input ${input.txid}:${input.vout}`);

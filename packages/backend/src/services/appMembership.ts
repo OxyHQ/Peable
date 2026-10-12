@@ -108,7 +108,7 @@ async function fetchCallerMembership(
   applicationId: string,
   userBearer: string,
 ): Promise<boolean> {
-  let result;
+  let result: Awaited<ReturnType<SafeFetchFn>>;
   try {
     result = await safeFetch(`${oxyApiUrl}/applications/${encodeURIComponent(applicationId)}`, {
       headers: { Authorization: `Bearer ${userBearer}` },

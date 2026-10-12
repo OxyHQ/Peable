@@ -52,12 +52,7 @@ import { refreshConnectedAccount } from '../accounts/connectedAccountService';
 import { getDb } from '../../db/postgres';
 import { applyEvent, type IntentEvent } from '../intentState';
 import { reconcileIntentWithProvider } from '../intentReconciliation';
-import {
-  announceIntentChange,
-  enqueueDisputeWebhook,
-  enqueueIntentWebhook,
-  transitionIntent,
-} from '../intentTransition';
+import { announceIntentChange, enqueueDisputeWebhook, transitionIntent } from '../intentTransition';
 import { upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
@@ -754,7 +749,7 @@ async function handleDisputeEvent(
    * nothing would ever enqueue it again: a merchant would be contesting a
    * payment they were never told about, with a deadline they never saw.
    */
-  const { dispute, created } = await db.transaction(async (tx) => {
+  const { dispute } = await db.transaction(async (tx) => {
     const upserted = await upsertDispute(tx, {
       merchantId: intent.merchantId,
       paymentIntentId: intent.id,

@@ -144,6 +144,7 @@ describe('the deploy workflow and the migrator agree', () => {
     // every push. Without that default an unset input would be the empty string
     // and the pre/post pair would be the branch taken — right by accident.
     const resolve = steps.find((step) => step.name?.includes('Resolve the ECS one-shot shape'));
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: this is the workflow's bash parameter expansion, matched as text
     expect(resolve?.run).toContain('${REQUESTED_PHASE:-pre-post}');
   });
 

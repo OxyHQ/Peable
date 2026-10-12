@@ -84,7 +84,6 @@ async function resolveViaDoH(hostname: string): Promise<string[]> {
     } catch {
       // Individual DoH endpoint failed (network error, timeout, etc.)
       // — try the next endpoint in the list.
-      continue;
     }
   }
 

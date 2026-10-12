@@ -169,6 +169,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'send.addressPlaceholder': 'FairCoin address',
     'send.amountPlaceholder': '0',
     'send.available': 'Available: {amount} FAIR',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'send.usdApprox': '\u2248 ${amount} USD',
     'send.max': 'MAX',
     'send.maxAccessibility': 'Use maximum balance',
@@ -221,6 +222,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
 
     // ---------- Approve pay ----------
     'pay.title': 'Approve Payment',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'pay.usdApprox': '≈ ${amount} USD',
     'pay.payTo': 'Pay to',
     'pay.network': 'Network',
@@ -260,6 +262,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'buy.title': 'Buy FAIR',
     'buy.subtitle': 'Get FairCoin delivered to your wallet',
     'buy.amount.label': 'How much FAIR?',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'buy.usdApprox': '\u2248 ${amount} USD',
     'buy.method.label': 'Pay with',
     'buy.payment.recommended': 'Recommended',
@@ -988,6 +991,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'send.addressPlaceholder': 'Direcci\u00f3n FairCoin',
     'send.amountPlaceholder': '0',
     'send.available': 'Disponible: {amount} FAIR',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'send.usdApprox': '\u2248 ${amount} USD',
     'send.max': 'MAX',
     'send.maxAccessibility': 'Usar saldo m\u00e1ximo',
@@ -1040,6 +1044,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
 
     // ---------- Approve pay ----------
     'pay.title': 'Aprobar Pago',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'pay.usdApprox': '\u2248 ${amount} USD',
     'pay.payTo': 'Pagar a',
     'pay.network': 'Red',
@@ -1082,6 +1087,7 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'buy.title': 'Comprar FAIR',
     'buy.subtitle': 'Recibe FairCoin en tu billetera',
     'buy.amount.label': '\u00bfCu\u00e1nto FAIR?',
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'buy.usdApprox': '\u2248 ${amount} USD',
     'buy.method.label': 'Pagar con',
     'buy.payment.recommended': 'Recomendado',

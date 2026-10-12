@@ -263,7 +263,7 @@ export default function ExportKeyScreen() {
             <View>
               {addresses.map((address, idx) => (
                 <ListItem
-                  key={`addr-${idx}-${address}`}
+                  key={address}
                   icon="key"
                   title={address}
                   subtitle={`#${idx + 1}`}

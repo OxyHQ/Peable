@@ -186,6 +186,7 @@ function RecoveryModal({ control, mnemonic, onDismiss }: RecoveryModalProps) {
     >
       <View className="flex-row flex-wrap justify-center gap-2 mt-2">
         {words.map((word, idx) => (
+          // biome-ignore lint/suspicious/noArrayIndexKey: a mnemonic can repeat a word, so its position is its identity, and the list never reorders
           <View key={`recovery-word-${idx}`} className="bg-background rounded-lg px-3 py-1.5">
             <Text className="text-foreground text-sm">
               <Text className="text-muted-foreground">{idx + 1}. </Text>

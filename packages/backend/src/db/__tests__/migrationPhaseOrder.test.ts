@@ -35,7 +35,7 @@
  * hand-maintained list with a reason per entry and not a heuristic.
  */
 import { describe, expect, test } from 'bun:test';
-import { readdirSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const MIGRATIONS_DIR = join(import.meta.dir, '..', 'migrations');

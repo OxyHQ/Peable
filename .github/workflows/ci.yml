@@ -86,8 +86,11 @@ jobs:
 
       # Biome formats and lints every package (root `biome.json`). `biome ci`
       # fails on formatting drift as well as lint errors, and needs no build.
+      # `--error-on-warnings` because the recommended preset reports many rules
+      # (noNonNullAssertion, noExplicitAny, the unused-code rules) as warnings,
+      # which alone would pass while the count crept back up from zero.
       - name: Biome (format + lint)
-        run: bunx biome ci .
+        run: bunx biome ci --error-on-warnings .
 
       # The frontend keeps a minimal ESLint config for the Expo rules Biome has
       # no equivalent for (`EXPO_PUBLIC_*` reads Metro would silently fail to

@@ -1,6 +1,6 @@
 import { test, expect, beforeEach, mock } from 'bun:test';
 import { eq } from 'drizzle-orm';
-import { type User } from '@oxy.so/core';
+import type { User } from '@oxy.so/core';
 import { oxy as realOxy } from '../../oxy';
 import { overrideOxy } from '../../__tests__/helpers/oxyOverrides';
 import { merchants } from '../../db/schema';
@@ -19,7 +19,7 @@ const XPUB =
 function userProfile(id: string, username: string, displayName: string): User {
   return {
     id,
-    publicKey: 'pub_' + id,
+    publicKey: `pub_${id}`,
     username,
     avatar: `file_${id}`,
     name: { displayName },
@@ -216,7 +216,7 @@ test('a display name falls back to the normalized handle when the profile has no
         (id) =>
           ({
             id,
-            publicKey: 'pub_' + id,
+            publicKey: `pub_${id}`,
             username: 'nodisplay',
             avatar: `file_${id}`,
             name: {},

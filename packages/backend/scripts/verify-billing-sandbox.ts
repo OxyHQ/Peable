@@ -10,6 +10,36 @@ import { randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import assert from 'node:assert/strict';
 
+/**
+ * The slice of Playwright this rehearsal drives. The module is loaded at run
+ * time from a reviewed local path (I08_PLAYWRIGHT_MODULE), so its own types are
+ * not installed here.
+ */
+interface RehearsalLocator {
+  fill(value: string): Promise<void>;
+  count(): Promise<number>;
+  selectOption(value: string): Promise<unknown>;
+  isEnabled(): Promise<boolean>;
+  isVisible(): Promise<boolean>;
+  click(): Promise<void>;
+  evaluateAll<T>(fn: (elements: Element[]) => T): Promise<T>;
+}
+interface RehearsalPage {
+  on(
+    event: 'requestfailed',
+    listener: (request: {
+      failure(): { errorText?: string } | null;
+      resourceType(): string;
+    }) => void,
+  ): void;
+  frames(): Array<{ locator(selector: string): RehearsalLocator }>;
+  goto(url: string, options: { waitUntil: 'domcontentloaded'; timeout: number }): Promise<unknown>;
+  locator(selector: string): RehearsalLocator;
+}
+interface RehearsalBrowser {
+  close(): Promise<void>;
+  newContext(): Promise<{ newPage(): Promise<RehearsalPage> }>;
+}
 const EXPECTED_ACCOUNT = 'acct_1TnXkUQWiCE02OnU';
 const KEY_FILE = '/home/nate/Oxy/Mercaria/packages/backend/.env';
 const args = new Set(process.argv.slice(2));
@@ -20,11 +50,12 @@ if (!args.has('--execute')) {
   process.exit(0);
 }
 assert(args.has('--checkout'), 'Only the reviewed Checkout phase is implemented by this script');
-const manifestPath = process.env.I08_SANDBOX_MANIFEST;
+const manifestPathInput = process.env.I08_SANDBOX_MANIFEST;
 assert(
-  manifestPath && resolve(manifestPath).startsWith('/home/nate/Oxy/.agent-evidence/'),
+  manifestPathInput && resolve(manifestPathInput).startsWith('/home/nate/Oxy/.agent-evidence/'),
   'Private manifest path required',
 );
+const manifestPath: string = manifestPathInput;
 const adminUrl = process.env.TEST_DATABASE_URL;
 assert(adminUrl, 'Explicit own PostgreSQL required');
 const parsedAdmin = new URL(adminUrl);
@@ -164,7 +195,7 @@ try {
     } finally {
       await file.close();
     }
-    await rename(temporary, manifestPath!);
+    await rename(temporary, manifestPath);
   }
   async function record(kind: Owned['kind'], id: string) {
     assert(!id.includes('?'));
@@ -199,13 +230,18 @@ try {
   await assertPlatform();
   await passed('test-key-and-platform-account');
   const db = await createSuiteDatabase();
-  databaseName = new URL(db.databaseUrl).pathname.slice(1);
+  const createdDatabaseName = new URL(db.databaseUrl).pathname.slice(1);
+  databaseName = createdDatabaseName;
   let http: ReturnType<ReturnType<typeof express>['listen']> | undefined;
-  let browser: { close(): Promise<void> } | undefined;
+  let browser: RehearsalBrowser | undefined;
   try {
     await save();
     // Validate that the isolated browser can launch before creating ANY Stripe object.
-    browser = await chromium.launch({ headless: true, executablePath: browserExecutable });
+    const launched: RehearsalBrowser = await chromium.launch({
+      headless: true,
+      executablePath: browserExecutable,
+    });
+    browser = launched;
     const merchant = await insertMerchant(db.db, {
       publicId: `merch_${randomUUID().replaceAll('-', '')}`,
       oxyAppId: runId,
@@ -362,9 +398,10 @@ try {
         },
       }),
     );
-    http = app.listen(0, '127.0.0.1');
-    await new Promise<void>((resolve) => http!.once('listening', resolve));
-    const address = http.address();
+    const server = app.listen(0, '127.0.0.1');
+    http = server;
+    await new Promise<void>((resolve) => server.once('listening', resolve));
+    const address = server.address();
     assert(address && typeof address !== 'string');
     const baseURL = `http://127.0.0.1:${address.port}`;
     const sdk = new Peable({ publicKey: runId, secret, baseURL, oxyApiUrl: baseURL });
@@ -440,7 +477,8 @@ try {
     );
     assert.equal(sessions.has_more, false);
     assert.equal(sessions.data.length, 1);
-    const session = sessions.data[0]!;
+    const [session] = sessions.data;
+    assert(session);
     assert.equal(session.livemode, false);
     assert.equal(session.mode, 'subscription');
     assert(owned.some((value) => value.kind === 'checkout' && value.id === session.id));
@@ -453,7 +491,7 @@ try {
     assert(new URL(portalSession.url).protocol === 'https:');
     await passed('real-checkout-and-portal-created');
     stage = 'isolated-browser-checkout';
-    const context = await (browser as any).newContext();
+    const context = await launched.newContext();
     const page = await context.newPage();
     page.on(
       'requestfailed',
@@ -554,8 +592,11 @@ try {
     assert.equal(snapshot.providerPriceId, price.id);
     assert.equal(snapshot.livemode, false);
     await passed('real-hosted-checkout-to-verified-local-binding');
+    const observedSubscriptionId = subscriptionId;
     const cancelled = await mutate('sdk-cancel-at-period-end', () =>
-      sdk.billing.cancelAtPeriodEnd(subscriptionId!, { idempotencyKey: `${runId}:cancel` }),
+      sdk.billing.cancelAtPeriodEnd(observedSubscriptionId, {
+        idempotencyKey: `${runId}:cancel`,
+      }),
     );
     assert.equal(cancelled.cancelAtPeriodEnd, true);
     await passed('real-cancel-at-period-end');
@@ -574,10 +615,11 @@ try {
       process.exitCode = 1;
     }
     try {
-      if (http)
+      const server = http;
+      if (server)
         await new Promise<void>((resolve) => {
-          http!.close(() => resolve());
-          http!.closeAllConnections();
+          server.close(() => resolve());
+          server.closeAllConnections();
         });
     } catch {
       cleanup.push({ kind: 'http', id: 'owned-loopback-server', ok: false });
@@ -696,12 +738,12 @@ try {
       await dropSuiteDatabase(db);
       cleanup.push({
         kind: 'database',
-        id: databaseName!,
+        id: createdDatabaseName,
         ok: true,
         readback: 'dropTestDatabase-completed',
       });
     } catch {
-      cleanup.push({ kind: 'database', id: databaseName!, ok: false });
+      cleanup.push({ kind: 'database', id: createdDatabaseName, ok: false });
       process.exitCode = 1;
     }
     await save().catch(() => {
