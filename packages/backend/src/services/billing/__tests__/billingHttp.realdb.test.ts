@@ -1631,8 +1631,33 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         'not_found',
       );
 
-      const [operation] = await gatewayDb().select().from(billingOperations);
-      expect(operation).toBeDefined();
+      const [operation] = await gatewayDb()
+        .select()
+        .from(billingOperations)
+        .where(eq(billingOperations.idempotencyKey, key));
+      if (!operation?.result || !('url' in operation.result) || !('expiresAt' in operation.result))
+        throw new Error('Expected stored checkout result');
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: { url: operation.result.url, expiresAt: operation.result.expiresAt } })
+        .where(eq(billingOperations.id, operation.id));
+      expect(await restarted.retrieveCheckoutOperation(owner, params)).toEqual(recovered);
+      const contradictory = {
+        id: 'cs_test_conflict',
+        url: operation.result.url,
+        expiresAt: operation.result.expiresAt,
+      };
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: contradictory })
+        .where(eq(billingOperations.id, operation.id));
+      await expect(restarted.retrieveCheckoutOperation(owner, params)).rejects.toThrow(
+        'identity_conflict',
+      );
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: operation.result })
+        .where(eq(billingOperations.id, operation.id));
       const query = new URLSearchParams({
         providerCustomerId: checkout.providerCustomerId,
         providerPriceId: checkout.providerPriceId,
