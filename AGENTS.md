@@ -23,9 +23,6 @@ refactor.
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
 
-The package directory name and the npm name differ for the SDK: `packages/sdk`
-publishes as `@peable.to/sdk`.
-
 `packages/pay` is consumed from its BUILD OUTPUT, like `shared-types`: root
 `postinstall` builds both, and `ci.yml` / `deploy-frontend.yml` state
 `bun run build:pay` rather than relying on that side effect. The frontend
@@ -43,10 +40,8 @@ re-exported specifier whether or not anything calls it, so one line of
 for the backend and every server-side consumer of `sendPayment`.
 `src/ui/barrelIsolation.test.ts` walks the real module graph and fails if that
 line ever appears. The `./ui` subpath has **no CJS build** and no `require`
-condition: its Bloom imports are all subpaths that live only in bloom's
-`exports` map, and the CJS pass has to use node10 resolution (`@fairco.in/core`
-is ESM-only, so `node16` refuses the whole package) — which cannot see subpath
-exports at all.
+condition: the CJS pass must use node10 resolution (`@fairco.in/core` is
+ESM-only), which cannot see the Bloom subpath exports `./ui` imports.
 
 The sheet takes a `getSeed` CALLBACK, never a seed. The bytes live in one async
 function's local and are zeroed in its `finally`; a seed passed as a prop would
@@ -101,14 +96,12 @@ reaches a driver directly.
 and `server.ts` calls `connectPostgres()` — which proves the connection with one
 round trip — before anything listens. A task definition missing it crash-loops
 with a message naming the variable, instead of serving requests that all 500.
-That is also why `deploy-aws.yml` no longer probes the live task definition for
-the secret before migrating: the state that probe skipped over is unreachable.
 
 Production uses the existing `oxypay` database on the shared `oxy-postgres` RDS
 instance so the OxyPay-to-Peable product rename preserves every merchant and
 payment record. The database name is an internal legacy identifier, not a
-separate product. **No extensions** — measured, and stated as an explicit empty list in
-`src/db/migrate.ts`.
+separate product. **No extensions** (an explicit empty list in
+`src/db/migrate.ts`).
 
 - **Every id is two ids, and confusing them is silent.** A public `pi_…` /
   `merch_…` / `link_…` / `cs_…` lives in `public_id` and is what the wire
@@ -177,9 +170,8 @@ watchable; terminal and pre-broadcast intents are never polled. Its timer is
 
 **The gateway is not a chain proxy for wallets.** It reads the chain to settle
 intents and nothing else. `/api/address/:a` DOES answer (balance, txCount,
-utxos, plus `/txs` for paginated history) — a note in `services/explorer.ts`
-claimed `addressindex` was off and it was unusable, which was false and stopped
-a feature being designed the obvious way. The surface that needs address
+utxos, plus `/txs` for paginated history); `addressindex` is on, whatever an
+old note says. The surface that needs address
 balances is the wallet, and `frontend/src/services/explorer-address.ts` reads
 them directly: the Explorer echoes the request Origin in
 `access-control-allow-origin`, so a browser reaches it with no proxy.
@@ -302,8 +294,7 @@ advances the row AND enqueues the merchant's webhook **in the same transaction**
 (ADR 0001 D7), then the caller calls `announceIntentChange` after the commit for
 the two transports that are not durable — the payer's socket frame and the
 outbox kick. A batch producer that cannot go one row at a time takes
-`enqueueIntentWebhook` on its own `tx` instead; the expiry sweeper is the one
-that does.
+`enqueueIntentWebhook` on its own `tx` instead, as the expiry sweeper does.
 
 The ordering is the whole point and it is easy to undo: enqueue after the commit
 and the outbox becomes the best-effort delivery it was built to replace; emit
@@ -361,18 +352,14 @@ capability, never on `initialized`.** `src/wallet/capability.ts` decides
 receive code, settings without wallet sections). Send and Buy need a key, so
 the read-only rail and bar omit them and their screens redirect home.
 
-It took three tries, and each wrong one is easy to rebuild. First the entry
-named the platform (`"web-unsupported"`) and redirected to `/@you`, whose back
-arrow fell into a `(tabs)` that admitted only an initialized wallet and bounced
-back. Then the read-only view rendered in place on `app/index.tsx` — outside
-the shell, so a browser had no navigation rail and no Settings. Gating on
-capability is what lets `app/index.tsx` send `read-only` into `(tabs)` like
-`ready`, with nothing to bounce off.
+Both wrong designs are easy to rebuild: naming the platform and redirecting
+bounced off a `(tabs)` that admitted only an initialized wallet, and rendering
+read-only in place on `app/index.tsx` left the browser outside the shell, with
+no rail and no Settings.
 
 **Never `<Redirect href="/" />` from inside `(tabs)`.** A route group adds no
 URL segment, so `/` there resolves to `(tabs)/index`, the layout renders the
-redirect again, and React aborts with error #185 — `peable.to/settings` did
-exactly that signed out. The layout renders `SignInView` in place for `none` on
+redirect again, and React aborts with error #185. The layout renders `SignInView` in place for `none` on
 a keyless host instead. A keystore host is deliberately NOT gated there:
 `lockWallet` drops `initialized` while the PIN overlay covers the shell, and a
 gate would swap the tabs for sign-in underneath it.
@@ -402,8 +389,17 @@ ours.
 | Change | Where it belongs |
 |---|---|
 | Protocol primitives — URIs, addresses, transactions, consensus | `@fairco.in/core`, which both already depend on. No fork sync needed |
-| Generic FairCoin wallet — SPV, storage, chain UI | FAIRWallet, then cherry-pick down; the shared history makes that work |
+| Generic FairCoin wallet — SPV, storage, chain UI | FAIRWallet, then `scripts/fairwallet-pick.sh` (below) |
 | Oxy identity, gateway, merchants, intents, checkout | Only here |
+
+**Take upstream commits with `scripts/fairwallet-pick.sh <sha>...`, not a bare
+`git cherry-pick`.** Upstream is at the repo root in double-quoted Prettier
+style, so a plain pick conflicts on nearly every line and loses the rename. The
+script Biome-formats the commit's before and after files under
+`packages/frontend/`, commits both as throwaway commits on HEAD and picks the
+second, leaving only real divergence. It lists and skips files with no
+counterpart here (upstream CI, `bun.lock`, deleted screens). On `c094cf3`: 55
+conflicts plain, 11 with it, each a Peable edit to the same lines.
 
 ## Deploy
 
