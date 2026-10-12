@@ -107,7 +107,7 @@ bun run electron -- --dev
 ### Build APK Locally
 
 ```bash
-npx expo prebuild --platform android
+bunx expo prebuild --platform android
 cd android && ./gradlew assembleRelease
 ```
 
