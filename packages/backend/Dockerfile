@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1.27@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 #
 # Peable Gateway — backend image (@peable.to/backend).
 #
@@ -21,8 +21,15 @@
 # OXY_API_URL) is set as plain task-definition env.
 # See .github/workflows/deploy-aws.yml.
 
+# Base images and the syntax frontend are pinned by multi-arch INDEX digest: the
+# digest is what the build pulls, and the tag is kept only for readability and
+# for `scripts/check-lockfile-sync.mjs`, which compares the tag's Bun version with
+# `packageManager`. A bump needs the new tag AND its new digest, and is a change
+# to a reviewed build input (`.github/scripts/reviewed-images.json`), so it is
+# re-reviewed and re-pinned by the owner.
+#
 # ── Stage 1: build (install deps, compile shared-types, type-gate the backend) ──
-FROM oven/bun:1.4.3-alpine AS builder
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS builder
 WORKDIR /app
 
 # Workspace root files. bunfig.toml pins `linker = "hoisted"` (REQUIRED so the
@@ -68,7 +75,7 @@ RUN cd packages/sdk && bun run build
 RUN cd packages/backend && bun run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────
-FROM oven/bun:1.4.3-alpine AS runtime
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runtime
 WORKDIR /app
 
 # Drop privileges: run as a dedicated non-root user.
