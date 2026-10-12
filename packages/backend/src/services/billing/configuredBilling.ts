@@ -14,7 +14,7 @@ import {
   billingReference,
   BillingError,
 } from './contracts';
-import { createBillingService } from './billingService';
+import { createBillingService, type BillingCheckoutOperationReader } from './billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from './stripeBillingProvider';
 import { createVerifiedBillingBindings } from './verifiedBindings';
 import {
@@ -46,6 +46,7 @@ const cohortConfiguration = z
     taxQuoteAdapterRef: billingReference.optional(),
     taxCheckoutAdapterRef: billingReference.optional(),
     finalInvoiceAuthorityAdapterRef: billingReference.optional(),
+    checkoutOperationReaderRef: billingReference.optional(),
     portalConfigurationRef: z.string().regex(/^bpc_[A-Za-z0-9]+$/),
     cohorts: z
       .array(
@@ -60,6 +61,7 @@ const cohortConfiguration = z
 /** Only trusted deployment composition registers adapters. Configuration selects
  * an existing name; it cannot load arbitrary modules, URLs or provider secrets. */
 export interface BillingRuntimeAdapters {
+  checkoutOperationReaders?: Readonly<Record<string, BillingCheckoutOperationReader>>;
   faircoinExecutors?: Readonly<Record<string, FaircoinRenewalExecutor>>;
   taxCheckoutAdapters?: Readonly<Record<string, BillingTaxCheckoutAdapter>>;
   taxQuoteCalculators?: Readonly<Record<string, BillingTaxQuoteCalculator>>;
@@ -120,6 +122,13 @@ export async function configureBillingRuntime(
     executor && parsed.faircoinActors
       ? { db, executor, actors: structuredClone(parsed.faircoinActors) }
       : undefined;
+  const checkoutOperationReader =
+    parsed.checkoutOperationReaderRef &&
+    Object.hasOwn(adapters.checkoutOperationReaders ?? {}, parsed.checkoutOperationReaderRef)
+      ? adapters.checkoutOperationReaders?.[parsed.checkoutOperationReaderRef]
+      : undefined;
+  if (parsed.checkoutOperationReaderRef && !checkoutOperationReader)
+    throw new Error('Configured checkout operation reader is unavailable');
   const selectedTax =
     parsed.taxQuoteAdapterRef &&
     Object.hasOwn(adapters.taxQuoteCalculators ?? {}, parsed.taxQuoteAdapterRef)
@@ -203,6 +212,7 @@ export async function configureBillingRuntime(
     cohorts,
     verifiedBindings,
     taxQuoteCalculator,
+    checkoutOperationReader,
     taxCheckoutAdapter,
     finalInvoiceAuthority,
   });

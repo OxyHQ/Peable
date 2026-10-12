@@ -112,6 +112,8 @@ export const billingOperations = pgTable(
     resultExpiresAt: timestamptz(),
     /** Checkout reference needed for verified completion; no provider payload. */
     providerObjectRef: text(),
+    /** Immutable first subscription_create invoice; never overwritten by renewal/latest. */
+    initialInvoiceRef: text(),
     createdAt: createdAt(),
     completedAt: timestamptz(),
   },

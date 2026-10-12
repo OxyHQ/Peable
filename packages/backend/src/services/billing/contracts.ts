@@ -192,3 +192,13 @@ export class BillingError extends Error {
     this.name = 'BillingError';
   }
 }
+
+export const checkoutOperationRequestSchema = z
+  .object({
+    idempotencyKey: billingIdempotencyKey,
+    providerCustomerId: billingReference,
+    providerPriceId: billingReference,
+    storeId: billingReference,
+    planId: billingReference,
+  })
+  .strict();

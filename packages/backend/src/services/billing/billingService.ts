@@ -13,14 +13,19 @@ import type {
   BillingHostedSession,
   BillingCheckoutSession,
   BillingSubscription,
+  RetrieveBillingCheckoutOperationParams,
+  BillingCheckoutOperationRecovery,
   CreateBillingTaxQuoteParams,
   CreateBillingCheckoutParams,
   CreateBillingPortalParams,
   EnsureBillingCustomerParams,
 } from '@peable.to/shared-types';
+import { z } from 'zod';
 import type { Database, Transaction } from '../../db/postgres';
 import {
   findBillingCustomerForStore,
+  findOwnedBillingCheckoutOperationByKey,
+  completeRecoveredBillingCheckout,
   findBillingTaxCheckoutSnapshot,
   bindBillingObject,
   claimBillingOperation,
@@ -33,8 +38,10 @@ import {
 import {
   BillingError,
   billingCustomerSchema,
+  checkoutOperationRequestSchema,
   billingHostedSessionSchema,
   billingCheckoutSessionSchema,
+  parseBillingResult,
   billingSubscriptionSchema,
   billingOwnerSchema,
   billingDeploymentSchema,
@@ -53,6 +60,18 @@ export interface BillingCohort extends BillingOwner, BillingDeployment {
   evidenceRef: string;
   requireTaxQuote?: boolean;
 }
+/** Capability supplied by trusted deployment composition. A provider without
+ * exact operation-key discovery leaves recovery indeterminate, never recreates. */
+export interface BillingCheckoutOperationReader {
+  read(input: {
+    taxQuoteId: string | null;
+    remoteIdempotencyKey: string;
+    requestDigest: string;
+    providerCustomerId: string;
+    providerPriceId: string;
+    livemode: boolean;
+  }): Promise<unknown>;
+}
 export interface BillingServiceOptions {
   db: Database;
   provider: BillingProvider;
@@ -60,6 +79,7 @@ export interface BillingServiceOptions {
   now?: () => Date;
   finalInvoiceAuthority?: FinalInvoiceAuthorityReader;
   taxQuoteCalculator?: BillingTaxQuoteCalculator;
+  checkoutOperationReader?: BillingCheckoutOperationReader;
   taxCheckoutAdapter?: BillingTaxCheckoutAdapter;
   verifiedBindings?: Pick<
     VerifiedBillingBindings,
@@ -401,6 +421,118 @@ export function createBillingService(options: BillingServiceOptions) {
           objectRef: value.providerObjectRef,
         };
       });
+    },
+    async retrieveCheckoutOperation(
+      owner: BillingOwner,
+      params: RetrieveBillingCheckoutOperationParams,
+    ): Promise<BillingCheckoutOperationRecovery> {
+      authorize(owner);
+      const input = checkoutOperationRequestSchema.parse(params);
+      const customer = await requireBillingBinding(
+        db,
+        deployment,
+        owner,
+        'customer',
+        input.providerCustomerId,
+      );
+      const price = await requireBillingBinding(
+        db,
+        deployment,
+        owner,
+        'price',
+        input.providerPriceId,
+      );
+      if (customer.externalSubjectRef !== input.storeId || price.planRef !== input.planId)
+        throw new BillingError('not_found', 404);
+      const merchant = await findMerchantById(db, owner.merchantId);
+      if (
+        !merchant ||
+        merchant.oxyAppId !== owner.oxyAppId ||
+        merchant.environment !== owner.environment
+      )
+        throw new BillingError('not_found', 404);
+      const source = {
+        ...input,
+        taxQuoteId: null as string | null,
+        merchantId: merchant.publicId,
+        appId: owner.oxyAppId,
+        mode: deployment.livemode ? ('live' as const) : ('test' as const),
+        environment: owner.environment,
+      };
+      let operation = await findOwnedBillingCheckoutOperationByKey(
+        db,
+        deployment,
+        owner,
+        input.idempotencyKey,
+      );
+      if (!operation) return { state: 'not_found', source };
+      if (operation.customerBindingId !== customer.id || operation.priceBindingId !== price.id)
+        throw new BillingError('not_found', 404);
+      source.taxQuoteId = operation.taxQuoteRef;
+      if (operation.state !== 'succeeded' && options.checkoutOperationReader) {
+        const expected = {
+          taxQuoteId: operation.taxQuoteRef,
+          remoteIdempotencyKey: operation.remoteIdempotencyKey,
+          requestDigest: operation.requestDigest,
+          providerCustomerId: customer.providerRef,
+          providerPriceId: price.providerRef,
+          livemode: deployment.livemode,
+        };
+        const recovered = z
+          .discriminatedUnion('state', [
+            z.object({ state: z.enum(['not_found', 'indeterminate']) }).strict(),
+            z
+              .object({
+                state: z.literal('succeeded'),
+                taxQuoteId: z.literal(expected.taxQuoteId),
+                remoteIdempotencyKey: z.literal(expected.remoteIdempotencyKey),
+                requestDigest: z.literal(expected.requestDigest),
+                providerCustomerId: z.literal(expected.providerCustomerId),
+                providerPriceId: z.literal(expected.providerPriceId),
+                livemode: z.literal(expected.livemode),
+                checkout: billingCheckoutSessionSchema,
+              })
+              .strict(),
+          ])
+          .parse(await options.checkoutOperationReader.read(structuredClone(expected)));
+        if (recovered.state !== 'succeeded') return { state: 'indeterminate', source };
+        if (recovered.checkout.id.startsWith('cs_live_') !== deployment.livemode)
+          throw new BillingError('identity_conflict');
+        if (
+          operation.taxCheckoutSnapshot &&
+          Date.parse(recovered.checkout.expiresAt) >
+            Date.parse(operation.taxCheckoutSnapshot.taxQuote.quote.expiresAt)
+        )
+          throw new BillingError('identity_conflict');
+        await completeRecoveredBillingCheckout(db, operation, recovered.checkout, now());
+        operation = await findOwnedBillingCheckoutOperationByKey(
+          db,
+          deployment,
+          owner,
+          input.idempotencyKey,
+        );
+        if (
+          !operation ||
+          operation.customerBindingId !== customer.id ||
+          operation.priceBindingId !== price.id
+        )
+          throw new BillingError('reconciliation_required');
+      }
+      if (operation.state !== 'succeeded') return { state: operation.state, source };
+      const result = billingCheckoutSessionSchema.parse({
+        id: operation.providerObjectRef,
+        ...parseBillingResult('checkout', operation.result),
+      });
+      if (result.id !== operation.providerObjectRef) throw new BillingError('identity_conflict');
+      return {
+        state: 'succeeded',
+        source,
+        checkout: {
+          id: result.id,
+          expiresAt: result.expiresAt,
+          ...(Date.parse(result.expiresAt) > now().getTime() ? { url: result.url } : {}),
+        },
+      };
     },
     async retrieveCheckout(owner: BillingOwner, ref: string) {
       authorize(owner);

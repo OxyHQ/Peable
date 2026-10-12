@@ -223,6 +223,11 @@ async function initialize(input: {
       cancelled = true;
       return sub();
     },
+    listSubscriptionInvoices: async (_subscriptionRef, startingAfter) => {
+      const ids = Object.keys(invoices).reverse();
+      const offset = startingAfter ? ids.indexOf(startingAfter) + 1 : 0;
+      return { has_more: false, data: ids.slice(offset).map(invoice) };
+    },
     retrieveInvoice: async (id) => invoice(id),
     listInvoiceLines: async (id) => ({
       has_more: false,
@@ -552,6 +557,17 @@ async function command(message: any) {
   switch (message.method) {
     case 'initialize':
       return initialize(message.input);
+    case 'setClock': {
+      const now = message.input?.now;
+      if (
+        typeof now !== 'string' ||
+        !Number.isFinite(Date.parse(now)) ||
+        new Date(now).toISOString() !== now
+      )
+        throw new Error('Fixture requires an ISO timestamp');
+      fixtureNow = Date.parse(now);
+      return { now: observedClock().toISOString() };
+    }
     case 'checkoutDispatchCount':
       return { dispatches: quotedCheckoutDispatches };
     case 'retrieveMerchant':
@@ -560,6 +576,10 @@ async function command(message: any) {
       return billing.retrieveFinalInvoiceAuthority(...(message.args as [string, string]));
     case 'retrievePaidInvoice':
       return billing.retrievePaidInvoice(...(message.args as [string, string]));
+    case 'retrieveCheckoutOperation':
+      return billing.retrieveCheckoutOperation(
+        ...(message.args as Parameters<typeof billing.retrieveCheckoutOperation>),
+      );
     case 'retrieveInvoiceState':
       return billing.retrieveInvoiceState(...(message.args as [string, string]));
     case 'retrieveSubscription':

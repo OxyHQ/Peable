@@ -2,6 +2,8 @@ import { createPublicKey, verify } from 'node:crypto';
 import { canonicalBillingAuthority, canonicalBillingTaxQuote } from '@peable.to/shared-types';
 import type {
   BillingTaxQuote,
+  RetrieveBillingCheckoutOperationParams,
+  BillingCheckoutOperationRecovery,
   CreateBillingTaxQuoteParams,
   BillingFinalInvoiceAuthority,
   BillingCustomer,
@@ -58,6 +60,18 @@ export class BillingResource {
   }
   retrieveCheckout(ref: string): Promise<BillingCheckoutObservation> {
     return this.client.request('GET', `/v1/billing/checkout_sessions/${encodeURIComponent(ref)}`);
+  }
+  /** Reads existing operation state only, even after quote/session expiry.
+   * Missing/pending/indeterminate never authorizes another create or cancellation. */
+  retrieveCheckoutOperation(
+    params: RetrieveBillingCheckoutOperationParams,
+  ): Promise<BillingCheckoutOperationRecovery> {
+    const { idempotencyKey, ...query } = params;
+    return this.client.request(
+      'GET',
+      `/v1/billing/checkout_operations/${encodeURIComponent(idempotencyKey)}`,
+      { query },
+    );
   }
   async createTaxQuote(params: CreateBillingTaxQuoteParams): Promise<BillingTaxQuote> {
     if (!this.taxQuoteAuthorityKeys || Object.keys(this.taxQuoteAuthorityKeys).length === 0)

@@ -60,7 +60,7 @@ assert.equal(sdkManifest.dependencies['@peable.to/shared-types'], ${JSON.stringi
 const peable = new sdk.Peable({ publicKey: 'synthetic-public', secret: 'synthetic-secret', baseURL: 'http://127.0.0.1:1', oxyApiUrl: 'http://127.0.0.1:1' });
 assert.equal(require('./node_modules/@peable.to/sdk/dist/esm/package.json').type,'module');
 assert.equal(require('./node_modules/@peable.to/shared-types/dist/esm/package.json').type,'module');
-for (const method of ['ensureCustomer', 'createCheckoutSession', 'createPortalSession', 'retrieveSubscription', 'cancelAtPeriodEnd', 'retrieveCheckout', 'retrievePaidInvoice', 'retrieveInvoiceState', 'retrieveFinalInvoiceAuthority', 'createTaxQuote']) assert.equal(typeof peable.billing[method], 'function');
+for (const method of ['ensureCustomer', 'createCheckoutSession', 'createPortalSession', 'retrieveSubscription', 'cancelAtPeriodEnd', 'retrieveCheckout', 'retrieveCheckoutOperation', 'retrievePaidInvoice', 'retrieveInvoiceState', 'retrieveFinalInvoiceAuthority', 'createTaxQuote']) assert.equal(typeof peable.billing[method], 'function');
 `;
 writeFileSync(
   resolve(fixture, 'check.cjs'),
@@ -79,11 +79,13 @@ writeFileSync(
 execFileSync(nodeBinary, [resolve(fixture, 'check-runtime.cjs')], { cwd: fixture, stdio: 'pipe' });
 writeFileSync(
   resolve(fixture, 'check.ts'),
-  `import { Peable, type BillingCheckoutSession,type BillingCheckoutObservation,type BillingPaidInvoice,type BillingInvoiceState,type BillingSubscription, type BillingFinalInvoiceAuthority,type BillingTaxQuote,type BillingRequestOptions } from '@peable.to/sdk';
+  `import { Peable, type BillingCheckoutSession,type BillingCheckoutObservation,type BillingCheckoutOperationRecovery,type BillingPaidInvoice,type BillingInvoiceState,type BillingSubscription, type BillingFinalInvoiceAuthority,type BillingTaxQuote,type BillingRequestOptions } from '@peable.to/sdk';
 import type { CreateBillingCheckoutParams, WebhookEvent } from '@peable.to/shared-types';
 declare const client: Peable; declare const checkout: CreateBillingCheckoutParams; declare const options: BillingRequestOptions;
 const subscription: Promise<BillingSubscription> = client.billing.retrieveSubscription('sub_fixture');
 const hosted:Promise<BillingCheckoutSession>=client.billing.createCheckoutSession(checkout, options);
+const recovered:Promise<BillingCheckoutOperationRecovery>=client.billing.retrieveCheckoutOperation({idempotencyKey:'owned:key',providerCustomerId:'cus_fixture',providerPriceId:'price_fixture',storeId:'store:fixture',planId:'plan:fixture'});
+void recovered;
 const observed:Promise<BillingCheckoutObservation>=client.billing.retrieveCheckout('cs_test_fixture');
 const paid:Promise<BillingPaidInvoice>=client.billing.retrievePaidInvoice('sub_fixture','in_fixture');
 const state:Promise<BillingInvoiceState>=client.billing.retrieveInvoiceState('sub_fixture','in_fixture');
@@ -148,8 +150,8 @@ const proof = {
   checks: [
     'Source workspace versions and declared dependency ranges match actual bun.lock',
     'Explicit nested ESM package scopes for both packages',
-    'Node CJS load and ten billing methods',
-    'Node ESM load and ten billing methods',
+    'Node CJS load and eleven billing methods',
+    'Node ESM load and eleven billing methods',
     'Public runtime: mocked billing transport/token caching/encoded refs/idempotency/signed observation/checkout entry',
     'TypeScript strict NodeNext public declarations',
     'Public CreateBillingCheckoutParams.taxQuote declaration with official BillingTaxQuote',
