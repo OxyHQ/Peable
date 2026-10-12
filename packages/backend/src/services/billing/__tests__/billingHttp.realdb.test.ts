@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm';
+import type { BillingCheckoutOperationReader } from '../billingService';
 import type { BillingTaxQuoteCalculator } from '../tax-quote';
 import type { BillingTaxCheckoutAdapter } from '../tax-checkout';
 import { findMerchantByAppEnvironment } from '../../../db/merchants/merchantRepository';
@@ -27,6 +29,7 @@ import {
 import {
   bindBillingObject,
   claimBillingOperation,
+  requireBillingBinding,
   completeBillingOperation,
 } from '../../../db/billing/billingRepository';
 import { billingOperations, billingObjectBindings, recurringMirrors } from '../../../db/schema';
@@ -102,6 +105,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     let accountId: string;
     let failCustomer: boolean;
     let cancelled: boolean;
+    let checkoutOperationReader: BillingCheckoutOperationReader | undefined;
     let taxCalculator: BillingTaxQuoteCalculator | undefined;
     let taxCheckoutAdapter: BillingTaxCheckoutAdapter | undefined;
     let finalAuthorityReader: FinalInvoiceAuthorityReader | undefined;
@@ -295,6 +299,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         now: () => time,
       });
       finalAuthorityReader = undefined;
+      checkoutOperationReader = undefined;
       taxCalculator = undefined;
       taxCheckoutAdapter = undefined;
       const service = createBillingService({
@@ -303,6 +308,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         cohorts,
         verifiedBindings: verified,
         now: () => time,
+        get checkoutOperationReader() {
+          return checkoutOperationReader;
+        },
         get taxQuoteCalculator() {
           return taxCalculator;
         },
@@ -323,8 +331,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         const selected = token === 'other' ? other : owner;
         if (token !== 'missing')
           (req as OxyAuthRequest).serviceApp = {
-            appId: selected.oxyAppId,
-            environment: selected.environment,
+            appId: token === 'wrongApp' ? 'app_unknown' : selected.oxyAppId,
+            environment: token === 'wrongEnvironment' ? 'staging' : selected.environment,
             appName: 'fixture',
             credentialId: 'fixture',
             ownerAccountId: 'not-the-payer',
@@ -1569,6 +1577,480 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(
         (await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one')).status,
       ).not.toBe(200);
+    });
+
+    it('recovers the exact stored operation after lost response and quote expiry without creating another session', async () => {
+      const fixture = await fiscalFixture();
+      const key = 'recovery:key:encoded';
+      const original = await fixture.fiscalSdk.createCheckoutSession(
+        { ...checkout, taxQuote: fixture.quote },
+        { idempotencyKey: key },
+      );
+      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      const before = calls.length;
+      const params = {
+        idempotencyKey: key,
+        providerCustomerId: checkout.providerCustomerId,
+        providerPriceId: checkout.providerPriceId,
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+      };
+      const recovered = await sdk().retrieveCheckoutOperation(params);
+      expect(recovered).toMatchObject({
+        state: 'succeeded',
+        source: { ...params, taxQuoteId: fixture.quote.quote.id },
+        checkout: { id: original.id, expiresAt: original.expiresAt },
+      });
+      if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
+      expect(recovered.checkout.url).toBeUndefined();
+      expect(calls).toHaveLength(before);
+      expect(await sdk().retrieveCheckoutOperation(params)).toEqual(recovered);
+      const freshProvider = createStripeBillingProvider(deployment, client, {
+        portalConfigurationRef: 'bpc_one',
+        now: () => time,
+      });
+      const restarted = createBillingService({
+        db: gatewayDb(),
+        provider: freshProvider,
+        cohorts: [{ ...owner, ...deployment, evidenceRef: 'fixture:restart' }],
+        now: () => time,
+      });
+      expect(await restarted.retrieveCheckoutOperation(owner, params)).toEqual(recovered);
+      const foreignDeployment = { ...deployment, platformAccountId: 'acct_other' };
+      const foreignProvider = createStripeBillingProvider(foreignDeployment, client, {
+        portalConfigurationRef: 'bpc_one',
+        now: () => time,
+      });
+      const foreignService = createBillingService({
+        db: gatewayDb(),
+        provider: foreignProvider,
+        cohorts: [{ ...owner, ...foreignDeployment, evidenceRef: 'fixture:other-platform' }],
+        now: () => time,
+      });
+      await expect(foreignService.retrieveCheckoutOperation(owner, params)).rejects.toThrow(
+        'not_found',
+      );
+
+      const [operation] = await gatewayDb()
+        .select()
+        .from(billingOperations)
+        .where(eq(billingOperations.idempotencyKey, key));
+      if (!operation?.result || !('url' in operation.result) || !('expiresAt' in operation.result))
+        throw new Error('Expected stored checkout result');
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: { url: operation.result.url, expiresAt: operation.result.expiresAt } })
+        .where(eq(billingOperations.id, operation.id));
+      expect(await restarted.retrieveCheckoutOperation(owner, params)).toEqual(recovered);
+      const contradictory = {
+        id: 'cs_test_conflict',
+        url: operation.result.url,
+        expiresAt: operation.result.expiresAt,
+      };
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: contradictory })
+        .where(eq(billingOperations.id, operation.id));
+      await expect(restarted.retrieveCheckoutOperation(owner, params)).rejects.toThrow(
+        'identity_conflict',
+      );
+      await gatewayDb()
+        .update(billingOperations)
+        .set({ result: operation.result })
+        .where(eq(billingOperations.id, operation.id));
+      const query = new URLSearchParams({
+        providerCustomerId: checkout.providerCustomerId,
+        providerPriceId: checkout.providerPriceId,
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+      });
+      const path = `/v1/billing/checkout_operations/${encodeURIComponent(key)}?${query}`;
+      expect((await request(path, 'other')).status).toBe(404);
+      expect((await request(path, 'noScope')).status).toBe(403);
+      expect((await request(path, 'wrongApp')).status).toBe(403);
+      expect((await request(path, 'wrongEnvironment')).status).toBe(403);
+      await bindBillingObject(gatewayDb(), deployment, owner, {
+        kind: 'customer',
+        providerRef: 'cus_second',
+        externalSubjectRef: 'store:second',
+        bindingEvidenceRef: 'fixture:second',
+      });
+      await expect(
+        sdk().retrieveCheckoutOperation({
+          ...params,
+          providerCustomerId: 'cus_second',
+          storeId: 'store:second',
+        }),
+      ).rejects.toThrow();
+      expect(calls).toHaveLength(before);
+    });
+    it('keeps absence and uncertain provider acceptance nonterminal and validates read-only recovery proof', async () => {
+      const fixture = await fiscalFixture();
+      const params = {
+        idempotencyKey: 'recover:pending',
+        providerCustomerId: checkout.providerCustomerId,
+        providerPriceId: checkout.providerPriceId,
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+      };
+      const missing = await sdk().retrieveCheckoutOperation(params);
+      expect(missing.state).toBe('not_found');
+      const customer = await requireBillingBinding(
+        gatewayDb(),
+        deployment,
+        owner,
+        'customer',
+        params.providerCustomerId,
+      );
+      const price = await requireBillingBinding(
+        gatewayDb(),
+        deployment,
+        owner,
+        'price',
+        params.providerPriceId,
+      );
+      const claim = await claimBillingOperation(
+        gatewayDb(),
+        deployment,
+        owner,
+        {
+          operation: 'checkout',
+          idempotencyKey: params.idempotencyKey,
+          requestDigest: 'a'.repeat(64),
+          customerBindingId: customer.id,
+          priceBindingId: price.id,
+        },
+        time,
+      );
+      if (claim.kind !== 'claimed') throw new Error('Expected claim');
+      time = new Date(time.getTime() + 120_000);
+      const before = calls.length;
+      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('pending');
+      let reads = 0;
+      checkoutOperationReader = {
+        async read() {
+          reads++;
+          return { state: 'not_found' };
+        },
+      };
+      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('indeterminate');
+      checkoutOperationReader = {
+        async read(input) {
+          reads++;
+          return {
+            state: 'succeeded',
+            ...input,
+            providerCustomerId: 'cus_foreign',
+            checkout: {
+              id: 'cs_test_found',
+              url: 'https://example.invalid/recovered',
+              expiresAt: time.toISOString(),
+            },
+          };
+        },
+      };
+      await expect(sdk().retrieveCheckoutOperation(params)).rejects.toThrow();
+      expect(
+        (
+          await gatewayDb()
+            .select()
+            .from(billingOperations)
+            .where(eq(billingOperations.id, claim.operation.id))
+        )[0]?.state,
+      ).toBe('pending');
+      checkoutOperationReader = {
+        async read(input) {
+          reads++;
+          return {
+            state: 'succeeded',
+            ...input,
+            checkout: {
+              id: 'cs_test_found',
+              url: 'https://example.invalid/recovered',
+              expiresAt: new Date(time.getTime() - 1).toISOString(),
+            },
+          };
+        },
+      };
+      const concurrent = await Promise.all([
+        sdk().retrieveCheckoutOperation(params),
+        sdk().retrieveCheckoutOperation(params),
+      ]);
+      expect(
+        concurrent.every(
+          (value) =>
+            value.state === 'succeeded' &&
+            value.checkout.id === 'cs_test_found' &&
+            !value.checkout.url,
+        ),
+      ).toBe(true);
+      const readCount = reads;
+      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('succeeded');
+      expect(reads).toBe(readCount);
+      expect(calls).toHaveLength(before);
+      expect(fixture.quote).toBeDefined();
+    });
+    it('discovers and pins the original invoice on first checkout read after renewal through all pages', async () => {
+      const fixture = await fiscalFixture();
+      const hosted = await fixture.fiscalSdk.createCheckoutSession(
+        { ...checkout, taxQuote: fixture.quote },
+        { idempotencyKey: 'initial:late' },
+      );
+      configurePaidEvidence();
+      const subscription = client.retrieveSubscription;
+      client.retrieveSubscription = async (ref) => ({
+        ...((await subscription(ref)) as Record<string, unknown>),
+        latest_invoice: 'in_renewal',
+      });
+      const initial = {
+        id: 'in_one',
+        customer: 'cus_one',
+        livemode: false,
+        billing_reason: 'subscription_create',
+        parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_one' } },
+      };
+      const cursors: Array<string | undefined> = [];
+      client.listSubscriptionInvoices = async (_ref, cursor) => {
+        cursors.push(cursor);
+        return cursor
+          ? { has_more: false, data: [initial] }
+          : {
+              has_more: true,
+              data: [{ ...initial, id: 'in_renewal', billing_reason: 'subscription_cycle' }],
+            };
+      };
+      const observed = await sdk().retrieveCheckout(hosted.id);
+      expect(observed.initialInvoiceId).toBe('in_one');
+      expect(observed.subscription?.latestInvoiceId).toBe('in_renewal');
+      expect(cursors).toEqual([undefined, 'in_renewal']);
+      client.listSubscriptionInvoices = async () => {
+        throw new Error('Initial pin must survive restart/provider outage');
+      };
+      const reloaded = createVerifiedBillingBindings({
+        db: gatewayDb(),
+        client,
+        deployment,
+        cohorts: [{ ...owner, ...deployment, evidenceRef: 'fixture:approved-cohort' }],
+        now: () => time,
+      });
+      expect((await reloaded.retrieveCheckout(owner, hosted.id)).initialInvoiceId).toBe('in_one');
+    });
+    it('does not pin ambiguous, foreign, wrong-price or incomplete initial invoice evidence', async () => {
+      const fixture = await fiscalFixture();
+      const hosted = await fixture.fiscalSdk.createCheckoutSession(
+        { ...checkout, taxQuote: fixture.quote },
+        { idempotencyKey: 'initial:invalid' },
+      );
+      configurePaidEvidence();
+      const initial = {
+        id: 'in_one',
+        customer: 'cus_one',
+        livemode: false,
+        billing_reason: 'subscription_create',
+        parent: { type: 'subscription_details', subscription_details: { subscription: 'sub_one' } },
+      };
+      client.listSubscriptionInvoices = async () => ({
+        has_more: false,
+        data: [initial, { ...initial, id: 'in_duplicate' }],
+      });
+      expect((await sdk().retrieveCheckout(hosted.id)).initialInvoiceId).toBeNull();
+      client.listSubscriptionInvoices = async () => ({
+        has_more: false,
+        data: [{ ...initial, customer: 'cus_foreign' }],
+      });
+      await expect(sdk().retrieveCheckout(hosted.id)).rejects.toThrow();
+      client.listSubscriptionInvoices = async () => ({ has_more: true, data: [] });
+      await expect(sdk().retrieveCheckout(hosted.id)).rejects.toThrow();
+      client.listSubscriptionInvoices = async () => ({ has_more: false, data: [initial] });
+      const lines = client.listInvoiceLines;
+      if (!lines) throw new Error('Expected fixture lines');
+      client.listInvoiceLines = async () => ({
+        has_more: false,
+        data: [
+          {
+            id: 'il_one',
+            invoice: 'in_one',
+            livemode: false,
+            subscription: 'sub_one',
+            quantity: 1,
+            parent: {
+              type: 'subscription_item_details',
+              subscription_item_details: { subscription: 'sub_one', proration: false },
+            },
+            pricing: { price_details: { price: 'price_foreign' } },
+          },
+        ],
+      });
+      await expect(sdk().retrieveCheckout(hosted.id)).rejects.toThrow();
+      expect(
+        (
+          await gatewayDb()
+            .select()
+            .from(billingOperations)
+            .where(eq(billingOperations.providerObjectRef, hosted.id))
+        )[0]?.initialInvoiceRef,
+      ).toBeNull();
+      client.listInvoiceLines = lines;
+    });
+
+    it('rejects a recovered provider session that outlives its immutable fiscal quote', async () => {
+      const fixture = await fiscalFixture();
+      if (!taxCheckoutAdapter) throw new Error('Expected fiscal fixture');
+      taxCheckoutAdapter.createCheckout = async () => {
+        throw new Error('Synthetic lost provider response');
+      };
+      await expect(
+        fixture.fiscalSdk.createCheckoutSession(
+          { ...checkout, taxQuote: fixture.quote },
+          { idempotencyKey: 'recover:quote-ceiling' },
+        ),
+      ).rejects.toThrow();
+      const params = {
+        idempotencyKey: 'recover:quote-ceiling',
+        providerCustomerId: checkout.providerCustomerId,
+        providerPriceId: checkout.providerPriceId,
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+      };
+      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      checkoutOperationReader = {
+        async read(input) {
+          return {
+            state: 'succeeded',
+            ...input,
+            checkout: {
+              id: 'cs_test_found',
+              url: 'https://example.invalid/recovered',
+              expiresAt: new Date(Date.parse(fixture.quote.quote.expiresAt) + 1).toISOString(),
+            },
+          };
+        },
+      };
+      await expect(sdk().retrieveCheckoutOperation(params)).rejects.toThrow();
+      const [operation] = await gatewayDb()
+        .select()
+        .from(billingOperations)
+        .where(eq(billingOperations.idempotencyKey, params.idempotencyKey));
+      expect(operation?.state).toBe('indeterminate');
+      expect(operation?.providerObjectRef).toBeNull();
+      checkoutOperationReader = {
+        async read(input) {
+          return {
+            state: 'succeeded',
+            ...input,
+            checkout: {
+              id: 'cs_test_found',
+              url: 'https://example.invalid/recovered',
+              expiresAt: fixture.quote.quote.expiresAt,
+            },
+          };
+        },
+      };
+      const recovered = await sdk().retrieveCheckoutOperation(params);
+      expect(recovered.state).toBe('succeeded');
+      expect(recovered.source.taxQuoteId).toBe(fixture.quote.quote.id);
+      if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
+      expect(recovered.checkout.url).toBeUndefined();
+    });
+
+    it('cannot overwrite completion or reacquired lease while a read-only provider lookup is in flight', async () => {
+      await fiscalFixture();
+      const customer = await requireBillingBinding(
+        gatewayDb(),
+        deployment,
+        owner,
+        'customer',
+        checkout.providerCustomerId,
+      );
+      const price = await requireBillingBinding(
+        gatewayDb(),
+        deployment,
+        owner,
+        'price',
+        checkout.providerPriceId,
+      );
+      const params = {
+        idempotencyKey: 'recover:race',
+        providerCustomerId: checkout.providerCustomerId,
+        providerPriceId: checkout.providerPriceId,
+        storeId: checkout.storeId,
+        planId: checkout.planId,
+      };
+      const input = {
+        operation: 'checkout' as const,
+        idempotencyKey: params.idempotencyKey,
+        requestDigest: 'a'.repeat(64),
+        customerBindingId: customer.id,
+        priceBindingId: price.id,
+      };
+      const claim = await claimBillingOperation(gatewayDb(), deployment, owner, input, time);
+      if (claim.kind !== 'claimed') throw new Error('Expected claim');
+      time = new Date(time.getTime() + 120_000);
+      let renewedToken = '';
+      checkoutOperationReader = {
+        async read(expected) {
+          const renewed = await claimBillingOperation(gatewayDb(), deployment, owner, input, time);
+          if (renewed.kind !== 'claimed') throw new Error('Expected renewed lease');
+          renewedToken = renewed.leaseToken;
+          return {
+            state: 'succeeded',
+            ...expected,
+            checkout: {
+              id: 'cs_test_discovered',
+              url: 'https://example.invalid/discovered',
+              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+            },
+          };
+        },
+      };
+      expect((await sdk().retrieveCheckoutOperation(params)).state).toBe('pending');
+      expect(
+        (
+          await gatewayDb()
+            .select()
+            .from(billingOperations)
+            .where(eq(billingOperations.id, claim.operation.id))
+        )[0]?.leaseToken,
+      ).toBe(renewedToken);
+      checkoutOperationReader = {
+        async read(expected) {
+          await gatewayDb().transaction((tx) =>
+            completeBillingOperation(
+              tx,
+              claim.operation,
+              renewedToken,
+              {
+                id: 'cs_test_original',
+                url: 'https://example.invalid/original',
+                expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              },
+              'cs_test_original',
+              time,
+            ),
+          );
+          return {
+            state: 'succeeded',
+            ...expected,
+            checkout: {
+              id: 'cs_test_discovered',
+              url: 'https://example.invalid/discovered',
+              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+            },
+          };
+        },
+      };
+      const recovered = await sdk().retrieveCheckoutOperation(params);
+      expect(recovered.state).toBe('succeeded');
+      if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
+      expect(recovered.checkout.id).toBe('cs_test_original');
+      expect(
+        (
+          await gatewayDb()
+            .select()
+            .from(billingOperations)
+            .where(eq(billingOperations.id, claim.operation.id))
+        )[0]?.providerObjectRef,
+      ).toBe('cs_test_original');
     });
   },
 );

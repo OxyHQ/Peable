@@ -63,6 +63,8 @@ export interface BillingCheckoutSession extends BillingHostedSession {
   id: string;
 }
 export interface BillingCheckoutObservation {
+  /** Immutable subscription_create invoice proven for this exact checkout. Discovery only, never paid authority. */
+  initialInvoiceId: string | null;
   id: string;
   status: 'open' | 'complete' | 'expired';
   storeId: string;
@@ -221,3 +223,27 @@ export interface BillingTaxQuote {
   };
   signature: { algorithm: 'Ed25519'; keyId: string; value: string };
 }
+
+/** Read-only recovery of one previously attempted recurring checkout. Neither
+ * absence nor uncertainty permits cancellation or another financial operation. */
+export interface RetrieveBillingCheckoutOperationParams {
+  idempotencyKey: string;
+  providerCustomerId: string;
+  providerPriceId: string;
+  storeId: string;
+  planId: string;
+}
+export interface BillingCheckoutOperationSource extends RetrieveBillingCheckoutOperationParams {
+  taxQuoteId: string | null;
+  merchantId: string;
+  appId: string;
+  mode: 'test' | 'live';
+  environment: 'development' | 'staging' | 'production';
+}
+export type BillingCheckoutOperationRecovery =
+  | { state: 'not_found' | 'pending' | 'indeterminate'; source: BillingCheckoutOperationSource }
+  | {
+      state: 'succeeded';
+      source: BillingCheckoutOperationSource;
+      checkout: { id: string; expiresAt: string; url?: string };
+    };

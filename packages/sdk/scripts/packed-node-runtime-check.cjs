@@ -22,6 +22,35 @@ globalThis.fetch = async (input, init = {}) => {
       status: 200,
     });
   }
+  if (url.pathname === '/v1/billing/checkout_operations/owned%3Akey') {
+    assert.equal(init.method, 'GET');
+    assert.equal(init.body, undefined);
+    assert.equal(init.headers['Idempotency-Key'], undefined);
+    assert.deepEqual(Object.fromEntries(url.searchParams), {
+      providerCustomerId: 'cus_fixture',
+      providerPriceId: 'price_fixture',
+      storeId: 'store:fixture',
+      planId: 'plan:fixture',
+    });
+    return new Response(
+      JSON.stringify({
+        state: 'indeterminate',
+        source: {
+          idempotencyKey: 'owned:key',
+          providerCustomerId: 'cus_fixture',
+          providerPriceId: 'price_fixture',
+          storeId: 'store:fixture',
+          planId: 'plan:fixture',
+          merchantId: 'merch_fixture',
+          appId: 'app_fixture',
+          environment: 'development',
+          mode: 'test',
+          taxQuoteId: 'quote_fixture',
+        },
+      }),
+      { status: 200 },
+    );
+  }
   if (url.pathname === '/v1/billing/subscriptions/sub_fixture%2Fowned/cancel_at_period_end') {
     assert.equal(init.headers['Idempotency-Key'], 'same-owned-action');
     return new Response(
@@ -50,7 +79,19 @@ globalThis.fetch = async (input, init = {}) => {
     ).cancelAtPeriodEnd,
     true,
   );
-  assert.equal(calls.length, 3); // Cached service token; no duplicate mint.
+  assert.equal(
+    (
+      await client.billing.retrieveCheckoutOperation({
+        idempotencyKey: 'owned:key',
+        providerCustomerId: 'cus_fixture',
+        providerPriceId: 'price_fixture',
+        storeId: 'store:fixture',
+        planId: 'plan:fixture',
+      })
+    ).state,
+    'indeterminate',
+  );
+  assert.equal(calls.length, 4); // Cached service token; no duplicate mint.
   const time = Math.floor(Date.now() / 1000);
   const raw = JSON.stringify({
     id: 'evt_fixture',

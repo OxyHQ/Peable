@@ -4,7 +4,7 @@ import {
 } from '../../services/billing/tax-checkout';
 import { canonicalBillingTaxQuote } from '@peable.to/shared-types';
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { z } from 'zod';
 import { findMerchantById } from '../merchants/merchantRepository';
@@ -514,4 +514,82 @@ export async function findBillingTaxCheckoutSnapshot(
   return row.taxCheckoutSnapshot === null
     ? null
     : billingTaxCheckoutSnapshotSchema.parse(row.taxCheckoutSnapshot);
+}
+
+export async function findOwnedBillingCheckoutOperationByKey(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  owner: BillingOwner,
+  key: string,
+) {
+  const [operation] = await db
+    .select()
+    .from(billingOperations)
+    .where(
+      and(
+        eq(billingOperations.provider, deployment.provider),
+        eq(billingOperations.platformAccountId, deployment.platformAccountId),
+        eq(billingOperations.livemode, deployment.livemode),
+        eq(billingOperations.merchantId, owner.merchantId),
+        eq(billingOperations.oxyAppId, owner.oxyAppId),
+        eq(billingOperations.environment, owner.environment),
+        eq(billingOperations.operation, 'checkout'),
+        eq(billingOperations.idempotencyKey, billingIdempotencyKey.parse(key)),
+      ),
+    );
+  return operation ?? null;
+}
+export async function pinBillingInitialInvoice(
+  db: DatabaseOrTransaction,
+  operation: BillingOperation,
+  invoiceId: string,
+) {
+  const [updated] = await db
+    .update(billingOperations)
+    .set({ initialInvoiceRef: invoiceId })
+    .where(and(eq(billingOperations.id, operation.id), isNull(billingOperations.initialInvoiceRef)))
+    .returning();
+  if (updated) return invoiceId;
+  const [existing] = await db
+    .select()
+    .from(billingOperations)
+    .where(eq(billingOperations.id, operation.id));
+  if (existing?.initialInvoiceRef !== invoiceId) throw new BillingError('identity_conflict');
+  return invoiceId;
+}
+
+/** Read-only provider discovery can finish an existing attempt; never claims or
+ * renews a lease, creates a session, or changes another completed result. */
+export async function completeRecoveredBillingCheckout(
+  db: DatabaseOrTransaction,
+  operation: BillingOperation,
+  result: unknown,
+  now: Date,
+) {
+  const parsed = parseBillingResult('checkout', result);
+  if (!('id' in parsed) || typeof parsed.id !== 'string' || !('expiresAt' in parsed))
+    throw new BillingError('invalid_provider_response');
+  const [updated] = await db
+    .update(billingOperations)
+    .set({
+      state: 'succeeded',
+      result: parsed,
+      providerObjectRef: parsed.id,
+      resultExpiresAt: new Date(parsed.expiresAt),
+      completedAt: now,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    })
+    .where(
+      and(
+        eq(billingOperations.id, operation.id),
+        eq(billingOperations.state, operation.state),
+        eq(billingOperations.requestDigest, operation.requestDigest),
+        operation.leaseToken === null
+          ? isNull(billingOperations.leaseToken)
+          : eq(billingOperations.leaseToken, operation.leaseToken),
+      ),
+    )
+    .returning();
+  return updated ?? null;
 }

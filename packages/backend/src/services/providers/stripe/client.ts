@@ -372,6 +372,15 @@ export function stripeBillingClient() {
         { limit: 100, ...(startingAfter ? { starting_after: startingAfter } : {}) },
         requestOptions,
       ),
+    listSubscriptionInvoices: (ref: string, startingAfter?: string) =>
+      getStripeClient().invoices.list(
+        {
+          subscription: ref,
+          limit: 100,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        },
+        requestOptions,
+      ),
     retrieveInvoice: (ref: string) => getStripeClient().invoices.retrieve(ref, {}, requestOptions),
     listInvoiceLines: (ref: string) =>
       getStripeClient().invoices.listLineItems(ref, { limit: 2 }, requestOptions),
