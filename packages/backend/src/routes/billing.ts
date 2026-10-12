@@ -8,6 +8,7 @@ import {
   BillingError,
   billingIdempotencyKey,
   checkoutSchema,
+  checkoutOperationRequestSchema,
   ensureCustomerSchema,
   portalSchema,
   type BillingOwner,
@@ -92,6 +93,16 @@ export function createBillingRouter(deps: {
     ...write,
     handle((service, owner, req) =>
       service.createPortalSession(owner, portalSchema.parse(req.body), key(req)),
+    ),
+  );
+  router.get(
+    '/v1/billing/checkout_operations/:key',
+    ...read,
+    handle((service, owner, req) =>
+      service.retrieveCheckoutOperation(
+        owner,
+        checkoutOperationRequestSchema.parse({ ...req.query, idempotencyKey: req.params.key }),
+      ),
     ),
   );
   router.get(

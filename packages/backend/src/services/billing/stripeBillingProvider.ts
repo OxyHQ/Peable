@@ -31,6 +31,7 @@ export interface StripeBillingClient {
   listCheckoutsForSubscription(ref: string): Promise<unknown>;
   retrieveTaxSettings?(): Promise<unknown>;
   listTaxRegistrations?(startingAfter?: string): Promise<unknown>;
+  listSubscriptionInvoices?(ref: string, startingAfter?: string): Promise<unknown>;
   retrieveInvoice?(ref: string): Promise<unknown>;
   listInvoiceLines?(ref: string): Promise<unknown>;
   listInvoicePayments?(ref: string): Promise<unknown>;
@@ -151,6 +152,7 @@ export function createStripeBillingProvider(
       return { providerCustomerId: customer.id, livemode: customer.livemode };
     },
     async createCheckoutSession(input, key) {
+      if (input.taxQuote !== undefined) throw new BillingError('not_found', 404);
       const successUrl = new URL(input.returnUrl);
       successUrl.searchParams.set('billing', 'complete');
       const cancelUrl = new URL(input.returnUrl);

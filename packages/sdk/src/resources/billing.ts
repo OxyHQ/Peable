@@ -2,6 +2,8 @@ import { createPublicKey, verify } from 'node:crypto';
 import { canonicalBillingAuthority, canonicalBillingTaxQuote } from '@peable.to/shared-types';
 import type {
   BillingTaxQuote,
+  RetrieveBillingCheckoutOperationParams,
+  BillingCheckoutOperationRecovery,
   CreateBillingTaxQuoteParams,
   BillingFinalInvoiceAuthority,
   BillingCustomer,
@@ -35,6 +37,9 @@ export class BillingResource {
       idempotencyKey: options.idempotencyKey,
     });
   }
+  /** Pass the complete signed taxQuote to opt into fiscal checkout. Peable validates
+   * its pinned authority and retains immutable evidence before creating a session.
+   * Existing callers without a quote remain on their explicitly enabled legacy path. */
   createCheckoutSession(
     params: CreateBillingCheckoutParams,
     options: BillingRequestOptions,
@@ -55,6 +60,18 @@ export class BillingResource {
   }
   retrieveCheckout(ref: string): Promise<BillingCheckoutObservation> {
     return this.client.request('GET', `/v1/billing/checkout_sessions/${encodeURIComponent(ref)}`);
+  }
+  /** Reads existing operation state only, even after quote/session expiry.
+   * Missing/pending/indeterminate never authorizes another create or cancellation. */
+  retrieveCheckoutOperation(
+    params: RetrieveBillingCheckoutOperationParams,
+  ): Promise<BillingCheckoutOperationRecovery> {
+    const { idempotencyKey, ...query } = params;
+    return this.client.request(
+      'GET',
+      `/v1/billing/checkout_operations/${encodeURIComponent(idempotencyKey)}`,
+      { query },
+    );
   }
   async createTaxQuote(params: CreateBillingTaxQuoteParams): Promise<BillingTaxQuote> {
     if (!this.taxQuoteAuthorityKeys || Object.keys(this.taxQuoteAuthorityKeys).length === 0)

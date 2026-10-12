@@ -1,8 +1,8 @@
 -- oxy:deploy-phase=pre
 --
 -- Genesis: the whole Peable schema, created from zero. Additive by
--- definition — there is nothing for it to drop, rename or narrow, and the
--- previous image (which reads Mongo) is unaffected by every statement here.
+-- definition — there is nothing for it to drop, rename or narrow, so no
+-- previous image is affected by any statement here.
 --
 -- Applied with --phase=all on a from-zero database: `pre` and `post` describe
 -- the two sides of a rolling deploy, and a database created seconds ago has no

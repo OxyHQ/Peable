@@ -77,6 +77,27 @@ const session = await peable.checkout.sessions.create({
 return redirect(session.url);
 ```
 
+### Without a key pair: `tokenProvider`
+
+A workload that already authenticates to Oxy without a key pair — an ECS task
+role attested through Oxy workload identity, say — passes a `tokenProvider`
+instead of `publicKey` + `secret` (SDK 0.2.5-oxy-one.0 and later). The Gateway
+resolves the merchant from the service token's application id and environment,
+never from how the token was minted, so the same merchant is served either way.
+
+```ts
+const peable = new Peable({
+  tokenProvider: {
+    getToken: () => myOxyServiceToken(), // a current Oxy service token
+    invalidate: () => dropCachedOxyServiceToken(), // called on a Gateway 401
+  },
+});
+```
+
+`invalidate()` runs when the Gateway answers 401, before the single retry, so the
+next `getToken()` must mint afresh. Pass one or the other: `new Peable` refuses
+both, and refuses neither.
+
 That's the whole happy path: create → redirect → the hosted page shows amount +
 your merchant identity + a "Pay with Peable" deep link/QR + live status, and
 sends the buyer to `successUrl` on settlement. You confirm fulfillment from the

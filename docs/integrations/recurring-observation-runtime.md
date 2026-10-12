@@ -138,3 +138,45 @@ transport are provider-independent; the Faircoin recurring payment adapter is
 still unfinished. The approved issuer legal name is The Oxy Collective, Inc.;
 its verified fiscal identifier and registrations remain configuration inputs,
 not invented identifiers in an invoice fixture.
+
+## Draft signed quote to checkout linkage
+
+`billing.createCheckoutSession` accepts an optional complete `taxQuote` from
+`billing.createTaxQuote`. Peable revalidates its pinned signature, owner/app,
+store, plan, mode, environment, current approved product and location, coverage,
+price-inclusive totals and expiry. The trusted `taxCheckoutAdapters` registry
+resolves the exact provider price to an offer/version and creates a checkout
+that applies the quote. `taxCheckoutAdapterRef` requires the quote and invoice
+authority adapters at boot. No concrete fiscal checkout adapter is installed by
+default; the ordinary Stripe checkout refuses this input rather than dropping it.
+
+A cohort may set `requireTaxQuote: true`; such a cohort cannot fall back to
+legacy checkout. The default remains false for existing approved integrations.
+This is an additive source contract; package versions have not been bumped or
+published for this draft.
+
+Generated migration `0025` is pre-deploy and nullable for the outgoing image.
+The durable checkout claim stores the immutable signed quote and offer snapshot
+before remote dispatch, alongside the existing customer/price bindings. One
+quote ID per merchant/deployment can claim only one operation, even with
+concurrent different keys. Existing idempotency, lease, bounded recovery and
+indeterminate-outcome handling still apply; expiry is rechecked before dispatch.
+A lost result never permits a replacement quote under the original key.
+
+Final invoice authority receives a detached copy of this stored evidence and
+must match its quote ID, seller/issuer, currency, gross/net/tax, location/rate
+references and offer/version. Current product changes do not rewrite history.
+Only a provider-proven `subscription_create` invoice can use the checkout quote.
+Renewal periods require their own fresh fiscal quote lifecycle and are rejected
+here; this change does not invent renewal tax policy or reuse an expired quote
+for a new period. Historical/operator-imported subscriptions with no fiscal
+checkout retain their existing authority path.
+
+Remaining activation gates include the actual provider adapter capable of
+applying these exact amounts and expiry, reviewed seller/remitter and explicit
+country/tax-service coverage, fresh renewal evidence, FAIR/USD authority,
+recovery acceptance and consumer adoption. The Oxy first-checkout HTTP unit
+remains separate. Tests use synthetic downstream authorities and a disposable
+PostgreSQL database; they certify the SDK/HTTP/SQL linkage, not live fiscal or
+payment processing. Commerce stays disabled pending independent review and
+those gates.

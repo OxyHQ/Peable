@@ -176,6 +176,20 @@
       "when": 1791399725614,
       "tag": "0024_premium_killmonger",
       "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1791727155933,
+      "tag": "0025_freezing_moonstone",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1791795712736,
+      "tag": "0026_woozy_wither",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,5 @@
+-- oxy:deploy-phase=pre
+ALTER TABLE "billing_operations" ADD COLUMN "tax_quote_ref" text;--> statement-breakpoint
+ALTER TABLE "billing_operations" ADD COLUMN "tax_checkout_snapshot" jsonb;--> statement-breakpoint
+CREATE UNIQUE INDEX "billing_operations_tax_quote_key" ON "billing_operations" USING btree ("provider","platform_account_id","livemode","merchant_id","tax_quote_ref") WHERE "billing_operations"."tax_quote_ref" is not null;--> statement-breakpoint
+ALTER TABLE "billing_operations" ADD CONSTRAINT "billing_operations_tax_quote_shape_check" CHECK (("billing_operations"."tax_quote_ref" is null and "billing_operations"."tax_checkout_snapshot" is null) or ("billing_operations"."operation" = 'checkout' and "billing_operations"."tax_quote_ref" is not null and "billing_operations"."tax_checkout_snapshot" is not null and jsonb_typeof("billing_operations"."tax_checkout_snapshot") = 'object' and coalesce("billing_operations"."tax_checkout_snapshot"->'taxQuote'->'quote'->>'id' = "billing_operations"."tax_quote_ref", false)));

@@ -1,3 +1,4 @@
+import type { BillingTaxCheckoutSnapshot } from './tax-checkout';
 import { createPublicKey, verify } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -89,6 +90,7 @@ export interface FinalInvoiceAuthorityReader {
     owner: BillingOwner;
     merchantPublicId: string;
     invoice: BillingPaidInvoice;
+    taxCheckoutSnapshot?: BillingTaxCheckoutSnapshot;
   }): Promise<unknown>;
   /** Pinned issuer verification keys. No key is accepted from a response. */
   verificationKeys: Readonly<Record<string, string>>;

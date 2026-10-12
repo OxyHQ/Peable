@@ -5,7 +5,12 @@ import {
   type BillingTaxQuote,
   type CreateBillingTaxQuoteParams,
 } from '@peable.to/shared-types';
-import { billingReference, BillingError, type BillingOwner } from './contracts';
+import {
+  billingReference,
+  billingTaxQuoteSchema,
+  BillingError,
+  type BillingOwner,
+} from './contracts';
 
 const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const timestamp = z.string().datetime();
@@ -19,7 +24,7 @@ export const billingTaxQuoteRequestSchema = z
     customerLocationEvidenceId: billingReference,
   })
   .strict();
-const productSchema = z
+export const billingTaxProductSchema = z
   .object({
     configurationApproved: z.literal(true),
     planId: billingReference,
@@ -38,7 +43,7 @@ const productSchema = z
     coverageEvidenceId: billingReference,
   })
   .strict();
-const locationSchema = z
+export const billingCustomerLocationSchema = z
   .object({
     id: billingReference,
     storeId: billingReference,
@@ -50,50 +55,8 @@ const locationSchema = z
     expiresAt: timestamp,
   })
   .strict();
-export const billingTaxQuoteSchema = z
-  .object({
-    schemaVersion: z.literal(1),
-    source: z
-      .object({
-        merchantId: billingReference,
-        appId: billingReference,
-        storeId: billingReference,
-        planId: billingReference,
-        mode,
-        environment,
-      })
-      .strict(),
-    quote: z
-      .object({
-        id: billingReference,
-        currency: z.string().regex(/^[A-Z]{3}$/),
-        grossMinorUnits: amount,
-        netMinorUnits: amount,
-        taxMinorUnits: amount,
-        taxTreatment: z.enum(['inclusive', 'exclusive']),
-        sellerId: billingReference,
-        invoiceIssuerId: billingReference,
-        taxRemitterId: billingReference,
-        taxServiceRef: billingReference,
-        country,
-        coverageEvidenceId: billingReference,
-        taxRateEvidenceId: billingReference,
-        customerLocationEvidenceId: billingReference,
-        quotedAt: timestamp,
-        expiresAt: timestamp,
-      })
-      .strict(),
-    signature: z
-      .object({
-        algorithm: z.literal('Ed25519'),
-        keyId: billingReference,
-        value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-      })
-      .strict(),
-  })
-  .strict();
-export type BillingTaxProductConfiguration = z.infer<typeof productSchema>;
-export type BillingVerifiedCustomerLocation = z.infer<typeof locationSchema>;
+export type BillingTaxProductConfiguration = z.infer<typeof billingTaxProductSchema>;
+export type BillingVerifiedCustomerLocation = z.infer<typeof billingCustomerLocationSchema>;
 export interface BillingTaxQuoteCalculator {
   /** Operator-reviewed product, issuer/remitter and explicit country coverage. */
   resolveProduct(owner: BillingOwner, planId: string): Promise<unknown>;
@@ -118,8 +81,10 @@ export async function createVerifiedBillingTaxQuote(
   now: () => Date = () => new Date(),
 ): Promise<BillingTaxQuote> {
   const request = billingTaxQuoteRequestSchema.parse(raw);
-  const product = productSchema.parse(await calculator.resolveProduct(owner, request.planId));
-  const location = locationSchema.parse(
+  const product = billingTaxProductSchema.parse(
+    await calculator.resolveProduct(owner, request.planId),
+  );
+  const location = billingCustomerLocationSchema.parse(
     await calculator.readCustomerLocation(owner, request.customerLocationEvidenceId),
   );
   const clock = now();
@@ -147,8 +112,30 @@ export async function createVerifiedBillingTaxQuote(
   const authority = billingTaxQuoteSchema.parse(
     await calculator.calculate(structuredClone({ source, product, location })),
   );
+  return verifyBillingTaxQuote(
+    authority,
+    { source, product, location },
+    calculator.verificationKeys,
+    now(),
+  );
+}
+
+/** Revalidate a supplied signed quote against current trusted product and location;
+ * this does not ask a supplier to mint a replacement quote. */
+export function verifyBillingTaxQuote(
+  raw: unknown,
+  expected: {
+    source: BillingTaxQuote['source'];
+    product: BillingTaxProductConfiguration;
+    location: BillingVerifiedCustomerLocation;
+  },
+  keys: Readonly<Record<string, string>>,
+  completion: Date,
+): BillingTaxQuote {
+  const authority = billingTaxQuoteSchema.parse(raw);
+  const { source, product, location } = expected;
   const quote = authority.quote;
-  const completion = now();
+
   if (
     JSON.stringify(authority.source) !==
       JSON.stringify(billingTaxQuoteSchema.shape.source.parse(source)) ||
@@ -170,7 +157,9 @@ export async function createVerifiedBillingTaxQuote(
     Date.parse(quote.expiresAt) <= Date.parse(quote.quotedAt)
   )
     throw new BillingError('invalid_provider_response', 502);
-  const pinned = calculator.verificationKeys[authority.signature.keyId];
+  const pinned = Object.hasOwn(keys, authority.signature.keyId)
+    ? keys[authority.signature.keyId]
+    : undefined;
   if (!pinned) throw new BillingError('invalid_provider_response', 502);
   try {
     const key = createPublicKey(pinned);

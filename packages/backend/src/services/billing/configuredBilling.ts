@@ -1,3 +1,4 @@
+import type { BillingTaxCheckoutAdapter } from './tax-checkout';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
 import { createPublicKey } from 'node:crypto';
@@ -13,7 +14,7 @@ import {
   billingReference,
   BillingError,
 } from './contracts';
-import { createBillingService } from './billingService';
+import { createBillingService, type BillingCheckoutOperationReader } from './billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from './stripeBillingProvider';
 import { createVerifiedBillingBindings } from './verifiedBindings';
 import {
@@ -43,10 +44,16 @@ const cohortConfiguration = z
       .optional(),
     observationsEnabled: z.boolean().default(false),
     taxQuoteAdapterRef: billingReference.optional(),
+    taxCheckoutAdapterRef: billingReference.optional(),
     finalInvoiceAuthorityAdapterRef: billingReference.optional(),
+    checkoutOperationReaderRef: billingReference.optional(),
     portalConfigurationRef: z.string().regex(/^bpc_[A-Za-z0-9]+$/),
     cohorts: z
-      .array(billingOwnerSchema.extend({ evidenceRef: billingReference }).strict())
+      .array(
+        billingOwnerSchema
+          .extend({ evidenceRef: billingReference, requireTaxQuote: z.boolean().default(false) })
+          .strict(),
+      )
       .min(1)
       .max(20),
   })
@@ -54,7 +61,9 @@ const cohortConfiguration = z
 /** Only trusted deployment composition registers adapters. Configuration selects
  * an existing name; it cannot load arbitrary modules, URLs or provider secrets. */
 export interface BillingRuntimeAdapters {
+  checkoutOperationReaders?: Readonly<Record<string, BillingCheckoutOperationReader>>;
   faircoinExecutors?: Readonly<Record<string, FaircoinRenewalExecutor>>;
+  taxCheckoutAdapters?: Readonly<Record<string, BillingTaxCheckoutAdapter>>;
   taxQuoteCalculators?: Readonly<Record<string, BillingTaxQuoteCalculator>>;
   finalInvoiceAuthorities?: Readonly<Record<string, FinalInvoiceAuthorityReader>>;
 }
@@ -113,6 +122,13 @@ export async function configureBillingRuntime(
     executor && parsed.faircoinActors
       ? { db, executor, actors: structuredClone(parsed.faircoinActors) }
       : undefined;
+  const checkoutOperationReader =
+    parsed.checkoutOperationReaderRef &&
+    Object.hasOwn(adapters.checkoutOperationReaders ?? {}, parsed.checkoutOperationReaderRef)
+      ? adapters.checkoutOperationReaders?.[parsed.checkoutOperationReaderRef]
+      : undefined;
+  if (parsed.checkoutOperationReaderRef && !checkoutOperationReader)
+    throw new Error('Configured checkout operation reader is unavailable');
   const selectedTax =
     parsed.taxQuoteAdapterRef &&
     Object.hasOwn(adapters.taxQuoteCalculators ?? {}, parsed.taxQuoteAdapterRef)
@@ -128,6 +144,27 @@ export async function configureBillingRuntime(
     (parsed.finalInvoiceAuthorityAdapterRef && !selectedInvoice)
   )
     throw new Error('Configured fiscal adapter is unavailable');
+  const selectedCheckout =
+    parsed.taxCheckoutAdapterRef &&
+    Object.hasOwn(adapters.taxCheckoutAdapters ?? {}, parsed.taxCheckoutAdapterRef)
+      ? adapters.taxCheckoutAdapters?.[parsed.taxCheckoutAdapterRef]
+      : undefined;
+  if (parsed.taxCheckoutAdapterRef && (!selectedCheckout || !selectedTax || !selectedInvoice))
+    throw new Error('Fiscal checkout requires configured checkout, quote and invoice adapters');
+  if (parsed.cohorts.some((cohort) => cohort.requireTaxQuote) && !selectedCheckout)
+    throw new Error('Quote-required cohort needs a fiscal checkout adapter');
+  const taxCheckoutAdapter = selectedCheckout
+    ? {
+        resolveOffer: (
+          owner: Parameters<BillingTaxCheckoutAdapter['resolveOffer']>[0],
+          price: string,
+        ) => selectedCheckout.resolveOffer(owner, price),
+        createCheckout: (
+          input: Parameters<BillingTaxCheckoutAdapter['createCheckout']>[0],
+          key: string,
+        ) => selectedCheckout.createCheckout(input, key),
+      }
+    : undefined;
   const taxQuoteCalculator = selectedTax
     ? {
         ...selectedTax,
@@ -175,6 +212,8 @@ export async function configureBillingRuntime(
     cohorts,
     verifiedBindings,
     taxQuoteCalculator,
+    checkoutOperationReader,
+    taxCheckoutAdapter,
     finalInvoiceAuthority,
   });
   // No recurring queue access until the reviewed cohort explicitly opts in.

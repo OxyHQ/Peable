@@ -1,5 +1,10 @@
+import {
+  billingTaxCheckoutSnapshotSchema,
+  type BillingTaxCheckoutSnapshot,
+} from '../../services/billing/tax-checkout';
+import { canonicalBillingTaxQuote } from '@peable.to/shared-types';
 import { createHash } from 'node:crypto';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { z } from 'zod';
 import { findMerchantById } from '../merchants/merchantRepository';
@@ -36,6 +41,7 @@ export interface ClaimBillingInput {
   operation: BillingOperationKind;
   idempotencyKey: string;
   requestDigest: string;
+  taxCheckoutSnapshot?: BillingTaxCheckoutSnapshot;
   subjectClaimRef?: string;
   customerBindingId?: string;
   priceBindingId?: string;
@@ -59,6 +65,7 @@ const claimSchema = z
     operation: z.enum(BILLING_OPERATIONS),
     idempotencyKey: billingIdempotencyKey,
     requestDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    taxCheckoutSnapshot: billingTaxCheckoutSnapshotSchema.optional(),
     subjectClaimRef: billingReference.optional(),
     customerBindingId: billingReference.optional(),
     priceBindingId: billingReference.optional(),
@@ -67,6 +74,10 @@ const claimSchema = z
   .refine(
     (value) => (value.operation === 'ensure_customer') === (value.subjectClaimRef !== undefined),
     'Customer claim requires store',
+  )
+  .refine(
+    (value) => value.taxCheckoutSnapshot === undefined || value.operation === 'checkout',
+    'Fiscal evidence requires checkout',
   )
   .refine(
     (value) =>
@@ -110,7 +121,7 @@ async function validateOwner(
     (owner.environment === 'production') !== deployment.livemode
   )
     throw new BillingError('identity_conflict');
-  return { deployment, owner };
+  return { deployment, owner, merchantPublicId: merchant.publicId };
 }
 function bindingIdentity(deployment: BillingDeployment, kind: BillingBinding['kind'], ref: string) {
   return and(
@@ -222,23 +233,24 @@ export async function claimBillingOperation(
   input: ClaimBillingInput,
   now = new Date(),
 ): Promise<BillingClaim> {
-  const { deployment, owner } = await validateOwner(db, deploymentInput, ownerInput);
+  const { deployment, owner, merchantPublicId } = await validateOwner(
+    db,
+    deploymentInput,
+    ownerInput,
+  );
   const parsed = claimSchema.parse(input);
   return db.transaction(async (tx) => {
     if (parsed.operation === 'checkout') {
-      // claimSchema's refine already requires both for a checkout; this only
-      // narrows them for the compiler.
-      const { customerBindingId, priceBindingId } = parsed;
-      if (!customerBindingId || !priceBindingId)
-        throw new Error('Checkout requires exact customer and price bindings');
+      if (!parsed.customerBindingId || !parsed.priceBindingId)
+        throw new BillingError('identity_conflict');
       const [customer] = await tx
         .select()
         .from(billingObjectBindings)
-        .where(eq(billingObjectBindings.id, customerBindingId));
+        .where(eq(billingObjectBindings.id, parsed.customerBindingId));
       const [price] = await tx
         .select()
         .from(billingObjectBindings)
-        .where(eq(billingObjectBindings.id, priceBindingId));
+        .where(eq(billingObjectBindings.id, parsed.priceBindingId));
       if (
         !customer ||
         !price ||
@@ -248,6 +260,37 @@ export async function claimBillingOperation(
         !sameOwner(price, owner) ||
         !sameDeployment(customer, deployment) ||
         !sameDeployment(price, deployment)
+      )
+        throw new BillingError('identity_conflict');
+    }
+    if (parsed.taxCheckoutSnapshot) {
+      const snapshot = parsed.taxCheckoutSnapshot;
+      const source = snapshot.taxQuote.source;
+      const customer = await requireBillingBindingById(
+        tx,
+        deployment,
+        owner,
+        'customer',
+        parsed.customerBindingId ?? '',
+      );
+      const price = await requireBillingBindingById(
+        tx,
+        deployment,
+        owner,
+        'price',
+        parsed.priceBindingId ?? '',
+      );
+      if (
+        source.merchantId !== merchantPublicId ||
+        source.appId !== owner.oxyAppId ||
+        source.environment !== owner.environment ||
+        (source.mode === 'live') !== deployment.livemode ||
+        source.storeId !== customer.externalSubjectRef ||
+        source.planId !== price.planRef ||
+        snapshot.offer.providerPriceId !== price.providerRef ||
+        snapshot.offer.planId !== price.planRef ||
+        snapshot.quoteDigest !==
+          createHash('sha256').update(canonicalBillingTaxQuote(snapshot.taxQuote)).digest('hex')
       )
         throw new BillingError('identity_conflict');
     }
@@ -270,6 +313,8 @@ export async function claimBillingOperation(
         ...deployment,
         ...owner,
         ...parsed,
+        taxQuoteRef: parsed.taxCheckoutSnapshot?.taxQuote.quote.id ?? null,
+        taxCheckoutSnapshot: parsed.taxCheckoutSnapshot ?? null,
         subjectClaimRef: parsed.subjectClaimRef ?? null,
         customerBindingId: parsed.customerBindingId ?? null,
         priceBindingId: parsed.priceBindingId ?? null,
@@ -300,6 +345,12 @@ export async function claimBillingOperation(
       !existing ||
       !sameOwner(existing, owner) ||
       existing.operation !== parsed.operation ||
+      existing.taxQuoteRef !== (parsed.taxCheckoutSnapshot?.taxQuote.quote.id ?? null) ||
+      JSON.stringify(
+        existing.taxCheckoutSnapshot === null
+          ? null
+          : billingTaxCheckoutSnapshotSchema.parse(existing.taxCheckoutSnapshot),
+      ) !== JSON.stringify(parsed.taxCheckoutSnapshot ?? null) ||
       (existing.requestDigest !== parsed.requestDigest &&
         !(existing.operation === 'ensure_customer' && existing.state === 'succeeded')) ||
       existing.subjectClaimRef !== (parsed.subjectClaimRef ?? null) ||
@@ -439,4 +490,106 @@ export async function requireBillingBindingById(
   if (!row || row.kind !== kind || !sameOwner(row, owner) || !sameDeployment(row, deployment))
     throw new BillingError('identity_conflict');
   return row;
+}
+
+/** Subscription evidence must identify the exact locally completed checkout. */
+export async function findBillingTaxCheckoutSnapshot(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  owner: BillingOwner,
+  operationId: string,
+): Promise<BillingTaxCheckoutSnapshot | null> {
+  const [row] = await db
+    .select()
+    .from(billingOperations)
+    .where(eq(billingOperations.id, operationId));
+  if (!row) return null; // Explicit compatibility for operator-imported legacy bindings.
+  if (
+    !sameOwner(row, owner) ||
+    !sameDeployment(row, deployment) ||
+    row.operation !== 'checkout' ||
+    row.state !== 'succeeded'
+  )
+    throw new BillingError('identity_conflict');
+  return row.taxCheckoutSnapshot === null
+    ? null
+    : billingTaxCheckoutSnapshotSchema.parse(row.taxCheckoutSnapshot);
+}
+
+export async function findOwnedBillingCheckoutOperationByKey(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  owner: BillingOwner,
+  key: string,
+) {
+  const [operation] = await db
+    .select()
+    .from(billingOperations)
+    .where(
+      and(
+        eq(billingOperations.provider, deployment.provider),
+        eq(billingOperations.platformAccountId, deployment.platformAccountId),
+        eq(billingOperations.livemode, deployment.livemode),
+        eq(billingOperations.merchantId, owner.merchantId),
+        eq(billingOperations.oxyAppId, owner.oxyAppId),
+        eq(billingOperations.environment, owner.environment),
+        eq(billingOperations.operation, 'checkout'),
+        eq(billingOperations.idempotencyKey, billingIdempotencyKey.parse(key)),
+      ),
+    );
+  return operation ?? null;
+}
+export async function pinBillingInitialInvoice(
+  db: DatabaseOrTransaction,
+  operation: BillingOperation,
+  invoiceId: string,
+) {
+  const [updated] = await db
+    .update(billingOperations)
+    .set({ initialInvoiceRef: invoiceId })
+    .where(and(eq(billingOperations.id, operation.id), isNull(billingOperations.initialInvoiceRef)))
+    .returning();
+  if (updated) return invoiceId;
+  const [existing] = await db
+    .select()
+    .from(billingOperations)
+    .where(eq(billingOperations.id, operation.id));
+  if (existing?.initialInvoiceRef !== invoiceId) throw new BillingError('identity_conflict');
+  return invoiceId;
+}
+
+/** Read-only provider discovery can finish an existing attempt; never claims or
+ * renews a lease, creates a session, or changes another completed result. */
+export async function completeRecoveredBillingCheckout(
+  db: DatabaseOrTransaction,
+  operation: BillingOperation,
+  result: unknown,
+  now: Date,
+) {
+  const parsed = parseBillingResult('checkout', result);
+  if (!('id' in parsed) || typeof parsed.id !== 'string' || !('expiresAt' in parsed))
+    throw new BillingError('invalid_provider_response');
+  const [updated] = await db
+    .update(billingOperations)
+    .set({
+      state: 'succeeded',
+      result: parsed,
+      providerObjectRef: parsed.id,
+      resultExpiresAt: new Date(parsed.expiresAt),
+      completedAt: now,
+      leaseToken: null,
+      leaseExpiresAt: null,
+    })
+    .where(
+      and(
+        eq(billingOperations.id, operation.id),
+        eq(billingOperations.state, operation.state),
+        eq(billingOperations.requestDigest, operation.requestDigest),
+        operation.leaseToken === null
+          ? isNull(billingOperations.leaseToken)
+          : eq(billingOperations.leaseToken, operation.leaseToken),
+      ),
+    )
+    .returning();
+  return updated ?? null;
 }

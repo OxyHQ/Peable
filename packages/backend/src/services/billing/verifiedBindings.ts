@@ -4,6 +4,7 @@ import type { Database } from '../../db/postgres';
 import {
   bindBillingObject,
   findBillingCheckoutOperation,
+  pinBillingInitialInvoice,
   requireBillingBinding,
   requireBillingBindingById,
 } from '../../db/billing/billingRepository';
@@ -98,6 +99,70 @@ export function createVerifiedBillingBindings(options: {
       return binding;
     });
   }
+  async function discoverInitialInvoice(
+    operation: import('../../db/billing/billingRepository').BillingOperation,
+    subscriptionRef: string,
+    customerRef: string,
+    priceRef: string,
+  ) {
+    if (operation.initialInvoiceRef) return operation.initialInvoiceRef;
+    if (!client.listSubscriptionInvoices || !client.listInvoiceLines) return null;
+    const invoiceSchema = z.object({
+      id: z.string().regex(/^in_[A-Za-z0-9]+$/),
+      customer: z.literal(customerRef),
+      livemode: z.literal(deployment.livemode),
+      billing_reason: z.string(),
+      parent: z.object({
+        type: z.literal('subscription_details'),
+        subscription_details: z.object({ subscription: z.literal(subscriptionRef) }),
+      }),
+    });
+    const matches: string[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    for (let pageIndex = 0; pageIndex < 100; pageIndex++) {
+      const page = z
+        .object({ has_more: z.boolean(), data: z.array(invoiceSchema).max(100) })
+        .parse(await client.listSubscriptionInvoices(subscriptionRef, cursor));
+      for (const invoice of page.data) {
+        if (seen.has(invoice.id)) throw new BillingError('reconciliation_required');
+        seen.add(invoice.id);
+        if (invoice.billing_reason === 'subscription_create') matches.push(invoice.id);
+      }
+      if (!page.has_more) {
+        if (matches.length !== 1) return null;
+        const invoiceId = matches[0];
+        if (!invoiceId) return null;
+        z.object({
+          has_more: z.literal(false),
+          data: z
+            .array(
+              z.object({
+                id: billingReference,
+                invoice: z.literal(invoiceId),
+                livemode: z.literal(deployment.livemode),
+                subscription: z.literal(subscriptionRef),
+                quantity: z.literal(1),
+                parent: z.object({
+                  type: z.literal('subscription_item_details'),
+                  subscription_item_details: z.object({
+                    subscription: z.literal(subscriptionRef),
+                    proration: z.literal(false),
+                  }),
+                }),
+                pricing: z.object({ price_details: z.object({ price: z.literal(priceRef) }) }),
+              }),
+            )
+            .length(1),
+        }).parse(await client.listInvoiceLines(invoiceId));
+        return pinBillingInitialInvoice(db, operation, invoiceId);
+      }
+      const last = page.data.at(-1);
+      if (!last || last.id === cursor) throw new BillingError('reconciliation_required');
+      cursor = last.id;
+    }
+    throw new BillingError('reconciliation_required');
+  }
   async function retrieveCheckout(owner: BillingOwner, checkoutRef: string) {
     await authorize(owner);
     z.string()
@@ -174,6 +239,14 @@ export function createVerifiedBillingBindings(options: {
       planId: price.planRef,
       providerCustomerId: customer.providerRef,
       providerPriceId: price.providerRef,
+      initialInvoiceId: snapshot
+        ? await discoverInitialInvoice(
+            operation,
+            snapshot.providerSubscriptionId,
+            customer.providerRef,
+            price.providerRef,
+          )
+        : null,
       subscription: snapshot
         ? { ...snapshot, storeId: customer.externalSubjectRef, planId: price.planRef }
         : null,
@@ -255,6 +328,45 @@ export function createVerifiedBillingBindings(options: {
           },
         );
       return value;
+    },
+    /** A checkout quote authorizes the initial invoice only. Subsequent periods
+     * require a separate fresh quote lifecycle, which is intentionally unavailable. */
+    async verifyInitialInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
+      await authorize(owner);
+      const binding = await requireBillingBinding(
+        db,
+        deployment,
+        owner,
+        'subscription',
+        subscriptionRef,
+      );
+      if (!client.retrieveInvoice) throw new BillingError('not_found', 404);
+      const invoice = z
+        .object({
+          id: z.literal(invoiceRef),
+          customer: z.string(),
+          livemode: z.literal(deployment.livemode),
+          billing_reason: z.literal('subscription_create'),
+          parent: z.object({
+            type: z.literal('subscription_details'),
+            subscription_details: z.object({ subscription: z.literal(subscriptionRef) }),
+          }),
+        })
+        .safeParse(await client.retrieveInvoice(invoiceRef));
+      if (
+        !invoice.success ||
+        invoice.data.customer !==
+          (
+            await requireBillingBindingById(
+              db,
+              deployment,
+              owner,
+              'customer',
+              binding.customerBindingId ?? '',
+            )
+          ).providerRef
+      )
+        throw new BillingError('reconciliation_required');
     },
     async retrievePaidInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
       const { state, chargeId, amountRefunded, ...paid } = await this.retrieveInvoiceState(
