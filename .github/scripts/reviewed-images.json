@@ -3,13 +3,11 @@
   "recipes": [
     {
       "name": "peable",
-      "services": ["peable"],
       "ecrRepository": "oxy/peable",
       "dockerfile": "packages/backend/Dockerfile",
-      "dockerfileSha256": "ce92f2eb1e5859dcbc9b8117c0b2cb3b63d7bbad79421f0c9af3f79cc05ce58d",
+      "context": ".",
       "target": null,
-      "tagSuffix": "",
-      "cacheScope": "peable-backend"
+      "buildInputsSha256": "e8e34b80aea503340225a3d8e23cffa4d907b81fb60ee7642b0f69452e763702"
     }
   ]
 }
