@@ -22,7 +22,7 @@
 # See .github/workflows/deploy-aws.yml.
 
 # ── Stage 1: build (install deps, compile shared-types, type-gate the backend) ──
-FROM oven/bun:1.3.14-alpine AS builder
+FROM oven/bun:1.4.3-alpine AS builder
 WORKDIR /app
 
 # Workspace root files. bunfig.toml pins `linker = "hoisted"` (REQUIRED so the
@@ -68,7 +68,7 @@ RUN cd packages/sdk && bun run build
 RUN cd packages/backend && bun run build
 
 # ── Stage 2: runtime ──────────────────────────────────────────────
-FROM oven/bun:1.3.14-alpine AS runtime
+FROM oven/bun:1.4.3-alpine AS runtime
 WORKDIR /app
 
 # Drop privileges: run as a dedicated non-root user.
