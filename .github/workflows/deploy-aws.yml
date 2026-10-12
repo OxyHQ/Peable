@@ -47,7 +47,6 @@ env:
   TASK_FAMILY: oxy-peable
   MIGRATION_WAIT_TIMEOUT_SECONDS: 660
   RELEASE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
-  DOCKERFILE: packages/backend/Dockerfile
   # The database the migrator is allowed to write DDL to. Checked against
   # `current_database()` by `--target-database`, so a task whose DATABASE_URL
   # reaches somewhere else fails instead of migrating it — a migrator pointed at
@@ -221,12 +220,28 @@ jobs:
       - name: Expose the Actions cache to buildx
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4
 
-      # Same Dockerfile, context, platform and tags as the plain `docker build`
-      # this replaces, pushed in the same step. --provenance=false keeps the
-      # pushed artefact a single-platform image manifest, as before, rather
-      # than an index with an attestation.
+      # Production builds only what the owner reviewed. The Dockerfile, its
+      # context, target and both .dockerignore files are hashed and compared
+      # with the ONE pin in .github/scripts/reviewed-images.json; a mismatch
+      # stops here, before anything is built or pushed. The Dockerfile path,
+      # context and the label values below are this step's outputs, so the
+      # build cannot use a different file than the one checked, and no hash is
+      # spelled out in this workflow to drift from the pin. CI runs the same
+      # check on every pull request (`reviewed-image.py check`, in the required
+      # `test` job), so a change that would stop here fails before it can merge.
+      - name: Refuse unreviewed image build inputs
+        id: reviewed
+        run: python3 -B .github/scripts/reviewed-image.py guard --recipe peable
+
+      # --provenance=false keeps the pushed artefact a single-platform image
+      # manifest rather than an index with an attestation.
       - name: Build and push (linux/arm64)
         id: image
+        env:
+          DOCKERFILE: ${{ steps.reviewed.outputs.dockerfile }}
+          CONTEXT: ${{ steps.reviewed.outputs.context }}
+          SOURCE_TREE: ${{ steps.reviewed.outputs.source_tree }}
+          BUILD_INPUTS_SHA256: ${{ steps.reviewed.outputs.build_inputs_sha256 }}
         run: |
           set -euo pipefail
           IMG=$ECR_REGISTRY/oxy/$APP
@@ -236,10 +251,14 @@ jobs:
             --cache-to type=gha,scope=$APP-backend,mode=max \
             --provenance=false \
             -f "$DOCKERFILE" \
+            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "io.oxy.source.tree=$SOURCE_TREE" \
+            --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
             -t "$IMG:${{ github.sha }}" \
             --metadata-file image-metadata.json \
             --push \
-            .
+            "$CONTEXT"
           DIGEST=$(jq -er '."containerimage.digest"' image-metadata.json)
           [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
           echo "image=$IMG@$DIGEST" >> "$GITHUB_OUTPUT"

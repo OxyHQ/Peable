@@ -18,8 +18,12 @@ docs
 *.log
 coverage
 .DS_Store
-.env
-.env.local
+
+# Local environment files, at ANY depth: `COPY packages/backend/` would
+# otherwise carry a developer's packages/backend/.env (real DATABASE_URL, salts)
+# into the builder layer. No build step reads one, `.env.example` included.
+**/.env
+**/.env.*
 
 # Exclude the heavy Expo frontend source from the backend build context, but
 # KEEP its package.json: bun's frozen-lockfile install requires every workspace
