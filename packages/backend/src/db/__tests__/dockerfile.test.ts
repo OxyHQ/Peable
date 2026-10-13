@@ -29,8 +29,9 @@ import { fileURLToPath } from 'node:url';
  * package added to `packages/` fails this test until both image stages carry
  * it.
  *
- * Both stages are checked, not just the builder. The runtime stage runs its own
- * `--frozen-lockfile --production` install and fails the same way.
+ * Both installing stages are checked, not just the builder. The `deps` stage
+ * runs its own `--frozen-lockfile --production` install (filtered to the
+ * backend) and fails the same way.
  */
 
 /** The repo root: `packages/backend/src/db/__tests__` is five levels deep. */
@@ -88,10 +89,8 @@ describe('the backend image carries the whole workspace manifest set', () => {
       expect(stage('builder')).toContain(`COPY packages/${name}/package.json packages/${name}/`);
     });
 
-    it(`copies packages/${name}/package.json into the runtime stage`, () => {
-      expect(stage('runtime')).toContain(
-        `COPY --from=builder /app/packages/${name}/package.json packages/${name}/`,
-      );
+    it(`copies packages/${name}/package.json into the deps stage`, () => {
+      expect(stage('deps')).toContain(`COPY packages/${name}/package.json packages/${name}/`);
     });
 
     it(`does not let .dockerignore hide packages/${name}/package.json`, () => {
@@ -104,4 +103,54 @@ describe('the backend image carries the whole workspace manifest set', () => {
       expect(dockerignore).toContain(`!packages/${name}/package.json`);
     });
   }
+});
+
+/**
+ * The runtime image carries the backend's production closure and nothing else.
+ *
+ * It used to run `bun install --production` at the workspace root, which ships
+ * every workspace's production dependencies (Expo, React Native, Electron) into
+ * an image whose only process is the gateway. ci.yml's `image` job proves the
+ * result on the built image; this pins the shape that produces it, so a change
+ * that widens the install fails here first, with a message naming the flag.
+ */
+describe('the runtime image installs only the backend production closure', () => {
+  const installs = dockerfile.split('\n').filter((line) => /^RUN .*\bbun install\b/.test(line));
+
+  it('finds the installs it is supposed to check', () => {
+    expect(installs.length).toBe(2);
+  });
+
+  it('never installs without the frozen lockfile', () => {
+    for (const line of installs) expect(line).toContain('--frozen-lockfile');
+  });
+
+  it('never runs install scripts', () => {
+    for (const line of installs) expect(line).toContain('--ignore-scripts');
+  });
+
+  it('installs the runtime closure in the deps stage, filtered to the backend', () => {
+    const install = stage('deps')
+      .split('\n')
+      .find((line) => line.startsWith('RUN bun install'));
+    expect(install).toBeDefined();
+    for (const flag of ['--production', '--omit=peer', '--filter @peable.to/backend']) {
+      expect(install).toContain(flag);
+    }
+  });
+
+  it('runs no install in the runtime stage and takes node_modules from deps', () => {
+    const runtime = stage('runtime');
+    expect(runtime).not.toContain('bun install');
+    expect(runtime).toContain('COPY --from=deps /app/node_modules/ node_modules/');
+    expect(runtime).not.toMatch(/COPY --from=builder \/app\/node_modules/);
+  });
+
+  it('leaves every runtime file owned by root', () => {
+    expect(stage('runtime')).not.toContain('--chown');
+  });
+
+  it('runs as the unprivileged app user', () => {
+    expect(stage('runtime')).toContain('USER appuser');
+  });
 });
