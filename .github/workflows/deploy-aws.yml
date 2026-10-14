@@ -12,11 +12,17 @@ on:
     branches: [main]
     # The backend image bundles shared-types and the root manifests, so a change
     # to any of them must trigger a redeploy — not just packages/backend/**.
+    # `.dockerignore` and the reviewed pin are build inputs too: a change to
+    # either one alone changes what production builds (or whether it may), so
+    # it deploys. The pin is also matched by `.github/scripts/**`; it is named
+    # so dropping that glob cannot silently stop it deploying.
     paths:
       - 'packages/backend/**'
       - 'packages/shared-types/**'
       - 'packages/sdk/**'
       - '.github/scripts/**'
+      - '.github/scripts/reviewed-images.json'
+      - '.dockerignore'
       - 'package.json'
       - 'bun.lock'
       - 'bunfig.toml'

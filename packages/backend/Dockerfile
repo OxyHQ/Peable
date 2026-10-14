@@ -74,33 +74,82 @@ RUN cd packages/shared-types && bun run build
 RUN cd packages/sdk && bun run build
 RUN cd packages/backend && bun run build
 
-# ── Stage 2: runtime ──────────────────────────────────────────────
+# ── Stage 2: deps (the backend's production closure, and nothing else) ──
+#
+# The runtime used to run `bun install --production` at the workspace ROOT, which
+# installs every workspace's production dependencies: the frontend's Expo, React
+# Native and Electron, the checkout's React, and — through optional peers the
+# lockfile resolves for the frontend — typescript. None of it is imported by the
+# gateway; all of it shipped (818 MB of node_modules, measured).
+#
+# This stage installs ONLY `@peable.to/backend`'s production closure:
+#   --filter @peable.to/backend  the backend workspace (and its workspace
+#                                dependency shared-types), not the other five;
+#   --production                 no devDependencies;
+#   --omit=peer                  no auto-installed peers. Without it the filter
+#                                alone still ships Expo and React Native,
+#                                because `@oxy.so/core` and `@oxy.so/protocol`
+#                                declare `expo-crypto` / `expo-secure-store` /
+#                                `expo-modules-core` as peers and the lockfile
+#                                resolves them for the frontend. The server
+#                                never loads them: the only import of
+#                                `expo-modules-core` is in a `*.native.js` file
+#                                that only Metro resolves. Every peer the
+#                                server does need (express, postgres) is a
+#                                direct backend dependency.
+#   --frozen-lockfile            bun.lock is the only source of versions.
+#   --ignore-scripts             skips the root `postinstall` (it builds
+#                                shared-types, which the builder already did);
+#                                no package in this closure has an install,
+#                                preinstall or postinstall script, so nothing
+#                                else is skipped.
+# ci.yml's `image` job asserts expo, react-native and typescript are absent
+# from the runtime image and boots it against Postgres.
+#
+# Every workspace member's manifest is still required: bun reconciles the frozen
+# lockfile against the whole workspace before it applies the filter. They come
+# from the build context, not the builder, so this stage builds in parallel with
+# it and is reused from cache until a manifest or the lockfile changes.
+FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS deps
+WORKDIR /app
+
+COPY package.json bun.lock bunfig.toml ./
+COPY packages/shared-types/package.json packages/shared-types/
+COPY packages/backend/package.json packages/backend/
+COPY packages/frontend/package.json packages/frontend/
+COPY packages/sdk/package.json packages/sdk/
+COPY packages/checkout/package.json packages/checkout/
+COPY packages/pay/package.json packages/pay/
+
+RUN bun install --frozen-lockfile --production --ignore-scripts --omit=peer --filter @peable.to/backend
+
+# ── Stage 3: runtime ──────────────────────────────────────────────
+#
+# Only what `bun packages/backend/src/server.ts` (and the migrator,
+# `packages/backend/src/db/migrate.ts`) loads: the deps stage's node_modules, the
+# two manifests module resolution reads, shared-types' compiled output and the
+# backend's TypeScript source. No install runs here, no other workspace's
+# manifest or source is present, and no package manager state (bun.lock,
+# bunfig.toml) ships.
+#
+# Every file is copied WITHOUT --chown, so it is owned by root and the app user
+# can read but not write it. The gateway writes nothing to disk; it needs no
+# writable path of its own.
 FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349437206c6b0b7422373 AS runtime
 WORKDIR /app
 
 # Drop privileges: run as a dedicated non-root user.
 RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 
-COPY --from=builder /app/package.json /app/bun.lock /app/bunfig.toml ./
-
-# Every workspace member's package.json is required for the frozen-lockfile
-# production install to reconcile, even in the runtime image.
-COPY --from=builder /app/packages/shared-types/package.json packages/shared-types/
-COPY --from=builder /app/packages/backend/package.json packages/backend/
-COPY --from=builder /app/packages/frontend/package.json packages/frontend/
-COPY --from=builder /app/packages/sdk/package.json packages/sdk/
-COPY --from=builder /app/packages/checkout/package.json packages/checkout/
-COPY --from=builder /app/packages/pay/package.json packages/pay/
-
-# Production dependencies only. --ignore-scripts skips the root postinstall
-# (shared-types is already built, and its dist/ is copied below). It runs from
-# the manifests and lockfile alone, BEFORE the source is copied, so a
-# source-only change reuses this layer from the build cache.
-RUN bun install --frozen-lockfile --production --ignore-scripts
+# The workspace links (`node_modules/@peable.to/{backend,shared-types}`) are
+# relative symlinks into packages/, so they resolve once the packages land below.
+COPY --from=deps /app/node_modules/ node_modules/
 
 # Compiled shared-types output (imported as dist/index.js) + the backend TS
 # source and its tsconfig (run directly under Bun — no compiled entrypoint).
+COPY --from=builder /app/packages/shared-types/package.json packages/shared-types/
 COPY --from=builder /app/packages/shared-types/dist/ packages/shared-types/dist/
+COPY --from=builder /app/packages/backend/package.json packages/backend/
 COPY --from=builder /app/packages/backend/src/ packages/backend/src/
 COPY --from=builder /app/packages/backend/tsconfig.json packages/backend/
 
