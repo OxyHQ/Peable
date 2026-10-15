@@ -24,7 +24,7 @@ const link = {
 test('owning SDK validates and scopes organization operations with caller operation keys', async () => {
   const calls: { method: string; path: string; options?: RestClientRequestOptions }[] = [];
   const client = new ContributionsResource({
-    request: async <T>(method, path, options) => {
+    request: async <T>(method: string, path: string, options?: RestClientRequestOptions) => {
       calls.push({ method, path, options });
       return link as T;
     },
