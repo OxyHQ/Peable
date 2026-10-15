@@ -146,7 +146,8 @@ export function verifyFinalInvoiceAuthority(
     (!invoice.faircoinQuote ||
       Date.parse(invoice.faircoinQuote.quotedAt) > now.getTime() ||
       Date.parse(invoice.faircoinQuote.expiresAt) > Date.parse(invoice.expiresAt) ||
-      Date.parse(invoice.faircoinQuote.expiresAt) <= now.getTime() ||
+      Date.parse(paid.paidAt) < Date.parse(invoice.faircoinQuote.quotedAt) ||
+      Date.parse(paid.paidAt) >= Date.parse(invoice.faircoinQuote.expiresAt) ||
       Date.parse(invoice.faircoinQuote.expiresAt) <= Date.parse(invoice.faircoinQuote.quotedAt))
   )
     throw new BillingError('invalid_provider_response', 502);
