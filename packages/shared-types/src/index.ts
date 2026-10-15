@@ -105,3 +105,5 @@ export {
   type BillingSubscription,
 } from './billing';
 export { canonicalBillingAuthority, canonicalBillingTaxQuote } from './billing-authority';
+
+export type { BillingFaircoinFxQuote } from './billing';

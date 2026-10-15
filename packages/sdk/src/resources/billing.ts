@@ -49,6 +49,21 @@ export class BillingResource {
       idempotencyKey: options.idempotencyKey,
     });
   }
+  /** Opens a new expiring FAIR payment for one monthly period. Never auto-debits. */
+  renewSubscription(
+    ref: string,
+    params: CreateBillingCheckoutParams,
+    options: BillingRequestOptions,
+  ): Promise<BillingCheckoutSession> {
+    return this.client.request(
+      'POST',
+      `/v1/billing/subscriptions/${encodeURIComponent(ref)}/renew`,
+      {
+        body: params,
+        idempotencyKey: options.idempotencyKey,
+      },
+    );
+  }
   createPortalSession(
     params: CreateBillingPortalParams,
     options: BillingRequestOptions,
@@ -106,25 +121,6 @@ export class BillingResource {
         )
       )
         throw new Error('Invalid signature');
-      // The FX quote bounds the payment, not delivery of its observation. A
-      // delayed webhook must remain recoverable after the original quote expires.
-      if (authority.method === 'faircoin') {
-        const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
-        const quote = authority.invoice.faircoinQuote!;
-        const paidAt = Date.parse(paid.paidAt);
-        if (
-          paid.invoiceId !== invoiceRef ||
-          paid.providerSubscriptionId !== subscriptionRef ||
-          paid.paymentIntentId !== authority.source.paymentIntentId ||
-          paid.providerCustomerId !== authority.source.customerId ||
-          paid.providerPriceId !== authority.source.priceId ||
-          paid.storeId !== authority.invoice.context.payerAccountId ||
-          !Number.isFinite(paidAt) ||
-          paidAt > Date.now() ||
-          paidAt < Date.parse(quote.quotedAt) ||
-          paidAt >= Date.parse(quote.expiresAt)
-        ) throw new Error('Payment outside signed quote');
-      }
     } catch {
       throw new Error('Peable: tax quote authority verification failed');
     }
@@ -198,7 +194,8 @@ export class BillingResource {
           paidAt > Date.now() ||
           paidAt < Date.parse(quote.quotedAt) ||
           paidAt >= Date.parse(quote.expiresAt)
-        ) throw new Error('Payment outside signed quote');
+        )
+          throw new Error('Payment outside signed quote');
       }
     } catch {
       throw new Error('Peable: invoice authority verification failed');
