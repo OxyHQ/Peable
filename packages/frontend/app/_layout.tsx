@@ -28,6 +28,7 @@ import { KeyboardProvider as NativeKeyboardProvider } from 'react-native-keyboar
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { OxyProvider } from '@oxy.so/services';
 import { BloomThemeProvider, useBloomTheme } from '@oxy.so/bloom/theme';
+import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
 import { ToastOutlet } from '@oxy.so/bloom/toast';
 import type { ThemeMode } from '@oxy.so/bloom/theme';
 import { ImageResolverProvider } from '@oxy.so/bloom/image-resolver';
@@ -338,12 +339,25 @@ export default function RootLayout() {
                 value={(id, variant) => oxyServices.assets.publicUrl(id, variant)}
               >
                 <BottomSheetModalProvider>
-                  {/* Inside the theme provider so the fallback screen is themed,
-                      and around AppContent so a throw in any screen is contained
-                      instead of unmounting the app to a black screen. */}
-                  <ErrorBoundary>
-                    <AppContent key={language} ready={fontsLoaded && themeReady && languageReady} />
-                  </ErrorBoundary>
+                  {/* Native Bloom `Portal` (AliaChatSheet's BottomSheet) only
+                      renders into a PortalProvider + ONE PortalOutlet. The
+                      outlet comes after the content it paints over; everything
+                      but the outlet sits in OverlayInertBoundary so a modal
+                      surface keeps a screen reader inside it. */}
+                  <PortalProvider>
+                    <OverlayInertBoundary>
+                      {/* Inside the theme provider so the fallback screen is themed,
+                          and around AppContent so a throw in any screen is contained
+                          instead of unmounting the app to a black screen. */}
+                      <ErrorBoundary>
+                        <AppContent
+                          key={language}
+                          ready={fontsLoaded && themeReady && languageReady}
+                        />
+                      </ErrorBoundary>
+                    </OverlayInertBoundary>
+                    <PortalOutlet />
+                  </PortalProvider>
                   {/* Global toast outlet (Bloom + sonner-native). Sibling of the
                       app content so toasts survive the language-key remount and
                       overlay every screen. */}
