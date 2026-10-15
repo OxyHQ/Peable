@@ -90,11 +90,11 @@ function resign(authority: BillingFinalInvoiceAuthority) {
   ).toString('base64url');
 }
 
-function client(value: unknown, requests: string[]): RestClient {
+function client(value: unknown, requests: string[], paid?: BillingPaidInvoice): RestClient {
   return {
     async request<T>(_method: string, path: string): Promise<T> {
       requests.push(path);
-      return value as T;
+      return (path.includes('/paid_invoices/') ? paid : value) as T;
     },
   };
 }
@@ -121,8 +121,8 @@ describe('pinned SDK invoice authority', () => {
       resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture'),
     ).rejects.toThrow('verification failed');
   });
-  it('rejects unknown keys, unsupported versions and signed expired Faircoin quotes', async () => {
-    const { authority } = fixture();
+  it('rejects unknown keys, unsupported versions and payments outside signed Faircoin quotes', async () => {
+    const { authority, expected } = fixture();
     const requests: string[] = [];
     await expect(
       new BillingResource(client(authority, requests), {}).retrieveFinalInvoiceAuthority(
@@ -154,7 +154,7 @@ describe('pinned SDK invoice authority', () => {
     expect(
       (
         await new BillingResource(
-          client(authority, requests),
+          client(authority, requests, expected.invoice),
           pinned,
         ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')
       ).method,
@@ -167,4 +167,23 @@ describe('pinned SDK invoice authority', () => {
       ),
     ).rejects.toThrow('verification failed');
   });
+});
+
+it('recovers a payment inside its original quote after quote expiry', async () => {
+  const { authority, expected, now } = fixture();
+  authority.method = 'faircoin';
+  authority.invoice.faircoinQuote = {
+    id: 'quote_old', amountBaseUnits: '1234',
+    quotedAt: new Date(+now - 120_000).toISOString(),
+    expiresAt: new Date(+now - 60_000).toISOString(), roundingEvidenceId: 'round_old',
+  };
+  expected.invoice.paidAt = new Date(+now - 90_000).toISOString();
+  resign(authority);
+  const resource = new BillingResource(client(authority, [], expected.invoice), pinned);
+  expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe('faircoin');
+  expected.invoice.paidAt = authority.invoice.faircoinQuote.expiresAt;
+  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow('verification failed');
+  expected.invoice.paidAt = authority.invoice.faircoinQuote.quotedAt;
+  expected.invoice.paymentIntentId = 'pi_other';
+  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow('verification failed');
 });

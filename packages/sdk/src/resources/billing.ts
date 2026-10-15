@@ -106,6 +106,25 @@ export class BillingResource {
         )
       )
         throw new Error('Invalid signature');
+      // The FX quote bounds the payment, not delivery of its observation. A
+      // delayed webhook must remain recoverable after the original quote expires.
+      if (authority.method === 'faircoin') {
+        const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
+        const quote = authority.invoice.faircoinQuote!;
+        const paidAt = Date.parse(paid.paidAt);
+        if (
+          paid.invoiceId !== invoiceRef ||
+          paid.providerSubscriptionId !== subscriptionRef ||
+          paid.paymentIntentId !== authority.source.paymentIntentId ||
+          paid.providerCustomerId !== authority.source.customerId ||
+          paid.providerPriceId !== authority.source.priceId ||
+          paid.storeId !== authority.invoice.context.payerAccountId ||
+          !Number.isFinite(paidAt) ||
+          paidAt > Date.now() ||
+          paidAt < Date.parse(quote.quotedAt) ||
+          paidAt >= Date.parse(quote.expiresAt)
+        ) throw new Error('Payment outside signed quote');
+      }
     } catch {
       throw new Error('Peable: tax quote authority verification failed');
     }
@@ -146,7 +165,7 @@ export class BillingResource {
           !Number.isFinite(Date.parse(quote.quotedAt)) ||
           Date.parse(quote.quotedAt) > Date.now() ||
           !Number.isFinite(Date.parse(quote.expiresAt)) ||
-          Date.parse(quote.expiresAt) <= Date.now() ||
+          Date.parse(quote.expiresAt) <= Date.parse(quote.quotedAt) ||
           Date.parse(quote.expiresAt) > Date.parse(authority.invoice.expiresAt)
         )
           throw new Error('Invalid quote');
@@ -162,6 +181,25 @@ export class BillingResource {
         )
       )
         throw new Error('Invalid signature');
+      // The FX quote bounds the payment, not delivery of its observation. A
+      // delayed webhook must remain recoverable after the original quote expires.
+      if (authority.method === 'faircoin') {
+        const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
+        const quote = authority.invoice.faircoinQuote!;
+        const paidAt = Date.parse(paid.paidAt);
+        if (
+          paid.invoiceId !== invoiceRef ||
+          paid.providerSubscriptionId !== subscriptionRef ||
+          paid.paymentIntentId !== authority.source.paymentIntentId ||
+          paid.providerCustomerId !== authority.source.customerId ||
+          paid.providerPriceId !== authority.source.priceId ||
+          paid.storeId !== authority.invoice.context.payerAccountId ||
+          !Number.isFinite(paidAt) ||
+          paidAt > Date.now() ||
+          paidAt < Date.parse(quote.quotedAt) ||
+          paidAt >= Date.parse(quote.expiresAt)
+        ) throw new Error('Payment outside signed quote');
+      }
     } catch {
       throw new Error('Peable: invoice authority verification failed');
     }

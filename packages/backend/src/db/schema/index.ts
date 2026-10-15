@@ -24,3 +24,4 @@ export { disputes } from './disputes';
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations } from './billing';
 export { faircoinRenewalAuthorizations } from './faircoinRenewals';
+export { faircoinBillingSubscriptions, faircoinBillingInvoices } from './faircoinBilling';

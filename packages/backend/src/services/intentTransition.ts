@@ -1,3 +1,5 @@
+import { and, eq, isNull } from 'drizzle-orm';
+import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 /**
  * Advancing an intent, and telling the merchant about it, as ONE commit.
  *
@@ -74,6 +76,11 @@ export async function transitionIntent(
   return getDb().transaction(async (tx) => {
     const result = await updateIntentState(tx, intentId, change);
     if (result.kind !== 'updated') return result;
+    if (change.status === 'broadcast') {
+      await tx.update(faircoinBillingInvoices).set({ acceptedAt: result.row.updatedAt }).where(and(
+        eq(faircoinBillingInvoices.paymentIntentId, intentId), isNull(faircoinBillingInvoices.acceptedAt),
+      ));
+    }
     await enqueueIntentWebhook(tx, result.row);
     return result;
   });
