@@ -1,11 +1,15 @@
 {
   "commercialScope": "all_countries",
   "intendedSellerAndIssuer": "Oxy",
-  "proposedLegalName": "The Oxy Collective, Inc.",
   "taxIdentifier": null,
-  "registrationJurisdiction": null,
+  "registrationJurisdiction": "US-DE",
   "reviewedSaleCountries": [],
   "reviewedRates": [],
   "customerLocationEvidence": [],
-  "operational": false
+  "operational": false,
+  "legalName": "The Oxy Collective, Inc.",
+  "legalNameStatus": "user_attested",
+  "entityType": "C Corporation",
+  "taxIdentifierStatus": "provided_in_private_operator_identity",
+  "issuerIdentityRef": "operator:oxy-issuer-identity"
 }

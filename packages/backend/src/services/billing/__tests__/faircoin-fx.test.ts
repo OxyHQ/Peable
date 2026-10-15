@@ -15,17 +15,40 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
     const read = (value: unknown) => (async () => Response.json(value)) as unknown as typeof fetch;
     const quote = await createExplorerFaircoinQuote(2999, {
       now,
-      fetch: read({ price: { usd: 0.12 }, timestamp: now.toISOString() }),
+      fetch: read({ price: 0.12, source: 'wfair-base', updatedAt: now.toISOString() }),
     });
     expect(quote.amountBaseUnits).toBe('24991666667');
     expect(Date.parse(quote.expiresAt) - +now).toBe(600_000);
     for (const body of [
       { price: null },
-      { price: { usd: 0.12 } },
-      { price: { usd: 0.12 }, timestamp: new Date(+now - 120_001).toISOString() },
-      { price: { usd: 0.12 }, timestamp: new Date(+now + 2000).toISOString() },
+      null,
+      { price: 0.12, source: 'wfair-base' },
+      { price: 0.12, source: 'manual', updatedAt: now.toISOString() },
+      { price: { usd: 0.12 }, timestamp: now.toISOString() },
+      { price: 0.12, source: 'wfair-base', updatedAt: new Date(+now - 120_001).toISOString() },
+      { price: 0.12, source: 'wfair-base', updatedAt: new Date(+now + 2000).toISOString() },
     ]) {
       await expect(createExplorerFaircoinQuote(2999, { now, fetch: read(body) })).rejects.toThrow();
     }
+  });
+  it('reads the current official response and identifies the server client', async () => {
+    const now = new Date('2026-10-15T10:47:22.537Z');
+    let request: RequestInit | undefined;
+    const quote = await createExplorerFaircoinQuote(2999, {
+      now,
+      fetch: (async (_url, options) => {
+        request = options;
+        return Response.json({
+          price: 0.4908275003129989,
+          change24h: 0,
+          liquidityUsd: 2454.137501565,
+          source: 'wfair-base',
+          updatedAt: now.toISOString(),
+        });
+      }) as typeof fetch,
+    });
+    expect(quote.amountBaseUnits).toBe('6110089590');
+    expect(new Headers(request?.headers).get('User-Agent')).toBe('Peable/1.0');
+    expect(request?.redirect).toBe('error');
   });
 });
