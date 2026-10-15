@@ -12,15 +12,19 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
   });
   it('uses fresh source evidence and refuses a stale/missing quote', async () => {
     const now = new Date();
-    const read = (value: unknown) => (async () => Response.json(value)) as typeof fetch;
+    const read = (value: unknown) => (async () => Response.json(value)) as unknown as typeof fetch;
     const quote = await createExplorerFaircoinQuote(2999, {
-      now, fetch: read({ price: { usd: 0.12 }, timestamp: now.toISOString() }),
+      now,
+      fetch: read({ price: { usd: 0.12 }, timestamp: now.toISOString() }),
     });
     expect(quote.amountBaseUnits).toBe('24991666667');
     expect(Date.parse(quote.expiresAt) - +now).toBe(600_000);
-    for (const body of [{ price: null }, { price: { usd: 0.12 } },
+    for (const body of [
+      { price: null },
+      { price: { usd: 0.12 } },
       { price: { usd: 0.12 }, timestamp: new Date(+now - 120_001).toISOString() },
-      { price: { usd: 0.12 }, timestamp: new Date(+now + 2000).toISOString() }]) {
+      { price: { usd: 0.12 }, timestamp: new Date(+now + 2000).toISOString() },
+    ]) {
       await expect(createExplorerFaircoinQuote(2999, { now, fetch: read(body) })).rejects.toThrow();
     }
   });

@@ -173,17 +173,25 @@ it('recovers a payment inside its original quote after quote expiry', async () =
   const { authority, expected, now } = fixture();
   authority.method = 'faircoin';
   authority.invoice.faircoinQuote = {
-    id: 'quote_old', amountBaseUnits: '1234',
+    id: 'quote_old',
+    amountBaseUnits: '1234',
     quotedAt: new Date(+now - 120_000).toISOString(),
-    expiresAt: new Date(+now - 60_000).toISOString(), roundingEvidenceId: 'round_old',
+    expiresAt: new Date(+now - 60_000).toISOString(),
+    roundingEvidenceId: 'round_old',
   };
   expected.invoice.paidAt = new Date(+now - 90_000).toISOString();
   resign(authority);
   const resource = new BillingResource(client(authority, [], expected.invoice), pinned);
-  expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe('faircoin');
+  expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe(
+    'faircoin',
+  );
   expected.invoice.paidAt = authority.invoice.faircoinQuote.expiresAt;
-  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow('verification failed');
+  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow(
+    'verification failed',
+  );
   expected.invoice.paidAt = authority.invoice.faircoinQuote.quotedAt;
   expected.invoice.paymentIntentId = 'pi_other';
-  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow('verification failed');
+  await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow(
+    'verification failed',
+  );
 });

@@ -157,14 +157,23 @@ describe('signed final invoice authority', () => {
 it('keeps a settled historical FX quote verifiable while rejecting late or early payment', () => {
   const { authority, expected, now } = fixture();
   authority.method = 'faircoin';
-  authority.invoice.faircoinQuote = { id: 'quote_old', amountBaseUnits: '1234',
+  authority.invoice.faircoinQuote = {
+    id: 'quote_old',
+    amountBaseUnits: '1234',
     quotedAt: new Date(+now - 120_000).toISOString(),
-    expiresAt: new Date(+now - 60_000).toISOString(), roundingEvidenceId: 'round_old' };
+    expiresAt: new Date(+now - 60_000).toISOString(),
+    roundingEvidenceId: 'round_old',
+  };
   expected.invoice.paidAt = new Date(+now - 90_000).toISOString();
   resign(authority);
   expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now).method).toBe('faircoin');
-  for (const paidAt of [authority.invoice.faircoinQuote.expiresAt, new Date(+now - 120_001).toISOString()]) {
+  for (const paidAt of [
+    authority.invoice.faircoinQuote.expiresAt,
+    new Date(+now - 120_001).toISOString(),
+  ]) {
     expected.invoice.paidAt = paidAt;
-    expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow('invalid_provider_response');
+    expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
+      'invalid_provider_response',
+    );
   }
 });

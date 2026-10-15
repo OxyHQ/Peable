@@ -247,3 +247,16 @@ export type BillingCheckoutOperationRecovery =
       source: BillingCheckoutOperationSource;
       checkout: { id: string; expiresAt: string; url?: string };
     };
+
+export interface BillingFaircoinFxQuote {
+  id: string;
+  currency: 'USD';
+  grossMinorUnits: number;
+  amountBaseUnits: string;
+  usdPerFair: string;
+  source: string;
+  observedAt: string;
+  quotedAt: string;
+  expiresAt: string;
+  rounding: 'ceil_to_base_unit';
+}

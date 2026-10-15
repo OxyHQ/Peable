@@ -137,6 +137,14 @@ export function createBillingRouter(deps: {
     handle((service, owner, req) => service.retrieveSubscription(owner, req.params.id ?? '')),
   );
   router.post(
+    '/v1/billing/subscriptions/:id/renew',
+    ...write,
+    handle((service, owner, req) => {
+      if (!service.renew) throw new BillingError('not_found', 404);
+      return service.renew(owner, req.params.id ?? '', checkoutSchema.parse(req.body), key(req));
+    }),
+  );
+  router.post(
     '/v1/billing/subscriptions/:id/cancel_at_period_end',
     ...write,
     handle((service, owner, req) => {

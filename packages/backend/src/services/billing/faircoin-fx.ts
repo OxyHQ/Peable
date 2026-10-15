@@ -2,18 +2,8 @@ import { createHash } from 'node:crypto';
 import { EXPLORER_BASE_URL } from '@fairco.in/core';
 import { BillingError } from './contracts';
 
-export interface FaircoinFxQuote {
-  id: string;
-  currency: 'USD';
-  grossMinorUnits: number;
-  amountBaseUnits: string;
-  usdPerFair: string;
-  source: string;
-  observedAt: string;
-  quotedAt: string;
-  expiresAt: string;
-  rounding: 'ceil_to_base_unit';
-}
+import type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
+export type FaircoinFxQuote = BillingFaircoinFxQuote;
 
 /** Decimal parsing and ceil arithmetic are exact. No binary float multiplication
  * or assumed parity between USD and FAIR enters the settlement amount. */
@@ -47,23 +37,32 @@ export async function createExplorerFaircoinQuote(
     throw new Error('Invalid FAIR quote lifetime');
   const source = `${EXPLORER_BASE_URL}/api/price`;
   const response = await (options.fetch ?? fetch)(source, {
-    signal: AbortSignal.timeout(8000), redirect: 'error', headers: { Accept: 'application/json' },
+    signal: AbortSignal.timeout(8000),
+    redirect: 'error',
+    headers: { Accept: 'application/json' },
   });
   if (!response.ok) throw new BillingError('invalid_provider_response', 502);
-  const body = await response.json() as { price?: { usd?: unknown }; timestamp?: unknown };
+  const body = (await response.json()) as { price?: { usd?: unknown }; timestamp?: unknown };
   const price = body.price?.usd;
   const observedAt = typeof body.timestamp === 'string' ? Date.parse(body.timestamp) : NaN;
   if (
     (typeof price !== 'number' && typeof price !== 'string') ||
     (typeof price === 'number' && (!Number.isFinite(price) || price <= 0)) ||
-    !Number.isFinite(observedAt) || observedAt > +now + 1000 || +now - observedAt > 120_000
-  ) throw new BillingError('invalid_provider_response', 502);
+    !Number.isFinite(observedAt) ||
+    observedAt > +now + 1000 ||
+    +now - observedAt > 120_000
+  )
+    throw new BillingError('invalid_provider_response', 502);
   const rate = String(price);
   const quote = {
-    currency: 'USD' as const, grossMinorUnits,
+    currency: 'USD' as const,
+    grossMinorUnits,
     amountBaseUnits: faircoinBaseUnitsForUsd(grossMinorUnits, rate),
-    usdPerFair: rate, source, observedAt: new Date(observedAt).toISOString(),
-    quotedAt: now.toISOString(), expiresAt: new Date(+now + lifetimeMs).toISOString(),
+    usdPerFair: rate,
+    source,
+    observedAt: new Date(observedAt).toISOString(),
+    quotedAt: now.toISOString(),
+    expiresAt: new Date(+now + lifetimeMs).toISOString(),
     rounding: 'ceil_to_base_unit' as const,
   };
   return { id: `fx_${createHash('sha256').update(JSON.stringify(quote)).digest('hex')}`, ...quote };
