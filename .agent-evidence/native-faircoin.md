@@ -31,3 +31,10 @@ Oxy intended issuer, worldwide commercial scope, proposed company name, and miss
 real tax identifier, registration jurisdiction, reviewed country rates, and customer
 location evidence. Deployment configuration must pass the strict source validator;
 no country, identity, or zero tax is inferred. See the integration guide.
+
+Annual individual offers are also exercised through the real cross-repository HTTP
+fixture (`PEABLE_NATIVE_ANNUAL_FIXTURE=1` in Oxy). The subscription freezes month/year
+cadence, and a paid annual invoice remains one financial period. Oxy creates its
+monthly quota windows. Annual renewal is another explicit quote/payment, not debit.
+All 31 schema migrations apply in the test database; six native regressions pass
+following the cadence extension. See Oxy's annual/window/refund acceptance commands.
