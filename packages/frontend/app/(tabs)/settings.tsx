@@ -605,6 +605,11 @@ export default function SettingsScreen() {
         {/* Account — the Oxy identity this wallet derives from. */}
         <SettingsListGroup title={t('settings.account')}>
           <SettingsListItem
+            title={t('contributions.title')}
+            icon={<RowIcon name="hand-heart" />}
+            onPress={() => router.push('/contributions')}
+          />
+          <SettingsListItem
             title={t('settings.oxyAccount')}
             icon={<RowIcon name="account-circle" />}
             onPress={handleManageAccount}

@@ -59,6 +59,7 @@ jobs:
       # `bun run --filter @peable.to/sdk build` left the output behind — which is
       # exactly why this cannot be left to chance in CI. `ci.yml` builds the
       # same pair before its typecheck for the same reason.
+      - run: bun run build:contracts
       - run: bun run build:shared-types
       - run: bun run --filter @peable.to/sdk build
 

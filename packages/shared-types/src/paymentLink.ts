@@ -1,3 +1,4 @@
+import type { ContributionDetails } from '@peable.to/contracts';
 // PaymentLink contract — a shareable, reusable generator of `PaymentIntent`s.
 // A link's price is immutable once shared (only `active`/`metadata`/`successUrl`
 // are mutable); each payer visit mints (or, at the page layer, reuses an open)
@@ -11,6 +12,7 @@ import type { PaymentIntentRail } from './paymentIntent';
 export interface PaymentLink {
   id: string;
   object: 'payment_link';
+  contribution?: ContributionDetails;
   /**
    * Amount in the currency's smallest unit, as a canonical integer string.
    * Never a float, and never interpretable without `currency`.
@@ -34,6 +36,7 @@ export interface PaymentLink {
 export interface PublicPaymentLink {
   id: string;
   object: 'payment_link';
+  contribution?: ContributionDetails;
   amount: string;
   currency: CurrencyCode;
   rail: PaymentIntentRail;

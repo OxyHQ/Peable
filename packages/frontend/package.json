@@ -2,7 +2,7 @@
   "name": "@peable.to/frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Peable — self-custodial FairCoin wallet (fork of FAIRWallet) with Oxy identity",
+  "description": "Peable \u2014 self-custodial FairCoin wallet (fork of FAIRWallet) with Oxy identity",
   "author": "FairCoin <dev@fairco.in>",
   "license": "MIT",
   "main": "expo-router/entry",
@@ -101,7 +101,9 @@
     "tailwindcss": "4.3.2",
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.4.3",
-    "zustand": "^5.0.12"
+    "zustand": "^5.0.12",
+    "@peable.to/contracts": "workspace:0.1.0",
+    "@peable.to/sdk": "workspace:0.2.7-oxy-one.0"
   },
   "devDependencies": {
     "@babel/core": "^7.27.0",

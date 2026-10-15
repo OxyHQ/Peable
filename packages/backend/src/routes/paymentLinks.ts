@@ -1,3 +1,6 @@
+import { findIntentByIdempotencyKey } from '../db/payments/paymentIntentRepository';
+import { createHash } from 'node:crypto';
+import { contributionMintSchema, contributionOperationKeySchema } from '@peable.to/contracts';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
@@ -14,6 +17,7 @@ import {
 } from '../db/payments/paymentLinkRepository';
 import {
   createIntent,
+  IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
@@ -314,20 +318,61 @@ export function createPaymentLinksRouter(deps: {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
-      if (!link.active) {
-        sendError(res, 422, 'invalid_request_error', 'payment link is no longer active');
-        return;
-      }
       const merchant = await findMerchantById(db, link.merchantId);
       if (!merchant) {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
 
+      let amount = link.amount;
+      let idempotencyKey: string | undefined;
+      if (link.contribution) {
+        const body = contributionMintSchema.safeParse(req.body ?? {});
+        const key = contributionOperationKeySchema.safeParse(req.header('Idempotency-Key'));
+        if (!body.success || !key.success) {
+          sendError(
+            res,
+            422,
+            'invalid_request_error',
+            'A valid amount and UUID Idempotency-Key are required',
+          );
+          return;
+        }
+        if (link.contribution.amountMode === 'free') {
+          if (!body.data.amount) {
+            sendError(res, 422, 'invalid_request_error', 'Choose a contribution amount');
+            return;
+          }
+          amount = body.data.amount;
+        } else if (body.data.amount !== undefined && body.data.amount !== link.amount) {
+          sendError(res, 422, 'invalid_request_error', 'This contribution has a fixed amount');
+          return;
+        }
+        idempotencyKey =
+          'contribution:' +
+          createHash('sha256')
+            .update(link.publicId + ':' + key.data)
+            .digest('hex');
+      }
+      // Disabling/expiry prevents new attempts, but a lost response can still
+      // recover the already-created payment using its unguessable operation key.
+      const existing = idempotencyKey
+        ? await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey)
+        : null;
+      if (
+        !existing &&
+        (!link.active ||
+          (link.contribution?.expiresAt && Date.parse(link.contribution.expiresAt) <= Date.now()))
+      ) {
+        sendError(res, 422, 'invalid_request_error', 'payment link is no longer active');
+        return;
+      }
       try {
         const { intent, clientAction } = await createIntent({
+          paymentLinkId: link.id,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
           merchant,
-          amount: link.amount,
+          amount,
           rail: link.rail,
           currency: link.currency,
           // `?? undefined` rather than passing the null through: `createIntent`
@@ -345,6 +390,10 @@ export function createPaymentLinksRouter(deps: {
           ...(clientAction ? { client_action: clientAction } : {}),
         });
       } catch (err) {
+        if (err instanceof IdempotencyConflictError) {
+          sendError(res, 409, 'invalid_request_error', err.message);
+          return;
+        }
         // Structurally unreachable today (a link's `network` is validated
         // against its merchant at creation, and `Merchant.network` has no
         // mutation route) — kept as a defensive translation, same as every

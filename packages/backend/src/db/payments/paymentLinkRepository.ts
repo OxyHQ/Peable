@@ -1,3 +1,4 @@
+import type { ContributionDetails } from '@peable.to/contracts';
 import { and, desc, eq, lt } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
@@ -15,6 +16,8 @@ import type { DatabaseOrTransaction } from '../postgres';
 
 export interface PaymentLinkRow {
   readonly id: string;
+  readonly contribution?: ContributionDetails | null;
+  readonly contributionKey?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
   readonly oxyAppId: string;
@@ -32,6 +35,8 @@ export interface PaymentLinkRow {
 }
 
 const LINK_COLUMNS = {
+  contribution: paymentLinks.contribution,
+  contributionKey: paymentLinks.contributionKey,
   id: paymentLinks.id,
   publicId: paymentLinks.publicId,
   merchantId: paymentLinks.merchantId,
@@ -65,6 +70,8 @@ function toLinkRow(row: {
 }
 
 export interface InsertPaymentLinkParams {
+  readonly contribution?: ContributionDetails | null;
+  readonly contributionKey?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
   readonly oxyAppId: string;
@@ -100,6 +107,8 @@ export async function insertPaymentLink(
     .values({
       id: uuidv7(),
       publicId: params.publicId,
+      contribution: params.contribution ?? null,
+      contributionKey: params.contributionKey ?? null,
       merchantId: params.merchantId,
       oxyAppId: params.oxyAppId,
       environment: params.environment,

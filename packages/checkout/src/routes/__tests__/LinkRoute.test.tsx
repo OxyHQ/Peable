@@ -153,3 +153,88 @@ test('mints a fresh intent once the remembered one is terminal', async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(sessionStorage.getItem('peable:link-intent:link_test123')).toContain('pi_fresh456');
 });
+
+test('free FAIR contribution locks the amount and reuses its operation after a lost response and reload', async () => {
+  const posts: { key: string | null; body: string }[] = [];
+  globalThis.fetch = Object.assign(
+    mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/public'))
+        return Response.json({
+          ...LINK,
+          amount: '0',
+          contribution: {
+            organizationId: 'organization',
+            purpose: 'Community garden',
+            amountMode: 'free',
+            expiresAt: null,
+          },
+        });
+      if (url.endsWith('/payment_intent')) {
+        posts.push({
+          key: new Headers(init?.headers).get('Idempotency-Key'),
+          body: String(init?.body),
+        });
+        if (posts.length === 1) throw new Error('Connection lost');
+        return Response.json(makeIntent({ amount: '125000001' }));
+      }
+      throw new Error(`Unexpected URL ${url}`);
+    }),
+    { preconnect: originalFetch.preconnect },
+  );
+  const mount = () =>
+    render(
+      <MemoryRouter initialEntries={['/l/link_test123']}>
+        <Routes>
+          <Route path="/l/:linkId" element={<LinkRoute />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  const first = mount();
+  const input = await screen.findByLabelText('Contribution amount');
+  fireEvent.change(input, { target: { value: '1.25000001' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Contribute once' }));
+  await screen.findByText('Connection lost');
+  expect((input as HTMLInputElement).disabled).toBe(true);
+  first.unmount();
+  mount();
+  const restored = await screen.findByLabelText('Contribution amount');
+  expect((restored as HTMLInputElement).value).toBe('1.25000001');
+  fireEvent.click(screen.getByRole('button', { name: 'Contribute once' }));
+  await screen.findByText('Scan with the Peable app');
+  expect(posts).toHaveLength(2);
+  expect(posts[1]).toEqual(posts[0]);
+  expect(posts[0]?.body).toBe(JSON.stringify({ amount: '125000001' }));
+  expect(posts[0]?.key).toBeTruthy();
+});
+
+test('FAIR contribution refuses more than eight decimal places without minting', async () => {
+  globalThis.fetch = Object.assign(
+    mock(async () =>
+      Response.json({
+        ...LINK,
+        amount: '0',
+        contribution: {
+          organizationId: 'organization',
+          purpose: 'Garden',
+          amountMode: 'free',
+          expiresAt: null,
+        },
+      }),
+    ),
+    { preconnect: originalFetch.preconnect },
+  );
+  render(
+    <MemoryRouter initialEntries={['/l/link_test123']}>
+      <Routes>
+        <Route path="/l/:linkId" element={<LinkRoute />} />
+      </Routes>
+    </MemoryRouter>,
+  );
+  fireEvent.change(await screen.findByLabelText('Contribution amount'), {
+    target: { value: '0.000000001' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Contribute once' }));
+  await screen.findByText('Enter a FAIR amount with at most eight decimals');
+  expect(sessionStorage.getItem('peable:contribution:link_test123')).toBeNull();
+});
