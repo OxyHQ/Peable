@@ -16,6 +16,11 @@ import { transitionIntent } from '../../intentTransition';
 import { createFaircoinBillingService } from '../faircoinBillingService';
 import type { BillingTaxQuoteCalculator } from '../tax-quote';
 
+function must<T>(value: T | null | undefined): T {
+  if (value === null || value === undefined) throw new Error('Missing fixture value');
+  return value;
+}
+
 async function fixture() {
   const merchant = await seedMerchant({ environment: 'development', network: 'testnet' });
   const owner = {
@@ -146,20 +151,20 @@ async function fixture() {
     return row;
   }
   async function submit(row: Awaited<ReturnType<typeof invoice>>) {
-    await transitionIntent(row.paymentIntentId!, {
+    await transitionIntent(must(row.paymentIntentId), {
       from: 'created',
       status: 'broadcast',
       txid: 'a'.repeat(64),
     });
   }
   async function confirm(row: Awaited<ReturnType<typeof invoice>>) {
-    const intent = await findIntentById(gatewayDb(), row.paymentIntentId!);
+    const intent = await findIntentById(gatewayDb(), must(row.paymentIntentId));
     if (!intent?.address || !intent.txid) throw new Error('Missing broadcast');
     const watcher = new SettlementWatcher({
       getTransaction: async () => ({
-        txid: intent.txid!,
+        txid: must(intent.txid),
         confirmations: 2,
-        outputs: [{ address: intent.address!, valueSat: BigInt(intent.amount) }],
+        outputs: [{ address: must(intent.address), valueSat: BigInt(intent.amount) }],
       }),
       onChange: () => {},
     });
@@ -283,5 +288,53 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     expect(
       (await f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id)).invoiceId,
     ).toBe(row.id);
+  });
+  it('renews one explicit paid period without suspending today or duplicating a lost reply', async () => {
+    const f = await fixture();
+    const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'first');
+    const row = await f.invoice(first);
+    await f.submit(row);
+    await f.confirm(row);
+    // Put the paid period in its renewal window without moving the trusted node clock.
+    const start = new Date(Date.now() - 24 * 86_400_000),
+      end = new Date(Date.now() + 6 * 86_400_000);
+    await gatewayDb()
+      .update(faircoinBillingInvoices)
+      .set({ periodStart: start, periodEnd: end })
+      .where(eq(faircoinBillingInvoices.id, row.id));
+    const request = await f.input();
+    const next = await f.service.renew(f.owner, row.subscriptionId, request, 'next');
+    expect(await f.service.renew(f.owner, row.subscriptionId, request, 'next')).toEqual(next);
+    const nextRow = await f.invoice(next);
+    expect(nextRow.periodStart.toISOString()).toBe(end.toISOString());
+    const intent = await findIntentById(gatewayDb(), must(nextRow.paymentIntentId));
+    expect(+must(intent).expiresAt).toBeLessThanOrEqual(Date.parse(nextRow.fxQuote.expiresAt));
+    await f.submit(nextRow);
+    await f.confirm(nextRow);
+    const current = await f.service.retrieveSubscription(f.owner, row.subscriptionId);
+    expect(current.status).toBe('active');
+    expect(current.currentPeriodStart).toBe(start.toISOString());
+    expect(current.currentPeriodEnd).toBe(nextRow.periodEnd.toISOString());
+    expect((await f.service.retrieveCheckout(f.owner, first.id)).initialInvoiceId).toBe(row.id);
+    expect((await f.service.retrieveCheckout(f.owner, next.id)).initialInvoiceId).toBe(nextRow.id);
+    const recovered = await f.service.retrieveCheckoutOperation(f.owner, {
+      idempotencyKey: 'next',
+      providerCustomerId: request.providerCustomerId,
+      providerPriceId: request.providerPriceId,
+      storeId: request.storeId,
+      planId: request.planId,
+    });
+    expect(recovered.state).toBe('succeeded');
+    expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(2);
+  });
+
+  it('refuses reuse of a signed single-use tax quote after cancellation', async () => {
+    const f = await fixture();
+    const input = await f.input();
+    const first = await f.service.createCheckoutSession(f.owner, input, 'first');
+    const row = await f.invoice(first);
+    await f.service.cancelAtPeriodEnd(f.owner, row.subscriptionId, 'cancel');
+    await expect(f.service.createCheckoutSession(f.owner, input, 'second')).rejects.toThrow();
+    expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(1);
   });
 });

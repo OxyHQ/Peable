@@ -127,8 +127,8 @@ export function createFaircoinBillingService(options: {
         c.oxyAppId === owner.oxyAppId &&
         c.environment === owner.environment,
     );
-    if (matches.length !== 1) throw new BillingError('not_found', 404);
-    return matches[0]!;
+    if (matches.length !== 1 || !matches[0]) throw new BillingError('not_found', 404);
+    return matches[0];
   }
   async function merchant(owner: BillingOwner) {
     authorize(owner);
@@ -189,7 +189,21 @@ export function createFaircoinBillingService(options: {
         +row.invoice.acceptedAt >= Date.parse(row.invoice.fxQuote.quotedAt) &&
         +row.invoice.acceptedAt < Date.parse(row.invoice.fxQuote.expiresAt),
     );
-    const current = paid[0]?.invoice ?? periods.at(-1)?.invoice;
+    const activePeriods = paid.filter(
+      (row) => +row.invoice.periodStart <= +now() && +row.invoice.periodEnd > +now(),
+    );
+    const current = activePeriods[0]?.invoice ?? paid[0]?.invoice ?? periods.at(-1)?.invoice;
+    // A paid renewal may begin next month. Keep today's paid start while extending
+    // the end through contiguous paid periods; do not suspend current access.
+    let paidThrough = current?.periodEnd;
+    for (const row of [...paid].reverse()) {
+      if (
+        paidThrough &&
+        +row.invoice.periodStart <= +paidThrough &&
+        +row.invoice.periodEnd > +paidThrough
+      )
+        paidThrough = row.invoice.periodEnd;
+    }
     if (!current) throw new BillingError('reconciliation_required');
     const active = paid.some(
       (row) => +row.invoice.periodStart <= +now() && +row.invoice.periodEnd > +now(),
@@ -212,9 +226,11 @@ export function createFaircoinBillingService(options: {
       interval: 'month',
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
       currentPeriodStart: current.periodStart.toISOString(),
-      currentPeriodEnd: current.periodEnd.toISOString(),
+      currentPeriodEnd: (paidThrough ?? current.periodEnd).toISOString(),
       trialEndsAt: null,
-      cancelAt: subscription.cancelAtPeriodEnd ? current.periodEnd.toISOString() : null,
+      cancelAt: subscription.cancelAtPeriodEnd
+        ? (paidThrough ?? current.periodEnd).toISOString()
+        : null,
       cancelledAt: subscription.cancelledAt?.toISOString() ?? null,
     };
   }
@@ -229,8 +245,7 @@ export function createFaircoinBillingService(options: {
       : null;
     // A submitted txid, a success redirect or an unconfirmed transfer awards nothing.
     if (
-      !intent ||
-      intent.status !== 'settled' ||
+      intent?.status !== 'settled' ||
       intent.rail !== 'faircoin' ||
       !intent.txid ||
       !invoice.acceptedAt ||
@@ -286,6 +301,17 @@ export function createFaircoinBillingService(options: {
         })
       ).intent;
     }
+    // Address reservation/network work can outlast the seconds rounded above.
+    // The persisted gateway deadline is bounded by the frozen signed quote too.
+    if (+intent.expiresAt > +expires) {
+      const [bounded] = await db
+        .update(paymentIntents)
+        .set({ expiresAt: expires })
+        .where(eq(paymentIntents.id, intent.id))
+        .returning();
+      if (!bounded) throw new BillingError('reconciliation_required');
+      intent = { ...intent, expiresAt: bounded.expiresAt };
+    }
     if (!invoice.paymentIntentId)
       await db
         .update(invoices)
@@ -331,12 +357,13 @@ export function createFaircoinBillingService(options: {
     );
     if (
       offers.length !== 1 ||
+      !offers[0] ||
       !input.taxQuote ||
       input.trialDays !== 0 ||
       input.providerCustomerId !== customerRef(owner, input.storeId)
     )
       throw new BillingError('identity_conflict');
-    const offer = offers[0]!;
+    const offer = offers[0];
     const subscriptionId = renewal ?? `sub_fair${digest([owner.merchantId, key])}`;
     const invoiceId = `in_fair${digest([subscriptionId, key])}`;
     const requestDigest = digest([input, renewal ?? null]);
@@ -442,7 +469,15 @@ export function createFaircoinBillingService(options: {
         )
       )
         throw new BillingError('identity_conflict');
-      const lastPaid = prior.find((p) => p.intent?.status === 'settled');
+      const lastPaid = prior.find(
+        (p) =>
+          p.intent?.status === 'settled' &&
+          p.intent.rail === 'faircoin' &&
+          p.intent.amount === p.invoice.fxQuote.amountBaseUnits &&
+          p.invoice.acceptedAt &&
+          +p.invoice.acceptedAt >= Date.parse(p.invoice.fxQuote.quotedAt) &&
+          +p.invoice.acceptedAt < Date.parse(p.invoice.fxQuote.expiresAt),
+      );
       // One explicit period at a time; renew during the final week or after expiry.
       if (lastPaid && +lastPaid.invoice.periodEnd - +now() > 7 * 86_400_000)
         throw new BillingError('identity_conflict');
@@ -545,8 +580,8 @@ export function createFaircoinBillingService(options: {
           ),
         );
       if (!found.length) return { state: 'not_found', source };
-      if (found.length !== 1) throw new BillingError('identity_conflict');
-      const row = found[0]!.invoice;
+      if (found.length !== 1 || !found[0]) throw new BillingError('identity_conflict');
+      const row = found[0].invoice;
       source.taxQuoteId = row.taxSnapshot.taxQuote.quote.id;
       const intent = row.paymentIntentId ? await findIntentById(db, row.paymentIntentId) : null;
       if (!intent) return { state: 'pending', source };
@@ -644,7 +679,7 @@ export function createFaircoinBillingService(options: {
     async cancelAtPeriodEnd(owner, ref, rawKey) {
       billingIdempotencyKey.parse(rawKey);
       await owned(owner, ref);
-      // Cancelling blocks all subsequent invoices. An already submitted transfer
+      // Cancelling blocks all subsequent invoices. An already issued checkout
       // remains observable and its issued period is honoured after confirmation.
       await db.transaction(async (tx) => {
         const [row] = await tx

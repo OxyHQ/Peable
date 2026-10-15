@@ -96,7 +96,12 @@ export async function configureBillingRuntime(
   adapters: BillingRuntimeAdapters = {},
 ) {
   if (raw === undefined) return undefined;
-  const requested = JSON.parse(raw);
+  let requested: Record<string, unknown>;
+  try {
+    requested = z.record(z.unknown()).parse(JSON.parse(raw));
+  } catch {
+    throw new Error('Invalid PEABLE_BILLING_COHORT configuration');
+  }
   if (requested.rail === 'faircoin') {
     const { rail: _rail, ...body } = requested;
     const native = faircoinBillingConfigurationSchema.parse(body);
@@ -107,7 +112,10 @@ export async function configureBillingRuntime(
     if ((!calculator || !signingKey) && fiscalFile && keyFile) {
       const configuredKey = await readFile(keyFile, 'utf8');
       signingKey ??= configuredKey;
-      calculator ??= createConfiguredFiscalAuthority(JSON.parse(await readFile(fiscalFile, 'utf8')), configuredKey);
+      calculator ??= createConfiguredFiscalAuthority(
+        JSON.parse(await readFile(fiscalFile, 'utf8')),
+        configuredKey,
+      );
     }
     if (!calculator || !signingKey)
       throw new Error(
