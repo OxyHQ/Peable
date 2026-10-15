@@ -2,6 +2,7 @@ import type { PaymentIntent } from '@peable.to/shared-types';
 import { formatFair } from '@fairco.in/core';
 import { buildPayDeepLink } from '../lib/deepLink';
 import { Qr } from './Qr';
+import { DisplayCurrency } from './DisplayCurrency';
 
 // Heuristic, not a hard guarantee — good enough to decide "can this device
 // plausibly handle a custom URL scheme via a same-tab navigation" for the
@@ -44,6 +45,7 @@ export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
   return (
     <div className="pay-with-peable">
       <p className="pay-with-peable__amount">{formatFair(BigInt(intent.amount))} FAIR</p>
+      <DisplayCurrency amount={intent.amount} />
       {isMobileDevice() ? (
         <button
           type="button"
