@@ -68,6 +68,9 @@ export function DisplayCurrency({ amount }: { amount: string }) {
           const selected = event.target.value;
           if (!isDisplayCurrency(selected)) return;
           setCurrency(selected);
+          const url = new URL(window.location.href);
+          url.searchParams.delete('displayCurrency');
+          window.history.replaceState(window.history.state, '', url.toString());
           try {
             localStorage.setItem(STORAGE_KEY, selected);
           } catch {

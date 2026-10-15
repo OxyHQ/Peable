@@ -117,3 +117,28 @@ test('does not show a success CTA without a successUrl', async () => {
   expect(await screen.findByText(/payment settled/i)).toBeDefined();
   expect(screen.queryByRole('link', { name: /continue/i })).toBeNull();
 });
+
+test('an expired frozen subscription quote shows canonical amounts and no payment action', () => {
+  const quote = {
+    id: 'fx_expired',
+    currency: 'USD' as const,
+    grossMinorUnits: 100,
+    amountBaseUnits: '333333334',
+    usdPerFair: '0.3',
+    source: 'official',
+    observedAt: new Date(Date.now() - 120000).toISOString(),
+    quotedAt: new Date(Date.now() - 120000).toISOString(),
+    expiresAt: new Date(Date.now() - 1000).toISOString(),
+    rounding: 'ceil_to_base_unit' as const,
+  };
+  render(
+    <CheckoutView
+      intent={makeIntent({ status: 'created', amount: '333333334' })}
+      billingQuote={quote}
+    />,
+  );
+  expect(screen.getByText('Catalogue total: 1.00 USD')).toBeTruthy();
+  expect(screen.getByText('Payment quote: 3.33333334 FAIR')).toBeTruthy();
+  expect(screen.getByRole('alert').textContent).toContain('expired');
+  expect(screen.queryByText('Scan with the Peable app')).toBeNull();
+});
