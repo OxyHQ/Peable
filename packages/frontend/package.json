@@ -23,7 +23,7 @@
     "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
-    "@alia.onl/sdk": "^15.4.0",
+    "@alia.onl/sdk": "^15.6.0",
     "@expo/vector-icons": "^15.1.1",
     "@fairco.in/core": "0.5.0",
     "@gorhom/bottom-sheet": "^5.2.9",
