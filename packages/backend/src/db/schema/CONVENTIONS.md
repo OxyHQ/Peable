@@ -375,3 +375,21 @@ The suites skip when `TEST_DATABASE_URL` is unset, so a developer without a
 container is not blocked — and `schemaGates.realdb.test.ts` turns that skip into
 a RED build when `CI` is set, because a skipped suite and a passing suite are
 indistinguishable in a summary line.
+
+
+## Organization contributions
+
+`payment_links.contribution` is the immutable, schema-validated contribution
+configuration: the opaque Oxy organization reference, purpose, fixed/free policy
+and optional UTC expiry. The Oxy account remains external; no membership or
+organization content is copied. Its operation key is unique per merchant and
+never appears in a DTO. A fixed link has a positive amount; a free link stores
+zero as a policy sentinel and every minted intent has a positive payer-chosen
+amount. The contribution shape CHECK restricts this phase to the FairCoin rail.
+
+`payment_intents.payment_link_id` is a local nullable FK with RESTRICT deletion,
+set during intent creation so collection reports never infer ownership from
+mutable metadata. Existing non-link intents remain NULL. The keyset collection
+query scopes both merchant and link; `payment_intents_payment_link_id_idx`
+supports it. No contribution-specific payment state or webhook producer exists:
+the existing FairCoin state machine, CAS transition and outbox remain authoritative.
