@@ -125,6 +125,7 @@ export async function insertCheckoutSession(
         successUrl: params.successUrl ?? null,
         cancelUrl: params.cancelUrl ?? null,
       })
+      .onConflictDoNothing()
       .returning(SESSION_COLUMNS);
     return row ? toSessionRow(row) : null;
   } catch (error) {

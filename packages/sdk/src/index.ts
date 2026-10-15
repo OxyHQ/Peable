@@ -166,3 +166,5 @@ export type {
   ContributionLink,
   ContributionDetails,
 } from './resources/contributions';
+
+export type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
