@@ -241,7 +241,97 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
       'incomplete',
     );
+    await expect(f.service.retrieveCheckout(f.owner, checkout.id)).rejects.toThrow(
+      'reconciliation_required',
+    );
   });
+  it('replaces only terminal unpaid initial attempts, serializing concurrent fresh checkouts', async () => {
+    const f = await fixture();
+    const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'abandoned');
+    const row = await f.invoice(first);
+    await transitionIntent(must(row.paymentIntentId), { from: 'created', status: 'expired' });
+    const results = await Promise.allSettled([
+      f.service.createCheckoutSession(f.owner, await f.input(), 'retry-one'),
+      f.service.createCheckoutSession(f.owner, await f.input(), 'retry-two'),
+    ]);
+    expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1);
+    expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
+      'canceled',
+    );
+    expect((await f.service.retrieveCheckout(f.owner, first.id)).status).toBe('expired');
+    // A stale watcher cannot revive the terminal payment after a replacement exists.
+    expect(
+      (
+        await transitionIntent(must(row.paymentIntentId), {
+          from: 'broadcast',
+          status: 'confirming',
+        })
+      ).kind,
+    ).toBe('stale');
+    await expect(
+      f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id),
+    ).rejects.toThrow();
+    expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(2);
+  });
+
+  it('does not replace a confirming first payment merely because its quote expired', async () => {
+    const f = await fixture();
+    const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'confirming');
+    const row = await f.invoice(first);
+    await f.submit(row);
+    await transitionIntent(must(row.paymentIntentId), { from: 'broadcast', status: 'confirming' });
+    f.advance(600_000);
+    expect((await f.service.retrieveCheckout(f.owner, first.id)).status).toBe('open');
+    await expect(
+      f.service.createCheckoutSession(f.owner, await f.input(), 'replacement'),
+    ).rejects.toThrow('identity_conflict');
+    expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(1);
+  });
+
+  it('does not claim an unseen broadcast is expired merely because its quote elapsed', async () => {
+    const f = await fixture();
+    const checkout = await f.service.createCheckoutSession(f.owner, await f.input(), 'unseen');
+    const row = await f.invoice(checkout);
+    await f.submit(row);
+    f.advance(600_000);
+    await expect(f.service.retrieveCheckout(f.owner, checkout.id)).rejects.toThrow(
+      'reconciliation_required',
+    );
+    expect(must(await findIntentById(gatewayDb(), must(row.paymentIntentId))).status).toBe(
+      'broadcast',
+    );
+    expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
+      'incomplete',
+    );
+  });
+
+  it('requires review for failed chain observations instead of proposing another charge', async () => {
+    const f = await fixture();
+    const checkout = await f.service.createCheckoutSession(f.owner, await f.input(), 'partial');
+    const row = await f.invoice(checkout);
+    await f.submit(row);
+    const intent = must(await findIntentById(gatewayDb(), must(row.paymentIntentId)));
+    await new SettlementWatcher({
+      getTransaction: async () => ({
+        txid: must(intent.txid),
+        confirmations: 2,
+        outputs: [{ address: must(intent.address), valueSat: 1n }],
+      }),
+      onChange: () => {},
+    }).check();
+    expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('failed');
+    await expect(f.service.retrieveCheckout(f.owner, checkout.id)).rejects.toThrow(
+      'reconciliation_required',
+    );
+    await expect(
+      f.service.createCheckoutSession(f.owner, await f.input(), 'fresh'),
+    ).rejects.toThrow('reconciliation_required');
+    await expect(
+      f.service.renew(f.owner, row.subscriptionId, await f.input(), 'renew'),
+    ).rejects.toThrow('reconciliation_required');
+    expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(1);
+  });
+
   it('serializes independent initial checkouts and binds merchant ownership', async () => {
     const f = await fixture();
     const input = await f.input();
@@ -326,6 +416,42 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     });
     expect(recovered.state).toBe('succeeded');
     expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(2);
+  });
+
+  it('renews a lapsed paid source from today without charging missed months', async () => {
+    const f = await fixture();
+    const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'first');
+    const row = await f.invoice(first);
+    await f.submit(row);
+    await f.confirm(row);
+    await gatewayDb()
+      .update(faircoinBillingInvoices)
+      .set({
+        periodStart: new Date(Date.now() - 120 * 86_400_000),
+        periodEnd: new Date(Date.now() - 90 * 86_400_000),
+      })
+      .where(eq(faircoinBillingInvoices.id, row.id));
+    // Existing paid history must use the owned renewal path, not replacement.
+    await expect(
+      f.service.createCheckoutSession(f.owner, await f.input(), 'replacement'),
+    ).rejects.toThrow('identity_conflict');
+    const renewed = await f.service.renew(
+      f.owner,
+      row.subscriptionId,
+      await f.input(),
+      'after-lapse',
+    );
+    const next = await f.invoice(renewed);
+    expect(Math.abs(+next.periodStart - Date.now())).toBeLessThan(5000);
+    expect(+next.periodEnd).toBeGreaterThan(Date.now() + 27 * 86_400_000);
+    expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
+      'past_due',
+    );
+    await f.submit(next);
+    await f.confirm(next);
+    expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
+      'active',
+    );
   });
 
   it('refuses reuse of a signed single-use tax quote after cancellation', async () => {
