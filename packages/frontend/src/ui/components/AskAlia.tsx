@@ -10,8 +10,8 @@
 import { useCallback, useMemo, useRef } from 'react';
 import { Pressable } from 'react-native';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
+import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
 import { VoiceSession } from '@alia.onl/sdk/voice';
-import { RiSparklingLine } from '@oxy.so/bloom/icons/RiSparklingLine';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useAuth } from '@oxy.so/services';
 import { t } from '../../i18n';
@@ -52,7 +52,7 @@ export function AskAlia({ screen }: AskAliaProps) {
         className="active:opacity-60"
         hitSlop={8}
       >
-        <RiSparklingLine width={24} height={24} fill={theme.colors.text} />
+        <AliaAvatarIcon width={24} height={24} fill={theme.colors.text} />
       </Pressable>
       {isAuthenticated && (
         <AliaChatSheet

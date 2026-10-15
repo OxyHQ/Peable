@@ -103,10 +103,12 @@
       "expo-image",
       "expo-audio",
       [
-        "expo-speech-recognition",
+        "react-native-audio-api",
         {
-          "microphonePermission": "Peable uses the microphone so you can dictate and talk to Alia.",
-          "speechRecognitionPermission": "Peable turns your speech into text for Alia."
+          "iosMicrophonePermission": "Peable uses the microphone so you can dictate and talk to Alia.",
+          "iosBackgroundMode": false,
+          "androidForegroundService": false,
+          "androidPermissions": ["android.permission.RECORD_AUDIO"]
         }
       ],
       "expo-background-task",
