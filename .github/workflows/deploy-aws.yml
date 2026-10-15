@@ -8,25 +8,18 @@
 name: Deploy to AWS
 
 on:
-  push:
+  # After CI passes on a push to main, never alongside it. CI includes the
+  # container build and boot (`ci.yml`'s `image` job, which a push to main
+  # always runs), so nothing is promoted over a red build. Until 2026-10 this
+  # ran on `push` and a `gate` job held a runner for up to 30 minutes polling
+  # CI's run for the pushed commit; `workflow_run` starts it only once CI has
+  # an answer, and the `scope` job below puts back the path filter `push` gave.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    # The backend image bundles shared-types and the root manifests, so a change
-    # to any of them must trigger a redeploy — not just packages/backend/**.
-    # `.dockerignore` and the reviewed pin are build inputs too: a change to
-    # either one alone changes what production builds (or whether it may), so
-    # it deploys. The pin is also matched by `.github/scripts/**`; it is named
-    # so dropping that glob cannot silently stop it deploying.
-    paths:
-      - 'packages/backend/**'
-      - 'packages/shared-types/**'
-      - 'packages/sdk/**'
-      - '.github/scripts/**'
-      - '.github/scripts/reviewed-images.json'
-      - '.dockerignore'
-      - 'package.json'
-      - 'bun.lock'
-      - 'bunfig.toml'
-      - '.github/workflows/deploy-aws.yml'
+  # Releases main's head on demand, and still only once CI succeeded on a push
+  # for it (`deploy-scope.sh gate` checks that, once, and refuses otherwise).
   workflow_dispatch:
     inputs:
       sync_secrets:
@@ -53,6 +46,10 @@ env:
   TASK_FAMILY: oxy-peable
   MIGRATION_WAIT_TIMEOUT_SECONDS: 660
   RELEASE_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+  # The commit under release: the one CI tested on `workflow_run`, main's head
+  # on a dispatch. Never `github.sha` alone, which on `workflow_run` is whatever
+  # main points at when CI finished.
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
   # The database the migrator is allowed to write DDL to. Checked against
   # `current_database()` by `--target-database`, so a task whose DATABASE_URL
   # reaches somewhere else fails instead of migrating it — a migrator pointed at
@@ -64,76 +61,92 @@ env:
   # service rename.
   PG_DATABASE: oxypay
 
-# Deploys run one at a time and are never cancelled: a rollout interrupted
-# half-way is worse than a late one. A newer pending run may replace an older
-# pending one, which is safe because main's newer head contains it.
-concurrency:
-  group: deploy-peable-aws
-  cancel-in-progress: false
-
 jobs:
-  # ── Nothing is promoted over a red build ──────────────────────────────────
+  # ── Nothing is promoted over a red build, and only what changed ships ─────
   #
-  # This workflow used to start building the moment main moved, independently of
-  # CI. On the push that failed at `Build and push (linux/arm64)`, the checkout
-  # and frontend deploys went green beside it and the run as a whole read as a
-  # release — the state issue #70 §2 names: a green-looking release of a backend
-  # that never shipped. A deploy that outruns its own tests has the same shape
-  # in the other direction: the image lands in ECR and the service rolls before
-  # anything has said the code is sound.
+  # Decides, OUTSIDE the release lane, whether `deploy` runs at all, on a
+  # ubuntu-latest runner for a few seconds, so a run with nothing to release
+  # never holds the arm64 one. See deploy-scope.sh for each rule:
   #
-  # So the deploy WAITS for the CI workflow on this exact commit, and CI now
-  # includes the container build and boot (`ci.yml`'s `image` job). Polling the
-  # API rather than using a `workflow_run` trigger keeps this workflow's path
-  # filter — a push touching only the frontend still must not deploy the
-  # backend, and `workflow_run` carries no path filtering at all.
-  gate:
-    if: github.ref == 'refs/heads/main'
+  #  * the trigger guards: CI succeeded, on a push, to main, in this repository
+  #    (`workflow_run` also fires for red runs and for a fork's `main`);
+  #  * order: an older commit whose CI finished late is held only while a newer
+  #    main commit has a CI run of its own that is live or green, and released
+  #    otherwise (a bot push starts no CI, and must not strand it);
+  #  * path scope: what the old `push.paths` decided, measured from the last
+  #    commit this workflow RELEASED (a marker the deploy job writes) rather
+  #    than from one push, so a skipped commit's changes are never lost. The
+  #    backend image bundles shared-types, the SDK and the root manifests, and
+  #    `.dockerignore` and the reviewed pin (under `.github/scripts/`) are build
+  #    inputs too, so a change to any of them deploys. When unsure, release.
+  #
+  # A dispatch skips the path scope (it is the manual redeploy) but not the
+  # one-shot check that CI succeeded on a push for main's head.
+  scope:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Job level: no OIDC token here, and `actions: read` (CI's runs, the release
+    # marker) reaches no other job.
     permissions:
       contents: read
       actions: read
-    steps:
-      - name: Wait for CI on this commit
-        env:
-          GH_TOKEN: ${{ github.token }}
-          SHA: ${{ github.sha }}
-          REPO: ${{ github.repository }}
-        run: |
-          set -euo pipefail
-          # Manual dispatch is subject to the same exact-source CI gate.
-          deadline=$(( SECONDS + 1800 ))
-          while [ "$SECONDS" -lt "$deadline" ]; do
-            run=$(gh api "repos/$REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&per_page=1"               --jq '.workflow_runs[0] | "\(.status) \(.conclusion)"' || echo "none none")
-            status=${run%% *}
-            conclusion=${run##* }
-            case "$status" in
-              completed)
-                if [ "$conclusion" = "success" ]; then
-                  echo "CI succeeded for $SHA"
-                  exit 0
-                fi
-                echo "::error::CI concluded '$conclusion' for $SHA — refusing to deploy"
-                exit 1
-                ;;
-              none|null)
-                echo "waiting for CI to start for $SHA"
-                ;;
-              *)
-                echo "CI is $status for $SHA"
-                ;;
-            esac
-            sleep 20
-          done
-          echo "::error::timed out waiting for CI on $SHA"
-          exit 1
-
-  deploy:
-    if: github.ref == 'refs/heads/main'
-    needs: [gate]
-    runs-on: ubuntu-24.04-arm
+    outputs:
+      backend: ${{ steps.backend.outputs.backend }}
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Release only a CI-green main commit nothing newer carries
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/deploy-scope.sh gate
+      - name: Decide whether anything the backend image ships changed
+        id: backend
+        if: steps.gate.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          bash .github/scripts/deploy-scope.sh target backend include
+          '^(packages/backend/|packages/shared-types/|packages/sdk/|\.github/scripts/|\.dockerignore$|package\.json$|bun\.lock$|bunfig\.toml$|\.github/workflows/deploy-aws\.yml$)'
+          peable-release-backend-
+
+  deploy:
+    needs: scope
+    # `scope` admits only a CI-green main commit with something to release. The
+    # ref check stays as well: only the protected main branch may assume the
+    # AWS deploy role (on `workflow_run` the ref is the default branch).
+    if: github.ref == 'refs/heads/main' && needs.scope.outputs.backend == 'true'
+    runs-on: ubuntu-24.04-arm
+    # The worst chain is bounded by the scripts' own deadlines: the build, the
+    # pre migration (MIGRATION_WAIT_TIMEOUT_SECONDS, 11 min), the rollout and a
+    # rollback to the previous revision (ROLLOUT_TIMEOUT_SECONDS, 20 min each)
+    # or the post migration after a good rollout (11 min). About 55 min plus
+    # the build; 90 keeps every one of those inside the job, so it is never
+    # killed mid-rollout, while a hang no longer holds the slot for 6 hours.
+    timeout-minutes: 90
+    # Deploys run one at a time and are never cancelled: a rollout interrupted
+    # half-way is worse than a late one. A newer pending run may replace an
+    # older pending one, which is safe because its `scope` diffed from the last
+    # RELEASED commit and so carries the older one. On the JOB, not the
+    # workflow, so only a run `scope` admitted ever enters the lane: a red CI
+    # run or a late older commit cannot displace a pending release.
+    concurrency:
+      group: deploy-peable-aws
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
 
       - name: Configure AWS credentials (OIDC, no stored keys)
         uses: aws-actions/configure-aws-credentials@e7f100cf4c008499ea8adda475de1042d6975c7b # v6
@@ -221,8 +234,8 @@ jobs:
       # `--cache-from/--cache-to type=gha` below need the Actions runtime token
       # and cache URL, which GitHub gives to JavaScript actions and NOT to `run:`
       # steps; without them buildx skips the cache silently. Only a push to main
-      # or a dispatch runs this workflow, so pull-request code never writes this
-      # cache scope.
+      # (via CI's `workflow_run`) or a dispatch of main runs this job, so
+      # pull-request code never writes this cache scope.
       - name: Expose the Actions cache to buildx
         uses: crazy-max/ghaction-github-runtime@04d248b84655b509d8c44dc1d6f990c879747487 # v4
 
@@ -257,11 +270,11 @@ jobs:
             --cache-to type=gha,scope=$APP-backend,mode=max \
             --provenance=false \
             -f "$DOCKERFILE" \
-            --label "org.opencontainers.image.revision=$GITHUB_SHA" \
+            --label "org.opencontainers.image.revision=$RELEASE_SHA" \
             --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
             --label "io.oxy.source.tree=$SOURCE_TREE" \
             --label "io.oxy.build-inputs.sha256=$BUILD_INPUTS_SHA256" \
-            -t "$IMG:${{ github.sha }}" \
+            -t "$IMG:$RELEASE_SHA" \
             --metadata-file image-metadata.json \
             --push \
             "$CONTEXT"
@@ -371,11 +384,24 @@ jobs:
           RELEASE_RECEIPT_DIR: ${{ runner.temp }}/peable-release
         run: python3 .github/scripts/ecs-release.py cleanup
 
+      # The scope job's base for the next release: the last commit this workflow
+      # actually rolled out, as an Actions cache key (its content is irrelevant).
+      # Only a run whose every step above succeeded reaches this, and only on
+      # main, so no pull request can move it. Lost or evicted, the next run
+      # releases.
+      - name: Write the release marker
+        run: printf '%s\n' "$RELEASE_SHA" >"$RUNNER_TEMP/release-marker"
+      - name: Record this release for the next scope decision
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/release-marker
+          key: peable-release-backend-${{ env.RELEASE_SHA }}
+
       - name: Retain release receipts
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: peable-release-${{ github.sha }}-${{ github.run_attempt }}
+          name: peable-release-${{ env.RELEASE_SHA }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/peable-release
           if-no-files-found: ignore
           retention-days: 14
