@@ -66,6 +66,9 @@ export const faircoinBillingInvoices = pgTable(
     createdAt: createdAt(),
   },
   (t) => [
+    uniqueIndex('faircoin_billing_single_use_tax_quote').on(
+      sql`(${t.taxSnapshot}->'taxQuote'->'quote'->>'id')`,
+    ),
     unique('faircoin_billing_invoice_operation').on(t.subscriptionId, t.operationKey),
     unique('faircoin_billing_invoice_period').on(t.subscriptionId, t.periodStart),
     check('faircoin_billing_positive_period', sql`${t.periodEnd} > ${t.periodStart}`),
