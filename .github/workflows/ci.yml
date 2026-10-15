@@ -263,6 +263,7 @@ jobs:
             test -f /app/node_modules/@peable.to/shared-types/dist/esm/index.js
             echo "node_modules: $(du -sh /app/node_modules | cut -f1), $(ls /app/node_modules | wc -l) top-level entries"
           '
+          docker run --rm --entrypoint bun "$IMAGE" -e 'import { contributionDetailsSchema } from "@peable.to/contracts"; if (!contributionDetailsSchema.safeParse({organizationId:"fixture",purpose:"runtime closure",amountMode:"free",expiresAt:null}).success) throw new Error("Contracts runtime closure failed");'
           size=$(docker image inspect "$IMAGE" --format '{{ .Size }}')
           echo "image size (uncompressed): $(( size / 1024 / 1024 )) MiB"
           echo "Runtime image: $(( size / 1024 / 1024 )) MiB uncompressed (linux/arm64)" >> "$GITHUB_STEP_SUMMARY"

@@ -282,12 +282,10 @@ export function createCheckoutSessionsRouter(deps: {
         .from(faircoinBillingInvoices)
         .where(eq(faircoinBillingInvoices.paymentIntentId, intent.id));
       res.setHeader('Cache-Control', 'no-store');
-      res
-        .status(200)
-        .json({
-          ...toCheckoutSessionPublicDTO(session, merchantDisplay, intent),
-          ...(billing ? { billingQuote: billing.fxQuote } : {}),
-        });
+      res.status(200).json({
+        ...toCheckoutSessionPublicDTO(session, merchantDisplay, intent),
+        ...(billing ? { billingQuote: billing.fxQuote } : {}),
+      });
     }),
   );
 

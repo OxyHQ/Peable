@@ -181,6 +181,7 @@ export class BillingResource {
       // delayed webhook must remain recoverable after the original quote expires.
       if (authority.method === 'faircoin') {
         const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
+        // biome-ignore lint/style/noNonNullAssertion: FairCoin quote presence and bounds were verified above before signature verification.
         const quote = authority.invoice.faircoinQuote!;
         const paidAt = Date.parse(paid.paidAt);
         if (

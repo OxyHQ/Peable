@@ -126,6 +126,9 @@ COPY packages/checkout/package.json packages/checkout/
 COPY packages/pay/package.json packages/pay/
 
 RUN bun install --frozen-lockfile --production --ignore-scripts --omit=peer --filter @peable.to/backend
+# A hoisted install can still require workspace-local versions (contracts uses
+# Zod 4 while the backend uses Zod 3). Preserve those filtered production deps.
+RUN mkdir -p packages/backend/node_modules packages/contracts/node_modules packages/shared-types/node_modules
 
 # ── Stage 3: runtime ──────────────────────────────────────────────
 #
@@ -148,6 +151,9 @@ RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 # The workspace links (`node_modules/@peable.to/{backend,shared-types}`) are
 # relative symlinks into packages/, so they resolve once the packages land below.
 COPY --from=deps /app/node_modules/ node_modules/
+COPY --from=deps /app/packages/backend/node_modules/ packages/backend/node_modules/
+COPY --from=deps /app/packages/contracts/node_modules/ packages/contracts/node_modules/
+COPY --from=deps /app/packages/shared-types/node_modules/ packages/shared-types/node_modules/
 
 # Compiled shared-types output (imported as dist/index.js) + the backend TS
 # source and its tsconfig (run directly under Bun — no compiled entrypoint).

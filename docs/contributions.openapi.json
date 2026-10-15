@@ -50,11 +50,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "development",
-                "staging",
-                "production"
-              ]
+              "enum": ["development", "staging", "production"]
             }
           },
           {
@@ -82,10 +78,7 @@
                   },
                   "amountMode": {
                     "type": "string",
-                    "enum": [
-                      "fixed",
-                      "free"
-                    ]
+                    "enum": ["fixed", "free"]
                   },
                   "amount": {
                     "type": "string",
@@ -108,11 +101,7 @@
                     ]
                   }
                 },
-                "required": [
-                  "purpose",
-                  "amountMode",
-                  "currency"
-                ],
+                "required": ["purpose", "amountMode", "currency"],
                 "additionalProperties": false
               }
             }
@@ -139,10 +128,7 @@
                     },
                     "network": {
                       "type": "string",
-                      "enum": [
-                        "mainnet",
-                        "testnet"
-                      ]
+                      "enum": ["mainnet", "testnet"]
                     },
                     "active": {
                       "type": "boolean"
@@ -166,10 +152,7 @@
                         },
                         "amountMode": {
                           "type": "string",
-                          "enum": [
-                            "fixed",
-                            "free"
-                          ]
+                          "enum": ["fixed", "free"]
                         },
                         "expiresAt": {
                           "anyOf": [
@@ -184,12 +167,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "organizationId",
-                        "purpose",
-                        "amountMode",
-                        "expiresAt"
-                      ],
+                      "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
                       "additionalProperties": false
                     },
                     "createdAt": {
@@ -219,16 +197,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": [
-                        "type",
-                        "message"
-                      ],
+                      "required": ["type", "message"],
                       "properties": {
                         "type": {
                           "type": "string"
@@ -275,11 +248,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "development",
-                "staging",
-                "production"
-              ]
+              "enum": ["development", "staging", "production"]
             }
           },
           {
@@ -326,10 +295,7 @@
                           },
                           "network": {
                             "type": "string",
-                            "enum": [
-                              "mainnet",
-                              "testnet"
-                            ]
+                            "enum": ["mainnet", "testnet"]
                           },
                           "active": {
                             "type": "boolean"
@@ -353,10 +319,7 @@
                               },
                               "amountMode": {
                                 "type": "string",
-                                "enum": [
-                                  "fixed",
-                                  "free"
-                                ]
+                                "enum": ["fixed", "free"]
                               },
                               "expiresAt": {
                                 "anyOf": [
@@ -371,12 +334,7 @@
                                 ]
                               }
                             },
-                            "required": [
-                              "organizationId",
-                              "purpose",
-                              "amountMode",
-                              "expiresAt"
-                            ],
+                            "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
                             "additionalProperties": false
                           },
                           "createdAt": {
@@ -399,16 +357,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": [
-                    "items",
-                    "nextCursor"
-                  ],
+                  "required": ["items", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -420,16 +372,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": [
-                        "type",
-                        "message"
-                      ],
+                      "required": ["type", "message"],
                       "properties": {
                         "type": {
                           "type": "string"
@@ -486,11 +433,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "development",
-                "staging",
-                "production"
-              ]
+              "enum": ["development", "staging", "production"]
             }
           }
         ],
@@ -506,9 +449,7 @@
                     "type": "boolean"
                   }
                 },
-                "required": [
-                  "active"
-                ],
+                "required": ["active"],
                 "additionalProperties": false
               }
             }
@@ -535,10 +476,7 @@
                     },
                     "network": {
                       "type": "string",
-                      "enum": [
-                        "mainnet",
-                        "testnet"
-                      ]
+                      "enum": ["mainnet", "testnet"]
                     },
                     "active": {
                       "type": "boolean"
@@ -562,10 +500,7 @@
                         },
                         "amountMode": {
                           "type": "string",
-                          "enum": [
-                            "fixed",
-                            "free"
-                          ]
+                          "enum": ["fixed", "free"]
                         },
                         "expiresAt": {
                           "anyOf": [
@@ -580,12 +515,7 @@
                           ]
                         }
                       },
-                      "required": [
-                        "organizationId",
-                        "purpose",
-                        "amountMode",
-                        "expiresAt"
-                      ],
+                      "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
                       "additionalProperties": false
                     },
                     "createdAt": {
@@ -615,16 +545,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": [
-                        "type",
-                        "message"
-                      ],
+                      "required": ["type", "message"],
                       "properties": {
                         "type": {
                           "type": "string"
@@ -681,11 +606,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": [
-                "development",
-                "staging",
-                "production"
-              ]
+              "enum": ["development", "staging", "production"]
             }
           },
           {
@@ -762,12 +683,7 @@
                                   "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                                 }
                               },
-                              "required": [
-                                "id",
-                                "amount",
-                                "status",
-                                "createdAt"
-                              ],
+                              "required": ["id", "amount", "status", "createdAt"],
                               "additionalProperties": false
                             }
                           }
@@ -785,16 +701,10 @@
                       }
                     },
                     "nextCursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ]
+                      "type": ["string", "null"]
                     }
                   },
-                  "required": [
-                    "items",
-                    "nextCursor"
-                  ],
+                  "required": ["items", "nextCursor"],
                   "additionalProperties": false
                 }
               }
@@ -806,16 +716,11 @@
               "application/json": {
                 "schema": {
                   "type": "object",
-                  "required": [
-                    "error"
-                  ],
+                  "required": ["error"],
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": [
-                        "type",
-                        "message"
-                      ],
+                      "required": ["type", "message"],
                       "properties": {
                         "type": {
                           "type": "string"
