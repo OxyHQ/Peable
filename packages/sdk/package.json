@@ -37,7 +37,14 @@
       },
       "default": "./dist/esm/checkout.js"
     },
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./display": {
+      "react-native": "./dist/esm/display.js",
+      "import": {
+        "types": "./dist/types/display.d.ts",
+        "default": "./dist/esm/display.js"
+      }
+    }
   },
   "files": [
     "dist"
@@ -75,7 +82,8 @@
     "@peable.to/shared-types": "workspace:0.3.4-oxy-one.0",
     "qrcode-generator": "^2.0.4",
     "socket.io-client": "^4.8.3",
-    "@peable.to/contracts": "workspace:0.1.0"
+    "@peable.to/contracts": "workspace:0.1.0",
+    "@fairco.in/core": "0.5.0"
   },
   "devDependencies": {
     "typescript": "~5.9.2",

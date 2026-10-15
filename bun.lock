@@ -215,6 +215,7 @@
       "name": "@peable.to/sdk",
       "version": "0.2.7-oxy-one.0",
       "dependencies": {
+        "@fairco.in/core": "0.5.0",
         "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/shared-types": "workspace:0.3.4-oxy-one.0",
         "qrcode-generator": "^2.0.4",
