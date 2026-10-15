@@ -36,6 +36,7 @@ import { getMyPayments } from '../../services/gateway-client';
 import { fetchBalancesSat } from '../../services/explorer-address';
 import { SafeAreaView } from '../safe-area-view';
 import { useTabScreenBottomInset } from '../navigation/tabs';
+import { AskAlia } from './AskAlia';
 import { Badge } from './Badge';
 import { ProfileQRCard } from './ProfileQRCard';
 import { UserAvatar } from './UserAvatar';
@@ -152,6 +153,7 @@ export function ReadOnlyWalletView() {
           </View>
           <View className="flex-row items-center gap-3">
             <Badge text={t('readOnly.badge')} variant="neutral" size="sm" />
+            <AskAlia screen={t('alia.screen.readOnly')} />
             <UserAvatar
               avatarFileId={user.avatar ?? undefined}
               displayName={user.name?.displayName ?? undefined}
