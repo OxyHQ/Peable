@@ -47,7 +47,9 @@ export async function readDisplayRates(
 ): Promise<DisplayRates> {
   const source = `${EXPLORER_BASE_URL}/api/price`;
   const response = await (options.fetch ?? fetch)(source, {
-    signal: options.signal ?? AbortSignal.timeout(8000),
+    signal: options.signal
+      ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)])
+      : AbortSignal.timeout(8000),
     redirect: 'error',
     headers: { Accept: 'application/json' },
   });
