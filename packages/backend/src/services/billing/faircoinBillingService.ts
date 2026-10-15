@@ -1,5 +1,5 @@
 import { createHash, createPrivateKey, createPublicKey, sign, type KeyObject } from 'node:crypto';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import {
   canonicalBillingAuthority,
@@ -416,8 +416,45 @@ export function createFaircoinBillingService(options: {
               eq(subscriptions.planRef, input.planId),
               eq(subscriptions.cancelAtPeriodEnd, false),
             ),
+          )
+          .for('update');
+        if (live && live.id !== subscriptionId) {
+          const attempts = await tx
+            .select()
+            .from(invoices)
+            .where(eq(invoices.subscriptionId, live.id));
+          const intentIds = attempts.flatMap((attempt) =>
+            attempt.paymentIntentId ? [attempt.paymentIntentId] : [],
           );
-        if (live && live.id !== subscriptionId) throw new BillingError('identity_conflict');
+          const payments = intentIds.length
+            ? await tx
+                .select()
+                .from(paymentIntents)
+                .where(inArray(paymentIntents.id, intentIds))
+                .for('update')
+            : [];
+          if (payments.some((payment) => payment.status === 'failed'))
+            throw new BillingError('reconciliation_required');
+          // An expired/rejected initial attempt has no source to renew in
+          // Oxy. Retire it atomically so the payer can request a fresh quote.
+          // Missing materialization, confirming transfers and all paid history
+          // still hold the slot; elapsed quote time alone never releases it.
+          if (
+            !attempts.length ||
+            intentIds.length !== attempts.length ||
+            payments.length !== attempts.length ||
+            attempts.some((attempt) => attempt.acceptedAt !== null) ||
+            payments.some(
+              (payment) =>
+                payment.rail !== 'faircoin' || !['expired', 'rejected'].includes(payment.status),
+            )
+          )
+            throw new BillingError('identity_conflict');
+          await tx
+            .update(subscriptions)
+            .set({ cancelAtPeriodEnd: true, cancelledAt: now() })
+            .where(eq(subscriptions.id, live.id));
+        }
         await tx
           .insert(subscriptions)
           .values({
@@ -471,6 +508,10 @@ export function createFaircoinBillingService(options: {
         )
       )
         throw new BillingError('identity_conflict');
+      // A failed chain observation may include partial funds. Do not propose
+      // another full renewal payment until that payment has been reconciled.
+      if (prior.some((p) => p.intent?.status === 'failed'))
+        throw new BillingError('reconciliation_required');
       const lastPaid = prior.find(
         (p) =>
           p.intent?.status === 'settled' &&
@@ -540,13 +581,33 @@ export function createFaircoinBillingService(options: {
         ? await findIntentById(db, invoice.paymentIntentId)
         : null;
       const settled = intent?.status === 'settled';
+      if (
+        intent?.status === 'failed' ||
+        (invoice.acceptedAt &&
+          (+invoice.acceptedAt < Date.parse(invoice.fxQuote.quotedAt) ||
+            +invoice.acceptedAt >= Date.parse(invoice.fxQuote.expiresAt))) ||
+        (!invoice.acceptedAt &&
+          Date.parse(invoice.fxQuote.expiresAt) <= +now() &&
+          ['approved', 'broadcast', 'confirming'].includes(intent?.status ?? ''))
+      )
+        throw new BillingError('reconciliation_required');
+      if (settled) {
+        // Funds confirmed after the frozen quote are not an expired unpaid
+        // checkout, nor valid paid authority. Preserve them for explicit review.
+        try {
+          await paidInvoice(owner, sub.id, invoice.id);
+        } catch (error) {
+          if (error instanceof BillingError && error.code === 'not_found')
+            throw new BillingError('reconciliation_required');
+          throw error;
+        }
+      }
       return {
         id: ref,
         initialInvoiceId: settled ? invoice.id : null,
         status: settled
           ? 'complete'
-          : ['expired', 'rejected', 'underpaid', 'failed'].includes(intent?.status ?? '') ||
-              (!invoice.acceptedAt && Date.parse(invoice.fxQuote.expiresAt) <= +now())
+          : ['expired', 'rejected'].includes(intent?.status ?? '')
             ? 'expired'
             : 'open',
         storeId: sub.subjectRef,
