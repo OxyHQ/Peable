@@ -11,6 +11,8 @@ import {
 const STORAGE_KEY = 'peable.displayCurrency';
 function savedCurrency(): Currency {
   try {
+    const requested = new URLSearchParams(window.location.search).get('displayCurrency');
+    if (isDisplayCurrency(requested)) return requested;
     const value = localStorage.getItem(STORAGE_KEY);
     return isDisplayCurrency(value) ? value : 'FAIR';
   } catch {

@@ -11,7 +11,7 @@ test('anonymous selection restores and never changes payable base units', async 
   globalThis.fetch = (async () =>
     new Response(
       JSON.stringify({ price: { usd: '0.3', eur: '0.27' }, timestamp: new Date().toISOString() }),
-    )) as typeof fetch;
+    )) as unknown as typeof fetch;
   const view = render(<DisplayCurrency amount="100000000" />);
   fireEvent.change(screen.getByLabelText('Display currency'), { target: { value: 'EUR' } });
   await waitFor(() => expect(screen.getByText('Approx. 0.27 EUR')).toBeTruthy());
@@ -31,7 +31,7 @@ test('unavailable and stale sources retain selected currency without fabricated 
         price: { usd: 1, eur: 2 },
         timestamp: new Date(Date.now() - 300000).toISOString(),
       }),
-    )) as typeof fetch;
+    )) as unknown as typeof fetch;
   render(<DisplayCurrency amount="123456789" />);
   await waitFor(() => expect(screen.getByText('Equivalent in EUR unavailable')).toBeTruthy());
   expect((screen.getByLabelText('Display currency') as HTMLSelectElement).value).toBe('EUR');

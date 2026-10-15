@@ -53,10 +53,15 @@ export function SessionRoute() {
     );
   }
 
-  const { paymentIntent, merchant, successUrl } = state.data;
+  const { paymentIntent, merchant, successUrl, billingQuote } = state.data;
   return (
     <main className="checkout-page">
-      <CheckoutView intent={paymentIntent} merchant={merchant} successUrl={successUrl} />
+      <CheckoutView
+        intent={paymentIntent}
+        merchant={merchant}
+        successUrl={successUrl}
+        billingQuote={billingQuote}
+      />
     </main>
   );
 }

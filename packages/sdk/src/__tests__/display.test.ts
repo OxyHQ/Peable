@@ -75,7 +75,7 @@ describe('display amounts never authorize payments', () => {
   });
   it('requires fresh timestamped official rates, no fetch fallback', async () => {
     const fetcher = (body: unknown, status = 200) =>
-      (async () => new Response(JSON.stringify(body), { status })) as typeof fetch;
+      (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
     const body = { price: { usd: 0.3, eur: 0.27 }, timestamp: new Date(now).toISOString() };
     expect((await readDisplayRates({ fetch: fetcher(body), now })).usdPerFair).toBe('0.3');
     for (const invalid of [
