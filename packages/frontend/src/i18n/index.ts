@@ -149,6 +149,17 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.transactionCount.other': '{count} transactions',
     'wallet.syncAccessibility': 'Sync status: {label}',
     'wallet.defaultName': 'Peable',
+
+    // ---------- Alia ----------
+    'alia.ask': 'Ask Alia',
+    'alia.clientContext':
+      'The person is using Peable, a FairCoin payment gateway and self-custodial wallet. They are looking at {screen}. Never ask for, repeat or handle their recovery phrase, PIN or private keys.',
+    'alia.screen.overview': 'the wallet home, on the Overview tab (the FairCoin holding and price)',
+    'alia.screen.activity': 'the wallet home, on the Activity tab (their recent payments)',
+    'alia.screen.readOnly': 'the web wallet, which shows their payment history but cannot spend',
+    'alia.suggestion.fairCoin': 'What is FairCoin and how do I get some?',
+    'alia.suggestion.safety': 'How do I keep my wallet safe?',
+    'alia.suggestion.merchants': 'Where can I spend FairCoin?',
     'wallet.sync.offline': 'Offline',
     'wallet.sync.syncing': 'Syncing {progress}%',
     'wallet.sync.synced': 'Synced',
@@ -971,6 +982,20 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'wallet.transactionCount.other': '{count} transacciones',
     'wallet.syncAccessibility': 'Estado de sincronizaci\u00f3n: {label}',
     'wallet.defaultName': 'Peable',
+
+    // ---------- Alia ----------
+    'alia.ask': 'Preguntar a Alia',
+    'alia.clientContext':
+      'La persona usa Peable, una pasarela de pagos de FairCoin y cartera de autocustodia. Est\u00e1 viendo {screen}. Nunca pidas, repitas ni gestiones su frase de recuperaci\u00f3n, su PIN ni sus claves privadas.',
+    'alia.screen.overview':
+      'el inicio de la cartera, en la pesta\u00f1a Resumen (su FairCoin y el precio)',
+    'alia.screen.activity':
+      'el inicio de la cartera, en la pesta\u00f1a Actividad (sus pagos recientes)',
+    'alia.screen.readOnly':
+      'la cartera web, que muestra su historial de pagos pero no puede gastar',
+    'alia.suggestion.fairCoin': '\u00bfQu\u00e9 es FairCoin y c\u00f3mo consigo algo?',
+    'alia.suggestion.safety': '\u00bfC\u00f3mo mantengo segura mi cartera?',
+    'alia.suggestion.merchants': '\u00bfD\u00f3nde puedo gastar FairCoin?',
     'wallet.sync.offline': 'Sin conexi\u00f3n',
     'wallet.sync.syncing': 'Sincronizando {progress}%',
     'wallet.sync.synced': 'Sincronizado',

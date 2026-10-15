@@ -25,6 +25,7 @@ import { TransactionItem } from '../../src/ui/components/TransactionItem';
 import { SuggestionStack, type Suggestion } from '../../src/ui/components/SuggestionStack';
 import { HomeOverview } from '../../src/ui/components/HomeOverview';
 import { ArrowCircleDownIcon } from '../../src/ui/components/ArrowCircleDownIcon';
+import { AskAlia } from '../../src/ui/components/AskAlia';
 import { SendIcon } from '../../src/ui/components/SendIcon';
 import { PocketSwitcherSheet } from '../../src/ui/sheets/PocketSwitcherSheet';
 import { TransactionDetailSheet } from '../../src/ui/sheets/TransactionDetailSheet';
@@ -262,6 +263,7 @@ function WalletHome() {
             {network === 'testnet' ? (
               <Badge text={t('wallet.badge.testnet')} variant="warning" size="sm" />
             ) : null}
+            <AskAlia screen={t(`alia.screen.${tab}`)} />
             <Pressable
               onPress={() => router.push('/peers')}
               accessibilityRole="button"

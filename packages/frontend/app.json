@@ -102,6 +102,13 @@
       ],
       "expo-image",
       "expo-audio",
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Peable uses the microphone so you can dictate and talk to Alia.",
+          "speechRecognitionPermission": "Peable turns your speech into text for Alia."
+        }
+      ],
       "expo-background-task",
       "expo-font",
       "expo-localization",
