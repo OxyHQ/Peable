@@ -1,3 +1,4 @@
+import { DisplayCurrency } from '../components/DisplayCurrency';
 import { decimalContributionAmount, formatContributionAmount } from '@peable.to/contracts';
 import { beginContribution, getContributionOperation } from '../lib/contributionSession';
 import { useEffect, useRef, useState } from 'react';
@@ -153,6 +154,9 @@ export function LinkRoute() {
             : (Number(link.amount) / 100).toFixed(2)}{' '}
           {link.currency}
         </p>
+      )}
+      {link.currency === 'FAIR' && link.contribution?.amountMode !== 'free' && (
+        <DisplayCurrency amount={link.amount} />
       )}
       {locked && (
         <p>Continuing the same contribution. Retrying does not create a second payment.</p>

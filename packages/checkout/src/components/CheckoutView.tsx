@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
-import type { MerchantDisplay, PaymentIntent } from '@peable.to/shared-types';
+import type {
+  BillingFaircoinFxQuote,
+  MerchantDisplay,
+  PaymentIntent,
+} from '@peable.to/shared-types';
 import { getPaymentIntent, subscribe } from '../lib/intentClient';
 import { MerchantIdentity } from './MerchantIdentity';
 import { CardPayment, isPayableCardIntent } from './CardPayment';
 import { PayWithPeable, isChainIntent } from './PayWithPeable';
 import { StatusPanel } from './StatusPanel';
+import { formatDisplayUnits } from '@peable.to/sdk/display';
 
 export interface CheckoutViewProps {
   /** The initial REST snapshot (already loaded by the route) — the first
@@ -15,6 +20,7 @@ export interface CheckoutViewProps {
   merchant?: MerchantDisplay;
   /** Only the checkout-session flow (`/c/:sessionId`) has a redirect target. */
   successUrl?: string;
+  billingQuote?: BillingFaircoinFxQuote;
 }
 
 const AWAITING_PAYMENT_STATUSES: ReadonlySet<PaymentIntent['status']> = new Set([
@@ -40,7 +46,19 @@ const TERMINAL_STATUSES: ReadonlySet<PaymentIntent['status']> = new Set([
  */
 const FALLBACK_POLL_MS = 5_000;
 
-export function CheckoutView({ intent: initialIntent, merchant, successUrl }: CheckoutViewProps) {
+export function CheckoutView({
+  intent: initialIntent,
+  merchant,
+  successUrl,
+  billingQuote,
+}: CheckoutViewProps) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    if (!billingQuote) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [billingQuote]);
+  const quoteExpired = billingQuote && Date.parse(billingQuote.expiresAt) <= now;
   const [intent, setIntent] = useState(initialIntent);
   /**
    * Set when `subscribe` rejects. Until this existed the failure was swallowed
@@ -145,7 +163,23 @@ export function CheckoutView({ intent: initialIntent, merchant, successUrl }: Ch
   return (
     <div className="checkout-view">
       {merchant && <MerchantIdentity merchant={merchant} />}
-      {awaitingPayment && isChainIntent(intent) ? (
+      {billingQuote && (
+        <div>
+          <p>
+            Catalogue total: {formatDisplayUnits(BigInt(billingQuote.grossMinorUnits), 2, 'USD')}
+          </p>
+          <p>
+            Payment quote: {formatDisplayUnits(BigInt(billingQuote.amountBaseUnits), 8, 'FAIR')}
+          </p>
+          <p>Quoted rate: 1 FAIR = {billingQuote.usdPerFair} USD</p>
+          <p>Quote expires: {new Date(billingQuote.expiresAt).toLocaleString()}</p>
+        </div>
+      )}
+      {awaitingPayment && quoteExpired ? (
+        <p role="alert">
+          This payment quote has expired. Return to the subscription to request a new quote.
+        </p>
+      ) : awaitingPayment && isChainIntent(intent) ? (
         <PayWithPeable intent={intent} />
       ) : isPayableCardIntent(intent) ? (
         /**
