@@ -58,7 +58,11 @@ export function CheckoutView({
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [billingQuote]);
-  const quoteExpired = billingQuote && Date.parse(billingQuote.expiresAt) <= now;
+  const quoteExpired =
+    billingQuote &&
+    (!Number.isFinite(Date.parse(billingQuote.expiresAt)) ||
+      Date.parse(billingQuote.expiresAt) <= now ||
+      billingQuote.amountBaseUnits !== initialIntent.amount);
   const [intent, setIntent] = useState(initialIntent);
   /**
    * Set when `subscribe` rejects. Until this existed the failure was swallowed
