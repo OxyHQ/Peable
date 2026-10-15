@@ -136,6 +136,8 @@ jobs:
       # `@peable.to/shared-types`' compiled output, and `@peable.to/checkout` imports
       # `@peable.to/sdk/checkout`. Without these, the typecheck fails with a TS2307
       # that says nothing about the change under review.
+      - run: bun run check:contribution-contracts
+      - run: bun run build:contracts
       - run: bun run build:shared-types
 
       # `@peable.to/pay` is consumed from its build output, same as

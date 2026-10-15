@@ -13,6 +13,7 @@ import type { DatabaseOrTransaction } from '../postgres';
 
 export interface PaymentIntentRow {
   readonly id: string;
+  readonly paymentLinkId?: string | null;
   readonly publicId: string;
   readonly status: PaymentIntentStatus;
   readonly rail: PaymentIntentRail;
@@ -47,6 +48,7 @@ export interface PaymentIntentRow {
  * IS here — the payer needs it, and `verifySecret` compares against it.
  */
 const INTENT_COLUMNS = {
+  paymentLinkId: paymentIntents.paymentLinkId,
   id: paymentIntents.id,
   publicId: paymentIntents.publicId,
   status: paymentIntents.status,
@@ -90,6 +92,7 @@ function toIntentRow(row: RawIntentRow): PaymentIntentRow {
 }
 
 export interface InsertPaymentIntentParams {
+  readonly paymentLinkId?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
   readonly rail: PaymentIntentRail;
@@ -134,6 +137,7 @@ export async function insertPaymentIntent(
       .values({
         id: uuidv7(),
         publicId: params.publicId,
+        paymentLinkId: params.paymentLinkId ?? null,
         status: 'created',
         rail: params.rail,
         amount: params.amount,

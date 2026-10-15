@@ -22,6 +22,13 @@ export function gatewayGet<T>(path: string, init?: RequestInit): Promise<T> {
   return gatewayFetch<T>(path, init);
 }
 
-export function gatewayPost<T>(path: string): Promise<T> {
-  return gatewayFetch<T>(path, { method: 'POST' });
+export function gatewayPost<T>(path: string, body?: unknown, idempotencyKey?: string): Promise<T> {
+  return gatewayFetch<T>(path, {
+    method: 'POST',
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    headers: {
+      ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
+      ...(idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {}),
+    },
+  });
 }

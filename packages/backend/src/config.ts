@@ -179,11 +179,17 @@ export function classifyStripeKey(secretKey: string | undefined): StripeKeyMode 
 }
 
 function readOrigins(raw: string | undefined): string[] {
-  if (raw === undefined) return [];
-  return raw
-    .split(',')
-    .map((origin) => origin.trim())
-    .filter((origin) => origin !== '');
+  // Peable's own clients must work without an optional deployment override.
+  return [
+    ...new Set([
+      'https://peable.to',
+      'https://checkout.peable.to',
+      ...(raw ?? '')
+        .split(',')
+        .map((origin) => origin.trim())
+        .filter(Boolean),
+    ]),
+  ];
 }
 
 function readNetwork(raw: string | undefined): NetworkType {

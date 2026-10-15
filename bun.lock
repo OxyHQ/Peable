@@ -20,6 +20,7 @@
         "@fairco.in/core": "0.5.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/db": "1.0.0",
+        "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/shared-types": "*",
         "@scure/bip32": "^1.7.0",
         "drizzle-orm": "^0.45.2",
@@ -46,6 +47,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@fairco.in/core": "0.5.0",
+        "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/sdk": "*",
         "@peable.to/shared-types": "*",
         "qr-creator": "^1.0.0",
@@ -64,6 +66,18 @@
         "vite": "^8.1.5",
       },
     },
+    "packages/contracts": {
+      "name": "@peable.to/contracts",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.3.6",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/node": "^20.0.0",
+        "typescript": "~5.9.2",
+      },
+    },
     "packages/frontend": {
       "name": "@peable.to/frontend",
       "version": "1.0.0",
@@ -79,7 +93,9 @@
         "@oxy.so/contracts": "4.12.0",
         "@oxy.so/core": "4.5.0",
         "@oxy.so/services": "^11.2.0",
+        "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/pay": "workspace:^",
+        "@peable.to/sdk": "workspace:0.2.7-oxy-one.0",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
         "@react-native-community/netinfo": "^12.0.1",
@@ -199,6 +215,7 @@
       "name": "@peable.to/sdk",
       "version": "0.2.7-oxy-one.0",
       "dependencies": {
+        "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/shared-types": "workspace:0.3.4-oxy-one.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
@@ -212,6 +229,9 @@
     "packages/shared-types": {
       "name": "@peable.to/shared-types",
       "version": "0.3.4-oxy-one.0",
+      "dependencies": {
+        "@peable.to/contracts": "workspace:0.1.0",
+      },
       "devDependencies": {
         "@types/bun": "latest",
         "@types/node": "^20.0.0",
@@ -611,6 +631,8 @@
     "@peable.to/backend": ["@peable.to/backend@workspace:packages/backend"],
 
     "@peable.to/checkout": ["@peable.to/checkout@workspace:packages/checkout"],
+
+    "@peable.to/contracts": ["@peable.to/contracts@workspace:packages/contracts"],
 
     "@peable.to/frontend": ["@peable.to/frontend@workspace:packages/frontend"],
 
@@ -2049,6 +2071,8 @@
     "@oxy.so/bloom/react-native-css": ["react-native-css@3.1.0-rc.0", "", { "dependencies": { "@types/debug": "^4.1.12", "babel-plugin-react-compiler": "^19.1.0-rc.2", "colorjs.io": "0.7.0", "comment-json": "^4.2.5", "debug": "^4.4.1" }, "peerDependencies": { "@expo/metro-config": ">=54", "lightningcss": ">=1.27.0", "react": ">=19", "react-native": ">=0.81" } }, "sha512-/wfPJ8pXiPxvHUs0QcocN3ViV4QJdnXpKukNirZJcJ/MeZKrStSEHm2rBq+KuZm8/2XDl4GfeuaVvJctYGtdgA=="],
 
     "@oxy.so/core/express-rate-limit": ["express-rate-limit@8.7.0", "", { "dependencies": { "debug": "^4.4.3", "ip-address": "^10.2.0" }, "peerDependencies": { "express": ">= 4.11" } }, "sha512-hOwV7WOxXfjRpAM1DSJWZDXx3GhplwD8IfwuwvogD8i1Qnkgosw/H45s4ZnFAUHDAhPjlY9hLBvJhKmGMyY26g=="],
+
+    "@peable.to/contracts/zod": ["zod@4.5.4", "", {}, "sha512-sC95tT5iHHH9gtpj6A81kh+NEaRAUFN+qlUPDUbRfOMvNf5QCBqsb3WgvnpVtK5Y+4UfA6KqufotuTvMGiTlsA=="],
 
     "@peable.to/frontend/react": ["react@19.2.3", "", {}, "sha512-Ku/hhYbVjOQnXDZFv2+RibmLFGwFdeeKHFcOTlrt7xplBnya5OGn/hIRDsqDiSUcfORsDC7MPxwork8jBwsIWA=="],
 

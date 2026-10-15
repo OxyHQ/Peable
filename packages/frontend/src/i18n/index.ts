@@ -44,6 +44,46 @@ const STORAGE_KEY = 'fairwallet_language';
 
 const translations: Record<TranslatedLanguage, Record<string, string>> = {
   en: {
+    'contributions.title': 'Organization contributions',
+    'contributions.heading': 'One-time contribution links',
+    'contributions.intro':
+      'Choose an organization and its registered Peable application. Contributions go directly to its watch-only FairCoin account.',
+    'contributions.organization': 'Organization',
+    'contributions.application': 'Application',
+    'contributions.signin':
+      'Sign in with access to an organization to manage its contribution links.',
+    'contributions.test': 'Test',
+    'contributions.live': 'Live',
+    'contributions.productionHelp':
+      'This selects the production merchant registration. Check its configured FairCoin network.',
+    'contributions.testHelp':
+      'This selects the test merchant registration. Check the FairCoin network on each link before paying.',
+    'contributions.purpose': 'Purpose / destination of contributions',
+    'contributions.purposeLabel': 'Contribution purpose',
+    'contributions.fixed': 'Fixed amount',
+    'contributions.free': 'Donor chooses',
+    'contributions.amount': 'Amount',
+    'contributions.expiry': 'Optional end date (YYYY-MM-DD, UTC)',
+    'contributions.expiryLabel': 'Expiry',
+    'contributions.retryHelp':
+      'Retrying the same link creation. Its details remain fixed until the result is known.',
+    'contributions.retry': 'Retry creation',
+    'contributions.create': 'Create contribution link',
+    'contributions.links': 'Contribution links',
+    'contributions.freeAmount': 'Donor chooses amount',
+    'contributions.active': 'Active',
+    'contributions.disabled': 'Disabled',
+    'contributions.copy': 'Copy link',
+    'contributions.disable': 'Disable link',
+    'contributions.enable': 'Enable link',
+    'contributions.view': 'View payments and refunds',
+    'contributions.moreLinks': 'More links',
+    'contributions.payments': 'Payments and refunds',
+    'contributions.refundHelp':
+      'The gateway holds no FairCoin spending keys and cannot create or verify refunds. An empty refund list does not prove no separate wallet transfer occurred.',
+    'contributions.empty': 'No payments yet.',
+    'contributions.morePayments': 'More payments',
+    'contributions.error': 'Request failed. Try again.',
     // ---------- Common ----------
     'common.ok': 'OK',
     'common.cancel': 'Cancel',
@@ -875,6 +915,46 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
     'notificationsSettings.events.outgoingConfirmed': 'Sent (confirmed)',
   },
   es: {
+    'contributions.title': 'Aportaciones a organizaciones',
+    'contributions.heading': 'Enlaces de aportación puntual',
+    'contributions.intro':
+      'Elige una organización y su aplicación registrada en Peable. Las aportaciones llegan directamente a su cuenta FairCoin de solo lectura.',
+    'contributions.organization': 'Organización',
+    'contributions.application': 'Aplicación',
+    'contributions.signin':
+      'Inicia sesión con acceso a una organización para gestionar sus enlaces de aportación.',
+    'contributions.test': 'Pruebas',
+    'contributions.live': 'Producción',
+    'contributions.productionHelp':
+      'Selecciona la cuenta registrada de producción. Comprueba su red FairCoin.',
+    'contributions.testHelp':
+      'Selecciona la cuenta registrada de pruebas. Comprueba la red FairCoin de cada enlace antes de pagar.',
+    'contributions.purpose': 'Finalidad o destino de las aportaciones',
+    'contributions.purposeLabel': 'Finalidad de la aportación',
+    'contributions.fixed': 'Importe fijo',
+    'contributions.free': 'Importe libre',
+    'contributions.amount': 'Importe',
+    'contributions.expiry': 'Fecha de fin opcional (AAAA-MM-DD, UTC)',
+    'contributions.expiryLabel': 'Caducidad',
+    'contributions.retryHelp':
+      'Se reintenta crear el mismo enlace. Sus datos permanecen fijos hasta conocer el resultado.',
+    'contributions.retry': 'Reintentar creación',
+    'contributions.create': 'Crear enlace de aportación',
+    'contributions.links': 'Enlaces de aportación',
+    'contributions.freeAmount': 'Importe elegido por quien aporta',
+    'contributions.active': 'Activo',
+    'contributions.disabled': 'Desactivado',
+    'contributions.copy': 'Copiar enlace',
+    'contributions.disable': 'Desactivar enlace',
+    'contributions.enable': 'Activar enlace',
+    'contributions.view': 'Consultar cobros y devoluciones',
+    'contributions.moreLinks': 'Más enlaces',
+    'contributions.payments': 'Cobros y devoluciones',
+    'contributions.refundHelp':
+      'La pasarela no guarda claves para gastar FairCoin ni puede crear o verificar devoluciones. Una lista vacía no descarta transferencias realizadas desde otra cartera.',
+    'contributions.empty': 'Todavía no hay cobros.',
+    'contributions.morePayments': 'Más cobros',
+    'contributions.error': 'No se pudo completar la solicitud. Inténtalo de nuevo.',
     // ---------- Common ----------
     'common.ok': 'OK',
     'common.cancel': 'Cancelar',
