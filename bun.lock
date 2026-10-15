@@ -95,7 +95,7 @@
         "@oxy.so/services": "^11.2.0",
         "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/pay": "workspace:^",
-        "@peable.to/sdk": "workspace:0.2.7-oxy-one.0",
+        "@peable.to/sdk": "workspace:0.2.7-oxy-one.1",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
         "@react-native-community/netinfo": "^12.0.1",
@@ -213,7 +213,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.2.7-oxy-one.0",
+      "version": "0.2.7-oxy-one.1",
       "dependencies": {
         "@fairco.in/core": "0.5.0",
         "@peable.to/contracts": "workspace:0.1.0",

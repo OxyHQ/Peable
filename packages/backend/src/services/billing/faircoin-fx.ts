@@ -31,7 +31,6 @@ export async function createExplorerFaircoinQuote(
   grossMinorUnits: number,
   options: { now?: Date; fetch?: typeof fetch; lifetimeMs?: number } = {},
 ): Promise<FaircoinFxQuote> {
-  const now = options.now ?? new Date();
   const lifetimeMs = options.lifetimeMs ?? 10 * 60_000;
   if (!Number.isSafeInteger(lifetimeMs) || lifetimeMs < 30_000 || lifetimeMs > 15 * 60_000)
     throw new Error('Invalid FAIR quote lifetime');
@@ -39,13 +38,23 @@ export async function createExplorerFaircoinQuote(
   const response = await (options.fetch ?? fetch)(source, {
     signal: AbortSignal.timeout(8000),
     redirect: 'error',
-    headers: { Accept: 'application/json' },
+    headers: { Accept: 'application/json', 'User-Agent': 'Peable/1.0' },
   });
   if (!response.ok) throw new BillingError('invalid_provider_response', 502);
-  const body = (await response.json()) as { price?: { usd?: unknown }; timestamp?: unknown };
-  const price = body.price?.usd;
-  const observedAt = typeof body.timestamp === 'string' ? Date.parse(body.timestamp) : NaN;
+  const body = (await response.json()) as {
+    price?: unknown;
+    source?: unknown;
+    updatedAt?: unknown;
+  } | null;
+  const now = options.now ?? new Date();
+  // The Explorer indexes WFAIR/USDC on Base as its FAIR/USD reference.
+  // This is an explicitly approved commercial reference, not proof of bridge
+  // reserves or a guaranteed FAIR redemption rate. No alternate source or
+  // manually entered/legacy rate is silently accepted.
+  const price = body?.price;
+  const observedAt = typeof body?.updatedAt === 'string' ? Date.parse(body.updatedAt) : NaN;
   if (
+    body?.source !== 'wfair-base' ||
     (typeof price !== 'number' && typeof price !== 'string') ||
     (typeof price === 'number' && (!Number.isFinite(price) || price <= 0)) ||
     !Number.isFinite(observedAt) ||

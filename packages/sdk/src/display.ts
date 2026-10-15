@@ -6,7 +6,8 @@ export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export interface DisplayRates {
   /** Currency units per FAIR, as exact decimal strings. */
   usdPerFair: string;
-  eurPerFair: string;
+  /** Null when the owning source does not supply a EUR quote. */
+  eurPerFair: string | null;
   source: string;
   observedAt: string;
   expiresAt: string;
@@ -55,26 +56,25 @@ export async function readDisplayRates(
   });
   if (!response.ok) throw new Error('Exchange rate unavailable');
   const body: unknown = await response.json();
-  if (!body || typeof body !== 'object' || !('price' in body) || !('timestamp' in body))
+  if (!body || typeof body !== 'object' || !('price' in body) || !('updatedAt' in body))
     throw new Error('Exchange rate unavailable');
   const price = body.price;
   if (
-    !price ||
-    typeof price !== 'object' ||
-    !('usd' in price) ||
-    !('eur' in price) ||
-    typeof body.timestamp !== 'string'
+    (typeof price !== 'number' && typeof price !== 'string') ||
+    !('source' in body) ||
+    body.source !== 'wfair-base' ||
+    typeof body.updatedAt !== 'string'
   )
     throw new Error('Exchange rate unavailable');
-  const usdPerFair = String(price.usd);
-  const eurPerFair = String(price.eur);
+  const usdPerFair = String(price);
   fraction(usdPerFair);
-  fraction(eurPerFair);
-  const observed = Date.parse(body.timestamp);
+  const observed = Date.parse(body.updatedAt);
   if (!Number.isFinite(observed)) throw new Error('Exchange rate unavailable');
   const rates = {
     usdPerFair,
-    eurPerFair,
+    // The public Explorer supplies USD only. Keep USD/FAIR usable without
+    // pretending the USD rate also applies to EUR or inventing a cross rate.
+    eurPerFair: null,
     source,
     observedAt: new Date(observed).toISOString(),
     expiresAt: new Date(observed + 120_000).toISOString(),
@@ -108,11 +108,14 @@ export function convertDisplayAmount(input: {
   if (input.currency === input.displayCurrency || units === 0n)
     return formatDisplayUnits(units === 0n ? 0n : units, targetDecimals, input.displayCurrency);
   if (!input.rates || !displayRatesAreFresh(input.rates, input.now)) return null;
+  const destinationRate =
+    input.displayCurrency === 'EUR' ? input.rates.eurPerFair : input.rates.usdPerFair;
+  if (destinationRate === null) return null;
   const usd = fraction(input.rates.usdPerFair);
   const destination =
     input.displayCurrency === 'FAIR'
       ? { numerator: 1n, denominator: 1n }
-      : fraction(input.displayCurrency === 'USD' ? input.rates.usdPerFair : input.rates.eurPerFair);
+      : fraction(destinationRate);
   const numerator =
     units *
     destination.numerator *

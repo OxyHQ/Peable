@@ -76,12 +76,36 @@ describe('display amounts never authorize payments', () => {
   it('requires fresh timestamped official rates, no fetch fallback', async () => {
     const fetcher = (body: unknown, status = 200) =>
       (async () => new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
-    const body = { price: { usd: 0.3, eur: 0.27 }, timestamp: new Date(now).toISOString() };
-    expect((await readDisplayRates({ fetch: fetcher(body), now })).usdPerFair).toBe('0.3');
+    const body = { price: 0.3, source: 'wfair-base', updatedAt: new Date(now).toISOString() };
+    const liveRates = await readDisplayRates({ fetch: fetcher(body), now });
+    expect(liveRates.usdPerFair).toBe('0.3');
+    expect(liveRates.eurPerFair).toBeNull();
+    expect(
+      convertDisplayAmount({
+        units: '100',
+        currency: 'USD',
+        displayCurrency: 'FAIR',
+        rates: liveRates,
+        now,
+      }),
+    ).toBe('3.33333333 FAIR');
+    expect(
+      convertDisplayAmount({
+        units: '100',
+        currency: 'USD',
+        displayCurrency: 'EUR',
+        rates: liveRates,
+        now,
+      }),
+    ).toBeNull();
     for (const invalid of [
+      null,
       { price: body.price },
-      { ...body, timestamp: new Date(now - 120001).toISOString() },
-      { ...body, price: { usd: 0, eur: 1 } },
+      { ...body, updatedAt: new Date(now - 120001).toISOString() },
+      { ...body, updatedAt: new Date(now + 2000).toISOString() },
+      { ...body, source: 'manual' },
+      { ...body, price: 0 },
+      { ...body, price: { usd: 0.3, eur: 0.27 } },
     ])
       await expect(readDisplayRates({ fetch: fetcher(invalid), now })).rejects.toThrow();
     await expect(readDisplayRates({ fetch: fetcher({}, 403), now })).rejects.toThrow();
