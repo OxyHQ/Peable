@@ -27,7 +27,7 @@ const offerSchema = z
     planId: billingReference,
     offerId: billingReference,
     offerVersion: z.number().int().positive(),
-    interval: z.literal('month'),
+    interval: z.enum(['month', 'year']),
     intervalCount: z.literal(1),
     currency: z.string().regex(/^[A-Z]{3}$/),
     grossMinorUnits: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),

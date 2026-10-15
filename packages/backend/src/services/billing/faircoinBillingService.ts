@@ -46,7 +46,7 @@ const offerSchema = z
     planId: z.string().min(1),
     offerId: z.string().min(1),
     offerVersion: z.number().int().positive(),
-    interval: z.literal('month'),
+    interval: z.enum(['month', 'year']),
     intervalCount: z.literal(1),
     currency: z.literal('USD'),
     grossMinorUnits: z.number().int().positive().safe(),
@@ -79,10 +79,10 @@ type Invoice = typeof invoices.$inferSelect;
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const customerRef = (owner: BillingOwner, subject: string) =>
   `cus_fair${digest([owner.merchantId, owner.oxyAppId, owner.environment, subject])}`;
-function monthAfter(start: Date) {
+function periodAfter(start: Date, interval: 'month' | 'year') {
   const next = new Date(start);
   const day = start.getUTCDate();
-  next.setUTCMonth(next.getUTCMonth() + 1, 1);
+  next.setUTCMonth(next.getUTCMonth() + (interval === 'year' ? 12 : 1), 1);
   const lastDay = new Date(Date.UTC(next.getUTCFullYear(), next.getUTCMonth() + 1, 0)).getUTCDate();
   next.setUTCDate(Math.min(day, lastDay));
   return next;
@@ -223,7 +223,7 @@ export function createFaircoinBillingService(options: {
           : paid.length
             ? 'past_due'
             : 'incomplete',
-      interval: 'month',
+      interval: subscription.billingInterval,
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
       currentPeriodStart: current.periodStart.toISOString(),
       currentPeriodEnd: (paidThrough ?? current.periodEnd).toISOString(),
@@ -428,6 +428,7 @@ export function createFaircoinBillingService(options: {
             subjectRef: input.storeId,
             planRef: input.planId,
             priceRef: input.providerPriceId,
+            billingInterval: offer.interval,
             customerRef: input.providerCustomerId,
             initialKey: key,
           })
@@ -444,6 +445,7 @@ export function createFaircoinBillingService(options: {
         sub.subjectRef !== input.storeId ||
         sub.planRef !== input.planId ||
         sub.priceRef !== input.providerPriceId ||
+        sub.billingInterval !== offer.interval ||
         sub.customerRef !== input.providerCustomerId
       )
         throw new BillingError('not_found', 404);
@@ -493,7 +495,7 @@ export function createFaircoinBillingService(options: {
           taxSnapshot: snapshot,
           fxQuote: fx,
           periodStart: start,
-          periodEnd: monthAfter(start),
+          periodEnd: periodAfter(start, offer.interval),
         })
         .returning();
       if (!inserted) throw new BillingError('reconciliation_required');

@@ -26,6 +26,9 @@ export const faircoinBillingSubscriptions = pgTable(
     subjectRef: text().notNull(),
     planRef: text().notNull(),
     priceRef: text().notNull(),
+    billingInterval: text({ enum: ['month', 'year'] })
+      .notNull()
+      .default('month'),
     customerRef: text().notNull(),
     initialKey: text().notNull(),
     cancelAtPeriodEnd: boolean().notNull().default(false),
@@ -38,6 +41,7 @@ export const faircoinBillingSubscriptions = pgTable(
       columns: [t.merchantId, t.oxyAppId, t.environment],
       foreignColumns: [merchants.id, merchants.oxyAppId, merchants.environment],
     }).onDelete('restrict'),
+    check('faircoin_billing_interval', sql`${t.billingInterval} IN ('month', 'year')`),
     unique('faircoin_billing_initial_key').on(t.merchantId, t.initialKey),
     uniqueIndex('faircoin_billing_live_subject_plan')
       .on(t.merchantId, t.subjectRef, t.planRef)

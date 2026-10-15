@@ -211,6 +211,13 @@
       "when": 1792056681791,
       "tag": "0029_previous_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1792058504131,
+      "tag": "0030_rich_clea",
+      "breakpoints": true
     }
   ]
 }

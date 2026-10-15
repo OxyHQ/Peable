@@ -61,6 +61,7 @@ async function initialize(input: {
     offerVersion: number;
     providerPriceId: string;
     grossMinorUnits: number;
+    interval?: 'month' | 'year';
   }>;
 }) {
   // Public BIP39 test vector, never a user's wallet. Only its watch-only xpub enters the gateway.
@@ -88,7 +89,7 @@ async function initialize(input: {
   const offers = input.offers.map((offer) => ({
     ...offer,
     currency: 'USD' as const,
-    interval: 'month' as const,
+    interval: offer.interval ?? 'month',
     intervalCount: 1 as const,
     taxTreatment: 'inclusive' as const,
   }));
