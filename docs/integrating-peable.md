@@ -254,7 +254,11 @@ expires — two prices they can be shown and two payments they can make.
 - **Amounts are base-unit integer strings** (`m⊜`), never floats. `1 FAIR = 100_000_000 m⊜`.
   Import `UNITS_PER_COIN` / `formatFair` from `@fairco.in/core` for display.
 - **Network** is `'testnet'` or `'mainnet'`. The intent's network must match the
-  merchant's registered network (the Gateway rejects a mismatch).
+  merchant's registered network (the Gateway rejects a mismatch) — or, for a
+  payment on behalf of a seller, the SELLER's network.
+- **`expiresAt` applies only while the payer has not paid.** A FairCoin intent
+  that is `broadcast` or `confirming` never expires; `canExpire` on the intent
+  says which. Release stock on `payment_intent.expired`, never on the clock.
 
 ## Test vs live
 
@@ -397,6 +401,30 @@ const quote = await peable.billing.createTaxQuote({
 - `peable.tax.transactions.list({ from, to })` and
   `peable.tax.reports.summary({ from, to })` (or `GET
   /v1/tax/reports/summary?format=csv`) are the filing export.
+
+## Connect for FairCoin — paying sellers in their own wallets
+
+The walkthrough is [Connect for FairCoin](connect-faircoin.md); the decisions are
+[ADR 0012](adr/0012-faircoin-connected-accounts.md). The endpoints:
+
+| Method + path | Auth | What |
+|---|---|---|
+| `POST /v1/connected_accounts` | service, `payments:write` | Open a seller. Body: `externalRef`; card half `country` + `businessType`; FairCoin half `faircoin: { network, oxyUserId }`. At least one half. Converges on `externalRef` (201 new / 200 existing) and adds a missing half. **No `xpub`** — a 422 |
+| `GET /v1/connected_accounts`, `/:id`, `/by_ref/:externalRef` | service, `payments:read` | Read sellers. `rails`, `faircoin: { network, status: 'pending'\|'active', oxyUserId, registeredAt }`; the seller's `xpub` is never returned |
+| `POST /v1/connected_accounts/:id/account_links` | service, `payments:write` | `{ rail: 'faircoin', returnUrl, refreshUrl }` → `{ url, expiresAt }`: Peable's own onboarding page, one use, one hour. `rail` defaults to `card` (the provider's KYC) |
+| `GET /v1/connect/onboarding/:token` | **Oxy user** (the seller) | What the link asks: platform display, network, `expiresAt`, `returnUrl`. 403 for any user but the account's `oxyUserId`; 410 (with `refreshUrl`) once expired or used |
+| `POST /v1/connect/onboarding/:token/faircoin` | **Oxy user** (the seller) | `{ xpub }` — the seller's watch-only ACCOUNT key. Refuses a private key / wrong network (422), a key already in use or an already-registered seller (409). Emits `connected_account.updated` |
+| `POST /v1/payment_intents`, `POST /v1/checkout_sessions` | service, `payments:write` | `connectedAccount: 'ca_…'` pays that seller: FairCoin only, address from the seller's key, 409 `account_not_ready` until they register |
+| `GET /v1/payment_intents?connected_account=ca_…` | service, `payments:read` | One seller's payments |
+
+On the wire, additive and optional in the published types: `PaymentIntent.connectedAccountId`,
+`PaymentIntent.canExpire`, `CheckoutSession.connectedAccountId`, `WebhookEvent.account`.
+`ConnectedAccount.country` is now `string | null` (a FairCoin-only seller has
+none) and `ConnectedAccount.rails` / `.faircoin` are new.
+
+SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ account, rail, … })`,
+`paymentIntents.create({ …, connectedAccount })`, `checkout.sessions.create({ …, connectedAccount })`,
+`paymentIntents.list({ connected_account })`, and `canExpire` / `EXPIRABLE_STATUSES`.
 
 ## Mercaria integration checklist
 
