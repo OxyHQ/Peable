@@ -412,3 +412,12 @@ build on an arm64 runner, pushed to ECR `oxy/peable`, rolling the `peable` ECS
 service on `oxy-cluster`. GitHub repo secrets are the source of truth and are
 synced to SSM by the workflow, which skips empty or placeholder values rather
 than overwriting a real one.
+
+It and the two Pages deploys (`deploy-frontend.yml`, `deploy-checkout.yml`)
+start on `workflow_run` after CI succeeds on a push to main, never beside it.
+A `scope` job runs `.github/scripts/deploy-scope.sh`: it holds an older commit
+only while a newer main commit has a live or green CI run (a bot push starts
+none), and releases only when a path that target ships changed since the last
+commit it released (an Actions cache marker; when unsure, it releases).
+`workflow_dispatch` redeploys main's head, after a one-shot check that CI passed
+for it.

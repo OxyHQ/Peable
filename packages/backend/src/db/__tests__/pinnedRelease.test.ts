@@ -167,19 +167,54 @@ function rolloutEnv(outputs: Record<string, string>) {
   };
 }
 describe('pinned ECS release', () => {
-  test('restricts manual and push promotion to main, exact CI, with post and cleanup still reachable', () => {
+  test('restricts manual and CI-triggered promotion to main, exact CI, with post and cleanup still reachable', () => {
     const workflow = Bun.YAML.parse(
       readFileSync(join(ROOT, '.github/workflows/deploy-aws.yml'), 'utf8'),
     ) as {
-      on: { workflow_dispatch: { inputs: { sync_secrets: { default: boolean } } } };
-      jobs: Record<string, { if: string; steps: { name?: string; if?: string; run?: string }[] }>;
+      on: {
+        push?: unknown;
+        workflow_run: { workflows: string[]; types: string[]; branches: string[] };
+        workflow_dispatch: { inputs: { sync_secrets: { default: boolean } } };
+      };
+      env: Record<string, string>;
+      jobs: Record<
+        string,
+        {
+          if: string;
+          needs?: string;
+          steps: { name?: string; if?: string; run?: string; with?: Record<string, string> }[];
+        }
+      >;
     };
-    expect(must(workflow.jobs.gate).if).toBe("github.ref == 'refs/heads/main'");
-    expect(must(workflow.jobs.deploy).if).toBe("github.ref == 'refs/heads/main'");
-    const gate = must(must(must(workflow.jobs.gate).steps[0]).run);
-    expect(gate).toContain('head_sha=$SHA');
-    expect(gate).not.toContain('EVENT');
-    const steps = must(workflow.jobs.deploy).steps;
+    // Released only after CI passed on a push to main, for the commit CI tested.
+    expect(workflow.on.push).toBeUndefined();
+    expect(workflow.on.workflow_run).toEqual({
+      workflows: ['CI'],
+      types: ['completed'],
+      branches: ['main'],
+    });
+    expect(workflow.env.RELEASE_SHA).toBe(
+      // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched as text
+      '${{ github.event.workflow_run.head_sha || github.sha }}',
+    );
+    const scope = must(workflow.jobs.scope);
+    for (const guard of [
+      "github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'",
+      "github.event.workflow_run.conclusion == 'success'",
+      "github.event.workflow_run.event == 'push'",
+      'github.event.workflow_run.head_repository.full_name == github.repository',
+      "github.event.workflow_run.head_branch == 'main'",
+    ])
+      expect(scope.if).toContain(guard);
+    expect(scope.steps.map((step) => step.run ?? '').join('\n')).toContain('deploy-scope.sh gate');
+    const deploy = must(workflow.jobs.deploy);
+    expect(deploy.needs).toBe('scope');
+    expect(deploy.if).toBe(
+      "github.ref == 'refs/heads/main' && needs.scope.outputs.backend == 'true'",
+    );
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched as text
+    expect(must(deploy.steps[0]).with?.ref).toBe('${{ env.RELEASE_SHA }}');
+    const steps = deploy.steps;
     expect(workflow.on.workflow_dispatch.inputs.sync_secrets.default).toBe(false);
     expect(steps.find((step) => step.name?.startsWith('Sync GitHub secrets'))?.if).toBe(
       "github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true",

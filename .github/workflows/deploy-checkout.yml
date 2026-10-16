@@ -12,35 +12,97 @@
 name: Deploy checkout to Cloudflare Pages
 
 on:
-  push:
+  # After CI passes on a push to main, never alongside it. Until 2026-10 this
+  # ran on `push`, in parallel with CI, so a commit whose CI went red still
+  # shipped. `workflow_run` takes no `paths:`; the `scope` job below puts back
+  # the path filter, measured from the last commit this workflow released.
+  # Gated on CI, not on the backend's rollout: exactly as unordered relative to
+  # deploy-aws.yml as it was on `push`.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-    # The checkout bundles shared-types and resolves through the root manifests,
-    # so a change to any of them can alter the built output — not just
-    # packages/checkout/**.
-    paths:
-      - 'packages/checkout/**'
-      - 'packages/shared-types/**'
-      - 'package.json'
-      - 'bun.lock'
-      - 'bunfig.toml'
-      - '.github/workflows/deploy-checkout.yml'
+  # Releases main's head, and only once CI succeeded on a push for it.
   workflow_dispatch:
 
-# Deploys run one at a time and are never cancelled: a rollout interrupted
-# half-way is worse than a late one. A newer pending run may replace an older
-# pending one, which is safe because main's newer head contains it.
-concurrency:
-  group: deploy-peable-checkout
-  cancel-in-progress: false
+# Checkout and Pages need nothing more: wrangler authenticates with the
+# Cloudflare credentials below, never with the job token. `scope` adds
+# `actions: read` for itself.
+permissions:
+  contents: read
+
+env:
+  # The commit under release: the one CI tested on `workflow_run`, main's head
+  # on a dispatch. Never `github.sha` alone, which on `workflow_run` is
+  # whatever main points at when CI finished.
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
 
 jobs:
-  deploy:
+  # Whether this run releases anything, decided OUTSIDE the release lane on
+  # a few seconds of ubuntu-latest. The trigger guards, the ordering rule and
+  # the marker-based path scope are deploy-scope.sh's, exactly as in
+  # deploy-aws.yml. A dispatch skips the path scope but still requires CI to
+  # have succeeded on a push for main's head.
+  scope:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      checkout: ${{ steps.checkout.outputs.checkout }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Release only a CI-green main commit nothing newer carries
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/deploy-scope.sh gate
+      # The checkout bundles shared-types and `@peable.to/sdk/checkout` (both
+      # built below) and resolves through the root manifests, so a change to
+      # any of them can alter the built output — not just packages/checkout/**.
+      # The SDK was missing from the old `push.paths` list.
+      - name: Decide whether anything the hosted checkout builds from changed
+        id: checkout
+        if: steps.gate.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          bash .github/scripts/deploy-scope.sh target checkout include
+          '^(packages/checkout/|packages/shared-types/|packages/sdk/|package\.json$|bun\.lock$|bunfig\.toml$|\.github/workflows/deploy-checkout\.yml$)'
+          peable-release-checkout-
+
+  deploy:
+    needs: scope
+    if: needs.scope.outputs.checkout == 'true'
+    runs-on: ubuntu-latest
+    # Measured 1-4 minutes of work; a backstop against the 6-hour default.
+    timeout-minutes: 30
+    # One Pages upload at a time, never cancelled mid-upload. On the job, not
+    # the workflow, so only a run `scope` admitted ever enters the lane and a
+    # late older commit cannot displace a newer pending release.
+    concurrency:
+      group: deploy-peable-checkout
+      cancel-in-progress: false
     permissions:
       contents: read
       deployments: write
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
@@ -81,3 +143,14 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # The scope job's base for the next release (see deploy-aws.yml). Only a
+      # successful deploy on main reaches this; lost or evicted, the next run
+      # releases.
+      - name: Write the release marker
+        run: printf '%s\n' "$RELEASE_SHA" >"$RUNNER_TEMP/release-marker"
+      - name: Record this release for the next scope decision
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/release-marker
+          key: peable-release-checkout-${{ env.RELEASE_SHA }}

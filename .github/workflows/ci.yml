@@ -18,7 +18,8 @@ on:
   pull_request:
   # `bump-base-digests.yml` opens its pull request with GITHUB_TOKEN, which
   # starts no `pull_request` run, so it dispatches this workflow on the bump
-  # branch instead. Both jobs run on a dispatch: neither has an event `if:`.
+  # branch instead. A dispatch runs `test` and `image` both: `changes` narrows
+  # pull requests only.
   workflow_dispatch:
 
 # A new push to a pull request supersedes the run still testing the old head,
@@ -26,18 +27,62 @@ on:
 # main gets a group of its own through the run id, since a shared group would
 # still let a newer pending run replace an older pending one even with
 # cancel-in-progress off.
-# deploy-aws.yml's gate reads this workflow's run for the pushed commit, so a
-# main run must never be cancelled.
+# The three deploys start on this workflow's completed run for the pushed
+# commit (`workflow_run`) and release only on `success`, so a main run must
+# never be cancelled.
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.ref, github.run_id) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Whether a pull request touches what the arm64 `image` job builds. The org
+  # shares 20 concurrent jobs across every repository, so a frontend, checkout
+  # or docs pull request does not hold an arm64 runner to build and boot a
+  # backend image it cannot change. Only pull requests are narrowed: anything
+  # else (push to main, a dispatch) skips this job, and a skipped `changes`
+  # runs `image`. So does a FAILED one: when the filter cannot answer, build.
+  # `test` is the required check and is never gated on this.
+  changes:
+    name: Detect image changes
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      image: ${{ steps.filter.outputs.image }}
+    steps:
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # The image's build inputs: the Dockerfile and the packages it copies
+          # (backend, shared-types, sdk), every workspace manifest (the frozen
+          # install needs all of them), the root manifests and tsconfig, the
+          # .dockerignore files, the reviewed pin and its script (the job's
+          # first step), and this workflow.
+          filters: |
+            image:
+              - 'packages/backend/**'
+              - 'packages/shared-types/**'
+              - 'packages/sdk/**'
+              - 'packages/*/package.json'
+              - 'package.json'
+              - 'bun.lock'
+              - 'bunfig.toml'
+              - 'tsconfig.json'
+              - '.dockerignore'
+              - '**/.dockerignore'
+              - '.github/scripts/**'
+              - '.github/workflows/ci.yml'
+
   test:
     # x86, deliberately: GitHub-hosted arm64 runners do not support service
     # containers at all. The deploy job builds on arm64; this one does not need
     # to, and pinning it there would cost the database entirely.
     runs-on: ubuntu-latest
+    # Measured about 2.5 minutes; a backstop against the 6-hour default.
+    timeout-minutes: 20
 
     services:
       postgres:
@@ -85,6 +130,10 @@ jobs:
         run: python3 -B .github/scripts/reviewed-image.py check
       - name: Prove the base-image digest bump works
         run: python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
+      # The three deploys release through deploy-scope.sh; its fixtures drive
+      # every hold and release decision both ways.
+      - name: Prove the deploy scope decisions
+        run: bash .github/scripts/test-deploy-scope.sh
 
       - uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2
         with:
@@ -192,7 +241,13 @@ jobs:
   #
   # GitHub-hosted arm64 runners do not support `services:` containers, so the
   # database is started with `docker run` instead.
+  #
+  # On a pull request it runs only when `changes` saw an image input change
+  # (or could not tell); a push to main always runs it, and the deploys
+  # release only after it passed there.
   image:
+    needs: changes
+    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.result != 'success' || needs.changes.outputs.image == 'true') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 30
     permissions:
