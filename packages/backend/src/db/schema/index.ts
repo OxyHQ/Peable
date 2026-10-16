@@ -16,7 +16,7 @@ export {
 } from './social';
 export { webhookDeliveries } from './webhooks';
 export { providerEvents } from './providerEvents';
-export { connectedAccounts } from './connectedAccounts';
+export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
 export { disputes } from './disputes';

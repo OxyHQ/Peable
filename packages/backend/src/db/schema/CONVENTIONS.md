@@ -84,7 +84,8 @@ address the recipient cannot spend from, or two payers sharing one address the
 gateway can then attribute to neither. That is the standard every decision in
 this section is held to.
 
-`merchants.next_derivation_index` and `social_receive_cursors.next_derivation_index`
+`merchants.next_derivation_index`, `connected_accounts.next_derivation_index`
+(a seller's key, ADR 0012) and `social_receive_cursors.next_derivation_index`
 are `integer`, and that is the domain rather than a size guess: a non-hardened
 BIP32 child index is bounded by 2^31 − 1, exactly `int4`'s ceiling.
 
@@ -192,6 +193,27 @@ ERROR:  MATCH FULL does not allow mixing of null and nonnull key values.
 
 The rail's own requirement is a CHECK, not a reference, because it is one row of
 one table: `rail <> 'faircoin' OR (address IS NOT NULL AND network IS NOT NULL)`.
+
+### A firewall that must bind SOME rows reads a GENERATED column (ADR 0012)
+
+A payment made ON BEHALF of a seller carries the SELLER's network, and its
+platform may have none (a card-only platform). The merchant firewall
+`(merchant_id, network) → merchants (id, network)` would refuse every such row.
+It now reads `merchant_network`, a STORED GENERATED column
+`CASE WHEN connected_account_id IS NULL THEN network END`: identical to
+`network` on every direct row, so the firewall binds exactly as before, and
+NULL on an on-behalf row, so `MATCH SIMPLE` switches it off there. The
+on-behalf row is held instead by `(connected_account_id, merchant_id, network)
+→ connected_accounts (id, merchant_id, network)` — the account is THIS
+platform's and the network is the ACCOUNT's — plus its network-free companion.
+`checkout_sessions` carries the same pair.
+
+Why generated rather than a column the application writes: the CASE is the
+rule, and a column every writer had to remember would be one more thing that
+could disagree with `connected_account_id`. A generation expression may only
+name its own table's columns, so it is written as raw SQL (`sql.raw`), not
+through drizzle column references. Adding one REWRITES the table under an
+ACCESS EXCLUSIVE lock — say so in the migration.
 
 ## `ON DELETE`
 
@@ -344,6 +366,13 @@ it to prove anything.
 
 Every such rule is expressed at a single write chokepoint with a test that would
 fail without it.
+
+The SELLER's key (ADR 0012) has its own chokepoint, `registerFaircoinKey` in
+`db/accounts/connectedAccountRepository.ts`, which calls the same
+`assertWatchOnly` (`services/watchOnly.ts`) before it writes and is the only
+statement that sets `connected_accounts.xpub` — its `WHERE xpub IS NULL` is the
+immutability. `connectedAccountFaircoin.realdb.test.ts` hands it a real private
+key; deleting the call reds that test and the wrong-network one, measured.
 
 ## Protected columns
 

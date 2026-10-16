@@ -34,6 +34,15 @@ export const PROTECTED_COLUMNS = {
     // enumeration and therefore their revenue.
     'nextDerivationIndex',
   ],
+  connectedAccounts: [
+    // A seller's watch-only ACCOUNT xpub (ADR 0012 D6). Unlike a merchant's own
+    // key, it is never on any DTO: an account xpub reveals every address of the
+    // account, so the PLATFORM reading it would learn the seller's whole history
+    // in that pocket. Read only by the reservation and the registration writer.
+    'xpub',
+    // The seller's derivation counter, withheld for the merchant's reason.
+    'nextDerivationIndex',
+  ],
 } as const;
 
 /**

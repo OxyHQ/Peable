@@ -1,10 +1,15 @@
 import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
-import type { CurrencyCode, PaymentIntentRail, PaymentIntentStatus } from '@peable.to/shared-types';
+import {
+  EXPIRABLE_STATUSES as SHARED_EXPIRABLE_STATUSES,
+  type CurrencyCode,
+  type PaymentIntentRail,
+  type PaymentIntentStatus,
+} from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 // Type-only: this repository must not pull the Stripe SDK into a query path.
 import type { ProviderId } from '../../services/providers/provider';
-import { paymentIntents } from '../schema';
+import { connectedAccounts, paymentIntents } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 
 /**
@@ -24,6 +29,19 @@ export interface PaymentIntentRow {
   /** FairCoin rail only — `null` on a card intent, which reserves no address. */
   readonly address: string | null;
   readonly merchantId: string;
+  /**
+   * The seller this payment is made on behalf of — the INTERNAL id, which is
+   * what `payment_intents.connected_account_id` references (ADR 0012 D5).
+   * `null`/absent on a payment to the merchant itself. Optional in the type, as
+   * `paymentLinkId` is, so a fixture that predates it still describes a row.
+   */
+  readonly connectedAccountId?: string | null;
+  /**
+   * The same seller's PUBLIC `ca_…`, read in the same statement — the wire
+   * contract promises a `ca_…`, and this is the one translation of it, so no
+   * serializer has to look it up (or reach for the internal id instead).
+   */
+  readonly connectedAccountPublicId?: string | null;
   readonly txid: string | null;
   readonly confirmations: number;
   /** Card rail only — `null` on a FairCoin intent, where the chain is the provider. */
@@ -58,6 +76,17 @@ const INTENT_COLUMNS = {
   network: paymentIntents.network,
   address: paymentIntents.address,
   merchantId: paymentIntents.merchantId,
+  connectedAccountId: paymentIntents.connectedAccountId,
+  /**
+   * A scalar subquery rather than a join, because this map is also every
+   * `INSERT`/`UPDATE … RETURNING` in this file — and RETURNING cannot join. It
+   * names the target table by its own name, which is valid in all three
+   * statement kinds; an ALIASED read of `payment_intents` would need its own
+   * column map.
+   */
+  connectedAccountPublicId: sql<
+    string | null
+  >`(select ${connectedAccounts.publicId} from ${connectedAccounts} where ${connectedAccounts.id} = ${paymentIntents.connectedAccountId})`,
   txid: paymentIntents.txid,
   confirmations: paymentIntents.confirmations,
   provider: paymentIntents.provider,
@@ -95,6 +124,14 @@ export interface InsertPaymentIntentParams {
   readonly paymentLinkId?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
+  /**
+   * The seller's INTERNAL id for an on-behalf payment (ADR 0012 D5), whose
+   * `address` the caller derived from that seller's key. FairCoin only —
+   * `payment_intents_connected_account_is_faircoin_check` — and the account
+   * must belong to `merchantId` with this intent's `network`, or
+   * `payment_intents_connected_account_network_fkey` refuses the row.
+   */
+  readonly connectedAccountId?: string | null;
   readonly rail: PaymentIntentRail;
   readonly amount: string;
   readonly currency: CurrencyCode;
@@ -146,6 +183,7 @@ export async function insertPaymentIntent(
         address: params.address,
         provider: params.provider,
         merchantId: params.merchantId,
+        connectedAccountId: params.connectedAccountId ?? null,
         clientSecret: params.clientSecret,
         idempotencyKey: params.idempotencyKey,
         metadata: params.metadata,
@@ -314,6 +352,8 @@ export interface ListIntentsParams {
   readonly limit: number;
   /** The internal id of the `starting_after` cursor row, already resolved and ownership-checked. */
   readonly after?: string | undefined;
+  /** Only payments on behalf of this seller — its INTERNAL id, already resolved and ownership-checked. */
+  readonly connectedAccountId?: string | undefined;
 }
 
 /**
@@ -346,6 +386,9 @@ export async function listIntentsForMerchant(
 ): Promise<{ data: PaymentIntentRow[]; hasMore: boolean }> {
   const conditions = [eq(paymentIntents.merchantId, params.merchantId)];
   if (params.status !== undefined) conditions.push(eq(paymentIntents.status, params.status));
+  if (params.connectedAccountId !== undefined) {
+    conditions.push(eq(paymentIntents.connectedAccountId, params.connectedAccountId));
+  }
   if (params.after !== undefined) conditions.push(lt(paymentIntents.id, params.after));
 
   const rows = await db
@@ -682,12 +725,14 @@ export async function findIntentByProviderCharge(
  * checkout would sit in `requires_action` forever, never expiring, and the
  * merchant would never get the `payment_intent.expired` they release an
  * inventory reservation on.
+ *
+ * The list itself now lives in `@peable.to/shared-types` (ADR 0012 D9), because
+ * the wire contract publishes it as `PaymentIntent.canExpire`: a platform must
+ * be able to tell a payment that can still expire from one that never will, and
+ * a second copy here would be a second answer. The sweeper and the DTO read the
+ * same array.
  */
-export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
-  'created',
-  'awaiting_approval',
-  'requires_action',
-];
+export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = SHARED_EXPIRABLE_STATUSES;
 
 /**
  * The CARD intents whose expiry has passed — READ, not claimed.

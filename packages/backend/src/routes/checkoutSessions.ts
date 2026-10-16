@@ -27,11 +27,16 @@ import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { newId } from '../lib/ids';
 import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from '../lib/serialize';
 import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from '../lib/http';
-import { resolveMerchant } from './paymentIntents';
+import {
+  connectedAccountBodyField,
+  resolveMerchant,
+  sendConnectedAccountRefusal,
+} from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
 
 const createBodySchema = z.object({
   ...railBodyFields,
+  ...connectedAccountBodyField,
   metadata: z.record(z.string(), z.string()).optional(),
   successUrl: z.string().url().optional(),
   cancelUrl: z.string().url().optional(),
@@ -100,6 +105,9 @@ export function createCheckoutSessionsRouter(deps: {
           ...(params.rail !== undefined ? { rail: params.rail } : {}),
           ...(params.currency !== undefined ? { currency: params.currency } : {}),
           ...(params.network !== undefined ? { network: params.network } : {}),
+          ...(params.connectedAccount !== undefined
+            ? { connectedAccount: params.connectedAccount }
+            : {}),
           metadata: params.metadata,
           ...(idempotencyKey ? { idempotencyKey } : {}),
         });
@@ -139,6 +147,11 @@ export function createCheckoutSessionsRouter(deps: {
           currency: intent.currency,
           rail: intent.rail,
           network: intent.network,
+          // From the INTENT, for the reason the rail is: a session whose seller
+          // disagreed with the payment it wraps would show one payee and pay
+          // another. `checkout_sessions_connected_account_network_fkey` holds the
+          // account to this merchant and to the intent's network.
+          connectedAccountId: intent.connectedAccountId ?? null,
           metadata: params.metadata ?? {},
           successUrl: params.successUrl,
           cancelUrl: params.cancelUrl,
@@ -169,6 +182,7 @@ export function createCheckoutSessionsRouter(deps: {
           sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
+        if (sendConnectedAccountRefusal(res, err)) return;
         if (err instanceof EnvironmentModeMismatchError) {
           sendEnvironmentMismatch(res, err.message);
           return;

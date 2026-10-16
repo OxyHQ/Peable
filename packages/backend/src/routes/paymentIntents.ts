@@ -20,12 +20,15 @@ import {
 } from '../db/payments/paymentIntentRepository';
 import type { IntentStateResult, PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
+  AccountNotReadyError,
+  ConnectedAccountNotFoundError,
   createIntent,
   IdempotencyConflictError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
 } from '../services/createIntent';
+import { findAccountByPublicId } from '../db/accounts/connectedAccountRepository';
 import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { redactProviderMessage } from '../services/providers/redact';
 import { cancelCardPaymentAtProvider } from '../services/cardCancellation';
@@ -97,13 +100,44 @@ export const listQuerySchema = z.object({
     .optional(),
   limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
   starting_after: z.string().optional(),
+  /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
+  connected_account: z.string().min(1).optional(),
 });
+
+/**
+ * The `connectedAccount` a create body may carry (ADR 0012 D5). Shared by the
+ * intent and checkout-session bodies so the two cannot disagree on its shape.
+ */
+export const connectedAccountBodyField = {
+  connectedAccount: z.string().min(1).max(255).optional(),
+} as const;
+
+/**
+ * Answer the two refusals an ON-BEHALF create can meet before anything is
+ * written. Shared by both creating routes.
+ *
+ * @returns whether it answered.
+ */
+export function sendConnectedAccountRefusal(res: Response, err: unknown): boolean {
+  if (err instanceof ConnectedAccountNotFoundError) {
+    sendError(res, 404, 'invalid_request_error', err.message);
+    return true;
+  }
+  if (err instanceof AccountNotReadyError) {
+    // 409 with a code the platform branches on: the request is right and the
+    // seller is not ready — onboard them, do not edit the request.
+    sendError(res, 409, 'invalid_request_error', err.message, err.code);
+    return true;
+  }
+  return false;
+}
 
 // Zod schema for the create body. Its inferred output is asserted assignable to
 // `CreatePaymentIntentParams` (see `params` below) so the wire contract and the
 // shared type can never silently drift apart.
 const createBodySchema = z.object({
   ...railBodyFields,
+  ...connectedAccountBodyField,
   metadata: z.record(z.string(), z.string()).optional(),
   expiresInSeconds: z.number().int().positive().optional(),
 });
@@ -182,6 +216,8 @@ export interface ListPaymentIntentsQuery {
   status?: PaymentIntentStatus;
   limit?: number;
   starting_after?: string;
+  /** A seller's PUBLIC `ca_…`; resolved and ownership-checked below. */
+  connected_account?: string;
 }
 
 export type ListPaymentIntentsResult =
@@ -220,7 +256,29 @@ export async function listPaymentIntentsForMerchant(
     after = cursor.id;
   }
 
-  const page = await listIntentsForMerchant(db, { merchantId, status, limit, after });
+  // The seller filter arrives as a PUBLIC `ca_…` and is resolved the way the
+  // cursor is: scoped to the merchant, so another platform's seller is a 422
+  // exactly like an unknown one.
+  let connectedAccountId: string | undefined;
+  if (query.connected_account !== undefined) {
+    const account = await findAccountByPublicId(db, merchantId, query.connected_account);
+    if (!account) {
+      return {
+        ok: false,
+        status: 422,
+        message: 'connected_account references an unknown connected account',
+      };
+    }
+    connectedAccountId = account.id;
+  }
+
+  const page = await listIntentsForMerchant(db, {
+    merchantId,
+    status,
+    limit,
+    after,
+    ...(connectedAccountId !== undefined ? { connectedAccountId } : {}),
+  });
   return { ok: true, data: page.data, hasMore: page.hasMore };
 }
 
@@ -277,6 +335,9 @@ export function createPaymentIntentsRouter(deps: {
           ...(params.rail !== undefined ? { rail: params.rail } : {}),
           ...(params.currency !== undefined ? { currency: params.currency } : {}),
           ...(params.network !== undefined ? { network: params.network } : {}),
+          ...(params.connectedAccount !== undefined
+            ? { connectedAccount: params.connectedAccount }
+            : {}),
           metadata: params.metadata,
           expiresInSeconds: params.expiresInSeconds,
           idempotencyKey,
@@ -303,6 +364,7 @@ export function createPaymentIntentsRouter(deps: {
           sendError(res, 422, 'invalid_request_error', err.message);
           return;
         }
+        if (sendConnectedAccountRefusal(res, err)) return;
         // A development or staging credential asking a live deployment for a
         // card payment. Refused before Stripe was called at all.
         if (err instanceof EnvironmentModeMismatchError) {

@@ -236,6 +236,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'billing_object_bindings',
       'billing_operations',
       'checkout_sessions',
+      'connected_account_links',
       'connected_accounts',
       'disputes',
       'faircoin_billing_invoices',

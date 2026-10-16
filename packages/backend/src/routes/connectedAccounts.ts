@@ -17,11 +17,19 @@ import {
   listAccountsForMerchant,
 } from '../db/accounts/connectedAccountRepository';
 import {
+  AccountConflictError,
+  AccountRailMissingError,
   AccountsUnavailableError,
   createAccountLink,
   ensureConnectedAccount,
+  FaircoinNetworkRefusedError,
   refreshConnectedAccount,
 } from '../services/accounts/connectedAccountService';
+import {
+  AccountAlreadyActiveError,
+  createFaircoinAccountLink,
+} from '../services/accounts/faircoinOnboarding';
+import { hasCardHalf } from '../db/accounts/connectedAccountRepository';
 import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { ProviderError } from '../services/providers/provider';
 import { toConnectedAccountDTO } from '../lib/serializeSettlement';
@@ -49,21 +57,54 @@ const listQuerySchema = z.object({
   starting_after: z.string().optional(),
 });
 
-const createAccountBodySchema = z.object({
-  /**
-   * The merchant's own id for the seller. Bounded because it is a key: an
-   * unbounded string here is an unbounded index entry and an unbounded response
-   * field.
-   */
-  externalRef: z.string().min(1).max(255),
-  /** ISO-3166-1 alpha-2. Case-insensitive in; upper-cased before storage. */
-  country: z.string().length(2),
-  businessType: z.enum(['individual', 'company']),
-});
+/** Bounded for the reason `externalRef` is: it is stored, and it is compared. */
+const OXY_USER_ID_MAX = 128;
+
+const createAccountBodySchema = z
+  .object({
+    /**
+     * The merchant's own id for the seller. Bounded because it is a key: an
+     * unbounded string here is an unbounded index entry and an unbounded response
+     * field.
+     */
+    externalRef: z.string().min(1).max(255),
+    /**
+     * The CARD half: ISO-3166-1 alpha-2 (case-insensitive in; upper-cased
+     * before storage) and the business type, both or neither. Required before
+     * ADR 0012, and still exactly what opens the card half.
+     */
+    country: z.string().length(2).optional(),
+    businessType: z.enum(['individual', 'company']).optional(),
+    /**
+     * The FAIRCOIN half (ADR 0012 D2): the chain the seller is paid on and the
+     * seller's Oxy user id — the only person who may register the key. There is
+     * deliberately no `xpub` here: the key comes from the SELLER's own session,
+     * never from the platform (D3).
+     */
+    faircoin: z
+      .object({
+        network: z.enum(['mainnet', 'testnet']),
+        oxyUserId: z.string().min(1).max(OXY_USER_ID_MAX),
+      })
+      .strict()
+      .optional(),
+  })
+  .refine((body) => (body.country === undefined) === (body.businessType === undefined), {
+    message: 'a card account needs both country and businessType, or neither',
+  })
+  .refine((body) => body.country !== undefined || body.faircoin !== undefined, {
+    message: 'open at least one rail: country and businessType for cards, faircoin for FairCoin',
+  });
 
 const accountLinkBodySchema = z.object({
   refreshUrl: z.string().url(),
   returnUrl: z.string().url(),
+  /**
+   * Which half to onboard. `card` (the default, and the only answer before
+   * ADR 0012) is the provider's hosted onboarding; `faircoin` is Peable's own
+   * page where the SELLER registers their watch-only key.
+   */
+  rail: z.enum(['card', 'faircoin']).optional(),
 });
 
 export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHandler }): Router {
@@ -86,7 +127,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = createAccountBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -99,16 +139,43 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         return;
       }
 
+      const { country, businessType, faircoin } = parsed.data;
+      const card =
+        country !== undefined && businessType !== undefined ? { country, businessType } : undefined;
+      // Only the CARD half reaches a provider, so only it is held to the key
+      // mode. A FairCoin-only seller can be opened on a deployment with no
+      // card rail at all.
+      if (card && !requireProviderMode(merchant.environment, res)) return;
+
+      const base = {
+        merchantId: merchant.id,
+        environment: merchant.environment,
+        externalRef: parsed.data.externalRef,
+      };
+      // The schema already refuses a body with neither half; this is that same
+      // fact said to the type checker, rather than asserted past it.
+      const input = card
+        ? { ...base, card, ...(faircoin ? { faircoin } : {}) }
+        : faircoin
+          ? { ...base, faircoin }
+          : null;
+      if (!input) {
+        sendError(res, 422, 'invalid_request_error', 'open at least one rail');
+        return;
+      }
+
       try {
-        const { account, created } = await ensureConnectedAccount({
-          merchantId: merchant.id,
-          environment: merchant.environment,
-          externalRef: parsed.data.externalRef,
-          country: parsed.data.country,
-          businessType: parsed.data.businessType,
-        });
+        const { account, created } = await ensureConnectedAccount(input);
         res.status(created ? 201 : 200).json(toConnectedAccountDTO(account));
       } catch (error) {
+        if (error instanceof FaircoinNetworkRefusedError) {
+          sendError(res, 422, 'invalid_request_error', error.message);
+          return;
+        }
+        if (error instanceof AccountConflictError) {
+          sendError(res, 409, 'invalid_request_error', error.message);
+          return;
+        }
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
           return;
@@ -260,7 +327,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      if (!requireProviderMode(merchant.environment, res)) return;
 
       const { accountId } = req.params;
       if (!accountId) {
@@ -273,6 +339,9 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
+      // Held to the key mode only when there is a provider to read; a
+      // FairCoin-only seller is returned as it stands.
+      if (hasCardHalf(account) && !requireProviderMode(merchant.environment, res)) return;
 
       try {
         res
@@ -313,7 +382,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      if (!requireProviderMode(merchant.environment, res)) return;
 
       const parsed = accountLinkBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -338,19 +406,39 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         return;
       }
 
+      const rail = parsed.data.rail ?? 'card';
+      // The card link is the provider's and is held to the key mode; the
+      // FairCoin link is Peable's own page and reaches no provider.
+      if (rail === 'card' && !requireProviderMode(merchant.environment, res)) return;
+
       try {
-        const link = await createAccountLink({
-          environment: merchant.environment,
-          account,
-          refreshUrl: parsed.data.refreshUrl,
-          returnUrl: parsed.data.returnUrl,
-        });
+        const link =
+          rail === 'faircoin'
+            ? await createFaircoinAccountLink({
+                account,
+                refreshUrl: parsed.data.refreshUrl,
+                returnUrl: parsed.data.returnUrl,
+              })
+            : await createAccountLink({
+                environment: merchant.environment,
+                account,
+                refreshUrl: parsed.data.refreshUrl,
+                returnUrl: parsed.data.returnUrl,
+              });
         res.status(201).json({
           object: 'account_link',
           url: link.url,
           expiresAt: link.expiresAt.toISOString(),
         });
       } catch (error) {
+        if (error instanceof AccountRailMissingError) {
+          sendError(res, 409, 'invalid_request_error', error.message);
+          return;
+        }
+        if (error instanceof AccountAlreadyActiveError) {
+          sendError(res, 409, 'invalid_request_error', error.message);
+          return;
+        }
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
           return;

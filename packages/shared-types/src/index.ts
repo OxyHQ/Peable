@@ -22,6 +22,8 @@ export {
   PAYMENT_INTENT_RAILS,
   CHAIN_ONLY_STATUSES,
   CARD_ONLY_STATUSES,
+  EXPIRABLE_STATUSES,
+  canExpire,
 } from './paymentIntent';
 export type {
   WebhookEventType,
@@ -33,6 +35,9 @@ export type { Dispute, DisputeEvidence, DisputeStatus } from './dispute';
 export type {
   CapabilityStatus,
   ConnectedAccount,
+  ConnectedAccountFaircoin,
+  ConnectedAccountFaircoinStatus,
+  ConnectedAccountRail,
   Refund,
   RefundOrigin,
   RefundStatus,
@@ -54,6 +59,12 @@ export {
   MERCHANT_ENVIRONMENTS,
 } from './merchant';
 export type { MerchantDisplay } from './merchantDisplay';
+export type {
+  AccountLink,
+  ConnectOnboarding,
+  ConnectOnboardingComplete,
+  RegisterFaircoinKeyParams,
+} from './connect';
 export type {
   PaymentLink,
   PublicPaymentLink,

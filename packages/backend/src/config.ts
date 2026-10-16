@@ -14,6 +14,9 @@ const DEFAULT_PORT = 3001;
 const DEFAULT_NETWORK: NetworkType = 'mainnet';
 // The hosted checkout page's host (F2.2/F2.3) — see `2026-07-19-fase2-checkout-links.md`.
 const DEFAULT_CHECKOUT_BASE_URL = 'https://checkout.peable.to';
+// Where a SELLER registers their FairCoin key (ADR 0012 D3): the Peable wallet,
+// which already holds the key and the seller's Oxy session.
+const DEFAULT_CONNECT_ONBOARDING_BASE_URL = 'https://peable.to/connect';
 // Oxy's API. The `oxy` client (`src/oxy.ts`) is built from `config.oxyApiUrl`,
 // so it and the direct fetches in `services/appMembership.ts` never drift.
 const DEFAULT_OXY_API_URL = 'https://api.oxy.so';
@@ -69,6 +72,11 @@ export interface AppConfig {
    * `PaymentLink.url` (`/l/<id>`) and `CheckoutSession.url` (`/c/<id>`).
    */
   checkoutBaseUrl: string;
+  /**
+   * Base URL of the seller-facing FairCoin onboarding page (no trailing slash)
+   * — a link is `<base>/<token>` (ADR 0012 D3). The Peable wallet serves it.
+   */
+  connectOnboardingBaseUrl: string;
   /**
    * Base URL of oxy-api (no trailing slash) — `services/appMembership.ts`
    * forwards the dashboard caller's Oxy bearer here (`GET
@@ -297,6 +305,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     port: readPort(env.PORT),
     allowedOrigins: readOrigins(env.PEABLE_ALLOWED_ORIGINS),
     checkoutBaseUrl: readNonEmpty(env.PEABLE_CHECKOUT_BASE_URL, DEFAULT_CHECKOUT_BASE_URL),
+    connectOnboardingBaseUrl: readNonEmpty(
+      env.PEABLE_CONNECT_ONBOARDING_BASE_URL,
+      DEFAULT_CONNECT_ONBOARDING_BASE_URL,
+    ).replace(/\/+$/, ''),
     oxyApiUrl: readNonEmpty(env.OXY_API_URL, DEFAULT_OXY_API_URL),
     ...(readOptional(env.PEABLE_BILLING_COHORT)
       ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) }

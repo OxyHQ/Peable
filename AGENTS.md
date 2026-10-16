@@ -152,8 +152,9 @@ separate product. **No extensions** (an explicit empty list in
 
 ### The reservation is the highest-risk thing in this repo
 
-`db/merchants/derivationIndex.ts` and `db/social/receiveCursor.ts` decide which
-address a payer sends money to. Both are ONE statement — `UPDATE … SET x = x + 1
+`db/merchants/derivationIndex.ts`, `db/accounts/accountDerivationIndex.ts` (a
+SELLER's key, ADR 0012) and `db/social/receiveCursor.ts` decide which address a
+payer sends money to. All three are ONE statement — `UPDATE … SET x = x + 1
 … RETURNING x - 1`, and for the social cursor an `INSERT … ON CONFLICT DO UPDATE`
 that folds the lazy create into the same statement. Never split either into a
 read followed by a write: two callers reading the same value derive the same
@@ -192,9 +193,22 @@ is bounded by the money supply and has ~14x of headroom.
 
 ## Non-custody is enforced in code, not by policy
 
+**A seller's key comes ONLY from the seller (ADR 0012).** FairCoin connected
+accounts hold a marketplace seller's own watch-only xpub, and the one writer,
+`registerFaircoinKey`, is reached only from `/v1/connect/onboarding/:token/*` —
+Oxy USER auth, the user the account names. Never add a service-authed path
+that sets it: the key decides who receives the money, and a platform-supplied
+key is indistinguishable from the platform's own. It is immutable once stored,
+unique across accounts, never on a DTO (a protected column), and the platform
+needs no xpub of its own — an on-behalf intent reads `payment_intents.
+merchant_network` (a generated column) for the merchant firewall and
+`(connected_account_id, merchant_id, network)` for the seller's.
+
 A merchant registers a **watch-only account xpub**. `services/derivation.ts`
 derives a per-intent receive address from it and **throws
-`watch-only violation` if the extended key carries a private key**. That guard is
+`watch-only violation` if the extended key carries a private key**
+(`services/watchOnly.ts`'s `assertWatchOnly`, ONE implementation for merchant
+and seller keys). That guard is
 the legal firewall: if a merchant ever hands over an `xprv`, the gateway refuses
 it rather than silently gaining the ability to spend their funds. Never relax it,
 and never add a code path that accepts a private extended key.
@@ -210,9 +224,10 @@ the key the address derives from is the one the reservation was taken against.
 
 ## Backend surface
 
-Routes (`src/routes/`): `checkoutSessions`, `connectedAccounts`, `dashboard`,
-`disputes`, `enrich`, `merchants`, `paymentIntents`, `paymentLinks`,
-`providerWebhooks`, `refunds`, `social`, `tax`, `transfers`, `webhookDeliveries`.
+Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
+`dashboard`, `disputes`, `enrich`, `merchants`, `paymentIntents`,
+`paymentLinks`, `providerWebhooks`, `refunds`, `social`, `tax`, `transfers`,
+`webhookDeliveries`.
 
 **Peable Tax (ADR 0011) decides whether a sale is taxed; a provider only says
 how much.** `services/tax/` owns it for every rail. A covered sale the provider
@@ -227,7 +242,8 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
 `webhooks/` (`webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
-(`connectedAccountRepository`), `transfers/` (`transferRepository`,
+(`connectedAccountRepository`, `accountDerivationIndex`,
+`accountLinkRepository`), `transfers/` (`transferRepository`,
 `transferReversalRepository`), `refunds/` (`refundRepository`), `disputes/`
 (`disputeRepository`).
 

@@ -130,6 +130,14 @@ export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
     object: 'event';
     type: T;
     created: string;
+    /**
+     * The connected account (`ca_…`) this event is about — Stripe's
+     * `event.account` (ADR 0012 D7). Present on every event for an on-behalf
+     * payment and on `connected_account.updated`; absent on events about the
+     * merchant's own payments. Lets a platform route an event to a seller
+     * without opening `data.object`.
+     */
+    account?: string;
     data: { object: WebhookEventPayload[T] };
   };
 }[K];

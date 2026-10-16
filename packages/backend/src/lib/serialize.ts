@@ -10,6 +10,7 @@ import type {
   SocialPaymentSource,
   WebhookDelivery,
 } from '@peable.to/shared-types';
+import { canExpire } from '@peable.to/shared-types';
 import { config } from '../config';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
@@ -42,11 +43,17 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     network: row.network,
     address: row.address,
     merchantId: row.merchantId,
+    // The PUBLIC `ca_…`, read in the same statement as the row. Never the
+    // internal `connectedAccountId` — that is a uuid this contract never names.
+    connectedAccountId: row.connectedAccountPublicId ?? null,
     txid: row.txid,
     confirmations: row.confirmations,
     clientSecret: row.clientSecret,
     metadata: row.metadata,
     expiresAt: row.expiresAt.toISOString(),
+    // ADR 0012 D9: a broadcast or confirming payment never expires, whatever
+    // `expiresAt` says — said per intent so a platform never has to know the set.
+    canExpire: canExpire(row.status),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   };
@@ -194,6 +201,9 @@ export function toCheckoutSessionDTO(
     currency: row.currency,
     rail: row.rail,
     network: row.network,
+    // From the INTENT, which carries the public `ca_…`; the session row holds
+    // only the internal id.
+    connectedAccountId: intent.connectedAccountPublicId ?? null,
     metadata: row.metadata,
     successUrl: row.successUrl ?? undefined,
     cancelUrl: row.cancelUrl ?? undefined,

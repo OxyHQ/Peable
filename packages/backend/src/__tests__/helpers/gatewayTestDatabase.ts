@@ -66,7 +66,7 @@ import {
 const TEST_MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art';
 
-const xpubCache = new Map<NetworkType, string>();
+const xpubCache = new Map<string, string>();
 
 /**
  * A watch-only account xpub for `network`, derived rather than pasted.
@@ -81,16 +81,31 @@ const xpubCache = new Map<NetworkType, string>();
  * Measured: that is exactly what happened the first time this harness ran, which
  * is the argument for testing a harness before twenty suites depend on it.
  */
-export function testXpubFor(network: NetworkType): string {
-  const cached = xpubCache.get(network);
+export function testXpubFor(network: NetworkType, account = 0): string {
+  // `account` is the BIP44 account — a wallet POCKET. A seller's key must be a
+  // different account from any merchant's (ADR 0012 D4: one key, one counter),
+  // so seller fixtures take 1, 2, … while every merchant keeps 0.
+  const cacheKey = `${network}:${String(account)}`;
+  const cached = xpubCache.get(cacheKey);
   if (cached) return cached;
 
   const config = getNetwork(network);
   const root = deriveKeyFromSeed(mnemonicToSeed(TEST_MNEMONIC), config);
-  const account = root.derive(`m/44'/${config.bip44CoinType}'/0'`);
-  const xpub = account.hdKey.publicExtendedKey;
-  xpubCache.set(network, xpub);
+  const node = root.derive(`m/44'/${config.bip44CoinType}'/${String(account)}'`);
+  const xpub = node.hdKey.publicExtendedKey;
+  xpubCache.set(cacheKey, xpub);
   return xpub;
+}
+
+/**
+ * A PRIVATE account key for `network` — the thing the non-custody firewall
+ * exists to refuse. Built from the same mnemonic rather than pasted, and only
+ * ever handed to a writer to prove it is refused.
+ */
+export function testXprvFor(network: NetworkType, account = 0): string {
+  const config = getNetwork(network);
+  const root = deriveKeyFromSeed(mnemonicToSeed(TEST_MNEMONIC), config);
+  return root.derive(`m/44'/${config.bip44CoinType}'/${String(account)}'`).hdKey.privateExtendedKey;
 }
 
 /** The testnet vector, kept as a named export for suites that assert on it directly. */

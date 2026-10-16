@@ -45,6 +45,7 @@ import { createContributionsRouter } from './routes/contributions';
 import { createDashboardRouter } from './routes/dashboard';
 import { createProviderWebhooksRouter } from './routes/providerWebhooks';
 import { createConnectedAccountsRouter } from './routes/connectedAccounts';
+import { createConnectRouter } from './routes/connect';
 import { createTransfersRouter } from './routes/transfers';
 import { createRefundsRouter } from './routes/refunds';
 import { createDisputesRouter } from './routes/disputes';
@@ -241,6 +242,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createMerchantsRouter({ requireMerchant }));
   app.use(createConnectedAccountsRouter({ requireMerchant }));
+  // The SELLER's half of connected accounts (ADR 0012 D3): Oxy USER auth, never
+  // a service credential — a platform cannot register a seller's key.
+  app.use(createConnectRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createTransfersRouter({ requireMerchant }));
   app.use(createRefundsRouter({ requireMerchant }));
   app.use(createDisputesRouter({ requireMerchant }));

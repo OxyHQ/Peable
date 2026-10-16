@@ -204,6 +204,14 @@ export async function createTransfer(input: CreateTransferInput): Promise<Create
   if (input.account.transfersCapability !== 'active' || !input.account.payoutsEnabled) {
     throw new AccountNotPayableError("the seller's account cannot receive settlements yet");
   }
+  // A FairCoin-only seller (ADR 0012) has no provider account to transfer to.
+  // It already failed the capability check above — its transfers capability is
+  // NULL — and this narrows the type to what that check implies, so the
+  // provider id below can never be read off a row that has none.
+  const destination = input.account.providerAccountId;
+  if (destination === null) {
+    throw new AccountNotPayableError('this seller has no card account to settle to');
+  }
   if (input.currency !== input.intent.currency) {
     // A transfer in a different currency from the charge is an FX conversion
     // this gateway does not perform, and the provider would either refuse it or
@@ -294,7 +302,7 @@ export async function createTransfer(input: CreateTransferInput): Promise<Create
       intentId: input.intent.publicId,
       transferId: row.publicId,
       sourceChargeObjectId,
-      destinationAccountId: input.account.providerAccountId,
+      destinationAccountId: destination,
       amount: { amount: row.amount, currency: input.currency },
       // Every movement of one checkout, tied together at the provider by the
       // payment's own public id — which is what `createPayment` set as the

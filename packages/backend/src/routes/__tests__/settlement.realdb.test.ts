@@ -345,6 +345,74 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     expect(providerCalls.filter((entry) => entry.fn === 'createAccount')).toHaveLength(0);
   });
 
+  // ── one seller, both rails (ADR 0012 D1) ──────────────────────────────────
+
+  test('a card seller gains a FairCoin half under the SAME ca_, with no provider call', async () => {
+    const card = await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_both_a',
+      country: 'ES',
+      businessType: 'individual',
+    });
+    providerCalls.length = 0;
+    const both = await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_both_a',
+      faircoin: { network: 'testnet', oxyUserId: 'user_both_a' },
+    });
+    expect(both.status).toBe(200);
+    expect(both.json.id).toBe(card.json.id);
+    expect(both.json.rails).toEqual(['card', 'faircoin']);
+    expect((both.json.faircoin as Record<string, unknown>).status).toBe('pending');
+    expect(providerCalls).toEqual([]);
+  });
+
+  test('a FairCoin seller gains a card half under the SAME ca_, opened at the provider once', async () => {
+    const fair = await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_both_b',
+      faircoin: { network: 'testnet', oxyUserId: 'user_both_b' },
+    });
+    expect(fair.status).toBe(201);
+    expect(providerCalls).toEqual([]);
+
+    const both = await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_both_b',
+      country: 'pt',
+      businessType: 'company',
+    });
+    expect(both.status).toBe(200);
+    expect(both.json.id).toBe(fair.json.id);
+    expect(both.json.rails).toEqual(['card', 'faircoin']);
+    expect(both.json.country).toBe('PT');
+    expect(providerCalls.filter((c) => c.fn === 'createAccount')).toHaveLength(1);
+
+    // Converging again opens nothing more.
+    await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_both_b',
+      country: 'PT',
+      businessType: 'company',
+    });
+    expect(providerCalls.filter((c) => c.fn === 'createAccount')).toHaveLength(1);
+  });
+
+  test('a FairCoin-only seller cannot be settled to by transfer', async () => {
+    const fair = await call('POST', '/v1/connected_accounts', {
+      externalRef: 'store_fair_transfer',
+      faircoin: { network: 'testnet', oxyUserId: 'user_fair_transfer' },
+    });
+    const transfer = await call('POST', '/v1/transfers', {
+      paymentIntentId: 'pi_settled_for_transfers',
+      connectedAccountId: fair.json.id,
+      externalRef: 'order_to_fair_seller',
+      amount: '1000',
+    });
+    expect(transfer.status).toBe(422);
+    expect(providerCalls.filter((c) => c.fn === 'createTransfer')).toHaveLength(0);
+
+    const refreshed = await call('POST', `/v1/connected_accounts/${String(fair.json.id)}/refresh`);
+    // Nothing at a provider to read: returned as it stands, no call made.
+    expect(refreshed.status).toBe(200);
+    expect(providerCalls.filter((c) => c.fn === 'getAccount')).toHaveLength(0);
+  });
+
   /**
    * The provider idempotency key is derived from the merchant and their own
    * seller id — never random. A random key would open a second real account on

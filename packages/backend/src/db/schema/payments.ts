@@ -13,6 +13,7 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import { connectedAccounts } from './connectedAccounts';
 import { merchants } from './merchants';
 import {
   BASE_UNIT_STRING_PATTERN,
@@ -79,6 +80,34 @@ export const paymentIntents = pgTable(
     address: text(),
     paymentLinkId: text().references((): AnyPgColumn => paymentLinks.id, { onDelete: 'restrict' }),
     merchantId: text().notNull(),
+    /**
+     * The seller this payment is made ON BEHALF OF (ADR 0012 D5) — the
+     * connected account whose xpub `address` derives from. NULL for a payment
+     * to the merchant itself, which is every payment that predates ADR 0012.
+     *
+     * The MERCHANT still owns the row: authentication, listing, `reject`, the
+     * outbox and every webhook are the platform's. This column says where the
+     * money goes, not whose record it is.
+     */
+    connectedAccountId: text(),
+    /**
+     * `network`, but only on a payment to the merchant ITSELF — NULL on an
+     * on-behalf one. Computed by the server, never written.
+     *
+     * It exists to be the referencing column of the network firewall
+     * (`payment_intents_merchant_id_network_fkey`). That reference used to read
+     * `network` directly, which would refuse every on-behalf intent of a
+     * card-only platform: the platform's own network is NULL, the intent's is
+     * the seller's. Reading this column instead keeps the firewall binding
+     * every direct FairCoin intent exactly as before and makes it vacuous
+     * (`MATCH SIMPLE`) for an on-behalf one, whose firewall is the account
+     * reference below. Raw SQL rather than column references, because a
+     * generation expression may only name its own table's columns and the
+     * qualified form drizzle would render is not something to depend on.
+     */
+    merchantNetwork: text().generatedAlwaysAs(
+      sql.raw('case when connected_account_id is null then network end'),
+    ),
     txid: text(),
     confirmations: integer().notNull().default(0),
     /**
@@ -178,9 +207,45 @@ export const paymentIntents = pgTable(
      */
     foreignKey({
       name: 'payment_intents_merchant_id_network_fkey',
-      columns: [table.merchantId, table.network],
+      columns: [table.merchantId, table.merchantNetwork],
       foreignColumns: [merchants.id, merchants.network],
     }).onDelete('restrict'),
+    /**
+     * The network firewall for an ON-BEHALF payment (ADR 0012 D5), and the
+     * ownership rule with it: the account belongs to THIS merchant, and the
+     * intent's network is the ACCOUNT's. Its implicit `ON UPDATE RESTRICT` also
+     * makes the account's network immutable once one intent exists.
+     *
+     * Always binding when `connected_account_id` is set: the CHECK below keeps
+     * that column to the FairCoin rail, and the FairCoin rail requires a
+     * network, so no NULL can switch this reference off.
+     */
+    foreignKey({
+      name: 'payment_intents_connected_account_network_fkey',
+      columns: [table.connectedAccountId, table.merchantId, table.network],
+      foreignColumns: [
+        connectedAccounts.id,
+        connectedAccounts.merchantId,
+        connectedAccounts.network,
+      ],
+    }).onDelete('restrict'),
+    /** The network-free companion — ADR 0001 D6's rule for every composite reference. */
+    foreignKey({
+      name: 'payment_intents_connected_account_merchant_fkey',
+      columns: [table.connectedAccountId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    // "Every payment for this seller" — the platform's per-seller listing.
+    index('payment_intents_connected_account_id_idx').on(table.connectedAccountId),
+    /**
+     * On-behalf payments are FairCoin payments (ADR 0012 D5). An on-behalf CARD
+     * charge is ADR 0009's open merchant-of-record decision, and a row that
+     * pre-empted it would be a decision taken by a constraint nobody reviewed.
+     */
+    check(
+      'payment_intents_connected_account_is_faircoin_check',
+      sql`${table.connectedAccountId} is null or ${table.rail} = 'faircoin'`,
+    ),
     /**
      * What keeps `merchant_id` referential once `network` may be NULL.
      *
@@ -359,6 +424,12 @@ export const checkoutSessions = pgTable(
     rail: text().notNull().default('faircoin'),
     /** FairCoin rail only — NULL on a card session. See ADR 0001 D6. */
     network: text(),
+    /** The seller the wrapped intent pays (ADR 0012). Copied from the intent at creation. */
+    connectedAccountId: text(),
+    /** `network` on a session for the merchant itself; NULL on an on-behalf one. See `payment_intents.merchant_network`. */
+    merchantNetwork: text().generatedAlwaysAs(
+      sql.raw('case when connected_account_id is null then network end'),
+    ),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
     successUrl: text(),
     cancelUrl: text(),
@@ -382,9 +453,28 @@ export const checkoutSessions = pgTable(
     // does not exist. See `payment_intents`' equivalent for the network half.
     foreignKey({
       name: 'checkout_sessions_merchant_identity_fkey',
-      columns: [table.merchantId, table.oxyAppId, table.environment, table.network],
+      columns: [table.merchantId, table.oxyAppId, table.environment, table.merchantNetwork],
       foreignColumns: [merchants.id, merchants.oxyAppId, merchants.environment, merchants.network],
     }).onDelete('restrict'),
+    /** The on-behalf firewall — `payment_intents_connected_account_network_fkey`'s twin. */
+    foreignKey({
+      name: 'checkout_sessions_connected_account_network_fkey',
+      columns: [table.connectedAccountId, table.merchantId, table.network],
+      foreignColumns: [
+        connectedAccounts.id,
+        connectedAccounts.merchantId,
+        connectedAccounts.network,
+      ],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'checkout_sessions_connected_account_merchant_fkey',
+      columns: [table.connectedAccountId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    check(
+      'checkout_sessions_connected_account_is_faircoin_check',
+      sql`${table.connectedAccountId} is null or ${table.rail} = 'faircoin'`,
+    ),
     /**
      * The network-free half of that identity, and the reason it is not
      * redundant is ADR 0001 D6: with `network` NULL on a card session, the

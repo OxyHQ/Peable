@@ -19,6 +19,11 @@ export interface CheckoutSession {
   rail: PaymentIntentRail;
   /** FairCoin rail only; `null` on a card session. */
   network: NetworkType | null;
+  /**
+   * The seller the wrapped payment is made on behalf of (`ca_…`), or `null`
+   * (ADR 0012 D5). Optional in the type for older fixtures; always sent.
+   */
+  connectedAccountId?: string | null;
   metadata: Record<string, string>;
   successUrl?: string;
   cancelUrl?: string;
@@ -56,4 +61,6 @@ export interface CreateCheckoutSessionParams {
   metadata?: Record<string, string>;
   successUrl?: string;
   cancelUrl?: string;
+  /** Pay this seller (`ca_…`) rather than the merchant — see `CreatePaymentIntentParams.connectedAccount`. */
+  connectedAccount?: string;
 }

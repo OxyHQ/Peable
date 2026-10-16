@@ -225,8 +225,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       account.id,
     );
     expect(
-      (await findAccountByProviderAccountId(must(suite).db, 'stripe', account.providerAccountId))
-        ?.id,
+      (
+        await findAccountByProviderAccountId(
+          must(suite).db,
+          'stripe',
+          must(account.providerAccountId),
+        )
+      )?.id,
     ).toBe(account.id);
     // ...and NOT for a different merchant, which is the access control.
     expect(

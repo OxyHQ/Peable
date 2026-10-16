@@ -225,6 +225,13 @@
       "when": 1792154122014,
       "tag": "0031_wise_brood",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1792157304125,
+      "tag": "0032_cool_richard_fisk",
+      "breakpoints": true
     }
   ]
 }
