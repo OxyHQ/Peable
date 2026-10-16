@@ -417,6 +417,7 @@ function AppContent({ ready }: { ready: boolean }) {
         />
         <Stack.Screen name="transaction/[txid]" options={{ headerShown: false }} />
         <Stack.Screen name="pay/[intent]" options={{ headerShown: false }} />
+        <Stack.Screen name="connect/[token]" options={{ headerShown: false }} />
         <Stack.Screen name="buy" options={{ headerShown: false }} />
       </Stack>
       {/* Full-screen lock overlay: covers every authenticated route while the

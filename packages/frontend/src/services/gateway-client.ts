@@ -1,5 +1,7 @@
 import type { NetworkType } from '@fairco.in/core';
 import type {
+  ConnectOnboarding,
+  ConnectOnboardingComplete,
   PaymentIntent,
   SocialNextAddressResponse,
   SocialReceiveCursorResponse,
@@ -148,4 +150,54 @@ export async function getMyPayments(network: NetworkType): Promise<SocialPayment
   return gateway.client.get<SocialPaymentsResponse>('/v1/social/me/payments', {
     params: { network },
   });
+}
+
+/**
+ * Why a seller's FairCoin onboarding was refused (ADR 0012 D3), by the
+ * Gateway's status: 404 unknown link, 410 expired or already used, 403 signed
+ * in as someone other than the seller the link names, 409 already registered
+ * or the key is in use elsewhere, 422 not a watch-only key for this network.
+ */
+export class ConnectOnboardingError extends Error {
+  constructor(readonly status: number) {
+    super(`onboarding refused (${String(status)})`);
+    this.name = 'ConnectOnboardingError';
+  }
+}
+
+async function connectCall<T>(run: () => Promise<T>): Promise<T> {
+  try {
+    return await run();
+  } catch (error: unknown) {
+    if (hasStatus(error)) throw new ConnectOnboardingError(error.status);
+    throw error;
+  }
+}
+
+/**
+ * What a platform's onboarding link asks of the signed-in seller. Looking
+ * consumes nothing. The caller's own Oxy session is the authorization — the
+ * link alone opens nothing.
+ */
+export async function getConnectOnboarding(token: string): Promise<ConnectOnboarding> {
+  return connectCall(() =>
+    gateway.client.get<ConnectOnboarding>(`/v1/connect/onboarding/${encodeURIComponent(token)}`),
+  );
+}
+
+/**
+ * Register the watch-only ACCOUNT xpub of the pocket that will receive this
+ * platform's sales. A PUBLIC key only — the Gateway refuses a private one and
+ * the wallet never sends one.
+ */
+export async function registerConnectKey(
+  token: string,
+  xpub: string,
+): Promise<ConnectOnboardingComplete> {
+  return connectCall(() =>
+    gateway.client.post<ConnectOnboardingComplete>(
+      `/v1/connect/onboarding/${encodeURIComponent(token)}/faircoin`,
+      { xpub },
+    ),
+  );
 }
