@@ -395,5 +395,9 @@ export function stripeBillingClient() {
       getStripeClient().paymentIntents.retrieve(ref, { expand: ['latest_charge'] }, requestOptions),
     retrievePortalConfiguration: (ref: string) =>
       getStripeClient().billingPortal.configurations.retrieve(ref, {}, requestOptions),
+    createTaxRate: (params: Stripe.TaxRateCreateParams, key: string) =>
+      getStripeClient().taxRates.create(params, { ...requestOptions, idempotencyKey: key }),
+    expireCheckout: (ref: string) =>
+      getStripeClient().checkout.sessions.expire(ref, {}, requestOptions),
   };
 }

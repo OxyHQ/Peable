@@ -3,9 +3,19 @@ import {
   faircoinBillingConfigurationSchema,
 } from './faircoinBillingService';
 import { createPrivateKey, type KeyObject } from 'node:crypto';
-import { createPeableTaxQuoteCalculator, PEABLE_TAX_SERVICE_REF } from '../tax/billingTaxQuotes';
+import {
+  CARD_QUOTE_LIFETIME_MS,
+  createPeableTaxQuoteCalculator,
+  PEABLE_TAX_SERVICE_REF,
+} from '../tax/billingTaxQuotes';
+import { billingTaxOfferSchema, type BillingTaxCheckoutAdapter } from './tax-checkout';
+import {
+  createPeableCardInvoiceAuthority,
+  createStripeInvoiceTaxRecorder,
+  createStripePeableTaxCheckout,
+  type StripeInvoiceTaxRecorder,
+} from './stripeTaxCheckout';
 import type { TaxService } from '../tax/taxService';
-import type { BillingTaxCheckoutAdapter } from './tax-checkout';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
 import { createPublicKey } from 'node:crypto';
@@ -57,11 +67,18 @@ const cohortConfiguration = z
     taxCheckoutAdapterRef: billingReference.optional(),
     finalInvoiceAuthorityAdapterRef: billingReference.optional(),
     checkoutOperationReaderRef: billingReference.optional(),
+    /** Peable Tax only: the pinned key its quotes and invoices are signed with. */
+    invoiceSigningKeyId: billingReference.optional(),
     portalConfigurationRef: z.string().regex(/^bpc_[A-Za-z0-9]+$/),
     cohorts: z
       .array(
         billingOwnerSchema
-          .extend({ evidenceRef: billingReference, requireTaxQuote: z.boolean().default(false) })
+          .extend({
+            evidenceRef: billingReference,
+            requireTaxQuote: z.boolean().default(false),
+            /** Peable Tax only: the bound prices it quotes, with their tax treatment. */
+            offers: z.array(billingTaxOfferSchema).min(1).max(50).optional(),
+          })
           .strict(),
       )
       .min(1)
@@ -98,8 +115,9 @@ type StripeRail = Awaited<ReturnType<typeof configureStripeRail>>;
 interface ConfiguredRail {
   rail: BillingRail;
   renewals?: StripeRail['renewals'];
-  observations?: StripeRail['observations'];
-  relay?: StripeRail['relay'];
+  observations?: Extract<StripeRail, { observations: unknown }>['observations'];
+  relay?: Extract<StripeRail, { relay: unknown }>['relay'];
+  invoiceTax?: StripeInvoiceTaxRecorder;
 }
 interface RailContext {
   db: Database;
@@ -119,6 +137,22 @@ const FAIRCOIN_REFS = {
   checkout: /^cs_(live|test)_fair[0-9a-f]{64}$/,
 } as const;
 
+/** The billing signing key named `keyId`: an injected one, else the mounted
+ * production key, which must be that pinned key. Tax quotes and invoices are
+ * signed under the same id, so consumers verify both with one pinned key. */
+async function resolveSigningKey(
+  adapters: BillingRuntimeAdapters,
+  keyId: string,
+): Promise<string | KeyObject | undefined> {
+  const injected = adapters.invoiceSigningKeys?.[keyId];
+  if (injected) return injected;
+  const keyFile = config.billingInvoicePrivateKeyFile;
+  if (!keyFile) return undefined;
+  const mounted = await loadPinnedSigningKey(keyFile);
+  if (mounted.keyId !== keyId) throw new Error('Billing must sign with its configured pinned key');
+  return mounted.privateKey;
+}
+
 /** FairCoin native: watch-only settlement, payer-initiated periods, signed
  * invoices. Needs no Stripe credential. */
 async function configureFaircoinRail({ db, body, adapters }: RailContext): Promise<ConfiguredRail> {
@@ -126,17 +160,7 @@ async function configureFaircoinRail({ db, body, adapters }: RailContext): Promi
   const cohortOf = (owner: BillingOwner) =>
     native.cohorts.find((cohort) => sameOwner(cohort, owner));
   let calculator = adapters.taxQuoteCalculators?.[native.taxQuoteAdapterRef];
-  let signingKey = adapters.invoiceSigningKeys?.[native.invoiceSigningKeyId];
-  const keyFile = config.billingInvoicePrivateKeyFile;
-  if (!signingKey && keyFile) {
-    // The mounted production key must be the pinned key the configuration names.
-    // Tax quotes are signed under the same id, so consumers verify both with
-    // the one pinned public key.
-    const mounted = await loadPinnedSigningKey(keyFile);
-    if (mounted.keyId !== native.invoiceSigningKeyId)
-      throw new Error('Native FairCoin billing must sign with its configured pinned key');
-    signingKey = mounted.privateKey;
-  }
+  const signingKey = await resolveSigningKey(adapters, native.invoiceSigningKeyId);
   if (!calculator && native.taxQuoteAdapterRef === PEABLE_TAX_SERVICE_REF && signingKey) {
     if (!adapters.taxService) throw new Error('Peable Tax quotes require the tax service');
     // Every amount comes from Peable Tax; the merchant's approved tax settings
@@ -235,7 +259,7 @@ export async function configureBillingRuntime(
   }
   if (!configured.some((entry) => entry.rail.id === 'faircoin'))
     await reportMountedSigningKey(config.billingInvoicePrivateKeyFile);
-  const single = <K extends 'renewals' | 'observations' | 'relay'>(key: K) => {
+  const single = <K extends 'renewals' | 'observations' | 'relay' | 'invoiceTax'>(key: K) => {
     const present = configured.flatMap((entry) => (entry[key] ? [entry[key]] : []));
     if (present.length > 1) throw new Error(`Only one billing rail may provide ${key}`);
     return present[0] as ConfiguredRail[K];
@@ -245,6 +269,8 @@ export async function configureBillingRuntime(
     renewals: single('renewals'),
     observations: single('observations'),
     relay: single('relay'),
+    /** Peable Tax on the card rail: commits a quoted card sale when it is paid. */
+    invoiceTax: single('invoiceTax'),
   };
 }
 
@@ -292,27 +318,56 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
       : undefined;
   if (parsed.checkoutOperationReaderRef && !checkoutOperationReader)
     throw new Error('Configured checkout operation reader is unavailable');
+  if (!injectedClient && (!config.stripe.secretKey || config.stripe.keyMode === 'unknown'))
+    throw new Error('Recurring billing requires the configured platform Stripe key');
+  const client = injectedClient ?? stripeBillingClient();
+  const cohorts = parsed.cohorts.map(({ offers: _offers, ...owner }) => ({
+    ...owner,
+    ...parsed.deployment,
+  }));
+  const cohortOf = (owner: BillingOwner) => cohorts.find((cohort) => sameOwner(cohort, owner));
+  const offersOf = (owner: BillingOwner) =>
+    parsed.cohorts.find((cohort) => sameOwner(cohort, owner))?.offers ?? [];
+  // Peable Tax on the card rail: one reference selects Peable's own quote,
+  // checkout and invoice signer together (ADR 0012). Without it nothing below
+  // is constructed and the rail is exactly the platform rail it always was.
+  const peableTax = parsed.taxQuoteAdapterRef === PEABLE_TAX_SERVICE_REF;
+  const builtIn = peableTax
+    ? await configurePeableCardTax({ db, client, adapters, parsed, offersOf })
+    : undefined;
+  if (
+    !peableTax &&
+    (parsed.taxCheckoutAdapterRef === PEABLE_TAX_SERVICE_REF ||
+      parsed.finalInvoiceAuthorityAdapterRef === PEABLE_TAX_SERVICE_REF)
+  )
+    throw new Error('Peable Tax checkout and invoices require its tax quotes');
   const selectedTax =
-    parsed.taxQuoteAdapterRef &&
+    builtIn?.calculator ??
+    (parsed.taxQuoteAdapterRef &&
     Object.hasOwn(adapters.taxQuoteCalculators ?? {}, parsed.taxQuoteAdapterRef)
       ? adapters.taxQuoteCalculators?.[parsed.taxQuoteAdapterRef]
-      : undefined;
+      : undefined);
   const selectedInvoice =
-    parsed.finalInvoiceAuthorityAdapterRef &&
+    builtIn?.authority ??
+    (parsed.finalInvoiceAuthorityAdapterRef &&
     Object.hasOwn(adapters.finalInvoiceAuthorities ?? {}, parsed.finalInvoiceAuthorityAdapterRef)
       ? adapters.finalInvoiceAuthorities?.[parsed.finalInvoiceAuthorityAdapterRef]
-      : undefined;
+      : undefined);
   if (
     (parsed.taxQuoteAdapterRef && !selectedTax) ||
     (parsed.finalInvoiceAuthorityAdapterRef && !selectedInvoice)
   )
     throw new Error('Configured fiscal adapter is unavailable');
   const selectedCheckout =
-    parsed.taxCheckoutAdapterRef &&
+    builtIn?.checkout ??
+    (parsed.taxCheckoutAdapterRef &&
     Object.hasOwn(adapters.taxCheckoutAdapters ?? {}, parsed.taxCheckoutAdapterRef)
       ? adapters.taxCheckoutAdapters?.[parsed.taxCheckoutAdapterRef]
-      : undefined;
-  if (parsed.taxCheckoutAdapterRef && (!selectedCheckout || !selectedTax || !selectedInvoice))
+      : undefined);
+  if (
+    (parsed.taxCheckoutAdapterRef || builtIn) &&
+    (!selectedCheckout || !selectedTax || !selectedInvoice)
+  )
     throw new Error('Fiscal checkout requires configured checkout, quote and invoice adapters');
   if (parsed.cohorts.some((cohort) => cohort.requireTaxQuote) && !selectedCheckout)
     throw new Error('Quote-required cohort needs a fiscal checkout adapter');
@@ -334,7 +389,11 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
         resolveProduct: (
           owner: Parameters<BillingTaxQuoteCalculator['resolveProduct']>[0],
           plan: string,
-        ) => selectedTax.resolveProduct(owner, plan),
+          price?: string,
+        ) =>
+          price === undefined
+            ? selectedTax.resolveProduct(owner, plan)
+            : selectedTax.resolveProduct(owner, plan, price),
         readCustomerLocation: (
           owner: Parameters<BillingTaxQuoteCalculator['readCustomerLocation']>[0],
           evidence: string,
@@ -349,12 +408,9 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
         read: (input: Parameters<FinalInvoiceAuthorityReader['read']>[0]) =>
           selectedInvoice.read(input),
         verificationKeys: pinnedKeys(selectedInvoice.verificationKeys),
+        ...(selectedInvoice.signsTaxLines ? { signsTaxLines: true } : {}),
       }
     : undefined;
-  if (!injectedClient && (!config.stripe.secretKey || config.stripe.keyMode === 'unknown'))
-    throw new Error('Recurring billing requires the configured platform Stripe key');
-  const client = injectedClient ?? stripeBillingClient();
-  const cohorts = parsed.cohorts.map((owner) => ({ ...owner, ...parsed.deployment }));
   if (cohorts.some((owner) => (owner.environment === 'production') !== parsed.deployment.livemode))
     throw new BillingError('identity_conflict');
   const provider = createStripeBillingProvider(parsed.deployment, client, {
@@ -379,7 +435,6 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
     taxCheckoutAdapter,
     finalInvoiceAuthority,
   });
-  const cohortOf = (owner: BillingOwner) => cohorts.find((cohort) => sameOwner(cohort, owner));
   const rail: BillingRail = {
     id: 'stripe',
     settlement: 'fiat',
@@ -388,12 +443,36 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
     // Opaque Stripe ids (`cus_…`, `sub_…`, `cs_…`): the catch-all rail, so every
     // subscriber created before rails coexisted routes here unchanged.
     serves: (owner) => cohortOf(owner) !== undefined,
-    taxQuotes: (owner) => cohortOf(owner) !== undefined && taxQuoteCalculator !== undefined,
-    // Prices are the app's own Stripe prices, bound through verified bindings.
-    offers: () => null,
+    taxQuotes: (owner) =>
+      cohortOf(owner) !== undefined &&
+      taxQuoteCalculator !== undefined &&
+      (!builtIn || offersOf(owner).length > 0),
+    // Prices are the app's own Stripe prices, bound through verified bindings;
+    // a Peable Tax cohort lists the ones it quotes.
+    offers: (owner) => {
+      const offers = offersOf(owner);
+      return builtIn && offers.length
+        ? offers.map((offer) => ({
+            providerPriceId: offer.providerPriceId,
+            planId: offer.planId,
+            interval: offer.interval,
+            currency: offer.currency,
+            grossMinorUnits: offer.grossMinorUnits,
+            taxTreatment: offer.taxTreatment,
+          }))
+        : null;
+    },
   };
+  const invoiceTax = builtIn
+    ? createStripeInvoiceTaxRecorder({
+        db,
+        client,
+        deployment: parsed.deployment,
+        bindings: verifiedBindings,
+      })
+    : undefined;
   // No recurring queue access until the reviewed cohort explicitly opts in.
-  if (!parsed.observationsEnabled) return { rail, renewals };
+  if (!parsed.observationsEnabled) return { rail, renewals, ...(invoiceTax ? { invoiceTax } : {}) };
   const environment = cohorts[0]?.environment;
   if (!environment || cohorts.some((cohort) => cohort.environment !== environment)) {
     throw new Error('Recurring observations require one deployment environment');
@@ -411,5 +490,45 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
       }),
     },
     relay: { enabled: true as const, db, cohorts },
+    ...(invoiceTax ? { invoiceTax } : {}),
+  };
+}
+
+/** Peable's own quote calculator, Checkout adapter and invoice signer for a
+ * Stripe rail entry that names `taxQuoteAdapterRef: "peable_tax"`. */
+async function configurePeableCardTax(input: {
+  db: Database;
+  client: StripeBillingClient;
+  adapters: BillingRuntimeAdapters;
+  parsed: z.infer<typeof cohortConfiguration>;
+  offersOf: (owner: BillingOwner) => readonly z.infer<typeof billingTaxOfferSchema>[];
+}) {
+  const { db, client, adapters, parsed, offersOf } = input;
+  if (
+    (parsed.taxCheckoutAdapterRef ?? PEABLE_TAX_SERVICE_REF) !== PEABLE_TAX_SERVICE_REF ||
+    (parsed.finalInvoiceAuthorityAdapterRef ?? PEABLE_TAX_SERVICE_REF) !== PEABLE_TAX_SERVICE_REF
+  )
+    throw new Error('Peable Tax quotes are charged and signed by Peable Tax');
+  if (!parsed.invoiceSigningKeyId)
+    throw new Error('Peable Tax on the card rail requires invoiceSigningKeyId');
+  if (!adapters.taxService) throw new Error('Peable Tax quotes require the tax service');
+  const raw = await resolveSigningKey(adapters, parsed.invoiceSigningKeyId);
+  if (!raw) throw new Error('Peable Tax on the card rail requires a pinned invoice signing key');
+  const signingKey = typeof raw === 'string' ? createPrivateKey(raw) : raw;
+  return {
+    calculator: createPeableTaxQuoteCalculator({
+      db,
+      tax: adapters.taxService,
+      offers: offersOf,
+      signingKey,
+      keyId: parsed.invoiceSigningKeyId,
+      quoteLifetimeMs: CARD_QUOTE_LIFETIME_MS,
+    }),
+    checkout: createStripePeableTaxCheckout({ db, client, offers: offersOf }),
+    authority: createPeableCardInvoiceAuthority({
+      db,
+      signingKey,
+      keyId: parsed.invoiceSigningKeyId,
+    }),
   };
 }

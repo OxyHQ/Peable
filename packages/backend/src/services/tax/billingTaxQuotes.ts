@@ -27,6 +27,9 @@ export interface TaxableOffer {
 export const PEABLE_TAX_SERVICE_REF = 'peable_tax';
 /** A quote is a short commitment; its calculation may live longer. */
 const QUOTE_LIFETIME_MS = 15 * 60_000;
+/** A card quote outlives the Stripe Checkout it prices: Stripe refuses a
+ * Checkout Session that expires sooner than 30 minutes after it is created. */
+export const CARD_QUOTE_LIFETIME_MS = 2 * 3600_000;
 
 /**
  * Peable Tax behind the billing rails' signed-quote seam. A rail supplies its
@@ -45,6 +48,8 @@ export function createPeableTaxQuoteCalculator(options: {
   offers: (owner: BillingOwner) => readonly TaxableOffer[];
   signingKey: KeyObject;
   keyId: string;
+  /** How long a signed quote stands (never past its calculation or evidence). */
+  quoteLifetimeMs?: number;
   now?: () => Date;
 }): BillingTaxQuoteCalculator {
   const { db, tax, signingKey, keyId } = options;
@@ -154,7 +159,7 @@ export function createPeableTaxQuoteCalculator(options: {
       const at = now();
       const expiresAt = new Date(
         Math.min(
-          +at + QUOTE_LIFETIME_MS,
+          +at + (options.quoteLifetimeMs ?? QUOTE_LIFETIME_MS),
           Date.parse(calculation.expiresAt),
           Date.parse(location.expiresAt),
         ),
