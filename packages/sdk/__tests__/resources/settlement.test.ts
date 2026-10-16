@@ -28,6 +28,8 @@ const ACCOUNT: ConnectedAccount = {
   id: 'ca_1',
   object: 'connected_account',
   externalRef: 'store_1',
+  rails: ['card'],
+  faircoin: null,
   country: 'ES',
   defaultCurrency: 'EUR',
   payable: true,

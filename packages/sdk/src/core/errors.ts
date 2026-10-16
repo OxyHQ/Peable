@@ -77,7 +77,7 @@ export class PeableSignatureVerificationError extends PeableError {
 }
 
 interface NestedGatewayErrorBody {
-  error: { type: string; message: string };
+  error: { type: string; message: string; code?: string };
 }
 
 interface FlatGatewayErrorBody {
@@ -124,7 +124,9 @@ export function errorFromResponse(status: number, body: unknown): PeableError {
   let message = `Peable request failed with status ${status}`;
 
   if (isNestedGatewayErrorBody(body)) {
-    upstreamCode = body.error.type;
+    // The specific reason when the gateway names one (`account_not_ready`),
+    // else the broad `type` — which is all any error carried before.
+    upstreamCode = typeof body.error.code === 'string' ? body.error.code : body.error.type;
     message = body.error.message;
   } else if (isFlatGatewayErrorBody(body)) {
     upstreamCode = body.error;

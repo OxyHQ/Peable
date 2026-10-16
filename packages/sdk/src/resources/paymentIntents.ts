@@ -9,6 +9,8 @@ export interface PaymentIntentListParams {
   status?: PaymentIntentStatus;
   limit?: number;
   starting_after?: string;
+  /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
+  connected_account?: string;
 }
 
 export interface PaymentIntentList {
@@ -49,6 +51,14 @@ export interface CreatePaymentIntentOptions {
 export class PaymentIntentsResource {
   constructor(private readonly client: RestClient) {}
 
+  /**
+   * Create a payment. With `connectedAccount: 'ca_…'` it is made ON BEHALF OF
+   * that seller (ADR 0012): FairCoin only, the address derives from the
+   * seller's own key so the coins go straight to their wallet, and you still
+   * own the payment and receive its webhooks (each tagged `event.account`).
+   * A seller who has not registered their key yet is a 409 with
+   * `code: 'account_not_ready'`.
+   */
   create(
     params: CreatePaymentIntentParams,
     options: CreatePaymentIntentOptions,
@@ -72,6 +82,7 @@ export class PaymentIntentsResource {
         status: params.status,
         limit: params.limit,
         starting_after: params.starting_after,
+        connected_account: params.connected_account,
       },
     });
   }

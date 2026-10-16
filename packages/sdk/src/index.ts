@@ -74,7 +74,7 @@ import { PaymentIntentsResource } from './resources/paymentIntents';
 import { PaymentLinksResource } from './resources/paymentLinks';
 import { CheckoutResource } from './resources/checkoutSessions';
 import { WebhooksResource } from './resources/webhooks';
-import { ConnectedAccountsResource } from './resources/connectedAccounts';
+import { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
 import { DisputesResource, MerchantsResource } from './resources/merchants';
 import { RefundsResource } from './resources/refunds';
 import { TransfersResource } from './resources/transfers';
@@ -107,6 +107,14 @@ export class Peable {
   readonly merchants: MerchantsResource;
   /** Sellers a marketplace onboards, and their readiness. */
   readonly connectedAccounts: ConnectedAccountsResource;
+  /**
+   * The same sellers, Stripe-named: `accounts.create/retrieve/list` is
+   * `connectedAccounts.create/retrieve/list` — one resource, two names, so a
+   * Stripe Connect integration reads the way its authors expect.
+   */
+  readonly accounts: ConnectedAccountsResource;
+  /** Onboarding links, Stripe-named: `accountLinks.create({ account, rail, … })`. */
+  readonly accountLinks: AccountLinksResource;
   /** Money going back to a payer. */
   readonly refunds: RefundsResource;
   /** Money going out to a seller, and coming back from one. */
@@ -137,6 +145,8 @@ export class Peable {
     this.webhooks = new WebhooksResource();
     this.merchants = new MerchantsResource(client);
     this.connectedAccounts = new ConnectedAccountsResource(client);
+    this.accounts = this.connectedAccounts;
+    this.accountLinks = new AccountLinksResource(this.connectedAccounts);
     this.refunds = new RefundsResource(client);
     this.transfers = new TransfersResource(client);
     this.disputes = new DisputesResource(client);
@@ -176,8 +186,30 @@ export type {
   AccountLinkParams,
   ConnectedAccountList,
   ConnectedAccountListParams,
+  CreateAccountLinkParams,
   CreateConnectedAccountParams,
 } from './resources/connectedAccounts';
+export { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
+/**
+ * The wire shapes a platform handles, re-exported so a Connect integration needs
+ * one import: the seller (`ConnectedAccount` and its FairCoin half), the
+ * payment, and the typed webhook event — whose `account` names the seller.
+ */
+export type {
+  ConnectedAccount,
+  ConnectedAccountFaircoin,
+  ConnectedAccountFaircoinStatus,
+  ConnectedAccountRail,
+  CheckoutSession,
+  CreateCheckoutSessionParams,
+  CreatePaymentIntentParams,
+  PaymentIntent,
+  PaymentIntentStatus,
+  WebhookEvent,
+  WebhookEventType,
+} from '@peable.to/shared-types';
+/** Whether an intent can still expire — `false` once a FairCoin payer has broadcast (ADR 0012 D9). */
+export { canExpire, EXPIRABLE_STATUSES } from '@peable.to/shared-types';
 export type {
   DisputeEvidenceParams,
   DisputeList,
