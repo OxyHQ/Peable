@@ -151,6 +151,8 @@ export {
   type TaxCalculation,
   type TaxTransaction,
   type TaxTransactionList,
+  type TaxTransactionReversal,
+  type CreateTaxReversalParams,
   type ListTaxTransactionsParams,
   type TaxReportRow,
   type TaxReport,

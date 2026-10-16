@@ -42,6 +42,21 @@ export interface StripeBillingClient {
   createTaxRate?(params: Stripe.TaxRateCreateParams, key: string): Promise<unknown>;
   /** Ends a Checkout whose totals differ from the quote before anyone pays it. */
   expireCheckout?(ref: string): Promise<unknown>;
+  /** Peable Tax renewals: hold or release a draft renewal invoice. */
+  updateInvoice?(ref: string, params: Stripe.InvoiceUpdateParams, key: string): Promise<unknown>;
+  /** Peable Tax renewals: put the fresh frozen tax on the draft's one line. */
+  updateInvoiceLine?(
+    invoiceRef: string,
+    lineRef: string,
+    params: Stripe.InvoiceUpdateLineItemParams,
+    key: string,
+  ): Promise<unknown>;
+  /** Peable Tax renewals: the card's country is location evidence. */
+  retrievePaymentMethod?(ref: string): Promise<unknown>;
+  /** Peable Tax reversals: what was credited on a paid invoice. */
+  listInvoiceCreditNotes?(invoiceRef: string, startingAfter?: string): Promise<unknown>;
+  /** Peable Tax on the card rail: the endpoint must deliver the events it acts on. */
+  retrieveWebhookEndpoint?(ref: string): Promise<unknown>;
 }
 const ref = (prefix: string) =>
   z

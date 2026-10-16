@@ -203,7 +203,8 @@ export async function markProviderEventFailed(
 
 /** Deferral never changes the authenticated envelope or marks an event completed.
  * Called after the whole explicit recurring pass, so a slow blocked batch cannot
- * become due again before the pass ends. Default drain never reads this column. */
+ * become due again before the pass ends. The default drain honours it too, for
+ * the Peable Tax events it defers (ADR 0013); nothing else sets it there. */
 export async function deferProviderEvents(
   db: DatabaseOrTransaction,
   ids: readonly string[],

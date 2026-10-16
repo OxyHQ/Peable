@@ -13,6 +13,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz } from '@oxy.so/db';
 import { merchants } from './merchants';
+import { taxCalculations } from './tax';
 import {
   BILLING_BINDING_KINDS,
   BILLING_OPERATIONS,
@@ -191,5 +192,43 @@ export const billingOperations = pgTable(
       'billing_operations_result_check',
       sql`(${table.state} = 'succeeded' and ${table.result} is not null and jsonb_typeof(${table.result}) = 'object' and ${table.completedAt} is not null and ${table.leaseToken} is null) or (${table.state} <> 'succeeded' and ${table.result} is null and ${table.completedAt} is null)`,
     ),
+  ],
+);
+
+/**
+ * Peable Tax on a card renewal (ADR 0013): the fresh, signed quote a draft
+ * renewal invoice was repriced with before it finalized. One per provider
+ * invoice; insert-only. The paid invoice commits `calculation_id` as its tax
+ * transaction, and the signed final invoice of a renewal is built from
+ * `snapshot` (the same shape as a quoted checkout's), never from the
+ * checkout's quote.
+ */
+export const billingRenewalTaxes = pgTable(
+  'billing_renewal_taxes',
+  {
+    id: generatedId(),
+    merchantId: text()
+      .notNull()
+      .references(() => merchants.id, { onDelete: 'restrict' }),
+    provider: text().notNull(),
+    livemode: boolean().notNull(),
+    invoiceRef: text().notNull(),
+    subscriptionRef: text().notNull(),
+    calculationId: text()
+      .notNull()
+      .references(() => taxCalculations.id, { onDelete: 'restrict' }),
+    /** The manual provider tax rate carrying the frozen amount; null for zero tax. */
+    taxRateRef: text(),
+    snapshot: jsonb().$type<BillingTaxCheckoutSnapshot>().notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique('billing_renewal_taxes_invoice_key').on(
+      table.provider,
+      table.livemode,
+      table.invoiceRef,
+    ),
+    check('billing_renewal_taxes_provider_check', sql`${table.provider} = 'stripe'`),
+    check('billing_renewal_taxes_snapshot_check', sql`jsonb_typeof(${table.snapshot}) = 'object'`),
   ],
 );

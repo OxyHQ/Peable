@@ -403,10 +403,19 @@ const quote = await peable.billing.createTaxQuote({
   `billing.createCheckoutSession({ …, taxQuote })`: Stripe Checkout charges
   exactly the quoted total, Stripe Tax stays off, and the paid invoice is
   recorded as a tax transaction (ADR 0012). A card quote stands two hours; the
-  Checkout needs at least 31 minutes of it left. Renewals are not yet re-quoted.
+  Checkout needs at least 31 minutes of it left. Each renewal is repriced by
+  Peable before Stripe finalizes it, from the billing address and card country
+  Stripe holds, and gets its own signed quote and tax transaction; a renewal
+  Peable cannot price stays an unfinalized draft and is retried (ADR 0013).
+- Refunds net out of the report: a card refund or credit note is observed and
+  reversed automatically; a FairCoin sale you refund from your own wallet is
+  recorded with `peable.tax.transactions.createReversal(txnId, { reference,
+  amount? })` (`amount` = gross refunded; omitted = the rest). Reversals list as
+  `type: 'reversal'` transactions naming the sale they reverse.
 - `peable.tax.transactions.list({ from, to })` and
   `peable.tax.reports.summary({ from, to })` (or `GET
-  /v1/tax/reports/summary?format=csv`) are the filing export.
+  /v1/tax/reports/summary?format=csv`) are the filing export; report rows are
+  net of reversals and count them in `reversals`.
 
 ## Connect for FairCoin — paying sellers in their own wallets
 

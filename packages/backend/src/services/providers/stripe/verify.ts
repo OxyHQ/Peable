@@ -79,7 +79,16 @@ export function stripeObjectIds(event: Stripe.Event): Record<string, string> {
     const objectType = typeof object.object === 'string' ? object.object : 'object';
     ids[objectType] = object.id;
   }
-  for (const key of ['payment_intent', 'charge', 'transfer', 'source_transaction']) {
+  // `invoice` names a credit note's invoice and `customer` lets a handler that
+  // only acts for some customers answer locally, without a provider read.
+  for (const key of [
+    'payment_intent',
+    'charge',
+    'transfer',
+    'source_transaction',
+    'invoice',
+    'customer',
+  ]) {
     const value = object[key];
     if (typeof value === 'string') ids[key] = value;
   }

@@ -1,4 +1,5 @@
 import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lt, ne, or } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { z } from 'zod';
 import {
   TAX_REGISTRATION_SCHEMES,
@@ -14,6 +15,7 @@ import {
   type TaxSettings,
   type TaxTransaction,
   type TaxTransactionList,
+  type TaxTransactionReversal,
 } from '@peable.to/shared-types';
 import type { Database, DatabaseOrTransaction } from '../../db/postgres';
 import {
@@ -149,6 +151,17 @@ export const listTaxTransactionsSchema = z
     to: z.string().datetime(),
     limit: z.coerce.number().int().positive().max(1000).optional(),
     startingAfter: z.string().optional(),
+  })
+  .strict();
+
+const createReversalSchema = z
+  .object({
+    reference: z
+      .string()
+      .min(1)
+      .max(200)
+      .regex(/^[A-Za-z0-9_.:-]+$/),
+    amount: z.number().int().positive().safe().optional(),
   })
   .strict();
 
@@ -840,6 +853,45 @@ export function createTaxService(options: TaxServiceOptions) {
         hasMore: rows.length > limit,
       };
     },
+    /**
+     * Record a refund the rail cannot report itself: a FairCoin payment is
+     * refunded from the seller's own wallet, so the merchant says so here.
+     * `amount` is the gross refunded; omitted, whatever is not yet reversed.
+     * A repeated `reference` answers the reversal it already made. Card
+     * refunds and credit notes are observed from the provider and never
+     * entered by hand, so the two cannot double-count one refund.
+     */
+    async createReversal(
+      merchant: MerchantRow,
+      originalPublicId: string,
+      raw: unknown,
+    ): Promise<TaxTransaction> {
+      const input = parse(createReversalSchema, raw);
+      const [original] = await db
+        .select()
+        .from(taxTransactions)
+        .where(
+          and(
+            eq(taxTransactions.merchantId, merchant.id),
+            eq(taxTransactions.publicId, originalPublicId),
+            isNull(taxTransactions.reversalOfId),
+          ),
+        );
+      if (!original) throw new TaxError('not_found');
+      if (original.rail === 'stripe')
+        throw new TaxError(
+          'invalid_tax_request',
+          'card refunds and credit notes are reversed from the provider',
+        );
+      const row = await reverseTaxTransaction(db, {
+        originalId: original.id,
+        reference: input.reference,
+        reversedAt: now(),
+        target: (reversed, total) => (input.amount === undefined ? total : reversed + input.amount),
+      });
+      if (!row) throw new TaxError('invalid_tax_request', 'nothing left to reverse');
+      return row;
+    },
     /** Totals per jurisdiction, registration, tax type and rate — the lines a
      * return (an OSS return, a state filing) is prepared from. */
     async report(merchant: MerchantRow, raw: unknown): Promise<TaxReport> {
@@ -866,7 +918,10 @@ export function createTaxService(options: TaxServiceOptions) {
         );
         for (const row of page) {
           const calculation = row.calculation.result;
-          for (const line of calculation.lineItems)
+          // A reversal nets into its original's rows with its own signed lines.
+          const reversal = row.transaction.reversal;
+          const lineItems = reversal ? reversal.lineItems : calculation.lineItems;
+          for (const line of lineItems)
             for (const entry of line.breakdown) {
               const key = JSON.stringify([
                 entry.country,
@@ -889,6 +944,7 @@ export function createTaxService(options: TaxServiceOptions) {
                 ratePercentage: entry.ratePercentage,
                 currency: calculation.currency,
                 transactions: 0,
+                reversals: 0,
                 taxableAmount: 0,
                 taxAmount: 0,
               };
@@ -898,7 +954,7 @@ export function createTaxService(options: TaxServiceOptions) {
             }
           // Count each transaction once per row it contributes to.
           const keys = new Set(
-            calculation.lineItems.flatMap((line) =>
+            lineItems.flatMap((line) =>
               line.breakdown.map((entry) =>
                 JSON.stringify([
                   entry.country,
@@ -914,7 +970,8 @@ export function createTaxService(options: TaxServiceOptions) {
           );
           for (const key of keys) {
             const existing = rows.get(key);
-            if (existing) existing.transactions += 1;
+            if (existing && reversal) existing.reversals += 1;
+            else if (existing) existing.transactions += 1;
           }
         }
         if (page.length < 1000) break;
@@ -959,10 +1016,16 @@ async function transactionsBetween(
     after = anchor.committedAt;
     afterId = anchor.id;
   }
+  const original = alias(taxTransactions, 'original');
   return db
-    .select({ transaction: taxTransactions, calculation: taxCalculations })
+    .select({
+      transaction: taxTransactions,
+      calculation: taxCalculations,
+      originalPublicId: original.publicId,
+    })
     .from(taxTransactions)
     .innerJoin(taxCalculations, eq(taxCalculations.id, taxTransactions.calculationId))
+    .leftJoin(original, eq(original.id, taxTransactions.reversalOfId))
     .where(
       and(
         eq(taxTransactions.merchantId, merchantId),
@@ -983,14 +1046,18 @@ async function transactionsBetween(
 function transactionDto(row: {
   transaction: typeof taxTransactions.$inferSelect;
   calculation: CalculationRow;
+  originalPublicId?: string | null;
 }): TaxTransaction {
   return {
     object: 'tax.transaction',
     id: row.transaction.publicId,
+    type: row.transaction.reversal ? 'reversal' : 'transaction',
     calculationId: row.calculation.publicId,
     reference: row.transaction.reference,
     rail: row.transaction.rail,
     committedAt: row.transaction.committedAt.toISOString(),
+    reversalOf: row.originalPublicId ?? null,
+    reversal: row.transaction.reversal ?? null,
     calculation: row.calculation.result,
   };
 }
@@ -1002,7 +1069,14 @@ function transactionDto(row: {
  */
 export async function commitTaxTransaction(
   tx: DatabaseOrTransaction,
-  input: { calculationPublicId: string; reference: string; rail: string; committedAt: Date },
+  input: {
+    calculationPublicId: string;
+    reference: string;
+    rail: string;
+    committedAt: Date;
+    /** The rail's payment object (a card `pi_…`), so a refund finds the sale. */
+    providerPaymentRef?: string;
+  },
 ): Promise<void> {
   const [calculation] = await tx
     .select({ id: taxCalculations.id, merchantId: taxCalculations.merchantId })
@@ -1019,6 +1093,138 @@ export async function commitTaxTransaction(
       reference: input.reference,
       rail: input.rail,
       committedAt: input.committedAt,
+      providerPaymentRef: input.providerPaymentRef ?? null,
     })
     .onConflictDoNothing();
+}
+
+/** Round `value × numerator / denominator` half up, for non-negative integers. */
+function scaled(value: number, numerator: number, denominator: number): number {
+  const sign = value < 0 ? -1n : 1n;
+  const magnitude = BigInt(Math.abs(value)) * BigInt(numerator);
+  const d = BigInt(denominator);
+  return Number(sign * ((2n * magnitude + d) / (2n * d)));
+}
+
+/** What a cumulative reversal of `reversed` out of `total` gives back, line by
+ * line. Always cumulative, so the parts of several partial reversals add up to
+ * exactly the original once everything is reversed. */
+function cumulativeLines(calculation: TaxCalculation, reversed: number) {
+  const total = calculation.amountTotal;
+  return calculation.lineItems.map((line) => {
+    const breakdown = line.breakdown.map((entry) => ({
+      ...entry,
+      taxableAmount: scaled(entry.taxableAmount, reversed, total),
+      amount: scaled(entry.amount, reversed, total),
+    }));
+    const amountTax = breakdown.reduce((sum, entry) => sum + entry.amount, 0);
+    const gross = scaled(
+      line.amount + (line.taxBehavior === 'exclusive' ? line.amountTax : 0),
+      reversed,
+      total,
+    );
+    return { line, breakdown, amountTax, gross };
+  });
+}
+
+/**
+ * Reverse (part of) a committed transaction. `target` names the CUMULATIVE
+ * gross that should stand reversed once this call is done, given what is
+ * reversed already and the original's total; the row written is the
+ * difference, so an observer that re-reads the provider's cumulative refunds
+ * converges no matter how often it runs, and a target below what is reversed
+ * reinstates the difference (a refund that failed after it succeeded).
+ *
+ * Serialized on the original row. Answers the reversal made under `reference`
+ * if there already is one, and null when there is nothing to write.
+ */
+export async function reverseTaxTransaction(
+  db: Database,
+  input: {
+    originalId: string;
+    /** The reversal's own reference, or one minted from its sequence number. */
+    reference: string | ((sequence: number) => string);
+    reversedAt: Date;
+    target: (reversed: number, total: number) => number;
+  },
+): Promise<TaxTransaction | null> {
+  return db.transaction(async (tx) => {
+    const [original] = await tx
+      .select()
+      .from(taxTransactions)
+      .where(and(eq(taxTransactions.id, input.originalId), isNull(taxTransactions.reversalOfId)))
+      .for('update');
+    if (!original) throw new TaxError('not_found');
+    const [calculation] = await tx
+      .select()
+      .from(taxCalculations)
+      .where(eq(taxCalculations.id, original.calculationId));
+    if (!calculation) throw new TaxError('not_found');
+    const existing = await tx
+      .select()
+      .from(taxTransactions)
+      .where(eq(taxTransactions.reversalOfId, original.id));
+    const reference =
+      typeof input.reference === 'string' ? input.reference : input.reference(existing.length + 1);
+    const same = existing.find((row) => row.reference === reference);
+    if (same)
+      return transactionDto({
+        transaction: same,
+        calculation,
+        originalPublicId: original.publicId,
+      });
+    const total = calculation.result.amountTotal;
+    const reversed = -existing.reduce((sum, row) => sum + (row.reversal?.amountTotal ?? 0), 0);
+    const target = input.target(reversed, total);
+    if (!Number.isSafeInteger(target) || target < 0 || target > total)
+      throw new TaxError('invalid_tax_request', 'a reversal cannot exceed the original');
+    if (target === reversed || total === 0) return null;
+    const before = cumulativeLines(calculation.result, reversed);
+    const after = cumulativeLines(calculation.result, target);
+    // Negative: what this reversal gives back (positive when it reinstates).
+    const lineItems = after.map((now, index) => {
+      const was = before[index];
+      if (!was) throw new Error('reversal lines diverged');
+      const amountTax = was.amountTax - now.amountTax;
+      const gross = was.gross - now.gross;
+      return {
+        ...now.line,
+        amount: gross - (now.line.taxBehavior === 'exclusive' ? amountTax : 0),
+        amountTax,
+        amountNet: gross - amountTax,
+        breakdown: now.breakdown.map((entry, at) => {
+          const prior = was.breakdown[at];
+          if (!prior) throw new Error('reversal breakdown diverged');
+          return {
+            ...entry,
+            taxableAmount: prior.taxableAmount - entry.taxableAmount,
+            amount: prior.amount - entry.amount,
+          };
+        }),
+      };
+    });
+    const taxAmount = lineItems.reduce((sum, line) => sum + line.amountTax, 0);
+    const amountNet = lineItems.reduce((sum, line) => sum + line.amountNet, 0);
+    const reversal: TaxTransactionReversal = {
+      amountTotal: amountNet + taxAmount,
+      amountNet,
+      taxAmount,
+      lineItems,
+    };
+    const [row] = await tx
+      .insert(taxTransactions)
+      .values({
+        publicId: newId('taxtxn'),
+        merchantId: original.merchantId,
+        calculationId: original.calculationId,
+        reference,
+        rail: original.rail,
+        committedAt: input.reversedAt,
+        reversalOfId: original.id,
+        reversal,
+      })
+      .returning();
+    if (!row) throw new Error('reversal insert returned nothing');
+    return transactionDto({ transaction: row, calculation, originalPublicId: original.publicId });
+  });
 }

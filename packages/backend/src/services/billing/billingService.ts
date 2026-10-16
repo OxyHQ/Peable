@@ -27,6 +27,7 @@ import {
   findBillingCustomerForStore,
   findOwnedBillingCheckoutOperationByKey,
   completeRecoveredBillingCheckout,
+  findBillingRenewalTax,
   findBillingTaxCheckoutSnapshot,
   bindBillingObject,
   claimBillingOperation,
@@ -591,13 +592,24 @@ export function createBillingService(options: BillingServiceOptions) {
       if (!options.finalInvoiceAuthority || !options.verifiedBindings)
         throw new BillingError('not_found', 404);
       const binding = await ownedSubscription(owner, subscriptionRef);
-      const taxCheckoutSnapshot = await findBillingTaxCheckoutSnapshot(
+      const checkoutSnapshot = await findBillingTaxCheckoutSnapshot(
         db,
         deployment,
         owner,
         binding.bindingEvidenceRef,
       );
-      if (taxCheckoutSnapshot)
+      // A quoted subscription's renewal is signed from the quote it was
+      // repriced with (ADR 0013); its first invoice from the checkout's.
+      const renewal = checkoutSnapshot
+        ? await findBillingRenewalTax(db, deployment, invoiceRef)
+        : null;
+      if (
+        renewal &&
+        (renewal.subscriptionRef !== subscriptionRef || renewal.merchantId !== owner.merchantId)
+      )
+        throw new BillingError('identity_conflict');
+      const taxCheckoutSnapshot = renewal?.snapshot ?? checkoutSnapshot;
+      if (checkoutSnapshot && !renewal)
         await options.verifiedBindings.verifyInitialInvoice(owner, subscriptionRef, invoiceRef);
       const invoice = await options.verifiedBindings.retrievePaidInvoice(
         owner,

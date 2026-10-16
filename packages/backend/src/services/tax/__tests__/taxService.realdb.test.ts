@@ -314,6 +314,26 @@ describe('Peable Tax', () => {
       await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.taxRateEvidenceId),
     );
     expect(lines.reduce((sum, line) => sum + line.taxMinorUnits, 0)).toBe(200);
+
+    // A FairCoin refund from the seller's wallet: reversed in part, by its
+    // reference once, then the rest; the report nets both.
+    const sale = must(list.data[0]);
+    const half = await tax.createReversal(merchant, sale.id, {
+      reference: 'refund_1',
+      amount: 600,
+    });
+    expect(half).toMatchObject({
+      type: 'reversal',
+      reversalOf: sale.id,
+      reversal: { amountTotal: -600, taxAmount: -100 },
+    });
+    expect(
+      await tax.createReversal(merchant, sale.id, { reference: 'refund_1', amount: 600 }),
+    ).toMatchObject({ id: half.id });
+    await tax.createReversal(merchant, sale.id, { reference: 'refund_2' });
+    expect((await tax.report(merchant, window)).rows).toEqual([
+      expect.objectContaining({ transactions: 1, reversals: 2, taxableAmount: 0, taxAmount: 0 }),
+    ]);
   });
 });
 

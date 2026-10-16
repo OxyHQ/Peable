@@ -22,7 +22,7 @@ export { refunds } from './refunds';
 export { disputes } from './disputes';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
-export { billingObjectBindings, billingOperations } from './billing';
+export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';
 export { faircoinRenewalAuthorizations } from './faircoinRenewals';
 export { faircoinBillingSubscriptions, faircoinBillingInvoices } from './faircoinBilling';
 export {

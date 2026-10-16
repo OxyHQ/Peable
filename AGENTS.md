@@ -235,6 +235,10 @@ cannot price fails closed, never zero; an uncovered one is zero and recorded as
 `not_registered`. Only the owner's dashboard approval activates registrations,
 and only official Oxy applications calculate on the platform's Stripe Tax
 account. Location evidence never includes language, currency or timezone.
+A quoted card subscription's renewal is HELD as a draft until Peable has
+repriced it (ADR 0013) — never release a draft whose Stripe totals are not
+the fresh quote — and refunds are reversals netted into the same report rows,
+never deletions of the original transaction.
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),

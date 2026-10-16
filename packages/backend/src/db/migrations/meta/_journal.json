@@ -232,6 +232,13 @@
       "when": 1792157304125,
       "tag": "0032_cool_richard_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1792161770214,
+      "tag": "0033_gigantic_robin_chapel",
+      "breakpoints": true
     }
   ]
 }
