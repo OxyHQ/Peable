@@ -56,6 +56,10 @@ import {
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
 import type { VerifiedBillingBindings } from './verifiedBindings';
 
+/** Optional parts of a signed final invoice a caller asks for. */
+export interface BillingInvoiceAuthorityInclude {
+  taxLines?: boolean;
+}
 /** Trusted deployment composition, never a request field. No cohort means no access. */
 export interface BillingCohort extends BillingOwner, BillingDeployment {
   evidenceRef: string;
@@ -576,8 +580,12 @@ export function createBillingService(options: BillingServiceOptions) {
       owner: BillingOwner,
       subscriptionRef: string,
       invoiceRef: string,
+      include?: BillingInvoiceAuthorityInclude,
     ) {
       authorize(owner);
+      // The card authority is signed by its reader adapter; Peable cannot add
+      // lines under someone else's signature.
+      if (include?.taxLines) throw new BillingError('not_found', 404);
       if (!options.finalInvoiceAuthority || !options.verifiedBindings)
         throw new BillingError('not_found', 404);
       const binding = await ownedSubscription(owner, subscriptionRef);

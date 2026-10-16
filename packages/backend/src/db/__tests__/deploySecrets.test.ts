@@ -61,8 +61,6 @@ const NOT_SYNCED: Readonly<Record<string, string>> = {
   // read-only into the container and sets this variable to where it landed.
   PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE:
     'the path of the mounted signing-key file; the key is an operator-owned SSM secret mounted by the task definition',
-  PEABLE_BILLING_FISCAL_FILE:
-    'the path of the mounted reviewed fiscal declaration; mounted the same way, set only at commercial activation',
   // Public chain infrastructure. `@fairco.in/core` supplies the default and an
   // override is an operational choice, not a credential.
   EXPLORER_BASE_URL: 'a public Explorer URL, defaulted from @fairco.in/core',

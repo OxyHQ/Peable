@@ -1,5 +1,10 @@
 import { BillingResource } from './resources/billing';
-export type { BillingRequestOptions } from './resources/billing';
+import { TaxResource } from './resources/tax';
+export { TaxResource } from './resources/tax';
+export type {
+  BillingRequestOptions,
+  RetrieveFinalInvoiceAuthorityOptions,
+} from './resources/billing';
 export type {
   CreateBillingTaxQuoteParams,
   BillingTaxQuote,
@@ -28,6 +33,29 @@ export type {
   BillingRailOffer,
   BillingRailOption,
   BillingRailList,
+  BillingInvoiceTaxLine,
+  TaxRegistrationScheme,
+  TaxLocationEvidenceType,
+  TaxBehavior,
+  TaxAddress,
+  TaxCode,
+  TaxCalculationAccount,
+  TaxSettings,
+  TaxRegistration,
+  TaxProductCode,
+  TaxLocationEvidenceItem,
+  CreateTaxLocationEvidenceParams,
+  TaxLocationEvidence,
+  TaxLineItemParams,
+  CreateTaxCalculationParams,
+  TaxBreakdownEntry,
+  TaxCalculationLineItem,
+  TaxCalculation,
+  TaxTransaction,
+  TaxTransactionList,
+  ListTaxTransactionsParams,
+  TaxReportRow,
+  TaxReport,
 } from '@peable.to/shared-types';
 /** Production Peable's pinned billing-authority public keys, by key id. */
 export { PEABLE_BILLING_AUTHORITY_KEYS } from '@peable.to/shared-types';
@@ -69,6 +97,8 @@ import { TransfersResource } from './resources/transfers';
  */
 export class Peable {
   readonly billing: BillingResource;
+  /** Peable Tax: location evidence, calculations, and what was collected. */
+  readonly tax: TaxResource;
   readonly paymentIntents: PaymentIntentsResource;
   readonly paymentLinks: PaymentLinksResource;
   readonly checkout: CheckoutResource;
@@ -100,6 +130,7 @@ export class Peable {
       resolved.invoiceAuthorityKeys,
       resolved.taxQuoteAuthorityKeys,
     );
+    this.tax = new TaxResource(client);
     this.paymentIntents = new PaymentIntentsResource(client);
     this.paymentLinks = new PaymentLinksResource(client);
     this.checkout = new CheckoutResource(client);

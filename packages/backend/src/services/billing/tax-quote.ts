@@ -23,6 +23,7 @@ export const billingTaxQuoteRequestSchema = z
     rail: billingRailId.optional(),
     storeId: billingReference,
     planId: billingReference,
+    providerPriceId: billingReference.optional(),
     customerLocationEvidenceId: billingReference,
   })
   .strict();
@@ -37,12 +38,16 @@ export const billingTaxProductSchema = z
     invoiceIssuerId: billingReference,
     taxRemitterId: billingReference,
     taxServiceRef: billingReference,
+    /** Absent: every country (a jurisdiction without a registration is quoted
+     * at zero tax, recorded as not registered). */
     allowedCountries: z
       .array(country)
       .min(1)
       .max(250)
-      .refine((values) => new Set(values).size === values.length, 'Duplicate countries'),
-    coverageEvidenceId: billingReference,
+      .refine((values) => new Set(values).size === values.length, 'Duplicate countries')
+      .optional(),
+    /** Absent: coverage is decided per sale, by the registration that covers it. */
+    coverageEvidenceId: billingReference.optional(),
   })
   .strict();
 export const billingCustomerLocationSchema = z
@@ -60,8 +65,9 @@ export const billingCustomerLocationSchema = z
 export type BillingTaxProductConfiguration = z.infer<typeof billingTaxProductSchema>;
 export type BillingVerifiedCustomerLocation = z.infer<typeof billingCustomerLocationSchema>;
 export interface BillingTaxQuoteCalculator {
-  /** Operator-reviewed product, issuer/remitter and explicit country coverage. */
-  resolveProduct(owner: BillingOwner, planId: string): Promise<unknown>;
+  /** The product as sold: its price, tax treatment and seller. `providerPriceId`
+   * selects one offer when a plan is sold at several prices. */
+  resolveProduct(owner: BillingOwner, planId: string, providerPriceId?: string): Promise<unknown>;
   /** Trusted location evidence lookup, never country from the request itself. */
   readCustomerLocation(owner: BillingOwner, evidenceId: string): Promise<unknown>;
   /** Provider-neutral calculator seam; no supplier selected by this interface. */
@@ -84,7 +90,7 @@ export async function createVerifiedBillingTaxQuote(
 ): Promise<BillingTaxQuote> {
   const request = billingTaxQuoteRequestSchema.parse(raw);
   const product = billingTaxProductSchema.parse(
-    await calculator.resolveProduct(owner, request.planId),
+    await calculator.resolveProduct(owner, request.planId, request.providerPriceId),
   );
   const location = billingCustomerLocationSchema.parse(
     await calculator.readCustomerLocation(owner, request.customerLocationEvidenceId),
@@ -97,7 +103,8 @@ export async function createVerifiedBillingTaxQuote(
     location.appId !== owner.oxyAppId ||
     location.environment !== owner.environment ||
     (location.mode === 'live') !== (owner.environment === 'production') ||
-    !product.allowedCountries.includes(location.country) ||
+    (product.allowedCountries !== undefined &&
+      !product.allowedCountries.includes(location.country)) ||
     Date.parse(location.observedAt) > clock.getTime() ||
     Date.parse(location.expiresAt) <= clock.getTime() ||
     Date.parse(location.expiresAt) <= Date.parse(location.observedAt)
@@ -142,14 +149,19 @@ export function verifyBillingTaxQuote(
     JSON.stringify(authority.source) !==
       JSON.stringify(billingTaxQuoteSchema.shape.source.parse(source)) ||
     quote.currency !== product.currency ||
-    quote.grossMinorUnits !== product.grossMinorUnits ||
+    // The product's price is what the payer pays when tax is included, and
+    // what tax is added to when it is not.
+    (product.taxTreatment === 'inclusive'
+      ? quote.grossMinorUnits !== product.grossMinorUnits
+      : quote.netMinorUnits !== product.grossMinorUnits) ||
     quote.taxTreatment !== product.taxTreatment ||
     quote.sellerId !== product.sellerId ||
     quote.invoiceIssuerId !== product.invoiceIssuerId ||
     quote.taxRemitterId !== product.taxRemitterId ||
     quote.taxServiceRef !== product.taxServiceRef ||
     quote.country !== location.country ||
-    quote.coverageEvidenceId !== product.coverageEvidenceId ||
+    (product.coverageEvidenceId !== undefined &&
+      quote.coverageEvidenceId !== product.coverageEvidenceId) ||
     quote.customerLocationEvidenceId !== location.id ||
     !Number.isSafeInteger(quote.netMinorUnits + quote.taxMinorUnits) ||
     quote.netMinorUnits + quote.taxMinorUnits !== quote.grossMinorUnits ||

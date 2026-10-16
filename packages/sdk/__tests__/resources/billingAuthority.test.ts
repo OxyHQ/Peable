@@ -195,3 +195,61 @@ it('recovers a payment inside its original quote after quote expiry', async () =
     'verification failed',
   );
 });
+
+it('asks for tax lines only when requested, and verifies them against the tax', async () => {
+  const { authority } = fixture();
+  const requests: string[] = [];
+  const queries: unknown[] = [];
+  const recording = (value: unknown): RestClient => ({
+    async request<T>(_method: string, path: string, opts?: { query?: unknown }): Promise<T> {
+      requests.push(path);
+      queries.push(opts?.query);
+      return value as T;
+    },
+  });
+  // A 0.3.x-shaped authority still verifies, and no query is sent.
+  await new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+    'sub_fixture',
+    'in_fixture',
+  );
+  expect(queries.at(-1)).toBeUndefined();
+  // Asked for but missing: refused.
+  await expect(
+    new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+      'sub_fixture',
+      'in_fixture',
+      { include: ['tax_lines'] },
+    ),
+  ).rejects.toThrow('verification failed');
+  authority.invoice.taxLines = [
+    {
+      calculationId: 'taxcalc_fixture',
+      country: 'DE',
+      state: null,
+      taxType: 'vat',
+      ratePercentage: '19.0',
+      taxableMinorUnits: 2499,
+      taxMinorUnits: 500,
+      inclusive: true,
+      taxabilityReason: 'standard_rated',
+    },
+  ];
+  resign(authority);
+  const withLines = await new BillingResource(
+    recording(authority),
+    pinned,
+  ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture', { include: ['tax_lines'] });
+  expect(queries.at(-1)).toEqual({ include: 'tax_lines' });
+  expect(withLines.invoice.taxLines?.[0]?.taxMinorUnits).toBe(500);
+  // Lines that do not add up to the tax are refused even when signed.
+  const line = authority.invoice.taxLines[0];
+  if (line) line.taxMinorUnits = 400;
+  resign(authority);
+  await expect(
+    new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+      'sub_fixture',
+      'in_fixture',
+      { include: ['tax_lines'] },
+    ),
+  ).rejects.toThrow('verification failed');
+});

@@ -129,8 +129,13 @@ export function createMultiRailBillingService(rails: readonly BillingRail[]): Bi
       owning(owner, 'subscription', ref).service.retrievePaidInvoice(owner, ref, invoice),
     retrieveInvoiceState: async (owner, ref, invoice) =>
       owning(owner, 'subscription', ref).service.retrieveInvoiceState(owner, ref, invoice),
-    retrieveFinalInvoiceAuthority: async (owner, ref, invoice) =>
-      owning(owner, 'subscription', ref).service.retrieveFinalInvoiceAuthority(owner, ref, invoice),
+    retrieveFinalInvoiceAuthority: async (owner, ref, invoice, include) =>
+      owning(owner, 'subscription', ref).service.retrieveFinalInvoiceAuthority(
+        owner,
+        ref,
+        invoice,
+        include,
+      ),
     cancelAtPeriodEnd: async (owner, ref, key) =>
       owning(owner, 'subscription', ref).service.cancelAtPeriodEnd(owner, ref, key),
     async listRails(owner): Promise<BillingRailList> {

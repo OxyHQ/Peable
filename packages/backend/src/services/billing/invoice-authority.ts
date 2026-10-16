@@ -71,6 +71,24 @@ export const finalInvoiceAuthoritySchema = z
           })
           .strict()
           .optional(),
+        taxLines: z
+          .array(
+            z
+              .object({
+                calculationId: billingReference,
+                country: z.string().regex(/^[A-Z]{2}$/),
+                state: z.string().nullable(),
+                taxType: z.string().nullable(),
+                ratePercentage: z.string().nullable(),
+                taxableMinorUnits: amount,
+                taxMinorUnits: amount,
+                inclusive: z.boolean(),
+                taxabilityReason: z.string().min(1),
+              })
+              .strict(),
+          )
+          .max(500)
+          .optional(),
       })
       .strict(),
     method: z.enum(['card', 'faircoin']),
@@ -132,6 +150,9 @@ export function verifyFinalInvoiceAuthority(
     BigInt(invoice.netMinorUnits) !== BigInt(paid.netAmount) ||
     BigInt(invoice.taxMinorUnits) !== BigInt(paid.taxAmount) ||
     invoice.netMinorUnits + invoice.taxMinorUnits !== invoice.grossMinorUnits ||
+    (invoice.taxLines !== undefined &&
+      invoice.taxLines.reduce((sum, line) => sum + line.taxMinorUnits, 0) !==
+        invoice.taxMinorUnits) ||
     !Number.isSafeInteger(invoice.netMinorUnits + invoice.taxMinorUnits) ||
     Date.parse(invoice.issuedAt) > now.getTime() ||
     Date.parse(invoice.expiresAt) <= now.getTime() ||

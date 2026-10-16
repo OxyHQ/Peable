@@ -355,6 +355,49 @@ cost: a fee paid by the operator of a Peable deployment is not automatically
 your expense, and that decision is still open (see the roadmap). Balances,
 payouts and a per-merchant journal are not implemented.
 
+## Taxes — Peable Tax
+
+Peable calculates tax for every rail (card, FairCoin) the way Stripe Tax does:
+your owner records where the business is registered, and Peable collects only
+there. Registrations and the approval live in the Peable app (Settings →
+*Business tax*, `billing:manage` on the application); your server never
+approves anything.
+
+At checkout, record where the customer is and calculate:
+
+```ts
+const evidence = await peable.tax.locationEvidence.create({
+  customerRef: storeId, // the billing storeId
+  evidence: [
+    { type: 'billing_address', address: { country: 'DE', postalCode: '10115' } },
+    { type: 'ip_address', ipAddress: clientIp, country: geoCountry },
+  ],
+});
+// evidence.status: 'sufficient' | 'insufficient' | 'conflicting'
+const quote = await peable.billing.createTaxQuote({
+  storeId,
+  planId,
+  customerLocationEvidenceId: evidence.id,
+});
+```
+
+- EU and UK customers need two agreeing kinds of evidence; US and Canadian
+  customers need a billing address with state/province and postal code; others
+  one item. Language, currency and timezone are refused as evidence.
+- Not registered where the customer is: zero tax, `collection:
+  "not_registered"`, recorded. Registered but the provider cannot answer: the
+  request fails (`tax_calculation_unavailable`) — never zero.
+- `peable.tax.calculations.create({ currency, customerLocationEvidenceId,
+  lineItems })` prices anything else (inclusive or exclusive); the answer is
+  frozen and retrievable by id.
+- `peable.tax.products.setTaxCode(planId, 'txcd_10103000')` sets a product tax
+  code (codes: `peable.tax.listCodes()`).
+- `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: ['tax_lines'] })`
+  returns the signed invoice with its tax lines inside the signature.
+- `peable.tax.transactions.list({ from, to })` and
+  `peable.tax.reports.summary({ from, to })` (or `GET
+  /v1/tax/reports/summary?format=csv`) are the filing export.
+
 ## Mercaria integration checklist
 
 - [ ] Owner: register Mercaria's Oxy Application + a `payments:read`/`payments:write`

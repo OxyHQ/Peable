@@ -122,9 +122,18 @@ export function createBillingRouter(deps: {
   router.get(
     '/v1/billing/subscriptions/:id/invoice_authorities/:invoiceId',
     ...read,
-    handle((service, owner, req) =>
-      service.retrieveFinalInvoiceAuthority(owner, req.params.id ?? '', req.params.invoiceId ?? ''),
-    ),
+    handle((service, owner, req) => {
+      // `?include=tax_lines`: the frozen Peable Tax lines, inside the signature.
+      const { include } = z
+        .object({ include: z.literal('tax_lines').optional() })
+        .parse({ include: req.query.include });
+      return service.retrieveFinalInvoiceAuthority(
+        owner,
+        req.params.id ?? '',
+        req.params.invoiceId ?? '',
+        include ? { taxLines: true } : undefined,
+      );
+    }),
   );
   router.get(
     '/v1/billing/subscriptions/:id/invoice_states/:invoiceId',

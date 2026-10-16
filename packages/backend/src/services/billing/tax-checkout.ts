@@ -31,7 +31,7 @@ const offerSchema = z
     intervalCount: z.literal(1),
     currency: z.string().regex(/^[A-Z]{3}$/),
     grossMinorUnits: z.number().int().positive().max(Number.MAX_SAFE_INTEGER),
-    taxTreatment: z.literal('inclusive'),
+    taxTreatment: z.enum(['inclusive', 'exclusive']),
   })
   .strict();
 export const billingTaxCheckoutSnapshotSchema = z
@@ -67,7 +67,7 @@ export async function prepareBillingTaxCheckout(
   now: () => Date,
 ): Promise<BillingTaxCheckoutSnapshot> {
   const product = billingTaxProductSchema.parse(
-    await calculator.resolveProduct(owner, input.planId),
+    await calculator.resolveProduct(owner, input.planId, input.providerPriceId),
   );
   const location = billingCustomerLocationSchema.parse(
     await calculator.readCustomerLocation(owner, input.taxQuote.quote.customerLocationEvidenceId),
@@ -84,13 +84,14 @@ export async function prepareBillingTaxCheckout(
     Date.parse(location.observedAt) > clock.getTime() ||
     Date.parse(location.expiresAt) <= clock.getTime() ||
     Date.parse(location.expiresAt) <= Date.parse(location.observedAt) ||
-    !product.allowedCountries.includes(location.country) ||
+    (product.allowedCountries !== undefined &&
+      !product.allowedCountries.includes(location.country)) ||
     product.planId !== input.planId ||
     offer.planId !== input.planId ||
     offer.providerPriceId !== input.providerPriceId ||
     offer.currency !== product.currency ||
     offer.grossMinorUnits !== product.grossMinorUnits ||
-    product.taxTreatment !== 'inclusive'
+    offer.taxTreatment !== product.taxTreatment
   )
     throw new BillingError('identity_conflict');
   const taxQuote = verifyBillingTaxQuote(

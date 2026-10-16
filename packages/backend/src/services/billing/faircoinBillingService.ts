@@ -39,6 +39,7 @@ import { prepareBillingTaxCheckout, type BillingTaxCheckoutAdapter } from './tax
 import { verifyFinalInvoiceAuthority } from './invoice-authority';
 import { createExplorerFaircoinQuote, type FaircoinFxQuote } from './faircoin-fx';
 import type { BillingService } from './billingService';
+import { invoiceTaxLines } from '../tax/billingTaxQuotes';
 
 const offerSchema = z
   .object({
@@ -50,7 +51,9 @@ const offerSchema = z
     intervalCount: z.literal(1),
     currency: z.literal('USD'),
     grossMinorUnits: z.number().int().positive().safe(),
-    taxTreatment: z.literal('inclusive'),
+    /** Inclusive: the payer pays the listed price. Exclusive: tax is added and
+     * the FairCoin amount converts price plus tax. */
+    taxTreatment: z.enum(['inclusive', 'exclusive']),
   })
   .strict();
 export const faircoinBillingConfigurationSchema = z
@@ -276,6 +279,12 @@ export function createFaircoinBillingService(options: {
       observedAt: now().toISOString(),
     };
   }
+  /** The frozen Peable Tax lines behind an invoice's tax amount. */
+  async function requireTaxLines(owner: BillingOwner, calculationId: string) {
+    const lines = await invoiceTaxLines(db, owner.merchantId, calculationId);
+    if (!lines) throw new BillingError('not_found', 404);
+    return lines;
+  }
   async function materialize(
     owner: BillingOwner,
     invoice: Invoice,
@@ -387,12 +396,14 @@ export function createFaircoinBillingService(options: {
       { ...input, taxQuote: input.taxQuote },
       now,
     );
+    // The payer pays the quote's total: the price, plus tax when it is added.
+    const payable = snapshot.taxQuote.quote.grossMinorUnits;
     const fx = await (
       options.quote ?? ((gross) => createExplorerFaircoinQuote(gross, { now: now() }))
-    )(snapshot.offer.grossMinorUnits);
+    )(payable);
     if (
       fx.currency !== 'USD' ||
-      fx.grossMinorUnits !== offer.grossMinorUnits ||
+      fx.grossMinorUnits !== payable ||
       Date.parse(fx.quotedAt) > +now() ||
       Date.parse(fx.expiresAt) <= +now()
     )
@@ -670,7 +681,7 @@ export function createFaircoinBillingService(options: {
       const paid = await paidInvoice(owner, ref, invoiceId);
       return { ...paid, chargeId: paid.paymentIntentId, amountRefunded: '0', state: 'paid' };
     },
-    async retrieveFinalInvoiceAuthority(owner, ref, invoiceId) {
+    async retrieveFinalInvoiceAuthority(owner, ref, invoiceId, include) {
       const paid = await paidInvoice(owner, ref, invoiceId);
       const { invoice } = await ownedInvoice(owner, ref, invoiceId);
       const m = await merchant(owner);
@@ -698,7 +709,7 @@ export function createFaircoinBillingService(options: {
           netMinorUnits: tax.netMinorUnits,
           taxMinorUnits: tax.taxMinorUnits,
           merchantFeeMinorUnits: 0,
-          taxTreatment: 'inclusive',
+          taxTreatment: tax.taxTreatment,
           sellerId: tax.sellerId,
           invoiceIssuerId: tax.invoiceIssuerId,
           taxQuoteId: tax.id,
@@ -724,6 +735,9 @@ export function createFaircoinBillingService(options: {
             expiresAt: fx.expiresAt,
             roundingEvidenceId: fx.id,
           },
+          ...(include?.taxLines
+            ? { taxLines: await requireTaxLines(owner, tax.taxRateEvidenceId) }
+            : {}),
         },
         signature: { algorithm: 'Ed25519', keyId: configuration.invoiceSigningKeyId, value: '' },
       };

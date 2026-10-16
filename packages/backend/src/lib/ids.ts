@@ -19,7 +19,21 @@ function randomHex(byteLength: number): string {
  * up. A new object type adds itself here deliberately.
  */
 export function newId(
-  prefix: 'pi' | 'evt' | 'merch' | 'link' | 'cs' | 'ca' | 'tr' | 'trr' | 're' | 'dp',
+  prefix:
+    | 'pi'
+    | 'evt'
+    | 'merch'
+    | 'link'
+    | 'cs'
+    | 'ca'
+    | 'tr'
+    | 'trr'
+    | 're'
+    | 'dp'
+    | 'taxreg'
+    | 'taxloc'
+    | 'taxcalc'
+    | 'taxtxn',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

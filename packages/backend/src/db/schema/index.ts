@@ -25,3 +25,11 @@ export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations } from './billing';
 export { faircoinRenewalAuthorizations } from './faircoinRenewals';
 export { faircoinBillingSubscriptions, faircoinBillingInvoices } from './faircoinBilling';
+export {
+  taxSettings,
+  taxRegistrations,
+  taxProductCodes,
+  taxLocationEvidence,
+  taxCalculations,
+  taxTransactions,
+} from './tax';

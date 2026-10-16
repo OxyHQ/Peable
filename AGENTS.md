@@ -212,7 +212,14 @@ the key the address derives from is the one the reservation was taken against.
 
 Routes (`src/routes/`): `checkoutSessions`, `connectedAccounts`, `dashboard`,
 `disputes`, `enrich`, `merchants`, `paymentIntents`, `paymentLinks`,
-`providerWebhooks`, `refunds`, `social`, `transfers`, `webhookDeliveries`.
+`providerWebhooks`, `refunds`, `social`, `tax`, `transfers`, `webhookDeliveries`.
+
+**Peable Tax (ADR 0011) decides whether a sale is taxed; a provider only says
+how much.** `services/tax/` owns it for every rail. A covered sale the provider
+cannot price fails closed, never zero; an uncovered one is zero and recorded as
+`not_registered`. Only the owner's dashboard approval activates registrations,
+and only official Oxy applications calculate on the platform's Stripe Tax
+account. Location evidence never includes language, currency or timezone.
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),

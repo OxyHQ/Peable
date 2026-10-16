@@ -16,7 +16,10 @@ import {
   createFaircoinBillingService,
   faircoinBillingConfigurationSchema,
 } from '../../services/billing/faircoinBillingService';
-import { createConfiguredFiscalAuthority } from '../../services/billing/configuredFiscalAuthority';
+import { createPeableTaxQuoteCalculator } from '../../services/tax/billingTaxQuotes';
+import { createTaxService } from '../../services/tax/taxService';
+import type { TaxProvider } from '../../services/tax/provider';
+import { taxLocationEvidence, taxRegistrations, taxSettings } from '../../db/schema/tax';
 import { createBillingRouter } from '../../routes/billing';
 import { createMerchantsRouter } from '../../routes/merchants';
 import { transitionIntent } from '../../services/intentTransition';
@@ -93,58 +96,89 @@ async function initialize(input: {
     intervalCount: 1 as const,
     taxTreatment: 'inclusive' as const,
   }));
-  const calculator = createConfiguredFiscalAuthority(
-    {
-      keyId: 'fixture',
-      quoteLifetimeSeconds: 300,
-      declarations: offers.map((offer) => ({
-        owner,
-        sellerLegalEntity: {
-          legalName: 'Synthetic only',
-          taxIdentifier: 'SYNTHETIC-ID',
-          registrationJurisdiction: 'SYNTHETIC',
-        },
-        product: {
-          configurationApproved: true,
-          planId: offer.planId,
-          currency: 'USD',
-          grossMinorUnits: offer.grossMinorUnits,
-          taxTreatment: 'inclusive',
-          sellerId: 'seller_fixture',
-          invoiceIssuerId: 'issuer_fixture',
-          taxRemitterId: 'remitter_fixture',
-          taxServiceRef: 'synthetic',
-          allowedCountries: ['RO'],
-          coverageEvidenceId: 'synthetic_coverage',
-        },
-        rates: [
-          {
-            country: 'RO',
-            rateNumerator: 1,
-            rateDenominator: 5,
-            rounding: 'half_up_minor_unit',
-            evidenceId: 'SYNTHETIC_NOT_REAL_TAX',
-            validFrom: '2026-01-01T00:00:00Z',
-            validUntil: '2099-01-01T00:00:00Z',
-          },
-        ],
-        locations: [
-          {
-            id: 'location_fixture',
-            storeId: input.accountId,
-            appId: input.appId,
-            country: 'RO',
-            mode: 'live',
-            environment: 'production',
-            observedAt: new Date(+clock() - 1000).toISOString(),
-            expiresAt: '2099-01-01T00:00:00Z',
-          },
-        ],
-      })),
+  // Peable Tax with a synthetic provider: an approved RO registration and a
+  // flat 20% inclusive rate. SYNTHETIC — not a real rate, registration or seller.
+  await suite.db.insert(taxSettings).values({
+    merchantId: merchant.id,
+    status: 'active',
+    legalName: 'Synthetic only',
+    headOffice: { country: 'US', state: 'DE' },
+    calculationAccount: 'platform',
+    approvedAt: clock(),
+    approvedBy: 'synthetic-owner',
+  });
+  await suite.db.insert(taxRegistrations).values({
+    publicId: 'taxreg_synthetic',
+    merchantId: merchant.id,
+    country: 'RO',
+    scheme: 'standard',
+    activeFrom: new Date('2026-01-01T00:00:00Z'),
+    approvedAt: clock(),
+    approvedBy: 'synthetic-owner',
+  });
+  await suite.db.insert(taxLocationEvidence).values({
+    publicId: 'location_fixture',
+    merchantId: merchant.id,
+    customerRef: input.accountId,
+    status: 'sufficient',
+    rule: 'eu_digital_two_items',
+    country: 'RO',
+    items: [
+      { type: 'billing_address', country: 'RO', state: null },
+      { type: 'payment_method_country', country: 'RO', state: null },
+    ],
+    observedAt: new Date(+clock() - 1000),
+    expiresAt: new Date('2099-01-01T00:00:00Z'),
+  });
+  const syntheticProvider: TaxProvider = {
+    id: 'synthetic_tax',
+    livemode: true,
+    async status() {
+      return { active: true, headOffice: { country: 'US', state: 'DE' }, missing: [] };
     },
-    keys.privateKey,
-    clock,
-  );
+    async calculate(request) {
+      return {
+        providerRef: `synthetic_${randomUUID()}`,
+        livemode: true,
+        expiresAt: null,
+        lineItems: request.lineItems.map((line) => {
+          const amountTax =
+            line.taxBehavior === 'inclusive'
+              ? line.amount - Math.round(line.amount / 1.2)
+              : Math.round(line.amount * 0.2);
+          return {
+            reference: line.reference,
+            amount: line.amount,
+            amountTax,
+            taxBehavior: line.taxBehavior,
+            breakdown: [
+              {
+                country: 'RO',
+                state: null,
+                level: 'country',
+                displayName: 'SYNTHETIC_NOT_REAL_TAX',
+                taxType: 'vat',
+                ratePercentage: '20.0',
+                taxableAmount:
+                  line.taxBehavior === 'inclusive' ? line.amount - amountTax : line.amount,
+                amount: amountTax,
+                inclusive: line.taxBehavior === 'inclusive',
+                taxabilityReason: 'standard_rated',
+              },
+            ],
+          };
+        }),
+      };
+    },
+  };
+  const calculator = createPeableTaxQuoteCalculator({
+    db: suite.db,
+    tax: createTaxService({ db: suite.db, provider: syntheticProvider, now: clock }),
+    offers: () => offers,
+    signingKey: keys.privateKey,
+    keyId: 'fixture',
+    now: clock,
+  });
   const service = createFaircoinBillingService({
     db: suite.db,
     configuration: faircoinBillingConfigurationSchema.parse({

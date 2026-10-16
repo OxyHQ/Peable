@@ -22,6 +22,12 @@ import type { RestClient } from '../core/client';
 export interface BillingRequestOptions {
   idempotencyKey: string;
 }
+export interface RetrieveFinalInvoiceAuthorityOptions {
+  /** `tax_lines`: include the frozen Peable Tax lines, covered by the signature
+   * (FairCoin and other Peable-signed rails). Omitted: the authority is exactly
+   * the 0.3.x shape. */
+  include?: readonly 'tax_lines'[];
+}
 /** Recurring billing is separate from one-off checkout and marketplace transfers. */
 export class BillingResource {
   constructor(
@@ -137,12 +143,15 @@ export class BillingResource {
   async retrieveFinalInvoiceAuthority(
     subscriptionRef: string,
     invoiceRef: string,
+    options: RetrieveFinalInvoiceAuthorityOptions = {},
   ): Promise<BillingFinalInvoiceAuthority> {
     if (!this.invoiceAuthorityKeys || Object.keys(this.invoiceAuthorityKeys).length === 0)
       throw new Error('Peable: invoice authority verification is unconfigured');
+    const withTaxLines = options.include?.includes('tax_lines') === true;
     const authority = await this.client.request<BillingFinalInvoiceAuthority>(
       'GET',
       `/v1/billing/subscriptions/${encodeURIComponent(subscriptionRef)}/invoice_authorities/${encodeURIComponent(invoiceRef)}`,
+      withTaxLines ? { query: { include: 'tax_lines' } } : undefined,
     );
     try {
       const pinnedKey = this.invoiceAuthorityKeys[authority.signature.keyId];
@@ -158,7 +167,12 @@ export class BillingResource {
         !Number.isFinite(Date.parse(authority.invoice.issuedAt)) ||
         Date.parse(authority.invoice.issuedAt) > Date.now() ||
         !Number.isFinite(Date.parse(authority.invoice.expiresAt)) ||
-        Date.parse(authority.invoice.expiresAt) <= Date.now()
+        Date.parse(authority.invoice.expiresAt) <= Date.now() ||
+        // Lines are present exactly when asked for, and add up to the tax.
+        withTaxLines !== Array.isArray(authority.invoice.taxLines) ||
+        (authority.invoice.taxLines !== undefined &&
+          authority.invoice.taxLines.reduce((sum, line) => sum + line.taxMinorUnits, 0) !==
+            authority.invoice.taxMinorUnits)
       )
         throw new Error('Invalid authority');
       if (authority.method === 'faircoin') {
