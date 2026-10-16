@@ -235,6 +235,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
     expect(names).toEqual([
       'billing_object_bindings',
       'billing_operations',
+      'billing_renewal_taxes',
       'checkout_sessions',
       'connected_account_links',
       'connected_accounts',

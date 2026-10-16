@@ -12,8 +12,9 @@
  *   before anyone is handed the URL;
  * - a `FinalInvoiceAuthorityReader` that Peable signs itself (method `card`),
  *   so the frozen tax lines can sit inside the signature;
- * - a recorder that turns the paid initial invoice into a `tax_transaction`
- *   from the provider webhook, like FairCoin's acceptance does.
+ * - the recorder in `stripeInvoiceTax.ts`, which commits a paid quoted
+ *   invoice as a `tax_transaction`, reprices each renewal before it finalizes
+ *   and reverses refunds (ADR 0013).
  *
  * Nothing here runs for a Stripe rail without that reference, so a deployment
  * that never opted in (Mercaria's I08 cohort) is untouched.
@@ -23,18 +24,11 @@ import { z } from 'zod';
 import {
   canonicalBillingAuthority,
   type BillingFinalInvoiceAuthority,
+  type BillingTaxQuote,
 } from '@peable.to/shared-types';
 import type { Database } from '../../db/postgres';
-import { findBillingTaxCheckoutsForCustomer } from '../../db/billing/billingRepository';
-import { commitTaxTransaction } from '../tax/taxService';
 import { invoiceTaxLines } from '../tax/billingTaxQuotes';
-import {
-  BillingError,
-  billingOwnerSchema,
-  billingReturnUrl,
-  type BillingDeployment,
-  type BillingOwner,
-} from './contracts';
+import { BillingError, billingReturnUrl, type BillingOwner } from './contracts';
 import {
   billingTaxCheckoutSnapshotSchema,
   type billingTaxOfferSchema,
@@ -42,7 +36,6 @@ import {
 } from './tax-checkout';
 import type { FinalInvoiceAuthorityReader } from './invoice-authority';
 import type { StripeBillingClient } from './stripeBillingProvider';
-import type { VerifiedBillingBindings } from './verifiedBindings';
 
 export type StripeTaxOffer = z.infer<typeof billingTaxOfferSchema>;
 
@@ -102,6 +95,56 @@ export function exactTaxRatePercentage(quote: {
   return null;
 }
 
+/**
+ * The manual Stripe tax rate that carries a frozen quote's tax: a percentage
+ * Stripe's own arithmetic turns into exactly that amount
+ * (`exactTaxRatePercentage`). `undefined` for a zero-tax quote, which carries
+ * no rate. Shared by the checkout and by a renewal's repricing.
+ */
+export async function createFrozenTaxRate(
+  input: {
+    db: Database;
+    client: StripeBillingClient;
+    owner: BillingOwner;
+    livemode: boolean;
+    quote: BillingTaxQuote['quote'];
+  },
+  key: string,
+): Promise<string | undefined> {
+  const { db, client, owner, quote } = input;
+  if (quote.taxMinorUnits <= 0) return undefined;
+  if (!client.createTaxRate) throw new BillingError('not_found', 404);
+  const percentage = exactTaxRatePercentage(quote);
+  if (percentage === null) throw new BillingError('invalid_provider_response', 502);
+  const lines = (await invoiceTaxLines(db, owner.merchantId, quote.taxRateEvidenceId)) ?? [];
+  const types = new Set(lines.map((line) => line.taxType));
+  const [only] = types;
+  const inclusive = quote.taxTreatment === 'inclusive';
+  return z
+    .object({
+      id: z.string().regex(/^txr_[A-Za-z0-9]+$/),
+      livemode: z.literal(input.livemode),
+      active: z.literal(true),
+      inclusive: z.literal(inclusive),
+      percentage: z.literal(percentage),
+    })
+    .parse(
+      await client.createTaxRate(
+        {
+          display_name: (types.size === 1 && only && TAX_LABELS[only]) || 'Tax',
+          inclusive,
+          percentage,
+          country: quote.country,
+          metadata: {
+            peable_tax_quote: quote.id,
+            peable_tax_calculation: quote.taxRateEvidenceId,
+          },
+        },
+        key,
+      ),
+    ).id;
+}
+
 /** Opens a Stripe Checkout that charges the frozen quote and nothing else. */
 export function createStripePeableTaxCheckout(options: {
   db: Database;
@@ -142,39 +185,10 @@ export function createStripePeableTaxCheckout(options: {
       const expiresAt = Math.floor(Date.parse(quote.expiresAt) / 1000);
       if (expiresAt * 1000 - now().getTime() < MIN_CHECKOUT_LIFETIME_MS)
         throw new BillingError('result_expired');
-      let taxRate: string | undefined;
-      if (quote.taxMinorUnits > 0) {
-        const percentage = exactTaxRatePercentage(quote);
-        if (percentage === null) throw new BillingError('invalid_provider_response', 502);
-        const lines = (await invoiceTaxLines(db, owner.merchantId, quote.taxRateEvidenceId)) ?? [];
-        const types = new Set(lines.map((line) => line.taxType));
-        const [only] = types;
-        const inclusive = quote.taxTreatment === 'inclusive';
-        const rate = z
-          .object({
-            id: z.string().regex(/^txr_[A-Za-z0-9]+$/),
-            livemode: z.literal(deployment.livemode),
-            active: z.literal(true),
-            inclusive: z.literal(inclusive),
-            percentage: z.literal(percentage),
-          })
-          .parse(
-            await client.createTaxRate(
-              {
-                display_name: (types.size === 1 && only && TAX_LABELS[only]) || 'Tax',
-                inclusive,
-                percentage,
-                country: quote.country,
-                metadata: {
-                  peable_tax_quote: quote.id,
-                  peable_tax_calculation: quote.taxRateEvidenceId,
-                },
-              },
-              `${key}:tax_rate`,
-            ),
-          );
-        taxRate = rate.id;
-      }
+      const taxRate = await createFrozenTaxRate(
+        { db, client, owner, livemode: deployment.livemode, quote },
+        `${key}:tax_rate`,
+      );
       const successUrl = new URL(checkout.returnUrl);
       successUrl.searchParams.set('billing', 'complete');
       const cancelUrl = new URL(checkout.returnUrl);
@@ -192,6 +206,10 @@ export function createStripePeableTaxCheckout(options: {
           ],
           // Peable Tax priced this sale; Stripe must not price it again.
           automatic_tax: { enabled: false },
+          // A renewal is repriced from what Stripe holds about the payer (ADR
+          // 0013): the billing address is collected and kept on the customer.
+          billing_address_collection: 'required',
+          customer_update: { address: 'auto' },
           expires_at: expiresAt,
           subscription_data: { metadata: { peable_tax_quote: quote.id } },
           success_url: successUrl.toString(),
@@ -313,98 +331,6 @@ export function createPeableCardInvoiceAuthority(options: {
         signingKey,
       ).toString('base64url');
       return authority;
-    },
-  };
-}
-
-export type InvoiceTaxOutcome = 'committed' | 'not_quoted' | 'renewal_unquoted';
-export interface StripeInvoiceTaxRecorder {
-  /** `invoice.paid`: commit the quoted sale's Peable Tax calculation. Idempotent. */
-  recordPaidInvoice(invoiceRef: string): Promise<InvoiceTaxOutcome>;
-}
-
-/**
- * A paid card invoice that Peable Tax priced becomes a committed tax
- * transaction — the card rail's counterpart of FairCoin's acceptance commit,
- * with the same idempotency (one transaction per calculation and per invoice).
- * The webhook only wakes it: every fact is re-read from Stripe and checked
- * against the frozen quote before anything is written.
- */
-export function createStripeInvoiceTaxRecorder(options: {
-  db: Database;
-  client: StripeBillingClient;
-  deployment: BillingDeployment;
-  bindings: Pick<VerifiedBillingBindings, 'retrieveCheckout' | 'retrieveInvoiceState'>;
-}): StripeInvoiceTaxRecorder {
-  const { db, client, deployment, bindings } = options;
-  return {
-    async recordPaidInvoice(invoiceRef) {
-      if (!client.retrieveInvoice) return 'not_quoted';
-      const invoice = z
-        .object({
-          id: z.literal(invoiceRef),
-          customer: z.string().regex(/^cus_[A-Za-z0-9]+$/),
-          livemode: z.literal(deployment.livemode),
-          billing_reason: z.string().nullable(),
-          parent: z.object({
-            type: z.literal('subscription_details'),
-            subscription_details: z.object({
-              subscription: z.string().regex(/^sub_[A-Za-z0-9]+$/),
-            }),
-          }),
-        })
-        .safeParse(await client.retrieveInvoice(invoiceRef));
-      // Not a subscription invoice of this deployment: nothing Peable Tax priced.
-      if (!invoice.success) return 'not_quoted';
-      // A customer that never bought through a quote is answered locally.
-      const quoted = await findBillingTaxCheckoutsForCustomer(
-        db,
-        deployment,
-        invoice.data.customer,
-      );
-      if (!quoted.length) return 'not_quoted';
-      const subscriptionRef = invoice.data.parent.subscription_details.subscription;
-      const sessions = z
-        .object({
-          has_more: z.literal(false),
-          data: z.array(z.object({ id: z.string() })).max(1),
-        })
-        .parse(await client.listCheckoutsForSubscription(subscriptionRef));
-      const operation = quoted.find(
-        (candidate) => candidate.providerObjectRef === sessions.data[0]?.id,
-      );
-      if (!operation?.providerObjectRef) return 'not_quoted';
-      // A checkout quote prices the first invoice only; a renewal needs its own.
-      if (invoice.data.billing_reason !== 'subscription_create') return 'renewal_unquoted';
-      const snapshot = billingTaxCheckoutSnapshotSchema.parse(operation.taxCheckoutSnapshot);
-      const owner = billingOwnerSchema.parse({
-        merchantId: operation.merchantId,
-        oxyAppId: operation.oxyAppId,
-        environment: operation.environment,
-      });
-      const checkout = await bindings.retrieveCheckout(owner, operation.providerObjectRef);
-      if (
-        checkout.status !== 'complete' ||
-        checkout.subscription?.providerSubscriptionId !== subscriptionRef ||
-        checkout.initialInvoiceId !== invoiceRef
-      )
-        throw new BillingError('reconciliation_required');
-      const paid = await bindings.retrieveInvoiceState(owner, subscriptionRef, invoiceRef, false);
-      const quote = snapshot.taxQuote.quote;
-      if (
-        paid.currency !== quote.currency ||
-        paid.amountPaid !== String(quote.grossMinorUnits) ||
-        paid.netAmount !== String(quote.netMinorUnits) ||
-        paid.taxAmount !== String(quote.taxMinorUnits)
-      )
-        throw new BillingError('invalid_provider_response', 502);
-      await commitTaxTransaction(db, {
-        calculationPublicId: quote.taxRateEvidenceId,
-        reference: invoiceRef,
-        rail: 'stripe',
-        committedAt: new Date(paid.paidAt),
-      });
-      return 'committed';
     },
   };
 }

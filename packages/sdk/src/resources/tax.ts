@@ -1,5 +1,6 @@
 import type {
   CreateTaxCalculationParams,
+  CreateTaxReversalParams,
   CreateTaxLocationEvidenceParams,
   ListTaxTransactionsParams,
   TaxCalculation,
@@ -9,6 +10,7 @@ import type {
   TaxRegistration,
   TaxReport,
   TaxSettings,
+  TaxTransaction,
   TaxTransactionList,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
@@ -45,8 +47,12 @@ export class TaxResource {
     setTaxCode(productRef: string, taxCode: string): Promise<TaxProductCode>;
   };
   readonly transactions: {
-    /** Paid sales and their frozen calculations, oldest first. */
+    /** Paid sales and their frozen calculations, oldest first; refunds appear
+     * as `type: "reversal"` rows naming the sale they reverse. */
     list(params: ListTaxTransactionsParams): Promise<TaxTransactionList>;
+    /** Record a refund made outside Peable (a FairCoin sale refunded from your
+     * own wallet). Card refunds and credit notes are reversed automatically. */
+    createReversal(id: string, params: CreateTaxReversalParams): Promise<TaxTransaction>;
   };
   readonly reports: {
     /** Totals per jurisdiction, registration, tax type and rate, for filings. */
@@ -79,6 +85,10 @@ export class TaxResource {
             limit: params.limit,
             startingAfter: params.startingAfter,
           },
+        }),
+      createReversal: (id, params) =>
+        client.request('POST', `/v1/tax/transactions/${encodeURIComponent(id)}/reversals`, {
+          body: params,
         }),
     };
     this.reports = {

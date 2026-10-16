@@ -399,5 +399,30 @@ export function stripeBillingClient() {
       getStripeClient().taxRates.create(params, { ...requestOptions, idempotencyKey: key }),
     expireCheckout: (ref: string) =>
       getStripeClient().checkout.sessions.expire(ref, {}, requestOptions),
+    updateInvoice: (ref: string, params: Stripe.InvoiceUpdateParams, key: string) =>
+      getStripeClient().invoices.update(ref, params, { ...requestOptions, idempotencyKey: key }),
+    updateInvoiceLine: (
+      invoiceRef: string,
+      lineRef: string,
+      params: Stripe.InvoiceUpdateLineItemParams,
+      key: string,
+    ) =>
+      getStripeClient().invoices.updateLineItem(invoiceRef, lineRef, params, {
+        ...requestOptions,
+        idempotencyKey: key,
+      }),
+    retrievePaymentMethod: (ref: string) =>
+      getStripeClient().paymentMethods.retrieve(ref, {}, requestOptions),
+    listInvoiceCreditNotes: (invoiceRef: string, startingAfter?: string) =>
+      getStripeClient().creditNotes.list(
+        {
+          invoice: invoiceRef,
+          limit: 100,
+          ...(startingAfter ? { starting_after: startingAfter } : {}),
+        },
+        requestOptions,
+      ),
+    retrieveWebhookEndpoint: (ref: string) =>
+      getStripeClient().webhookEndpoints.retrieve(ref, {}, requestOptions),
   };
 }

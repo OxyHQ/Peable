@@ -1,10 +1,21 @@
 import { sql } from 'drizzle-orm';
-import { check, index, jsonb, pgTable, primaryKey, text, unique } from 'drizzle-orm/pg-core';
+import {
+  check,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  unique,
+  uniqueIndex,
+  type AnyPgColumn,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import {
   TAX_REGISTRATION_SCHEMES,
   type TaxAddress,
   type TaxCalculation,
+  type TaxTransactionReversal,
 } from '@peable.to/shared-types';
 import { merchants } from './merchants';
 
@@ -186,8 +197,15 @@ export const taxCalculations = pgTable(
   ],
 );
 
-/** A calculation that priced an accepted payment. One per calculation, and a
- * rail object is committed once. */
+/** A calculation that priced an accepted payment, or a reversal of one.
+ *
+ * An original is one per calculation (`tax_transactions_calculation_key`, a
+ * partial unique index over originals only) and a rail object is committed
+ * once per merchant. A reversal (`reversal_of_id`) names the original it gives
+ * back and carries its own signed amounts in `reversal`; it shares the
+ * original's calculation, so the report nets it into the same rows.
+ * `provider_payment_ref` is the card rail's `pi_…`, so a refund event finds
+ * its transaction without asking the provider. */
 export const taxTransactions = pgTable(
   'tax_transactions',
   {
@@ -198,15 +216,30 @@ export const taxTransactions = pgTable(
       .references(() => merchants.id, { onDelete: 'restrict' }),
     calculationId: text()
       .notNull()
-      .unique()
       .references(() => taxCalculations.id, { onDelete: 'restrict' }),
     reference: text().notNull(),
     rail: text().notNull(),
     committedAt: timestamptz().notNull(),
+    reversalOfId: text().references((): AnyPgColumn => taxTransactions.id, {
+      onDelete: 'restrict',
+    }),
+    reversal: jsonb().$type<TaxTransactionReversal>(),
+    providerPaymentRef: text(),
     createdAt: createdAt(),
   },
   (t) => [
     unique('tax_transactions_reference_key').on(t.merchantId, t.reference),
+    uniqueIndex('tax_transactions_calculation_key')
+      .on(t.calculationId)
+      .where(sql`${t.reversalOfId} IS NULL`),
     index('tax_transactions_merchant_committed_idx').on(t.merchantId, t.committedAt),
+    index('tax_transactions_reversal_of_idx').on(t.reversalOfId),
+    index('tax_transactions_payment_ref_idx')
+      .on(t.providerPaymentRef)
+      .where(sql`${t.providerPaymentRef} IS NOT NULL`),
+    check(
+      'tax_transactions_reversal_shape_check',
+      sql`(${t.reversalOfId} IS NULL) = (${t.reversal} IS NULL)`,
+    ),
   ],
 );

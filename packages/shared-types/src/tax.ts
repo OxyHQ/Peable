@@ -225,17 +225,46 @@ export interface TaxCalculation {
   livemode: boolean;
 }
 
+/** What a reversal gave back: the original calculation's amounts, scaled to
+ * the refunded share and NEGATIVE (positive only when it reinstates an earlier
+ * reversal, e.g. a refund the bank later failed). */
+export interface TaxTransactionReversal {
+  amountTotal: number;
+  amountNet: number;
+  taxAmount: number;
+  lineItems: TaxCalculationLineItem[];
+}
+
 /** A calculation that was paid. Created by Peable when the payment it priced
- * is accepted on its rail; the report and filings are built from these. */
+ * is accepted on its rail; the report and filings are built from these.
+ *
+ * `type: "reversal"` is a refund (or credit note) of an earlier transaction,
+ * `reversalOf` names it, and `reversal` holds its signed amounts. The report
+ * nets reversals into the rows of the original. */
 export interface TaxTransaction {
   object: 'tax.transaction';
   id: string;
+  type: 'transaction' | 'reversal';
   calculationId: string;
   /** The rail's own object, e.g. the invoice id. */
   reference: string;
   rail: string;
   committedAt: string;
+  /** The original transaction's id, for a reversal. */
+  reversalOf: string | null;
+  reversal: TaxTransactionReversal | null;
   calculation: TaxCalculation;
+}
+
+/** Record a refund made outside Peable (a FairCoin rail payment is refunded
+ * from the seller's own wallet, never by the gateway). Card refunds and credit
+ * notes are observed from the provider instead. */
+export interface CreateTaxReversalParams {
+  /** The refund's own reference; a repeated reference returns the same reversal. */
+  reference: string;
+  /** Gross minor units refunded (what the payer got back). Omitted: everything
+   * that is not yet reversed. */
+  amount?: number;
 }
 
 export interface TaxTransactionList {
@@ -264,6 +293,8 @@ export interface TaxReportRow {
   ratePercentage: string | null;
   currency: string;
   transactions: number;
+  /** Reversals netted into this row; `taxableAmount` and `taxAmount` are net. */
+  reversals: number;
   taxableAmount: number;
   taxAmount: number;
 }

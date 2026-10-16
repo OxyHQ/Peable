@@ -11,10 +11,13 @@ import {
 import { billingTaxOfferSchema, type BillingTaxCheckoutAdapter } from './tax-checkout';
 import {
   createPeableCardInvoiceAuthority,
-  createStripeInvoiceTaxRecorder,
   createStripePeableTaxCheckout,
-  type StripeInvoiceTaxRecorder,
 } from './stripeTaxCheckout';
+import {
+  createStripeInvoiceTaxRecorder,
+  verifyPeableTaxWebhookEndpoint,
+  type StripeInvoiceTaxRecorder,
+} from './stripeInvoiceTax';
 import type { TaxService } from '../tax/taxService';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
@@ -69,6 +72,12 @@ const cohortConfiguration = z
     checkoutOperationReaderRef: billingReference.optional(),
     /** Peable Tax only: the pinned key its quotes and invoices are signed with. */
     invoiceSigningKeyId: billingReference.optional(),
+    /** Peable Tax only: the Stripe webhook endpoint (`we_…`) that delivers the
+     * events it reprices renewals and reverses refunds from. */
+    webhookEndpointRef: z
+      .string()
+      .regex(/^we_[A-Za-z0-9]+$/)
+      .optional(),
     portalConfigurationRef: z.string().regex(/^bpc_[A-Za-z0-9]+$/),
     cohorts: z
       .array(
@@ -463,14 +472,17 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
         : null;
     },
   };
-  const invoiceTax = builtIn
-    ? createStripeInvoiceTaxRecorder({
-        db,
-        client,
-        deployment: parsed.deployment,
-        bindings: verifiedBindings,
-      })
-    : undefined;
+  const invoiceTax =
+    builtIn && adapters.taxService
+      ? createStripeInvoiceTaxRecorder({
+          db,
+          client,
+          deployment: parsed.deployment,
+          bindings: verifiedBindings,
+          tax: adapters.taxService,
+          calculator: builtIn.calculator,
+        })
+      : undefined;
   // No recurring queue access until the reviewed cohort explicitly opts in.
   if (!parsed.observationsEnabled) return { rail, renewals, ...(invoiceTax ? { invoiceTax } : {}) };
   const environment = cohorts[0]?.environment;
@@ -511,6 +523,11 @@ async function configurePeableCardTax(input: {
     throw new Error('Peable Tax quotes are charged and signed by Peable Tax');
   if (!parsed.invoiceSigningKeyId)
     throw new Error('Peable Tax on the card rail requires invoiceSigningKeyId');
+  // Renewals are repriced and refunds reversed from provider events, so a rail
+  // that cannot hear them must not sell (ADR 0013).
+  if (!parsed.webhookEndpointRef)
+    throw new Error('Peable Tax on the card rail requires webhookEndpointRef');
+  await verifyPeableTaxWebhookEndpoint(client, parsed.webhookEndpointRef);
   if (!adapters.taxService) throw new Error('Peable Tax quotes require the tax service');
   const raw = await resolveSigningKey(adapters, parsed.invoiceSigningKeyId);
   if (!raw) throw new Error('Peable Tax on the card rail requires a pinned invoice signing key');

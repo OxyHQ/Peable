@@ -57,18 +57,9 @@ of this. Mercaria's live I08 cohort, every existing subscriber and every caller
 that sends no quote take exactly the path they took before; their offers stay
 `null` in `listRails()`.
 
-## Not decided here
+## Decided since
 
-- **Renewals.** A checkout quote prices the initial invoice only (as before).
-  Stripe renews automatically and keeps the tax rate on the subscription item,
-  so a renewal is charged the same frozen tax, but it has no quote of its own:
-  no tax transaction is committed and its invoice authority answers
-  `reconciliation_required`. The drain warns for each such invoice. Pricing a
-  renewal needs location evidence at renewal time without the payer present —
-  the card's country and the billing address Stripe holds — recorded on
-  `invoice.created` and applied to the draft before it finalizes. That is the
-  next step before a quoting cohort renews.
-- **Refunds.** Peable does not initiate refunds of subscription invoices (it
-  only observes them in `retrieveInvoiceState`), and `tax_transactions` has no
-  reversal. A refunded quoted invoice leaves its committed transaction in
-  place until tax reversals exist.
+Renewals and refunds — the two items this ADR left open — are decided in
+ADR 0013: a renewal is repriced on `invoice.created` before it finalizes and
+commits its own calculation when paid; refunds and credit notes become tax
+reversals.

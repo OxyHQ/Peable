@@ -1,5 +1,5 @@
 import type { RecurringObservationOptions } from './recurring/contracts';
-import type { StripeInvoiceTaxRecorder } from './billing/stripeTaxCheckout';
+import { invoiceTaxAction, type StripeInvoiceTaxRecorder } from './billing/stripeInvoiceTax';
 /**
  * The drain: stored provider events become payment state.
  *
@@ -93,13 +93,15 @@ export async function runProviderEventDrainPass(
   const batchSize = options.batchSize ?? DEFAULT_BATCH_SIZE;
   if (options.recurring && (!Number.isSafeInteger(batchSize) || batchSize < 1 || batchSize > 100))
     throw new Error('Invalid recurring drain batch size');
-  const events = await findUnprocessedProviderEvents(
-    getDb(),
-    batchSize,
-    options.recurring ? { dueAt: (options.now ?? (() => new Date()))() } : undefined,
-  );
+  // Due events only, in every mode: nothing but a deferral sets a retry time,
+  // so for an event that was never deferred this is the same oldest-first set.
+  const events = await findUnprocessedProviderEvents(getDb(), batchSize, {
+    dueAt: (options.now ?? (() => new Date()))(),
+  });
 
   const deferred: string[] = [];
+  /** Peable Tax retries on its own clock in every mode, never every tick. */
+  const taxDeferred: string[] = [];
   let applied = 0;
   let noop = 0;
   let skipped = 0;
@@ -107,24 +109,30 @@ export async function runProviderEventDrainPass(
   let failed = 0;
 
   for (const event of events) {
-    // A quoted card sale is committed to Peable Tax when its invoice is paid,
-    // before the event goes on to whatever else handles it. Idempotent, so a
-    // redelivered or retried event commits nothing twice; a failure leaves the
-    // event unprocessed for the next pass, like an unmatched payment event.
-    const invoiceRef = event.objectIds.invoice;
-    if (options.invoiceTax && event.type === 'invoice.paid' && invoiceRef) {
+    // Peable Tax on the card rail acts first: a draft renewal is repriced
+    // before it can finalize, a paid invoice commits its calculation, and a
+    // refund or credit note reverses it. Each is idempotent, so a redelivered
+    // or retried event writes nothing twice; a failure leaves the event
+    // unprocessed and retries it a minute later (a held renewal stays held).
+    const action = options.invoiceTax ? invoiceTaxAction(event) : null;
+    if (options.invoiceTax && action) {
       try {
-        const outcome = await options.invoiceTax.recordPaidInvoice(invoiceRef);
-        if (outcome === 'renewal_unquoted')
+        const outcome =
+          action.kind === 'paid'
+            ? await options.invoiceTax.recordPaidInvoice(action.invoiceRef, action.customerRef)
+            : action.kind === 'renewal'
+              ? await options.invoiceTax.priceRenewalInvoice(action.invoiceRef, action.customerRef)
+              : await options.invoiceTax.reconcileReversals(action);
+        if (outcome === 'renewal_unquoted' || outcome === 'finalized_unpriced')
           process.emitWarning(
-            `Peable Tax: renewal invoice ${invoiceRef} of a quoted card subscription has no quote`,
+            `Peable Tax: renewal invoice ${'invoiceRef' in action ? action.invoiceRef : ''} of a quoted card subscription was not repriced (${outcome})`,
           );
       } catch (error) {
         const message = redactProviderMessage(
-          error instanceof Error ? error.message : 'invoice tax commit failed',
+          error instanceof Error ? error.message : 'invoice tax failed',
         );
         await markProviderEventFailed(getDb(), event.id, message).catch(() => undefined);
-        if (options.recurring) deferred.push(event.id);
+        taxDeferred.push(event.id);
         failed += 1;
         continue;
       }
@@ -157,6 +165,13 @@ export async function runProviderEventDrainPass(
   }
 
   const progress = { examined: events.length, applied, noop, skipped, unmatched, failed };
+  if (taxDeferred.length && !options.recurring)
+    await deferProviderEvents(
+      getDb(),
+      taxDeferred,
+      new Date((options.now ?? (() => new Date()))().getTime() + 60_000),
+    ).catch(() => undefined);
+  else deferred.push(...taxDeferred);
   if (options.recurring && deferred.length) {
     try {
       await deferProviderEvents(

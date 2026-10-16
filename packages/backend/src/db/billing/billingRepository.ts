@@ -25,9 +25,10 @@ import type {
   BillingOperationKind,
   BillingOperationResult,
 } from '../../services/billing/contracts';
-import { billingObjectBindings, billingOperations } from '../schema';
+import { billingObjectBindings, billingOperations, billingRenewalTaxes } from '../schema';
 export type BillingBinding = typeof billingObjectBindings.$inferSelect;
 export type BillingOperation = typeof billingOperations.$inferSelect;
+export type BillingRenewalTax = typeof billingRenewalTaxes.$inferSelect;
 export interface BindBillingInput {
   kind: 'customer' | 'price' | 'subscription';
   providerRef: string;
@@ -621,4 +622,46 @@ export async function completeRecoveredBillingCheckout(
     )
     .returning();
   return updated ?? null;
+}
+
+/** The fresh Peable Tax quote a renewal invoice was repriced with, if any. */
+export async function findBillingRenewalTax(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  invoiceRef: string,
+): Promise<(BillingRenewalTax & { snapshot: BillingTaxCheckoutSnapshot }) | null> {
+  const [row] = await db
+    .select()
+    .from(billingRenewalTaxes)
+    .where(
+      and(
+        eq(billingRenewalTaxes.provider, deployment.provider),
+        eq(billingRenewalTaxes.livemode, deployment.livemode),
+        eq(billingRenewalTaxes.invoiceRef, invoiceRef),
+      ),
+    );
+  return row ? { ...row, snapshot: billingTaxCheckoutSnapshotSchema.parse(row.snapshot) } : null;
+}
+
+/** Insert-only: a second pricing of one invoice keeps the first. */
+export async function recordBillingRenewalTax(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  input: {
+    merchantId: string;
+    invoiceRef: string;
+    subscriptionRef: string;
+    calculationId: string;
+    taxRateRef: string | null;
+    snapshot: BillingTaxCheckoutSnapshot;
+  },
+) {
+  await db
+    .insert(billingRenewalTaxes)
+    .values({ ...input, provider: deployment.provider, livemode: deployment.livemode })
+    .onConflictDoNothing();
+  const row = await findBillingRenewalTax(db, deployment, input.invoiceRef);
+  if (!row || row.subscriptionRef !== input.subscriptionRef)
+    throw new BillingError('identity_conflict');
+  return row;
 }

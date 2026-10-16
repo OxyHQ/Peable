@@ -87,5 +87,7 @@ registrations and approving, not a deployment.
 ## Not decided here
 
 - The card rail's signed quote and fiscal checkout: decided in ADR 0012.
-- Refunds on the FairCoin rail do not exist yet, so there is no tax reversal.
+- Tax reversals for refunds, on both rails: ADR 0013. (The FairCoin rail
+  cannot refund — the gateway never holds the money — so the merchant records
+  a refund it made from its own wallet.)
 - Which registrations a seller needs is a legal question, never code.

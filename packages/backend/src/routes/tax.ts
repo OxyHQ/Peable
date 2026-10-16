@@ -47,6 +47,7 @@ function reportCsv(report: TaxReport): string {
     'rate_percentage',
     'currency',
     'transactions',
+    'reversals',
     'taxable_amount_minor',
     'tax_amount_minor',
   ];
@@ -67,6 +68,7 @@ function reportCsv(report: TaxReport): string {
         row.ratePercentage,
         row.currency,
         row.transactions,
+        row.reversals,
         row.taxableAmount,
         row.taxAmount,
       ]
@@ -194,6 +196,13 @@ export function createTaxRouter(deps: {
     '/v1/tax/transactions',
     ...read,
     route((tax, merchant, req) => tax.listTransactions(merchant, req.query)),
+  );
+  // A refund the rail cannot report itself (FairCoin: the seller refunds from
+  // their own wallet). Card refunds are observed from the provider.
+  router.post(
+    '/v1/tax/transactions/:id/reversals',
+    ...write,
+    route((tax, merchant, req) => tax.createReversal(merchant, req.params.id ?? '', req.body), 201),
   );
   router.get(
     '/v1/tax/reports/summary',
