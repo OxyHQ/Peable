@@ -13,7 +13,7 @@ import {
   type CreateContribution,
   type ContributionCollectionList,
 } from '@peable.to/contracts';
-import type { ContributionScope } from '@peable.to/sdk';
+import type { ContributionScope } from '@peable.to/sdk/contributions';
 import { oxyServices } from '@/services/oxy-services';
 import { contributions } from '@/services/contributions';
 import { SafeAreaView } from '@/ui/safe-area-view';

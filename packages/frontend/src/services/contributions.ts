@@ -1,9 +1,9 @@
-import { ContributionsResource } from '@peable.to/sdk';
+import { ContributionsResource } from '@peable.to/sdk/contributions';
 import { gateway } from './gateway-client';
 /** The owning SDK validates every response; Oxy owns session refresh. */
 export const contributions = new ContributionsResource({
   request: async <T>(method: string, path: string, options = {}) => {
-    const opts = options as import('@peable.to/sdk').RestClientRequestOptions;
+    const opts = options as import('@peable.to/sdk/contributions').RestClientRequestOptions;
     const query = new URLSearchParams();
     for (const [key, value] of Object.entries(opts.query ?? {}))
       if (value !== undefined) query.set(key, String(value));

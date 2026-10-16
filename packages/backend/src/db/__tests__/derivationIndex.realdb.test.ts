@@ -238,6 +238,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'checkout_sessions',
       'connected_accounts',
       'disputes',
+      'faircoin_billing_invoices',
+      'faircoin_billing_subscriptions',
       'faircoin_renewal_authorizations',
       'merchants',
       'payment_intents',
