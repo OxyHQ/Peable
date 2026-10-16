@@ -98,12 +98,21 @@ export {
   type BillingPaidInvoice,
   type BillingInvoiceState,
   type BillingCustomer,
+  type BillingRail,
+  type BillingRailSettlement,
+  type BillingRailOffer,
+  type BillingRailOption,
+  type BillingRailList,
   type EnsureBillingCustomerParams,
   type CreateBillingCheckoutParams,
   type CreateBillingPortalParams,
   type BillingHostedSession,
   type BillingSubscription,
 } from './billing';
-export { canonicalBillingAuthority, canonicalBillingTaxQuote } from './billing-authority';
+export {
+  canonicalBillingAuthority,
+  canonicalBillingTaxQuote,
+  PEABLE_BILLING_AUTHORITY_KEYS,
+} from './billing-authority';
 
 export type { BillingFaircoinFxQuote } from './billing';

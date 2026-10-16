@@ -1,5 +1,8 @@
 import { readFile } from 'node:fs/promises';
-import { createConfiguredFiscalAuthority } from './configuredFiscalAuthority';
+import {
+  configuredFiscalAuthoritySchema,
+  createConfiguredFiscalAuthority,
+} from './configuredFiscalAuthority';
 import {
   createFaircoinBillingService,
   faircoinBillingConfigurationSchema,
@@ -24,6 +27,9 @@ import {
 import { createBillingService, type BillingCheckoutOperationReader } from './billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from './stripeBillingProvider';
 import { createVerifiedBillingBindings } from './verifiedBindings';
+import { billingRailId, type BillingOwner } from './contracts';
+import { createMultiRailBillingService, type BillingRail } from './rails';
+import { loadPinnedSigningKey, reportMountedSigningKey } from './signingKey';
 import {
   createOwnedBillingRecurringReader,
   createOwnedBillingInvoiceResolver,
@@ -88,53 +94,160 @@ function pinnedKeys(keys: Readonly<Record<string, string>>): Readonly<Record<str
   }
   return Object.freeze(copy);
 }
-/** Boot opt-in. No JSON means no client construction or provider call. */
+/** Workers and observers a rail contributes besides its service. */
+type StripeRail = Awaited<ReturnType<typeof configureStripeRail>>;
+interface ConfiguredRail {
+  rail: BillingRail;
+  renewals?: StripeRail['renewals'];
+  observations?: StripeRail['observations'];
+  relay?: StripeRail['relay'];
+}
+interface RailContext {
+  db: Database;
+  body: Record<string, unknown>;
+  injectedClient?: StripeBillingClient;
+  adapters: BillingRuntimeAdapters;
+}
+const sameOwner = (left: BillingOwner, right: BillingOwner) =>
+  left.merchantId === right.merchantId &&
+  left.oxyAppId === right.oxyAppId &&
+  left.environment === right.environment;
+
+/** References the native rail mints; disjoint from every opaque provider id. */
+const FAIRCOIN_REFS = {
+  customer: /^cus_fair[0-9a-f]{64}$/,
+  subscription: /^sub_fair[0-9a-f]{64}$/,
+  checkout: /^cs_(live|test)_fair[0-9a-f]{64}$/,
+} as const;
+
+/** FairCoin native: watch-only settlement, payer-initiated periods, signed
+ * invoices. Needs no Stripe credential. */
+async function configureFaircoinRail({ db, body, adapters }: RailContext): Promise<ConfiguredRail> {
+  const native = faircoinBillingConfigurationSchema.parse(body);
+  let calculator = adapters.taxQuoteCalculators?.[native.taxQuoteAdapterRef];
+  let signingKey = adapters.invoiceSigningKeys?.[native.invoiceSigningKeyId];
+  const fiscalFile = config.billingFiscalFile;
+  const keyFile = config.billingInvoicePrivateKeyFile;
+  if ((!calculator || !signingKey) && fiscalFile && keyFile) {
+    // The mounted production key must be the pinned key the configuration names,
+    // and tax quotes are signed under that same id, so consumers verify both
+    // with the one pinned public key.
+    const mounted = await loadPinnedSigningKey(keyFile);
+    const fiscal = configuredFiscalAuthoritySchema.parse(
+      JSON.parse(await readFile(fiscalFile, 'utf8')),
+    );
+    if (mounted.keyId !== native.invoiceSigningKeyId || fiscal.keyId !== mounted.keyId)
+      throw new Error('Native FairCoin billing must sign with its configured pinned key');
+    signingKey ??= mounted.privateKey;
+    calculator ??= createConfiguredFiscalAuthority(fiscal, mounted.privateKey);
+  }
+  if (!calculator || !signingKey)
+    throw new Error('Native FairCoin billing requires trusted fiscal and invoice signing adapters');
+  const service = createFaircoinBillingService({
+    db,
+    configuration: native,
+    taxQuoteCalculator: calculator,
+    invoiceSigningKey: signingKey,
+  });
+  const cohortOf = (owner: BillingOwner) =>
+    native.cohorts.find((cohort) => sameOwner(cohort, owner));
+  // Watch-only payment intent settlement + its durable webhook outbox are the
+  // existing gateway workers. No Stripe client or automatic renewal executor.
+  return {
+    rail: {
+      id: 'faircoin',
+      settlement: 'faircoin',
+      renewal: 'payer_initiated',
+      service,
+      refPatterns: FAIRCOIN_REFS,
+      serves: (owner) => cohortOf(owner) !== undefined,
+      taxQuotes: (owner) => cohortOf(owner) !== undefined,
+      offers: (owner) =>
+        (cohortOf(owner)?.offers ?? []).map((offer) => ({
+          providerPriceId: offer.providerPriceId,
+          planId: offer.planId,
+          interval: offer.interval,
+          currency: offer.currency,
+          grossMinorUnits: offer.grossMinorUnits,
+          taxTreatment: offer.taxTreatment,
+        })),
+    },
+  };
+}
+
+/** Rails by name. A further fiat provider registers its own factory here,
+ * producing a `BillingRail` with namespaced references. */
+const RAIL_FACTORIES: Readonly<Record<string, (context: RailContext) => Promise<ConfiguredRail>>> =
+  { stripe: configureStripeRail, faircoin: configureFaircoinRail };
+
+/**
+ * Boot opt-in. No JSON means no client construction or provider call.
+ *
+ * `PEABLE_BILLING_COHORT` is either ONE rail's configuration — the shape every
+ * deployment used before rails coexisted, still read unchanged (a Stripe
+ * configuration, or `rail: "faircoin"` with the native one) — or
+ * `{ "rails": [ { "rail": "stripe", … }, { "rail": "faircoin", … } ] }`, where
+ * each entry is exactly that rail's single configuration. Rails are in
+ * preference order: the first one serving a merchant answers every request that
+ * names no rail, so adding a rail after an existing one changes nothing for its
+ * existing callers or subscribers.
+ */
 export async function configureBillingRuntime(
   db: Database,
   raw = config.billingCohortConfig,
   injectedClient?: StripeBillingClient,
   adapters: BillingRuntimeAdapters = {},
 ) {
-  if (raw === undefined) return undefined;
-  let requested: Record<string, unknown>;
+  if (raw === undefined) {
+    await reportMountedSigningKey(config.billingInvoicePrivateKeyFile);
+    return undefined;
+  }
+  let entries: Record<string, unknown>[];
   try {
-    requested = z.record(z.unknown()).parse(JSON.parse(raw));
+    const requested = z.record(z.unknown()).parse(JSON.parse(raw));
+    entries = Object.hasOwn(requested, 'rails')
+      ? z
+          .object({ rails: z.array(z.record(z.unknown())).min(1).max(8) })
+          .strict()
+          .parse(requested).rails
+      : [requested];
   } catch {
     throw new Error('Invalid PEABLE_BILLING_COHORT configuration');
   }
-  if (requested.rail === 'faircoin') {
-    const { rail: _rail, ...body } = requested;
-    const native = faircoinBillingConfigurationSchema.parse(body);
-    let calculator = adapters.taxQuoteCalculators?.[native.taxQuoteAdapterRef];
-    let signingKey = adapters.invoiceSigningKeys?.[native.invoiceSigningKeyId];
-    const fiscalFile = process.env.PEABLE_BILLING_FISCAL_FILE;
-    const keyFile = process.env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE;
-    if ((!calculator || !signingKey) && fiscalFile && keyFile) {
-      const configuredKey = await readFile(keyFile, 'utf8');
-      signingKey ??= configuredKey;
-      calculator ??= createConfiguredFiscalAuthority(
-        JSON.parse(await readFile(fiscalFile, 'utf8')),
-        configuredKey,
-      );
-    }
-    if (!calculator || !signingKey)
-      throw new Error(
-        'Native FairCoin billing requires trusted fiscal and invoice signing adapters',
-      );
-    const service = createFaircoinBillingService({
-      db,
-      configuration: native,
-      taxQuoteCalculator: calculator,
-      invoiceSigningKey: signingKey,
-    });
-    // Watch-only payment intent settlement + its durable webhook outbox are the
-    // existing gateway workers. No Stripe client or automatic renewal executor.
-    return { service, renewals: undefined, observations: undefined, relay: undefined };
+  const configured: ConfiguredRail[] = [];
+  for (const entry of entries) {
+    const { rail: name = 'stripe', ...body } = entry;
+    const parsedName = billingRailId.safeParse(name);
+    const factory =
+      parsedName.success && Object.hasOwn(RAIL_FACTORIES, parsedName.data)
+        ? RAIL_FACTORIES[parsedName.data]
+        : undefined;
+    if (!factory) throw new Error('Invalid PEABLE_BILLING_COHORT configuration');
+    if (configured.some((existing) => existing.rail.id === parsedName.data))
+      throw new Error('Each billing rail may be configured once');
+    configured.push(await factory({ db, body, injectedClient, adapters }));
   }
+  if (!configured.some((entry) => entry.rail.id === 'faircoin'))
+    await reportMountedSigningKey(config.billingInvoicePrivateKeyFile);
+  const single = <K extends 'renewals' | 'observations' | 'relay'>(key: K) => {
+    const present = configured.flatMap((entry) => (entry[key] ? [entry[key]] : []));
+    if (present.length > 1) throw new Error(`Only one billing rail may provide ${key}`);
+    return present[0] as ConfiguredRail[K];
+  };
+  return {
+    service: createMultiRailBillingService(configured.map((entry) => entry.rail)),
+    renewals: single('renewals'),
+    observations: single('observations'),
+    relay: single('relay'),
+  };
+}
 
+/** The Stripe platform rail (fiat). Its configuration is the original
+ * `PEABLE_BILLING_COHORT` shape, byte for byte. */
+async function configureStripeRail({ db, body, injectedClient, adapters }: RailContext) {
   let parsed: z.infer<typeof cohortConfiguration>;
   try {
-    parsed = cohortConfiguration.parse(JSON.parse(raw));
+    parsed = cohortConfiguration.parse(body);
   } catch {
     throw new Error('Invalid PEABLE_BILLING_COHORT configuration');
   }
@@ -260,14 +373,27 @@ export async function configureBillingRuntime(
     taxCheckoutAdapter,
     finalInvoiceAuthority,
   });
+  const cohortOf = (owner: BillingOwner) => cohorts.find((cohort) => sameOwner(cohort, owner));
+  const rail: BillingRail = {
+    id: 'stripe',
+    settlement: 'fiat',
+    renewal: 'automatic',
+    service,
+    // Opaque Stripe ids (`cus_…`, `sub_…`, `cs_…`): the catch-all rail, so every
+    // subscriber created before rails coexisted routes here unchanged.
+    serves: (owner) => cohortOf(owner) !== undefined,
+    taxQuotes: (owner) => cohortOf(owner) !== undefined && taxQuoteCalculator !== undefined,
+    // Prices are the app's own Stripe prices, bound through verified bindings.
+    offers: () => null,
+  };
   // No recurring queue access until the reviewed cohort explicitly opts in.
-  if (!parsed.observationsEnabled) return { service, renewals };
+  if (!parsed.observationsEnabled) return { rail, renewals };
   const environment = cohorts[0]?.environment;
   if (!environment || cohorts.some((cohort) => cohort.environment !== environment)) {
     throw new Error('Recurring observations require one deployment environment');
   }
   return {
-    service,
+    rail,
     renewals,
     observations: {
       deployment: { ...parsed.deployment, environment, apiVersion: STRIPE_API_VERSION },
@@ -278,6 +404,6 @@ export async function configureBillingRuntime(
         client,
       }),
     },
-    relay: { enabled: true, db, cohorts },
+    relay: { enabled: true as const, db, cohorts },
   };
 }

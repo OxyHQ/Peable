@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import { PEABLE_BILLING_AUTHORITY_KEYS } from '@peable.to/shared-types';
 import { faircoinBillingConfigurationSchema } from '../src/services/billing/faircoinBillingService';
 import { configuredFiscalAuthoritySchema } from '../src/services/billing/configuredFiscalAuthority';
 
@@ -7,12 +8,22 @@ if (!cohortFile || !fiscalFile)
   throw new Error(
     'Usage: bun scripts/validate-native-billing.ts <cohort.json> <reviewed-fiscal.json>',
   );
-const { rail, ...raw } = JSON.parse(await readFile(cohortFile, 'utf8'));
-if (rail !== 'faircoin') throw new Error('Expected native FairCoin rail');
+// Either the native rail alone, or the multi-rail `{ rails: [...] }` shape.
+const parsedCohort = JSON.parse(await readFile(cohortFile, 'utf8'));
+const entries: Record<string, unknown>[] = Array.isArray(parsedCohort.rails)
+  ? parsedCohort.rails
+  : [parsedCohort];
+const native = entries.filter((entry) => entry.rail === 'faircoin');
+if (native.length !== 1 || !native[0]) throw new Error('Expected one native FairCoin rail');
+const { rail: _rail, ...raw } = native[0];
 const cohort = faircoinBillingConfigurationSchema.parse(raw);
 const fiscal = configuredFiscalAuthoritySchema.parse(
   JSON.parse(await readFile(fiscalFile, 'utf8')),
 );
+if (fiscal.keyId !== cohort.invoiceSigningKeyId)
+  throw new Error('Tax quotes and invoices must be signed under the same pinned key id');
+if (!Object.hasOwn(PEABLE_BILLING_AUTHORITY_KEYS, cohort.invoiceSigningKeyId))
+  throw new Error('invoiceSigningKeyId must name a key pinned in PEABLE_BILLING_AUTHORITY_KEYS');
 for (const owner of cohort.cohorts)
   for (const offer of owner.offers) {
     const matches = fiscal.declarations.filter(

@@ -1,3 +1,4 @@
+import { must } from '../../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import type { BillingCheckoutOperationReader } from '../billingService';
 import type { BillingTaxQuoteCalculator } from '../tax-quote';
@@ -1308,6 +1309,79 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           adapters,
         ),
       ).rejects.toThrow('outside configured cohorts');
+    });
+    it('offers FairCoin beside the Stripe cohort, keeps the old single-rail shapes, and refuses an unknown rail', async () => {
+      const stripe = {
+        deployment,
+        portalConfigurationRef: 'bpc_one',
+        cohorts: [{ ...owner, evidenceRef: 'fixture:cohort' }],
+      };
+      const faircoin = {
+        rail: 'faircoin',
+        cohorts: [
+          {
+            ...owner,
+            offers: [
+              {
+                providerPriceId: 'price_one',
+                planId: 'plan:one',
+                offerId: 'offer_one',
+                offerVersion: 1,
+                interval: 'month',
+                intervalCount: 1,
+                currency: 'USD',
+                grossMinorUnits: 2999,
+                taxTreatment: 'inclusive',
+              },
+            ],
+          },
+        ],
+        priceSource: 'faircoin_explorer_indexed_usd',
+        taxQuoteAdapterRef: 'tax_fixture',
+        invoiceSigningKeyId: 'invoice_fixture',
+      };
+      const adapters = {
+        taxQuoteCalculators: { tax_fixture: {} as BillingTaxQuoteCalculator },
+        invoiceSigningKeys: { invoice_fixture: generateKeyPairSync('ed25519').privateKey },
+      };
+      const runtime = async (raw: unknown) =>
+        must(await configureBillingRuntime(gatewayDb(), JSON.stringify(raw), client, adapters));
+      const rails = async (raw: unknown) =>
+        (await (await runtime(raw)).service.listRails?.(owner))?.data.map((rail) => [
+          rail.rail,
+          rail.default,
+          rail.offers?.length ?? null,
+        ]);
+      const both = { rails: [{ rail: 'stripe', ...stripe }, faircoin] };
+      expect(await rails(both)).toEqual([
+        ['stripe', true, null],
+        ['faircoin', false, 1],
+      ]);
+      // The pre-rails configurations still mean exactly one rail each.
+      expect(await rails(stripe)).toEqual([['stripe', true, null]]);
+      expect(await rails(faircoin)).toEqual([['faircoin', true, 1]]);
+      // A caller that names no rail keeps reaching Stripe, as before FairCoin was added.
+      const { service } = await runtime(both);
+      expect(await service.ensureCustomer(owner, customerInput, 'customer:one')).toEqual({
+        providerCustomerId: 'cus_one',
+      });
+      expect(calls.filter((call) => call.method === 'customer')).toHaveLength(1);
+      // Choosing FairCoin mints its own namespaced customer and touches no provider.
+      const native = await service.ensureCustomer(
+        owner,
+        { ...customerInput, rail: 'faircoin' },
+        'customer:fair',
+      );
+      expect(native.providerCustomerId).toMatch(/^cus_fair[0-9a-f]{64}$/);
+      expect(calls.filter((call) => call.method === 'customer')).toHaveLength(1);
+      for (const raw of [
+        { rails: [faircoin, faircoin] },
+        { rails: [{ ...stripe, rail: 'square' }] },
+        { rails: [] },
+      ])
+        await expect(
+          configureBillingRuntime(gatewayDb(), JSON.stringify(raw), client, adapters),
+        ).rejects.toThrow();
     });
     it('composes owned observations only when explicitly enabled', async () => {
       const configuration = {
