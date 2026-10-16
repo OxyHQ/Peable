@@ -1,5 +1,16 @@
-/** Read-only display values. Never use these estimates to authorize a payment. */
-import { EXPLORER_BASE_URL } from '@fairco.in/core';
+/**
+ * Read-only display values. Never use these estimates to authorize a payment.
+ *
+ * This entry is imported by every Oxy app's startup bundle (through
+ * `@oxy.so/services`), and Metro does not tree-shake: it must import nothing.
+ * `@fairco.in/core` exposes only its root barrel, which drags in the whole
+ * wallet stack, so the Explorer origin is restated here and a test pins it to
+ * the core constant.
+ */
+
+/** Same value as `EXPLORER_BASE_URL` in `@fairco.in/core`. */
+const DISPLAY_RATES_ORIGIN = 'https://explorer.fairco.in';
+const DISPLAY_RATES_TIMEOUT_MS = 8000;
 
 export const DISPLAY_CURRENCIES = ['USD', 'EUR', 'FAIR'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
@@ -42,20 +53,50 @@ export function displayRatesAreFresh(rates: DisplayRates, now = Date.now()): boo
   );
 }
 
+/**
+ * A signal that aborts after `ms` or when `parent` does. React Native's
+ * AbortSignal (Hermes) lacks `AbortSignal.timeout` and `AbortSignal.any`, which
+ * made every native read fail, so this uses only a controller and a timer.
+ */
+function timeoutSignal(
+  ms: number,
+  parent?: AbortSignal,
+): { signal: AbortSignal; dispose: () => void } {
+  const controller = new AbortController();
+  const onParentAbort = () => controller.abort(parent?.reason);
+  const timer = setTimeout(
+    () => controller.abort(new Error('Exchange rate request timed out')),
+    ms,
+  );
+  if (parent?.aborted) onParentAbort();
+  else parent?.addEventListener('abort', onParentAbort);
+  return {
+    signal: controller.signal,
+    dispose: () => {
+      clearTimeout(timer);
+      parent?.removeEventListener('abort', onParentAbort);
+    },
+  };
+}
+
 /** Uses the owning FairCoin source; no cached fallback after expiry or failure. */
 export async function readDisplayRates(
   options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number } = {},
 ): Promise<DisplayRates> {
-  const source = `${EXPLORER_BASE_URL}/api/price`;
-  const response = await (options.fetch ?? fetch)(source, {
-    signal: options.signal
-      ? AbortSignal.any([options.signal, AbortSignal.timeout(8000)])
-      : AbortSignal.timeout(8000),
-    redirect: 'error',
-    headers: { Accept: 'application/json' },
-  });
-  if (!response.ok) throw new Error('Exchange rate unavailable');
-  const body: unknown = await response.json();
+  const source = `${DISPLAY_RATES_ORIGIN}/api/price`;
+  const request = timeoutSignal(DISPLAY_RATES_TIMEOUT_MS, options.signal);
+  let body: unknown;
+  try {
+    const response = await (options.fetch ?? fetch)(source, {
+      signal: request.signal,
+      redirect: 'error',
+      headers: { Accept: 'application/json' },
+    });
+    if (!response.ok) throw new Error('Exchange rate unavailable');
+    body = await response.json();
+  } finally {
+    request.dispose();
+  }
   if (!body || typeof body !== 'object' || !('price' in body) || !('updatedAt' in body))
     throw new Error('Exchange rate unavailable');
   const price = body.price;
