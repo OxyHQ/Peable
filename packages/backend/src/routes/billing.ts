@@ -67,6 +67,15 @@ export function createBillingRouter(deps: {
     requireAuthenticated,
     oxy.middleware.requireScope('payments:read'),
   ];
+  // The rails this merchant's payers can choose between, default first.
+  router.get(
+    '/v1/billing/rails',
+    ...read,
+    handle((service, owner) => {
+      if (!service.listRails) throw new BillingError('not_found', 404);
+      return service.listRails(owner);
+    }),
+  );
   router.post(
     '/v1/billing/tax_quotes',
     ...read,

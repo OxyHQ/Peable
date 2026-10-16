@@ -23,7 +23,14 @@ export type {
   CreateBillingCheckoutParams,
   CreateBillingPortalParams,
   EnsureBillingCustomerParams,
+  BillingRail,
+  BillingRailSettlement,
+  BillingRailOffer,
+  BillingRailOption,
+  BillingRailList,
 } from '@peable.to/shared-types';
+/** Production Peable's pinned billing-authority public keys, by key id. */
+export { PEABLE_BILLING_AUTHORITY_KEYS } from '@peable.to/shared-types';
 // Server entry (`@peable.to/sdk`) — the merchant-authed SDK. Configured with a
 // confidential `ApplicationCredential` (`{publicKey, secret}`), from which it
 // mints and caches an Oxy service token, or with a caller-supplied

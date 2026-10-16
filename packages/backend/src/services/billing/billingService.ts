@@ -12,6 +12,7 @@ import type {
   BillingCustomer,
   BillingHostedSession,
   BillingCheckoutSession,
+  BillingRailList,
   BillingSubscription,
   RetrieveBillingCheckoutOperationParams,
   BillingCheckoutOperationRecovery,
@@ -667,4 +668,6 @@ export type BillingService = ReturnType<typeof createBillingService> & {
     input: CreateBillingCheckoutParams,
     idempotencyKey: string,
   ) => Promise<BillingCheckoutSession>;
+  /** The rails the merchant's payers can choose from (the multi-rail router). */
+  listRails?: (owner: BillingOwner) => Promise<BillingRailList>;
 };

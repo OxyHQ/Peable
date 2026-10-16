@@ -40,3 +40,19 @@ export function canonicalBillingTaxQuote(
     quote: authority.quote,
   });
 }
+
+/**
+ * The PUBLIC halves of the Ed25519 keys production Peable signs billing
+ * authority with (signed tax quotes and final invoice authorities), by key id.
+ * Pin these as the SDK's `invoiceAuthorityKeys` / `taxQuoteAuthorityKeys`.
+ *
+ * The private halves exist only in Peable's production secret store and reach
+ * the gateway as a mounted file (`PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE`); the
+ * gateway refuses to sign with a key whose public half is not listed here. A
+ * rotation adds the new id beside the old one, and the old id is removed only
+ * after every authority it signed has been consumed.
+ */
+export const PEABLE_BILLING_AUTHORITY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  'peable-billing-2026-10':
+    '-----BEGIN PUBLIC KEY-----\nMCowBQYDK2VwAyEAt6lkqirzUxlnt22igH+lRWW7+dRRlk4QK0a2wIKfnCA=\n-----END PUBLIC KEY-----\n',
+});

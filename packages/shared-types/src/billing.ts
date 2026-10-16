@@ -14,11 +14,50 @@ export type BillingSubscriptionStatus = (typeof BILLING_SUBSCRIPTION_STATUSES)[n
 export interface BillingCustomer {
   providerCustomerId: string;
 }
+
+/** A settlement rail a merchant's recurring offers can be paid through. `stripe`
+ * (and any further fiat provider) settles in fiat; `faircoin` settles natively
+ * to the merchant's watch-only wallet. One merchant may offer several rails at
+ * once and the payer chooses; every rail answers through the same subscription,
+ * invoice and authority contracts below. */
+export type BillingRail = 'stripe' | 'faircoin' | (string & {});
+export type BillingRailSettlement = 'fiat' | 'faircoin';
+/** One offer a rail can sell. Fiat provider rails bind their prices from the
+ * app's own provider catalogue, so they list `offers: null`. */
+export interface BillingRailOffer {
+  providerPriceId: string;
+  planId: string;
+  interval: 'month' | 'year';
+  currency: string;
+  grossMinorUnits: number;
+  taxTreatment: 'inclusive' | 'exclusive';
+}
+export interface BillingRailOption {
+  rail: BillingRail;
+  settlement: BillingRailSettlement;
+  /** The rail a request that names none is served by: the first configured. */
+  default: boolean;
+  /** Whether `createTaxQuote` is answered for this rail. */
+  taxQuotes: boolean;
+  /** `automatic`: the provider charges each period. `payer_initiated`: each
+   * period is an explicit payment through `renewSubscription`. */
+  renewal: 'automatic' | 'payer_initiated';
+  offers: BillingRailOffer[] | null;
+}
+export interface BillingRailList {
+  object: 'list';
+  data: BillingRailOption[];
+}
 export interface EnsureBillingCustomerParams {
   storeId: string;
   storeName: string;
+  /** The payer's chosen rail. Omitted: the merchant's default rail. A customer
+   * belongs to one rail, and its checkouts and subscriptions follow it. */
+  rail?: BillingRail;
 }
 export interface CreateBillingCheckoutParams {
+  /** Optional assertion of the rail; it must be the rail of `providerCustomerId`. */
+  rail?: BillingRail;
   /** Opt-in fiscal checkout. The full signed quote is immutable and single-use.
    * Requires a trusted Peable adapter capable of applying these exact amounts. */
   taxQuote?: BillingTaxQuote;
@@ -189,6 +228,8 @@ export interface BillingFaircoinRenewalRevocation {
 /** A merchant asks Peable to quote a registered product. Monetary/fiscal
  * configuration is resolved inside Peable, never supplied by a consumer. */
 export interface CreateBillingTaxQuoteParams {
+  /** Omitted: the first of the merchant's rails that answers tax quotes. */
+  rail?: BillingRail;
   storeId: string;
   planId: string;
   customerLocationEvidenceId: string;

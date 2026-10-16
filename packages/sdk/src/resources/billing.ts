@@ -7,6 +7,7 @@ import type {
   CreateBillingTaxQuoteParams,
   BillingFinalInvoiceAuthority,
   BillingCustomer,
+  BillingRailList,
   BillingHostedSession,
   BillingCheckoutSession,
   BillingCheckoutObservation,
@@ -28,6 +29,13 @@ export class BillingResource {
     private readonly invoiceAuthorityKeys?: Readonly<Record<string, string>>,
     private readonly taxQuoteAuthorityKeys?: Readonly<Record<string, string>>,
   ) {}
+  /** The rails this merchant's payers can choose between (card and other fiat
+   * providers, FairCoin), default first, with each rail's offers. Pass the
+   * payer's choice as `rail` to `ensureCustomer`; the customer's rail then
+   * carries its checkouts, subscriptions and invoices. */
+  listRails(): Promise<BillingRailList> {
+    return this.client.request('GET', '/v1/billing/rails');
+  }
   ensureCustomer(
     params: EnsureBillingCustomerParams,
     options: BillingRequestOptions,

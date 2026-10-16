@@ -24,6 +24,9 @@ const subscriptionRef = z
   .string()
   .regex(/^sub_[A-Za-z0-9]+$/)
   .max(128);
+/** A configured settlement rail's name (`stripe`, `faircoin`, a further fiat
+ * provider). Selecting one never configures it: an unconfigured rail is refused. */
+export const billingRailId = z.string().regex(/^[a-z][a-z0-9_]{1,31}$/);
 /** HTTPS destinations only; the authenticated app supplies its own return page. */
 export const billingReturnUrl = z
   .string()
@@ -34,7 +37,11 @@ export const billingReturnUrl = z
     return url.protocol === 'https:' && !url.username && !url.password;
   }, 'An HTTPS return URL without credentials is required');
 export const ensureCustomerSchema = z
-  .object({ storeId: billingReference, storeName: z.string().min(1).max(200) })
+  .object({
+    storeId: billingReference,
+    storeName: z.string().min(1).max(200),
+    rail: billingRailId.optional(),
+  })
   .strict();
 export const billingTaxQuoteSchema = z
   .object({
@@ -80,6 +87,7 @@ export const billingTaxQuoteSchema = z
   .strict();
 export const checkoutSchema = z
   .object({
+    rail: billingRailId.optional(),
     providerCustomerId: customerRef,
     providerPriceId: priceRef,
     trialDays: z.number().int().min(0).max(730),
@@ -179,6 +187,7 @@ export class BillingError extends Error {
   constructor(
     readonly code:
       | 'not_found'
+      | 'rail_unavailable'
       | 'identity_conflict'
       | 'idempotency_conflict'
       | 'in_progress'

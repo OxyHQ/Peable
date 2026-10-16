@@ -6,6 +6,7 @@ import {
   type CreateBillingTaxQuoteParams,
 } from '@peable.to/shared-types';
 import {
+  billingRailId,
   billingReference,
   billingTaxQuoteSchema,
   BillingError,
@@ -19,6 +20,7 @@ const environment = z.enum(['development', 'staging', 'production']);
 const country = z.string().regex(/^[A-Z]{2}$/);
 export const billingTaxQuoteRequestSchema = z
   .object({
+    rail: billingRailId.optional(),
     storeId: billingReference,
     planId: billingReference,
     customerLocationEvidenceId: billingReference,

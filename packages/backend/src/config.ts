@@ -93,6 +93,10 @@ export interface AppConfig {
   stripe: StripeConfig;
   /** Explicit reviewed recurring cohort JSON; absent keeps all recurring routes closed. */
   billingCohortConfig?: string;
+  /** PATHS of operator-mounted files, never their content. The signing key is a
+   * secret delivered as a file by the task definition; see signingKey.ts. */
+  billingInvoicePrivateKeyFile?: string;
+  billingFiscalFile?: string;
 }
 
 export interface StripeConfig {
@@ -295,6 +299,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ...(readOptional(env.PEABLE_BILLING_COHORT)
       ? { billingCohortConfig: readOptional(env.PEABLE_BILLING_COHORT) }
       : {}),
+    billingInvoicePrivateKeyFile: readOptional(env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE),
+    billingFiscalFile: readOptional(env.PEABLE_BILLING_FISCAL_FILE),
     stripe: {
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
