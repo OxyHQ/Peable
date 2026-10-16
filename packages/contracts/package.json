@@ -65,7 +65,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run clean && bun run typecheck && bun run test && bun run build"
   },
   "devDependencies": {
     "typescript": "~5.9.2",
