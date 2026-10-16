@@ -87,7 +87,7 @@
     "dev": "tsc --watch",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run clean && bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "@peable.to/shared-types": "workspace:0.4.0",

@@ -62,7 +62,7 @@
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
     "test": "bun test",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run clean && bun run typecheck && bun run test && bun run build"
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
