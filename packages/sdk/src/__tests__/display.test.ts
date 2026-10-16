@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'bun:test';
+import { readFileSync } from 'node:fs';
+import { EXPLORER_BASE_URL } from '@fairco.in/core';
 import {
   convertDisplayAmount,
   formatDisplayUnits,
@@ -109,5 +111,38 @@ describe('display amounts never authorize payments', () => {
     ])
       await expect(readDisplayRates({ fetch: fetcher(invalid), now })).rejects.toThrow();
     await expect(readDisplayRates({ fetch: fetcher({}, 403), now })).rejects.toThrow();
+  });
+});
+
+describe('display entry stays portable', () => {
+  it('imports nothing, so a non-tree-shaking bundler pulls in no wallet code', () => {
+    const source = readFileSync(new URL('../display.ts', import.meta.url), 'utf8');
+    expect(source).not.toMatch(/^\s*(import|export)\b[^;]*\bfrom\s/m);
+  });
+  it('reads the core Explorer without AbortSignal.any/timeout and honours the caller signal', async () => {
+    const statics = AbortSignal as unknown as Record<'any' | 'timeout', unknown>;
+    const saved = { any: statics.any, timeout: statics.timeout };
+    statics.any = undefined;
+    statics.timeout = undefined;
+    try {
+      const caller = new AbortController();
+      let seen: { url: string; signal: AbortSignal } | undefined;
+      const fetcher = (async (url: string, init: RequestInit) => {
+        seen = { url, signal: init.signal as AbortSignal };
+        caller.abort();
+        return new Response(
+          JSON.stringify({
+            price: 0.3,
+            source: 'wfair-base',
+            updatedAt: new Date(now).toISOString(),
+          }),
+        );
+      }) as unknown as typeof fetch;
+      await readDisplayRates({ fetch: fetcher, signal: caller.signal, now });
+      expect(seen?.url).toBe(`${EXPLORER_BASE_URL}/api/price`);
+      expect(seen?.signal.aborted).toBe(true);
+    } finally {
+      Object.assign(statics, saved);
+    }
   });
 });

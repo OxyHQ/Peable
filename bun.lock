@@ -214,15 +214,15 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "dependencies": {
-        "@fairco.in/core": "0.5.0",
         "@peable.to/contracts": "workspace:0.1.0",
         "@peable.to/shared-types": "workspace:0.5.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
       },
       "devDependencies": {
+        "@fairco.in/core": "0.5.0",
         "@types/bun": "latest",
         "@types/node": "^20.0.0",
         "typescript": "~5.9.2",
