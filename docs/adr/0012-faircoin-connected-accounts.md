@@ -339,11 +339,11 @@ unchanged, and the EU legal opinion on the roadmap is still a release gate.
 
 ## Consequences
 
-- `@peable.to/shared-types` 0.5.0 and `@peable.to/sdk` 0.4.0 carry the new
-  shapes (`ConnectedAccount.rails/faircoin`, nullable `country`,
+- `@peable.to/shared-types` 0.5.0 and `@peable.to/sdk` 0.4.0 — the unpublished
+  versions already pending on `main` for Peable Tax — carry the new shapes (`ConnectedAccount.rails/faircoin`, nullable `country`,
   `PaymentIntent.connectedAccountId/canExpire`, `WebhookEvent.account`,
   `accounts` / `accountLinks`). Not published by this change.
-- Migration `0031` is `pre` and additive for every image that predates it: the
+- Migration `0032` is `pre` and additive for every image that predates it: the
   old image never writes a connected intent, and the generated column is
   computed by the server.
 - The roadmap gains a row for this flow with **impl** only; sandbox, deployed
