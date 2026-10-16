@@ -119,7 +119,7 @@ export async function runProviderEventDrainPass(
       try {
         const outcome =
           action.kind === 'paid'
-            ? await options.invoiceTax.recordPaidInvoice(action.invoiceRef)
+            ? await options.invoiceTax.recordPaidInvoice(action.invoiceRef, action.customerRef)
             : action.kind === 'renewal'
               ? await options.invoiceTax.priceRenewalInvoice(action.invoiceRef, action.customerRef)
               : await options.invoiceTax.reconcileReversals(action);

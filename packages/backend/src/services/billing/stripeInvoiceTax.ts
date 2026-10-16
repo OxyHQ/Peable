@@ -61,7 +61,7 @@ export type RenewalTaxOutcome = 'priced' | 'not_quoted' | 'not_renewal' | 'final
 export type ReversalTaxOutcome = 'reversed' | 'unchanged' | 'not_quoted';
 export interface StripeInvoiceTaxRecorder {
   /** `invoice.paid`: commit the calculation that priced the invoice. Idempotent. */
-  recordPaidInvoice(invoiceRef: string): Promise<InvoiceTaxOutcome>;
+  recordPaidInvoice(invoiceRef: string, customerRef?: string): Promise<InvoiceTaxOutcome>;
   /** `invoice.created`: reprice a draft renewal before it can finalize. */
   priceRenewalInvoice(invoiceRef: string, customerRef?: string): Promise<RenewalTaxOutcome>;
   /** A refund or credit note: reverse the committed share Stripe reports. */
@@ -279,8 +279,14 @@ export function createStripeInvoiceTaxRecorder(options: {
   }
 
   return {
-    async recordPaidInvoice(invoiceRef) {
+    async recordPaidInvoice(invoiceRef, customerRef) {
       if (!client.retrieveInvoice) return 'not_quoted';
+      // A customer that never bought through a quote is answered locally.
+      if (
+        customerRef &&
+        !(await findBillingTaxCheckoutsForCustomer(db, deployment, customerRef)).length
+      )
+        return 'not_quoted';
       const invoice = invoiceSchema(invoiceRef).safeParse(await client.retrieveInvoice(invoiceRef));
       // Not a subscription invoice of this deployment: nothing Peable Tax priced.
       if (!invoice.success) return 'not_quoted';
@@ -568,12 +574,13 @@ export function invoiceTaxAction(event: {
   type: string;
   objectIds: Readonly<Record<string, string>>;
 }):
-  | { kind: 'paid'; invoiceRef: string }
+  | { kind: 'paid'; invoiceRef: string; customerRef?: string }
   | { kind: 'renewal'; invoiceRef: string; customerRef?: string }
   | { kind: 'reversal'; invoiceRef?: string; paymentRef?: string }
   | null {
   const { invoice, customer, payment_intent: paymentRef } = event.objectIds;
-  if (event.type === 'invoice.paid' && invoice) return { kind: 'paid', invoiceRef: invoice };
+  if (event.type === 'invoice.paid' && invoice)
+    return { kind: 'paid', invoiceRef: invoice, ...(customer ? { customerRef: customer } : {}) };
   if (event.type === 'invoice.created' && invoice)
     return { kind: 'renewal', invoiceRef: invoice, ...(customer ? { customerRef: customer } : {}) };
   if (REVERSAL_EVENTS.has(event.type) && (invoice || paymentRef))
