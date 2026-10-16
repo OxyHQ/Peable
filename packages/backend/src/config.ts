@@ -107,6 +107,43 @@ export interface AppConfig {
   /** Salt for the one-way hash Peable Tax keeps of an IP address given as
    * location evidence. Absent: no trace of the address is kept at all. */
   ipHashSalt?: string;
+  /** Oxy Files: file events and reference reconciliation (ADR 0043). */
+  oxyFiles: OxyFilesConfig;
+}
+
+/**
+ * How the nightly Oxy file-reference reconciliation runs.
+ *
+ *  - `apply`   — the default and the steady state: Oxy adds the references
+ *                Peable uses and removes the stale ones.
+ *  - `dry-run` — Oxy reports what it WOULD change and changes nothing; the
+ *                counts land in `oxy_file_reconciliation_runs`. For a first
+ *                look at a database whose avatars predate references.
+ *  - `off`     — not run.
+ */
+export type OxyFileReconciliationMode = 'apply' | 'dry-run' | 'off';
+
+export interface OxyFilesConfig {
+  /**
+   * The signing secret of Peable's file-events endpoint, shown ONCE by Oxy
+   * when the endpoint is set (`oxy.apps.setFilesWebhook` / console → Webhooks
+   * → File events). Absent: the endpoint still answers Oxy's verification
+   * challenge — that is how it gets set — and refuses every event with a 503,
+   * which Oxy retries.
+   */
+  webhookSecret: string | undefined;
+  /** The rotation window: the outgoing secret, accepted beside the new one until removed. */
+  webhookSecretPrevious: string | undefined;
+  reconciliationMode: OxyFileReconciliationMode;
+}
+
+function readReconciliationMode(raw: string | undefined): OxyFileReconciliationMode {
+  const value = raw?.trim();
+  if (!value) return 'apply';
+  if (value === 'apply' || value === 'dry-run' || value === 'off') return value;
+  throw new Error(
+    `OXY_FILE_RECONCILIATION_MODE must be "apply", "dry-run" or "off", received "${raw}"`,
+  );
 }
 
 export interface StripeConfig {
@@ -330,6 +367,11 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       // webhook while clearing a development credential to charge live cards.
       livemode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === 'live',
       keyMode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)),
+    },
+    oxyFiles: {
+      webhookSecret: readOptional(env.OXY_FILES_WEBHOOK_SECRET),
+      webhookSecretPrevious: readOptional(env.OXY_FILES_WEBHOOK_SECRET_PREVIOUS),
+      reconciliationMode: readReconciliationMode(env.OXY_FILE_RECONCILIATION_MODE),
     },
   };
 }

@@ -330,3 +330,54 @@ export const MAX_DERIVATION_INDEX = 2147483647;
  * the TypeScript source; `schema/__tests__/valueSets.test.ts` pins that.
  */
 export const BASE_UNIT_STRING_PATTERN = '^(0|[1-9][0-9]*)$';
+
+/**
+ * The kinds of Peable entity that USE an Oxy file (ADR 0043 D4): the
+ * `entityType` of every reference this application registers with Oxy, and the
+ * unit `OxyServer.assets.references.reconcile` is run per.
+ *
+ * One member today. A merchant's avatar is the only Oxy file Peable stores — a
+ * person's profile avatar is Oxy's own, shown through `profile.avatar` and never
+ * written here. A new use is a new member AND a branch in
+ * `db/oxyFiles/referenceSyncRepository.ts`'s `isReferenceWanted` and in
+ * `services/oxyFiles/referenceReconciliation.ts`'s inventory, which switch on
+ * this tuple exhaustively so a member without them does not compile.
+ */
+export const OXY_FILE_ENTITY_TYPES = ['merchant_avatar'] as const;
+export type OxyFileEntityType = (typeof OXY_FILE_ENTITY_TYPES)[number];
+
+/**
+ * Every file event Oxy sends (ADR 0043 D9), from the SDK's own tuple, so the
+ * CHECK on `oxy_file_events.event_type` can never refuse a type the verifier
+ * accepted.
+ */
+export { FILE_EVENT_TYPES as OXY_FILE_EVENT_TYPES } from '@oxy.so/core/server';
+
+/**
+ * Why a merchant's avatar is stored but not SHOWN to a payer.
+ *
+ *  - `unavailable` — Oxy says the file is no longer `active` (moved to trash
+ *                    by its owner). Oxy does not serve it, so a URL to it is a
+ *                    broken image on the checkout page.
+ *  - `private`     — its owner made it private. Same consequence.
+ *
+ * Both are reversible by the owner (restore, or make it public again), which is
+ * why the column is kept rather than the avatar cleared: a deleted or blocked
+ * file is NOT here — that clears `avatar_file_id` outright, because it can
+ * never come back.
+ */
+export const MERCHANT_AVATAR_WITHHELD_REASONS = ['unavailable', 'private'] as const;
+export type MerchantAvatarWithheldReason = (typeof MERCHANT_AVATAR_WITHHELD_REASONS)[number];
+
+/** What a file event did to a merchant's avatar — `merchant_avatar_audit.action`. */
+export const MERCHANT_AVATAR_AUDIT_ACTIONS = ['cleared', 'withheld', 'released'] as const;
+export type MerchantAvatarAuditAction = (typeof MERCHANT_AVATAR_AUDIT_ACTIONS)[number];
+
+/** Where one scheduled reconciliation run stands — `oxy_file_reconciliation_runs.status`. */
+export const OXY_FILE_RECONCILIATION_STATUSES = [
+  'running',
+  'succeeded',
+  'failed',
+  'abandoned',
+] as const;
+export type OxyFileReconciliationStatus = (typeof OXY_FILE_RECONCILIATION_STATUSES)[number];

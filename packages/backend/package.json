@@ -12,6 +12,7 @@
     "test": "bun test src",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "bun src/db/migrate.ts",
+    "oxy-files:reconcile": "bun src/services/oxyFiles/reconcileCli.ts",
     "clean": "rm -rf dist"
   },
   "dependencies": {

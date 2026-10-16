@@ -1,4 +1,4 @@
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, or, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
@@ -10,8 +10,10 @@ import { assertWatchOnly, WatchOnlyViolationError } from '../../services/watchOn
  * importers keep reading it from here.
  */
 export { WatchOnlyViolationError };
-import { merchants } from '../schema';
+import { merchantAvatarAudit, merchants } from '../schema';
+import type { MerchantAvatarAuditAction, MerchantAvatarWithheldReason } from '../schema/valueSets';
 import type { DatabaseOrTransaction } from '../postgres';
+import { enqueueReferenceSync } from '../oxyFiles/referenceSyncRepository';
 
 /**
  * Reads and writes for `merchants`.
@@ -38,6 +40,8 @@ export interface MerchantRow {
   readonly livemode: boolean;
   readonly displayName: string | null;
   readonly avatarFileId: string | null;
+  /** Why the avatar is not shown to a payer right now, or `null` when it is. */
+  readonly avatarWithheld: MerchantAvatarWithheldReason | null;
   readonly description: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -55,6 +59,7 @@ const MERCHANT_COLUMNS = {
   livemode: merchants.livemode,
   displayName: merchants.displayName,
   avatarFileId: merchants.avatarFileId,
+  avatarWithheld: merchants.avatarWithheld,
   description: merchants.description,
   createdAt: merchants.createdAt,
   updatedAt: merchants.updatedAt,
@@ -122,40 +127,53 @@ export async function insertMerchant(
   }
 
   try {
-    // Explicit field list, never a spread of caller input.
-    // `next_derivation_index` takes its column default; `xpub`, `network` and
-    // `environment` are immutable afterwards.
-    //
-    // `livemode` is DERIVED from `environment` here rather than defaulted.
-    // Until this line existed, every row carried `false` including every
-    // production merchant — a published field that looked like a test/live
-    // guarantee and participated in no decision, which is worse than not
-    // having it: an integrator reading `livemode: false` off a production
-    // merchant has been told something untrue. `merchants_livemode_agrees_check`
-    // now refuses the pair disagreeing, so a second writer cannot reintroduce
-    // the drift.
-    const [row] = await db
-      .insert(merchants)
-      .values({
-        id: uuidv7(),
-        publicId: params.publicId,
-        oxyAppId: params.oxyAppId,
-        environment: params.environment,
-        livemode: params.environment === 'production',
-        network: params.network ?? null,
-        xpub: params.xpub ?? null,
-        webhookUrl: params.webhookUrl ?? null,
-        webhookSecret: params.webhookSecret ?? null,
-        ...(params.requiredConfirmations === undefined
-          ? {}
-          : { requiredConfirmations: params.requiredConfirmations }),
-        displayName: params.displayName ?? null,
-        avatarFileId: params.avatarFileId ?? null,
-        description: params.description ?? null,
-      })
-      .returning(MERCHANT_COLUMNS);
+    return await db.transaction(async (tx) => {
+      // Explicit field list, never a spread of caller input.
+      // `next_derivation_index` takes its column default; `xpub`, `network` and
+      // `environment` are immutable afterwards.
+      //
+      // `livemode` is DERIVED from `environment` here rather than defaulted.
+      // Until this line existed, every row carried `false` including every
+      // production merchant — a published field that looked like a test/live
+      // guarantee and participated in no decision, which is worse than not
+      // having it: an integrator reading `livemode: false` off a production
+      // merchant has been told something untrue. `merchants_livemode_agrees_check`
+      // now refuses the pair disagreeing, so a second writer cannot reintroduce
+      // the drift.
+      const [row] = await tx
+        .insert(merchants)
+        .values({
+          id: uuidv7(),
+          publicId: params.publicId,
+          oxyAppId: params.oxyAppId,
+          environment: params.environment,
+          livemode: params.environment === 'production',
+          network: params.network ?? null,
+          xpub: params.xpub ?? null,
+          webhookUrl: params.webhookUrl ?? null,
+          webhookSecret: params.webhookSecret ?? null,
+          ...(params.requiredConfirmations === undefined
+            ? {}
+            : { requiredConfirmations: params.requiredConfirmations }),
+          displayName: params.displayName ?? null,
+          avatarFileId: params.avatarFileId ?? null,
+          avatarFileEventAt: params.avatarFileId ? new Date() : null,
+          description: params.description ?? null,
+        })
+        .returning(MERCHANT_COLUMNS);
+      if (!row) return null;
 
-    return row ? toMerchantRow(row) : null;
+      // The avatar's Oxy reference, queued in the SAME transaction as the row
+      // that uses the file (ADR 0043 D4) — see `enqueueReferenceSync`.
+      if (row.avatarFileId) {
+        await enqueueReferenceSync(tx, {
+          fileId: row.avatarFileId,
+          entityType: 'merchant_avatar',
+          entityId: row.publicId,
+        });
+      }
+      return toMerchantRow(row);
+    });
   } catch (error) {
     if (isUniqueViolation(error, 'merchants_oxy_app_id_environment_key')) {
       return null;
@@ -277,7 +295,7 @@ export async function updateMerchantSettings(
   id: string,
   patch: MerchantPatch,
 ): Promise<MerchantRow | null> {
-  const values: Record<string, string | number | null> = {};
+  const values: Record<string, string | number | Date | null> = {};
   if (patch.webhookUrl !== undefined) values.webhookUrl = patch.webhookUrl;
   if (patch.webhookSecret !== undefined) values.webhookSecret = patch.webhookSecret;
   if (patch.requiredConfirmations !== undefined) {
@@ -290,12 +308,176 @@ export async function updateMerchantSettings(
     return findMerchantById(db, id);
   }
 
-  const [row] = await db
+  return db.transaction(async (tx) => {
+    // The avatar is a use of an Oxy file, so changing it changes TWO
+    // references: the old file's ends and the new one's begins. The current
+    // value is read under the row lock, so two concurrent changes each queue
+    // the file the OTHER one replaced rather than both queuing the same stale
+    // value — a reference left behind would keep a file "in use" forever.
+    if (patch.avatarFileId !== undefined) {
+      const [current] = await tx
+        .select({ publicId: merchants.publicId, avatarFileId: merchants.avatarFileId })
+        .from(merchants)
+        .where(eq(merchants.id, id))
+        .for('update');
+      if (!current) return null;
+      if (current.avatarFileId === patch.avatarFileId) {
+        delete values.avatarFileId;
+      } else {
+        // A new file starts with nothing withheld; events about it from before
+        // this moment describe a file nobody here was using.
+        values.avatarWithheld = null;
+        values.avatarFileEventAt = patch.avatarFileId === null ? null : new Date();
+        for (const fileId of [current.avatarFileId, patch.avatarFileId]) {
+          if (fileId) {
+            await enqueueReferenceSync(tx, {
+              fileId,
+              entityType: 'merchant_avatar',
+              entityId: current.publicId,
+            });
+          }
+        }
+      }
+      if (Object.keys(values).length === 0) return findMerchantById(tx, id);
+    }
+
+    const [row] = await tx
+      .update(merchants)
+      .set(values)
+      .where(eq(merchants.id, id))
+      .returning(MERCHANT_COLUMNS);
+    return row ? toMerchantRow(row) : null;
+  });
+}
+
+/** The effect of one Oxy file event on the merchants whose avatar it is. */
+export interface AvatarFileEvent {
+  readonly eventId: string;
+  readonly eventType: string;
+  readonly fileId: string;
+  readonly occurredAt: Date;
+}
+
+export interface AvatarEventChange {
+  readonly merchantId: string;
+  readonly action: MerchantAvatarAuditAction;
+}
+
+/**
+ * The file can never come back (deleted, or blocked on a rights claim): stop
+ * using it. Clears the avatar of every merchant using it, writes one audit row
+ * each and queues the reference sync that tells Oxy the use ended.
+ *
+ * Takes a TRANSACTION — the caller's, which also records the event as received,
+ * so a redelivery cannot clear twice and a failure clears nothing.
+ */
+export async function clearMerchantAvatarsForFile(
+  tx: DatabaseOrTransaction,
+  event: AvatarFileEvent,
+): Promise<AvatarEventChange[]> {
+  const cleared = await tx
     .update(merchants)
-    .set(values)
-    .where(eq(merchants.id, id))
-    .returning(MERCHANT_COLUMNS);
-  return row ? toMerchantRow(row) : null;
+    .set({ avatarFileId: null, avatarWithheld: null, avatarFileEventAt: null })
+    .where(eq(merchants.avatarFileId, event.fileId))
+    .returning({ id: merchants.id, publicId: merchants.publicId });
+
+  for (const merchant of cleared) {
+    await recordAvatarAudit(tx, merchant.id, 'cleared', event);
+    await enqueueReferenceSync(tx, {
+      fileId: event.fileId,
+      entityType: 'merchant_avatar',
+      entityId: merchant.publicId,
+    });
+  }
+  return cleared.map((merchant) => ({ merchantId: merchant.id, action: 'cleared' }));
+}
+
+/**
+ * The file still exists but its owner changed whether Peable can show it
+ * (trash, restore, visibility). Sets `avatar_withheld` to `withheld` on every
+ * merchant whose CURRENT avatar is the file — unless that merchant already
+ * applied a newer event, or set the avatar after this event occurred — and
+ * audits each merchant whose display actually changed.
+ */
+export async function setMerchantAvatarWithheldForFile(
+  tx: DatabaseOrTransaction,
+  event: AvatarFileEvent,
+  withheld: MerchantAvatarWithheldReason | null,
+): Promise<AvatarEventChange[]> {
+  const candidates = await tx
+    .select({ id: merchants.id, avatarWithheld: merchants.avatarWithheld })
+    .from(merchants)
+    .where(
+      and(
+        eq(merchants.avatarFileId, event.fileId),
+        or(isNull(merchants.avatarFileEventAt), lt(merchants.avatarFileEventAt, event.occurredAt)),
+      ),
+    )
+    .for('update');
+
+  const changes: AvatarEventChange[] = [];
+  for (const candidate of candidates) {
+    await tx
+      .update(merchants)
+      .set({ avatarWithheld: withheld, avatarFileEventAt: event.occurredAt })
+      .where(eq(merchants.id, candidate.id));
+    if (candidate.avatarWithheld === withheld) continue;
+    const action: MerchantAvatarAuditAction = withheld === null ? 'released' : 'withheld';
+    await recordAvatarAudit(tx, candidate.id, action, event);
+    changes.push({ merchantId: candidate.id, action });
+  }
+  return changes;
+}
+
+async function recordAvatarAudit(
+  tx: DatabaseOrTransaction,
+  merchantId: string,
+  action: MerchantAvatarAuditAction,
+  event: AvatarFileEvent,
+): Promise<void> {
+  await tx.insert(merchantAvatarAudit).values({
+    id: uuidv7(),
+    merchantId,
+    fileId: event.fileId,
+    action,
+    eventId: event.eventId,
+    eventType: event.eventType,
+  });
+}
+
+/**
+ * Every (avatar file, merchant public id) pair this database uses, in pages
+ * ordered by primary key — the inventory `OxyServer.assets.references.reconcile`
+ * compares Oxy's references against. A generator, so a large table is streamed
+ * a page at a time rather than read whole.
+ */
+export async function* listMerchantAvatarUses(
+  db: DatabaseOrTransaction,
+  pageSize = 500,
+): AsyncGenerator<{ fileId: string; entityId: string }> {
+  let after: string | null = null;
+  for (;;) {
+    const page: { id: string; publicId: string; avatarFileId: string | null }[] = await db
+      .select({
+        id: merchants.id,
+        publicId: merchants.publicId,
+        avatarFileId: merchants.avatarFileId,
+      })
+      .from(merchants)
+      .where(
+        after === null
+          ? sql`${merchants.avatarFileId} is not null`
+          : and(sql`${merchants.avatarFileId} is not null`, sql`${merchants.id} > ${after}`),
+      )
+      .orderBy(merchants.id)
+      .limit(pageSize);
+    for (const row of page) {
+      if (row.avatarFileId) yield { fileId: row.avatarFileId, entityId: row.publicId };
+    }
+    const last = page.at(-1);
+    if (!last || page.length < pageSize) return;
+    after = last.id;
+  }
 }
 
 /**
@@ -311,6 +493,8 @@ function toMerchantRow(row: {
   return {
     ...row,
     environment: row.environment as OxyServiceEnvironment,
+    // `merchants_avatar_withheld_check` keeps it in the closed set.
+    avatarWithheld: (row.avatarWithheld ?? null) as MerchantAvatarWithheldReason | null,
     // `null` for a card-only merchant, and the cast covers only the non-null
     // case: `merchants_network_check` keeps the text in the closed set.
     network: row.network as NetworkType | null,

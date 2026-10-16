@@ -18,3 +18,20 @@ test('oxyApiUrl reads OXY_API_URL', () => {
 test("oxyApiUrl defaults to https://api.oxy.so when unset — Oxy's production API", () => {
   expect(loadConfig({ ...DB }).oxyApiUrl).toBe('https://api.oxy.so');
 });
+
+test('Oxy Files: the reconciliation applies by default, and a typo is refused rather than guessed', () => {
+  expect(loadConfig({ ...DB }).oxyFiles).toEqual({
+    webhookSecret: undefined,
+    webhookSecretPrevious: undefined,
+    reconciliationMode: 'apply',
+  });
+  expect(
+    loadConfig({ ...DB, OXY_FILE_RECONCILIATION_MODE: 'dry-run' }).oxyFiles.reconciliationMode,
+  ).toBe('dry-run');
+  expect(() => loadConfig({ ...DB, OXY_FILE_RECONCILIATION_MODE: 'dryrun' })).toThrow(
+    'OXY_FILE_RECONCILIATION_MODE',
+  );
+  expect(loadConfig({ ...DB, OXY_FILES_WEBHOOK_SECRET: ' whsec_x ' }).oxyFiles.webhookSecret).toBe(
+    'whsec_x',
+  );
+});

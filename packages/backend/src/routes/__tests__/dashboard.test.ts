@@ -20,6 +20,7 @@ import {
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createDashboardRouter } from '../dashboard';
+import { createFakeOxyFiles } from '../../__tests__/helpers/fakeOxyFiles';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
 // (m/44'/1'/0' neutered) — public-key-only, cannot spend. Same fixture used
@@ -61,9 +62,20 @@ const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
  * wrapped-real-client isn't applicable here since `assertAppMembership` is
  * itself an injected router dependency, not `@oxy.so/core`).
  */
-const stubAssertAppMembership = async (userId: string): Promise<AppMembershipResult> => ({
-  allowed: userId === MEMBER_USER_ID,
-});
+const OWNER_ACCOUNT_ID = 'acct_dashboard_owner';
+
+const stubAssertAppMembership = async (userId: string): Promise<AppMembershipResult> =>
+  userId === MEMBER_USER_ID
+    ? { allowed: true, ownerAccountId: OWNER_ACCOUNT_ID }
+    : { allowed: false };
+
+const files = createFakeOxyFiles([
+  { id: 'file_member', ownerUserId: MEMBER_USER_ID },
+  { id: 'file_owner_account', ownerUserId: OWNER_ACCOUNT_ID },
+  { id: 'file_application', ownerApplicationId: APP_ID },
+  { id: 'file_stranger', ownerUserId: OUTSIDER_USER_ID },
+  { id: 'file_other_application', ownerApplicationId: OTHER_APP_ID },
+]);
 
 const capturedRedeliverFetches: string[] = [];
 const fakeSafeFetch = async (url: string): Promise<SafeFetchResult> => {
@@ -133,6 +145,7 @@ beforeAll(async () => {
       requireOxyUser: stubRequireOxyUser,
       assertAppMembership: stubAssertAppMembership,
       safeFetch: fakeSafeFetch,
+      files,
     }),
   );
   server = app.listen(0);
@@ -286,6 +299,29 @@ describe('PATCH /v1/dashboard/applications/:applicationId/merchant', () => {
     expect(body.webhookUrl).toBe('https://merchant.example/rotated-hook');
     expect(body.requiredConfirmations).toBe(4);
     expect(body.xpub).toBe(XPUB);
+  });
+});
+
+describe('avatar ownership through the dashboard (ADR 0043)', () => {
+  async function patchAvatar(avatarFileId: string): Promise<Response> {
+    return authedFetch(`/v1/dashboard/applications/${APP_ID}/merchant?environment=development`, {
+      method: 'PATCH',
+      body: JSON.stringify({ avatarFileId }),
+    });
+  }
+
+  test("a member may use their own file, the owning account's, or the application's", async () => {
+    for (const fileId of ['file_member', 'file_owner_account', 'file_application']) {
+      const res = await patchAvatar(fileId);
+      expect(res.status).toBe(200);
+      expect(((await res.json()) as { avatarFileId?: string }).avatarFileId).toBe(fileId);
+    }
+  });
+
+  test("a member may NOT use somebody else's file or another application's", async () => {
+    for (const fileId of ['file_stranger', 'file_other_application']) {
+      expect((await patchAvatar(fileId)).status).toBe(422);
+    }
   });
 });
 
