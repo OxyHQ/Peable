@@ -1,5 +1,6 @@
 import { and, eq, isNull } from 'drizzle-orm';
 import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
+import { commitTaxTransaction } from './tax/taxService';
 /**
  * Advancing an intent, and telling the merchant about it, as ONE commit.
  *
@@ -82,7 +83,7 @@ export async function transitionIntent(
       result.row.rail === 'faircoin' &&
       (change.status === 'confirming' || change.status === 'settled')
     ) {
-      await tx
+      const accepted = await tx
         .update(faircoinBillingInvoices)
         .set({ acceptedAt: result.row.updatedAt })
         .where(
@@ -90,7 +91,20 @@ export async function transitionIntent(
             eq(faircoinBillingInvoices.paymentIntentId, intentId),
             isNull(faircoinBillingInvoices.acceptedAt),
           ),
-        );
+        )
+        .returning({
+          id: faircoinBillingInvoices.id,
+          taxSnapshot: faircoinBillingInvoices.taxSnapshot,
+        });
+      // The accepted payment's Peable Tax calculation becomes a committed tax
+      // transaction in the same transaction: no filing can miss a paid sale.
+      for (const invoice of accepted)
+        await commitTaxTransaction(tx, {
+          calculationPublicId: invoice.taxSnapshot.taxQuote.quote.taxRateEvidenceId,
+          reference: invoice.id,
+          rail: 'faircoin',
+          committedAt: result.row.updatedAt,
+        });
     }
     await enqueueIntentWebhook(tx, result.row);
     return result;

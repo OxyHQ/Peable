@@ -116,3 +116,32 @@ export {
 } from './billing-authority';
 
 export type { BillingFaircoinFxQuote } from './billing';
+export {
+  TAX_REGISTRATION_SCHEMES,
+  TAX_LOCATION_EVIDENCE_TYPES,
+  type TaxRegistrationScheme,
+  type TaxLocationEvidenceType,
+  type TaxBehavior,
+  type TaxAddress,
+  type TaxCode,
+  type TaxCalculationAccount,
+  type TaxSettings,
+  type UpdateTaxSettingsParams,
+  type TaxRegistration,
+  type CreateTaxRegistrationParams,
+  type TaxProductCode,
+  type TaxLocationEvidenceItem,
+  type CreateTaxLocationEvidenceParams,
+  type TaxLocationEvidence,
+  type TaxLineItemParams,
+  type CreateTaxCalculationParams,
+  type TaxBreakdownEntry,
+  type TaxCalculationLineItem,
+  type TaxCalculation,
+  type TaxTransaction,
+  type TaxTransactionList,
+  type ListTaxTransactionsParams,
+  type TaxReportRow,
+  type TaxReport,
+  type BillingInvoiceTaxLine,
+} from './tax';

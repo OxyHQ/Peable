@@ -610,6 +610,11 @@ export default function SettingsScreen() {
             onPress={() => router.push('/contributions')}
           />
           <SettingsListItem
+            title={t('tax.title')}
+            icon={<RowIcon name="file-document-outline" />}
+            onPress={() => router.push('/tax')}
+          />
+          <SettingsListItem
             title={t('settings.oxyAccount')}
             icon={<RowIcon name="account-circle" />}
             onPress={handleManageAccount}

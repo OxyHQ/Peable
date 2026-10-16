@@ -62,9 +62,11 @@ function resolveEnvironment(req: Request, res: Response): OxyServiceEnvironment 
   return parsed.data.environment;
 }
 
-interface DashboardAccess {
+export interface DashboardAccess {
   applicationId: string;
   environment: OxyServiceEnvironment;
+  userId: string;
+  membership: AppMembershipResult;
 }
 
 /**
@@ -74,7 +76,7 @@ interface DashboardAccess {
  * Writes the appropriate error response and returns `null` on any failure, so
  * every handler below just does `if (!access) return`.
  */
-async function resolveDashboardAccess(
+export async function resolveDashboardAccess(
   req: Request,
   res: Response,
   deps: { assertAppMembership: typeof realAssertAppMembership },
@@ -104,17 +106,17 @@ async function resolveDashboardAccess(
     return null;
   }
 
-  const { allowed }: AppMembershipResult = await deps.assertAppMembership(
+  const membership: AppMembershipResult = await deps.assertAppMembership(
     userId,
     applicationId,
     accessToken,
   );
-  if (!allowed) {
+  if (!membership.allowed) {
     sendError(res, 403, 'permission_error', 'you are not a member of this application');
     return null;
   }
 
-  return { applicationId, environment };
+  return { applicationId, environment, userId, membership };
 }
 
 const webhookDeliveriesListQuerySchema = z.object({

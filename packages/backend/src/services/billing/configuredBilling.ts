@@ -1,13 +1,10 @@
-import { readFile } from 'node:fs/promises';
-import {
-  configuredFiscalAuthoritySchema,
-  createConfiguredFiscalAuthority,
-} from './configuredFiscalAuthority';
 import {
   createFaircoinBillingService,
   faircoinBillingConfigurationSchema,
 } from './faircoinBillingService';
-import type { KeyObject } from 'node:crypto';
+import { createPrivateKey, type KeyObject } from 'node:crypto';
+import { createPeableTaxQuoteCalculator, PEABLE_TAX_SERVICE_REF } from '../tax/billingTaxQuotes';
+import type { TaxService } from '../tax/taxService';
 import type { BillingTaxCheckoutAdapter } from './tax-checkout';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
@@ -80,6 +77,8 @@ export interface BillingRuntimeAdapters {
   taxCheckoutAdapters?: Readonly<Record<string, BillingTaxCheckoutAdapter>>;
   taxQuoteCalculators?: Readonly<Record<string, BillingTaxQuoteCalculator>>;
   finalInvoiceAuthorities?: Readonly<Record<string, FinalInvoiceAuthorityReader>>;
+  /** Peable Tax, which `taxQuoteAdapterRef: "peable_tax"` quotes through. */
+  taxService?: TaxService;
 }
 function pinnedKeys(keys: Readonly<Record<string, string>>): Readonly<Record<string, string>> {
   const copy = z.record(billingReference, z.string().min(1)).parse(keys);
@@ -124,33 +123,40 @@ const FAIRCOIN_REFS = {
  * invoices. Needs no Stripe credential. */
 async function configureFaircoinRail({ db, body, adapters }: RailContext): Promise<ConfiguredRail> {
   const native = faircoinBillingConfigurationSchema.parse(body);
+  const cohortOf = (owner: BillingOwner) =>
+    native.cohorts.find((cohort) => sameOwner(cohort, owner));
   let calculator = adapters.taxQuoteCalculators?.[native.taxQuoteAdapterRef];
   let signingKey = adapters.invoiceSigningKeys?.[native.invoiceSigningKeyId];
-  const fiscalFile = config.billingFiscalFile;
   const keyFile = config.billingInvoicePrivateKeyFile;
-  if ((!calculator || !signingKey) && fiscalFile && keyFile) {
-    // The mounted production key must be the pinned key the configuration names,
-    // and tax quotes are signed under that same id, so consumers verify both
-    // with the one pinned public key.
+  if (!signingKey && keyFile) {
+    // The mounted production key must be the pinned key the configuration names.
+    // Tax quotes are signed under the same id, so consumers verify both with
+    // the one pinned public key.
     const mounted = await loadPinnedSigningKey(keyFile);
-    const fiscal = configuredFiscalAuthoritySchema.parse(
-      JSON.parse(await readFile(fiscalFile, 'utf8')),
-    );
-    if (mounted.keyId !== native.invoiceSigningKeyId || fiscal.keyId !== mounted.keyId)
+    if (mounted.keyId !== native.invoiceSigningKeyId)
       throw new Error('Native FairCoin billing must sign with its configured pinned key');
-    signingKey ??= mounted.privateKey;
-    calculator ??= createConfiguredFiscalAuthority(fiscal, mounted.privateKey);
+    signingKey = mounted.privateKey;
+  }
+  if (!calculator && native.taxQuoteAdapterRef === PEABLE_TAX_SERVICE_REF && signingKey) {
+    if (!adapters.taxService) throw new Error('Peable Tax quotes require the tax service');
+    // Every amount comes from Peable Tax; the merchant's approved tax settings
+    // are the commercial gate, checked per quote rather than at boot.
+    calculator = createPeableTaxQuoteCalculator({
+      db,
+      tax: adapters.taxService,
+      offers: (owner) => cohortOf(owner)?.offers ?? [],
+      signingKey: typeof signingKey === 'string' ? createPrivateKey(signingKey) : signingKey,
+      keyId: native.invoiceSigningKeyId,
+    });
   }
   if (!calculator || !signingKey)
-    throw new Error('Native FairCoin billing requires trusted fiscal and invoice signing adapters');
+    throw new Error('Native FairCoin billing requires Peable Tax and a pinned invoice signing key');
   const service = createFaircoinBillingService({
     db,
     configuration: native,
     taxQuoteCalculator: calculator,
     invoiceSigningKey: signingKey,
   });
-  const cohortOf = (owner: BillingOwner) =>
-    native.cohorts.find((cohort) => sameOwner(cohort, owner));
   // Watch-only payment intent settlement + its durable webhook outbox are the
   // existing gateway workers. No Stripe client or automatic renewal executor.
   return {

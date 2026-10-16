@@ -15,6 +15,13 @@ import type { SafeFetchFn } from './webhookDispatcher';
  */
 export interface AppMembershipResult {
   allowed: boolean;
+  /** The caller's effective application permissions (`billing:manage`, …),
+   * exactly as oxy-api reports them. Absent when oxy-api reported none. */
+  permissions?: readonly string[];
+  /** Whether oxy-api marks the application as Oxy's own (official, or a
+   * first-party/internal/system type). Peable Tax lets only these calculate on
+   * the platform's provider account, whose seller is Oxy's legal entity. */
+  official?: boolean;
 }
 
 /**
@@ -31,7 +38,7 @@ const MEMBERSHIP_CACHE_SWEEP_MS = 5 * 60 * 1000;
 const MAX_RESPONSE_BYTES = 64 * 1024;
 
 interface CacheEntry {
-  allowed: boolean;
+  result: AppMembershipResult;
   expiresAt: number;
 }
 
@@ -54,9 +61,15 @@ sweepTimer.unref?.();
  */
 const applicationResponseSchema = z.object({
   application: z.object({
-    callerMembership: z.record(z.string(), z.unknown()).nullable(),
+    callerMembership: z
+      .object({ permissions: z.array(z.string()).optional() })
+      .passthrough()
+      .nullable(),
+    isOfficial: z.boolean().optional(),
+    type: z.string().optional(),
   }),
 });
+const OFFICIAL_TYPES = new Set(['first_party', 'internal', 'system']);
 
 /**
  * Read an `IncomingMessage` body into a Buffer, aborting (and destroying the
@@ -107,7 +120,7 @@ async function fetchCallerMembership(
   oxyApiUrl: string,
   applicationId: string,
   userBearer: string,
-): Promise<boolean> {
+): Promise<AppMembershipResult> {
   let result: Awaited<ReturnType<SafeFetchFn>>;
   try {
     result = await safeFetch(`${oxyApiUrl}/applications/${encodeURIComponent(applicationId)}`, {
@@ -120,17 +133,28 @@ async function fetchCallerMembership(
         `Peable dashboard membership check failed for application ${applicationId}: ${message}`,
       );
     }
-    return false;
+    return { allowed: false };
   }
 
   try {
-    if (result.status !== 200) return false;
+    if (result.status !== 200) return { allowed: false };
     const buffer = await readBodyLimited(result.response, MAX_RESPONSE_BYTES);
-    if (!buffer || buffer.length === 0) return false;
+    if (!buffer || buffer.length === 0) return { allowed: false };
     const parsed = applicationResponseSchema.safeParse(JSON.parse(buffer.toString('utf-8')));
-    return parsed.success && parsed.data.application.callerMembership !== null;
+    if (!parsed.success || parsed.data.application.callerMembership === null)
+      return { allowed: false };
+    const { application } = parsed.data;
+    return {
+      allowed: true,
+      ...(application.callerMembership?.permissions
+        ? { permissions: application.callerMembership.permissions }
+        : {}),
+      official:
+        application.isOfficial === true ||
+        (application.type !== undefined && OFFICIAL_TYPES.has(application.type)),
+    };
   } catch {
-    return false;
+    return { allowed: false };
   } finally {
     result.response.destroy();
   }
@@ -157,13 +181,13 @@ export async function assertAppMembership(
   const now = Date.now();
   const cached = membershipCache.get(cacheKey);
   if (cached && cached.expiresAt > now) {
-    return { allowed: cached.allowed };
+    return cached.result;
   }
 
   const safeFetch = deps.safeFetch ?? realSafeFetch;
   const oxyApiUrl = deps.oxyApiUrl ?? config.oxyApiUrl;
   const ttlMs = deps.ttlMs ?? MEMBERSHIP_CACHE_TTL_MS;
-  const allowed = await fetchCallerMembership(safeFetch, oxyApiUrl, applicationId, userBearer);
-  membershipCache.set(cacheKey, { allowed, expiresAt: now + ttlMs });
-  return { allowed };
+  const result = await fetchCallerMembership(safeFetch, oxyApiUrl, applicationId, userBearer);
+  membershipCache.set(cacheKey, { result, expiresAt: now + ttlMs });
+  return result;
 }

@@ -1,3 +1,5 @@
+import type { BillingInvoiceTaxLine } from './tax';
+
 /** Recurring billing transport. Store/plan references belong to the authenticated app;
  * they do not identify an Oxy payer or convey entitlements. */
 export const BILLING_SUBSCRIPTION_STATUSES = [
@@ -186,6 +188,9 @@ export interface BillingFinalInvoice {
     expiresAt: string;
     roundingEvidenceId: string;
   };
+  /** Present only when requested (`include: ['tax_lines']`): the frozen
+   * Peable Tax lines behind `taxMinorUnits`, covered by the same signature. */
+  taxLines?: BillingInvoiceTaxLine[];
 }
 export interface BillingFinalInvoiceAuthority {
   schemaVersion: 1;
@@ -232,6 +237,9 @@ export interface CreateBillingTaxQuoteParams {
   rail?: BillingRail;
   storeId: string;
   planId: string;
+  /** Selects one offer when a plan is sold at several prices. */
+  providerPriceId?: string;
+  /** A `tax.location_evidence` id (`taxloc_…`) recorded for this `storeId`. */
   customerLocationEvidenceId: string;
 }
 export interface BillingTaxQuote {

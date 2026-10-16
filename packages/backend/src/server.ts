@@ -7,6 +7,13 @@ import {
 import { startRecurringRelay } from './services/recurring/recurring-relay-worker';
 import { createBillingRouter } from './routes/billing';
 import type { BillingService } from './services/billing/billingService';
+import { createDashboardTaxRouter, createTaxRouter } from './routes/tax';
+import type { TaxService } from './services/tax/taxService';
+import {
+  configuredTaxProvider,
+  createConfiguredTaxService,
+  reportTaxProvider,
+} from './services/tax/configuredTax';
 import {
   startEcosystemActivity,
   stopEcosystemActivity,
@@ -71,6 +78,8 @@ const PUBLIC_RATE_LIMIT_MAX = 30;
 export interface GatewayDeps {
   /** Explicitly composed, cohort-limited recurrent service. Absent by default. */
   billingService?: BillingService;
+  /** Peable Tax. Absent: the tax routes answer `tax_not_enabled`. */
+  taxService?: TaxService;
   /**
    * Merchant service-auth middleware (default `oxy.middleware.service()`,
    * which verifies EdDSA service tokens against Oxy's public JWKS).
@@ -241,6 +250,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
   app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit }));
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
+  app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
+  app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser: deps.requireOxyUser }));
   app.use(
     createDashboardRouter({ requireOxyUser: deps.requireOxyUser, safeFetch: deps.safeFetch }),
   );
@@ -296,13 +307,16 @@ export async function start(
   options: { billingAdapters?: BillingRuntimeAdapters } = {},
 ): Promise<void> {
   const database = await connectPostgres();
+  const taxProvider = configuredTaxProvider();
+  const taxService = createConfiguredTaxService(database, taxProvider);
+  void reportTaxProvider(taxProvider);
   const billingRuntime = await configureBillingRuntime(
     database,
     config.billingCohortConfig,
     undefined,
-    options.billingAdapters,
+    { taxService, ...options.billingAdapters },
   );
-  const gateway = createGateway({ billingService: billingRuntime?.service });
+  const gateway = createGateway({ billingService: billingRuntime?.service, taxService });
   const stopRecurringRelay = billingRuntime?.relay
     ? startRecurringRelay(billingRuntime.relay)
     : undefined;
