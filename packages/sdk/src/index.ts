@@ -159,3 +159,12 @@ export type {
 } from './resources/paymentLinks';
 export { WEBHOOK_SIGNATURE_HEADER, WebhooksResource } from './resources/webhooks';
 export type { ConstructEventOptions } from './resources/webhooks';
+export { ContributionsResource } from './resources/contributions';
+export type {
+  ContributionScope,
+  CreateContribution,
+  ContributionLink,
+  ContributionDetails,
+} from './resources/contributions';
+
+export type { BillingFaircoinFxQuote } from '@peable.to/shared-types';

@@ -134,7 +134,10 @@ export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
     currency: row.currency,
     rail: row.rail,
     network: row.network,
-    active: row.active,
+    active:
+      row.active &&
+      (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
+    ...(row.contribution ? { contribution: row.contribution } : {}),
     metadata: row.metadata,
     successUrl: row.successUrl ?? undefined,
     url: `${config.checkoutBaseUrl}/l/${row.publicId}`,
@@ -161,7 +164,10 @@ export function toPublicPaymentLinkDTO(
     currency: row.currency,
     rail: row.rail,
     network: row.network,
-    active: row.active,
+    active:
+      row.active &&
+      (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
+    ...(row.contribution ? { contribution: row.contribution } : {}),
     merchant,
   };
 }

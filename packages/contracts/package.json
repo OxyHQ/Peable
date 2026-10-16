@@ -1,0 +1,78 @@
+{
+  "name": "@peable.to/contracts",
+  "version": "0.1.0",
+  "description": "Validated Peable contribution-link contracts",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "types": "dist/types/index.d.ts",
+  "source": "src/index.ts",
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "exports": {
+    ".": {
+      "react-native": "./dist/esm/index.js",
+      "import": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/types/index.d.ts",
+        "default": "./dist/cjs/index.js"
+      },
+      "default": "./dist/esm/index.js"
+    },
+    "./package.json": "./package.json",
+    "./openapi": {
+      "import": {
+        "types": "./dist/types/openapi.d.ts",
+        "default": "./dist/esm/openapi.js"
+      },
+      "require": {
+        "types": "./dist/types/openapi.d.ts",
+        "default": "./dist/cjs/openapi.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "peable",
+    "gateway",
+    "payments",
+    "types"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OxyHQ/Peable.git",
+    "directory": "packages/contracts"
+  },
+  "author": "Peable",
+  "license": "MIT",
+  "homepage": "https://peable.to",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "scripts": {
+    "build": "bun run build:cjs && bun run build:esm && bun run build:types",
+    "build:cjs": "tsc -p tsconfig.cjs.json",
+    "build:esm": "tsc -p tsconfig.esm.json && node scripts/fix-esm-imports.mjs",
+    "build:types": "tsc -p tsconfig.types.json",
+    "clean": "rm -rf dist",
+    "dev": "tsc --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "@types/node": "^20.0.0",
+    "@types/bun": "latest"
+  },
+  "dependencies": {
+    "zod": "^4.3.6"
+  }
+}

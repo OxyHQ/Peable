@@ -1,3 +1,10 @@
+import { readFile } from 'node:fs/promises';
+import { createConfiguredFiscalAuthority } from './configuredFiscalAuthority';
+import {
+  createFaircoinBillingService,
+  faircoinBillingConfigurationSchema,
+} from './faircoinBillingService';
+import type { KeyObject } from 'node:crypto';
 import type { BillingTaxCheckoutAdapter } from './tax-checkout';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import type { FaircoinRenewalExecutor } from './faircoin-renewal-consumer';
@@ -61,6 +68,7 @@ const cohortConfiguration = z
 /** Only trusted deployment composition registers adapters. Configuration selects
  * an existing name; it cannot load arbitrary modules, URLs or provider secrets. */
 export interface BillingRuntimeAdapters {
+  invoiceSigningKeys?: Readonly<Record<string, string | KeyObject>>;
   checkoutOperationReaders?: Readonly<Record<string, BillingCheckoutOperationReader>>;
   faircoinExecutors?: Readonly<Record<string, FaircoinRenewalExecutor>>;
   taxCheckoutAdapters?: Readonly<Record<string, BillingTaxCheckoutAdapter>>;
@@ -88,6 +96,42 @@ export async function configureBillingRuntime(
   adapters: BillingRuntimeAdapters = {},
 ) {
   if (raw === undefined) return undefined;
+  let requested: Record<string, unknown>;
+  try {
+    requested = z.record(z.unknown()).parse(JSON.parse(raw));
+  } catch {
+    throw new Error('Invalid PEABLE_BILLING_COHORT configuration');
+  }
+  if (requested.rail === 'faircoin') {
+    const { rail: _rail, ...body } = requested;
+    const native = faircoinBillingConfigurationSchema.parse(body);
+    let calculator = adapters.taxQuoteCalculators?.[native.taxQuoteAdapterRef];
+    let signingKey = adapters.invoiceSigningKeys?.[native.invoiceSigningKeyId];
+    const fiscalFile = process.env.PEABLE_BILLING_FISCAL_FILE;
+    const keyFile = process.env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE;
+    if ((!calculator || !signingKey) && fiscalFile && keyFile) {
+      const configuredKey = await readFile(keyFile, 'utf8');
+      signingKey ??= configuredKey;
+      calculator ??= createConfiguredFiscalAuthority(
+        JSON.parse(await readFile(fiscalFile, 'utf8')),
+        configuredKey,
+      );
+    }
+    if (!calculator || !signingKey)
+      throw new Error(
+        'Native FairCoin billing requires trusted fiscal and invoice signing adapters',
+      );
+    const service = createFaircoinBillingService({
+      db,
+      configuration: native,
+      taxQuoteCalculator: calculator,
+      invoiceSigningKey: signingKey,
+    });
+    // Watch-only payment intent settlement + its durable webhook outbox are the
+    // existing gateway workers. No Stripe client or automatic renewal executor.
+    return { service, renewals: undefined, observations: undefined, relay: undefined };
+  }
+
   let parsed: z.infer<typeof cohortConfiguration>;
   try {
     parsed = cohortConfiguration.parse(JSON.parse(raw));

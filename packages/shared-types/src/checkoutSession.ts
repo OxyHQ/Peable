@@ -1,3 +1,4 @@
+import type { BillingFaircoinFxQuote } from './billing';
 // CheckoutSession contract — wraps exactly ONE `PaymentIntent`, created at
 // session-create time, with `success_url`/`cancel_url` for a hosted checkout
 // redirect flow (Stripe Checkout Session parity).
@@ -34,6 +35,8 @@ export interface CheckoutSession {
  * `clientSecret`, which the page needs to open the socket and to `submit_tx`.
  */
 export interface CheckoutSessionPublic {
+  /** Frozen commercial USD price and exact FAIR settlement quote; no payer metadata. */
+  billingQuote?: BillingFaircoinFxQuote;
   id: string;
   object: 'checkout_session';
   successUrl?: string;

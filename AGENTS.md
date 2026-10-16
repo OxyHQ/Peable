@@ -10,9 +10,9 @@ self-custodial wallet that spends on it. Bun monorepo, `packages/` layout.
 
 ## Packages
 
-There are **six**, not three. Three of them are published to npm, so a change in
-`shared-types`, `sdk` or `pay` is an external API change, not an internal
-refactor.
+There are **seven**. Four are published to npm, so a change in
+`contracts`, `shared-types`, `sdk` or `pay` is an external API change, not an
+internal refactor.
 
 | Path | Name | What it is |
 |---|---|---|
@@ -20,6 +20,7 @@ refactor.
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
 | `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry mints Oxy service tokens from an `ApplicationCredential`, or takes them from a caller's `tokenProvider` (workload identity, no key pair), and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
 
@@ -85,7 +86,7 @@ the unused-code rules as warnings, and the count is zero. In tests, write
 `packages/backend/src/db/migrations/` (drizzle-kit output, checked by CI's
 regenerate-and-diff gate) are excluded from Biome on purpose.
 
-Root `postinstall` builds `shared-types`, so a fresh `bun install` leaves its
+Root `postinstall` builds `contracts`, `shared-types` and `pay`, so a fresh `bun install` leaves its
 `dist/` present. Both published packages build cjs + esm + types separately;
 `shared-types` also runs `scripts/fix-esm-imports.mjs` after the esm pass.
 

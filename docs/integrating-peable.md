@@ -368,3 +368,52 @@ payouts and a per-merchant journal are not implemented.
 - [ ] Go live: swap to a production-environment credential + `network: 'mainnet'`
       (gated on the mainnet items — see the roadmap).
 ```
+
+## Organization contribution links (FairCoin)
+
+The `ContributionsResource` SDK uses a **human Oxy linked-client transport**, not
+an application credential. Its scope is `{ organizationId, applicationId,
+environment }`; Oxy must currently report an organization owner, admin or editor,
+and the active application must belong to that organization. Peable stores no
+membership copy. Register the application's existing watch-only FairCoin merchant
+first. The merchant fixes the network; the contribution amount is always FAIR.
+
+`create(scope, { purpose, amountMode: 'fixed', amount: '100000000', currency:
+'FAIR' }, operationUuid)` creates a one-FAIR link. For `amountMode: 'free'`, omit
+`amount`. Amounts are canonical positive integers in 10^-8 FAIR units. Optional
+`expiresAt` is UTC. Purpose, amount policy and organization are immutable; use
+`setActive` to withdraw a link. `list` / `iterate` and `collections` return only
+that organization's contribution records, with bounded, scope-bound cursors.
+The app's Settings → Organization contributions screen uses this SDK.
+
+Payers open the existing anonymous `https://checkout.peable.to/l/<id>` page.
+An operation UUID and exact amount are saved **before** minting an intent and
+reused after lost replies or reloads. Replaying the key with a different amount
+conflicts. Disabling or expiring a link refuses new attempts while permitting
+recovery of an already-created attempt. No Oxy login is required at hosted
+checkout; signing remains in the payer's existing wallet. The gateway only
+reserves public receive addresses and observes reported transactions through the
+existing Explorer/settlement watcher. It never obtains spending keys.
+
+Collections report payment states and a `refundCapability` of
+`unsupported_non_custodial`. The existing gateway cannot sign or verify FairCoin
+refunds; an empty refund list does **not** mean no independent wallet transfer
+occurred. This phase adds no refund-signing protocol, recurring contributions,
+card processing or Stripe configuration.
+
+Migration `0027_polite_mother_askani` is a pre-phase additive migration. It links
+intents to their owning payment link, adds immutable contribution configuration
+and operation keys, and keeps all existing link consumers compatible. Deploy
+contracts/shared types/SDK and gateway before the new management/checkout UI.
+`packages/contracts` owns the validated schemas and generates
+`docs/contributions.openapi.json`; `bun run check:contribution-contracts` gates
+freshness. The served `/openapi.json` currently documents this new contribution
+surface, not the whole legacy gateway API.
+
+Validation on 2026-10-15 used real PostgreSQL and HTTP, with deterministic
+Explorer transaction fixtures for broadcast → confirming → settled and repeated
+polls. No local FairCoin daemon/regtest binary was available. Read-only requests
+to both Explorer network stats endpoints returned HTTP 403 from this environment;
+no transaction was signed or broadcast, and no live chain confirmation is claimed.
+The real payer-wallet/Explorer confirmation run remains an external validation
+step; absence of Stripe is not a blocker for this FairCoin feature.

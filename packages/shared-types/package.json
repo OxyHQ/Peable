@@ -1,7 +1,7 @@
 {
   "name": "@peable.to/shared-types",
-  "version": "0.3.4-oxy-one.0",
-  "description": "Shared TypeScript types for the Peable Gateway — the wire contract shared by the backend, SDK, and frontend.",
+  "version": "0.3.4",
+  "description": "Shared TypeScript types for the Peable Gateway \u2014 the wire contract shared by the backend, SDK, and frontend.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",
@@ -9,8 +9,7 @@
   "sideEffects": false,
   "publishConfig": {
     "access": "public",
-    "registry": "https://registry.npmjs.org/",
-    "tag": "oxy-one"
+    "registry": "https://registry.npmjs.org/"
   },
   "exports": {
     ".": {
@@ -62,5 +61,8 @@
     "typescript": "~5.9.2",
     "@types/node": "^20.0.0",
     "@types/bun": "latest"
+  },
+  "dependencies": {
+    "@peable.to/contracts": "workspace:0.1.0"
   }
 }

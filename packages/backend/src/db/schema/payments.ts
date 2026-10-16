@@ -1,3 +1,5 @@
+import type { ContributionDetails } from '@peable.to/contracts';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
   boolean,
@@ -75,6 +77,7 @@ export const paymentIntents = pgTable(
     network: text(),
     /** Watch-only receive address derived per intent from the merchant's xpub. FairCoin rail only. */
     address: text(),
+    paymentLinkId: text().references((): AnyPgColumn => paymentLinks.id, { onDelete: 'restrict' }),
     merchantId: text().notNull(),
     txid: text(),
     confirmations: integer().notNull().default(0),
@@ -133,6 +136,7 @@ export const paymentIntents = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    index('payment_intents_payment_link_id_idx').on(table.paymentLinkId),
     uniqueIndex('payment_intents_public_id_key').on(table.publicId),
     // Stripe-style idempotency: one intent per (merchant, Idempotency-Key).
     // Load-bearing — `createIntent` races on it and converges on the winner
@@ -445,6 +449,8 @@ export const paymentLinks = pgTable(
     rail: text().notNull().default('faircoin'),
     /** FairCoin rail only — NULL on a card link. See ADR 0001 D6. */
     network: text(),
+    contribution: jsonb().$type<ContributionDetails>(),
+    contributionKey: text(),
     active: boolean().notNull().default(true),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
     successUrl: text(),
@@ -452,6 +458,21 @@ export const paymentLinks = pgTable(
     updatedAt: updatedAt(),
   },
   (table) => [
+    uniqueIndex('payment_links_contribution_key').on(table.merchantId, table.contributionKey),
+    check(
+      'payment_links_contribution_shape',
+      sql` ${table.contribution} is null or (
+      jsonb_typeof(${table.contribution}) = 'object' and ${table.rail} = 'faircoin'
+      and coalesce(length(${table.contribution}->>'organizationId') between 1 and 200, false)
+      and coalesce(length(${table.contribution}->>'purpose') between 1 and 500, false)
+      and coalesce(((${table.contribution}->>'amountMode' = 'fixed' and ${table.amount} <> '0')
+       or (${table.contribution}->>'amountMode' = 'free' and ${table.amount} = '0')), false)
+    )`,
+    ),
+    check(
+      'payment_links_contribution_agrees',
+      sql`(${table.contribution} is null) = (${table.contributionKey} is null)`,
+    ),
     uniqueIndex('payment_links_public_id_key').on(table.publicId),
     index('payment_links_oxy_app_id_environment_idx').on(table.oxyAppId, table.environment),
     index('payment_links_merchant_id_idx').on(table.merchantId),

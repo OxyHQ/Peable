@@ -146,6 +146,14 @@ describe('the runtime image installs only the backend production closure', () =>
     expect(runtime).not.toMatch(/COPY --from=builder \/app\/node_modules/);
   });
 
+  it('preserves workspace-local production dependencies when versions cannot be hoisted', () => {
+    for (const workspace of ['backend', 'contracts', 'shared-types']) {
+      expect(stage('runtime')).toContain(
+        `COPY --from=deps /app/packages/${workspace}/node_modules/ packages/${workspace}/node_modules/`,
+      );
+    }
+  });
+
   it('leaves every runtime file owned by root', () => {
     expect(stage('runtime')).not.toContain('--chown');
   });

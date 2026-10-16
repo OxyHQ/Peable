@@ -1,3 +1,5 @@
+import { and, eq, isNull } from 'drizzle-orm';
+import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 /**
  * Advancing an intent, and telling the merchant about it, as ONE commit.
  *
@@ -74,6 +76,22 @@ export async function transitionIntent(
   return getDb().transaction(async (tx) => {
     const result = await updateIntentState(tx, intentId, change);
     if (result.kind !== 'updated') return result;
+    // A caller-reported hash is not acceptance of the FX quote. Only the
+    // watcher proving the full output at the fixed address may lock it.
+    if (
+      result.row.rail === 'faircoin' &&
+      (change.status === 'confirming' || change.status === 'settled')
+    ) {
+      await tx
+        .update(faircoinBillingInvoices)
+        .set({ acceptedAt: result.row.updatedAt })
+        .where(
+          and(
+            eq(faircoinBillingInvoices.paymentIntentId, intentId),
+            isNull(faircoinBillingInvoices.acceptedAt),
+          ),
+        );
+    }
     await enqueueIntentWebhook(tx, result.row);
     return result;
   });

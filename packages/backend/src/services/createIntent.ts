@@ -70,6 +70,7 @@ function assertRailCurrency(rail: PaymentIntentRail, currency: CurrencyCode): vo
 }
 
 export interface CreateIntentInput {
+  paymentLinkId?: string;
   merchant: MerchantRow;
   amount: string;
   /** Defaults to `faircoin` — the rail this gateway shipped with (ADR 0001 D1). */
@@ -379,6 +380,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // intent that is already settled.
   const intent = await insertPaymentIntent(db, {
     publicId,
+    paymentLinkId: input.paymentLinkId,
     merchantId: merchant.id,
     rail,
     amount,

@@ -659,4 +659,12 @@ export function createBillingService(options: BillingServiceOptions) {
     },
   };
 }
-export type BillingService = ReturnType<typeof createBillingService>;
+export type BillingService = ReturnType<typeof createBillingService> & {
+  /** Native FAIR is explicitly renewed by the payer; existing card providers may omit this. */
+  renew?: (
+    owner: BillingOwner,
+    subscriptionRef: string,
+    input: CreateBillingCheckoutParams,
+    idempotencyKey: string,
+  ) => Promise<BillingCheckoutSession>;
+};

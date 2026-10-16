@@ -1,3 +1,4 @@
+import { contributionOpenApi } from '@peable.to/contracts/openapi';
 import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
 import {
   configureBillingRuntime,
@@ -33,6 +34,7 @@ import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createSocialRouter } from './routes/social';
 import { createEnrichRouter } from './routes/enrich';
+import { createContributionsRouter } from './routes/contributions';
 import { createDashboardRouter } from './routes/dashboard';
 import { createProviderWebhooksRouter } from './routes/providerWebhooks';
 import { createConnectedAccountsRouter } from './routes/connectedAccounts';
@@ -234,6 +236,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createRefundsRouter({ requireMerchant }));
   app.use(createDisputesRouter({ requireMerchant }));
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
+  app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
+  app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
   app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit }));
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));

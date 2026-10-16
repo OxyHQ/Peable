@@ -49,6 +49,7 @@ COPY package.json bun.lock bunfig.toml tsconfig.json ./
 # workflows went green, so nothing in the run said the backend had not shipped.
 # `db/__tests__/dockerfile.test.ts` re-derives this list from the workspace glob
 # and fails the build when a new package is added without a line here.
+COPY packages/contracts/package.json packages/contracts/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
@@ -62,6 +63,7 @@ COPY packages/pay/package.json packages/pay/
 RUN bun install --frozen-lockfile --ignore-scripts
 
 # Copy the source for the packages this image builds/runs.
+COPY packages/contracts/ packages/contracts/
 COPY packages/shared-types/ packages/shared-types/
 COPY packages/backend/ packages/backend/
 # Backend contract tests typecheck against the built public SDK.
@@ -70,6 +72,7 @@ COPY packages/sdk/ packages/sdk/
 # Build shared-types (its dist/index.js is what the backend imports at runtime),
 # then compile the backend as a type-safety gate. The backend's emitted dist is
 # intentionally discarded — the runtime stage runs the TS source under Bun.
+RUN cd packages/contracts && bun run build
 RUN cd packages/shared-types && bun run build
 RUN cd packages/sdk && bun run build
 RUN cd packages/backend && bun run build
@@ -114,6 +117,7 @@ FROM oven/bun:1.4.3-alpine@sha256:629e17411f1f129dbec3af78d5af9c9f2a937435c80349
 WORKDIR /app
 
 COPY package.json bun.lock bunfig.toml ./
+COPY packages/contracts/package.json packages/contracts/
 COPY packages/shared-types/package.json packages/shared-types/
 COPY packages/backend/package.json packages/backend/
 COPY packages/frontend/package.json packages/frontend/
@@ -122,6 +126,9 @@ COPY packages/checkout/package.json packages/checkout/
 COPY packages/pay/package.json packages/pay/
 
 RUN bun install --frozen-lockfile --production --ignore-scripts --omit=peer --filter @peable.to/backend
+# A hoisted install can still require workspace-local versions (contracts uses
+# Zod 4 while the backend uses Zod 3). Preserve those filtered production deps.
+RUN mkdir -p packages/backend/node_modules packages/contracts/node_modules packages/shared-types/node_modules
 
 # ── Stage 3: runtime ──────────────────────────────────────────────
 #
@@ -144,9 +151,14 @@ RUN addgroup -g 1001 -S appgroup && adduser -u 1001 -S appuser -G appgroup
 # The workspace links (`node_modules/@peable.to/{backend,shared-types}`) are
 # relative symlinks into packages/, so they resolve once the packages land below.
 COPY --from=deps /app/node_modules/ node_modules/
+COPY --from=deps /app/packages/backend/node_modules/ packages/backend/node_modules/
+COPY --from=deps /app/packages/contracts/node_modules/ packages/contracts/node_modules/
+COPY --from=deps /app/packages/shared-types/node_modules/ packages/shared-types/node_modules/
 
 # Compiled shared-types output (imported as dist/index.js) + the backend TS
 # source and its tsconfig (run directly under Bun — no compiled entrypoint).
+COPY --from=builder /app/packages/contracts/package.json packages/contracts/
+COPY --from=builder /app/packages/contracts/dist/ packages/contracts/dist/
 COPY --from=builder /app/packages/shared-types/package.json packages/shared-types/
 COPY --from=builder /app/packages/shared-types/dist/ packages/shared-types/dist/
 COPY --from=builder /app/packages/backend/package.json packages/backend/

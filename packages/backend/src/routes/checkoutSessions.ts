@@ -1,3 +1,5 @@
+import { eq } from 'drizzle-orm';
+import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
@@ -275,7 +277,15 @@ export function createCheckoutSessionsRouter(deps: {
         return;
       }
       const merchantDisplay = await resolveMerchantDisplay(merchant);
-      res.status(200).json(toCheckoutSessionPublicDTO(session, merchantDisplay, intent));
+      const [billing] = await db
+        .select({ fxQuote: faircoinBillingInvoices.fxQuote })
+        .from(faircoinBillingInvoices)
+        .where(eq(faircoinBillingInvoices.paymentIntentId, intent.id));
+      res.setHeader('Cache-Control', 'no-store');
+      res.status(200).json({
+        ...toCheckoutSessionPublicDTO(session, merchantDisplay, intent),
+        ...(billing ? { billingQuote: billing.fxQuote } : {}),
+      });
     }),
   );
 
