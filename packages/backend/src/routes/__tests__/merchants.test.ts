@@ -15,6 +15,12 @@ import {
 import { createMerchantsRouter } from '../merchants';
 import { findMerchantByAppEnvironment } from '../../db/merchants/merchantRepository';
 import { resolveMerchantDisplay } from '../../services/merchantDisplay';
+import { oxyFileReferenceSyncs } from '../../db/schema';
+import {
+  createFakeOxyFiles,
+  type FakeOxyFiles,
+  referenceKey,
+} from '../../__tests__/helpers/fakeOxyFiles';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
 // (m/44'/1'/0' neutered) — public-key-only, cannot spend.
@@ -97,12 +103,15 @@ afterEach(async () => {
 function createApp(
   appId: string,
   environment: string,
-): { app: ReturnType<typeof express>; requireMerchant: RequestHandler } {
-  const requireMerchant = stubRequireMerchant(appId, environment);
+  files: FakeOxyFiles = createFakeOxyFiles([
+    { id: 'file_mercaria_logo', ownerApplicationId: appId },
+  ]),
+  requireMerchant: RequestHandler = stubRequireMerchant(appId, environment),
+): { app: ReturnType<typeof express>; requireMerchant: RequestHandler; files: FakeOxyFiles } {
   const app = express();
   app.use(express.json());
-  app.use(createMerchantsRouter({ requireMerchant }));
-  return { app, requireMerchant };
+  app.use(createMerchantsRouter({ requireMerchant, files }));
+  return { app, requireMerchant, files };
 }
 
 async function listen(
@@ -565,6 +574,180 @@ describe('card-only registration', () => {
 
       expect(networkOnly.status).toBe(422);
       expect(xpubOnly.status).toBe(422);
+    } finally {
+      s.close();
+    }
+  });
+});
+
+describe('merchant avatar ownership (ADR 0043)', () => {
+  /** A service token of DEV_APP_ID, owned by account `owner`, optionally acting as a user. */
+  function stubWithActingAs(userId: string | undefined): RequestHandler {
+    const base = stubRequireMerchant(DEV_APP_ID, 'development');
+    return (req, res, next) =>
+      base(req, res, () => {
+        if (userId)
+          (req as OxyAuthRequest).serviceActingAs = {
+            userId,
+            scopes: ['payments:read', 'payments:write'],
+          };
+        next();
+      });
+  }
+
+  async function register(
+    files: FakeOxyFiles,
+    avatarFileId: string,
+    requireMerchant?: RequestHandler,
+  ): Promise<{ status: number; body: MerchantResponse }> {
+    const { app } = createApp(DEV_APP_ID, 'development', files, requireMerchant);
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      const res = await fetch(`${url}/v1/merchants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatarFileId }),
+      });
+      return { status: res.status, body: await readJson(res) };
+    } finally {
+      s.close();
+    }
+  }
+
+  async function queuedSyncs(): Promise<string[]> {
+    const rows = await gatewayDb().select().from(oxyFileReferenceSyncs);
+    return rows.map((row) => referenceKey(row)).sort();
+  }
+
+  test("accepts the merchant application's own file, references it, and queues its sync in the same write", async () => {
+    const files = createFakeOxyFiles([{ id: 'file_app', ownerApplicationId: DEV_APP_ID }]);
+    const { status, body } = await register(files, 'file_app');
+    expect(status).toBe(201);
+    expect(body.avatarFileId).toBe('file_app');
+    expect([...files.held]).toEqual([`file_app|merchant_avatar|${body.id}`]);
+    expect(await queuedSyncs()).toEqual([`file_app|merchant_avatar|${body.id}`]);
+  });
+
+  test("accepts a file owned by the application's owner account", async () => {
+    // `stubRequireMerchant` signs the token's owner account as `owner`.
+    const files = createFakeOxyFiles([{ id: 'file_owner', ownerUserId: 'owner' }]);
+    expect((await register(files, 'file_owner')).status).toBe(201);
+  });
+
+  test('accepts a file of the user a delegated token acts as', async () => {
+    const files = createFakeOxyFiles([{ id: 'file_user', ownerUserId: 'user_delegator' }]);
+    expect((await register(files, 'file_user', stubWithActingAs('user_delegator'))).status).toBe(
+      201,
+    );
+  });
+
+  test("refuses ANYONE ELSE'S file — another account's, another application's — and references nothing", async () => {
+    const files = createFakeOxyFiles([
+      { id: 'file_stranger', ownerUserId: 'user_stranger' },
+      { id: 'file_other_app', ownerApplicationId: 'app_somebody_else' },
+      { id: 'file_platform', ownerUserId: null },
+    ]);
+    for (const fileId of ['file_stranger', 'file_other_app', 'file_platform', 'file_missing']) {
+      const { status, body } = await register(files, fileId);
+      expect(status).toBe(422);
+      expect(body.error?.type).toBe('invalid_request_error');
+    }
+    expect(files.added).toEqual([]);
+    expect(await countMerchants(DEV_APP_ID)).toBe(0);
+  });
+
+  test('refuses a file in trash, even its own', async () => {
+    const files = createFakeOxyFiles([
+      { id: 'file_trashed', ownerApplicationId: DEV_APP_ID, status: 'trash' },
+    ]);
+    expect((await register(files, 'file_trashed')).status).toBe(422);
+  });
+
+  test('refuses a file Oxy will not let Peable reference (private): no payer could load it', async () => {
+    const files = createFakeOxyFiles([
+      { id: 'file_private', ownerApplicationId: DEV_APP_ID, referenceable: false },
+    ]);
+    const { status, body } = await register(files, 'file_private');
+    expect(status).toBe(422);
+    expect(body.error?.message).toContain('public or unlisted');
+    expect(await countMerchants(DEV_APP_ID)).toBe(0);
+  });
+
+  test('FAILS CLOSED when Oxy hides the owner, or cannot be reached', async () => {
+    const owned = [{ id: 'file_app', ownerApplicationId: DEV_APP_ID }];
+    for (const options of [{ hideOwner: true }, { failMetadata: true }, { failReferences: true }]) {
+      const { status, body } = await register(createFakeOxyFiles(owned, options), 'file_app');
+      expect(status).toBe(503);
+      expect(body.error?.type).toBe('api_error');
+    }
+    expect(await countMerchants(DEV_APP_ID)).toBe(0);
+  });
+
+  test('a registration refused AFTER the reference was taken queues its release', async () => {
+    const files = createFakeOxyFiles([{ id: 'file_app', ownerApplicationId: DEV_APP_ID }]);
+    const first = await register(files, 'file_app');
+    expect(first.status).toBe(201);
+    // A second registration for the same app+environment is refused with 409
+    // only AFTER its avatar was accepted and referenced under a new public id.
+    const second = await register(files, 'file_app');
+    expect(second.status).toBe(409);
+    const entities = (await queuedSyncs()).map((key) => key.split('|')[2]);
+    expect(entities).toHaveLength(2);
+    expect(entities).toContain(first.body.id);
+    // The other names no merchant: the sync finds it unwanted and removes it.
+    const orphan = entities.find((id) => id !== first.body.id);
+    expect(orphan).toMatch(/^merch_/);
+    expect(files.held.has(`file_app|merchant_avatar|${orphan}`)).toBe(true);
+  });
+
+  test('PATCH to a new avatar checks it, and queues BOTH the old and the new reference', async () => {
+    const files = createFakeOxyFiles([
+      { id: 'file_a', ownerApplicationId: DEV_APP_ID },
+      { id: 'file_b', ownerUserId: 'owner' },
+      { id: 'file_stranger', ownerUserId: 'user_stranger' },
+    ]);
+    const { app } = createApp(DEV_APP_ID, 'development', files);
+    const { server: s, baseUrl: url } = await listen(app);
+    try {
+      const created = await fetch(`${url}/v1/merchants`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatarFileId: 'file_a' }),
+      });
+      const merchant = await readJson(created);
+      await gatewayDb().delete(oxyFileReferenceSyncs);
+
+      const refused = await fetch(`${url}/v1/merchants/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarFileId: 'file_stranger' }),
+      });
+      expect(refused.status).toBe(422);
+      expect(await queuedSyncs()).toEqual([]);
+
+      const patched = await fetch(`${url}/v1/merchants/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarFileId: 'file_b' }),
+      });
+      expect(patched.status).toBe(200);
+      expect((await readJson(patched)).avatarFileId).toBe('file_b');
+      expect(await queuedSyncs()).toEqual([
+        `file_a|merchant_avatar|${merchant.id}`,
+        `file_b|merchant_avatar|${merchant.id}`,
+      ]);
+
+      // Clearing needs nothing from Oxy and queues the release.
+      const lookupsBefore = files.added.length;
+      await gatewayDb().delete(oxyFileReferenceSyncs);
+      const cleared = await fetch(`${url}/v1/merchants/me`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ avatarFileId: null }),
+      });
+      expect(cleared.status).toBe(200);
+      expect(files.added.length).toBe(lookupsBefore);
+      expect(await queuedSyncs()).toEqual([`file_b|merchant_avatar|${merchant.id}`]);
     } finally {
       s.close();
     }

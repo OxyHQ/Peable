@@ -32,7 +32,10 @@ export interface Merchant {
    * the raw values the merchant owns.
    */
   displayName?: string;
-  /** Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it. */
+  /**
+   * Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it.
+   * Absent again once Oxy reports the file deleted or taken down.
+   */
   avatarFileId?: string;
   description?: string;
   createdAt: string;

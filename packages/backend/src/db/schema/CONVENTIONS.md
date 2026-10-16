@@ -422,3 +422,30 @@ mutable metadata. Existing non-link intents remain NULL. The keyset collection
 query scopes both merchant and link; `payment_intents_payment_link_id_idx`
 supports it. No contribution-specific payment state or webhook producer exists:
 the existing FairCoin state machine, CAS transition and outbox remain authoritative.
+
+
+## Oxy Files (ADR 0043)
+
+`oxy_file_reference_syncs`, `oxy_file_events`, `merchant_avatar_audit` and
+`oxy_file_reconciliation_runs` (`schema/oxyFiles.ts`) are Peable's side of Oxy's
+file references. Decisions a reader would otherwise undo:
+
+- **A sync row is keyed by the reference, not by an operation.** Its primary key
+  is `(file_id, entity_type, entity_id)` — Oxy's own reference identity — and the
+  loop decides add-or-remove from the database at the moment it acts. An
+  add/remove log would replay a set-clear-set in whatever order it was retried
+  and could end with the reference gone while the avatar is set. `version` is the
+  compare half that keeps a change made during a call from being deleted with it.
+- **`entity_id` is the merchant's PUBLIC id and has no foreign key**: the
+  reference is registered before the merchant row exists (the answer decides the
+  registration), so a refused registration leaves a sync naming no row — which
+  is exactly what makes the loop remove it.
+- **`merchants.avatar_withheld` keeps the avatar instead of clearing it** for a
+  file its owner can bring back (trash, private). Deleted and blocked clear
+  `avatar_file_id`. `merchants_avatar_withheld_needs_avatar_check` refuses a
+  withheld nothing. `avatar_file_event_at` orders Oxy's unordered events and is
+  reset to the write time whenever the avatar changes, so an event about the
+  file from before it was set again is ignored.
+- **`oxy_file_events` is pruned after 45 days** by the reconciliation loop: Oxy
+  expires an undelivered event after 30, so an older row dedupes nothing.
+  `merchant_avatar_audit.event_id` therefore carries no foreign key to it.

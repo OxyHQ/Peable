@@ -29,6 +29,7 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
     livemode: false,
     displayName: null,
     avatarFileId: null,
+    avatarWithheld: null,
     description: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -67,4 +68,13 @@ test('falls back to a neutral name and null avatar/description when unset', asyn
   expect(display.name).toBe('Peable merchant');
   expect(display.avatarUrl).toBeNull();
   expect(display.description).toBeNull();
+});
+
+test('a withheld avatar resolves to no URL: Oxy would not serve it', async () => {
+  for (const avatarWithheld of ['unavailable', 'private'] as const) {
+    const display = await resolveMerchantDisplay(
+      merchantRow({ avatarFileId: 'file_mercaria_logo', avatarWithheld }),
+    );
+    expect(display.avatarUrl).toBeNull();
+  }
 });

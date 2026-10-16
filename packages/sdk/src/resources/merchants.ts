@@ -33,7 +33,13 @@ export interface RegisterMerchantParams {
   webhookSecret?: string;
   requiredConfirmations?: number;
   displayName?: string;
-  /** A bare Oxy file id, never a URL. */
+  /**
+   * A bare Oxy file id, never a URL. It must name an active, public or unlisted
+   * file owned by your application, by the account that owns it, or by the
+   * user your token acts for — anything else is refused with a 422 (a 503 when
+   * Oxy cannot be asked). If the file is later deleted or taken down, Peable
+   * clears it.
+   */
   avatarFileId?: string;
   description?: string;
 }
@@ -49,6 +55,7 @@ export interface UpdateMerchantParams {
   webhookSecret?: string | null;
   requiredConfirmations?: number;
   displayName?: string | null;
+  /** Same rule as {@link RegisterMerchantParams.avatarFileId}; `null` removes it. */
   avatarFileId?: string | null;
   description?: string | null;
 }

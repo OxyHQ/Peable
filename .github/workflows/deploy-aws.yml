@@ -203,6 +203,12 @@ jobs:
           APP_STRIPE_CONNECT_WEBHOOK_SECRET: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET }}
           APP_STRIPE_WEBHOOK_SECRET_PREVIOUS: ${{ secrets.STRIPE_WEBHOOK_SECRET_PREVIOUS }}
           APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS: ${{ secrets.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS }}
+          # Oxy's file events (ADR 0043 D9): the signing secret Oxy shows ONCE
+          # when Peable's endpoint is set, and the rotation window beside it.
+          # Unset, `/v1/webhooks/oxy/files` still answers the verification
+          # challenge and refuses events with a 503, which Oxy retries.
+          APP_OXY_FILES_WEBHOOK_SECRET: ${{ secrets.OXY_FILES_WEBHOOK_SECRET }}
+          APP_OXY_FILES_WEBHOOK_SECRET_PREVIOUS: ${{ secrets.OXY_FILES_WEBHOOK_SECRET_PREVIOUS }}
         run: |
           sync_secret() {
             name="$1"; value="$2"; path="$3"
@@ -224,6 +230,8 @@ jobs:
           sync_secret STRIPE_CONNECT_WEBHOOK_SECRET "$APP_STRIPE_CONNECT_WEBHOOK_SECRET" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET"
           sync_secret STRIPE_WEBHOOK_SECRET_PREVIOUS "$APP_STRIPE_WEBHOOK_SECRET_PREVIOUS" "/oxy/$APP/STRIPE_WEBHOOK_SECRET_PREVIOUS"
           sync_secret STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS "$APP_STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS" "/oxy/$APP/STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS"
+          sync_secret OXY_FILES_WEBHOOK_SECRET "$APP_OXY_FILES_WEBHOOK_SECRET" "/oxy/$APP/OXY_FILES_WEBHOOK_SECRET"
+          sync_secret OXY_FILES_WEBHOOK_SECRET_PREVIOUS "$APP_OXY_FILES_WEBHOOK_SECRET_PREVIOUS" "/oxy/$APP/OXY_FILES_WEBHOOK_SECRET_PREVIOUS"
 
       - name: Login to ECR
         uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2

@@ -60,7 +60,9 @@ export async function enrichAddresses(
     result[address] = {
       kind: 'merchant',
       displayName: merchant.displayName ?? undefined,
-      avatarFileId: merchant.avatarFileId ?? undefined,
+      // Not while withheld: Oxy will not serve it (`services/merchantDisplay.ts`).
+      avatarFileId:
+        merchant.avatarWithheld === null ? (merchant.avatarFileId ?? undefined) : undefined,
       description: merchant.description ?? undefined,
     };
     resolvedAddresses.add(address);

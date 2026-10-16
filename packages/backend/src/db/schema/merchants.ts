@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { boolean, check, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
-import { createdAt, generatedId, inList, updatedAt } from '@oxy.so/db';
-import { NETWORK_TYPES, SERVICE_ENVIRONMENTS } from './valueSets';
+import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS } from './valueSets';
 
 /**
  * A merchant of the Peable Gateway.
@@ -74,8 +74,30 @@ export const merchants = pgTable(
     livemode: boolean().notNull().default(false),
     /** Display name shown in the payer's transaction history ("Paid at <name>"). */
     displayName: text(),
-    /** Bare Oxy file id for the merchant's logo — the canonical media chokepoint. */
+    /**
+     * Bare Oxy file id for the merchant's logo — the canonical media chokepoint.
+     *
+     * Accepted only for a file the caller owns or acts for
+     * (`services/oxyFiles/merchantAvatar.ts`), and every write of it queues the
+     * matching Oxy file reference in the same transaction
+     * (`db/merchants/merchantRepository.ts`), so Oxy knows Peable uses it and
+     * tells Peable when it goes away (ADR 0043).
+     */
     avatarFileId: text(),
+    /**
+     * Why the avatar is stored but not shown, or NULL when it is shown — set
+     * only by Oxy's file events (`services/oxyFiles/fileEvents.ts`) for a file
+     * its owner can bring back (trash, made private). A deleted or blocked file
+     * clears `avatar_file_id` instead.
+     */
+    avatarWithheld: text(),
+    /**
+     * The `occurredAt` of the newest file event applied to the CURRENT avatar,
+     * or the moment it was set. Oxy delivers at least once and in no promised
+     * order, so an older event (a `trashed` delivered after the `restored` that
+     * followed it, or one about the file before it was set again) is ignored.
+     */
+    avatarFileEventAt: timestamptz(),
     description: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -149,6 +171,17 @@ export const merchants = pgTable(
       sql`(${table.network} is null) = (${table.xpub} is null)`,
     ),
     check('merchants_next_derivation_index_check', sql`${table.nextDerivationIndex} >= 0`),
+    check(
+      'merchants_avatar_withheld_check',
+      sql.raw(
+        `avatar_withheld is null or avatar_withheld in (${inList(MERCHANT_AVATAR_WITHHELD_REASONS)})`,
+      ),
+    ),
+    // Nothing is withheld when there is nothing to show.
+    check(
+      'merchants_avatar_withheld_needs_avatar_check',
+      sql`${table.avatarWithheld} is null or ${table.avatarFileId} is not null`,
+    ),
     /**
      * `livemode` ⇔ `environment = 'production'`, and nothing else.
      *

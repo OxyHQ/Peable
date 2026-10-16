@@ -23,7 +23,13 @@ const DEFAULT_MERCHANT_NAME = 'Peable merchant';
 export async function resolveMerchantDisplay(merchant: MerchantRow): Promise<MerchantDisplay> {
   return {
     name: merchant.displayName ?? DEFAULT_MERCHANT_NAME,
-    avatarUrl: merchant.avatarFileId ? oxy.assets.publicUrl(merchant.avatarFileId, 'thumb') : null,
+    // A withheld avatar is one Oxy has said it will not serve right now (its
+    // owner trashed it or made it private — `services/oxyFiles/fileEvents.ts`).
+    // A URL to it would be a broken image on the checkout page.
+    avatarUrl:
+      merchant.avatarFileId && merchant.avatarWithheld === null
+        ? oxy.assets.publicUrl(merchant.avatarFileId, 'thumb')
+        : null,
     description: merchant.description ?? null,
   };
 }

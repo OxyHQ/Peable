@@ -17,7 +17,11 @@ import {
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  merchantAvatarAudit,
   merchants,
+  oxyFileEvents,
+  oxyFileReconciliationRuns,
+  oxyFileReferenceSyncs,
   paymentIntents,
   paymentLinks,
   providerEvents,
@@ -51,7 +55,11 @@ const ALL_TABLES = [
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  merchantAvatarAudit,
   merchants,
+  oxyFileEvents,
+  oxyFileReconciliationRuns,
+  oxyFileReferenceSyncs,
   paymentIntents,
   paymentLinks,
   providerEvents,
@@ -130,6 +138,34 @@ describe('id-column classification', () => {
         {
           column: 'merchants.avatar_file_id',
           reason: "a bare Oxy file id, resolved through the SDK's media chokepoint",
+        },
+        // ADR 0043: Peable's side of Oxy Files. Every file and event id is
+        // Oxy's; the entity id is the reference's own key at Oxy.
+        {
+          column: 'oxy_file_reference_syncs.file_id',
+          reason: 'an Oxy file id — Oxy owns the files',
+        },
+        {
+          column: 'oxy_file_reference_syncs.entity_id',
+          reason:
+            "the entity id of an Oxy file reference: a merch_… public id that may name no row (a refused registration's reference is synced away)",
+        },
+        {
+          column: 'oxy_file_events.event_id',
+          reason: "Oxy's own file event id — this row's dedupe key, not a reference",
+        },
+        {
+          column: 'oxy_file_events.file_id',
+          reason: 'an Oxy file id — Oxy owns the files',
+        },
+        {
+          column: 'merchant_avatar_audit.file_id',
+          reason: 'an Oxy file id — Oxy owns the files',
+        },
+        {
+          column: 'merchant_avatar_audit.event_id',
+          reason:
+            "Oxy's file event id; oxy_file_events is pruned after Oxy's redelivery window and the audit row is kept",
         },
         {
           column: 'social_receive_cursors.oxy_user_id',

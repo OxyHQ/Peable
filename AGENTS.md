@@ -225,9 +225,9 @@ the key the address derives from is the one the reservation was taken against.
 ## Backend surface
 
 Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
-`dashboard`, `disputes`, `enrich`, `merchants`, `paymentIntents`,
-`paymentLinks`, `providerWebhooks`, `refunds`, `social`, `tax`, `transfers`,
-`webhookDeliveries`.
+`dashboard`, `disputes`, `enrich`, `merchants`, `oxyFileEvents`,
+`paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`, `social`,
+`tax`, `transfers`, `webhookDeliveries`.
 
 **Peable Tax (ADR 0011) decides whether a sale is taxed; a provider only says
 how much.** `services/tax/` owns it for every rail. A covered sale the provider
@@ -239,6 +239,31 @@ A quoted card subscription's renewal is HELD as a draft until Peable has
 repriced it (ADR 0013) — never release a draft whose Stripe totals are not
 the fresh quote — and refunds are reversals netted into the same report rows,
 never deletions of the original transaction.
+
+### Oxy Files (ADR 0043 of the oxy repo)
+
+A merchant's avatar is the only Oxy file Peable stores, and three rules keep it
+honest:
+
+- **Ownership is checked at ONE place**, `services/oxyFiles/merchantAvatar.ts`,
+  reached from `registerMerchant` / `applyMerchantPatch` (service AND dashboard
+  routes). The file must be active and owned by the merchant's application, its
+  owner account, the dashboard user or the user a delegated token acts as, and
+  Oxy must accept Peable's reference. It FAILS CLOSED (503) when Oxy cannot be
+  asked or hides the owner — owners are revealed only to `internal`-tier
+  applications. Never accept an avatar id without it.
+- **Every avatar write queues its reference sync in the same transaction**
+  (`enqueueReferenceSync`, called only from `db/merchants/merchantRepository.ts`);
+  `services/oxyFiles/referenceSync.ts` makes Oxy agree, and the daily
+  reconciliation (`OXY_FILE_RECONCILIATION_MODE`, `bun run oxy-files:reconcile`)
+  repairs the rest. A new kind of file use is a new `OXY_FILE_ENTITY_TYPES`
+  member, and the exhaustive switches will not compile without its rules.
+- **`/v1/webhooks/oxy/files` is mounted before `express.json()` and the rate
+  limiter**, like the Stripe webhooks: the signature covers the raw bytes.
+  Deleted/blocked clears the avatar (audited in `merchant_avatar_audit`);
+  trashed/private withholds it from payers until the owner brings it back.
+
+The Peable application needs `files:read` and `files:references:write`.
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),

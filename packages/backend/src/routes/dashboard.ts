@@ -24,7 +24,10 @@ import {
   patchMerchantBodySchema,
   registerMerchant,
   applyMerchantPatch,
+  sendMerchantWriteError,
 } from './merchants';
+import type { AvatarActor } from '../services/oxyFiles/merchantAvatar';
+import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import {
   resolveMerchantByApp,
   listQuerySchema,
@@ -67,6 +70,12 @@ export interface DashboardAccess {
   environment: OxyServiceEnvironment;
   userId: string;
   membership: AppMembershipResult;
+  /**
+   * Who may own a file this caller makes the merchant's avatar: the
+   * application itself, the signed-in user, and the account that owns the
+   * application — which oxy-api just confirmed the user is a member of.
+   */
+  avatarActor: AvatarActor;
 }
 
 /**
@@ -116,7 +125,13 @@ export async function resolveDashboardAccess(
     return null;
   }
 
-  return { applicationId, environment, userId, membership };
+  return {
+    applicationId,
+    environment,
+    userId,
+    membership,
+    avatarActor: { applicationId, accountIds: [userId, membership.ownerAccountId] },
+  };
 }
 
 const webhookDeliveriesListQuerySchema = z.object({
@@ -139,7 +154,10 @@ export function createDashboardRouter(deps?: {
   requireOxyUser?: RequestHandler;
   assertAppMembership?: typeof realAssertAppMembership;
   safeFetch?: SafeFetchFn;
+  /** Oxy Files, for the avatar ownership check. Default: the real client. */
+  files?: OxyFilesClient;
 }): Router {
+  const files = deps?.files ?? oxyFilesClient;
   const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
   const assertAppMembership = deps?.assertAppMembership ?? realAssertAppMembership;
   const safeFetch = deps?.safeFetch;
@@ -176,9 +194,12 @@ export function createDashboardRouter(deps?: {
         return;
       }
 
-      const result = await registerMerchant(access.applicationId, access.environment, parsed.data);
+      const result = await registerMerchant(access.applicationId, access.environment, parsed.data, {
+        actor: access.avatarActor,
+        files,
+      });
       if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
+        sendMerchantWriteError(res, result);
         return;
       }
       res.status(201).json(toMerchantDTO(result.merchant));
@@ -205,12 +226,15 @@ export function createDashboardRouter(deps?: {
         );
         return;
       }
-      const updated = await applyMerchantPatch(merchant, parsed.data);
-      if (!updated) {
-        sendError(res, 404, 'invalid_request_error', 'merchant not found');
+      const result = await applyMerchantPatch(merchant, parsed.data, {
+        actor: access.avatarActor,
+        files,
+      });
+      if (!result.ok) {
+        sendMerchantWriteError(res, result);
         return;
       }
-      res.status(200).json(toMerchantDTO(updated));
+      res.status(200).json(toMerchantDTO(result.merchant));
     }),
   );
 

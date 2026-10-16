@@ -22,6 +22,13 @@ export interface AppMembershipResult {
    * first-party/internal/system type). Peable Tax lets only these calculate on
    * the platform's provider account, whose seller is Oxy's legal entity. */
   official?: boolean;
+  /**
+   * The Oxy account that owns the application, from the same response — the
+   * account a member acts for. Read only by the merchant-avatar ownership check
+   * (`services/oxyFiles/merchantAvatar.ts`); absent when not allowed or when
+   * oxy-api did not say.
+   */
+  ownerAccountId?: string;
 }
 
 /**
@@ -67,6 +74,7 @@ const applicationResponseSchema = z.object({
       .nullable(),
     isOfficial: z.boolean().optional(),
     type: z.string().optional(),
+    ownerAccountId: z.string().min(1).optional(),
   }),
 });
 const OFFICIAL_TYPES = new Set(['first_party', 'internal', 'system']);
@@ -146,6 +154,7 @@ async function fetchCallerMembership(
     const { application } = parsed.data;
     return {
       allowed: true,
+      ...(application.ownerAccountId ? { ownerAccountId: application.ownerAccountId } : {}),
       ...(application.callerMembership?.permissions
         ? { permissions: application.callerMembership.permissions }
         : {}),

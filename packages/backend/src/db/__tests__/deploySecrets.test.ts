@@ -75,6 +75,8 @@ const NOT_SYNCED: Readonly<Record<string, string>> = {
     'the public seller-onboarding page (ADR 0012), defaulted to the Peable wallet',
   OXY_API_URL: 'the public Oxy API origin',
   PORT: 'the listen port, set by the task definition',
+  OXY_FILE_RECONCILIATION_MODE:
+    'apply|dry-run|off for the Oxy file-reference reconciliation; a deployment decision with a safe default',
 };
 
 /**

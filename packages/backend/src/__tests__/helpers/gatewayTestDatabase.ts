@@ -203,6 +203,8 @@ export interface SeedMerchantValues {
   readonly webhookUrl?: string;
   readonly webhookSecret?: string;
   readonly requiredConfirmations?: number;
+  /** An Oxy file id, stored as the real writer stores it (its reference sync queued too). */
+  readonly avatarFileId?: string;
 }
 
 /**
@@ -226,6 +228,7 @@ export async function seedMerchant(values: SeedMerchantValues = {}): Promise<Mer
     webhookUrl: values.webhookUrl,
     webhookSecret: values.webhookSecret,
     requiredConfirmations: values.requiredConfirmations,
+    avatarFileId: values.avatarFileId,
   });
   if (!row) {
     throw new Error(

@@ -47,6 +47,29 @@ describe('assertAppMembership', () => {
     expect(result.allowed).toBe(true);
   });
 
+  test("carries the application's owner account — the account a member acts for — and caches it", async () => {
+    const { fn, calls } = fakeSafeFetchOnce(200, {
+      application: { callerMembership: { role: 'admin' }, ownerAccountId: 'acct_owner' },
+    });
+    const deps = { safeFetch: fn, oxyApiUrl: OXY_API_URL };
+    const first = await assertAppMembership('user_owner_1', 'app_owner', 'bearer', deps);
+    const cached = await assertAppMembership('user_owner_1', 'app_owner', 'bearer', deps);
+    expect(first).toEqual({ allowed: true, ownerAccountId: 'acct_owner', official: false });
+    expect(cached).toEqual(first);
+    expect(calls).toHaveLength(1);
+  });
+
+  test('a refused membership carries no owner account', async () => {
+    const { fn } = fakeSafeFetchOnce(200, {
+      application: { callerMembership: null, ownerAccountId: 'acct_owner' },
+    });
+    const result = await assertAppMembership('user_owner_2', 'app_owner', 'bearer', {
+      safeFetch: fn,
+      oxyApiUrl: OXY_API_URL,
+    });
+    expect(result).toEqual({ allowed: false });
+  });
+
   test('a null callerMembership -> allowed: false', async () => {
     const { fn } = fakeSafeFetchOnce(200, { application: { callerMembership: null } });
     const result = await assertAppMembership('user_b', 'app_1', 'bearer-b', {

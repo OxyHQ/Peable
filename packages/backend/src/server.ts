@@ -30,7 +30,7 @@ import {
 import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
-import { oxy } from './oxy';
+import { canUseOxyServiceLane, oxy } from './oxy';
 import { createOxyCors, createOxyRateLimit } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
@@ -44,6 +44,13 @@ import { createEnrichRouter } from './routes/enrich';
 import { createContributionsRouter } from './routes/contributions';
 import { createDashboardRouter } from './routes/dashboard';
 import { createProviderWebhooksRouter } from './routes/providerWebhooks';
+import { createOxyFileEventsRouter } from './routes/oxyFileEvents';
+import type { OxyFilesClient } from './services/oxyFiles/client';
+import { startReferenceSync, stopReferenceSync } from './services/oxyFiles/referenceSync';
+import {
+  startReferenceReconciliation,
+  stopReferenceReconciliation,
+} from './services/oxyFiles/referenceReconciliation';
 import { createConnectedAccountsRouter } from './routes/connectedAccounts';
 import { createConnectRouter } from './routes/connect';
 import { createTransfersRouter } from './routes/transfers';
@@ -108,6 +115,8 @@ export interface GatewayDeps {
   getTransaction?: typeof getTransaction;
   /** SSRF-safe fetch used for webhook delivery (default the real one). */
   safeFetch?: SafeFetchFn;
+  /** Oxy Files, for the merchant avatar ownership check (default the real client). */
+  oxyFiles?: OxyFilesClient;
 }
 
 export interface Gateway {
@@ -212,6 +221,11 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // `routes/__tests__/providerWebhooks.integration.test.ts` asserts this
   // ordering against the real chain so a reorder is a red build.
   app.use(createProviderWebhooksRouter());
+  // Oxy's file events, for the same two reasons: the signature covers the raw
+  // bytes, and every delivery comes from Oxy's own few addresses. The router
+  // brings its own `express.raw`; `routes/oxyFileEvents.ts` has the argument and
+  // `routes/__tests__/oxyFileEvents.realdb.test.ts` asserts the order.
+  app.use(createOxyFileEventsRouter());
 
   app.use(createOxyRateLimit(oxy));
   app.use(express.json());
@@ -240,7 +254,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createPaymentIntentsRouter({ requireMerchant, optionalServiceAuth }));
   app.use(createSocialRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
-  app.use(createMerchantsRouter({ requireMerchant }));
+  app.use(createMerchantsRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createConnectedAccountsRouter({ requireMerchant }));
   // The SELLER's half of connected accounts (ADR 0012 D3): Oxy USER auth, never
   // a service credential — a platform cannot register a seller's key.
@@ -257,7 +271,11 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
   app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser: deps.requireOxyUser }));
   app.use(
-    createDashboardRouter({ requireOxyUser: deps.requireOxyUser, safeFetch: deps.safeFetch }),
+    createDashboardRouter({
+      requireOxyUser: deps.requireOxyUser,
+      safeFetch: deps.safeFetch,
+      files: deps.oxyFiles,
+    }),
   );
 
   const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
@@ -338,6 +356,8 @@ export async function start(
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
+    stopReferenceSync();
+    stopReferenceReconciliation();
     const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
       void Promise.allSettled([stopEcosystemActivity(), renewalsStopped])
@@ -371,6 +391,20 @@ export async function start(
   // with the rail off it stops after the first refusal rather than logging the
   // same line per account.
   startAccountSync();
+  // Oxy Files (ADR 0043): the reference sync makes Oxy's record of which files
+  // Peable uses follow every avatar write, and the reconciliation repairs it
+  // daily. Both need Peable's own service token; a process that cannot get one
+  // (a laptop) starts neither, and says so once.
+  if (canUseOxyServiceLane()) {
+    startReferenceSync();
+    if (config.oxyFiles.reconciliationMode !== 'off') {
+      startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
+    }
+  } else {
+    console.warn(
+      'Oxy file references are disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest',
+    );
+  }
   gateway.httpServer.listen(config.port);
 }
 

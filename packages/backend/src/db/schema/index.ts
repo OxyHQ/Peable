@@ -33,3 +33,9 @@ export {
   taxCalculations,
   taxTransactions,
 } from './tax';
+export {
+  merchantAvatarAudit,
+  oxyFileEvents,
+  oxyFileReconciliationRuns,
+  oxyFileReferenceSyncs,
+} from './oxyFiles';
