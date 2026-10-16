@@ -109,9 +109,14 @@ export interface FinalInvoiceAuthorityReader {
     merchantPublicId: string;
     invoice: BillingPaidInvoice;
     taxCheckoutSnapshot?: BillingTaxCheckoutSnapshot;
+    /** Present only when the caller asked for the frozen tax lines. */
+    include?: { taxLines: true };
   }): Promise<unknown>;
   /** Pinned issuer verification keys. No key is accepted from a response. */
   verificationKeys: Readonly<Record<string, string>>;
+  /** Peable itself signs, so it may put its own frozen tax lines inside the
+   * signature. A reader relaying someone else's signature never can. */
+  signsTaxLines?: boolean;
 }
 
 export function verifyFinalInvoiceAuthority(

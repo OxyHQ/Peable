@@ -358,7 +358,10 @@ export async function start(
   // that have to be finished, and a drain gated on `config.stripe.enabled`
   // would leave them unprocessed with no sign that anything was wrong. With no
   // events the pass reads an empty partial index and does nothing.
-  startProviderEventDrain({ recurring: billingRuntime?.observations });
+  startProviderEventDrain({
+    recurring: billingRuntime?.observations,
+    invoiceTax: billingRuntime?.invoiceTax,
+  });
   // The backstop for a missed `account.updated`. Gated on nothing, like the
   // drain: with no accounts the pass reads an empty batch and does nothing, and
   // with the rail off it stops after the first refusal rather than logging the

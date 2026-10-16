@@ -394,6 +394,12 @@ const quote = await peable.billing.createTaxQuote({
   code (codes: `peable.tax.listCodes()`).
 - `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: ['tax_lines'] })`
   returns the signed invoice with its tax lines inside the signature.
+- On the card rail (`rail: 'stripe'`, configured with
+  `taxQuoteAdapterRef: "peable_tax"`) pass the quote to
+  `billing.createCheckoutSession({ …, taxQuote })`: Stripe Checkout charges
+  exactly the quoted total, Stripe Tax stays off, and the paid invoice is
+  recorded as a tax transaction (ADR 0012). A card quote stands two hours; the
+  Checkout needs at least 31 minutes of it left. Renewals are not yet re-quoted.
 - `peable.tax.transactions.list({ from, to })` and
   `peable.tax.reports.summary({ from, to })` (or `GET
   /v1/tax/reports/summary?format=csv`) are the filing export.

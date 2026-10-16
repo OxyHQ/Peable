@@ -583,9 +583,11 @@ export function createBillingService(options: BillingServiceOptions) {
       include?: BillingInvoiceAuthorityInclude,
     ) {
       authorize(owner);
-      // The card authority is signed by its reader adapter; Peable cannot add
-      // lines under someone else's signature.
-      if (include?.taxLines) throw new BillingError('not_found', 404);
+      // A relayed card authority is signed by its reader adapter and Peable
+      // cannot add lines under someone else's signature; only a reader that is
+      // Peable's own signer (Peable Tax on the card rail) can include them.
+      if (include?.taxLines && !options.finalInvoiceAuthority?.signsTaxLines)
+        throw new BillingError('not_found', 404);
       if (!options.finalInvoiceAuthority || !options.verifiedBindings)
         throw new BillingError('not_found', 404);
       const binding = await ownedSubscription(owner, subscriptionRef);
@@ -615,7 +617,11 @@ export function createBillingService(options: BillingServiceOptions) {
         invoice,
         ...(taxCheckoutSnapshot ? { taxCheckoutSnapshot } : {}),
       };
-      const raw = await options.finalInvoiceAuthority.read(structuredClone(expected));
+      const raw = await options.finalInvoiceAuthority.read(
+        structuredClone(
+          include?.taxLines ? { ...expected, include: { taxLines: true as const } } : expected,
+        ),
+      );
       const authority = verifyFinalInvoiceAuthority(
         raw,
         expected,
@@ -623,6 +629,9 @@ export function createBillingService(options: BillingServiceOptions) {
         now(),
       );
       if (taxCheckoutSnapshot) verifyBillingInvoiceTaxCheckout(authority, taxCheckoutSnapshot);
+      // Lines are present exactly when asked for.
+      if ((authority.invoice.taxLines !== undefined) !== (include?.taxLines === true))
+        throw new BillingError('invalid_provider_response', 502);
       return authority;
     },
     async retrieveSubscription(owner: BillingOwner, ref: string): Promise<BillingSubscription> {

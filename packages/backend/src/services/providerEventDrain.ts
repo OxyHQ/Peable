@@ -1,4 +1,5 @@
 import type { RecurringObservationOptions } from './recurring/contracts';
+import type { StripeInvoiceTaxRecorder } from './billing/stripeTaxCheckout';
 /**
  * The drain: stored provider events become payment state.
  *
@@ -20,7 +21,9 @@ import { getDb } from '../db/postgres';
 import {
   findUnprocessedProviderEvents,
   deferProviderEvents,
+  markProviderEventFailed,
 } from '../db/providers/providerEventRepository';
+import { redactProviderMessage } from './providers/redact';
 import { processProviderEvent } from './providers/eventProcessor';
 
 const DEFAULT_POLL_INTERVAL_MS = 5_000;
@@ -30,6 +33,8 @@ export interface DrainPassOptions {
   readonly batchSize?: number;
   /** Explicit operator-approved composition only; omitted until boot opt-in. */
   readonly recurring?: RecurringObservationOptions;
+  /** Peable Tax on the card rail; absent unless a Stripe rail opted in. */
+  readonly invoiceTax?: StripeInvoiceTaxRecorder;
   readonly now?: () => Date;
 }
 
@@ -102,6 +107,28 @@ export async function runProviderEventDrainPass(
   let failed = 0;
 
   for (const event of events) {
+    // A quoted card sale is committed to Peable Tax when its invoice is paid,
+    // before the event goes on to whatever else handles it. Idempotent, so a
+    // redelivered or retried event commits nothing twice; a failure leaves the
+    // event unprocessed for the next pass, like an unmatched payment event.
+    const invoiceRef = event.objectIds.invoice;
+    if (options.invoiceTax && event.type === 'invoice.paid' && invoiceRef) {
+      try {
+        const outcome = await options.invoiceTax.recordPaidInvoice(invoiceRef);
+        if (outcome === 'renewal_unquoted')
+          process.emitWarning(
+            `Peable Tax: renewal invoice ${invoiceRef} of a quoted card subscription has no quote`,
+          );
+      } catch (error) {
+        const message = redactProviderMessage(
+          error instanceof Error ? error.message : 'invoice tax commit failed',
+        );
+        await markProviderEventFailed(getDb(), event.id, message).catch(() => undefined);
+        if (options.recurring) deferred.push(event.id);
+        failed += 1;
+        continue;
+      }
+    }
     const outcome = await (options.recurring
       ? processProviderEvent(event, options.recurring)
       : processProviderEvent(event));

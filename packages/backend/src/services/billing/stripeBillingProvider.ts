@@ -38,6 +38,10 @@ export interface StripeBillingClient {
   listChargeRefunds?(chargeRef: string, startingAfter?: string): Promise<unknown>;
   retrievePaidPaymentIntent?(ref: string): Promise<unknown>;
   retrievePortalConfiguration(ref: string): Promise<unknown>;
+  /** Peable Tax on the card rail: a manual rate carrying the frozen tax. */
+  createTaxRate?(params: Stripe.TaxRateCreateParams, key: string): Promise<unknown>;
+  /** Ends a Checkout whose totals differ from the quote before anyone pays it. */
+  expireCheckout?(ref: string): Promise<unknown>;
 }
 const ref = (prefix: string) =>
   z

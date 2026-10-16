@@ -4,7 +4,7 @@ import {
 } from '../../services/billing/tax-checkout';
 import { canonicalBillingTaxQuote } from '@peable.to/shared-types';
 import { createHash } from 'node:crypto';
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { z } from 'zod';
 import { findMerchantById } from '../merchants/merchantRepository';
@@ -475,6 +475,35 @@ export async function findBillingCheckoutOperation(
       ),
     );
   return row ?? null;
+}
+/** Completed checkouts that froze a Peable Tax quote, for one provider customer.
+ * Empty for every customer that never bought through a quote — the common case,
+ * answered without asking the provider anything else. */
+export async function findBillingTaxCheckoutsForCustomer(
+  db: DatabaseOrTransaction,
+  deployment: BillingDeployment,
+  providerCustomerRef: string,
+): Promise<BillingOperation[]> {
+  return db
+    .select({ operation: billingOperations })
+    .from(billingOperations)
+    .innerJoin(
+      billingObjectBindings,
+      eq(billingObjectBindings.id, billingOperations.customerBindingId),
+    )
+    .where(
+      and(
+        eq(billingObjectBindings.provider, deployment.provider),
+        eq(billingObjectBindings.platformAccountId, deployment.platformAccountId),
+        eq(billingObjectBindings.livemode, deployment.livemode),
+        eq(billingObjectBindings.kind, 'customer'),
+        eq(billingObjectBindings.providerRef, providerCustomerRef),
+        eq(billingOperations.operation, 'checkout'),
+        eq(billingOperations.state, 'succeeded'),
+        isNotNull(billingOperations.taxCheckoutSnapshot),
+      ),
+    )
+    .then((rows) => rows.map((row) => row.operation));
 }
 export async function requireBillingBindingById(
   db: DatabaseOrTransaction,

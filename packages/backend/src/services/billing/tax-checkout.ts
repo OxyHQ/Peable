@@ -21,7 +21,7 @@ import {
 } from './tax-quote';
 import type { ProviderHostedSession } from './provider';
 
-const offerSchema = z
+export const billingTaxOfferSchema = z
   .object({
     providerPriceId: billingReference,
     planId: billingReference,
@@ -38,7 +38,7 @@ export const billingTaxCheckoutSnapshotSchema = z
   .object({
     taxQuote: billingTaxQuoteSchema,
     quoteDigest: z.string().regex(/^[a-f0-9]{64}$/),
-    offer: offerSchema,
+    offer: billingTaxOfferSchema,
   })
   .strict();
 export type BillingTaxCheckoutSnapshot = z.infer<typeof billingTaxCheckoutSnapshotSchema>;
@@ -72,7 +72,9 @@ export async function prepareBillingTaxCheckout(
   const location = billingCustomerLocationSchema.parse(
     await calculator.readCustomerLocation(owner, input.taxQuote.quote.customerLocationEvidenceId),
   );
-  const offer = offerSchema.parse(await adapter.resolveOffer(owner, input.providerPriceId));
+  const offer = billingTaxOfferSchema.parse(
+    await adapter.resolveOffer(owner, input.providerPriceId),
+  );
   const clock = now();
   if (
     input.trialDays !== 0 ||

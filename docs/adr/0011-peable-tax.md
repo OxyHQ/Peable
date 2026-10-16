@@ -86,9 +86,6 @@ registrations and approving, not a deployment.
 
 ## Not decided here
 
-- The card rail's signed quote and fiscal checkout (charging a frozen Peable
-  Tax amount through Stripe Checkout) still need a `BillingTaxCheckoutAdapter`
-  and the rail's offers. `/v1/tax/calculations` already prices card sales with
-  the same engine.
+- The card rail's signed quote and fiscal checkout: decided in ADR 0012.
 - Refunds on the FairCoin rail do not exist yet, so there is no tax reversal.
 - Which registrations a seller needs is a legal question, never code.
