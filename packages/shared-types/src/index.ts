@@ -56,14 +56,30 @@ export { signWebhook, verifyWebhook } from './webhookSigner';
 export {
   type MerchantEnvironment,
   type Merchant,
+  type PlatformFeeAccount,
   MERCHANT_ENVIRONMENTS,
 } from './merchant';
 export type { MerchantDisplay } from './merchantDisplay';
+export {
+  APPLICATION_FEE_GRACE_DAYS_DEFAULT,
+  APPLICATION_FEE_GRACE_DAYS_MAX,
+  APPLICATION_FEE_GRACE_DAYS_MIN,
+  APPLICATION_FEE_WARNING_DAYS,
+  type ApplicationFee,
+  type ApplicationFeeBalance,
+  type ApplicationFeeInvoice,
+  type ApplicationFeeInvoiceStatus,
+  type ApplicationFeeKind,
+  type ApplicationFeeStanding,
+} from './applicationFee';
 export type {
   AccountLink,
   ConnectOnboarding,
   ConnectOnboardingComplete,
+  ConnectSellerAccount,
+  PlatformFeeOnboarding,
   RegisterFaircoinKeyParams,
+  RegisterPlatformFeeKeyParams,
 } from './connect';
 export type {
   PaymentLink,

@@ -2,6 +2,7 @@
 // object nested under `data.object`, delivered HMAC-signed by the dispatcher.
 import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
+import type { ApplicationFee, ApplicationFeeInvoice } from './applicationFee';
 import type { ConnectedAccount } from './settlement';
 
 export type WebhookEventType =
@@ -69,6 +70,29 @@ export type WebhookEventType =
    * this union keeps compiling and simply never matches it.
    */
   | 'connected_account.updated'
+  /**
+   * The platform fee ledger (ADR 0012 §D12). `application_fee.accrued` when a
+   * payment carrying `applicationFee` settles, `application_fee.reversed` when
+   * the platform waives one. Both carry the ledger line ({@link ApplicationFee})
+   * and name the payment. Additive.
+   */
+  | 'application_fee.accrued'
+  | 'application_fee.reversed'
+  /**
+   * A seller's fee invoice — created, partly paid, paid. Carry the
+   * {@link ApplicationFeeInvoice}. Additive.
+   */
+  | 'application_fee_invoice.created'
+  | 'application_fee_invoice.partially_paid'
+  | 'application_fee_invoice.paid'
+  /**
+   * A seller's fee standing changed for the worse: fees will be past due within
+   * the warning window, or are past due (the FairCoin rail is now
+   * `restricted`). Carry the {@link ConnectedAccount}; `connected_account.updated`
+   * is sent too. Recovery is `connected_account.updated` alone. Additive.
+   */
+  | 'connected_account.application_fees_due_soon'
+  | 'connected_account.application_fees_past_due'
   | 'billing.observation.updated';
 
 /**
@@ -100,6 +124,13 @@ export interface WebhookEventPayload {
   'payment_intent.disputed': Dispute;
   'payment_intent.dispute_closed': Dispute;
   'connected_account.updated': ConnectedAccount;
+  'application_fee.accrued': ApplicationFee;
+  'application_fee.reversed': ApplicationFee;
+  'application_fee_invoice.created': ApplicationFeeInvoice;
+  'application_fee_invoice.partially_paid': ApplicationFeeInvoice;
+  'application_fee_invoice.paid': ApplicationFeeInvoice;
+  'connected_account.application_fees_due_soon': ConnectedAccount;
+  'connected_account.application_fees_past_due': ConnectedAccount;
 }
 
 /**

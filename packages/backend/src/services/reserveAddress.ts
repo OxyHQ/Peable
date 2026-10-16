@@ -2,6 +2,8 @@ import { getNetwork } from '@fairco.in/core';
 import { getDb } from '../db/postgres';
 import { reserveNextAccountDerivationIndex } from '../db/accounts/accountDerivationIndex';
 import { reserveNextDerivationIndex } from '../db/merchants/derivationIndex';
+import { reserveNextPlatformFeeDerivationIndex } from '../db/platformFees/platformFeeAccountRepository';
+import type { NetworkType } from '@fairco.in/core';
 import { deriveIntentAddress } from './derivation';
 
 /**
@@ -59,4 +61,21 @@ export async function reserveNextAccountAddress(
     getNetwork(reserved.network),
   );
   return { index: reserved.index, address };
+}
+
+/**
+ * The FEE output's address (ADR 0013): the platform's next index on the
+ * PLATFORM's own fee key — never the seller's, never the merchant's receive
+ * key. Same single-statement reservation as every other.
+ *
+ * @returns `null` when the platform has no fee key on this network.
+ */
+export async function reserveNextPlatformFeeAddress(
+  merchantId: string,
+  network: NetworkType,
+): Promise<{ accountId: string; index: number; address: string } | null> {
+  const reserved = await reserveNextPlatformFeeDerivationIndex(getDb(), merchantId, network);
+  if (!reserved) return null;
+  const address = deriveIntentAddress(reserved.xpub, 0, reserved.index, getNetwork(reserved.network));
+  return { accountId: reserved.accountId, index: reserved.index, address };
 }

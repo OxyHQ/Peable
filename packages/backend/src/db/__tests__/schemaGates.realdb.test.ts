@@ -11,6 +11,8 @@ import {
 import { phaseMarkerLine } from '@oxy.so/db/migrate';
 import { PROTECTED_COLUMNS } from '../protectedColumns';
 import {
+  applicationFeeRefunds,
+  platformFeeAccounts,
   billingObjectBindings,
   billingOperations,
   faircoinRenewalAuthorizations,
@@ -45,6 +47,8 @@ const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MIGRATIONS_DIR = join(BACKEND_ROOT, 'db', 'migrations');
 
 const ALL_TABLES = [
+  applicationFeeRefunds,
+  platformFeeAccounts,
   billingObjectBindings,
   billingOperations,
   faircoinRenewalAuthorizations,
@@ -188,6 +192,14 @@ describe('id-column classification', () => {
         {
           column: 'transfers.public_id',
           reason: "this row's own tr_… identifier, not a reference",
+        },
+        {
+          column: 'application_fee_refunds.public_id',
+          reason: "this row's own afr_… identifier, not a reference",
+        },
+        {
+          column: 'platform_fee_accounts.registered_by_oxy_user_id',
+          reason: 'the Oxy user (the platform owner) who registered the fee key — Oxy owns identity',
         },
         {
           column: 'connected_accounts.faircoin_oxy_user_id',

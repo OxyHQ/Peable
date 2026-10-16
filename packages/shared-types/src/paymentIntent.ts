@@ -299,6 +299,13 @@ export interface PaymentIntent {
    * still compile; a gateway at this version always sends it.
    */
   connectedAccountId?: string | null;
+  /**
+   * The platform's fee on this payment, base units, or `null` (ADR 0012 §D12).
+   * It is NOT taken from the payment: the payer pays `amount` to the seller,
+   * and when the payment settles the fee is recorded as owed by the seller to
+   * the platform. Optional in the type for older fixtures; always sent.
+   */
+  applicationFee?: string | null;
   txid: string | null;
   /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
   confirmations: number;
@@ -344,4 +351,12 @@ export interface CreatePaymentIntentParams {
    * must be the account's network.
    */
   connectedAccount?: string;
+  /**
+   * The platform's fee, base units, at most `amount` (ADR 0012 §D12). Only with
+   * `connectedAccount`. The payer still pays the full `amount` to the seller
+   * with a normal FairCoin request; on settlement the fee is recorded as owed by
+   * the seller, who pays it later on an application-fee invoice. Refused until
+   * the platform's owner has registered a fee key on this network.
+   */
+  applicationFee?: string;
 }

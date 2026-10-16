@@ -43,6 +43,12 @@ export const PROTECTED_COLUMNS = {
     // The seller's derivation counter, withheld for the merchant's reason.
     'nextDerivationIndex',
   ],
+  platformFeeAccounts: [
+    // The platform's fee key (ADR 0013): never on a DTO, for the seller key's
+    // reason — it reveals every fee the platform ever received.
+    'xpub',
+    'nextDerivationIndex',
+  ],
 } as const;
 
 /**

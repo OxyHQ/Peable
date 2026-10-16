@@ -22,6 +22,7 @@
 // theirs, no provider name. A reviewer should be able to check that by what is
 // absent from these interfaces.
 import type { CurrencyCode } from './money';
+import type { ApplicationFeeBalance } from './applicationFee';
 import type { NetworkType } from './network';
 
 /** How a provider reports one capability on a seller's account. */
@@ -48,8 +49,11 @@ export type ConnectedAccountRail = 'card' | 'faircoin';
  * `pending` — the platform opened it and the seller has not registered a key
  * yet; an on-behalf payment is refused (`account_not_ready`). `active` — the
  * seller registered their key; payments derive addresses from it.
+ * `restricted` — the key is registered but the seller's platform fees are past
+ * due (ADR 0012 §D12): new payments on their behalf are refused
+ * (`account_past_due`) until they pay, and it clears by itself when they do.
  */
-export type ConnectedAccountFaircoinStatus = 'pending' | 'active';
+export type ConnectedAccountFaircoinStatus = 'pending' | 'active' | 'restricted';
 
 /**
  * The FairCoin half of a seller's account.
@@ -67,6 +71,11 @@ export interface ConnectedAccountFaircoin {
   oxyUserId: string;
   /** When the seller registered their key. `null` while `pending`. */
   registeredAt: string | null;
+  /**
+   * The seller's platform-fee balance and standing (ADR 0012 §D12).
+   * Optional in the type for older fixtures; always sent.
+   */
+  applicationFees?: ApplicationFeeBalance;
 }
 
 export interface ConnectedAccount {

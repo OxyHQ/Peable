@@ -7,6 +7,17 @@ import type { NetworkType } from './network';
 export const MERCHANT_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
 export type MerchantEnvironment = (typeof MERCHANT_ENVIRONMENTS)[number];
 
+/**
+ * A platform's own FairCoin fee key, as the platform may see it (ADR 0012 §D12):
+ * which network it is on and when it was registered — never the key itself.
+ * Registered only by a member of the merchant's Oxy application with
+ * `billing:manage`, in the Peable wallet; the API never accepts one.
+ */
+export interface PlatformFeeAccount {
+  network: NetworkType;
+  registeredAt: string;
+}
+
 export interface Merchant {
   id: string;
   object: 'merchant';
@@ -35,6 +46,19 @@ export interface Merchant {
   /** Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it. */
   avatarFileId?: string;
   description?: string;
+  /**
+   * The platform's fee keys, one per network (ADR 0012 §D12). Present on
+   * `GET /v1/merchants/me`; a fee-bearing payment on a network with none is
+   * refused (`platform_fee_account_missing`).
+   */
+  feeAccounts?: PlatformFeeAccount[];
+  /** Where the owner registers a fee key — the Peable wallet, signed in with Oxy. */
+  feeAccountSetupUrl?: string;
+  /**
+   * Days from a fee accruing to it being past due, which restricts the seller
+   * (ADR 0012 §D12). Platform setting, 1–365, default 30.
+   */
+  applicationFeeGraceDays?: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -63,4 +63,6 @@ export interface CreateCheckoutSessionParams {
   cancelUrl?: string;
   /** Pay this seller (`ca_…`) rather than the merchant — see `CreatePaymentIntentParams.connectedAccount`. */
   connectedAccount?: string;
+  /** The platform's fee — see `CreatePaymentIntentParams.applicationFee`. */
+  applicationFee?: string;
 }

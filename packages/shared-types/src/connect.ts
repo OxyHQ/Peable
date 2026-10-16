@@ -4,6 +4,7 @@
 // it signed in with Oxy and registers the watch-only key their FairCoin will be
 // paid to. These are the shapes that page reads and writes. The platform never
 // sees them and never supplies a key.
+import type { ApplicationFeeBalance } from './applicationFee';
 import type { MerchantDisplay } from './merchantDisplay';
 import type { NetworkType } from './network';
 
@@ -46,4 +47,39 @@ export interface AccountLink {
   object: 'account_link';
   url: string;
   expiresAt: string;
+}
+
+/**
+ * `GET /v1/connect/platform_fee/:merchantId` — what the platform OWNER sees
+ * before registering the platform's FairCoin fee key (ADR 0012 §D12). Requires an Oxy
+ * session with `billing:manage` on the merchant's application.
+ */
+export interface PlatformFeeOnboarding {
+  object: 'platform_fee_onboarding';
+  merchantId: string;
+  platform: MerchantDisplay;
+  /** The networks this merchant may register a fee key on (non-production: testnet only). */
+  allowedNetworks: NetworkType[];
+  /** Fee keys already registered — one per network, immutable. */
+  feeAccounts: { network: NetworkType; registeredAt: string }[];
+}
+
+/** `POST /v1/connect/platform_fee/:merchantId/faircoin` — the dedicated pocket's watch-only ACCOUNT xpub. */
+export interface RegisterPlatformFeeKeyParams {
+  network: NetworkType;
+  xpub: string;
+}
+
+/**
+ * `GET /v1/connect/accounts` — the signed-in SELLER's accounts across every
+ * platform, with what they owe each (ADR 0012 §D12). Oxy user auth.
+ */
+export interface ConnectSellerAccount {
+  object: 'connect_seller_account';
+  /** The `ca_…`. */
+  accountId: string;
+  platform: MerchantDisplay;
+  network: NetworkType;
+  status: 'pending' | 'active' | 'restricted';
+  applicationFees: ApplicationFeeBalance;
 }

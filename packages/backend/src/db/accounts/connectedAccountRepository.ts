@@ -11,7 +11,8 @@ import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { assertWatchOnly } from '../../services/watchOnly';
-import { connectedAccounts, merchants } from '../schema';
+import { isWatchOnlyKeyInUse } from '../keys/keyInUse';
+import { connectedAccounts } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
@@ -249,8 +250,10 @@ export type RegisterKeyResult =
  *    and must have an open FairCoin half with no key yet.
  * 2. `assertWatchOnly(xpub, network)`: an extended key that can spend, or one
  *    for the other chain, throws `WatchOnlyViolationError` and is never stored.
- * 3. A MERCHANT's key is refused (`key_in_use`): two derivation counters on one
- *    key hand out the same addresses. A cross-table rule no constraint can
+ * 3. A key that already derives addresses for anyone — a merchant, another
+ *    seller, a platform's fee account — is refused (`key_in_use`): two
+ *    derivation counters on one key hand out the same addresses. A cross-table
+ *    rule no constraint can
  *    state; a merchant registering this exact key in the same instant is the
  *    residual risk, written down in the ADR.
  * 4. `UPDATE … WHERE xpub IS NULL` is the immutability — there is no other
@@ -277,12 +280,8 @@ export async function registerFaircoinKey(
   // refused on its own merits rather than reported as "in use".
   assertWatchOnly(xpub, current.network as NetworkType);
 
-  const [merchantHolding] = await db
-    .select({ id: merchants.id })
-    .from(merchants)
-    .where(eq(merchants.xpub, xpub))
-    .limit(1);
-  if (merchantHolding) return { ok: false, refusal: 'key_in_use' };
+  // A merchant's key, another seller's, or a platform's fee key (ADR 0013).
+  if (await isWatchOnlyKeyInUse(db, xpub)) return { ok: false, refusal: 'key_in_use' };
 
   let row: Record<string, unknown> | undefined;
   try {

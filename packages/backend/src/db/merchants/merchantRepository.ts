@@ -186,6 +186,22 @@ export async function findMerchantById(
 }
 
 /**
+ * By the public `merch_…` — for the platform OWNER's fee-key page (ADR 0013),
+ * whose URL names the merchant. Not an access control: that page authorizes by
+ * the caller's Oxy membership of the merchant's application.
+ */
+export async function findMerchantByPublicId(
+  db: DatabaseOrTransaction,
+  publicId: string,
+): Promise<MerchantRow | null> {
+  const [row] = await db
+    .select(MERCHANT_COLUMNS)
+    .from(merchants)
+    .where(eq(merchants.publicId, publicId));
+  return row ? toMerchantRow(row) : null;
+}
+
+/**
  * Several merchants in ONE round trip — address enrichment's second lookup.
  *
  * `services/enrichment.ts` resolves up to `ENRICH_MAX_ADDRESSES` (50) addresses

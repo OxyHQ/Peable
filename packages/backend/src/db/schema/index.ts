@@ -8,7 +8,7 @@
  */
 
 export { merchants } from './merchants';
-export { checkoutSessions, paymentIntents, paymentLinks } from './payments';
+export { applicationFeeRefunds, checkoutSessions, paymentIntents, paymentLinks } from './payments';
 export {
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
   socialReceiveCursors,
@@ -17,6 +17,7 @@ export {
 export { webhookDeliveries } from './webhooks';
 export { providerEvents } from './providerEvents';
 export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
+export { platformFeeAccounts } from './platformFees';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
 export { disputes } from './disputes';
