@@ -22,6 +22,7 @@
 // theirs, no provider name. A reviewer should be able to check that by what is
 // absent from these interfaces.
 import type { CurrencyCode } from './money';
+import type { NetworkType } from './network';
 
 /** How a provider reports one capability on a seller's account. */
 export type CapabilityStatus = 'active' | 'pending' | 'inactive';
@@ -32,16 +33,64 @@ export type TransferStatus = 'pending' | 'paid' | 'partially_reversed' | 'revers
 /** Where one reversal of a settlement stands. */
 export type TransferReversalStatus = 'pending' | 'succeeded' | 'failed';
 
+/**
+ * Which rails a seller's account was opened for (ADR 0012 D1).
+ *
+ * One seller is ONE `ca_…`: `card` is the provider account a marketplace
+ * settles to by transfer, `faircoin` is the seller's own watch-only key that
+ * on-behalf FairCoin payments derive their addresses from.
+ */
+export type ConnectedAccountRail = 'card' | 'faircoin';
+
+/**
+ * Where a seller's FairCoin half stands.
+ *
+ * `pending` — the platform opened it and the seller has not registered a key
+ * yet; an on-behalf payment is refused (`account_not_ready`). `active` — the
+ * seller registered their key; payments derive addresses from it.
+ */
+export type ConnectedAccountFaircoinStatus = 'pending' | 'active';
+
+/**
+ * The FairCoin half of a seller's account.
+ *
+ * The seller's xpub is deliberately ABSENT (ADR 0012 D6): an account xpub
+ * reveals every address of that account, so a platform holding it would learn
+ * the seller's whole history and balance. Nothing a platform does needs it —
+ * each payment carries its own address.
+ */
+export interface ConnectedAccountFaircoin {
+  /** The chain the seller is paid on. Fixed when the platform opened the half. */
+  network: NetworkType;
+  status: ConnectedAccountFaircoinStatus;
+  /** The Oxy user who may register the key — and, once `active`, who did. */
+  oxyUserId: string;
+  /** When the seller registered their key. `null` while `pending`. */
+  registeredAt: string | null;
+}
+
 export interface ConnectedAccount {
   id: string;
   object: 'connected_account';
   /** The merchant's OWN id for this seller — how they address it. */
   externalRef: string;
-  /** ISO 3166-1 alpha-2, upper-case. */
-  country: string;
+  /** Which halves this account has. Never empty. */
+  rails: readonly ConnectedAccountRail[];
+  /**
+   * The FairCoin half, or `null` when the platform never opened one.
+   * Readiness for FairCoin is `faircoin?.status === 'active'`; `payable` below
+   * is about the CARD half's settlements and says nothing about FairCoin.
+   */
+  faircoin: ConnectedAccountFaircoin | null;
+  /**
+   * ISO 3166-1 alpha-2, upper-case. `null` on a FairCoin-only seller, which has
+   * no card half and was never asked for one (ADR 0012 D1).
+   */
+  country: string | null;
   defaultCurrency: string | null;
   /**
-   * Whether this seller can receive a settlement right now.
+   * Whether this seller can receive a CARD settlement (a transfer) right now.
+   * Always `false` on a FairCoin-only seller.
    *
    * A CONVENIENCE, not the authority: every field it is derived from is here
    * too, and a marketplace with its own readiness policy reads those instead.

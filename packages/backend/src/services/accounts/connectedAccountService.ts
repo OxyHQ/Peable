@@ -9,11 +9,16 @@
  * produces the second account.
  */
 import type { MerchantEnvironment } from '@peable.to/shared-types';
+import type { NetworkType } from '@fairco.in/core';
 import {
   applyAccountSnapshot,
+  attachCardHalf,
+  enableFaircoinHalf,
   findAccountByExternalRef,
+  hasCardHalf,
   insertConnectedAccount,
   type AccountSnapshot,
+  type CardConnectedAccountRow,
   type ConnectedAccountRow,
   type SnapshotWrittenField,
 } from '../../db/accounts/connectedAccountRepository';
@@ -35,6 +40,47 @@ export class AccountsUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AccountsUnavailableError';
+  }
+}
+
+/**
+ * The seller's account does not have the half this operation needs — a card
+ * onboarding link or a transfer for a FairCoin-only seller, or a FairCoin
+ * operation for a card-only one (ADR 0012 D1). A 409: the account exists and
+ * is in a state that cannot do this, which the caller fixes by opening the
+ * half, not by editing the request.
+ */
+export class AccountRailMissingError extends Error {
+  constructor(readonly rail: 'card' | 'faircoin') {
+    super(
+      rail === 'card'
+        ? 'this seller has no card account; open one by creating the account with country and businessType'
+        : 'this seller has no FairCoin account; open one by creating the account with faircoin.network and faircoin.oxyUserId',
+    );
+    this.name = 'AccountRailMissingError';
+  }
+}
+
+/**
+ * A repeated create asked for a FairCoin half that disagrees with the one
+ * already open — another network or another seller identity. Both are fixed
+ * once set (ADR 0012 D2), so this is a 409 and nothing changes.
+ */
+export class AccountConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AccountConflictError';
+  }
+}
+
+/**
+ * A non-production platform asked for a mainnet FairCoin half — the merchants'
+ * test/live firewall, applied to sellers (ADR 0012 D8). 422.
+ */
+export class FaircoinNetworkRefusedError extends Error {
+  constructor(environment: MerchantEnvironment) {
+    super(`a '${environment}' environment cannot open a mainnet FairCoin account`);
+    this.name = 'FaircoinNetworkRefusedError';
   }
 }
 
@@ -83,7 +129,7 @@ export function toAccountSnapshot(snapshot: ProviderAccountSnapshot): AccountSna
  * `connected_accounts.provider` has recorded the answer since the table
  * existed; nothing was reading it.
  */
-function requireProviderFor(account: ConnectedAccountRow): AccountHoldingProvider {
+function requireProviderFor(account: CardConnectedAccountRow): AccountHoldingProvider {
   return requireAccountProvider(resolveProvider(account.provider), account.provider);
 }
 
@@ -115,16 +161,30 @@ function requireAccountProvider(
   return provider;
 }
 
-export interface EnsureAccountInput {
+/** The card half a platform asks for — opened at the provider. */
+export interface CardHalfRequest {
+  /** ISO-3166-1 alpha-2. Upper-cased here; the CHECK insists on it. */
+  readonly country: string;
+  readonly businessType: 'individual' | 'company';
+}
+
+/** The FairCoin half a platform asks for — no provider, no key yet (ADR 0012 D2). */
+export interface FaircoinHalfRequest {
+  readonly network: NetworkType;
+  /** The seller's Oxy user id: the only person who may register the key. */
+  readonly oxyUserId: string;
+}
+
+export type EnsureAccountInput = {
   readonly merchantId: string;
   /** The asking credential's environment — checked against the provider's mode. */
   readonly environment: MerchantEnvironment;
   /** The MERCHANT's own id for this seller. The address, and the idempotency. */
   readonly externalRef: string;
-  /** ISO-3166-1 alpha-2. Upper-cased here; the CHECK insists on it. */
-  readonly country: string;
-  readonly businessType: 'individual' | 'company';
-}
+} & (
+  | { readonly card: CardHalfRequest; readonly faircoin?: FaircoinHalfRequest }
+  | { readonly card?: undefined; readonly faircoin: FaircoinHalfRequest }
+);
 
 export interface EnsureAccountResult {
   readonly account: ConnectedAccountRow;
@@ -133,21 +193,37 @@ export interface EnsureAccountResult {
 }
 
 /**
- * Get the account for a seller, opening one at the provider if there is none.
+ * Get the account for a seller, opening whichever halves it asks for that the
+ * seller does not have yet.
  *
- * The order is: read, then create at the provider, then insert. That is the
+ * ## The card half
+ *
+ * The order is: read, then create at the provider, then write. That is the
  * opposite of the two-step used for payments and transfers, and the reason is
  * that the thing being created here is not reversible and not idempotent by
  * amount: a row written before the provider call would name an account that may
- * never exist, and the row's `provider_account_id` is NOT NULL because a seller
- * account with no account behind it is not a state anything downstream can act
- * on.
+ * never exist.
  *
  * What protects against the double-create is the provider's OWN idempotency
  * key, derived from `(merchantId, externalRef)` — the same input on a retry
  * returns the same account rather than opening a second — plus the unique
- * constraint, which decides the winner if two calls still race past the read.
- * The loser's account is then the same account, because the key was the same.
+ * constraint (or, for a seller who already has a FairCoin half, the
+ * `WHERE provider IS NULL` of `attachCardHalf`), which decides the winner if two
+ * calls still race past the read. The loser's account is then the same
+ * account, because the key was the same.
+ *
+ * ## The FairCoin half (ADR 0012 D2)
+ *
+ * No provider is involved: opening it records the network and the seller's Oxy
+ * identity, and nothing else. The KEY arrives later, from the seller's own
+ * session, never from here. A FairCoin-only seller therefore never reaches the
+ * acquirer and is never asked for KYC.
+ *
+ * ## Converging
+ *
+ * An existing seller is returned with `created: false`, after adding a half it
+ * lacked. A FairCoin half that is already open must AGREE with the request —
+ * network and Oxy user are fixed once set — or the call is a 409.
  */
 export async function ensureConnectedAccount(
   input: EnsureAccountInput,
@@ -155,15 +231,75 @@ export async function ensureConnectedAccount(
   // A connected account opened under the wrong mode is the least recoverable
   // mistake on this surface: the object cannot be deleted, so a development
   // credential that opened a LIVE Express account leaves a real one behind,
-  // generating real requirement emails to a real person, forever.
-  assertEnvironmentMatchesProvider(input.environment);
-  const provider = requireDefaultAccountProvider();
+  // generating real requirement emails to a real person, forever. Only the
+  // CARD half reaches a provider, so only it is checked against the key mode.
+  if (input.card) assertEnvironmentMatchesProvider(input.environment);
+  // The merchants' test/live firewall, applied to sellers: a leaked test
+  // credential can never point a seller's payments at mainnet.
+  if (
+    input.faircoin &&
+    input.environment !== 'production' &&
+    input.faircoin.network === 'mainnet'
+  ) {
+    throw new FaircoinNetworkRefusedError(input.environment);
+  }
+
   const db = getDb();
-  const country = input.country.toUpperCase();
-
   const existing = await findAccountByExternalRef(db, input.merchantId, input.externalRef);
-  if (existing) return { account: existing, created: false };
+  if (existing) return { account: await completeHalves(existing, input), created: false };
 
+  const card = input.card ? await openCardHalf(input, input.card) : undefined;
+  const faircoin = input.faircoin
+    ? { network: input.faircoin.network, oxyUserId: input.faircoin.oxyUserId }
+    : undefined;
+  const base = {
+    publicId: newId('ca'),
+    merchantId: input.merchantId,
+    externalRef: input.externalRef,
+  };
+  const inserted = card
+    ? await insertConnectedAccount(db, {
+        ...base,
+        provider: card.provider,
+        providerAccountId: card.snapshot.providerAccountId,
+        country: card.country,
+        ...(faircoin ? { faircoin } : {}),
+      })
+    : faircoin
+      ? await insertConnectedAccount(db, { ...base, faircoin })
+      : null;
+
+  if (!inserted) {
+    // A concurrent call won the constraint. For the card half its account is
+    // the SAME account — both calls presented the same idempotency key — so
+    // converging on the winner is correct rather than merely convenient.
+    const winner = await findAccountByExternalRef(db, input.merchantId, input.externalRef);
+    if (!winner) {
+      throw new Error(`connected account for ${input.externalRef} neither inserted nor found`);
+    }
+    return { account: await completeHalves(winner, input), created: false };
+  }
+
+  if (!card) return { account: inserted, created: true };
+  const withSnapshot = await applyAccountSnapshot(
+    db,
+    inserted.id,
+    toAccountSnapshot(card.snapshot),
+  );
+  return { account: withSnapshot ?? inserted, created: true };
+}
+
+/** Open the provider account for a seller. Never writes a row. */
+async function openCardHalf(
+  input: { readonly merchantId: string; readonly externalRef: string },
+  card: CardHalfRequest,
+): Promise<{
+  provider: AccountHoldingProvider['id'];
+  country: string;
+  snapshot: ProviderAccountSnapshot;
+}> {
+  const provider = requireDefaultAccountProvider();
+  const country = card.country.toUpperCase();
   // Derived from the merchant and their own seller id, never random: a retry
   // after a timeout presents the same key and the provider hands back the
   // account it already opened. A random key here opens a second real account
@@ -172,35 +308,68 @@ export async function ensureConnectedAccount(
   const snapshot = await provider.createAccount({
     accountId: `${input.merchantId}:${input.externalRef}`,
     country,
-    businessType: input.businessType,
+    businessType: card.businessType,
     idempotencyKey,
     // The merchant's seller id, and nothing else. A provider's metadata is
     // readable by everyone with dashboard access.
     metadata: { peable_merchant_id: input.merchantId },
   });
+  return { provider: provider.id, country, snapshot };
+}
 
-  const inserted = await insertConnectedAccount(db, {
-    publicId: newId('ca'),
-    merchantId: input.merchantId,
-    externalRef: input.externalRef,
-    provider: provider.id,
-    providerAccountId: snapshot.providerAccountId,
-    country,
-  });
+/**
+ * Add to an EXISTING seller whichever requested half it lacks, and check that a
+ * FairCoin half already open agrees with the request.
+ */
+async function completeHalves(
+  existing: ConnectedAccountRow,
+  input: EnsureAccountInput,
+): Promise<ConnectedAccountRow> {
+  const db = getDb();
+  let account = existing;
 
-  if (!inserted) {
-    // A concurrent call won the constraint. Its account is the SAME account —
-    // both calls presented the same idempotency key — so re-reading is correct
-    // rather than merely convenient.
-    const winner = await findAccountByExternalRef(db, input.merchantId, input.externalRef);
-    if (!winner) {
-      throw new Error(`connected account for ${input.externalRef} neither inserted nor found`);
+  if (input.faircoin) {
+    if (account.network === null) {
+      account =
+        (await enableFaircoinHalf(db, account.id, input.faircoin)) ??
+        (await rereadAccount(account));
     }
-    return { account: winner, created: false };
+    if (account.network !== input.faircoin.network) {
+      throw new AccountConflictError(
+        `this seller's FairCoin account is on ${String(account.network)}, which cannot change`,
+      );
+    }
+    if (account.faircoinOxyUserId !== input.faircoin.oxyUserId) {
+      throw new AccountConflictError(
+        "this seller's FairCoin account names a different Oxy user, which cannot change",
+      );
+    }
   }
 
-  const withSnapshot = await applyAccountSnapshot(db, inserted.id, toAccountSnapshot(snapshot));
-  return { account: withSnapshot ?? inserted, created: true };
+  // A card half is opened only when it was asked for and is missing — a card
+  // seller converging is EXACTLY the pre-ADR-0012 path: returned unchanged.
+  if (input.card && !hasCardHalf(account)) {
+    assertEnvironmentMatchesProvider(input.environment);
+    const card = await openCardHalf(input, input.card);
+    const attached = await attachCardHalf(db, account.id, {
+      provider: card.provider,
+      providerAccountId: card.snapshot.providerAccountId,
+      country: card.country,
+    });
+    if (attached) {
+      account =
+        (await applyAccountSnapshot(db, attached.id, toAccountSnapshot(card.snapshot))) ?? attached;
+    } else {
+      account = await rereadAccount(account);
+    }
+  }
+  return account;
+}
+
+async function rereadAccount(account: ConnectedAccountRow): Promise<ConnectedAccountRow> {
+  const fresh = await findAccountByExternalRef(getDb(), account.merchantId, account.externalRef);
+  if (!fresh) throw new Error(`connected account ${account.publicId} disappeared`);
+  return fresh;
 }
 
 /**
@@ -274,6 +443,9 @@ export async function refreshConnectedAccount(
   // a correctly-configured deployment. Reading an account moves no money, which
   // is what makes the asymmetry safe — `ensureConnectedAccount` and
   // `createAccountLink`, which do, both require it.
+  // A FairCoin-only seller has nothing at a provider to read: its readiness is
+  // the key it registered, which is already the row. Returned as it is.
+  if (!hasCardHalf(account)) return account;
   if (environment !== undefined) assertEnvironmentMatchesProvider(environment);
   const provider = requireProviderFor(account);
   const snapshot = await provider.getAccount(account.providerAccountId);
@@ -315,6 +487,7 @@ export interface AccountLinkInput {
 export async function createAccountLink(
   input: AccountLinkInput,
 ): Promise<{ url: string; expiresAt: Date }> {
+  if (!hasCardHalf(input.account)) throw new AccountRailMissingError('card');
   assertEnvironmentMatchesProvider(input.environment);
   const provider = requireProviderFor(input.account);
   return provider.accountLink({

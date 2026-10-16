@@ -1,4 +1,4 @@
-import type { ConnectedAccount } from '@peable.to/shared-types';
+import type { AccountLink, ConnectedAccount, NetworkType } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 
 /**
@@ -15,13 +15,33 @@ import type { RestClient } from '../core/client';
  * holding the reference they chose.
  */
 
-export interface CreateConnectedAccountParams {
+/**
+ * Open a seller — on the card rail, the FairCoin rail, or both — under ONE
+ * `ca_…` (ADR 0012 D1). At least one half is required.
+ *
+ * Repeating a create converges on the seller's existing account and ADDS a half
+ * it does not have yet, so a card seller can be given FairCoin later (and the
+ * reverse) without a second id.
+ */
+export type CreateConnectedAccountParams = {
   /** The merchant's own id for this seller. The idempotency, and durable. */
   externalRef: string;
-  /** ISO 3166-1 alpha-2. Case-insensitive; the gateway upper-cases it. */
-  country: string;
-  businessType: 'individual' | 'company';
-}
+  /**
+   * The FairCoin half: the chain the seller is paid on and the seller's Oxy
+   * user id — the ONLY person the onboarding page lets register the key.
+   * There is no key here, by design: the seller registers it themselves, in
+   * their own Oxy session, through `accountLinks.create({ rail: 'faircoin' })`.
+   * A non-production credential can only open `testnet`.
+   */
+  faircoin?: { network: NetworkType; oxyUserId: string };
+} & (
+  | {
+      /** ISO 3166-1 alpha-2. Case-insensitive; the gateway upper-cases it. Opens the CARD half. */
+      country: string;
+      businessType: 'individual' | 'company';
+    }
+  | { country?: undefined; businessType?: undefined }
+);
 
 export interface ConnectedAccountListParams {
   limit?: number;
@@ -36,16 +56,20 @@ export interface ConnectedAccountList {
 }
 
 export interface AccountLinkParams {
-  /** Where the provider sends a seller whose link expired mid-flow. */
+  /** Where an EXPIRED link sends the seller, to ask you for a fresh one. */
   refreshUrl: string;
+  /** Where the seller lands when onboarding is done. Proves nothing — read the account. */
   returnUrl: string;
+  /**
+   * Which half to onboard. `card` (the default) is the provider's hosted KYC;
+   * `faircoin` is Peable's page in the wallet, where the seller — signed in
+   * with Oxy as the account's `oxyUserId` — registers their watch-only key
+   * (ADR 0012 D3). The FairCoin link works for an hour and only for that user.
+   */
+  rail?: 'card' | 'faircoin';
 }
 
-export interface AccountLink {
-  object: 'account_link';
-  url: string;
-  expiresAt: string;
-}
+export type { AccountLink };
 
 export class ConnectedAccountsResource {
   constructor(private readonly client: RestClient) {}
@@ -121,5 +145,26 @@ export class ConnectedAccountsResource {
       `/v1/connected_accounts/${encodeURIComponent(accountId)}/account_links`,
       { body: params },
     );
+  }
+}
+
+/** `accountLinks.create` — Stripe's `AccountLink.create`, naming the account in the body. */
+export interface CreateAccountLinkParams extends AccountLinkParams {
+  /** The seller's `ca_…`. */
+  account: string;
+}
+
+/**
+ * `peable.accountLinks` — onboarding links, Stripe-named.
+ *
+ * The same operation as `connectedAccounts.createAccountLink`, addressed the
+ * way Stripe Connect integrators expect: `accountLinks.create({ account, … })`.
+ */
+export class AccountLinksResource {
+  constructor(private readonly accounts: ConnectedAccountsResource) {}
+
+  create(params: CreateAccountLinkParams): Promise<AccountLink> {
+    const { account, ...link } = params;
+    return this.accounts.createAccountLink(account, link);
   }
 }

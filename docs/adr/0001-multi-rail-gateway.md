@@ -327,10 +327,16 @@ because both are ways an event that should exist never gets emitted:
 
 ## Open items (tracked, not blocking)
 
-1. Whether the FairCoin rail can settle a **sub-merchant** — a seller who
+1. ~~Whether the FairCoin rail can settle a **sub-merchant** — a seller who
    registers their own xpub — or only the merchant itself. This decides whether
    a marketplace can offer FairCoin to third-party sellers at all, and it is a
-   product decision that does not block the card rail.
+   product decision that does not block the card rail.~~ **CLOSED by
+   [ADR 0012](0012-faircoin-connected-accounts.md) (2026-10-16):** it can. A
+   seller's connected account holds the seller's own watch-only key, registered
+   by the seller in their own Oxy session, and the platform creates payments on
+   the seller's behalf whose addresses derive from that key. Nothing is
+   settled afterwards — the payer pays the seller directly — so D2's statement
+   that the FairCoin rail implements no transfer still stands.
 2. A React Native surface for the payer SDK. The browser entry mounts onto the
    DOM, so a native app can only reach the hosted checkout today.
 3. Embedded onboarding components, to close the one place a merchant sees the

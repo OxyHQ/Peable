@@ -146,6 +146,8 @@ const account: ConnectedAccount = {
   id: 'ca_fixture',
   object: 'connected_account',
   externalRef: 'store_fixture',
+  rails: ['card'],
+  faircoin: null,
   country: 'ES',
   defaultCurrency: 'EUR',
   payable: false,

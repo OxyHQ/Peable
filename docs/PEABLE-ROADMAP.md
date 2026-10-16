@@ -74,6 +74,8 @@ documents:
 | REST routes: merchants, intents, links, sessions, social, enrichment, webhook deliveries | yes | — | — | — |
 | REST routes: connected accounts, transfers and reversals, refunds, disputes | yes | no | — | no |
 | `connected_account.updated` — seller readiness reaches the merchant | yes | no | no | no |
+| FairCoin connected accounts: sellers paid on-chain straight to their own keys, intents and sessions on behalf ([ADR 0012](adr/0012-faircoin-connected-accounts.md)) | yes | — | no | no |
+| Seller onboarding page in the wallet (`/connect/<token>`), Oxy-authenticated key registration | yes | — | no | no |
 | Realtime intent updates and signed, retrying webhook delivery | yes | — | — | — |
 | PostgreSQL repositories, schema, phased migrations, real-database harness | yes | — | — | — |
 | Test/live isolation enforced against the provider's KEY MODE, not only by row | yes | no | no | no |
@@ -110,6 +112,7 @@ capability behaviour, or the shape of its real events.
 |---|---|---|---|---|
 | Server SDK: intents, links, checkout sessions, webhooks | yes | — | published `0.1.1` | — |
 | Server SDK: merchants, connected accounts, refunds, transfers, disputes | yes | no | **not published** | no |
+| Server SDK 0.4.0: `accounts`, `accountLinks`, `connectedAccount` on intents and sessions | yes | — | **not published** | no |
 | Browser entry: payer retrieval, deep-link handoff, QR, live status | yes | — | deployed | — |
 | Browser entry: resume (`getClientAction`) and the hosted CARD form | yes | **no** | no | **no** |
 
@@ -169,6 +172,22 @@ namespaces are unreleased on this snapshot.
 - [ ] Record funds withdrawn and reinstated on a dispute, and the dispute fee,
   as movements of their own — they are not refunds to the customer.
 
+### FairCoin connected accounts (ADR 0012), before a seller is paid on mainnet
+
+- [ ] Testnet canary by a person, end to end: a card-only platform opens a
+  seller, the seller registers a dedicated pocket from the wallet on a real
+  device, the platform takes an on-behalf payment, the coins arrive in that
+  pocket, and the platform receives `confirming` / `settled` tagged with the
+  seller.
+- [ ] Owner decision on the platform fee — ADR 0012 §D12 lays out the options
+  and recommends none at launch, then a fee invoiced to the seller. No code
+  computes a fee today.
+- [ ] Key rotation for a seller who loses their wallet — today the platform
+  opens a new account; an in-place rotation needs per-intent key versions.
+- [ ] Gap-limit behaviour of the seller's wallet when many on-behalf intents
+  expire unpaid (the same exposure direct merchants have).
+- [ ] Publish `@peable.to/shared-types` 0.5.0 and `@peable.to/sdk` 0.4.0.
+
 ### Existing gates
 
 - [ ] Record the required EU crypto/fintech legal opinion before production
@@ -185,7 +204,9 @@ namespaces are unreleased on this snapshot.
 
 ## Later phases
 
-- [ ] Merchant integration in Mercaria.
+- [ ] Merchant integration in Mercaria. Mercaria uses the card rail today; its
+  sellers can be paid in FairCoin through connected accounts
+  ([Connect for FairCoin](connect-faircoin.md)) once Mercaria builds its side.
 - [ ] WordPress/WooCommerce integration, followed by other commerce adapters.
 - [ ] Shared Pockets with multi-party signing and encrypted partial-signature
   coordination; the coordinator must remain unable to spend.

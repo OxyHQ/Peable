@@ -17,8 +17,17 @@
  * the mapping from a ROW to one of them, which is the half that is nobody
  * else's business.
  */
-import type { ConnectedAccount, Transfer } from '@peable.to/shared-types';
-import type { ConnectedAccountRow } from '../db/accounts/connectedAccountRepository';
+import type {
+  ConnectedAccount,
+  ConnectedAccountFaircoin,
+  ConnectedAccountRail,
+  Transfer,
+} from '@peable.to/shared-types';
+import {
+  faircoinStatusOf,
+  hasCardHalf,
+  type ConnectedAccountRow,
+} from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
 
 /** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
@@ -29,12 +38,19 @@ export type ConnectedAccountDTO = ConnectedAccount;
  *
  * `providerAccountId` and `provider` are absent, and that is the point of the
  * file. A reviewer checking this should be able to see it by what is NOT here.
+ * So is the seller's FairCoin `xpub` (ADR 0012 D6) — the row type does not even
+ * carry it.
  */
 export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccountDTO {
+  const rails: ConnectedAccountRail[] = [];
+  if (hasCardHalf(row)) rails.push('card');
+  if (row.network !== null) rails.push('faircoin');
   return {
     id: row.publicId,
     object: 'connected_account',
     externalRef: row.externalRef,
+    rails,
+    faircoin: toFaircoinHalf(row),
     country: row.country,
     defaultCurrency: row.defaultCurrency,
     // Both halves, and `transfers` is the one that actually gates a settlement:
@@ -55,6 +71,18 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
     lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+  };
+}
+
+/** The FairCoin half, or `null` when the platform never opened one. */
+function toFaircoinHalf(row: ConnectedAccountRow): ConnectedAccountFaircoin | null {
+  const status = faircoinStatusOf(row);
+  if (status === null || row.network === null || row.faircoinOxyUserId === null) return null;
+  return {
+    network: row.network,
+    status,
+    oxyUserId: row.faircoinOxyUserId,
+    registeredAt: row.faircoinRegisteredAt?.toISOString() ?? null,
   };
 }
 

@@ -131,7 +131,11 @@ export async function enqueueIntentWebhook(
 ): Promise<void> {
   const eventType = WEBHOOK_EVENT_FOR[row.status];
   if (eventType === undefined) return;
-  await enqueue(tx, toAddress(row), buildEvent(eventType, toPaymentIntentDTO(row)));
+  await enqueue(
+    tx,
+    toAddress(row),
+    buildEvent(eventType, toPaymentIntentDTO(row), row.connectedAccountPublicId),
+  );
 }
 
 /**
@@ -160,7 +164,7 @@ export async function enqueueDisputeWebhook(
   dispute: Dispute,
   eventType: 'payment_intent.disputed' | 'payment_intent.dispute_closed',
 ): Promise<void> {
-  await enqueue(tx, toAddress(row), buildEvent(eventType, dispute));
+  await enqueue(tx, toAddress(row), buildEvent(eventType, dispute, row.connectedAccountPublicId));
 }
 
 /**
@@ -188,7 +192,7 @@ export async function enqueueConnectedAccountWebhook(
   merchantId: string,
   account: ConnectedAccount,
 ): Promise<void> {
-  await enqueue(tx, { merchantId }, buildEvent('connected_account.updated', account));
+  await enqueue(tx, { merchantId }, buildEvent('connected_account.updated', account, account.id));
 }
 
 /** Where an intent's events go: its merchant, correlated to the payment. */

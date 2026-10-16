@@ -328,6 +328,37 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'Sending is disabled for watch-only wallets. Import the full wallet with a recovery phrase to enable sending.',
 
     // ---------- Approve pay ----------
+    'connect.title': 'Get paid in FairCoin',
+    'connect.signInTitle': 'Sign in to continue',
+    'connect.signInBody': 'Sign in with the Oxy account this store belongs to.',
+    'connect.signIn': 'Sign in',
+    'connect.asks': '{platform} wants to pay your sales in FairCoin, straight to your wallet.',
+    'connect.network': 'Network',
+    'connect.custody':
+      'Peable and {platform} never hold your coins. They go from the buyer to this pocket.',
+    'connect.pocket': 'Receive into pocket',
+    'connect.dedicated':
+      'Use a pocket only for {platform} sales. Payments are matched by address, and a pocket you also use for other payments can mix them up.',
+    'connect.confirmDedicated': 'This pocket is only for {platform}',
+    'connect.managePockets': 'Manage pockets',
+    'connect.register': 'Receive {platform} sales here',
+    'connect.pasteTitle': 'Watch-only account key',
+    'connect.pasteBody':
+      'This device has no {network} wallet. Paste the watch-only account key (xpub) of the wallet that should receive these sales, or open this link on your phone.',
+    'connect.pasteLabel': 'Watch-only account key',
+    'connect.doneTitle': "You're set up",
+    'connect.doneBody':
+      '{platform} can now take FairCoin payments for your sales. They arrive in this pocket.',
+    'connect.return': 'Back to {platform}',
+    'connect.error.notFound': 'This link does not exist.',
+    'connect.error.expired':
+      'This link has expired or was already used. Go back to {platform} for a new one.',
+    'connect.error.wrongSeller':
+      'This link is for a different Oxy account. Switch to the account that owns the store.',
+    'connect.error.conflict':
+      'This store already has a FairCoin key, or this pocket already receives payments elsewhere. Pick another pocket.',
+    'connect.error.invalidKey': 'That is not a watch-only key for this network.',
+    'connect.error.generic': 'Something went wrong. Try again.',
     'pay.title': 'Approve Payment',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'pay.usdApprox': '≈ ${amount} USD',
@@ -1262,6 +1293,37 @@ const translations: Record<TranslatedLanguage, Record<string, string>> = {
       'El env\u00edo est\u00e1 deshabilitado para billeteras de solo lectura. Importa la billetera completa con una frase de recuperaci\u00f3n para habilitar el env\u00edo.',
 
     // ---------- Approve pay ----------
+    'connect.title': 'Cobra en FairCoin',
+    'connect.signInTitle': 'Inicia sesión para continuar',
+    'connect.signInBody': 'Inicia sesión con la cuenta Oxy a la que pertenece esta tienda.',
+    'connect.signIn': 'Iniciar sesión',
+    'connect.asks': '{platform} quiere pagarte tus ventas en FairCoin, directamente a tu monedero.',
+    'connect.network': 'Red',
+    'connect.custody':
+      'Ni Peable ni {platform} custodian tus monedas. Van del comprador a este bolsillo.',
+    'connect.pocket': 'Recibir en el bolsillo',
+    'connect.dedicated':
+      'Usa un bolsillo solo para las ventas de {platform}. Los pagos se identifican por dirección, y un bolsillo que también usas para otros pagos puede mezclarlos.',
+    'connect.confirmDedicated': 'Este bolsillo es solo para {platform}',
+    'connect.managePockets': 'Gestionar bolsillos',
+    'connect.register': 'Recibir aquí las ventas de {platform}',
+    'connect.pasteTitle': 'Clave de cuenta de solo lectura',
+    'connect.pasteBody':
+      'Este dispositivo no tiene un monedero de {network}. Pega la clave de cuenta de solo lectura (xpub) del monedero que debe recibir estas ventas, o abre este enlace en tu móvil.',
+    'connect.pasteLabel': 'Clave de cuenta de solo lectura',
+    'connect.doneTitle': 'Todo listo',
+    'connect.doneBody':
+      '{platform} ya puede cobrar tus ventas en FairCoin. Llegan a este bolsillo.',
+    'connect.return': 'Volver a {platform}',
+    'connect.error.notFound': 'Este enlace no existe.',
+    'connect.error.expired':
+      'Este enlace ha caducado o ya se usó. Vuelve a {platform} para pedir uno nuevo.',
+    'connect.error.wrongSeller':
+      'Este enlace es para otra cuenta Oxy. Cambia a la cuenta propietaria de la tienda.',
+    'connect.error.conflict':
+      'Esta tienda ya tiene una clave FairCoin, o este bolsillo ya recibe pagos en otro sitio. Elige otro bolsillo.',
+    'connect.error.invalidKey': 'Esa no es una clave de solo lectura para esta red.',
+    'connect.error.generic': 'Algo salió mal. Inténtalo de nuevo.',
     'pay.title': 'Aprobar Pago',
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a literal dollar sign before the {amount} placeholder
     'pay.usdApprox': '\u2248 ${amount} USD',

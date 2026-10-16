@@ -84,6 +84,11 @@ export interface InsertCheckoutSessionParams {
   readonly rail: PaymentIntentRail;
   /** FairCoin rail only; `null` on a card session. */
   readonly network: NetworkType | null;
+  /**
+   * The seller the wrapped intent pays — its INTERNAL id, copied from the
+   * intent (ADR 0012). `null` for a session paying the merchant itself.
+   */
+  readonly connectedAccountId?: string | null;
   readonly metadata: Record<string, string>;
   readonly successUrl?: string | undefined;
   readonly cancelUrl?: string | undefined;
@@ -121,6 +126,7 @@ export async function insertCheckoutSession(
         currency: params.currency,
         rail: params.rail,
         network: params.network,
+        connectedAccountId: params.connectedAccountId ?? null,
         metadata: params.metadata,
         successUrl: params.successUrl ?? null,
         cancelUrl: params.cancelUrl ?? null,

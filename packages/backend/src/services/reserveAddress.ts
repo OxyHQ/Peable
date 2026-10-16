@@ -1,5 +1,6 @@
 import { getNetwork } from '@fairco.in/core';
 import { getDb } from '../db/postgres';
+import { reserveNextAccountDerivationIndex } from '../db/accounts/accountDerivationIndex';
 import { reserveNextDerivationIndex } from '../db/merchants/derivationIndex';
 import { deriveIntentAddress } from './derivation';
 
@@ -32,5 +33,30 @@ export async function reserveNextAddress(
     getNetwork(reserved.network),
   );
 
+  return { index: reserved.index, address };
+}
+
+/**
+ * The on-behalf twin of {@link reserveNextAddress} (ADR 0012 D5): claim the
+ * SELLER's next index and derive the receive address from THEIR key, so the
+ * coins go straight to their wallet.
+ *
+ * Same single-statement reservation, on `connected_accounts`; see
+ * `db/accounts/accountDerivationIndex.ts`.
+ */
+export async function reserveNextAccountAddress(
+  merchantId: string,
+  accountId: string,
+): Promise<{ index: number; address: string }> {
+  const reserved = await reserveNextAccountDerivationIndex(getDb(), merchantId, accountId);
+  if (!reserved) {
+    throw new Error(`connected account has no registered key: ${accountId}`);
+  }
+  const address = deriveIntentAddress(
+    reserved.xpub,
+    0,
+    reserved.index,
+    getNetwork(reserved.network),
+  );
   return { index: reserved.index, address };
 }

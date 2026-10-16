@@ -1,8 +1,15 @@
 import { and, eq, inArray } from 'drizzle-orm';
-import { getNetwork, type NetworkType } from '@fairco.in/core';
+import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { deriveIntentAddress } from '../../services/derivation';
+import { assertWatchOnly, WatchOnlyViolationError } from '../../services/watchOnly';
+
+/**
+ * Re-exported: the firewall moved to `services/watchOnly.ts` so the seller's key
+ * (ADR 0012) and the merchant's are refused by ONE implementation. Existing
+ * importers keep reading it from here.
+ */
+export { WatchOnlyViolationError };
 import { merchants } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 
@@ -54,17 +61,6 @@ const MERCHANT_COLUMNS = {
 } as const;
 
 /**
- * Raised when the extended key handed in is not a spend-incapable watch-only
- * key. Callers translate it into the `watch-only violation` refusal.
- */
-export class WatchOnlyViolationError extends Error {
-  constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : 'invalid watch-only xpub');
-    this.name = 'WatchOnlyViolationError';
-  }
-}
-
-/**
  * Raised when a registration describes HALF a FairCoin account.
  *
  * Separate from the watch-only violation because it is a different mistake:
@@ -76,36 +72,6 @@ export class ChainRegistrationError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'ChainRegistrationError';
-  }
-}
-
-/**
- * The non-custody firewall.
- *
- * ## Read this before touching `insertMerchant`
- *
- * The repository AGENTS.md calls this "the legal firewall": if a merchant ever
- * hands over an `xprv`, the gateway refuses it rather than silently gaining the
- * ability to spend their funds.
- *
- * A schema has no hooks. There is no CHECK constraint that can express it
- * either — deciding it requires deriving a child key, which is a secp256k1
- * operation and not something SQL can perform. So the guarantee moves from
- * "true of every write by construction" to "true of every write that goes
- * through this function", and the only thing keeping that honest is that
- * `insertMerchant` is the single writer.
- *
- * Nothing fails if this is removed. Every existing test still passes, because
- * a test has to hand in a PRIVATE extended key to notice — which is exactly
- * why `merchantRepository.realdb.test.ts` does.
- */
-function assertWatchOnly(xpub: string, network: NetworkType): void {
-  try {
-    // Deriving index 0 proves the key is usable AND public-only:
-    // `deriveIntentAddress` throws on an extended key carrying a private key.
-    deriveIntentAddress(xpub, 0, 0, getNetwork(network));
-  } catch (error) {
-    throw new WatchOnlyViolationError(error);
   }
 }
 

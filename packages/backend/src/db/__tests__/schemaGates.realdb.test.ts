@@ -15,6 +15,7 @@ import {
   billingOperations,
   faircoinRenewalAuthorizations,
   checkoutSessions,
+  connectedAccountLinks,
   connectedAccounts,
   merchants,
   paymentIntents,
@@ -48,6 +49,7 @@ const ALL_TABLES = [
   billingOperations,
   faircoinRenewalAuthorizations,
   checkoutSessions,
+  connectedAccountLinks,
   connectedAccounts,
   merchants,
   paymentIntents,
@@ -186,6 +188,10 @@ describe('id-column classification', () => {
         {
           column: 'transfers.public_id',
           reason: "this row's own tr_… identifier, not a reference",
+        },
+        {
+          column: 'connected_accounts.faircoin_oxy_user_id',
+          reason: "the seller's Oxy user id (ADR 0012 D2) — Oxy owns identity",
         },
         {
           column: 'connected_accounts.provider_account_id',

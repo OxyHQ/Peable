@@ -244,6 +244,31 @@ export function reachesSettlementFromPayer(status: PaymentIntentStatus): boolean
   return false;
 }
 
+/**
+ * The statuses an intent may still EXPIRE from (ADR 0012 D9).
+ *
+ * Exactly those whose transition list contains `expired`: the gateway is
+ * waiting on a PERSON who has not paid. Once a FairCoin payer has reported a
+ * broadcast (`broadcast`), or the chain is confirming it (`confirming`), the
+ * intent NEVER expires, whatever `expiresAt` says — coins are moving and the
+ * settlement watcher owns the row. A platform must therefore never cancel an
+ * order because `expiresAt` passed: it releases a reservation on
+ * `payment_intent.expired` (or `rejected`), and on nothing else.
+ *
+ * Stated rather than derived, for `PAYABLE_STATUSES`' reason; the gateway's
+ * test suite pins it against the transition table.
+ */
+export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
+  'created',
+  'awaiting_approval',
+  'requires_action',
+];
+
+/** Whether an intent in this status can still expire. See {@link EXPIRABLE_STATUSES}. */
+export function canExpire(status: PaymentIntentStatus): boolean {
+  return EXPIRABLE_STATUSES.includes(status);
+}
+
 export interface PaymentIntent {
   id: string;
   object: 'payment_intent';
@@ -265,12 +290,34 @@ export interface PaymentIntent {
    */
   address: string | null;
   merchantId: string;
+  /**
+   * The seller this payment is made ON BEHALF OF (`ca_…`), or `null` for a
+   * payment to the merchant itself (ADR 0012 D5). On-behalf payments are
+   * FairCoin only, and `address` derives from that seller's own key.
+   *
+   * Optional in the type only so fixtures written against earlier versions
+   * still compile; a gateway at this version always sends it.
+   */
+  connectedAccountId?: string | null;
   txid: string | null;
   /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
   confirmations: number;
   clientSecret: string;
   metadata: Record<string, string>;
+  /**
+   * When an UNPAID intent expires. Meaningful only while {@link canExpire}
+   * is true for `status` — see `canExpire` below.
+   */
   expiresAt: string;
+  /**
+   * Whether this intent can still expire (ADR 0012 D9). `false` once the payer
+   * has reported a broadcast: a FairCoin payment that is `broadcast` or
+   * `confirming` NEVER expires, so a platform must not cancel the order for it.
+   *
+   * Optional in the type only for fixtures written against earlier versions;
+   * a gateway at this version always sends it.
+   */
+  canExpire?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -289,4 +336,12 @@ export interface CreatePaymentIntentParams {
   currency?: CurrencyCode;
   metadata?: Record<string, string>;
   expiresInSeconds?: number;
+  /**
+   * Create the payment ON BEHALF OF this connected account (`ca_…`) — the
+   * address derives from the seller's own key and the coins go straight to
+   * their wallet (ADR 0012 D5). FairCoin only: combined with `rail: 'card'` it
+   * is refused. The account's FairCoin half must be `active` and `network`
+   * must be the account's network.
+   */
+  connectedAccount?: string;
 }

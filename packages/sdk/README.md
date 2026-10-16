@@ -22,3 +22,29 @@ The remote outcome may be unknown: recover explicitly with the same durable key.
 optional second `{ idempotencyKey }` argument, forwarding the existing header.
 Refund/transfer `externalRef` remains their durable business identity; the option
 neither replaces it nor changes gateway financial semantics.
+
+### Connect for FairCoin (0.4.0)
+
+Pay a marketplace's sellers in FairCoin straight to their own wallets
+(ADR 0012, guide in `docs/connect-faircoin.md`):
+
+```ts
+const seller = await peable.accounts.create({
+  externalRef: store.id,
+  faircoin: { network: 'testnet', oxyUserId: store.ownerOxyUserId },
+});
+const link = await peable.accountLinks.create({
+  account: seller.id, rail: 'faircoin', returnUrl, refreshUrl,
+});
+// the seller registers their key at link.url, signed in with Oxy;
+// you receive connected_account.updated with faircoin.status === 'active'
+const intent = await peable.paymentIntents.create(
+  { amount: '250000000', rail: 'faircoin', network: 'testnet', connectedAccount: seller.id },
+  { idempotencyKey: `order:${order.id}` },
+);
+```
+
+`peable.accounts` is `peable.connectedAccounts` under its Stripe name. Events for
+an on-behalf payment carry `event.account`; `intent.canExpire` is `false` once a
+payer has broadcast, so never cancel an order on `expiresAt` alone. A seller
+without a registered key is a 409 with `error.code === 'account_not_ready'`.

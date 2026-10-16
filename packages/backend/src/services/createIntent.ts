@@ -4,6 +4,11 @@ import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
+  faircoinStatusOf,
+  findAccountByPublicId,
+  type ConnectedAccountRow,
+} from '../db/accounts/connectedAccountRepository';
+import {
   findIntentByIdempotencyKey,
   insertPaymentIntent,
   linkProviderObject,
@@ -13,7 +18,7 @@ import type { Database } from '../db/postgres';
 import type { PaymentProvider, ProviderClientAction } from './providers/provider';
 import { assertEnvironmentMatchesProvider } from './providers/environmentGuard';
 import { resolveCardProvider, resolveProvider } from './providers/registry';
-import { reserveNextAddress } from './reserveAddress';
+import { reserveNextAccountAddress, reserveNextAddress } from './reserveAddress';
 import { newId, clientSecretFor } from '../lib/ids';
 
 const DEFAULT_EXPIRY_SECONDS = 15 * 60;
@@ -26,9 +31,13 @@ const MS_PER_SECOND = 1000;
  * `address` actually encodes. Routes translate this into a 422.
  */
 export class NetworkMismatchError extends Error {
-  constructor(requested: NetworkType, merchantNetwork: NetworkType) {
+  constructor(
+    requested: NetworkType,
+    configured: NetworkType,
+    whose: 'merchant' | 'connected account' = 'merchant',
+  ) {
     super(
-      `network '${requested}' does not match the merchant's configured network '${merchantNetwork}'`,
+      `network '${requested}' does not match the ${whose}'s configured network '${configured}'`,
     );
     this.name = 'NetworkMismatchError';
   }
@@ -69,9 +78,67 @@ function assertRailCurrency(rail: PaymentIntentRail, currency: CurrencyCode): vo
   }
 }
 
+/**
+ * The `connectedAccount` named no seller of THIS merchant. A 404, worded like
+ * one for an account that does not exist at all, so a `ca_…` belonging to
+ * another platform is never confirmed.
+ */
+export class ConnectedAccountNotFoundError extends Error {
+  constructor() {
+    super('connected account not found');
+    this.name = 'ConnectedAccountNotFoundError';
+  }
+}
+
+/**
+ * The seller cannot be paid in FairCoin yet — no FairCoin half, or one whose
+ * key the seller has not registered (ADR 0012 D5). A 409 with code
+ * `account_not_ready`: the request is right and the account is not, and the
+ * platform fixes it by onboarding the seller, not by editing the request.
+ */
+export class AccountNotReadyError extends Error {
+  readonly code = 'account_not_ready';
+  constructor(message: string) {
+    super(message);
+    this.name = 'AccountNotReadyError';
+  }
+}
+
+/**
+ * Find the seller a request names, scoped to the merchant, and refuse one that
+ * cannot take a FairCoin payment. Exported for the routes that resolve a seller
+ * BEFORE minting (the checkout session needs the same answer).
+ *
+ * @throws {ConnectedAccountNotFoundError}
+ * @throws {AccountNotReadyError}
+ */
+export async function resolveConnectedAccountForPayment(
+  merchant: MerchantRow,
+  publicId: string,
+): Promise<ConnectedAccountRow> {
+  const account = await findAccountByPublicId(getDb(), merchant.id, publicId);
+  if (!account) throw new ConnectedAccountNotFoundError();
+  const status = faircoinStatusOf(account);
+  if (status === null) {
+    throw new AccountNotReadyError('this seller has no FairCoin account');
+  }
+  if (status === 'pending') {
+    throw new AccountNotReadyError(
+      'this seller has not registered their FairCoin key yet; send them an onboarding link',
+    );
+  }
+  return account;
+}
+
 export interface CreateIntentInput {
   paymentLinkId?: string;
   merchant: MerchantRow;
+  /**
+   * Pay this seller rather than the merchant (ADR 0012 D5) — its PUBLIC `ca_…`.
+   * The address derives from the seller's own key; the merchant still owns the
+   * intent. FairCoin only.
+   */
+  connectedAccount?: string;
   amount: string;
   /** Defaults to `faircoin` — the rail this gateway shipped with (ADR 0001 D1). */
   rail?: PaymentIntentRail;
@@ -155,8 +222,35 @@ export interface ResolvedRail {
 export function resolveRail(
   merchant: MerchantRow,
   input: { rail?: PaymentIntentRail; currency?: CurrencyCode; network?: NetworkType },
+  /**
+   * The seller an on-behalf payment pays (ADR 0012 D5), already resolved and
+   * ready. Its network — not the merchant's — is the one the address encodes,
+   * so it is the one the request must name. The merchant needs no FairCoin
+   * account of its own for this.
+   */
+  account?: ConnectedAccountRow,
 ): ResolvedRail {
   const rail = input.rail ?? 'faircoin';
+  if (account !== undefined) {
+    // On-behalf CARD charges are ADR 0009's open merchant-of-record decision.
+    // Refused by name rather than by the CHECK one layer down, which would
+    // answer a 500.
+    if (rail !== 'faircoin') {
+      throw new RailMismatchError('a connectedAccount payment is FairCoin only');
+    }
+    const currency = input.currency ?? 'FAIR';
+    assertRailCurrency(rail, currency);
+    if (input.network === undefined) {
+      throw new RailMismatchError('the faircoin rail requires a network');
+    }
+    if (account.network === null) {
+      throw new AccountNotReadyError('this seller has no FairCoin account');
+    }
+    if (input.network !== account.network) {
+      throw new NetworkMismatchError(input.network, account.network, 'connected account');
+    }
+    return { rail, currency, network: input.network };
+  }
   const currency = input.currency ?? (rail === 'faircoin' ? 'FAIR' : undefined);
 
   if (currency === undefined) {
@@ -284,8 +378,22 @@ async function clientActionFor(
  */
 function replayConflict(
   existing: PaymentIntentRow,
-  requested: { amount: string; rail: PaymentIntentRail; currency: CurrencyCode },
+  requested: {
+    amount: string;
+    rail: PaymentIntentRail;
+    currency: CurrencyCode;
+    /** The seller's INTERNAL id, or `null` for a payment to the merchant. */
+    connectedAccountId: string | null;
+  },
 ): string | null {
+  // WHO is paid is part of the operation (ADR 0012 D5). Answering a replay that
+  // names another seller with the stored intent would hand the platform an
+  // address on the wrong seller's key.
+  if ((existing.connectedAccountId ?? null) !== requested.connectedAccountId) {
+    return existing.connectedAccountPublicId
+      ? `this Idempotency-Key already names a payment on behalf of ${existing.connectedAccountPublicId}`
+      : 'this Idempotency-Key already names a payment to the merchant itself';
+  }
   if (existing.amount !== requested.amount) {
     return `this Idempotency-Key already names a payment of ${existing.amount}`;
   }
@@ -330,7 +438,14 @@ export function assertRailAvailable(rail: PaymentIntentRail): void {
 
 export async function createIntent(input: CreateIntentInput): Promise<CreateIntentResult> {
   const { merchant, amount, metadata, expiresInSeconds, idempotencyKey } = input;
-  const { rail, currency, network } = resolveRail(merchant, input);
+  // The seller first: an unknown or unready one is refused before anything —
+  // a reservation, a row, a provider call — happens.
+  const account =
+    input.connectedAccount !== undefined
+      ? await resolveConnectedAccountForPayment(merchant, input.connectedAccount)
+      : undefined;
+  const { rail, currency, network } = resolveRail(merchant, input, account);
+  const connectedAccountId = account?.id ?? null;
 
   // BEFORE the idempotency lookup, not just before the insert, because the
   // replay path calls the provider too (`clientActionFor` re-reads the payment).
@@ -347,7 +462,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const existing = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (existing) {
-      const conflict = replayConflict(existing, { amount, rail, currency });
+      const conflict = replayConflict(existing, { amount, rail, currency, connectedAccountId });
       if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: existing, reused: true, clientAction: await clientActionFor(existing) };
     }
@@ -356,7 +471,15 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   // A card payment reserves NO derivation index. Reserving one anyway would
   // burn an index on a payment that can never receive coins, and every FairCoin
   // payer after it would be handed a different address than the counter implies.
-  const address = rail === 'faircoin' ? (await reserveNextAddress(merchant.id)).address : null;
+  //
+  // An on-behalf payment reserves on the SELLER's counter and derives from the
+  // SELLER's key (ADR 0012 D5): the coins go straight to their wallet.
+  const address =
+    rail !== 'faircoin'
+      ? null
+      : account
+        ? (await reserveNextAccountAddress(merchant.id, account.id)).address
+        : (await reserveNextAddress(merchant.id)).address;
   const publicId = newId('pi');
   const clientSecret = clientSecretFor(publicId);
   const expiresAt = new Date(
@@ -382,6 +505,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     publicId,
     paymentLinkId: input.paymentLinkId,
     merchantId: merchant.id,
+    connectedAccountId,
     rail,
     amount,
     currency,
@@ -416,7 +540,7 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const winner = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (winner) {
-      const conflict = replayConflict(winner, { amount, rail, currency });
+      const conflict = replayConflict(winner, { amount, rail, currency, connectedAccountId });
       if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: winner, reused: true, clientAction: await clientActionFor(winner) };
     }

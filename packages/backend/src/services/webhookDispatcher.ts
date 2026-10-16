@@ -39,14 +39,22 @@ const HTTP_SERVER_ERROR_MIN = 500;
 export function buildEvent<K extends WebhookEventType>(
   type: K,
   object: WebhookEventPayload[K],
+  /**
+   * The connected account (`ca_…`) the event is about — Stripe's
+   * `event.account` (ADR 0012 D7). Omitted, not `null`, on an event about the
+   * merchant's own payment, so the envelope of every existing event is
+   * byte-for-byte what it was.
+   */
+  account?: string | null,
 ): WebhookEvent<K> {
   return {
     id: newId('evt'),
     object: 'event',
     type,
     created: new Date(Date.now()).toISOString(),
+    ...(account ? { account } : {}),
     data: { object },
-  };
+  } as WebhookEvent<K>;
 }
 
 /** One attempt's conclusion, in the outbox's vocabulary. */

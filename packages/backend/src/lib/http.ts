@@ -37,8 +37,19 @@ export function sendProviderError(res: Response, error: ProviderError): void {
 }
 
 /** Stripe-ish error envelope: `{ error: { type, message } }`. */
-export function sendError(res: Response, status: number, type: string, message: string): void {
-  res.status(status).json({ error: { type, message } });
+export function sendError(
+  res: Response,
+  status: number,
+  type: string,
+  message: string,
+  /**
+   * A machine-readable reason beside the broad `type`, for the few refusals a
+   * caller must branch on — `account_not_ready` (ADR 0012) is the first. Absent
+   * otherwise, so every existing error body is byte-for-byte what it was.
+   */
+  code?: string,
+): void {
+  res.status(status).json({ error: { type, message, ...(code ? { code } : {}) } });
 }
 
 // Express 4 does not forward rejected promises to the error handler, so wrap
