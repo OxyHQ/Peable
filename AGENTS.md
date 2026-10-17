@@ -56,6 +56,12 @@ deps through the standard `node_modules` chain, and the default isolated linker
 breaks that plus ECS image resolution. Copy `bunfig.toml` into any Dockerfile
 before `bun install`.
 
+The root `overrides` entry `"@peable.to/sdk": "workspace:*"` points
+`@oxy.so/services`' exact `@peable.to/sdk` dependency (it imports
+`@peable.to/sdk/display` for display prices) at this workspace. Without it bun
+nests the published copy under services, with its own older
+`@peable.to/contracts`, and the wallet bundles two SDKs.
+
 ## Commands
 
 npm releases: only Actions → Release packages (`release-packages.yml`, Oxy's shared
