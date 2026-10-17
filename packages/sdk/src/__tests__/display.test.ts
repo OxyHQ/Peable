@@ -115,9 +115,15 @@ describe('display amounts never authorize payments', () => {
 });
 
 describe('display entry stays portable', () => {
-  it('imports nothing, so a non-tree-shaking bundler pulls in no wallet code', () => {
-    const source = readFileSync(new URL('../display.ts', import.meta.url), 'utf8');
-    expect(source).not.toMatch(/^\s*(import|export)\b[^;]*\bfrom\s/m);
+  it('imports only the import-free timeout helper, so a non-tree-shaking bundler pulls in no wallet code', () => {
+    const imports = (file: string) =>
+      [
+        ...readFileSync(new URL(file, import.meta.url), 'utf8').matchAll(
+          /^\s*(?:import|export)\b[^;]*\bfrom\s+'([^']+)'/gm,
+        ),
+      ].map((match) => match[1]);
+    expect(imports('../display.ts')).toEqual(['./core/timeoutSignal']);
+    expect(imports('../core/timeoutSignal.ts')).toEqual([]);
   });
   it('reads the core Explorer without AbortSignal.any/timeout and honours the caller signal', async () => {
     const statics = AbortSignal as unknown as Record<'any' | 'timeout', unknown>;

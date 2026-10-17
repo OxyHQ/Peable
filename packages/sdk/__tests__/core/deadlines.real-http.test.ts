@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test';
 import { createServer, type Server, type RequestListener } from 'node:http';
 import { Peable } from '../../src/index';
 const servers: Server[] = [];
@@ -26,6 +26,17 @@ function sdk(url: string) {
   });
 }
 describe('HTTP deadline and existing intent propagation', () => {
+  // Hermes has neither static; the deadlines must hold without them.
+  const statics = AbortSignal as unknown as Record<'any' | 'timeout', unknown>;
+  const saved = { any: statics.any, timeout: statics.timeout };
+  beforeAll(() => {
+    statics.any = undefined;
+    statics.timeout = undefined;
+  });
+  afterAll(() => {
+    statics.any = saved.any;
+    statics.timeout = saved.timeout;
+  });
   test.each(['mint-headers', 'mint-body', 'gateway-headers', 'gateway-body'])(
     'bounds %s without automatically repeating a POST',
     async (mode) => {
