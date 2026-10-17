@@ -2,11 +2,14 @@
  * Read-only display values. Never use these estimates to authorize a payment.
  *
  * This entry is imported by every Oxy app's startup bundle (through
- * `@oxy.so/services`), and Metro does not tree-shake: it must import nothing.
+ * `@oxy.so/services`), and Metro does not tree-shake: it imports nothing but
+ * `./core/timeoutSignal`, which itself imports nothing.
  * `@fairco.in/core` exposes only its root barrel, which drags in the whole
  * wallet stack, so the Explorer origin is restated here and a test pins it to
  * the core constant.
  */
+
+import { timeoutSignal } from './core/timeoutSignal';
 
 /** Same value as `EXPLORER_BASE_URL` in `@fairco.in/core`. */
 const DISPLAY_RATES_ORIGIN = 'https://explorer.fairco.in';
@@ -53,38 +56,16 @@ export function displayRatesAreFresh(rates: DisplayRates, now = Date.now()): boo
   );
 }
 
-/**
- * A signal that aborts after `ms` or when `parent` does. React Native's
- * AbortSignal (Hermes) lacks `AbortSignal.timeout` and `AbortSignal.any`, which
- * made every native read fail, so this uses only a controller and a timer.
- */
-function timeoutSignal(
-  ms: number,
-  parent?: AbortSignal,
-): { signal: AbortSignal; dispose: () => void } {
-  const controller = new AbortController();
-  const onParentAbort = () => controller.abort(parent?.reason);
-  const timer = setTimeout(
-    () => controller.abort(new Error('Exchange rate request timed out')),
-    ms,
-  );
-  if (parent?.aborted) onParentAbort();
-  else parent?.addEventListener('abort', onParentAbort);
-  return {
-    signal: controller.signal,
-    dispose: () => {
-      clearTimeout(timer);
-      parent?.removeEventListener('abort', onParentAbort);
-    },
-  };
-}
-
 /** Uses the owning FairCoin source; no cached fallback after expiry or failure. */
 export async function readDisplayRates(
   options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number } = {},
 ): Promise<DisplayRates> {
   const source = `${DISPLAY_RATES_ORIGIN}/api/price`;
-  const request = timeoutSignal(DISPLAY_RATES_TIMEOUT_MS, options.signal);
+  const request = timeoutSignal(
+    DISPLAY_RATES_TIMEOUT_MS,
+    options.signal,
+    'Exchange rate request timed out',
+  );
   let body: unknown;
   try {
     const response = await (options.fetch ?? fetch)(source, {

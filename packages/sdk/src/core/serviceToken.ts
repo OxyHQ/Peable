@@ -6,6 +6,7 @@
 
 import { resolveConfig, type PeableCredentialConfig } from './config';
 import { errorFromResponse, PeableApiError } from './errors';
+import { timeoutSignal } from './timeoutSignal';
 
 /** Path (relative to `oxyApiUrl`) of oxy-api's service-token mint endpoint. */
 const SERVICE_TOKEN_PATH = '/auth/service-token';
@@ -62,32 +63,39 @@ export function createServiceTokenProvider(
   let inflight: Promise<string> | null = null;
 
   async function mint(): Promise<string> {
+    // One deadline over the headers AND the body, released once both are in.
+    const deadline =
+      resolved.requestTimeoutMs === undefined
+        ? undefined
+        : timeoutSignal(resolved.requestTimeoutMs);
     let response: Response;
-    try {
-      response = await fetchImpl(`${resolved.oxyApiUrl}${SERVICE_TOKEN_PATH}`, {
-        method: 'POST',
-        ...(resolved.requestTimeoutMs === undefined
-          ? {}
-          : { signal: AbortSignal.timeout(resolved.requestTimeoutMs) }),
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ apiKey: resolved.publicKey, apiSecret: resolved.secret }),
-      });
-    } catch (cause) {
-      throw new PeableApiError(
-        `Failed to reach ${resolved.oxyApiUrl} to mint an Peable service token: ${
-          cause instanceof Error ? cause.message : String(cause)
-        }`,
-      );
-    }
-
     let body: unknown;
     try {
-      body = await readJsonBody(response);
-    } catch {
-      throw new PeableApiError('The Oxy service-token response body could not be read', {
-        statusCode: response.status,
-        code: 'invalid_response',
-      });
+      try {
+        response = await fetchImpl(`${resolved.oxyApiUrl}${SERVICE_TOKEN_PATH}`, {
+          method: 'POST',
+          ...(deadline === undefined ? {} : { signal: deadline.signal }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ apiKey: resolved.publicKey, apiSecret: resolved.secret }),
+        });
+      } catch (cause) {
+        throw new PeableApiError(
+          `Failed to reach ${resolved.oxyApiUrl} to mint an Peable service token: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        );
+      }
+
+      try {
+        body = await readJsonBody(response);
+      } catch {
+        throw new PeableApiError('The Oxy service-token response body could not be read', {
+          statusCode: response.status,
+          code: 'invalid_response',
+        });
+      }
+    } finally {
+      deadline?.dispose();
     }
     if (!response.ok) {
       throw errorFromResponse(response.status, body);

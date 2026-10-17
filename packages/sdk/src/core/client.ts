@@ -6,6 +6,7 @@
 import { resolveRequestTimeout } from './config';
 import { errorFromResponse, PeableApiError } from './errors';
 import type { ServiceTokenProvider } from './serviceToken';
+import { timeoutSignal } from './timeoutSignal';
 
 const HTTP_UNAUTHORIZED = 401;
 
@@ -72,48 +73,54 @@ export function createRestClient(
     if (opts.idempotencyKey !== undefined) headers['Idempotency-Key'] = opts.idempotencyKey;
     if (opts.headers) Object.assign(headers, opts.headers);
 
+    // One deadline over the headers AND the body, released once both are in.
+    const deadline = timeout === undefined ? undefined : timeoutSignal(timeout);
     let response: Response;
-    try {
-      response = await fetchImpl(buildUrl(config.baseURL, path, opts.query), {
-        method,
-        headers,
-        ...(timeout === undefined ? {} : { signal: AbortSignal.timeout(timeout) }),
-        body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
-      });
-    } catch (cause) {
-      throw new PeableApiError(
-        `Failed to reach the Peable Gateway at ${config.baseURL}: ${
-          cause instanceof Error ? cause.message : String(cause)
-        }`,
-      );
-    }
-
-    // A 401 here means the cached service token expired or was revoked
-    // mid-flight (it was valid when minted, or a prior request would have
-    // failed at `tokenProvider.getToken()` already). Invalidate the cache and
-    // retry exactly once with a freshly minted token before giving up.
-    if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401) {
-      tokenProvider.invalidate();
-      return performRequest<T>(method, path, opts, false);
-    }
-
-    // The Gateway echoes a date-based `Peable-Version` response header
-    // (Stripe parity). No SDK behavior depends on it yet, so it is
-    // deliberately not read here — nothing to do with it today.
     let body: unknown;
     try {
-      body = await readJsonBody(response);
-    } catch {
-      // Headers can arrive before the connection fails during body consumption.
-      // Preserve the known status, but do not infer whether a mutation committed
-      // or retry it automatically. Recovery keeps the caller's original key.
-      throw new PeableApiError(
-        'The Peable Gateway response body could not be read; remote outcome is unknown',
-        {
-          statusCode: response.status,
-          code: 'invalid_response',
-        },
-      );
+      try {
+        response = await fetchImpl(buildUrl(config.baseURL, path, opts.query), {
+          method,
+          headers,
+          ...(deadline === undefined ? {} : { signal: deadline.signal }),
+          body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+        });
+      } catch (cause) {
+        throw new PeableApiError(
+          `Failed to reach the Peable Gateway at ${config.baseURL}: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        );
+      }
+
+      // A 401 here means the cached service token expired or was revoked
+      // mid-flight (it was valid when minted, or a prior request would have
+      // failed at `tokenProvider.getToken()` already). Invalidate the cache and
+      // retry exactly once with a freshly minted token, under its own deadline.
+      if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401) {
+        tokenProvider.invalidate();
+        return performRequest<T>(method, path, opts, false);
+      }
+
+      // The Gateway echoes a date-based `Peable-Version` response header
+      // (Stripe parity). No SDK behavior depends on it yet, so it is
+      // deliberately not read here — nothing to do with it today.
+      try {
+        body = await readJsonBody(response);
+      } catch {
+        // Headers can arrive before the connection fails during body consumption.
+        // Preserve the known status, but do not infer whether a mutation committed
+        // or retry it automatically. Recovery keeps the caller's original key.
+        throw new PeableApiError(
+          'The Peable Gateway response body could not be read; remote outcome is unknown',
+          {
+            statusCode: response.status,
+            code: 'invalid_response',
+          },
+        );
+      }
+    } finally {
+      deadline?.dispose();
     }
     if (!response.ok) {
       throw errorFromResponse(response.status, body);
