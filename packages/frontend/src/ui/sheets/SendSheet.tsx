@@ -192,7 +192,7 @@ export function SendSheet({
     const file = new File(Paths.cache, 'peable-tx-link.txt');
     if (file.exists) file.delete();
     file.create();
-    file.write(explorerUrl);
+    await file.write(explorerUrl);
     await Sharing.shareAsync(file.uri, {
       mimeType: 'text/plain',
       dialogTitle: t('send.sent.share'),
