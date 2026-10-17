@@ -6,7 +6,7 @@
  */
 
 import { useEffect } from 'react';
-import { AppState, type AppStateStatus } from 'react-native';
+import { AppState } from 'react-native';
 import { useWalletStore } from '../wallet/wallet-store';
 import { explorerSocket } from '../services/explorer-socket';
 
@@ -16,7 +16,10 @@ export function useExplorerRealtime(): void {
   // Foreground/background lifecycle. Runs once; the current network is read
   // imperatively from the store so this never captures a stale value.
   useEffect(() => {
-    const applyState = (status: AppStateStatus) => {
+    // `currentState` is `string | null | undefined` under RN's strict API (null
+    // before the native module reports), wider than the listener's
+    // `AppStateStatus`; only 'active' starts the socket either way.
+    const applyState = (status: typeof AppState.currentState) => {
       if (status === 'active') {
         explorerSocket.start(useWalletStore.getState().network);
       } else {
