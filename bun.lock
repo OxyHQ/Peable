@@ -20,7 +20,7 @@
         "@fairco.in/core": "0.5.0",
         "@oxy.so/core": "4.18.0",
         "@oxy.so/db": "1.0.0",
-        "@peable.to/contracts": "workspace:0.1.0",
+        "@peable.to/contracts": "workspace:0.2.0",
         "@peable.to/shared-types": "*",
         "@scure/bip32": "^1.7.0",
         "drizzle-orm": "^0.45.2",
@@ -47,7 +47,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@fairco.in/core": "0.5.0",
-        "@peable.to/contracts": "workspace:0.1.0",
+        "@peable.to/contracts": "workspace:0.2.0",
         "@peable.to/sdk": "*",
         "@peable.to/shared-types": "*",
         "qr-creator": "^1.0.0",
@@ -68,7 +68,7 @@
     },
     "packages/contracts": {
       "name": "@peable.to/contracts",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "zod": "^4.3.6",
       },
@@ -94,7 +94,7 @@
         "@oxy.so/contracts": "4.22.0",
         "@oxy.so/core": "4.18.0",
         "@oxy.so/services": "11.9.0",
-        "@peable.to/contracts": "workspace:0.1.0",
+        "@peable.to/contracts": "workspace:0.2.0",
         "@peable.to/pay": "workspace:^",
         "@peable.to/sdk": "workspace:0.4.0",
         "@peable.to/shared-types": "*",
@@ -183,7 +183,7 @@
     },
     "packages/pay": {
       "name": "@peable.to/pay",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "dependencies": {
         "@noble/hashes": "1.8.0",
         "@scure/bip32": "1.7.0",
@@ -216,7 +216,7 @@
       "name": "@peable.to/sdk",
       "version": "0.4.1",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.1.0",
+        "@peable.to/contracts": "workspace:0.2.0",
         "@peable.to/shared-types": "workspace:0.5.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
@@ -232,7 +232,7 @@
       "name": "@peable.to/shared-types",
       "version": "0.5.0",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.1.0",
+        "@peable.to/contracts": "workspace:0.2.0",
       },
       "devDependencies": {
         "@types/bun": "latest",

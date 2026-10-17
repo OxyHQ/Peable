@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/pay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Peable Pay — the self-custodial FairCoin payment client an Oxy app embeds. Derives the wallet from the device's Oxy identity, reads the chain over the Explorer HTTP API, and builds, signs and broadcasts a payment without an SPV node.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
