@@ -11,7 +11,6 @@ import { useCallback, useMemo, useRef } from 'react';
 import { Pressable } from 'react-native';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
-import { VoiceSession } from '@alia.onl/sdk/voice';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { useAuth } from '@oxy.so/services';
 import { t } from '../../i18n';
@@ -57,7 +56,6 @@ export function AskAlia({ screen }: AskAliaProps) {
       {isAuthenticated && (
         <AliaChatSheet
           ref={chatRef}
-          voiceSession={VoiceSession}
           clientContext={t('alia.clientContext', { screen })}
           welcomeSuggestions={welcomeSuggestions}
         />
