@@ -63,6 +63,6 @@
     "@types/bun": "latest"
   },
   "dependencies": {
-    "@peable.to/contracts": "workspace:0.1.0"
+    "@peable.to/contracts": "workspace:0.2.0"
   }
 }

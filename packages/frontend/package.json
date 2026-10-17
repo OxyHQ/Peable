@@ -103,7 +103,7 @@
     "tailwindcss-animate": "^1.0.7",
     "zod": "^4.4.3",
     "zustand": "^5.0.12",
-    "@peable.to/contracts": "workspace:0.1.0",
+    "@peable.to/contracts": "workspace:0.2.0",
     "@peable.to/sdk": "workspace:0.4.1"
   },
   "devDependencies": {
