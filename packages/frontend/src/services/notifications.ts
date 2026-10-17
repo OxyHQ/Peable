@@ -67,6 +67,24 @@ export function initNotifications(): Promise<void> {
   if (initPromise) return initPromise;
   initPromise = (async () => {
     try {
+      // Installed FIRST, before anything below can throw: since SDK 58 a
+      // notification that arrives in the foreground with no handler is SHOWN
+      // (banner and sound), so a failed permission or channel step must not
+      // leave the continuously-updating sync notification bannering.
+      Notifications.setNotificationHandler({
+        handleNotification: async (notification) => {
+          // The ongoing sync-progress notification must never banner or sound —
+          // it updates continuously. Everything else (received payments) does.
+          const isSync = notification.request.content.data?.type === 'sync';
+          return {
+            shouldShowBanner: !isSync,
+            shouldShowList: true,
+            shouldPlaySound: !isSync,
+            shouldSetBadge: false,
+          };
+        },
+      });
+
       const settings = await Notifications.getPermissionsAsync();
       if (!settings.granted) {
         await Notifications.requestPermissionsAsync({
@@ -107,20 +125,6 @@ export function initNotifications(): Promise<void> {
           }
         }
       }
-
-      Notifications.setNotificationHandler({
-        handleNotification: async (notification) => {
-          // The ongoing sync-progress notification must never banner or sound —
-          // it updates continuously. Everything else (received payments) does.
-          const isSync = notification.request.content.data?.type === 'sync';
-          return {
-            shouldShowBanner: !isSync,
-            shouldShowList: true,
-            shouldPlaySound: !isSync,
-            shouldSetBadge: false,
-          };
-        },
-      });
     } catch {
       // Notification subsystem unavailable (web/electron without the native
       // module, user revoked permission, etc). We still resolve so callers

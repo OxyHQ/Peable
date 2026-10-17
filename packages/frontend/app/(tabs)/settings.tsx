@@ -466,7 +466,7 @@ export default function SettingsScreen() {
       const file = new File(Paths.cache, filename);
       if (file.exists) file.delete();
       file.create();
-      file.write(json);
+      await file.write(json);
 
       if (await Sharing.isAvailableAsync()) {
         await Sharing.shareAsync(file.uri, {
