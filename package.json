@@ -50,7 +50,9 @@
     "@oxy.so/telemetry": "2.1.0",
     "react-native-css": "3.1.0-rc.0",
     "@oxy.so/protocol": "1.4.0",
-    "@peable.to/sdk": "workspace:*"
+    "@peable.to/sdk": "workspace:*",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   },
   "dependencies": {
     "@oxy.so/core": "6.0.0"
