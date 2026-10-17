@@ -213,6 +213,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
       must(suite).db,
       delivery({ providerEventId: 'evt_drain_2' }),
     );
+    // `created_at` has millisecond precision and the id tiebreak is random
+    // within a millisecond, so two back-to-back inserts can be "the same age".
+    // Make the older row measurably older; the order under test is by age.
+    await must(suite)
+      .db.update(providerEvents)
+      .set({ createdAt: new Date(Date.now() - 60_000) })
+      .where(eq(providerEvents.id, must(older)));
 
     const pending = await findUnprocessedProviderEvents(must(suite).db, 100);
     const ids = pending.map((row) => row.id);
