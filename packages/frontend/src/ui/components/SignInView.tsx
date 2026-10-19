@@ -10,7 +10,7 @@
  */
 
 import { View, Text } from 'react-native';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { Button } from './Button';
 import { t } from '../../i18n';
 

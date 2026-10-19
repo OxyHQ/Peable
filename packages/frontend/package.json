@@ -35,7 +35,7 @@
     "@oxy.so/bloom": "15.0.0",
     "@oxy.so/contracts": "5.0.0",
     "@oxy.so/core": "6.0.0",
-    "@oxy.so/services": "12.2.0",
+    "@oxy.so/services": "12.2.1",
     "@peable.to/contracts": "workspace:0.2.0",
     "@peable.to/pay": "workspace:^",
     "@peable.to/sdk": "workspace:0.4.2",

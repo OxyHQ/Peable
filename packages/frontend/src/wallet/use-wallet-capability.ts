@@ -1,4 +1,4 @@
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { useWalletStore } from './wallet-store';
 import { hasIdentityKeystore } from './keystore';
 import { decideWalletCapability, type WalletCapability } from './capability';

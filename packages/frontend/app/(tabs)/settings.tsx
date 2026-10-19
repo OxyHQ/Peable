@@ -47,7 +47,7 @@ import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
 import type { DialogControlProps } from '@oxy.so/bloom/dialog';
 import { SettingsListGroup, SettingsListItem } from '@oxy.so/bloom/settings-list';
 import { toast } from '@oxy.so/bloom/toast';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
 import { UserAvatar } from '../../src/ui/components/UserAvatar';
 import { findLanguageOption, t } from '../../src/i18n';
