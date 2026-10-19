@@ -49,7 +49,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-router",
+      ["expo-router", { "asyncRoutes": { "web": false } }],
       "expo-secure-store",
       "@oxy.so/services/plugins/withOxySharedPermissions",
       "@oxy.so/app-preset/plugin/withOxyAndroidRelease",
