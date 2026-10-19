@@ -148,6 +148,13 @@ jobs:
           # together.
           bun-version-file: package.json
 
+      # Expo SDK 58's CLI (expo lint / expo export run under Node through the
+      # `expo` bin's shebang) supports Node 22.13+ / 24.3+ only, so pin a
+      # supported major instead of trusting the runner image's default Node.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
       - run: bun install --frozen-lockfile
 
       # Biome formats and lints every package (root `biome.json`). `biome ci`

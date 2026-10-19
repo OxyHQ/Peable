@@ -11,8 +11,14 @@
  * depending on magnitude.
  */
 
-import { forwardRef, useCallback, useMemo } from 'react';
-import { TextInput, type TextInputProps } from 'react-native';
+import {
+  type ForwardRefExoticComponent,
+  forwardRef,
+  type RefAttributes,
+  useCallback,
+  useMemo,
+} from 'react';
+import { TextInput, type TextInputInstance, type TextInputProps } from 'react-native';
 import { numericFormatter } from 'react-number-format';
 
 export interface AmountInputProps
@@ -52,7 +58,11 @@ function sanitize(input: string, decimalScale: number): string {
   return parts.join(DECIMAL_SEPARATOR);
 }
 
-export const AmountInput = forwardRef<TextInput, AmountInputProps>(function AmountInput(
+// Annotated: the frontend is a composite project, and under RN 0.88 the inferred
+// type would name RN's internal `_TextInputInstance`, which a declaration cannot.
+export const AmountInput: ForwardRefExoticComponent<
+  AmountInputProps & RefAttributes<TextInputInstance>
+> = forwardRef<TextInputInstance, AmountInputProps>(function AmountInput(
   { value, onValueChange, decimalScale = 8, ...rest },
   ref,
 ) {

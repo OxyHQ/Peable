@@ -95,7 +95,7 @@ export function ReceiveSheet({ heading = true }: { heading?: boolean }): React.J
     const file = new File(Paths.cache, 'peable-payment-request.txt');
     if (file.exists) file.delete();
     file.create();
-    file.write(payload);
+    await file.write(payload);
     await Sharing.shareAsync(file.uri, {
       mimeType: 'text/plain',
       dialogTitle: t('receive.paymentRequestTitle'),

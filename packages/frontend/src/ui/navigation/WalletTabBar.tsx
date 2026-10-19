@@ -26,7 +26,7 @@ const ICON_SIZE = 21;
 
 export function WalletTabBar({
   state,
-  navigation,
+  navigateToTab,
   tabs,
 }: BottomTabBarProps & { tabs: readonly WalletTabName[] }) {
   const theme = useTheme();
@@ -38,12 +38,14 @@ export function WalletTabBar({
   // biome-ignore lint/complexity/useIndexOf: the route name is a plain string (or undefined) and indexOf on WalletTabName[] refuses it without a cast
   const activeIndex = tabs.findIndex((name) => name === focusedRouteName);
 
+  // The navigator switches tabs by route KEY, not by name (expo-router 58).
   const handleIndexChange = useCallback(
     (index: number) => {
       const name = tabs[index];
-      if (name !== undefined) navigation.navigate(name);
+      const key = state.routes.find((route) => route.name === name)?.key;
+      if (key !== undefined) navigateToTab(key);
     },
-    [navigation, tabs],
+    [navigateToTab, state.routes, tabs],
   );
 
   return (

@@ -18,17 +18,19 @@ const ICON_SIZE = 24;
 
 export function WalletRail({
   state,
-  navigation,
+  navigateToTab,
   tabs,
 }: BottomTabBarProps & { tabs: readonly WalletTabName[] }) {
   const theme = useTheme();
   const focusedRouteName = state.routes[state.index]?.name;
 
+  // The navigator switches tabs by route KEY, not by name (expo-router 58).
   const handleSelect = useCallback(
     (id: string) => {
-      navigation.navigate(id);
+      const key = state.routes.find((route) => route.name === id)?.key;
+      if (key !== undefined) navigateToTab(key);
     },
-    [navigation],
+    [navigateToTab, state.routes],
   );
 
   return (
