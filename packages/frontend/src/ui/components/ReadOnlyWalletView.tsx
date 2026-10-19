@@ -28,7 +28,7 @@
 import { View, Text, ScrollView, ActivityIndicator } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useQuery } from '@tanstack/react-query';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { useTheme } from '@oxy.so/bloom/theme';
 import type { SocialPayment } from '@peable.to/shared-types';
 import { SOCIAL_PAY_NETWORK } from '../../pay/social-network';

@@ -38,7 +38,7 @@ import { View, Text, ActivityIndicator, Platform, Linking, ScrollView } from 're
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import Constants from 'expo-constants';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { isNotFoundError } from '@oxy.so/core';
 import { SafeAreaView } from '../../src/ui/safe-area-view';
 import { NotFoundScreen } from '../../src/ui/components/NotFoundScreen';

@@ -26,7 +26,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
 import { KeyboardProvider as NativeKeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { OxyProvider } from '@oxy.so/services';
+import { OxyProvider } from '@oxy.so/services/ui/client';
 import { BloomThemeProvider, useBloomTheme } from '@oxy.so/bloom/theme';
 import { OverlayInertBoundary, PortalOutlet, PortalProvider } from '@oxy.so/bloom/portal';
 import { ToastOutlet } from '@oxy.so/bloom/toast';

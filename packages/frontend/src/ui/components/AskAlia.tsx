@@ -12,7 +12,7 @@ import { Pressable } from 'react-native';
 import { AliaChatSheet, type AliaChatSheetRef } from '@alia.onl/sdk';
 import { AliaAvatarIcon } from '@alia.onl/sdk/avatar';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { t } from '../../i18n';
 
 interface AskAliaProps {

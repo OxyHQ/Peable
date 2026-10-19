@@ -20,7 +20,7 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import QRCode from 'react-native-qrcode-svg';
 import { Dialog, useDialogControl } from '@oxy.so/bloom/dialog';
 import { useTheme } from '@oxy.so/bloom/theme';
-import { useOxy } from '@oxy.so/services';
+import { useOxy } from '@oxy.so/services/ui/client';
 import { useWalletStore } from '../../wallet/wallet-store';
 import { Button, ListItem } from '../components';
 import { t } from '../../i18n';

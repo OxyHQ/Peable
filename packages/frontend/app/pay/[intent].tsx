@@ -26,7 +26,7 @@ import { View, Text, ScrollView, ActivityIndicator, Pressable } from 'react-nati
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { formatFair, explorerTxUrl, UNITS_PER_COIN, type NetworkType } from '@fairco.in/core';
 import type { PaymentIntent, PaymentIntentStatus } from '@peable.to/shared-types';

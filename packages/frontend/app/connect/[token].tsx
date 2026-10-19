@@ -20,7 +20,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { View, Text, TextInput, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Linking from 'expo-linking';
-import { useAuth } from '@oxy.so/services';
+import { useAuth } from '@oxy.so/services/ui/client';
 import type { ConnectOnboarding } from '@peable.to/shared-types';
 import { SafeAreaView } from '../../src/ui/safe-area-view';
 import { ScreenHeader, Button } from '../../src/ui/components';
