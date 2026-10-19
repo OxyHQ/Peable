@@ -139,6 +139,12 @@ separate product. **No extensions** (an explicit empty list in
   ONLY thing that applies it; `drizzle-kit migrate` is a devDependency and cannot
   reach the production image. `--phase=all` is for a from-zero genesis, never a
   normal release.
+- **New migrations keep their locks short.** `oxypay` lives on the shared
+  `oxy-postgres` instance, so CI runs `bun run --cwd packages/backend
+  db:check-locks` (`@oxy.so/db`'s `oxy-db-check-migration-locks`): constraints
+  on existing tables go in `NOT VALID` and are validated later, and hot-table
+  DDL sits alone in its migration. The script's `--after` is the baseline (older
+  migrations are not re-judged) and `--hot-tables` names the busy tables.
 - **The runtime image runs TypeScript source under Bun**, so migrations live
   under `src/db/migrations/` and are copied into the image with everything else
   in `src/`. Do not move them to a package-root `drizzle/` folder without
