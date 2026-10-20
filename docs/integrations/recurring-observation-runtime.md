@@ -19,10 +19,14 @@ introduces no fiscal authority, Faircoin mandate, or
 commercial configuration. The current production adapter remains Stripe;
 changing a provider label does not implement a Faircoin recurring payment rail.
 
-Oxy One's approved invoice issuer is The Oxy Collective, Inc. That approval does
-not supply tax registrations, the tax remitter, sales countries, tax services,
-exchange-rate authority, or a refund policy. Invoice amount observations remain
-insufficient for final fiscal authority; consumers must fail closed. Faircoin
+Oxy One's intended operating company and prospective invoice issuer is Oxy
+Platforms, Inc. Its Delaware incorporation is in progress. The new issuer is
+unapproved, with no verified tax identifier or operator identity reference in
+the commercial draft; activation remains disabled. Formation, identity and
+seller/processor verification are required before activation. The company name
+does not supply tax registrations, the tax remitter, sales countries, tax
+services, exchange-rate authority, or a refund policy. Invoice amount
+observations remain insufficient for final fiscal authority; consumers must fail closed. Faircoin
 manual monthly payments and automatic renewal are approved choices, but an
 automatic renewal still requires explicit consent, amount and cadence limits,
 and verifiable revocation before a real mandate can be used.
@@ -135,9 +139,11 @@ returns 404. No default supplier, seller/remitter registrations, worldwide
 allowlist or fiscal activation is created. The existing billing owner adapter
 still uses Stripe deployment/binding contracts. The quote seam and evidence
 transport are provider-independent; the Faircoin recurring payment adapter is
-still unfinished. The approved issuer legal name is The Oxy Collective, Inc.;
-its verified fiscal identifier and registrations remain configuration inputs,
-not invented identifiers in an invoice fixture.
+still unfinished. The prospective issuer legal name is Oxy Platforms, Inc.;
+its incorporation, issuer identity, fiscal identifier and registrations still
+require verification. They remain configuration inputs, not invented identifiers
+in an invoice fixture. Existing software, licence and trademark attributions to
+The Oxy Collective, Inc. are separate and are not reassigned by this transition.
 
 ## Draft signed quote to checkout linkage
 
