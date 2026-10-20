@@ -31,7 +31,10 @@ export function DisplayCurrency({ amount }: { amount: string }) {
     let active = true;
     async function refresh() {
       try {
-        const next = await readDisplayRates({ signal: controller.signal });
+        const next = await readDisplayRates({
+          signal: controller.signal,
+          includeEur: currency === 'EUR',
+        });
         if (active) setRates(next);
       } catch {
         if (active) setRates(null);
