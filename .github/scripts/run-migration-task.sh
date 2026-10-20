@@ -111,11 +111,23 @@ OVERRIDES=$(jq -nc \
       ("--phase=" + $phase)
   ]}]}')
 
+# The task runs where the service runs: on its capacity provider strategy when
+# it has one (oxy-cluster's EC2 capacity, whose revisions are EC2-only),
+# otherwise on its launch type. A hard-coded FARGATE would refuse an EC2-only
+# revision and fail the deploy before the rollout.
+PLACEMENT_SERVICE_JSON=$(aws ecs describe-services --cluster "$CLUSTER" --services "$APP" --query 'services[0]' --output json)
+PLACEMENT_STRATEGY=$(jq -c '.capacityProviderStrategy // []' <<<"$PLACEMENT_SERVICE_JSON")
+if [ "$PLACEMENT_STRATEGY" != "[]" ]; then
+  PLACEMENT=(--capacity-provider-strategy "$PLACEMENT_STRATEGY")
+else
+  PLACEMENT=(--launch-type "$(jq -r '.launchType // "FARGATE"' <<<"$PLACEMENT_SERVICE_JSON")")
+fi
+
 echo "running $PHASE migration task on $CLUSTER using $TASK_DEFINITION"
 TASK_ARN=$(aws ecs run-task \
   --cluster "$CLUSTER" \
   --task-definition "$TASK_DEFINITION" \
-  --launch-type FARGATE \
+  "${PLACEMENT[@]}" \
   --count 1 \
   --network-configuration "$NETWORK_CONFIGURATION" \
   --overrides "$OVERRIDES" \
