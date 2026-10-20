@@ -23,6 +23,27 @@ const rates: DisplayRates = {
   expiresAt: new Date(now + 120000).toISOString(),
 };
 describe('display amounts never authorize payments', () => {
+  it('keeps USD display fast by skipping the optional ECB request', async () => {
+    let ecbRequests = 0;
+    const body = { price: 0.3, source: 'wfair-base', updatedAt: new Date(now).toISOString() };
+    const rates = await readDisplayRates({
+      fetch: (async (url: string | URL | Request) => {
+        if (String(url).startsWith('https://data-api.ecb.europa.eu/')) {
+          ecbRequests += 1;
+          throw new Error('ECB should not be requested for USD display');
+        }
+        return new Response(JSON.stringify(body));
+      }) as unknown as typeof fetch,
+      now,
+    });
+    expect(ecbRequests).toBe(0);
+    expect(rates.usdPerFair).toBe('0.3');
+    expect(rates.eurReference).toBeNull();
+    expect(
+      convertDisplayAmount({ units: '100', currency: 'USD', displayCurrency: 'USD', rates, now }),
+    ).toBe('1.00 USD');
+  });
+
   it('converts USD to EUR and FAIR at their real precision', () => {
     expect(
       convertDisplayAmount({ units: '100', currency: 'USD', displayCurrency: 'EUR', rates, now }),
@@ -107,7 +128,7 @@ describe('display amounts never authorize payments', () => {
           ? new Response(csv, { status })
           : new Response(JSON.stringify(body), { status })) as unknown as typeof fetch;
     const body = { price: 0.3, source: 'wfair-base', updatedAt: new Date(now).toISOString() };
-    const liveRates = await readDisplayRates({ fetch: fetcher(body), now });
+    const liveRates = await readDisplayRates({ fetch: fetcher(body), now, includeEur: true });
     expect(liveRates.usdPerFair).toBe('0.3');
     expect(liveRates.eurPerFair).toBe('0.267260579064587973');
     expect(liveRates.eurReference?.usdPerEur).toBe('1.1225');
@@ -165,6 +186,7 @@ describe('display amounts never authorize payments', () => {
           ? new Response(fridayCsv)
           : new Response(JSON.stringify(weekendBody))) as unknown as typeof fetch,
       now: sunday,
+      includeEur: true,
     });
     expect(atWeekend.eurReference?.observedAt).toBe('2026-10-16T00:00:00.000Z');
     expect(
@@ -183,6 +205,7 @@ describe('display amounts never authorize payments', () => {
           ? new Response(ecbCsv('2026-10-14'))
           : new Response(JSON.stringify(weekendBody))) as unknown as typeof fetch,
       now: sunday,
+      includeEur: true,
     });
     expect(stale.usdPerFair).toBe('0.3');
     expect(stale.eurReference).toBeNull();
@@ -231,6 +254,7 @@ describe('display amounts never authorize payments', () => {
             ? new Response(csv)
             : new Response(JSON.stringify(body))) as unknown as typeof fetch,
         now,
+        includeEur: true,
       });
       expect(result.usdPerFair).toBe('0.3');
       expect(result.eurReference).toBeNull();
@@ -252,6 +276,7 @@ describe('display amounts never authorize payments', () => {
           ? new Response('', { status: 503 })
           : new Response(JSON.stringify(body))) as unknown as typeof fetch,
       now,
+      includeEur: true,
     });
     expect(failed.usdPerFair).toBe('0.3');
     expect(failed.eurReference).toBeNull();
@@ -273,6 +298,7 @@ describe('display amounts never authorize payments', () => {
         });
       }) as unknown as typeof fetch,
       now,
+      includeEur: true,
     });
     expect(Date.now() - started).toBeGreaterThanOrEqual(2400);
     expect(Date.now() - started).toBeLessThan(4000);

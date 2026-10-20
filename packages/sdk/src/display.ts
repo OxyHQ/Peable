@@ -24,7 +24,7 @@ export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
 export interface DisplayRates {
   /** Currency units per FAIR, as exact decimal strings. */
   usdPerFair: string;
-  /** Null when the owning source does not supply a EUR quote. */
+  /** EUR per FAIR, rounded to 18 decimal places; null when the ECB quote is unavailable. */
   eurPerFair: string | null;
   /** USD per EUR from the ECB; absent when no fresh official observation is available. */
   eurReference?: {
@@ -194,14 +194,19 @@ async function readEcbReference(
   }
 }
 
-/** Uses the owning FairCoin source; no cached fallback after expiry or failure. */
+/** Uses the owning FairCoin source; no cached fallback after expiry or failure.
+ * Set `includeEur` only for EUR display: the ECB request is optional, separate,
+ * and bounded so USD/FAIR-only views do not wait on it.
+ */
 export async function readDisplayRates(
-  options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number } = {},
+  options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number; includeEur?: boolean } = {},
 ): Promise<DisplayRates> {
   const source = `${DISPLAY_RATES_ORIGIN}/api/price`;
   const now = options.now ?? Date.now();
   const fetcher = options.fetch ?? fetch;
-  const eurReferencePromise = readEcbReference(fetcher, options.signal, now);
+  const eurReferencePromise = options.includeEur
+    ? readEcbReference(fetcher, options.signal, now)
+    : Promise.resolve(null);
   const request = timeoutSignal(
     DISPLAY_RATES_TIMEOUT_MS,
     options.signal,

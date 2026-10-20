@@ -6,7 +6,7 @@ import { createExplorerFaircoinQuote } from '../src/services/billing/faircoin-fx
 const checks = {
   quote: () => createExplorerFaircoinQuote(2999),
   display: async () => {
-    const rates = await readDisplayRates();
+    const rates = await readDisplayRates({ includeEur: true });
     return {
       rates,
       usdPrice: '29.99 USD',
