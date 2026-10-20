@@ -14,6 +14,10 @@ import { timeoutSignal } from './core/timeoutSignal';
 /** Same value as `EXPLORER_BASE_URL` in `@fairco.in/core`. */
 const DISPLAY_RATES_ORIGIN = 'https://explorer.fairco.in';
 const DISPLAY_RATES_TIMEOUT_MS = 8000;
+const ECB_RATES_URL =
+  'https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?lastNObservations=1&format=csvdata';
+const ECB_RATES_TIMEOUT_MS = 2500;
+const ECB_RATE_MAX_AGE_MS = 4 * 24 * 60 * 60 * 1000;
 
 export const DISPLAY_CURRENCIES = ['USD', 'EUR', 'FAIR'] as const;
 export type DisplayCurrency = (typeof DISPLAY_CURRENCIES)[number];
@@ -22,6 +26,13 @@ export interface DisplayRates {
   usdPerFair: string;
   /** Null when the owning source does not supply a EUR quote. */
   eurPerFair: string | null;
+  /** USD per EUR from the ECB; absent when no fresh official observation is available. */
+  eurReference?: {
+    usdPerEur: string;
+    source: string;
+    observedAt: string;
+    expiresAt: string;
+  } | null;
   source: string;
   observedAt: string;
   expiresAt: string;
@@ -44,6 +55,15 @@ function fraction(value: string): { numerator: bigint; denominator: bigint } {
   return { numerator, denominator };
 }
 
+function decimal(numerator: bigint, denominator: bigint, places = 18): string {
+  if (numerator <= 0n || denominator <= 0n) throw new Error('Invalid display rate');
+  const scale = 10n ** BigInt(places);
+  const rounded = (numerator * scale * 2n + denominator) / (2n * denominator);
+  const whole = rounded / scale;
+  const fractional = (rounded % scale).toString().padStart(places, '0').replace(/0+$/, '');
+  return fractional ? `${whole}.${fractional}` : whole.toString();
+}
+
 export function displayRatesAreFresh(rates: DisplayRates, now = Date.now()): boolean {
   const observed = Date.parse(rates.observedAt);
   const expires = Date.parse(rates.expiresAt);
@@ -56,11 +76,132 @@ export function displayRatesAreFresh(rates: DisplayRates, now = Date.now()): boo
   );
 }
 
+function ecbReferenceIsFresh(
+  reference: NonNullable<DisplayRates['eurReference']>,
+  now: number,
+): boolean {
+  const observed = Date.parse(reference.observedAt);
+  const expires = Date.parse(reference.expiresAt);
+  return (
+    Number.isFinite(observed) &&
+    observed <= now + 1000 &&
+    observed >= now - ECB_RATE_MAX_AGE_MS &&
+    expires > now &&
+    expires === observed + ECB_RATE_MAX_AGE_MS
+  );
+}
+
+/** Parse just the columns needed from the ECB's CSV response, preserving quoted CSV fields. */
+function csvRecords(csv: string): string[][] {
+  if (csv.length > 64_000) throw new Error('Exchange rate unavailable');
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let field = '';
+  let quoted = false;
+  for (let index = 0; index < csv.length; index += 1) {
+    const character = csv[index];
+    if (quoted) {
+      if (character === '"' && csv[index + 1] === '"') {
+        field += '"';
+        index += 1;
+      } else if (character === '"') quoted = false;
+      else field += character;
+      continue;
+    }
+    if (character === '"') {
+      if (field) throw new Error('Exchange rate unavailable');
+      quoted = true;
+    } else if (character === ',') {
+      row.push(field);
+      field = '';
+    } else if (character === '\n') {
+      row.push(field.replace(/\r$/, ''));
+      if (row.some((value) => value !== '')) rows.push(row);
+      row = [];
+      field = '';
+    } else field += character;
+  }
+  if (quoted) throw new Error('Exchange rate unavailable');
+  if (field || row.length) {
+    row.push(field.replace(/\r$/, ''));
+    if (row.some((value) => value !== '')) rows.push(row);
+  }
+  return rows;
+}
+
+async function readEcbReference(
+  fetcher: typeof fetch,
+  parentSignal: AbortSignal | undefined,
+  now: number,
+): Promise<DisplayRates['eurReference']> {
+  const request = timeoutSignal(
+    ECB_RATES_TIMEOUT_MS,
+    parentSignal,
+    'ECB exchange rate request timed out',
+  );
+  try {
+    const response = await fetcher(ECB_RATES_URL, {
+      signal: request.signal,
+      redirect: 'error',
+      headers: { Accept: 'text/csv' },
+    });
+    if (!response.ok) return null;
+    const rows = csvRecords(await response.text());
+    const header = rows[0];
+    const observation = rows[1];
+    if (
+      !header ||
+      !observation ||
+      rows.length !== 2 ||
+      header[0] !== 'KEY' ||
+      header[6] !== 'TIME_PERIOD' ||
+      header[7] !== 'OBS_VALUE' ||
+      header[8] !== 'OBS_STATUS' ||
+      observation[0] !== 'EXR.D.USD.EUR.SP00.A' ||
+      observation[1] !== 'D' ||
+      observation[2] !== 'USD' ||
+      observation[3] !== 'EUR' ||
+      observation[4] !== 'SP00' ||
+      observation[5] !== 'A' ||
+      observation[8] !== 'A'
+    )
+      return null;
+    const day = observation[6];
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day ?? '')) return null;
+    const observed = Date.parse(`${day}T00:00:00.000Z`);
+    if (!Number.isFinite(observed) || new Date(observed).toISOString().slice(0, 10) !== day)
+      return null;
+    const usdPerEur = observation[7];
+    if (!usdPerEur || !/^(0|[1-9][0-9]*)(?:\.[0-9]+)?$/.test(usdPerEur)) return null;
+    const parsedUsdPerEur = fraction(usdPerEur);
+    if (
+      parsedUsdPerEur.numerator * 10n < parsedUsdPerEur.denominator ||
+      parsedUsdPerEur.numerator > parsedUsdPerEur.denominator * 10n
+    )
+      return null;
+    const reference = {
+      usdPerEur,
+      source: ECB_RATES_URL,
+      observedAt: new Date(observed).toISOString(),
+      expiresAt: new Date(observed + ECB_RATE_MAX_AGE_MS).toISOString(),
+    };
+    return ecbReferenceIsFresh(reference, now) ? reference : null;
+  } catch {
+    // USD/FAIR remain available if ECB is down or returns an unusable observation.
+    return null;
+  } finally {
+    request.dispose();
+  }
+}
+
 /** Uses the owning FairCoin source; no cached fallback after expiry or failure. */
 export async function readDisplayRates(
   options: { fetch?: typeof fetch; signal?: AbortSignal; now?: number } = {},
 ): Promise<DisplayRates> {
   const source = `${DISPLAY_RATES_ORIGIN}/api/price`;
+  const now = options.now ?? Date.now();
+  const fetcher = options.fetch ?? fetch;
+  const eurReferencePromise = readEcbReference(fetcher, options.signal, now);
   const request = timeoutSignal(
     DISPLAY_RATES_TIMEOUT_MS,
     options.signal,
@@ -68,7 +209,7 @@ export async function readDisplayRates(
   );
   let body: unknown;
   try {
-    const response = await (options.fetch ?? fetch)(source, {
+    const response = await fetcher(source, {
       signal: request.signal,
       redirect: 'error',
       headers: { Accept: 'application/json' },
@@ -92,11 +233,23 @@ export async function readDisplayRates(
   fraction(usdPerFair);
   const observed = Date.parse(body.updatedAt);
   if (!Number.isFinite(observed)) throw new Error('Exchange rate unavailable');
+  const receivedEurReference = await eurReferencePromise;
+  const eurReference = receivedEurReference
+    ? ecbReferenceIsFresh(receivedEurReference, options.now ?? Date.now())
+      ? receivedEurReference
+      : null
+    : null;
+  const usd = fraction(usdPerFair);
+  const eurPerFair = eurReference
+    ? decimal(
+        usd.numerator * fraction(eurReference.usdPerEur).denominator,
+        usd.denominator * fraction(eurReference.usdPerEur).numerator,
+      )
+    : null;
   const rates = {
     usdPerFair,
-    // The public Explorer supplies USD only. Keep USD/FAIR usable without
-    // pretending the USD rate also applies to EUR or inventing a cross rate.
-    eurPerFair: null,
+    eurPerFair,
+    eurReference,
     source,
     observedAt: new Date(observed).toISOString(),
     expiresAt: new Date(observed + 120_000).toISOString(),
@@ -130,9 +283,26 @@ export function convertDisplayAmount(input: {
   if (input.currency === input.displayCurrency || units === 0n)
     return formatDisplayUnits(units === 0n ? 0n : units, targetDecimals, input.displayCurrency);
   if (!input.rates || !displayRatesAreFresh(input.rates, input.now)) return null;
-  const destinationRate =
-    input.displayCurrency === 'EUR' ? input.rates.eurPerFair : input.rates.usdPerFair;
-  if (destinationRate === null) return null;
+  if (input.displayCurrency === 'EUR') {
+    const reference = input.rates.eurReference;
+    const now = input.now ?? Date.now();
+    if (!reference || !ecbReferenceIsFresh(reference, now)) return null;
+    const usdPerEur = fraction(reference.usdPerEur);
+    const usdPerFair = fraction(input.rates.usdPerFair);
+    const numerator =
+      units *
+      (input.currency === 'FAIR' ? usdPerFair.numerator : 1n) *
+      usdPerEur.denominator *
+      100n;
+    const denominator =
+      sourceScale * (input.currency === 'FAIR' ? usdPerFair.denominator : 1n) * usdPerEur.numerator;
+    return formatDisplayUnits(
+      (numerator * 2n + denominator) / (2n * denominator),
+      targetDecimals,
+      input.displayCurrency,
+    );
+  }
+  const destinationRate = input.rates.usdPerFair;
   const usd = fraction(input.rates.usdPerFair);
   const destination =
     input.displayCurrency === 'FAIR'
