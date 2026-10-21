@@ -93,7 +93,7 @@ type ConnectResult = { connected: true; socket: ClientSocket } | { connected: fa
 
 /**
  * Open one client connection tagged with a synthetic `X-Forwarded-For` IP
- * (see `resolveClientIp` in `socket.ts`), resolving once it either connects
+ * (see `socketClientIp` in `socket.ts`), resolving once it either connects
  * or is rejected by the connection middleware chain. Every test below uses
  * its OWN distinct IP so the per-IP throttle test's budget-exhausting run
  * can never affect another test, regardless of `bun test --randomize` order.

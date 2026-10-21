@@ -1,8 +1,8 @@
 import { observeEcosystemSocket } from '../ecosystemActivity';
-import { isIP } from 'node:net';
+import type { IncomingMessage } from 'node:http';
 import type { Server, Socket } from 'socket.io';
 import { oxy } from '../oxy';
-import { verifySecret } from '@oxy.so/core/server';
+import { resolveClientIp, verifySecret } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import { findIntentByPublicId } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
@@ -152,52 +152,23 @@ export const IP_CONNECT_MAX = 20;
 export const SUBSCRIBE_WINDOW_MS = 60_000;
 export const SUBSCRIBE_MAX_PER_WINDOW = 20;
 
-const FORWARDED_FOR_HEADER = 'x-forwarded-for';
-
-function looksLikeIp(candidate: string): boolean {
-  return isIP(candidate) !== 0;
-}
-
 /**
- * Resolve the real client IP from a socket handshake. Engine.io has no
- * trust-proxy concept of its own: `socket.handshake.address` is always the
- * raw TCP peer (`req.connection.remoteAddress`), which behind the ALB is the
- * ALB's address, never the payer's browser — unlike Express, where `req.ip`
- * resolves through `X-Forwarded-For` once `trust proxy` is set (`server.ts`).
+ * The real client address of a socket.io connection, for the per-IP throttle.
  *
- * The ALB is the ONE trusted hop (`trust proxy: 1` there): it never strips
- * or replaces an incoming `X-Forwarded-For` — it APPENDS the address it
- * observed for its own direct peer to the RIGHT of whatever the connecting
- * client already sent. A caller can freely prepend any forged value to the
- * LEFT (`X-Forwarded-For: <anything>` costs nothing to send), so that prefix
- * must NEVER be trusted. The RIGHTMOST entry is the one value in the header
- * no untrusted party ever wrote — it is exactly what `req.ip` resolves to on
- * the Express side for the same request path: `proxy-addr` (the module
- * behind `req.ip`) with `trust proxy: 1` trusts exactly the socket hop and
- * returns `addrs[1]` in its `[socket, rightmost-XFF, …, leftmost-XFF]`
- * ordering — the rightmost XFF entry, never the leftmost. Also validates the
- * extracted value actually looks like an IP address (`node:net`'s `isIP`),
- * so a malformed/garbage header can't mint unbounded distinct throttle keys.
- * Falls back to the raw transport address when there's no usable header at
- * all (local dev, direct connections, no proxy in front).
+ * Engine.io has no trust-proxy concept of its own: `socket.handshake.address`
+ * is the raw TCP peer, which behind the ALB is the ALB. `resolveClientIp`
+ * (`@oxy.so/core/server`) walks `X-Forwarded-For` from the socket outward by
+ * the SAME rule `oxyTrustProxy` gives `req.ip` in `server.ts`: the socket peer
+ * is trusted only when private (the ALB), the next hop only when it is a
+ * Cloudflare edge address, nothing further out. So a hostname proxied by
+ * Cloudflare (`<client>, <cloudflare>`) and a DNS-only one (`<client>`) both
+ * answer the payer, and a forged left prefix is never believed. Taking the
+ * right-most entry by hand, as this did, put every proxied payer in the bucket
+ * of whichever Cloudflare edge they reached.
  */
-export function resolveClientIp(socket: unknown): string {
-  const handshake = (
-    socket as {
-      handshake?: {
-        headers?: Record<string, string | string[] | undefined>;
-        address?: string;
-      };
-    }
-  ).handshake;
-  const forwardedFor = handshake?.headers?.[FORWARDED_FOR_HEADER];
-  const header = Array.isArray(forwardedFor) ? forwardedFor.join(',') : forwardedFor;
-  const parts = header?.split(',') ?? [];
-  const rightmost = parts[parts.length - 1]?.trim();
-  if (rightmost !== undefined && looksLikeIp(rightmost)) {
-    return rightmost;
-  }
-  return handshake?.address ?? 'unknown';
+export function socketClientIp(socket: unknown): string {
+  const request = (socket as { request?: IncomingMessage }).request;
+  return (request === undefined ? undefined : resolveClientIp(request)) ?? 'unknown';
 }
 
 /**
@@ -210,7 +181,7 @@ export function resolveClientIp(socket: unknown): string {
  */
 export function ipConnectionThrottle(limiter: FixedWindowLimiter): SocketAuth {
   return (socket, next) => {
-    if (!limiter.consume(resolveClientIp(socket))) {
+    if (!limiter.consume(socketClientIp(socket))) {
       next(new Error('too many connections — try again shortly'));
       return;
     }

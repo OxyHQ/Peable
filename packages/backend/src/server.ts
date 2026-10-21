@@ -31,7 +31,7 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
 import { canUseOxyServiceLane, oxy } from './oxy';
-import { createOxyCors, createOxyRateLimit } from '@oxy.so/core/server';
+import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
@@ -120,6 +120,8 @@ export interface GatewayDeps {
 }
 
 export interface Gateway {
+  /** The Express app `httpServer` serves; exposed so tests can read its settings (`trust proxy`). */
+  app: express.Express;
   httpServer: HttpServer;
   io: SocketServer;
   watcher: SettlementWatcher;
@@ -160,20 +162,17 @@ export async function onIntentChange(
  */
 export function createGateway(deps: GatewayDeps = {}): Gateway {
   const app = express();
+  // `req.ip` is the real client, before or after the hostname is proxied by
+  // Cloudflare: `oxyTrustProxy` trusts the socket peer only when private (the
+  // ALB) and the next hop only when it is a Cloudflare edge address, so a
+  // forged `X-Forwarded-For` is never believed. `trust proxy: 1` answered the
+  // Cloudflare edge for a proxied hostname, and every request would collapse
+  // into a handful of buckets in `createOxyRateLimit` and the public limiter
+  // below. Set first, before anything that can read `req.ip`. Engine.io has no
+  // trust-proxy setting; `realtime/socket.ts`'s `socketClientIp` applies the
+  // same rule to the handshake request.
+  app.set('trust proxy', oxyTrustProxy);
   app.use(ecosystemActivityMiddleware);
-
-  // Trust the ALB as exactly one hop: `req.ip` then resolves through
-  // `X-Forwarded-For` to the real client address instead of the ALB's own
-  // address. Without this, EVERY request behind the shared ALB collapses
-  // into the same handful of buckets in `createOxyRateLimit` below — the
-  // exact "shared load balancer IP" failure mode that library's own doc
-  // comment (`@oxy.so/core/server/rateLimit.ts`) warns about. Matches every
-  // other Oxy backend on ECS (oxy-api, mention, homiio, syra). Engine.io
-  // (the realtime layer's transport) has no equivalent trust-proxy concept
-  // of its own and is NOT affected by this setting — see
-  // `realtime/socket.ts`'s `resolveClientIp`, which reads the same header
-  // directly for the same reason.
-  app.set('trust proxy', 1);
 
   // Unauthenticated liveness probe for the ALB target-group health check.
   // Mounted first so it is never CORS-blocked or rate-limited, and returns 200
@@ -307,7 +306,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     onChange: (intent) => onIntentChange(io, intent, deps.safeFetch),
   });
 
-  return { httpServer, io, watcher };
+  return { app, httpServer, io, watcher };
 }
 
 /**
