@@ -24,6 +24,18 @@
       },
       "default": "./dist/esm/index.js"
     },
+    "./tax": {
+      "react-native": "./dist/esm/tax.js",
+      "import": {
+        "types": "./dist/types/tax.d.ts",
+        "default": "./dist/esm/tax.js"
+      },
+      "require": {
+        "types": "./dist/types/tax.d.ts",
+        "default": "./dist/cjs/tax.js"
+      },
+      "default": "./dist/esm/tax.js"
+    },
     "./package.json": "./package.json"
   },
   "files": [

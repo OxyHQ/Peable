@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { View, Text, TextInput, Pressable, ScrollView } from 'react-native';
 import { Stack } from 'expo-router';
 import type { AccountNode, Application } from '@oxy.so/core';
+// The `/tax` subpath, not the root: the root barrel also exports the
+// node:crypto webhook signer, which Metro cannot resolve on iOS/Android.
 import {
   TAX_REGISTRATION_SCHEMES,
   type TaxCode,
@@ -10,7 +12,7 @@ import {
   type TaxRegistrationScheme,
   type TaxReport,
   type TaxSettings,
-} from '@peable.to/shared-types';
+} from '@peable.to/shared-types/tax';
 import { oxyServices } from '@/services/oxy-services';
 import { taxDashboard, type TaxEnvironment } from '@/services/tax-dashboard';
 import { SafeAreaView } from '@/ui/safe-area-view';
