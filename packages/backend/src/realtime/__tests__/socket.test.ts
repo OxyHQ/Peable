@@ -5,7 +5,7 @@
  * capability semantics can't silently regress underneath the `subscribe`
  * capability check, which is covered end-to-end in `__tests__/e2e.test.ts`.
  *
- * The `FixedWindowLimiter` / `resolveClientIp` / `ipConnectionThrottle`
+ * The `FixedWindowLimiter` / `socketClientIp` / `ipConnectionThrottle`
  * tests below cover the throttling ALGORITHM in isolation (no real socket,
  * no server); the full wiring (real connections actually getting rejected,
  * `subscribe` actually getting throttled while the socket stays alive) is
@@ -16,7 +16,7 @@ import {
   optionalSocketAuth,
   type SocketAuth,
   FixedWindowLimiter,
-  resolveClientIp,
+  socketClientIp,
   ipConnectionThrottle,
 } from '../socket';
 
@@ -103,51 +103,56 @@ test('optionalSocketAuth: a present but INVALID token is rejected outright — n
   expect(err?.message).toBe('Invalid token');
 });
 
+/** A socket.io socket as `socketClientIp` sees it: the handshake's raw Node request. */
 function fakeSocketWithHeaders(
   headers: Record<string, string | string[] | undefined>,
-  address = '10.0.0.1',
+  remoteAddress = '10.0.0.1',
 ): unknown {
-  return { handshake: { headers, address } };
+  return { request: { headers, socket: { remoteAddress } } };
 }
 
-test('resolveClientIp: no X-Forwarded-For header falls back to the raw transport address', () => {
-  expect(resolveClientIp(fakeSocketWithHeaders({}))).toBe('10.0.0.1');
+test('socketClientIp: no X-Forwarded-For header answers the raw transport address', () => {
+  expect(socketClientIp(fakeSocketWithHeaders({}))).toBe('10.0.0.1');
 });
 
-test('resolveClientIp: a single-entry X-Forwarded-For header is used as-is', () => {
-  expect(resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '203.0.113.5' }))).toBe(
+test('socketClientIp: DNS-only hostname — the ALB (private peer) appended the client, which is the answer', () => {
+  expect(socketClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '203.0.113.5' }))).toBe(
     '203.0.113.5',
   );
 });
 
-test("resolveClientIp: a multi-hop X-Forwarded-For header uses the RIGHTMOST entry — the one the ALB itself appended — matching Express's trust-proxy-1 `req.ip`", () => {
+test('socketClientIp: Cloudflare-proxied hostname — the ALB appended a Cloudflare edge, so the client is the entry Cloudflare appended', () => {
   expect(
-    resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '203.0.113.5, 10.0.0.2' })),
-  ).toBe('10.0.0.2');
-});
-
-test('resolveClientIp: a client-forged LEFT prefix claiming to be another address is ignored — never trusted over the ALB-appended rightmost entry', () => {
-  expect(
-    resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '1.2.3.4, 203.0.113.5' })),
+    socketClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '203.0.113.5, 172.70.1.2' })),
   ).toBe('203.0.113.5');
 });
 
-test('resolveClientIp: an array-valued header (duplicate header case) uses the rightmost entry, same as a single joined header', () => {
+test('socketClientIp: a client-forged LEFT prefix is never believed, DNS-only or proxied', () => {
+  expect(socketClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '1.2.3.4, 203.0.113.5' }))).toBe(
+    '203.0.113.5',
+  );
   expect(
-    resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': ['203.0.113.5', '203.0.113.6'] })),
+    socketClientIp(
+      fakeSocketWithHeaders({ 'x-forwarded-for': '1.2.3.4, 203.0.113.5, 172.70.1.2' }),
+    ),
+  ).toBe('203.0.113.5');
+});
+
+test('socketClientIp: a public socket peer means no proxy in front, so the header is ignored', () => {
+  expect(
+    socketClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '1.2.3.4' }, '198.51.100.7')),
+  ).toBe('198.51.100.7');
+});
+
+test('socketClientIp: an array-valued header (duplicate header case) is read as one joined chain', () => {
+  expect(
+    socketClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': ['203.0.113.5', '203.0.113.6'] })),
   ).toBe('203.0.113.6');
 });
 
-test('resolveClientIp: an empty trailing entry falls back to the raw transport address', () => {
-  expect(resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': '203.0.113.5, ' }))).toBe(
-    '10.0.0.1',
-  );
-});
-
-test("resolveClientIp: a rightmost entry that isn't a valid IP falls back to the raw transport address", () => {
-  expect(resolveClientIp(fakeSocketWithHeaders({ 'x-forwarded-for': 'not-an-ip' }))).toBe(
-    '10.0.0.1',
-  );
+test('socketClientIp: a closed socket with no address answers "unknown"', () => {
+  expect(socketClientIp({ request: { headers: {}, socket: {} } })).toBe('unknown');
+  expect(socketClientIp({})).toBe('unknown');
 });
 
 test('FixedWindowLimiter: allows exactly `max` hits per key within a window, then rejects', () => {
