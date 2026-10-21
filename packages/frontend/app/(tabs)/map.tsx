@@ -13,7 +13,7 @@
  *    the camera and highlights the selection; tapping a marker does the same.
  *
  * Map implementation:
- *  - Uses `@maplibre/maplibre-react-native` (MapLibre Native v10) on both iOS
+ *  - Uses `@maplibre/maplibre-react-native` (v11, New Architecture) on both iOS
  *    and Android — a single open-source SDK forked from Mapbox GL that
  *    delivers a consistent look across platforms with no access token, no
  *    usage limits, and no proprietary vendor lock-in.
@@ -35,6 +35,7 @@ import {
   StyleSheet,
   Image,
   useWindowDimensions,
+  type NativeSyntheticEvent,
 } from 'react-native';
 import Animated, {
   Extrapolation,
@@ -52,16 +53,16 @@ import BottomSheet, {
 } from '@gorhom/bottom-sheet';
 import { FlashList } from '@shopify/flash-list';
 import {
-  MapView,
+  Map as MapLibreMap,
   Camera,
-  ShapeSource,
-  CircleLayer,
-  SymbolLayer,
-  setAccessToken,
+  GeoJSONSource,
+  Layer,
   type CameraRef,
-  type OnPressEvent,
-  type CircleLayerStyle,
-  type SymbolLayerStyle,
+  type CircleLayerSpecification,
+  type FilterSpecification,
+  type PressEventWithFeatures,
+  type SymbolLayerSpecification,
+  type ViewPadding,
 } from '@maplibre/maplibre-react-native';
 import * as Location from 'expo-location';
 import { useTheme } from '@oxy.so/bloom/theme';
@@ -79,15 +80,6 @@ import { EmptyState } from '../../src/ui/components/EmptyState';
 import { useTabScreenBottomInset } from '../../src/ui/navigation/tabs';
 import { hapticSelection } from '../../src/utils/haptics';
 import { COIN_TICKER } from '@fairco.in/core';
-
-// ---------------------------------------------------------------------------
-// MapLibre access token
-// ---------------------------------------------------------------------------
-
-// MapLibre is open-source but the native module still expects
-// `setAccessToken` to run once at module load. `null` is the documented
-// opt-out; the promise is intentionally not awaited.
-void setAccessToken(null);
 
 // ---------------------------------------------------------------------------
 // Types
@@ -125,9 +117,10 @@ const CAMERA_ANIMATION_MS = 500;
 // enough for "street view" without clipping the marker at viewport edges.
 const PLACE_BOUNDS_HALF_DEGREES = 0.002;
 
-// Hit area for native ShapeSource taps. MapLibre defaults to 44×44; we use
-// 50×50 so taps feel forgiving even when a pin is small at low zoom.
-const MARKER_HITBOX = { width: 50, height: 50 } as const;
+// Hit area for native GeoJSONSource taps. MapLibre defaults to 44×44; we use
+// 50×50 (25 pt each side of the touch) so taps feel forgiving even when a pin
+// is small at low zoom.
+const MARKER_HITBOX = { top: 25, right: 25, bottom: 25, left: 25 } as const;
 
 // Snap points for the sheet. Index 0 = 15% peek (mostly map). Index 1 =
 // 62% mid — the Google-Maps-style "selected place" height where the hero
@@ -159,7 +152,7 @@ const CATEGORY_ICON: Record<PlaceCategory, IconName> = {
   other: 'map-marker',
 };
 
-// Per-category palette for the native CircleLayer that renders pins.
+// Per-category palette for the native circle layer that renders pins.
 // High-contrast hues so each category is recognisable at a glance, matching
 // Google Maps' conventions.
 const CATEGORY_COLOR: Record<PlaceCategory, string> = {
@@ -170,18 +163,6 @@ const CATEGORY_COLOR: Record<PlaceCategory, string> = {
   atm: '#16a34a',
   other: '#6b7280',
 };
-
-// `match` expression driving `circleColor`, derived once from CATEGORY_COLOR
-// so adding a new PlaceCategory only requires extending the record above.
-const CATEGORY_COLOR_EXPRESSION = [
-  'match',
-  ['get', 'category'],
-  ...(Object.entries(CATEGORY_COLOR) as [PlaceCategory, string][]).flatMap(([cat, color]) => [
-    cat,
-    color,
-  ]),
-  CATEGORY_COLOR.other,
-] as const;
 
 // Order of chips in the Google-Maps-style filter row at the top of the
 // sheet. `all` is the initial/reset state.
@@ -194,10 +175,6 @@ const CATEGORY_FILTERS: readonly CategoryFilter[] = [
   'atm',
   'other',
 ] as const;
-
-// Stable MapLibre sub-expression reused by the selected-state filter so the
-// inner `["get", "id"]` array isn't reallocated on every selection change.
-const GET_ID_EXPR = ['get', 'id'] as const;
 
 function categoryLabel(category: PlaceCategory): string {
   return t(`map.category.${category}`);
@@ -229,32 +206,64 @@ function FloatingHandle() {
 // Drop shadow underneath every pin. Uses `circleBlur` for a soft edge and
 // `circleTranslate` in viewport space so the shadow always drops straight
 // down on screen regardless of map rotation.
-const PLACES_SHADOW_STYLE: CircleLayerStyle = {
-  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 7, 16, 10, 18, 14],
-  circleColor: 'rgba(0,0,0,0.35)',
-  circleBlur: 0.8,
-  circleTranslate: [0, 2],
-  circleTranslateAnchor: 'viewport',
-  circlePitchAlignment: 'map',
+type CirclePaint = NonNullable<CircleLayerSpecification['paint']>;
+type SymbolLayout = NonNullable<SymbolLayerSpecification['layout']>;
+type SymbolPaint = NonNullable<SymbolLayerSpecification['paint']>;
+
+const PLACES_SHADOW_PAINT: CirclePaint = {
+  'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 5, 14, 7, 16, 10, 18, 14],
+  'circle-color': 'rgba(0,0,0,0.35)',
+  'circle-blur': 0.8,
+  'circle-translate': [0, 2],
+  'circle-translate-anchor': 'viewport',
+  'circle-pitch-alignment': 'map',
 };
 
-// Base pin circle. Zoom-interpolated radius + native `match` on category.
-const PLACES_CIRCLE_STYLE: CircleLayerStyle = {
-  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 4, 14, 6, 16, 9, 18, 12],
-  circleColor: CATEGORY_COLOR_EXPRESSION,
-  circleStrokeColor: '#ffffff',
-  circleStrokeWidth: 2.5,
-  circlePitchAlignment: 'map',
+// Base pin circle. Zoom-interpolated radius; the colour is each feature's
+// `color` property, looked up from CATEGORY_COLOR when the GeoJSON is built,
+// so adding a PlaceCategory only requires extending that record.
+const PLACES_CIRCLE_PAINT: CirclePaint = {
+  'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 4, 14, 6, 16, 9, 18, 12],
+  'circle-color': ['get', 'color'],
+  'circle-stroke-color': '#ffffff',
+  'circle-stroke-width': 2.5,
+  'circle-pitch-alignment': 'map',
 };
 
 // Small white glossy highlight on the selected pin. Offset in viewport
 // space so it's always top-left of the pin regardless of rotation.
-const PLACES_SELECTED_HIGHLIGHT_STYLE: CircleLayerStyle = {
-  circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3, 16, 4, 18, 5],
-  circleColor: 'rgba(255,255,255,0.9)',
-  circleTranslate: [-2, -2],
-  circleTranslateAnchor: 'viewport',
-  circlePitchAlignment: 'map',
+const PLACES_SELECTED_HIGHLIGHT_PAINT: CirclePaint = {
+  'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 2, 14, 3, 16, 4, 18, 5],
+  'circle-color': 'rgba(255,255,255,0.9)',
+  'circle-translate': [-2, -2],
+  'circle-translate-anchor': 'viewport',
+  'circle-pitch-alignment': 'map',
+};
+
+// Label layouts don't depend on the theme, so they live at module scope; the
+// theme-coloured paint halves are memoised in the screen.
+// `text-allow-overlap: false` lets MapLibre declutter colliding labels as the
+// user zooms out (Google Maps collision avoidance).
+const PLACES_LABEL_LAYOUT: SymbolLayout = {
+  'text-field': ['get', 'name'],
+  'text-size': ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 10, 14, 11, 16, 12, 18, 14],
+  'text-offset': [0, 1.4],
+  'text-anchor': 'top',
+  'text-allow-overlap': false,
+  'text-ignore-placement': false,
+  'text-pitch-alignment': 'viewport',
+  'text-max-width': 8,
+};
+
+const PLACES_SELECTED_LABEL_LAYOUT: SymbolLayout = {
+  'text-field': ['get', 'name'],
+  'text-size': 14,
+  'text-offset': [0, 1.6],
+  'text-anchor': 'top',
+  'text-allow-overlap': true,
+  'text-ignore-placement': true,
+  'text-pitch-alignment': 'viewport',
+  'text-max-width': 10,
 };
 
 // Google Maps directions URL — on iOS opens the Google Maps app if
@@ -328,8 +337,8 @@ export default function MapScreen() {
   // Padding ordered [top, right, bottom, left] per the fitBounds signature.
   // The top inset clears the floating search pill; the bottom inset matches
   // the mid sheet snap so the camera target lands above the sheet.
-  const fitPadding = useMemo<[number, number, number, number]>(
-    () => [insets.top + 80, 0, Math.round(windowHeight * 0.62), 0],
+  const fitPadding = useMemo<ViewPadding>(
+    () => ({ top: insets.top + 80, right: 0, bottom: Math.round(windowHeight * 0.62), left: 0 }),
     [insets.top, windowHeight],
   );
 
@@ -364,6 +373,7 @@ export default function MapScreen() {
           id: place.id,
           name: place.name,
           category: place.category,
+          color: CATEGORY_COLOR[place.category],
         },
       })),
     }),
@@ -382,7 +392,12 @@ export default function MapScreen() {
         longitude - PLACE_BOUNDS_HALF_DEGREES,
         latitude - PLACE_BOUNDS_HALF_DEGREES,
       ];
-      cameraRef.current?.fitBounds(ne, sw, fitPadding, CAMERA_ANIMATION_MS);
+      // v10's fitBounds eased; v11 defaults to `fly`, so ask for `ease`.
+      cameraRef.current?.fitBounds([sw[0], sw[1], ne[0], ne[1]], {
+        padding: fitPadding,
+        duration: CAMERA_ANIMATION_MS,
+        easing: 'ease',
+      });
     },
     [fitPadding],
   );
@@ -401,8 +416,8 @@ export default function MapScreen() {
   );
 
   const handleMarkerPress = useCallback(
-    (event: OnPressEvent) => {
-      const feature = event.features[0];
+    (event: NativeSyntheticEvent<PressEventWithFeatures>) => {
+      const feature = event.nativeEvent.features[0];
       const id = feature?.properties?.id;
       if (typeof id !== 'string') return;
       const place = PLACES.find((p) => p.id === id);
@@ -497,57 +512,38 @@ export default function MapScreen() {
   // Selection ring and selected-label depend on the theme primary so they
   // can't be hoisted; the base pin / shadow / highlight styles live at
   // module scope at the top of the file.
-  const placesSelectedStyle = useMemo<CircleLayerStyle>(
+  const placesSelectedPaint = useMemo<CirclePaint>(
     () => ({
-      circleRadius: ['interpolate', ['linear'], ['zoom'], 10, 6, 14, 9, 16, 13, 18, 16],
-      circleColor: theme.colors.primary,
-      circleStrokeColor: '#ffffff',
-      circleStrokeWidth: 3,
-      circlePitchAlignment: 'map',
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 10, 6, 14, 9, 16, 13, 18, 16],
+      'circle-color': theme.colors.primary,
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 3,
+      'circle-pitch-alignment': 'map',
     }),
     [theme.colors.primary],
   );
 
-  // `textAllowOverlap: false` lets MapLibre declutter colliding labels as
-  // the user zooms out (Google Maps collision avoidance).
-  const placesLabelStyle = useMemo<SymbolLayerStyle>(
+  // Theme-coloured halves of the label layers; layouts are module constants.
+  const placesLabelPaint = useMemo<SymbolPaint>(
     () => ({
-      textField: ['get', 'name'],
-      textSize: ['interpolate', ['linear'], ['zoom'], 11, 0, 12, 10, 14, 11, 16, 12, 18, 14],
-      textColor: theme.colors.text,
-      textHaloColor: theme.colors.background,
-      textHaloWidth: 2,
-      textOffset: [0, 1.4],
-      textAnchor: 'top',
-      textAllowOverlap: false,
-      textIgnorePlacement: false,
-      textPitchAlignment: 'viewport',
-      textMaxWidth: 8,
+      'text-color': theme.colors.text,
+      'text-halo-color': theme.colors.background,
+      'text-halo-width': 2,
     }),
     [theme.colors.text, theme.colors.background],
   );
 
-  const placesSelectedLabelStyle = useMemo<SymbolLayerStyle>(
+  const placesSelectedLabelPaint = useMemo<SymbolPaint>(
     () => ({
-      textField: ['get', 'name'],
-      textSize: 14,
-      textColor: theme.colors.primary,
-      textHaloColor: theme.colors.background,
-      textHaloWidth: 2.5,
-      textOffset: [0, 1.6],
-      textAnchor: 'top',
-      textAllowOverlap: true,
-      textIgnorePlacement: true,
-      textPitchAlignment: 'viewport',
-      textMaxWidth: 10,
+      'text-color': theme.colors.primary,
+      'text-halo-color': theme.colors.background,
+      'text-halo-width': 2.5,
     }),
     [theme.colors.primary, theme.colors.background],
   );
 
-  // Only `selectedPlaceId` varies — the inner `["get", "id"]` is a stable
-  // module constant (`GET_ID_EXPR`) so we don't reallocate it per render.
-  const placesSelectedFilter = useMemo(
-    () => ['==', GET_ID_EXPR, selectedPlaceId] as const,
+  const placesSelectedFilter = useMemo<FilterSpecification>(
+    () => ['==', ['get', 'id'], selectedPlaceId],
     [selectedPlaceId],
   );
 
@@ -601,10 +597,11 @@ export default function MapScreen() {
     [selectedPlaceId, selectPlace],
   );
 
-  // User-location marker rendered from expo-location coords via a ShapeSource +
-  // CircleLayer, instead of MapLibre's native `UserLocation` — that component's
-  // location module calls `getReactNativeHost()` on every fix, which throws
-  // under the New Architecture ("You should not use ReactNativeHost directly").
+  // User-location marker rendered from expo-location coords via a GeoJSONSource
+  // + circle layers, instead of MapLibre's `UserLocation`. MapLibre v10's
+  // location module threw under the New Architecture, and expo-location
+  // already owns the permission prompt (`handleLocateMe`), so the dot stays on
+  // the same source of truth.
   const userLocationFeature = useMemo<GeoJSON.Feature<GeoJSON.Point> | null>(
     () =>
       userLocation
@@ -620,21 +617,21 @@ export default function MapScreen() {
     [userLocation],
   );
 
-  const userDotStyle = useMemo<CircleLayerStyle>(
+  const userDotPaint = useMemo<CirclePaint>(
     () => ({
-      circleRadius: 7,
-      circleColor: theme.colors.primary,
-      circleStrokeWidth: 3,
-      circleStrokeColor: '#ffffff',
+      'circle-radius': 7,
+      'circle-color': theme.colors.primary,
+      'circle-stroke-width': 3,
+      'circle-stroke-color': '#ffffff',
     }),
     [theme.colors.primary],
   );
 
-  const userHaloStyle = useMemo<CircleLayerStyle>(
+  const userHaloPaint = useMemo<CirclePaint>(
     () => ({
-      circleRadius: 16,
-      circleColor: theme.colors.primary,
-      circleOpacity: 0.18,
+      'circle-radius': 16,
+      'circle-color': theme.colors.primary,
+      'circle-opacity': 0.18,
     }),
     [theme.colors.primary],
   );
@@ -642,59 +639,72 @@ export default function MapScreen() {
   return (
     <View className="flex-1 bg-background">
       {/* ---- Full-bleed native map ---- */}
-      <MapView
+      {/* `androidView="texture"` keeps the TextureView v10 rendered with
+          (v11 defaults to GLSurfaceView), so the map composes with the
+          sheet and search pill drawn over it exactly as before. */}
+      <MapLibreMap
         style={StyleSheet.absoluteFill}
         mapStyle={mapStyleUrl}
-        logoEnabled={false}
-        attributionEnabled={false}
-        compassEnabled
+        androidView="texture"
+        logo={false}
+        attribution={false}
+        compass
       >
         <Camera
           ref={cameraRef}
-          defaultSettings={{
-            centerCoordinate: INITIAL_CENTER,
-            zoomLevel: INITIAL_ZOOM,
+          initialViewState={{
+            center: INITIAL_CENTER,
+            zoom: INITIAL_ZOOM,
             pitch: INITIAL_PITCH,
-            heading: 0,
+            bearing: 0,
           }}
         />
         {userLocationFeature ? (
-          <ShapeSource id="user-location-source" shape={userLocationFeature}>
-            <CircleLayer id="user-location-halo" style={userHaloStyle} />
-            <CircleLayer id="user-location-dot" style={userDotStyle} />
-          </ShapeSource>
+          <GeoJSONSource id="user-location-source" data={userLocationFeature}>
+            <Layer type="circle" id="user-location-halo" paint={userHaloPaint} />
+            <Layer type="circle" id="user-location-dot" paint={userDotPaint} />
+          </GeoJSONSource>
         ) : null}
 
-        {/* Native place pins. One ShapeSource feeds every layer so the
+        {/* Native place pins. One GeoJSONSource feeds every layer so the
             native hit-test dispatches onPress for taps on any visible
             layer. Layer order bottom→top: shadow, base pin, selected
             ring, selected highlight, base label, selected label. */}
-        <ShapeSource
+        <GeoJSONSource
           id="places-source"
-          shape={placesGeoJson}
+          data={placesGeoJson}
           onPress={handleMarkerPress}
           hitbox={MARKER_HITBOX}
         >
-          <CircleLayer id="places-shadow" style={PLACES_SHADOW_STYLE} />
-          <CircleLayer id="places-circles" style={PLACES_CIRCLE_STYLE} />
-          <CircleLayer
+          <Layer type="circle" id="places-shadow" paint={PLACES_SHADOW_PAINT} />
+          <Layer type="circle" id="places-circles" paint={PLACES_CIRCLE_PAINT} />
+          <Layer
+            type="circle"
             id="places-circles-selected"
             filter={placesSelectedFilter}
-            style={placesSelectedStyle}
+            paint={placesSelectedPaint}
           />
-          <CircleLayer
+          <Layer
+            type="circle"
             id="places-circles-highlight"
             filter={placesSelectedFilter}
-            style={PLACES_SELECTED_HIGHLIGHT_STYLE}
+            paint={PLACES_SELECTED_HIGHLIGHT_PAINT}
           />
-          <SymbolLayer id="places-labels" style={placesLabelStyle} />
-          <SymbolLayer
+          <Layer
+            type="symbol"
+            id="places-labels"
+            layout={PLACES_LABEL_LAYOUT}
+            paint={placesLabelPaint}
+          />
+          <Layer
+            type="symbol"
             id="places-labels-selected"
             filter={placesSelectedFilter}
-            style={placesSelectedLabelStyle}
+            layout={PLACES_SELECTED_LABEL_LAYOUT}
+            paint={placesSelectedLabelPaint}
           />
-        </ShapeSource>
-      </MapView>
+        </GeoJSONSource>
+      </MapLibreMap>
 
       <View pointerEvents="box-none" style={searchPillBaseStyle}>
         <View
