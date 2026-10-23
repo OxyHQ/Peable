@@ -64,9 +64,9 @@ nests the published copy under services, with its own older
 
 ## Commands
 
-npm releases: only Actions → Release packages (`release-packages.yml`, Oxy's shared
-workflow, OIDC); a package's gates are its `prepublishOnly`. Never publish from a laptop —
-`~/Oxy/docs/npm-releases.md`.
+npm releases: merging a version bump to main publishes it (`release-packages.yml`, Oxy's
+shared workflow, OIDC, once CI passed on that commit); a package's gates are CI. Never publish
+from a laptop — `~/Oxy/docs/npm-releases.md`.
 
 ```bash
 bun run dev:frontend    # expo start --clear

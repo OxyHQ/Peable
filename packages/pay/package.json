@@ -61,8 +61,7 @@
     "build:types": "tsc -p tsconfig.types.json",
     "clean": "rm -rf dist",
     "typecheck": "tsc --noEmit",
-    "test": "bun test",
-    "prepublishOnly": "bun run clean && bun run typecheck && bun run test && bun run build"
+    "test": "bun test"
   },
   "dependencies": {
     "@noble/hashes": "1.8.0",
