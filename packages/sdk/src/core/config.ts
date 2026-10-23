@@ -1,16 +1,24 @@
-// Configuration for the server-side `Peable` client. The SDK authenticates with
-// an Oxy service token, obtained one of two ways:
-//
-// - a confidential `ApplicationCredential` (`{publicKey, secret}`, the SAME
-//   credential Oxy Console already issues for a `type:'service'` credential) —
-//   never a bespoke "Peable API key" — from which the SDK mints the token
-//   itself. See the SDK plan's "Architecture / auth" section; or
-// - a caller-supplied `tokenProvider`, for a workload that already holds an Oxy
-//   identity (e.g. an ECS task role attested through workload identity) and
-//   has no key pair to hand over. The Gateway resolves the merchant from the
-//   token's application id and environment, not from how it was minted.
+// Own Oxy products use the shared workload transport through { oxy }.
+// External customers retain ApplicationCredential and tokenProvider support.
+// The Gateway resolves the merchant from the verified application/environment
+// and applies merchant and finance rules independently of authentication.
 
 import type { ServiceTokenProvider } from './serviceToken';
+
+/** Oxy owns workload mint, proof binding and authenticated HTTP transport. */
+export interface PeableOxyHost {
+  createServiceClient(options: {
+    baseURL: string;
+    audience: string;
+    requester?: PeableRequester;
+  }): { fetch: typeof globalThis.fetch; dispose(): void };
+}
+export type PeableRequester = { accountId: string } & (
+  | { token: string; taskId?: never; requesterContext?: never }
+  | { taskId: string; token?: never; requesterContext?: never }
+  | { requesterContext: string; token?: never; taskId?: never }
+);
+export const PEABLE_SERVICE_AUDIENCE = 'oxy-service:6a2f851751b784a86fd0e958';
 
 /** Default Gateway host (`api.peable.to`) — the SDK never sends a `livemode`
  * flag; the credential's `environment` rides in the minted service JWT and
@@ -20,8 +28,8 @@ export const DEFAULT_GATEWAY_BASE_URL = 'https://api.peable.to';
 /** Default oxy-api host used to mint the short-lived service token. */
 export const DEFAULT_OXY_API_URL = 'https://api.oxy.so';
 
-/** Options shared by both ways of authenticating. */
-interface PeableConfigOptions {
+/** Options shared by the supported authentication methods. */
+export interface PeableConfigOptions {
   /** Gateway base URL. Default `https://api.peable.to`. */
   baseURL?: string;
   /** oxy-api host used to mint the service token. Default `https://api.oxy.so`.
@@ -41,6 +49,8 @@ export interface PeableCredentialConfig extends PeableConfigOptions {
   /** ApplicationCredential plaintext secret. */
   secret: string;
   tokenProvider?: undefined;
+  oxy?: undefined;
+  requester?: undefined;
 }
 
 /** Authenticate with Oxy service tokens the caller already knows how to obtain. */
@@ -49,11 +59,23 @@ export interface PeableTokenProviderConfig extends PeableConfigOptions {
    * when the Gateway answers 401, before the single retry; the next
    * `getToken()` must then return a freshly minted token. */
   tokenProvider: ServiceTokenProvider;
+  oxy?: undefined;
+  requester?: undefined;
   publicKey?: undefined;
   secret?: undefined;
 }
 
-export type PeableConfig = PeableCredentialConfig | PeableTokenProviderConfig;
+export interface PeableWorkloadConfig extends PeableConfigOptions {
+  oxy: PeableOxyHost;
+  requester?: PeableRequester;
+  publicKey?: undefined;
+  secret?: undefined;
+  tokenProvider?: undefined;
+}
+export type PeableConfig =
+  | PeableCredentialConfig
+  | PeableTokenProviderConfig
+  | PeableWorkloadConfig;
 
 interface ResolvedPeableConfigOptions {
   baseURL: string;
@@ -68,11 +90,15 @@ export interface ResolvedPeableCredentialConfig extends ResolvedPeableConfigOpti
   publicKey: string;
   secret: string;
   tokenProvider?: undefined;
+  oxy?: undefined;
+  requester?: undefined;
 }
 
 /** `PeableTokenProviderConfig` with every optional field defaulted and normalized. */
 export interface ResolvedPeableTokenProviderConfig extends ResolvedPeableConfigOptions {
   tokenProvider: ServiceTokenProvider;
+  oxy?: undefined;
+  requester?: undefined;
   publicKey?: undefined;
   secret?: undefined;
 }
@@ -80,7 +106,8 @@ export interface ResolvedPeableTokenProviderConfig extends ResolvedPeableConfigO
 /** `PeableConfig` with every optional field defaulted and normalized. */
 export type ResolvedPeableConfig =
   | ResolvedPeableCredentialConfig
-  | ResolvedPeableTokenProviderConfig;
+  | ResolvedPeableTokenProviderConfig
+  | (PeableWorkloadConfig & ResolvedPeableConfigOptions);
 
 export function resolveRequestTimeout(value: number | undefined): number | undefined {
   if (value === undefined) return undefined;
@@ -110,6 +137,9 @@ function isServiceTokenProvider(value: unknown): value is ServiceTokenProvider {
  */
 export function resolveConfig(config: PeableCredentialConfig): ResolvedPeableCredentialConfig;
 export function resolveConfig(config: PeableTokenProviderConfig): ResolvedPeableTokenProviderConfig;
+export function resolveConfig(
+  config: PeableWorkloadConfig,
+): PeableWorkloadConfig & ResolvedPeableConfigOptions;
 export function resolveConfig(config: PeableConfig): ResolvedPeableConfig;
 export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
   // Read loosely: a JavaScript caller is not held to the union, and "both" is
@@ -119,7 +149,18 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
     publicKey?: unknown;
     secret?: unknown;
   };
-  if (tokenProvider !== undefined) {
+  if (config.oxy !== undefined) {
+    if (
+      tokenProvider !== undefined ||
+      publicKey !== undefined ||
+      secret !== undefined ||
+      typeof config.oxy.createServiceClient !== 'function'
+    ) {
+      throw new Error(
+        'Peable: a shared workload client cannot be combined with external credentials',
+      );
+    }
+  } else if (tokenProvider !== undefined) {
     if (publicKey !== undefined || secret !== undefined) {
       throw new Error('Peable: pass either `tokenProvider` or `publicKey` + `secret`, not both');
     }
@@ -148,6 +189,12 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
     baseURL: stripTrailingSlash(config.baseURL ?? DEFAULT_GATEWAY_BASE_URL),
     oxyApiUrl: stripTrailingSlash(config.oxyApiUrl ?? DEFAULT_OXY_API_URL),
   };
+  if (config.oxy !== undefined)
+    return {
+      ...options,
+      oxy: config.oxy,
+      ...(config.requester ? { requester: { ...config.requester } } : {}),
+    };
   return config.tokenProvider !== undefined
     ? { ...options, tokenProvider: config.tokenProvider }
     : { ...options, publicKey: config.publicKey, secret: config.secret };

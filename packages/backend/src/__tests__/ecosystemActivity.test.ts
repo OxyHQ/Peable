@@ -74,11 +74,11 @@ describe('ecosystem activity configuration', () => {
     expect(canStartEcosystemActivity()).toBe(true);
   });
 
-  test('a key pair still admits a process that cannot attest anything', () => {
+  test('a key pair never substitutes for own workload identity', () => {
     delete process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
     delete process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
     process.env.OXY_SERVICE_API_KEY = 'key';
     process.env.OXY_SERVICE_API_SECRET = 'secret';
-    expect(canStartEcosystemActivity()).toBe(true);
+    expect(canStartEcosystemActivity()).toBe(false);
   });
 });

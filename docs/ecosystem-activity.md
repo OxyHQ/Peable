@@ -8,11 +8,10 @@ Starts automatically once `AWS_REGION` is set and the process can authenticate
 to Oxy — there is no separate enable flag. On the infrastructure the gateway
 authenticates as ITSELF: an ECS task signs an STS `GetCallerIdentity` request
 with its task role and Oxy mints the service token (oxy ADR 0026), so a
-deployed task needs no credential in its environment. A registered application
-credential (`OXY_SERVICE_API_KEY` and `OXY_SERVICE_API_SECRET`) is still
-accepted and still preferred where one is present.
+deployed task needs no application credential in its environment. Customer API
+keys never substitute for workload authority.
 
-Neither an attestable workload identity nor a credential — a laptop, a CI box —
+No attestable workload identity — a laptop, a CI box —
 is a no-op, not an error, and emits a warning that must not be interpreted as
 zero traffic. Missing or unrecognized `AWS_REGION` still fails at boot once the
 publisher does start.

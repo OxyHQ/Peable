@@ -67,7 +67,12 @@ export { PEABLE_BILLING_AUTHORITY_KEYS } from '@peable.to/shared-types';
 //
 // Deliberately never imports `socket.io-client` or `./browser/*` — the
 // server bundle stays lean and holds no browser-only code.
-import { resolveConfig, type PeableConfig } from './core/config';
+import {
+  resolveConfig,
+  PEABLE_SERVICE_AUDIENCE,
+  type PeableConfig,
+  type PeableWorkloadConfig,
+} from './core/config';
 import { createServiceTokenProvider } from './core/serviceToken';
 import { createRestClient } from './core/client';
 import { PaymentIntentsResource } from './resources/paymentIntents';
@@ -96,6 +101,8 @@ import { TransfersResource } from './resources/transfers';
  * relocates it.
  */
 export class Peable {
+  /** Release requester-bound shared transport resources after the operation. */
+  readonly dispose: () => void;
   readonly billing: BillingResource;
   /** Peable Tax: location evidence, calculations, and what was collected. */
   readonly tax: TaxResource;
@@ -124,13 +131,19 @@ export class Peable {
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
-    const tokenProvider =
-      config.tokenProvider !== undefined
-        ? config.tokenProvider
-        : createServiceTokenProvider(config);
+    const transport = config.oxy?.createServiceClient({
+      baseURL: resolved.baseURL,
+      audience: PEABLE_SERVICE_AUDIENCE,
+      ...(config.requester ? { requester: { ...config.requester } } : {}),
+    });
+    const tokenProvider = config.oxy
+      ? undefined
+      : (config.tokenProvider ?? createServiceTokenProvider(config));
+    this.dispose = () => transport?.dispose();
     const client = createRestClient(
       { baseURL: resolved.baseURL, requestTimeoutMs: resolved.requestTimeoutMs },
       tokenProvider,
+      transport ? { fetch: transport.fetch } : {},
     );
 
     this.billing = new BillingResource(
@@ -238,3 +251,10 @@ export type {
 } from './resources/contributions';
 
 export type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
+
+/** Own applications use this factory with their existing shared OxyServer. */
+export function peableForOxyService(config: PeableWorkloadConfig): Peable {
+  return new Peable(config);
+}
+export { PEABLE_SERVICE_AUDIENCE } from './core/config';
+export type { PeableWorkloadConfig, PeableOxyHost, PeableRequester } from './core/config';

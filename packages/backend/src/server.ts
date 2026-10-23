@@ -30,7 +30,7 @@ import {
 import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
-import { canUseOxyServiceLane, oxy } from './oxy';
+import { canUseOxyServiceLane, oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
 import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
@@ -226,18 +226,21 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // `routes/__tests__/oxyFileEvents.realdb.test.ts` asserts the order.
   app.use(createOxyFileEventsRouter());
 
-  app.use(createOxyRateLimit(oxy));
+  app.use(createOxyRateLimit(oxy, { auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE } }));
   app.use(express.json());
   app.use(((_req, res, next) => {
     res.setHeader('Peable-Version', PEABLE_VERSION);
     next();
   }) as RequestHandler);
-  const requireMerchant: RequestHandler = deps.requireMerchant ?? oxy.middleware.service();
+  const requireMerchant: RequestHandler =
+    deps.requireMerchant ?? oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE });
   const optionalServiceAuth: RequestHandler =
-    deps.optionalServiceAuth ?? oxy.middleware.auth({ optional: true });
+    deps.optionalServiceAuth ??
+    oxy.middleware.auth({ optional: true, expectedAudience: PEABLE_SERVICE_AUDIENCE });
   const publicRateLimit: RequestHandler =
     deps.publicRateLimit ??
     createOxyRateLimit(oxy, {
+      auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE },
       anonymousMax: PUBLIC_RATE_LIMIT_MAX,
       // `createOxyRateLimit` resolves `oxy.middleware.auth({ optional: true })` BEFORE
       // limiting regardless of route auth, so ANY caller with a valid Oxy
@@ -400,9 +403,7 @@ export async function start(
       startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
     }
   } else {
-    console.warn(
-      'Oxy file references are disabled for peable: no OXY_SERVICE_API_KEY/OXY_SERVICE_API_SECRET and no workload identity to attest',
-    );
+    console.warn('Oxy file references are disabled for peable: no workload identity to attest');
   }
   gateway.httpServer.listen(config.port);
 }

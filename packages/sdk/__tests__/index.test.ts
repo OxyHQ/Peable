@@ -1,5 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { Peable } from '../src/index';
+import {
+  Peable,
+  peableForOxyService,
+  PEABLE_SERVICE_AUDIENCE,
+  type PeableOxyHost,
+} from '../src/index';
 import { PaymentIntentsResource } from '../src/resources/paymentIntents';
 import { PaymentLinksResource } from '../src/resources/paymentLinks';
 import { CheckoutResource, CheckoutSessionsResource } from '../src/resources/checkoutSessions';
@@ -45,4 +50,46 @@ describe('Peable', () => {
     // @ts-expect-error — the config union requires one of the two.
     expect(() => new Peable({})).toThrow(/tokenProvider/);
   });
+});
+
+test('own factory uses canonical shared transport and snapshots requester context', async () => {
+  const received: Parameters<PeableOxyHost['createServiceClient']>[0][] = [];
+  let disposed = 0;
+  const oxy: PeableOxyHost = {
+    createServiceClient(options) {
+      received.push(options);
+      const fetch = Object.assign(
+        async (_input: Parameters<typeof globalThis.fetch>[0], init?: RequestInit) => {
+          expect(new Headers(init?.headers).has('authorization')).toBe(false);
+          return Response.json({ id: options.requester?.accountId });
+        },
+        { preconnect: globalThis.fetch.preconnect },
+      );
+      return {
+        fetch,
+        dispose() {
+          disposed++;
+        },
+      };
+    },
+  };
+  const requester = { accountId: 'A', requesterContext: 'proof-A' };
+  const a = peableForOxyService({ oxy, requester, baseURL: 'https://receiver.test' });
+  requester.accountId = 'B';
+  requester.requesterContext = 'proof-B';
+  const b = peableForOxyService({ oxy, requester });
+  expect(received[0]).toEqual({
+    baseURL: 'https://receiver.test',
+    audience: PEABLE_SERVICE_AUDIENCE,
+    requester: { accountId: 'A', requesterContext: 'proof-A' },
+  });
+  expect((await a.paymentIntents.retrieve('pi_a')).id).toBe('A');
+  expect((await b.paymentIntents.retrieve('pi_b')).id).toBe('B');
+  a.dispose();
+  b.dispose();
+  expect(disposed).toBe(2);
+  // @ts-expect-error — external credentials and workload identity are exclusive.
+  expect(() => new Peable({ oxy, publicKey: 'external', secret: 'secret' })).toThrow(
+    /cannot be combined/,
+  );
 });
