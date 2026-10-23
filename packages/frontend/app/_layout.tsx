@@ -15,7 +15,7 @@ import '../src/crypto-polyfill';
 import '../global.css';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState, type AppStateStatus, Platform, View } from 'react-native';
+import { AppState, type AppStateStatus, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import * as SplashScreen from 'expo-splash-screen';
@@ -24,7 +24,6 @@ import * as Linking from 'expo-linking';
 import * as Notifications from 'expo-notifications';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { BottomSheetModalProvider } from '@gorhom/bottom-sheet';
-import { KeyboardProvider as NativeKeyboardProvider } from 'react-native-keyboard-controller';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { OxyProvider } from '@oxy.so/services/ui/client';
 import { BloomThemeProvider, useBloomTheme } from '@oxy.so/bloom/theme';
@@ -52,15 +51,6 @@ import { startSyncNotifier } from '../src/services/sync-notifier';
 import { startPushRegistration } from '../src/services/push-registration';
 import { handleIncomingPush } from '../src/services/push-handler';
 import { registerBackgroundSync } from '../src/services/background-sync';
-
-// react-native-keyboard-controller ships no web build — its KeyboardControllerView
-// is a native-only component that breaks the flex height chain on web and leaves
-// all scrollables with 0 bounded height. Web has no virtual keyboard anyway, so
-// we pass children straight through.
-const KeyboardProvider =
-  Platform.OS === 'web'
-    ? ({ children }: { children: React.ReactNode }) => <>{children}</>
-    : NativeKeyboardProvider;
 
 // Oxy resolves which language the app shows — the signed-in account's
 // primary locale, or the device/guest locale when signed out — and reports
@@ -314,60 +304,61 @@ export default function RootLayout() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <KeyboardProvider>
-        <SafeAreaProvider>
-          <BloomThemeProvider
-            mode={mode}
-            colorPreset="blue"
-            onModeChange={handleModeChange}
-            fonts={false}
+      {/* No KeyboardProvider here: OxyProvider mounts the one. A second one above it
+          took the native keyboard events, so every keyboard hook under OxyProvider read
+          a closed keyboard. */}
+      <SafeAreaProvider>
+        <BloomThemeProvider
+          mode={mode}
+          colorPreset="blue"
+          onModeChange={handleModeChange}
+          fonts={false}
+        >
+          <OxyProvider
+            oxyServices={oxyServices}
+            clientId={OXY_CLIENT_ID}
+            authRedirectUri={OXY_AUTH_REDIRECT_URI}
+            storageKeyPrefix="peable"
+            queryClient={queryClient}
+            language={{
+              supportedLocales: TRANSLATED_LANGUAGE_CODES,
+              fallbackLocale: DEFAULT_LANGUAGE,
+              onChange: handleLanguageChange,
+              onError: handleLanguageError,
+            }}
           >
-            <OxyProvider
-              oxyServices={oxyServices}
-              clientId={OXY_CLIENT_ID}
-              authRedirectUri={OXY_AUTH_REDIRECT_URI}
-              storageKeyPrefix="peable"
-              queryClient={queryClient}
-              language={{
-                supportedLocales: TRANSLATED_LANGUAGE_CODES,
-                fallbackLocale: DEFAULT_LANGUAGE,
-                onChange: handleLanguageChange,
-                onError: handleLanguageError,
-              }}
+            <ImageResolverProvider
+              value={(id, variant) => oxyServices.assets.publicUrl(id, variant)}
             >
-              <ImageResolverProvider
-                value={(id, variant) => oxyServices.assets.publicUrl(id, variant)}
-              >
-                <BottomSheetModalProvider>
-                  {/* Native Bloom `Portal` (AliaChatSheet's BottomSheet) only
-                      renders into a PortalProvider + ONE PortalOutlet. The
-                      outlet comes after the content it paints over; everything
-                      but the outlet sits in OverlayInertBoundary so a modal
-                      surface keeps a screen reader inside it. */}
-                  <PortalProvider>
-                    <OverlayInertBoundary>
-                      {/* Inside the theme provider so the fallback screen is themed,
-                          and around AppContent so a throw in any screen is contained
-                          instead of unmounting the app to a black screen. */}
-                      <ErrorBoundary>
-                        <AppContent
-                          key={language}
-                          ready={fontsLoaded && themeReady && languageReady}
-                        />
-                      </ErrorBoundary>
-                    </OverlayInertBoundary>
-                    <PortalOutlet />
-                  </PortalProvider>
-                  {/* Global toast outlet (Bloom + sonner-native). Sibling of the
-                      app content so toasts survive the language-key remount and
-                      overlay every screen. */}
-                  <ToastOutlet />
-                </BottomSheetModalProvider>
-              </ImageResolverProvider>
-            </OxyProvider>
-          </BloomThemeProvider>
-        </SafeAreaProvider>
-      </KeyboardProvider>
+              <BottomSheetModalProvider>
+                {/* Native Bloom `Portal` (AliaChatSheet's BottomSheet) only
+                    renders into a PortalProvider + ONE PortalOutlet. The
+                    outlet comes after the content it paints over; everything
+                    but the outlet sits in OverlayInertBoundary so a modal
+                    surface keeps a screen reader inside it. */}
+                <PortalProvider>
+                  <OverlayInertBoundary>
+                    {/* Inside the theme provider so the fallback screen is themed,
+                        and around AppContent so a throw in any screen is contained
+                        instead of unmounting the app to a black screen. */}
+                    <ErrorBoundary>
+                      <AppContent
+                        key={language}
+                        ready={fontsLoaded && themeReady && languageReady}
+                      />
+                    </ErrorBoundary>
+                  </OverlayInertBoundary>
+                  <PortalOutlet />
+                </PortalProvider>
+                {/* Global toast outlet (Bloom + sonner-native). Sibling of the
+                    app content so toasts survive the language-key remount and
+                    overlay every screen. */}
+                <ToastOutlet />
+              </BottomSheetModalProvider>
+            </ImageResolverProvider>
+          </OxyProvider>
+        </BloomThemeProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
