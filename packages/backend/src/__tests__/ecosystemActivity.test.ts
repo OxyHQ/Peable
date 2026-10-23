@@ -1,84 +1,44 @@
-import { afterEach, describe, expect, test } from 'bun:test';
+import { afterEach, describe, expect, mock, test } from 'bun:test';
+import type { createEcosystemTraffic } from '@oxy.so/core/server';
+import { workloadCredentials } from '../oxy';
 import {
-  canStartEcosystemActivity,
   ecosystemActivityMiddleware,
   startEcosystemActivity,
   stopEcosystemActivity,
 } from '../ecosystemActivity';
 
-const keys = [
-  'OXY_SERVICE_API_KEY',
-  'OXY_SERVICE_API_SECRET',
-  'AWS_REGION',
-  'OXY_API_URL',
-  'AWS_CONTAINER_CREDENTIALS_FULL_URI',
-  'AWS_CONTAINER_CREDENTIALS_RELATIVE_URI',
-] as const;
-const initial = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
-afterEach(async () => {
-  await stopEcosystemActivity();
-  for (const key of keys) {
-    const value = initial[key];
-    if (value === undefined) delete process.env[key];
-    else process.env[key] = value;
-  }
-});
+afterEach(stopEcosystemActivity);
 
 describe('ecosystem activity configuration', () => {
-  test('missing credentials allow the anonymous checkout request to continue', () => {
-    delete process.env.OXY_SERVICE_API_KEY;
-    delete process.env.OXY_SERVICE_API_SECRET;
-    startEcosystemActivity(() => false);
+  test('missing infrastructure region leaves anonymous checkout available', () => {
+    const create = mock<typeof createEcosystemTraffic>(() => {
+      throw new Error('must not create');
+    });
+    startEcosystemActivity(() => false, create, '');
+    expect(create).not.toHaveBeenCalled();
     let continued = false;
     ecosystemActivityMiddleware({} as never, {} as never, () => {
       continued = true;
     });
     expect(continued).toBe(true);
   });
-  test('a credential missing only its pair is a no-op, not a crash', () => {
-    process.env.OXY_SERVICE_API_KEY = 'key';
-    delete process.env.OXY_SERVICE_API_SECRET;
-    expect(() => startEcosystemActivity(() => true)).not.toThrow();
-    let continued = false;
-    ecosystemActivityMiddleware({} as never, {} as never, () => {
-      continued = true;
+  test('configured region forwards temporary role provider without an ECS gate', async () => {
+    const publisher = { installFetch: mock(), stop: mock(async () => {}) };
+    const create = mock<typeof createEcosystemTraffic>(
+      () => publisher as unknown as ReturnType<typeof createEcosystemTraffic>,
+    );
+    const ready = () => true;
+    startEcosystemActivity(ready, create, 'us-west-2');
+    startEcosystemActivity(ready, create, 'us-west-2');
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledWith({
+      service: 'peable',
+      ready,
+      region: 'us-west-2',
+      workloadCredentials,
     });
-    expect(continued).toBe(true);
-  });
-  test('blank credentials are treated as absent', () => {
-    process.env.OXY_SERVICE_API_KEY = '   ';
-    process.env.OXY_SERVICE_API_SECRET = '   ';
-    expect(() => startEcosystemActivity(() => true)).not.toThrow();
-    let continued = false;
-    ecosystemActivityMiddleware({} as never, {} as never, () => {
-      continued = true;
-    });
-    expect(continued).toBe(true);
-  });
-  /**
-   * The case the migration off the key pair makes NORMAL: a task carrying no
-   * credential at all, which can still prove what it is. Gating on the pair
-   * would have taken peable off the ecosystem dashboard the moment the secret
-   * left its task definition, without failing anything.
-   *
-   * The DECISION is asserted rather than the publisher, deliberately: starting
-   * one installs interval timers, a global `fetch` wrapper and a heartbeat that
-   * would reach for the credentials endpoint, none of which belongs in a unit
-   * test of a gate.
-   */
-  test('an attestable workload with no key pair at all may publish', () => {
-    delete process.env.OXY_SERVICE_API_KEY;
-    delete process.env.OXY_SERVICE_API_SECRET;
-    expect(canStartEcosystemActivity()).toBe(false);
-    process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI = 'http://169.254.170.2/v2/credentials/example';
-    expect(canStartEcosystemActivity()).toBe(true);
-  });
-
-  test('a key pair never substitutes for own workload identity', () => {
-    delete process.env.AWS_CONTAINER_CREDENTIALS_FULL_URI;
-    delete process.env.AWS_CONTAINER_CREDENTIALS_RELATIVE_URI;
-    process.env.OXY_SERVICE_API_KEY = 'key';
-    process.env.OXY_SERVICE_API_SECRET = 'secret';
-    expect(canStartEcosystemActivity()).toBe(false);
+    expect(publisher.installFetch).toHaveBeenCalledTimes(1);
+    await stopEcosystemActivity();
+    expect(publisher.stop).toHaveBeenCalledTimes(1);
   });
 });

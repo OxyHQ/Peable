@@ -17,6 +17,13 @@ const APP_ID = 'app_wiring';
 const KID = 'wiring-test-key';
 const live = new Map<string, Record<string, unknown>>();
 let receiverOxy: OxyServer;
+let oxyApi: string;
+let workloadClaims: Record<string, unknown> = {};
+const temporaryCredentials = (accessKeyId: string) => async () => ({
+  AccessKeyId: accessKeyId,
+  SecretAccessKey: 'fixture-only-secret',
+  Token: 'fixture-only-session',
+});
 
 // Oxy signs service tokens with Ed25519 under a published kid (oxy ADR 0012).
 // This stands in for oxy-api: it serves the public half at the SAME path the
@@ -100,8 +107,35 @@ beforeAll(async () => {
 
   const jwks = express().use(express.json());
   jwks.post('/auth/resources/introspect', (req, res) => {
-    if (req.headers.authorization !== 'Bearer receiver-workload') return res.sendStatus(401);
+    const receiver = live.get(String(req.headers.authorization).replace(/^Bearer /, ''));
+    if (receiver?.applicationId !== 'peable-receiver' || receiver?.authority !== 'first_party')
+      return res.sendStatus(401);
     return res.json(live.get(req.body.token) ?? { active: false });
+  });
+  jwks.post('/auth/service-token/workload/challenge', (_req, res) => {
+    res.json({ data: { nonce: 'peable-workload-challenge' } });
+  });
+  jwks.post('/auth/service-token/workload', (req, res) => {
+    const body = req.body;
+    const signature = body.attestation?.headers?.authorization ?? '';
+    if (
+      body.provider !== 'aws-iam' ||
+      body.protocolVersion !== 2 ||
+      body.nonce !== 'peable-workload-challenge' ||
+      body.attestation?.headers?.['x-oxy-attestation-nonce'] !== body.nonce ||
+      !signature.includes('ASIA_PEABLE_')
+    )
+      return res.sendStatus(401);
+    const isReceiver = signature.includes('ASIA_PEABLE_RECEIVER');
+    const token = signServiceToken({
+      appId: isReceiver ? 'peable-receiver' : APP_ID,
+      appName: 'Own workload',
+      authority: 'first_party',
+      credentialId: isReceiver ? 'wl_receiver' : 'wl_own',
+      aud: body.audience ?? 'oxy-api',
+      ...(isReceiver ? {} : workloadClaims),
+    });
+    res.json({ data: { token, expiresIn: 300, appName: 'Own workload' } });
   });
   jwks.get('/.well-known/jwks.json', (_req, res) => {
     res.json({
@@ -109,14 +143,13 @@ beforeAll(async () => {
     });
   });
   jwksServer = jwks.listen(0);
-  const oxyApi = `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}`;
+  oxyApi = `http://127.0.0.1:${(jwksServer.address() as AddressInfo).port}`;
 
-  // The same calls `server.ts` makes, with no options: verification is the
-  // JWKS at the client's base URL and nothing else. A fresh client rather than
-  // the `oxy` client, so its key cache is this file's alone.
-  receiverOxy = new OxyServer({ baseURL: oxyApi });
-  Object.defineProperty(receiverOxy, 'platformServiceToken', {
-    value: async () => 'receiver-workload',
+  // Real shared workload attestation and live introspection, with temporary
+  // credentials injected at the supported provider seam rather than mint stubs.
+  receiverOxy = new OxyServer({
+    baseURL: oxyApi,
+    workloadCredentials: temporaryCredentials('ASIA_PEABLE_RECEIVER'),
   });
   const requireMerchant = receiverOxy.middleware.service({
     expectedAudience: PEABLE_SERVICE_AUDIENCE,
@@ -225,20 +258,11 @@ test('a correctly signed service token with a 301-second lifetime is rejected', 
 });
 
 test('own SDK workload transport has no scopes and still binds merchant and environment', async () => {
-  const oxy = new OxyServer({ baseURL: 'https://api.oxy.invalid' });
-  let claims: Record<string, unknown> = {
-    appId: APP_ID,
-    appName: 'own',
-    authority: 'first_party',
-    credentialId: 'wl_own',
-    aud: PEABLE_SERVICE_AUDIENCE,
-  };
-  Object.defineProperty(oxy, 'workloadServiceToken', {
-    value: async (audience: string) => {
-      expect(audience).toBe(PEABLE_SERVICE_AUDIENCE);
-      return signServiceToken(claims);
-    },
+  const oxy = new OxyServer({
+    baseURL: oxyApi,
+    workloadCredentials: temporaryCredentials('ASIA_PEABLE_CALLER'),
   });
+  workloadClaims = {};
   const client = peableForOxyService({ oxy, baseURL: baseUrl });
   try {
     const intent = await client.paymentIntents.create(
@@ -246,15 +270,22 @@ test('own SDK workload transport has no scopes and still binds merchant and envi
       { idempotencyKey: 'own-sdk-intent' },
     );
     expect(intent.id.startsWith('pi_')).toBe(true);
-    claims = { ...claims, appId: 'unbound-merchant' };
+    oxy.invalidateServiceToken();
+    workloadClaims = { ...workloadClaims, appId: 'unbound-merchant' };
     await expect(client.paymentIntents.retrieve(intent.id)).rejects.toMatchObject({
       statusCode: 403,
     });
-    claims = { ...claims, appId: APP_ID, environment: 'production' };
+    oxy.invalidateServiceToken();
+    workloadClaims = { ...workloadClaims, appId: APP_ID, environment: 'production' };
     await expect(client.paymentIntents.retrieve(intent.id)).rejects.toMatchObject({
       statusCode: 403,
     });
-    claims = { ...claims, environment: 'development', aud: 'oxy-service:other-product' };
+    oxy.invalidateServiceToken();
+    workloadClaims = {
+      ...workloadClaims,
+      environment: 'development',
+      aud: 'oxy-service:other-product',
+    };
     await expect(client.paymentIntents.retrieve(intent.id)).rejects.toMatchObject({
       statusCode: 401,
     });

@@ -30,7 +30,7 @@ import {
 import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
-import { canUseOxyServiceLane, oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
+import { oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
 import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
@@ -393,17 +393,11 @@ export async function start(
   // with the rail off it stops after the first refusal rather than logging the
   // same line per account.
   startAccountSync();
-  // Oxy Files (ADR 0043): the reference sync makes Oxy's record of which files
-  // Peable uses follow every avatar write, and the reconciliation repairs it
-  // daily. Both need Peable's own service token; a process that cannot get one
-  // (a laptop) starts neither, and says so once.
-  if (canUseOxyServiceLane()) {
-    startReferenceSync();
-    if (config.oxyFiles.reconciliationMode !== 'off') {
-      startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
-    }
-  } else {
-    console.warn('Oxy file references are disabled for peable: no workload identity to attest');
+  // The durable outbox retries missing/revoked workload authority; ECS markers
+  // cannot decide whether a temporary development role can authenticate.
+  startReferenceSync();
+  if (config.oxyFiles.reconciliationMode !== 'off') {
+    startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
   }
   gateway.httpServer.listen(config.port);
 }

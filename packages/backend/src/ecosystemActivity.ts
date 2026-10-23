@@ -1,23 +1,17 @@
-import { canAttestWorkloadIdentity, createEcosystemTraffic } from '@oxy.so/core/server';
+import { createEcosystemTraffic } from '@oxy.so/core/server';
 import type { RequestHandler } from 'express';
+import { workloadCredentials } from './oxy';
 
 let activity: ReturnType<typeof createEcosystemTraffic> | undefined;
 
-/** Own telemetry is authenticated by this deployment's workload identity. */
-export function canStartEcosystemActivity(): boolean {
-  return canAttestWorkloadIdentity();
-}
-
-export function startEcosystemActivity(ready: () => boolean): void {
-  if (!canStartEcosystemActivity()) {
-    console.warn('Ecosystem activity is disabled for peable: no workload identity to attest');
-    return;
-  }
-  if (activity) return;
-  activity = createEcosystemTraffic({
-    service: 'peable',
-    ready,
-  });
+/** Region config enables telemetry; credentials are resolved by the shared provider on demand. */
+export function startEcosystemActivity(
+  ready: () => boolean,
+  create: typeof createEcosystemTraffic = createEcosystemTraffic,
+  region = process.env.AWS_REGION,
+): void {
+  if (activity || !region) return;
+  activity = create({ service: 'peable', ready, region, workloadCredentials });
   activity.installFetch();
 }
 

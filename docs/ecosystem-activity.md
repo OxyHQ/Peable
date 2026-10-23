@@ -4,17 +4,17 @@ The backend publishes aggregate traffic and its infrastructure heartbeat to the
 Oxy API, which broadcasts changes to the website dashboard. Collection runs in
 the service process regardless of whether somebody opens the dashboard.
 
-Starts automatically once `AWS_REGION` is set and the process can authenticate
-to Oxy — there is no separate enable flag. On the infrastructure the gateway
-authenticates as ITSELF: an ECS task signs an STS `GetCallerIdentity` request
-with its task role and Oxy mints the service token (oxy ADR 0026), so a
-deployed task needs no application credential in its environment. Customer API
-keys never substitute for workload authority.
+With `AWS_REGION` configured, the publisher uses the shared temporary AWS role
+provider, including ECS and authenticated development/SSO roles. Oxy validates
+its live application/environment binding (ADR 0049); own apps need no scopes or
+customer keys. Missing region omits only telemetry. Invalid region fails at boot;
+missing/revoked identity is reported through the shared publisher's retry policy
+and must not be interpreted as zero traffic.
 
-No attestable workload identity — a laptop, a CI box —
-is a no-op, not an error, and emits a warning that must not be interpreted as
-zero traffic. Missing or unrecognized `AWS_REGION` still fails at boot once the
-publisher does start.
+The same provider authenticates service introspection and Oxy Files. Reference
+outboxes start independently of ECS environment markers and retain their existing
+durable retry behavior. Merchant, environment and payment authorization remain
+unchanged.
 
 HTTP middleware is mounted before body parsers and routers, including public
 routes, webhooks, failures and authenticated internal calls. Outgoing fetch and

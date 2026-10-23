@@ -29,7 +29,8 @@
     "socket.io": "^4.8.1",
     "stripe": "22.4.0",
     "zod": "^3.23.8",
-    "@peable.to/contracts": "workspace:0.2.0"
+    "@peable.to/contracts": "workspace:0.2.0",
+    "@aws-sdk/credential-provider-node": "3.972.84"
   },
   "devDependencies": {
     "@oxy.so/contracts": "5.4.0",
