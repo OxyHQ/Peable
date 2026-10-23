@@ -441,7 +441,7 @@ file references. Decisions a reader would otherwise undo:
   registration), so a refused registration leaves a sync naming no row — which
   is exactly what makes the loop remove it.
 - **`merchants.avatar_withheld` keeps the avatar instead of clearing it** for a
-  file its owner can bring back (trash, private). Deleted and blocked clear
+  file its owner can bring back (trash, private). Deleted, blocked and permanently lost files clear
   `avatar_file_id`. `merchants_avatar_withheld_needs_avatar_check` refuses a
   withheld nothing. `avatar_file_event_at` orders Oxy's unordered events and is
   reset to the write time whenever the avatar changes, so an event about the

@@ -155,7 +155,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Oxy file events, real chain', () => {
     expect(parsed.status).toBe(400);
   });
 
-  for (const type of ['file.deleted', 'file.blocked'] as const) {
+  for (const type of ['file.deleted', 'file.blocked', 'file.lost'] as const) {
     test(`${type} clears the avatar, audits it, queues the reference release — once`, async () => {
       const merchant = await seedMerchant({ avatarFileId: `file_${type}` });
       await gatewayDb().delete(oxyFileReferenceSyncs);
