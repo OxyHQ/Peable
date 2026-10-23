@@ -226,9 +226,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
       .then(() => {
         revoked = true;
       });
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(revoked).toBe(true);
-    release();
+    // Revocation must complete while dispatch is still blocked. Wait for the
+    // operation itself; database scheduling is not guaranteed within 20 ms.
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        revocation,
+        new Promise<never>((_resolve, reject) => {
+          deadline = setTimeout(() => reject(new Error('Revocation waited for dispatch')), 3_000);
+        }),
+      ]);
+      expect(revoked).toBe(true);
+    } finally {
+      clearTimeout(deadline);
+      release();
+    }
     expect((await pending).status).toBe('accepted');
     await revocation;
     const replay = await Promise.all([
