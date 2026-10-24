@@ -6,7 +6,8 @@
 // Build the dev variant with `APP_VARIANT=development`; production is default.
 //
 // The base config (plugins, scheme, icons, notifications, …) lives in app.json;
-// this file reads it as `config` and only overrides the identity fields.
+// this file reads it as `config` and overrides only the identity fields and the
+// development-only Noxcturnal flag (it depends on NODE_ENV, which JSON cannot read).
 module.exports = ({ config }) => {
   const IS_DEV = process.env.APP_VARIANT === 'development';
   // Moved from `so.oxy.pay` with the Peable rebrand, which was free only because
@@ -30,6 +31,14 @@ module.exports = ({ config }) => {
   return {
     ...config,
     name: APP_NAME,
+    experiments: {
+      ...config.experiments,
+      // Expo's oxc transformer, about 2x faster cold bundles than Babel. Development
+      // only: in a production export it keeps the requires of dead platform branches
+      // (`if (Platform.OS !== 'web') require(...)`), pulling native-only packages into
+      // the web bundle. The CLI sets NODE_ENV before it reads this config.
+      noxcturnalTransformWorker: process.env.NODE_ENV !== 'production',
+    },
     ios: { ...config.ios, bundleIdentifier: APP_ID },
     android: { ...config.android, package: APP_ID },
   };
