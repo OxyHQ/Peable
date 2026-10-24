@@ -77,7 +77,7 @@ bun run build:shared-types
 ```
 
 The named root shortcuts only cover `frontend`, `backend` and `shared-types`.
-**`checkout` and `sdk` have no root shortcut**: reach them with
+**`checkout` has no root shortcut and `sdk` only `build:sdk`**: reach them with
 `bun run --filter @peable.to/checkout <script>` (`dev` is `vite`, `build` is
 `vite build`) and `bun run --filter @peable.to/sdk <script>`, or run the script from
 inside the package. The unnamed root scripts (`dev`, `build`, `test`) use
@@ -96,8 +96,11 @@ the unused-code rules as warnings, and the count is zero. In tests, write
 `packages/backend/src/db/migrations/` (drizzle-kit output, checked by CI's
 regenerate-and-diff gate) are excluded from Biome on purpose.
 
-Root `postinstall` builds `contracts`, `shared-types` and `pay`, so a fresh `bun install` leaves its
-`dist/` present. Both published packages build cjs + esm + types separately;
+Root `postinstall` builds `contracts`, `shared-types`, `sdk` and `pay` — every workspace package
+the wallet imports — so a fresh `bun install` leaves each `dist/` present. Metro bundles those
+`dist/`s, the same output `tsc` checks the wallet against, so a package missing from that chain
+fails the Android release bundle (`Unable to resolve "@peable.to/sdk/contributions"` when `sdk`
+was not in it). The builds are `incremental: false`, so each install rewrites them whole. Both published packages build cjs + esm + types separately;
 `shared-types` also runs `scripts/fix-esm-imports.mjs` after the esm pass.
 
 ## PostgreSQL is the only store

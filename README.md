@@ -89,7 +89,7 @@ docker-compose.postgres.yml up -d` starts one, and the backend refuses to boot
 without `DATABASE_URL` pointing at it (see `packages/backend/.env.example`).
 
 ```bash
-bun install                    # postinstall builds shared-types for you
+bun install                    # postinstall builds contracts, shared-types, sdk and pay
 bun run dev                    # every package at once
 ```
 

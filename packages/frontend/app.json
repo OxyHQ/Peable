@@ -53,7 +53,6 @@
       "expo-secure-store",
       "@oxy.so/services/plugins/withOxySharedPermissions",
       ["expo-build-properties", { "android": { "gifEnabled": false, "webpEnabled": false } }],
-      "@oxy.so/app-preset/plugin/withOxyAndroidRelease",
       "expo-sqlite",
       "expo-local-authentication",
       "expo-system-ui",
