@@ -3,7 +3,7 @@
  * (ADR 0043 D9). Peable uses exactly one kind of file — a merchant's avatar —
  * so every event is about avatars:
  *
- *  - `file.deleted`, `file.blocked`: the file is gone for good (its owner
+ *  - `file.deleted`, `file.blocked`, `file.lost`: the file is gone for good (its owner
  *    deleted it, or it was taken down on a rights or privacy claim). The avatar
  *    is CLEARED on every merchant using it, an audit row says which event did
  *    it, and the reference sync tells Oxy the use ended.
@@ -67,6 +67,7 @@ export async function applyFileEvent(
     switch (event.type) {
       case 'file.deleted':
       case 'file.blocked':
+      case 'file.lost':
         return { kind: 'applied', changes: await clearMerchantAvatarsForFile(tx, avatarEvent) };
       case 'file.trashed':
       case 'file.restored':

@@ -4,9 +4,9 @@
  * Every caller takes an `OxyFilesClient` rather than reaching for `oxy`
  * itself, so a suite hands in a fake and no test can reach the real Oxy API.
  * The default forwards to `oxy.assets` — authenticated as Peable by the
- * process's own service token (`oxy.ts`). Scopes the Peable application needs:
- * `files:read` (`metadataByIds`, which reveals a file's owner only to Oxy's own
- * `internal`-tier applications) and `files:references:write` (the rest).
+ * process's verified workload identity (`oxy.ts`), including temporary
+ * development roles. Oxy validates its live registration; merchant ownership
+ * and Files reference semantics remain independent resource checks.
  */
 import type {
   ServiceAssetMetadata,

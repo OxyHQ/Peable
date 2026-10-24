@@ -77,26 +77,31 @@ const session = await peable.checkout.sessions.create({
 return redirect(session.url);
 ```
 
-### Without a key pair: `tokenProvider`
-
-A workload that already authenticates to Oxy without a key pair — an ECS task
-role attested through Oxy workload identity, say — passes a `tokenProvider`
-instead of `publicKey` + `secret` (SDK 0.2.5-oxy-one.0 and later). The Gateway
-resolves the merchant from the service token's application id and environment,
-never from how the token was minted, so the same merchant is served either way.
+### Own Oxy applications: shared workload transport
 
 ```ts
-const peable = new Peable({
-  tokenProvider: {
-    getToken: () => myOxyServiceToken(), // a current Oxy service token
-    invalidate: () => dropCachedOxyServiceToken(), // called on a Gateway 401
-  },
-});
+import { peableForOxyService } from '@peable.to/sdk';
+const peable = peableForOxyService({ oxy: mySharedOxyServer });
 ```
 
-`invalidate()` runs when the Gateway answers 401, before the single retry, so the
-next `getToken()` must mint afresh. Pass one or the other: `new Peable` refuses
-both, and refuses neither.
+The factory uses `OxyServer.createServiceClient` with Peable's registered
+audience `oxy-service:6a2f851751b784a86fd0e958`. Own workloads have no payment
+scopes or application consent. The gateway still resolves the merchant from
+the verified application and environment and enforces all account, rail,
+settlement, idempotency and business rules. The hosted payer checkout stays
+anonymous.
+
+An optional `requester: {accountId, token | taskId | requesterContext}` carries
+verified account context for a person-bound call. Do not supply a user header,
+persist a session bearer, or share a requester-bound client between accounts.
+Call `peable.dispose()` when finished with the client.
+
+External customer integrations retain `publicKey` + `secret` or an explicit
+`tokenProvider: {getToken(), invalidate()}`. Their existing `oxy-api` audience
+remains accepted with live credential/application scope checks. Own traffic
+requires the exact registered audience. An external key on an official app
+remains external and cannot gain own authority from branding. Only the own
+factory bypasses app permission configuration, never merchant/resource rules.
 
 That's the whole happy path: create → redirect → the hosted page shows amount +
 your merchant identity + a "Pay with Peable" deep link/QR + live status, and

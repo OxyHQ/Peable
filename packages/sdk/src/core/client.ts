@@ -55,7 +55,7 @@ async function readJsonBody(response: Response): Promise<unknown> {
 
 export function createRestClient(
   config: RestClientConfig,
-  tokenProvider: ServiceTokenProvider,
+  tokenProvider: ServiceTokenProvider | undefined,
   deps: { fetch?: typeof fetch } = {},
 ): RestClient {
   const fetchImpl = deps.fetch ?? fetch;
@@ -67,8 +67,8 @@ export function createRestClient(
     opts: RestClientRequestOptions,
     allowRetryOn401: boolean,
   ): Promise<T> {
-    const token = await tokenProvider.getToken();
-    const headers: Record<string, string> = { Authorization: `Bearer ${token}` };
+    const token = await tokenProvider?.getToken();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.idempotencyKey !== undefined) headers['Idempotency-Key'] = opts.idempotencyKey;
     if (opts.headers) Object.assign(headers, opts.headers);
@@ -97,7 +97,7 @@ export function createRestClient(
       // mid-flight (it was valid when minted, or a prior request would have
       // failed at `tokenProvider.getToken()` already). Invalidate the cache and
       // retry exactly once with a freshly minted token, under its own deadline.
-      if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401) {
+      if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401 && tokenProvider) {
         tokenProvider.invalidate();
         return performRequest<T>(method, path, opts, false);
       }

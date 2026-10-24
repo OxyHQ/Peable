@@ -19,7 +19,7 @@ internal refactor.
 | `packages/backend/` | `@peable.to/backend` | Express + Socket.IO gateway API. PostgreSQL-native — see below |
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
-| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry mints Oxy service tokens from an `ApplicationCredential`, or takes them from a caller's `tokenProvider` (workload identity, no key pair), and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
@@ -390,7 +390,7 @@ predicate and `for update skip locked`.
 Backend uses `@oxy.so/core/server`: the one `OxyServer` is `src/oxy.ts`
 (`oxy`), with `createOxyAuthMiddleware(oxy)` on routes, `getRequiredOxyUserId`
 to read the caller, `oxy.middleware.service()` / `.requireScope()` for merchant
-service tokens (EdDSA, verified against Oxy's JWKS), `oxy.middleware.socket()`
+service tokens (EdDSA plus live authority; canonical own audience, bounded external legacy audience), `oxy.middleware.socket()`
 for Socket.IO, plus `createOxyCors` and `createOxyRateLimit` in `server.ts`. There is no
 `requireOxyAuth` call site in this repo. Frontend uses `OxyProvider` and `useOxy`
 from `@oxy.so/services` (`app/_layout.tsx`, `src/services/oxy-services.ts`).
