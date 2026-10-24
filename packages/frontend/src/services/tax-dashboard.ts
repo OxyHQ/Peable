@@ -8,15 +8,12 @@ import type {
   UpdateTaxSettingsParams,
 } from '@peable.to/shared-types';
 import { gateway } from './gateway-client';
+import { readTaxList } from './tax-list';
 
 export type TaxEnvironment = 'development' | 'production';
 export interface TaxScope {
   applicationId: string;
   environment: TaxEnvironment;
-}
-interface List<T> {
-  object: 'list';
-  data: T[];
 }
 
 const path = (scope: TaxScope, rest: string) =>
@@ -34,10 +31,9 @@ export const taxDashboard = {
     gateway.client.get<TaxSettings>(path(scope, '/settings'), { cache: false }),
   updateSettings: (scope: TaxScope, body: UpdateTaxSettingsParams) =>
     gateway.client.patch<TaxSettings>(path(scope, '/settings'), body),
-  codes: (scope: TaxScope) =>
-    gateway.client.get<List<TaxCode>>(path(scope, '/codes'), { cache: false }),
+  codes: (scope: TaxScope) => readTaxList<TaxCode>(gateway.client, path(scope, '/codes')),
   registrations: (scope: TaxScope) =>
-    gateway.client.get<List<TaxRegistration>>(path(scope, '/registrations'), { cache: false }),
+    readTaxList<TaxRegistration>(gateway.client, path(scope, '/registrations')),
   addRegistration: (scope: TaxScope, body: CreateTaxRegistrationParams) =>
     gateway.client.post<TaxRegistration>(path(scope, '/registrations'), body),
   deleteRegistration: (scope: TaxScope, id: string) =>
@@ -48,7 +44,7 @@ export const taxDashboard = {
       { expiresAt },
     ),
   products: (scope: TaxScope) =>
-    gateway.client.get<List<TaxProductCode>>(path(scope, '/products'), { cache: false }),
+    readTaxList<TaxProductCode>(gateway.client, path(scope, '/products')),
   setProductCode: (scope: TaxScope, productRef: string, taxCode: string) =>
     gateway.client.put<TaxProductCode>(path(scope, `/products/${encodeURIComponent(productRef)}`), {
       taxCode,

@@ -28,7 +28,11 @@ The file.lost event in the new core requires migration 0035 before the receiver
 starts. It expands only the event/audit CHECK vocabulary and clears permanently
 lost avatars with the existing audit and reference-release transaction.
 
-Source commits intentionally retain registry dependency versions until the shared
-release is published. The dependency adoption commit must pin the released core,
-contracts and this SDK before deployment; local candidate tarball paths are not
-committed. Workload binding/environment registration must already be active.
+The adoption release pins registry core7.0.0/contracts6.0.0/services13.0.0 and
+protocol1.5.1; SDK0.5.0 adds the own factory while preserving customer credential
+minting. The SDK remains structurally typed and does not load Oxy in its root.
+Contracts0.2.1 sets Zod4.6.7 as its minimum; shared-types0.5.1 follows that
+contract pin. Backend and frontend types, 191 SDK tests and 9 real HTTP receiver
+tests passed against the published dependencies. The tax UI consumes complete
+Peable list envelopes through shared authenticated raw transport. Workload
+binding/environment registration must already be active before deployment.
