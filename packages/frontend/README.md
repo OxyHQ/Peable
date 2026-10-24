@@ -114,8 +114,10 @@ That is `expo prebuild --platform android --clean` and then `assembleRelease`.
 `--clean` is load-bearing: `android/` is generated and gitignored, and a
 leftover one from before the Oxy shared-permissions switch still declares
 `sharedUserId`, which a non-clean prebuild leaves in place.
-Release signing reads the `OXY_UPLOAD_*` Gradle properties
-(`@oxy.so/app-preset/plugin/withOxyAndroidRelease`).
+Release signing is `@oxy.so/services/plugins/withOxySharedPermissions`' own
+(services 13.4+): it reads the `OXY_UPLOAD_*` Gradle properties and FAILS a
+release build whose signing certificate is not the Oxy upload key, rather than
+falling back to the debug keystore. No signing plugin is listed in `app.json`.
 
 ### Type Check
 
