@@ -107,9 +107,15 @@ bun run electron -- --dev
 ### Build APK Locally
 
 ```bash
-bunx expo prebuild --platform android
-cd android && ./gradlew assembleRelease
+bun run build:android:local
 ```
+
+That is `expo prebuild --platform android --clean` and then `assembleRelease`.
+`--clean` is load-bearing: `android/` is generated and gitignored, and a
+leftover one from before the Oxy shared-permissions switch still declares
+`sharedUserId`, which a non-clean prebuild leaves in place.
+Release signing reads the `OXY_UPLOAD_*` Gradle properties
+(`@oxy.so/app-preset/plugin/withOxyAndroidRelease`).
 
 ### Type Check
 
@@ -185,10 +191,7 @@ FAIRWallet/
 ├── electron/               # Desktop wrapper
 │   ├── main.js             # Custom app:// protocol + TCP P2P + safeStorage
 │   └── preload.js          # contextBridge API
-├── plugins/
-│   └── withGradle813.js    # Expo config plugin: Gradle 9→8.13 downgrade
 ├── .github/workflows/
-│   ├── build-android.yml   # APK build on release
 │   └── build-desktop.yml   # Electron builds on release
 └── app.json                # Expo config
 ```

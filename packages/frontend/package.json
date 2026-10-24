@@ -19,7 +19,7 @@
     "test": "bun test src",
     "lint": "expo lint",
     "build:android": "eas build --platform android --profile preview",
-    "build:android:local": "bunx expo prebuild --platform android && cd android && ./gradlew assembleRelease",
+    "build:android:local": "bunx expo prebuild --platform android --clean && cd android && ./gradlew assembleRelease",
     "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
