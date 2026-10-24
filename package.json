@@ -26,10 +26,11 @@
     "install:all": "bun install",
     "start:frontend": "bun run --filter @peable.to/frontend start",
     "start:backend": "bun run --filter @peable.to/backend start",
-    "postinstall": "bun run build:contracts && bun run build:shared-types && bun run build:pay",
+    "postinstall": "bun run build:contracts && bun run build:shared-types && bun run build:sdk && bun run build:pay",
     "test:edge": "bun test scripts/edge-worker.test.ts",
     "build:pay": "bun run --filter @peable.to/pay build",
     "build:contracts": "bun run --filter @peable.to/contracts build",
+    "build:sdk": "bun run --filter @peable.to/sdk build",
     "check:contribution-contracts": "bun scripts/contribution-openapi.ts --check"
   },
   "devDependencies": {
