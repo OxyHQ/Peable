@@ -35,6 +35,7 @@ import { ScreenHeader, Button } from '../../src/ui/components';
 import { FairCoinSymbol } from '../../src/ui/components/FairCoinSymbol';
 import { useWalletStore, FEE_RATES } from '../../src/wallet/wallet-store';
 import { submitTx } from '../../src/services/gateway-client';
+import { oxyServices } from '../../src/services/oxy-services';
 import { subscribeToIntent, type IntentSubscription } from '../../src/services/gateway-socket';
 import { getCachedPrice } from '../../src/services/price';
 import { hapticSuccess, hapticError } from '../../src/utils/haptics';
@@ -157,10 +158,15 @@ export default function ApprovePayScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const subscriptionRef = useRef<IntentSubscription | null>(null);
+  const subscriptionAbort = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
 
   // Tear down the realtime subscription when leaving the screen.
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
+      subscriptionAbort.current?.abort();
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
     };
@@ -221,6 +227,8 @@ export default function ApprovePayScreen() {
 
   const handleApprove = useCallback(async () => {
     if (amount === null) return;
+    const ownerEpoch = oxyServices.http.getSessionEpoch();
+    const ownsView = () => mounted.current && oxyServices.http.getSessionEpoch() === ownerEpoch;
     setNotice(null);
     setErrorMessage(null);
     setPhase('processing');
@@ -231,6 +239,7 @@ export default function ApprovePayScreen() {
     try {
       broadcastTxid = await sendTransaction(address, amount, FEE_RATES.medium);
     } catch (err: unknown) {
+      if (!ownsView()) return;
       hapticError();
       setErrorMessage(err instanceof Error ? err.message : t('pay.error.sendFailed'));
       setPhase('error');
@@ -239,19 +248,23 @@ export default function ApprovePayScreen() {
 
     // The coins are on-chain now. From here every failure is non-fatal to the
     // payment: never route back to the `error` phase once we hold a txid.
-    setTxid(broadcastTxid);
-    hapticSuccess();
+    if (ownsView()) {
+      setTxid(broadcastTxid);
+      hapticSuccess();
+    }
 
     // 2. Report the txid to the Gateway. Possession of `clientSecret` authorizes
     //    it; the Gateway's watcher verifies the txid on-chain.
     try {
       const submitted = await submitTx(intentId, clientSecret, broadcastTxid);
-      setIntent(submitted);
+      if (ownsView()) setIntent(submitted);
     } catch {
       // Gateway didn't record it, but the settlement watcher still catches the
       // tx on-chain. Surface a soft notice rather than failing the payment.
-      setNotice(t('pay.notice.reportFailed'));
+      if (ownsView()) setNotice(t('pay.notice.reportFailed'));
     }
+
+    if (!ownsView()) return;
 
     // 3. Live status needs an authenticated Oxy session for the socket handshake.
     if (!isAuthenticated) {
@@ -260,17 +273,32 @@ export default function ApprovePayScreen() {
     }
 
     try {
+      if (!ownsView()) return;
+      subscriptionAbort.current?.abort();
+      const controller = new AbortController();
+      subscriptionAbort.current = controller;
       setPhase('tracking');
-      const subscription = await subscribeToIntent(intentId, clientSecret, (updated) => {
-        setIntent(updated);
-        if (updated.status === 'settled') {
-          hapticSuccess();
-        } else if (updated.status === 'failed') {
-          hapticError();
-        }
-      });
+      const subscription = await subscribeToIntent(
+        intentId,
+        clientSecret,
+        (updated) => {
+          if (!ownsView()) return;
+          setIntent(updated);
+          if (updated.status === 'settled') {
+            hapticSuccess();
+          } else if (updated.status === 'failed') {
+            hapticError();
+          }
+        },
+        controller.signal,
+      );
+      if (!ownsView()) {
+        subscription.unsubscribe();
+        return;
+      }
       subscriptionRef.current = subscription;
     } catch {
+      if (!ownsView()) return;
       // Couldn't open the realtime channel; the payment still went through.
       setNotice(t('pay.notice.liveStatusUnavailable'));
       setPhase('sent_no_status');
