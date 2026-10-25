@@ -35,6 +35,7 @@ import { ScreenHeader, Button } from '../../src/ui/components';
 import { FairCoinSymbol } from '../../src/ui/components/FairCoinSymbol';
 import { useWalletStore, FEE_RATES } from '../../src/wallet/wallet-store';
 import { submitTx } from '../../src/services/gateway-client';
+import { oxyServices } from '../../src/services/oxy-services';
 import { subscribeToIntent, type IntentSubscription } from '../../src/services/gateway-socket';
 import { getCachedPrice } from '../../src/services/price';
 import { hapticSuccess, hapticError } from '../../src/utils/haptics';
@@ -157,10 +158,15 @@ export default function ApprovePayScreen() {
   const [notice, setNotice] = useState<string | null>(null);
 
   const subscriptionRef = useRef<IntentSubscription | null>(null);
+  const subscriptionAbort = useRef<AbortController | null>(null);
+  const mounted = useRef(false);
 
   // Tear down the realtime subscription when leaving the screen.
   useEffect(() => {
+    mounted.current = true;
     return () => {
+      mounted.current = false;
+      subscriptionAbort.current?.abort();
       subscriptionRef.current?.unsubscribe();
       subscriptionRef.current = null;
     };
@@ -221,6 +227,7 @@ export default function ApprovePayScreen() {
 
   const handleApprove = useCallback(async () => {
     if (amount === null) return;
+    const ownerEpoch = oxyServices.http.getSessionEpoch();
     setNotice(null);
     setErrorMessage(null);
     setPhase('processing');
@@ -260,17 +267,27 @@ export default function ApprovePayScreen() {
     }
 
     try {
+      if (!mounted.current || oxyServices.http.getSessionEpoch() !== ownerEpoch) return;
+      subscriptionAbort.current?.abort();
+      const controller = new AbortController();
+      subscriptionAbort.current = controller;
       setPhase('tracking');
-      const subscription = await subscribeToIntent(intentId, clientSecret, (updated) => {
-        setIntent(updated);
-        if (updated.status === 'settled') {
-          hapticSuccess();
-        } else if (updated.status === 'failed') {
-          hapticError();
-        }
-      });
+      const subscription = await subscribeToIntent(
+        intentId,
+        clientSecret,
+        (updated) => {
+          setIntent(updated);
+          if (updated.status === 'settled') {
+            hapticSuccess();
+          } else if (updated.status === 'failed') {
+            hapticError();
+          }
+        },
+        controller.signal,
+      );
       subscriptionRef.current = subscription;
     } catch {
+      if (!mounted.current) return;
       // Couldn't open the realtime channel; the payment still went through.
       setNotice(t('pay.notice.liveStatusUnavailable'));
       setPhase('sent_no_status');
