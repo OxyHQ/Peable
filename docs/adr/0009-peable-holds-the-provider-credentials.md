@@ -33,11 +33,12 @@ follows from it was never faced.
 **Peable holds the provider credentials. A merchant never supplies a Stripe
 secret key, and there is no code path that would accept one.**
 
-A merchant authenticates with an Oxy **application credential** — the same
-credential every other Oxy service takes — and the gateway resolves them from
-`(oxy_app_id, environment)`. Their capabilities on the card rail come from their
-own onboarding and from the connected account they hold, never from a key they
-hand over.
+A customer merchant authenticates with an Oxy **application credential**;
+own Oxy products use verified workload authority under Oxy ADR 0049, as
+documented in [first-party authority](../first-party-authority.md). The gateway
+resolves either merchant from `(oxy_app_id, environment)`. Their capabilities
+on the card rail come from their own onboarding and from the connected account
+they hold, never from a key they hand over.
 
 Three things follow, and all three are now enforced in code rather than
 described:

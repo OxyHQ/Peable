@@ -265,8 +265,9 @@ honest:
   routes). The file must be active and owned by the merchant's application, its
   owner account, the dashboard user or the user a delegated token acts as, and
   Oxy must accept Peable's reference. It FAILS CLOSED (503) when Oxy cannot be
-  asked or hides the owner — owners are revealed only to `internal`-tier
-  applications. Never accept an avatar id without it.
+  asked or hides the owner — Oxy reveals owners to verified first-party
+  workload authority. Application branding or tier is insufficient. Never
+  accept an avatar id without it.
 - **Every avatar write queues its reference sync in the same transaction**
   (`enqueueReferenceSync`, called only from `db/merchants/merchantRepository.ts`);
   `services/oxyFiles/referenceSync.ts` makes Oxy agree, and the daily
@@ -278,7 +279,10 @@ honest:
   Deleted/blocked clears the avatar (audited in `merchant_avatar_audit`);
   trashed/private withholds it from payers until the owner brings it back.
 
-The Peable application needs `files:read` and `files:references:write`.
+Peable's own Files calls use its live workload binding through the shared
+`OxyServer`; no application scopes or client key pair configure that authority.
+Merchant/file ownership and reference visibility checks still apply. See
+[`docs/first-party-authority.md`](docs/first-party-authority.md).
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),

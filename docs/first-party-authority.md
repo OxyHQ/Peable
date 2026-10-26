@@ -16,6 +16,21 @@ is external. Revocation takes effect on the next call.
 Canonical platform contract: Oxy ADR 0049. No changes to anonymous checkout,
 non-custody, ledger accounting or Stripe settlement are part of this migration.
 
+## Peable's calls to Oxy Files
+
+`packages/backend/src/oxy.ts` supplies the shared AWS workload credential
+provider to `OxyServer`. The Files adapter in
+`packages/backend/src/services/oxyFiles/client.ts` uses that instance for
+metadata and reference synchronization; do not configure application scopes or
+a client key pair for these own calls.
+
+Oxy reveals file ownership to verified first-party workload authority, not an
+application's `internal` tier or branding. `acceptMerchantAvatar` still checks
+the active file against the authenticated merchant/application/account and
+requires Oxy to accept the reference. Missing ownership fails closed. External
+customer credential scopes remain enforced by the shared middleware; an
+external key cannot obtain this ownership projection by requesting file scopes.
+
 ## Validation and release gate
 
 Validated with core 7/contracts 6 candidate (central external live verification
