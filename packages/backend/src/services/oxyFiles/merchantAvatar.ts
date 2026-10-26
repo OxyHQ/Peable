@@ -29,7 +29,7 @@
  * could load — so that refusal is an answer too.
  *
  * FAIL CLOSED. If Oxy cannot be asked, or answers without the owner (it reveals
- * owners only to Oxy's own `internal`-tier applications), the avatar is
+ * owners only to verified first-party workload authority), the avatar is
  * refused with a 503: an unverifiable file is not accepted on trust.
  */
 import { ServiceAssetMetadataError } from '@oxy.so/core';
@@ -81,9 +81,9 @@ export async function acceptMerchantAvatar(
     return { ok: false, status: 422, message: NOT_YOURS };
   }
   if (!('ownerUserId' in file) && file.ownerApplicationId === undefined) {
-    // Oxy left the owner out: this deployment is not authenticating as an
-    // `internal`-tier application. A configuration fault, not the caller's —
-    // and never a reason to accept.
+    // Oxy left the owner out: verified first-party workload authority is
+    // unavailable. Application branding or tier cannot replace that proof,
+    // and missing ownership is never a reason to accept.
     warn('Oxy did not reveal the owner of a file; is Peable authenticating as itself?');
     return { ok: false, status: 503, message: UNVERIFIABLE };
   }

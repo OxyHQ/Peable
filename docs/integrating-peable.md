@@ -5,13 +5,17 @@ never holds keys or funds — the buyer pays from their own self-custody Peable
 wallet (or an external FairCoin wallet), and settlement is watched on-chain from
 the merchant's **watch-only** xpub. Your server never sees a private key.
 
-> **This is the guide for integrating a merchant (e.g. Mercaria).** Everything
+> **This is the guide for integrating a merchant.** Own Oxy products such as
+> Mercaria use the [shared workload factory](#own-oxy-applications-shared-workload-transport);
+> the application credential examples below are for external customers. Everything
 > here works on **testnet** first; mainnet is a credential/config flip once the
 > merchant is live (see [Test vs live](#test-vs-live)).
 
 ---
 
 ## 0. Prerequisites (one-time, owner/Console)
+
+For an external customer integration:
 
 1. Register an **Oxy Application** for the merchant in Oxy Console (`third_party` is fine).
 2. Issue a **service credential** on it (`type: 'service'`) with scopes
@@ -30,8 +34,9 @@ the merchant's **watch-only** xpub. Your server never sees a private key.
 Keep `secret` server-side only. The browser never sees it.
 
 **You never supply a Stripe key.** Peable holds the provider credentials and
-calls the acquirer itself; your Oxy application credential is the whole of your
-authentication ([ADR 0009](adr/0009-peable-holds-the-provider-credentials.md)).
+calls the acquirer itself; external customers authenticate with their Oxy
+application credential, while own products use their registered workload
+([ADR 0009](adr/0009-peable-holds-the-provider-credentials.md)).
 A merchant-of-record decision follows from that and is still open — see the
 roadmap before charging a real card on behalf of a third party.
 
@@ -48,10 +53,12 @@ Node 18+ (global `fetch`). Server entry is zero-runtime-dep; the browser entry
 
 ---
 
-## 2. Server: create a Checkout Session (recommended for Mercaria)
+## 2. Server: create a Checkout Session
 
 A **Checkout Session** wraps exactly one payment and gives you a hosted URL to
-redirect the buyer to — the least code, Stripe-Checkout parity.
+redirect the buyer to — the least code, Stripe-Checkout parity. This example
+uses an external customer credential; own products construct the client with
+the factory below and use the same checkout methods.
 
 ```ts
 import { Peable } from '@peable.to/sdk';

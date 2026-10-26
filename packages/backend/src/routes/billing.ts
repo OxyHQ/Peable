@@ -15,7 +15,7 @@ import {
 } from '../services/billing/contracts';
 import type { BillingService } from '../services/billing/billingService';
 
-/** Absent service/cohort is closed. Auth remains OxyServer middleware + registered scopes. */
+/** Absent service/cohort is closed. OxyServer verifies own authority or bounded external scopes. */
 export function createBillingRouter(deps: {
   requireMerchant: RequestHandler;
   service?: BillingService;
