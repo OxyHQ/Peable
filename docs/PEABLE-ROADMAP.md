@@ -88,9 +88,10 @@ Current deployment and physical-device payment flows remain unverified.
 A read-only check on 2026-11-02 of Oxy's public
 `GET https://api.oxy.so/billing/personal-plans` returned HTTP 200 with
 `state: "unconfigured"`, `purchase: "unavailable"` and an empty `plans` list.
-Mention's payment-window integration therefore cannot offer a live subscription
-until an approved central Oxy One offer is configured. An unavailable catalogue
-must never fall back to an invented price or grant Plus locally.
+That observation covers the then-current personal-plan catalogue, not availability
+of a standalone Mention Plus offer. Standalone Plus price, cadence, payment methods
+and catalogue activation remain pending. An unavailable catalogue must never fall
+back to an invented price or grant Plus locally.
 
 ## Delivery order
 
@@ -98,13 +99,12 @@ must never fall back to an invented price or grant Plus locally.
    exchange/ATM discovery surfaces are removed. Sending, receiving and merchant
    payments in FairCoin remain. Verify the removal in the release artifact and
    keep generic upstream wallet changes separate from Peable-specific product gates.
-2. **Complete the unified payment window, with Mention first.** Mention Plus's
-   Subscribe action opens Peable's window for the selected subscription. It shows
-   the offer, payment method, authorization and resulting status. Mention Plus stays
-   bundled with Oxy One: Oxy verifies payment and owns the entitlement; Mention
-   reads that authority without a separate subscription price. Pending, canceled and
-   failed outcomes do not become successful subscriptions. Existing historical
-   integrations do not change this first target for the new window experience.
+2. **Complete standalone Mention Plus checkout first.** Subscribe opens Pay with
+   Peable in a Bloom detached bottom sheet, showing the approved standalone offer
+   and payment progress. Mention Plus is independently purchasable; Oxy One also
+   includes it. One subscribers keep Plus without a second purchase. Both routes
+   use authoritative backend entitlements; pending, canceled and failed payments
+   do not become successful subscriptions.
 3. **Verify that first journey.** Cover Subscribe, closing/canceling, reopening,
    duplicate clicks, authentication where needed, declined payment, delayed
    confirmation and recovery after interrupted responses. Verify entitlement
@@ -118,20 +118,19 @@ must never fall back to an invented price or grant Plus locally.
    Terminal/contactless, commerce adapters, coordinated shared pockets, broader
    analytics and additional providers remain separate future work.
 
-Mention's source integration opens a Pay with Peable dialog immediately from
-Subscribe. Its deployment explicitly binds the reviewed Oxy One offer using
-`EXPO_PUBLIC_MENTION_PLUS_OFFER_ID` and `EXPO_PUBLIC_MENTION_PLUS_OFFER_VERSION`.
-The dialog requires the central catalogue to expose that exact offer/version as
-available with an approved price. Without that match it shows unavailable.
+The previous Mention source integration bound a One-only offer and rendered a
+dialog. The product requirement now explicitly supersedes that assumption:
+standalone Mention Plus checkout, presented in a Bloom detached bottom sheet,
+with One remaining an additional source of Plus access. Updating the offer binding,
+backend entitlement flow and sheet is work in progress, not a claim of live purchase
+availability. The standalone price, cadence and supported rails must be approved
+before activation; no existing One price is a substitute.
 
-Continue uses the central `startPersonalPlanCheckout` API and a persisted
-account/offer/version operation key, then opens the authoritative HTTPS hosted
-checkout in a web popup or native browser. The hosted destination depends on the
-payment rail; the dialog does not claim to embed every authorization step itself.
-Status checks reuse the operation key. No window-close callback grants Plus.
-This source integration still requires deployed offer configuration and payment,
-account-switch and cross-device acceptance. Method availability follows the
-approved offer and deployed capabilities, not the presence of a button.
+The payment flow must retain a scoped operation key for interrupted-request
+recovery, open only authoritative checkout destinations when a hosted authorization
+step is needed, and obtain payment/access outcomes from the backend. Dismissing
+the sheet or browser does not grant access. Existing One benefits must continue
+to be recognized without billing the user twice.
 
 ## Release gates retained
 
