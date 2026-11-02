@@ -256,7 +256,6 @@ export interface WalletState {
   restoreWallet: (mnemonic: string) => Promise<void>;
   refreshBalance: () => void;
   getNewAddress: () => string;
-  getBuyDeliveryAddress: () => Promise<string>;
   sendTransaction: (toAddress: string, amount: bigint, feeRate: number) => Promise<string>;
   refreshMasternodeUTXOs: () => void;
   estimateFee: (feeLevel: FeeLevel) => bigint;
@@ -1839,38 +1838,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       currentReceiveAddress: derived.address,
       addresses: [...current, derived.address],
     });
-
-    return derived.address;
-  },
-
-  getBuyDeliveryAddress: async (): Promise<string> => {
-    if (!keyManager) {
-      throw new Error('Wallet not initialized');
-    }
-    if (keyManager.isWatchOnly()) {
-      throw new Error('Watch-only wallet cannot receive bought FAIR');
-    }
-
-    // Bought FAIR is delivered to a NORMAL chain-0 receive address, so it flows
-    // through the wallet's existing watched-address path: it is in the Bloom
-    // filter and accepted by ownsAddress, which a dedicated chain-2 "buy" chain
-    // was NOT (review finding C5 — deposits to chain 2 never matched and were
-    // rejected). We derive a fresh address per order to keep orders unlinkable.
-    const derived = keyManager.getNextAddress();
-
-    if (database) {
-      await database.insertAddress(derived.address, derived.path, derived.index, false);
-    }
-
-    const current = get().addresses;
-    set({ addresses: [...current, derived.address] });
-
-    // Make sure the new address is watched before the deposit can arrive.
-    // getNextAddress extends the lookahead window; refresh the Bloom filter so
-    // a peer relays the incoming transaction that pays this address.
-    if (spvClient) {
-      spvClient.setBloomFilter(buildCombinedBloomFilterHashes(keyManager));
-    }
 
     return derived.address;
   },

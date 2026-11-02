@@ -14,7 +14,7 @@
 
 import { describe, test, expect } from 'bun:test';
 import { isTerminalBuyStatus, needsStatusRefresh, type BuyHistoryEntry } from './buy-history';
-import type { BuyOrderStatus } from '../api/buy';
+import type { BuyOrderStatus } from './buy-history';
 
 const ALL_STATUSES: readonly BuyOrderStatus[] = [
   'AWAITING_PAYMENT',

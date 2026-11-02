@@ -14,8 +14,6 @@ import { GestureDetector } from 'react-native-gesture-handler';
 import Animated from 'react-native-reanimated';
 import { useFocusEffect, useRouter } from 'expo-router';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
-import * as WebBrowser from 'expo-web-browser';
-import * as Localization from 'expo-localization';
 import { useWalletStore } from '../../src/wallet/wallet-store';
 import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
 import { ReadOnlyWalletView } from '../../src/ui/components/ReadOnlyWalletView';
@@ -38,7 +36,6 @@ import { usePrice } from '../../src/hooks/usePrice';
 import { queryClient } from '../../src/services/query-client';
 import { useTheme } from '@oxy.so/bloom/theme';
 import { Tabs, TabsTrigger } from '@oxy.so/bloom/tabs';
-import { BUY_BASE_URL } from '@fairco.in/core';
 import { useTransactionEnrichment } from '../../src/hooks/useTransactionEnrichment';
 import { t } from '../../src/i18n';
 
@@ -121,7 +118,6 @@ function WalletHome() {
   const transactions = useWalletStore((s) => s.transactions);
   const network = useWalletStore((s) => s.network);
   const activeWalletName = useWalletStore((s) => s.activeWalletName);
-  const receiveAddress = useWalletStore((s) => s.currentReceiveAddress);
   const refreshBalance = useWalletStore((s) => s.refreshBalance);
   const hasBackedUp = useWalletStore((s) => s.hasBackedUp);
   const loadPockets = useWalletStore((s) => s.loadPockets);
@@ -186,19 +182,6 @@ function WalletHome() {
     });
     return list.filter((s) => !dismissedSuggestions.has(s.id));
   }, [hasBackedUp, dismissedSuggestions, router]);
-
-  const handleBuy = useCallback(async () => {
-    const locale = Localization.getLocales()[0];
-    const language = locale?.languageCode ?? 'en';
-    const country = locale?.regionCode ?? '';
-    const params = new URLSearchParams({
-      in_app: 'true',
-      address: receiveAddress ?? '',
-      language,
-      country,
-    });
-    await WebBrowser.openBrowserAsync(`${BUY_BASE_URL}/?${params.toString()}`);
-  }, [receiveAddress]);
 
   // Pull-to-refresh: the rainbow band IS the indicator. Gesture, threshold,
   // haptics and hold live in one shared hook so every refreshable screen
@@ -316,7 +299,6 @@ function WalletHome() {
               }}
               renderIcon={({ color, size }) => <ArrowCircleDownIcon color={color} size={size} />}
             />
-            <ActionButton icon="credit-card-plus" label={t('wallet.buy')} onPress={handleBuy} />
             <ActionButton
               icon="wallet-bifold-outline"
               label={t('pockets.title')}
