@@ -44,20 +44,24 @@ payment window with the complete buyer flow is still a delivery target.
 
 ### First integration: Mention Plus
 
-**Mention is the first target for the unified payment-window experience.** When a
-user opens Mention Plus and taps **Subscribe**, Mention must open the Peable
-payment window for that subscription. The buyer reviews the offer and payment
-method, authorizes payment, and sees the resulting status. Mention Plus remains bundled with Oxy One: Oxy owns the plan and verifies
-the payment/subscription through Peable; Mention reads the resulting entitlement.
-This integration does not introduce a separate Mention subscription price.
-Cancellation, failed payment and a pending confirmation must remain distinguishable.
+**Mention is the first target for the unified payment experience.** When a user
+opens Mention Plus and taps **Subscribe**, Mention opens **Pay with Peable in a
+Bloom detached bottom sheet**. The buyer reviews the offer and payment method,
+authorizes payment, and sees the resulting status.
 
-Mention's source integration opens a Pay with Peable dialog, validates the explicitly
-bound Oxy One offer, and continues through Oxy's authoritative hosted checkout.
-It retains the operation identity for status checks and interrupted-request recovery;
-closing a window does not grant Plus. This is not yet verified as a live purchase:
-the public central catalogue reported purchases unavailable on 2026-11-02.
-The full cross-device/payment acceptance remains a release requirement.
+**Mention Plus can be purchased on its own. Oxy One also includes Mention Plus; it
+is not the only way to subscribe.** Users with Plus through One must keep that
+access without purchasing Plus again. Both routes rely on authoritative backend
+entitlements; cancellation, failed payment and pending confirmation remain distinct.
+
+The standalone flow must use an approved offer with its actual price, cadence and
+supported payment methods. These commercial values and catalogue activation remain
+pending; the payment sheet must show unavailable rather than invent an offer.
+The earlier integration used a One-only offer and a dialog; adapting it to the
+standalone offer and detached sheet is implementation work, not a live release.
+Payment authorization may continue through authoritative hosted checkout. Closing
+the sheet or checkout window never grants Plus. The full cross-device/payment
+acceptance remains a release requirement.
 
 ### FairCoin is a payment method, not an exchange product
 
