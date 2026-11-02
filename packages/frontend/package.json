@@ -23,7 +23,7 @@
     "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
   },
   "dependencies": {
-    "@alia.onl/sdk": "22.1.1",
+    "@alia.onl/sdk": "22.10.1",
     "@expo/app-integrity": "~58.0.2",
     "@expo/vector-icons": "^15.1.1",
     "@fairco.in/core": "0.5.0",
@@ -32,10 +32,10 @@
     "@noble/hashes": "1.8.0",
     "@noble/secp256k1": "2.3.0",
     "@oxy.so/app-preset": "^5.0.0",
-    "@oxy.so/bloom": "15.10.1",
-    "@oxy.so/contracts": "6.0.0",
-    "@oxy.so/core": "7.2.0",
-    "@oxy.so/services": "^13.4.0",
+    "@oxy.so/bloom": "16.0.1",
+    "@oxy.so/contracts": "6.3.0",
+    "@oxy.so/core": "7.11.0",
+    "@oxy.so/services": "^14.0.0",
     "@peable.to/contracts": "workspace:0.2.1",
     "@peable.to/pay": "workspace:^",
     "@peable.to/sdk": "workspace:0.5.0",
