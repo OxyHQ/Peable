@@ -72,7 +72,6 @@ import {
   PLACES,
   distanceKm,
   formatDistanceKm,
-  type FiatPayoutMethod,
   type Place,
   type PlaceCategory,
 } from '../../src/data/places';
@@ -148,7 +147,6 @@ const CATEGORY_ICON: Record<PlaceCategory, IconName> = {
   restaurant: 'silverware-fork-knife',
   shop: 'storefront',
   service: 'tools',
-  atm: 'cash-multiple',
   other: 'map-marker',
 };
 
@@ -160,7 +158,6 @@ const CATEGORY_COLOR: Record<PlaceCategory, string> = {
   restaurant: '#dc2626',
   shop: '#2563eb',
   service: '#7c3aed',
-  atm: '#16a34a',
   other: '#6b7280',
 };
 
@@ -172,16 +169,11 @@ const CATEGORY_FILTERS: readonly CategoryFilter[] = [
   'restaurant',
   'shop',
   'service',
-  'atm',
   'other',
 ] as const;
 
 function categoryLabel(category: PlaceCategory): string {
   return t(`map.category.${category}`);
-}
-
-function fiatPayoutLabel(method: FiatPayoutMethod): string {
-  return t(`map.detail.payoutMethod.${method}`);
 }
 
 // We always suppress gorhom's chrome handle. In detail mode the hero
@@ -1124,15 +1116,13 @@ function PlaceDetail({ place, distanceKm: km, onClose }: PlaceDetailProps) {
 
 // ---------------------------------------------------------------------------
 // PlaceFacts — structured key/value rows rendered in the place detail view
-// for the extended metadata (minimum spend, FairCoin → local fiat exchange,
-// payout methods, opening hours). Each row is only rendered when the
+// for merchant metadata (minimum spend and opening hours). Each row is rendered when the
 // corresponding field is populated on the Place.
 // ---------------------------------------------------------------------------
 
 function PlaceFacts({ place }: { place: Place }) {
   const theme = useTheme();
-  const hasAnyFact =
-    place.minimumSpend !== undefined || place.acceptsFairToFiat || place.openingHours !== undefined;
+  const hasAnyFact = place.minimumSpend !== undefined || place.openingHours !== undefined;
   if (!hasAnyFact) return null;
 
   return (
@@ -1149,39 +1139,6 @@ function PlaceFacts({ place }: { place: Place }) {
           labelColor={theme.colors.textSecondary}
           valueColor={theme.colors.text}
         />
-      ) : null}
-
-      {place.acceptsFairToFiat && place.localCurrency ? (
-        <View className="mt-2">
-          <FactRow
-            icon="swap-horizontal-bold"
-            label={t('map.detail.fiatExchange', {
-              currency: place.localCurrency,
-            })}
-            value={
-              place.maxFiatPayout !== undefined
-                ? t('map.detail.maxFiatPayout', {
-                    amount: place.maxFiatPayout,
-                    currency: place.localCurrency,
-                  })
-                : undefined
-            }
-            iconColor={theme.colors.primary}
-            labelColor={theme.colors.text}
-            valueColor={theme.colors.textSecondary}
-          />
-          {place.fiatPayoutMethods && place.fiatPayoutMethods.length > 0 ? (
-            <View className="flex-row flex-wrap mt-2 ml-7">
-              {place.fiatPayoutMethods.map((method) => (
-                <View key={method} className="bg-primary/10 rounded-full px-3 py-1 mr-2 mb-2">
-                  <Text className="text-primary text-xs font-semibold">
-                    {fiatPayoutLabel(method)}
-                  </Text>
-                </View>
-              ))}
-            </View>
-          ) : null}
-        </View>
       ) : null}
 
       {place.openingHours ? (

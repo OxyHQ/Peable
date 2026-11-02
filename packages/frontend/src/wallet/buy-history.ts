@@ -1,25 +1,20 @@
 /**
- * Local record of buy orders.
- *
- * A buy is the one flow in this wallet whose state lives on a server rather
- * than on the chain or in the local UTXO set. Until now nothing on the device
- * remembered that an order existed: the order id was passed to the quote screen
- * as a navigation param and lost the moment the user went back. If they closed
- * the screen while a payment was in flight — or the app was killed, or they
- * simply wanted to check later — there was no way to find out what happened to
- * their money.
- *
- * So every order is written here the instant the bridge accepts it, before the
- * user is navigated anywhere. Rows are a cache of the bridge's state, never the
- * source of truth: `status` is refreshed from `GET /api/buy/status/:id` and the
- * bridge always wins.
- *
- * Only non-sensitive order metadata is stored. The delivery address is one of
- * the wallet's own receive addresses and is already in `addresses`.
+ * Compatibility access to historical currency-purchase records. Peable no longer
+ * offers that flow or calls the bridge. Keep local records readable; removing a
+ * product surface must not erase a user's financial history.
  */
 
 import type { Database } from '../storage/database';
-import type { BuyOrderStatus, PaymentCurrency } from '../api/buy';
+export type PaymentCurrency = 'USDC_BASE' | 'ETH_BASE' | 'ETH_MAINNET' | 'BTC' | 'CARD';
+export type BuyOrderStatus =
+  | 'AWAITING_PAYMENT'
+  | 'PAYMENT_DETECTED'
+  | 'SWAPPING'
+  | 'BURNING'
+  | 'DELIVERING'
+  | 'DELIVERED'
+  | 'FAILED'
+  | 'EXPIRED';
 
 export interface BuyHistoryEntry {
   readonly id: string;

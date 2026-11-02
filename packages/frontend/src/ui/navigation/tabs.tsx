@@ -16,7 +16,7 @@ import { t } from '../../i18n';
 
 type IconName = React.ComponentProps<typeof MaterialCommunityIcons>['name'];
 
-export type WalletTabName = 'index' | 'map' | 'send' | 'receive' | 'buy' | 'settings';
+export type WalletTabName = 'index' | 'map' | 'send' | 'receive' | 'settings';
 
 interface WalletTabDef {
   /** i18n key of the label under the glyph. */
@@ -36,11 +36,6 @@ const TAB_DEFS: Record<WalletTabName, WalletTabDef> = {
     icon: 'arrow-down-bold-outline',
     activeIcon: 'arrow-down-bold',
   },
-  buy: {
-    labelKey: 'wallet.buy',
-    icon: 'credit-card-plus-outline',
-    activeIcon: 'credit-card-plus',
-  },
   settings: { labelKey: 'wallet.settings', icon: 'cog-outline', activeIcon: 'cog' },
 };
 
@@ -54,9 +49,7 @@ const TAB_DEFS: Record<WalletTabName, WalletTabDef> = {
  * destinations instead.
  */
 export const WALLET_TABS: readonly WalletTabName[] =
-  Platform.OS === 'web'
-    ? ['index', 'send', 'receive', 'buy', 'settings']
-    : ['index', 'map', 'buy', 'settings'];
+  Platform.OS === 'web' ? ['index', 'send', 'receive', 'settings'] : ['index', 'map', 'settings'];
 
 export function walletTabLabel(name: WalletTabName): string {
   return t(TAB_DEFS[name].labelKey);
