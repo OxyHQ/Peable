@@ -1,237 +1,151 @@
 # Peable roadmap
 
-> Source snapshot: `fix/issue-70-gateway-hardening` at `433fa354f5dd43364e24de06295d22065b1323e7`
-> (2026-09-19). A merged source feature is not proof that its production
-> deployment, database migration or device flow has been verified.
+> Initial review: 2026-11-02 at `0eeb676`; implementation follow-up through
+> Peable `59cdd78` and the Mention payment-window work on 2026-11-03.
+> This is a source and recorded-evidence review, not a production certification.
 
-## How to read a checkbox here
+## Product and boundaries
 
-The previous version of this file used one box per item, and a reader could not
-tell "the code exists" from "this works in production". That ambiguity is how a
-roadmap entry becomes a commercial promise: the 2026-09-03 snapshot said the
-checkout had no deployment workflow while one existed and had run successfully,
-and the same document's checkboxes were being read as a statement about live
-capability.
+Peable has three connected surfaces: the business payments platform (dashboard,
+APIs and services), the personal payment app, and SDKs that bring payment
+management and the **Pay with Peable** experience into other websites and apps.
+The [README](../README.md) defines their purpose and relationship.
 
-So every item below carries **four independent states**, and they do not imply
-each other:
+FairCoin is a payment rail for sending, receiving and paying for goods or services.
+Peable, Oxy and Oxy ecosystem applications do not buy or sell FairCoin or offer
+exchange/brokerage services. Currency sales and purchases belong outside this
+product, to the FairCoin organization. This product boundary is motivated by legal
+considerations; it does not replace legal review.
 
-| Mark | Means |
+The inherited Buy FAIR routes, purchase bridge client and exchange/ATM discovery
+have been removed from Peable. Existing local purchase records are preserved;
+they do not expose a new purchase flow. Do not reintroduce currency sales as a
+Peable capability or a future Oxy service.
+
+Oxy owns identity, applications and credentials. FairCoin signing remains on the
+payer's capable device; merchants and sellers supply watch-only public keys.
+
+## How readiness is recorded
+
+| State | Required evidence |
 |---|---|
-| **impl** | the code is merged and its own tests pass |
-| **sandbox** | exercised end to end against the provider's test mode, by a person |
-| **deployed** | running in the production artifact, with the migration ledger read back |
-| **live** | enabled for real money, with the commercial and legal gates cleared |
+| Implemented | Source exists; record relevant checks separately |
+| Externally tested | A dated end-to-end test against a real provider or chain, with its scope |
+| Deployed | Exact running artifact and applied migration ledger verified |
+| Live | Flow enabled for real payments with applicable commercial and legal decisions resolved |
 
-An item with **impl** and nothing else is a thing that compiles. Nothing in this
-repository can mark **sandbox**, **deployed** or **live** on its own: each needs
-evidence from an authorized environment, and a merged commit is not that
-evidence.
+These states do not imply each other. An API, a passing test or an old deployment
+receipt cannot establish that today's user journey works in production.
 
-The detailed design history remains in git. These are the maintained source
-documents:
+## Current capability map
 
-- [Fase 1 product design](superpowers/specs/2026-07-18-peable-phase1-foundation-design.md)
-- [Gateway implementation plan](superpowers/plans/2026-07-18-peable-gateway-backend-f1a.md)
-- [Oxy identity and social-payment design](superpowers/specs/2026-07-18-peable-oxy-identity-social-redesign-design.md)
-- [Integration guide](integrating-peable.md)
+| Surface | Present in source | Remaining capability or acceptance |
+|---|---|---|
+| Payments | Intents, links, hosted checkout, idempotency, signed/retrying webhooks and realtime updates | Current release end-to-end acceptance |
+| FairCoin | Watch-only address reservation, Explorer settlement, seller-owned connected accounts | Funded chain canary, device verification, seller recovery and gap-limit checks |
+| Cards | Creation, confirmation, cancellation, expiry and reconciliation through the implemented provider | Full payment and marketplace lifecycle acceptance; current live enablement unverified |
+| Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
+| Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
+| Merchant dashboard | Merchant/payment/webhook APIs; tax administration and contribution screens in the app | Complete merchant dashboard, credential UI over Oxy authority, broad resource management |
+| Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
+| FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
+| Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
+| Personal app | Identity, self-custodial wallet, activity, social send/receive, profiles, QR, pockets and checkout approval | Physical-device/recovery acceptance |
+| Browser integration | `@peable.to/sdk/checkout`: button, QR window, mobile app handoff and status events | Unified commercial payment-window experience |
+| App integration | `@peable.to/pay` execution and separate `@peable.to/pay/ui` payment-to-person sheet | Commercial checkout integration; do not equate a person-payment sheet with a subscription checkout |
+| In-person payments | No terminal implementation | Terminal/contactless product |
 
-## Product boundaries
+The SDK's server entry covers payments, merchants, connected accounts, refunds,
+transfers, disputes, billing and tax. Its browser entry carries the scoped payer
+client, not merchant credentials. The UI payment sheet remains a separate entry
+with optional UI peers and must never enter the root payment barrel.
 
-- **Peable** is the self-custodial wallet in `packages/frontend`.
-- **Peable Gateway** is the API in `packages/backend`, its wire contract in
-  `packages/shared-types`, the published `@peable.to/sdk` SDK in `packages/sdk`, and
-  the payer-facing web application in `packages/checkout`.
-- **Peable Terminal** is the future point-of-sale product. No
-  `packages/terminal` implementation exists yet.
-- Oxy owns applications, credentials and permissions. Peable must not create a
-  second account or credential authority.
+## Evidence and known verification limits
 
-## Invariants
+The older September roadmap claimed subscriptions did not exist and no real
+provider sandbox testing had occurred. Later source and evidence supersede those
+claims:
 
-- The wallet signs and broadcasts. The backend accepts watch-only merchant
-  material and must never receive, derive, persist or log a private key.
-- PostgreSQL is the only backend datastore. `DATABASE_URL` is required; schema
-  changes go through the repository's phased Drizzle migrator.
-- Public ids such as `pi_...`, `link_...` and `cs_...` are wire identities;
-  internal primary keys remain private database references. Code must select by
-  the exact kind of id the contract names.
-- Merchant routes use Oxy service credentials. Payer reads use the scoped
-  client secret. Dashboard routes delegate human authorization to Oxy instead
-  of reproducing Oxy membership logic.
-- A source checkbox never certifies mainnet eligibility. Legal review, exact
-  deployed-artifact readback and an end-to-end testnet canary remain release
-  gates.
+- [October 3 hosted subscription checkout](audits/2026-10-03-i08-billing-provider/checkout-sandbox/README.md): real provider test-mode checkout, customer reuse, lost-response recovery and period-end cancellation request. Oxy authentication was synthetic.
+- [October 3 lifecycle tests](audits/2026-10-03-i08-billing-provider/test-clock/README.md): trial, paid renewal, refund/idempotency, cancellation, failed renewal and unresolved authentication challenge. These fixtures do not prove production adoption or the entire marketplace rail.
+- [Historical release and deployment receipts](audits/2026-10-03-i08-billing-provider/published-release/README.md): published packages and backend/frontend/checkout checks for the recorded commit. They do not establish current package publication, configuration or payment readiness.
+- [Native FairCoin billing](integrations/native-faircoin-subscriptions.md): implementation and database/fixture verification; external funded settlement was not demonstrated in that evidence.
 
-## Current state
+During the 2026-11-02 local review, 191 SDK tests and 130 pay tests passed. After
+building the SDK output, six packages passed typechecking. Frontend failed at
+`src/services/intent-subscription.ts:42` because `LinkedHttpClient` does not expose
+`getAccessToken`, with a related implicit-any error on the next line. The follow-up
+used current main `3d84f37` and its frozen dependencies (core 7.11.0): frontend
+typechecking and all three real socket tests passed without changing the socket
+implementation. The earlier failure was against the older dependency installation.
+The removal at `59cdd78` subsequently passed 407 frontend tests (including three
+product-boundary regressions and the three socket tests), frontend typechecking,
+Biome and the Expo web/edge export. These checks used the isolated cleanup
+worktree and its frozen dependencies. After integration, an independent check of
+all seven packages on main with the current frozen dependencies passed typechecking.
+Current deployment and physical-device payment flows remain unverified.
 
-### Gateway and contract
+A read-only check on 2026-11-02 of Oxy's public
+`GET https://api.oxy.so/billing/personal-plans` returned HTTP 200 with
+`state: "unconfigured"`, `purchase: "unavailable"` and an empty `plans` list.
+Mention's payment-window integration therefore cannot offer a live subscription
+until an approved central Oxy One offer is configured. An unavailable catalogue
+must never fall back to an invented price or grant Plus locally.
 
-| Capability | impl | sandbox | deployed | live |
-|---|---|---|---|---|
-| Payment-intent state machine, public ids, idempotent creation | yes | — | — | — |
-| Watch-only address reservation and Explorer settlement checks | yes | — | — | — |
-| REST routes: merchants, intents, links, sessions, social, enrichment, webhook deliveries | yes | — | — | — |
-| REST routes: connected accounts, transfers and reversals, refunds, disputes | yes | no | — | no |
-| `connected_account.updated` — seller readiness reaches the merchant | yes | no | no | no |
-| FairCoin connected accounts: sellers paid on-chain straight to their own keys, intents and sessions on behalf ([ADR 0012](adr/0012-faircoin-connected-accounts.md)) | yes | — | no | no |
-| Seller onboarding page in the wallet (`/connect/<token>`), Oxy-authenticated key registration | yes | — | no | no |
-| Realtime intent updates and signed, retrying webhook delivery | yes | — | — | — |
-| PostgreSQL repositories, schema, phased migrations, real-database harness | yes | — | — | — |
-| Test/live isolation enforced against the provider's KEY MODE, not only by row | yes | no | no | no |
-| Card payments: create, confirm, cancel, expire, reconcile | yes | **no** | no | **no** |
-| Refund lifecycle including pending, failed and provider-originated refunds | yes | **no** | no | **no** |
-| Settlement: charge-sourced transfers, per-payment budget, durable reversals | yes | **no** | no | **no** |
-| Disputes: deadline, outcome, atomic notification | yes | **no** | no | **no** |
-| Disputes: submitting a text response (no file attachments) | yes | **no** | no | **no** |
-| Settlement READ: gross, fee, net, with `unknown` distinct from zero | yes | **no** | no | **no** |
+## Delivery order
 
-The card rail has never been exercised against Stripe's sandbox by a person, and
-no row above may be moved without that. The unit and real-database suites cover
-the gateway's own invariants; they cannot cover Stripe's object ids, its
-capability behaviour, or the shape of its real events.
+1. **Product boundary implemented in source.** The inherited Buy FAIR and
+   exchange/ATM discovery surfaces are removed. Sending, receiving and merchant
+   payments in FairCoin remain. Verify the removal in the release artifact and
+   keep generic upstream wallet changes separate from Peable-specific product gates.
+2. **Complete the unified payment window, with Mention first.** Mention Plus's
+   Subscribe action opens Peable's window for the selected subscription. It shows
+   the offer, payment method, authorization and resulting status. Mention Plus stays
+   bundled with Oxy One: Oxy verifies payment and owns the entitlement; Mention
+   reads that authority without a separate subscription price. Pending, canceled and
+   failed outcomes do not become successful subscriptions. Existing historical
+   integrations do not change this first target for the new window experience.
+3. **Verify that first journey.** Cover Subscribe, closing/canceling, reopening,
+   duplicate clicks, authentication where needed, declined payment, delayed
+   confirmation and recovery after interrupted responses. Verify entitlement
+   updates and renewals/cancellation against authoritative backend state. Use the
+   same payment implementation for subsequent integrations.
+4. **Build the merchant dashboard.** Bring onboarding, payments, links, checkout,
+   sellers, refunds/disputes, billing, tax and webhook diagnostics into a coherent
+   administrative interface over existing authority and services.
+5. **Complete financial operations and later products.** Define accounting and
+   fees per entity before adding balances, bank payouts, reserves and reconciliation.
+   Terminal/contactless, commerce adapters, coordinated shared pockets, broader
+   analytics and additional providers remain separate future work.
 
-### Wallet
+Mention's source integration opens a Pay with Peable dialog immediately from
+Subscribe. Its deployment explicitly binds the reviewed Oxy One offer using
+`EXPO_PUBLIC_MENTION_PLUS_OFFER_ID` and `EXPO_PUBLIC_MENTION_PLUS_OFFER_VERSION`.
+The dialog requires the central catalogue to expose that exact offer/version as
+available with an approved price. Without that match it shows unavailable.
 
-- [x] Oxy identity integration and self-custodial approve/sign/submit flow.
-- [x] Pockets, social send/receive and multisig primitives are present in the
-  source tree and consume `@fairco.in/core@0.5.0`.
-- [ ] Re-verify cold boot, sign-in, key rotation, social receive and the full
-  approve-payment flow on a production-equivalent physical device before
-  enabling mainnet social payments. The code half of finding F-1 is done —
-  `docs/adr/0002-social-receive-is-bound-to-one-identity-key.md` lists what it
-  changed and what is still required — so what remains here is the device
-  verification itself, on a device WITH the shared-identity slot and one
-  without.
-- [ ] Complete the internal FAIRWallet-to-Peable naming sweep without changing
-  third-party attribution.
+Continue uses the central `startPersonalPlanCheckout` API and a persisted
+account/offer/version operation key, then opens the authoritative HTTPS hosted
+checkout in a web popup or native browser. The hosted destination depends on the
+payment rail; the dialog does not claim to embed every authorization step itself.
+Status checks reuse the operation key. No window-close callback grants Plus.
+This source integration still requires deployed offer configuration and payment,
+account-switch and cross-device acceptance. Method availability follows the
+approved offer and deployed capabilities, not the presence of a button.
 
-### SDK and hosted checkout
+## Release gates retained
 
-| Capability | impl | sandbox | deployed | live |
-|---|---|---|---|---|
-| Server SDK: intents, links, checkout sessions, webhooks | yes | — | published `0.1.1` | — |
-| Server SDK: merchants, connected accounts, refunds, transfers, disputes | yes | no | **not published** | no |
-| Server SDK 0.4.0: `accounts`, `accountLinks`, `connectedAccount` on intents and sessions | yes | — | **not published** | no |
-| Browser entry: payer retrieval, deep-link handoff, QR, live status | yes | — | deployed | — |
-| Browser entry: resume (`getClientAction`) and the hosted CARD form | yes | **no** | no | **no** |
-
-The deployment workflow for the checkout application EXISTS and has run
-successfully; the 2026-09-03 snapshot of this file said it did not, which is the
-kind of stale claim the four-state table above is meant to stop.
-
-**A local change to `shared-types` or `sdk` is not a published contract.** Both
-are consumed by other repositories from npm, so an integrator has the published
-version until a release happens — and the settlement shapes and the new
-namespaces are unreleased on this snapshot.
-
-### Dashboard and merchant tooling
-
-- [x] `/v1/dashboard/*` delegates application membership to Oxy and exposes
-  merchant, intent and webhook-delivery operations.
-- [ ] Build the standalone dashboard application. No `packages/dashboard`
-  directory exists on this snapshot.
-- [ ] Add the API-credential UI over Oxy's existing application-credential
-  routes; never persist the show-once secret.
-
-## Remaining delivery gates
-
-### Card rail, before any real card is charged
-
-- [ ] **Decide the merchant of record, per flow.** Every card payment this
-  gateway creates today is a platform charge with no `on_behalf_of`, which makes
-  the operator of the Peable deployment the merchant of record — see
-  [ADR 0009](adr/0009-peable-holds-the-provider-credentials.md). That decides
-  the descriptor, who answers a chargeback, whose terms apply and who issues
-  receipts. It is commercial and legal, not technical, and no code change makes
-  it.
-- [ ] Confirm the platform account's approved scope with the provider:
-  countries, capabilities, cross-border flows, and whether the intended flows
-  are within them.
-- [ ] Exercise the whole card rail against the provider's sandbox, by a person:
-  onboarding, a payment with and without SCA, a decline and a retry, a
-  cancellation racing a confirmation, a two-seller cart, two distinct reversals
-  of the same amount, a pending refund that later fails, a refund made from the
-  provider's dashboard, and a dispute through to its outcome.
-- [ ] Verify the environment guard with a real key pair: a development
-  credential against a live-keyed deployment must be refused before any call.
-- [ ] Publish `@peable.to/shared-types` and `@peable.to/sdk`, and confirm each
-  consumer resolves the published version — a contract test that runs against
-  the workspace copy proves nothing about what an integrator has.
-- [ ] Settle the accounting PER ENTITY: which costs Peable's operator bears and
-  what Peable charges on top. The FACT is now reported — `GET
-  /v1/payment_intents/:id/settlement` gives gross, fee, net, settlement
-  currency, availability and FX, with `unknown` representable and never zero —
-  but attributing that cost to an entity is a commercial decision and is not
-  made anywhere in the repository. Balances, a per-merchant journal, payouts and
-  reserves remain unimplemented.
-- [ ] File ATTACHMENTS on a dispute response. The text path exists; attachments
-  need the provider's upload API, a size and type policy, and somewhere for the
-  bytes to live on the way through. A merchant whose defence rests on a receipt
-  still cannot submit it here.
-- [ ] Record funds withdrawn and reinstated on a dispute, and the dispute fee,
-  as movements of their own — they are not refunds to the customer.
-
-### FairCoin connected accounts (ADR 0012), before a seller is paid on mainnet
-
-- [ ] Testnet canary by a person, end to end: a card-only platform opens a
-  seller, the seller registers a dedicated pocket from the wallet on a real
-  device, the platform takes an on-behalf payment, the coins arrive in that
-  pocket, and the platform receives `confirming` / `settled` tagged with the
-  seller.
-- [ ] Owner decision on the platform fee — ADR 0012 §D12 lays out the options
-  and recommends none at launch, then a fee invoiced to the seller. No code
-  computes a fee today.
-- [ ] Key rotation for a seller who loses their wallet — today the platform
-  opens a new account; an in-place rotation needs per-intent key versions.
-- [ ] Gap-limit behaviour of the seller's wallet when many on-behalf intents
-  expire unpaid (the same exposure direct merchants have).
-- [ ] Publish `@peable.to/shared-types` 0.5.0 and `@peable.to/sdk` 0.4.0.
-
-### Existing gates
-
-- [ ] Record the required EU crypto/fintech legal opinion before production
-  money movement.
-- [ ] Verify the exact running AWS task image and the applied pre/post migration
-  ledger; a successful build or merged commit is insufficient.
-- [ ] Run an end-to-end testnet canary: create intent, payer retrieval, wallet
-  approval, signing, broadcast, settlement, realtime update and webhook.
-- [ ] Prove private-key rejection and concurrent address reservation again on
-  the release candidate.
-- [ ] Deploy and canary the hosted checkout separately from the backend.
-- [ ] Keep mainnet disabled for any flow whose physical-device and key-rotation
-  checks have not passed on the release candidate.
-
-## Later phases
-
-- [ ] Merchant integration in Mercaria. Mercaria uses the card rail today; its
-  sellers can be paid in FairCoin through connected accounts
-  ([Connect for FairCoin](connect-faircoin.md)) once Mercaria builds its side.
-- [ ] WordPress/WooCommerce integration, followed by other commerce adapters.
-- [ ] Shared Pockets with multi-party signing and encrypted partial-signature
-  coordination; the coordinator must remain unable to spend.
-- [ ] Peable Terminal for mobile and desktop, including an explicit NFC
-  entitlement and confirmation policy.
-- [ ] Subscriptions and billing, IF they are part of the announced offer:
-  customers, products and prices, stored methods and consent, renewals,
-  off-session SCA, dunning, proration, cancellation, invoices and tax. A payment
-  link is not a subscription engine, and nothing here implements one.
-- [ ] Payouts and reconciliation: a transfer marked `paid` says a connected
-  account's balance moved, NOT that a bank received anything. Payout tracking,
-  bank returns, reserves and negative balances are unimplemented.
-- [ ] A second fiat provider. The provider port exists; only Stripe implements
-  it, and "the interface exists" is not "SumUp works". Failover must never
-  create a second charge when the first one's outcome is unknown.
-- [ ] Analytics, without weakening self-custody.
-
-## Deliberately NOT available
-
-Listed here because a roadmap entry reads as a commitment, and these are things
-a merchant must not be told they can have:
-
-- dispute evidence with FILE ATTACHMENTS (text responses work);
-- balances, payouts, reserves and a per-merchant journal (the per-payment
-  settlement READ works);
-- subscriptions and stored payment methods;
-- any fiat provider other than Stripe;
-- Peable Terminal, NFC and shared pockets.
+- Resolve the merchant-of-record role, cost allocation, platform fees and provider
+  account scope for each enabled flow; record applicable legal review.
+- Verify exact backend, checkout and app release artifacts, pre/post migrations,
+  provider key-mode isolation and published SDK versions used by consumers.
+- Exercise payment, cancellation races, refunds including delayed failure,
+  seller onboarding, transfers/reversals and disputes against the real test provider.
+- Run a funded chain canary through intent creation, payer retrieval, device
+  approval, signing, broadcast, settlement, realtime status and merchant webhook.
+- Verify cold boot, sign-in, identity-key changes and recovery on physical devices
+  with and without the shared identity keystore before enabling affected flows.
+- Recheck private-key rejection and concurrent address reservation. Preserve
+  transactional webhook enqueueing, public-id routing and state compare-and-swap.
+- Keep dispute attachments, bank payouts, reserves, terminal and coordinated shared
+  pockets out of available-capability claims until implemented and accepted.
