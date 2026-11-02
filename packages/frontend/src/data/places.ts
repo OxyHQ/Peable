@@ -15,13 +15,7 @@
 // Types
 // ---------------------------------------------------------------------------
 
-export type PlaceCategory = 'cafe' | 'restaurant' | 'shop' | 'service' | 'atm' | 'other';
-
-/**
- * Methods a place offers for paying out FairCoin balance to local fiat.
- * Used by the detail view when `acceptsFairToFiat` is true.
- */
-export type FiatPayoutMethod = 'cash' | 'bank' | 'card';
+export type PlaceCategory = 'cafe' | 'restaurant' | 'shop' | 'service' | 'other';
 
 export interface Place {
   /** Stable, unique identifier (also used as the map marker id). */
@@ -52,17 +46,6 @@ export interface Place {
   phone?: string;
   /** Minimum FairCoin spend required to pay here, denominated in FAIR. */
   minimumSpend?: number;
-  /** Whether the place will exchange FairCoin for the local fiat currency. */
-  acceptsFairToFiat?: boolean;
-  /** ISO-4217 currency code used for the local-fiat exchange rate quote. */
-  localCurrency?: string;
-  /** Supported fiat payout methods when `acceptsFairToFiat` is true. */
-  fiatPayoutMethods?: readonly FiatPayoutMethod[];
-  /**
-   * Maximum fiat amount the place will pay out in a single transaction,
-   * expressed in the `localCurrency`.
-   */
-  maxFiatPayout?: number;
   /** Free-form opening-hours string (e.g. "Mon-Fri 09:00-18:00"). */
   openingHours?: string;
 }
@@ -85,7 +68,6 @@ const CATEGORY_IMAGE: Record<PlaceCategory, string> = {
   restaurant: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80',
   shop: 'https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=600&q=80',
   service: 'https://images.unsplash.com/photo-1581291518633-83b4ebd1d83e?w=600&q=80',
-  atm: 'https://images.unsplash.com/photo-1556742504-16b083241fab?w=600&q=80',
   other: 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=600&q=80',
 };
 
@@ -109,7 +91,6 @@ export const PLACES: readonly Place[] = [
     phone: '+34932185529',
     website: 'https://barrosabcn.example',
     minimumSpend: 5,
-    localCurrency: 'EUR',
     openingHours: 'Tue-Sun 12:00-23:00',
   },
   {
@@ -125,10 +106,6 @@ export const PLACES: readonly Place[] = [
     longitude: 1.692,
     imageUrl: CATEGORY_IMAGE.service,
     website: 'https://calafou.org',
-    acceptsFairToFiat: true,
-    localCurrency: 'EUR',
-    fiatPayoutMethods: ['cash', 'bank'],
-    maxFiatPayout: 500,
     openingHours: 'Mon-Fri 10:00-20:00',
   },
   {
@@ -146,7 +123,6 @@ export const PLACES: readonly Place[] = [
     phone: '+34915944612',
     website: 'https://cafefair.example',
     minimumSpend: 3,
-    localCurrency: 'EUR',
     openingHours: 'Mon-Sat 08:00-20:00',
   },
   {
@@ -161,7 +137,6 @@ export const PLACES: readonly Place[] = [
     latitude: 39.4609,
     longitude: -0.3254,
     imageUrl: CATEGORY_IMAGE.shop,
-    localCurrency: 'EUR',
     openingHours: 'Tue-Sat 09:00-14:00, 17:00-20:00',
   },
   {
@@ -169,7 +144,7 @@ export const PLACES: readonly Place[] = [
     name: 'FairCoop Bilbao',
     category: 'service',
     description:
-      'Local FairCoop hub and exchange point. Helps newcomers set up wallets, provides educational resources and runs regular meetups for the community.',
+      'Local FairCoop community hub. Helps newcomers set up wallets, provides educational resources and runs regular meetups for the community.',
     address: 'Kale Nagusia, 20',
     city: 'Bilbao',
     country: 'Spain',
@@ -177,28 +152,7 @@ export const PLACES: readonly Place[] = [
     longitude: -2.9253,
     imageUrl: CATEGORY_IMAGE.service,
     phone: '+34944157890',
-    acceptsFairToFiat: true,
-    localCurrency: 'EUR',
-    fiatPayoutMethods: ['cash', 'bank', 'card'],
-    maxFiatPayout: 1000,
     openingHours: 'Mon-Fri 10:00-19:00',
-  },
-  {
-    id: 'fair-atm-sevilla',
-    name: 'Fair ATM Sevilla',
-    category: 'atm',
-    description: 'FairCoin cash-in / cash-out point on the Calle Sierpes. Open Monday to Saturday.',
-    address: 'Calle Sierpes, 48',
-    city: 'Seville',
-    country: 'Spain',
-    latitude: 37.3891,
-    longitude: -5.9931,
-    imageUrl: CATEGORY_IMAGE.atm,
-    acceptsFairToFiat: true,
-    localCurrency: 'EUR',
-    fiatPayoutMethods: ['cash'],
-    maxFiatPayout: 250,
-    openingHours: 'Mon-Sat 09:00-21:00',
   },
   {
     id: 'panaderia-zaragoza',
@@ -214,7 +168,6 @@ export const PLACES: readonly Place[] = [
     imageUrl: CATEGORY_IMAGE.shop,
     phone: '+34976393021',
     minimumSpend: 2,
-    localCurrency: 'EUR',
     openingHours: 'Mon-Sat 07:30-14:30',
   },
   {
@@ -229,7 +182,6 @@ export const PLACES: readonly Place[] = [
     longitude: -4.4214,
     imageUrl: CATEGORY_IMAGE.shop,
     minimumSpend: 10,
-    localCurrency: 'EUR',
     openingHours: 'Mon-Sat 10:00-21:00',
   },
   {
@@ -246,7 +198,6 @@ export const PLACES: readonly Place[] = [
     imageUrl: CATEGORY_IMAGE.service,
     phone: '+34958221033',
     minimumSpend: 15,
-    localCurrency: 'EUR',
     openingHours: 'Mon-Fri 10:00-14:00, 16:00-20:00',
   },
   {
@@ -263,7 +214,6 @@ export const PLACES: readonly Place[] = [
     imageUrl: CATEGORY_IMAGE.restaurant,
     website: 'https://restaurantevegetal.example',
     minimumSpend: 8,
-    localCurrency: 'EUR',
     openingHours: 'Wed-Mon 13:00-16:00, 20:00-23:30',
   },
   {
@@ -278,7 +228,6 @@ export const PLACES: readonly Place[] = [
     latitude: 37.9869,
     longitude: 23.7303,
     imageUrl: CATEGORY_IMAGE.cafe,
-    localCurrency: 'EUR',
     openingHours: 'Daily 09:00-02:00',
   },
   {
@@ -294,7 +243,6 @@ export const PLACES: readonly Place[] = [
     longitude: 13.4271,
     imageUrl: CATEGORY_IMAGE.shop,
     minimumSpend: 5,
-    localCurrency: 'EUR',
     openingHours: 'Thu 17:00-22:00',
   },
   {
@@ -309,7 +257,6 @@ export const PLACES: readonly Place[] = [
     latitude: 46.0569,
     longitude: 14.5142,
     imageUrl: CATEGORY_IMAGE.cafe,
-    localCurrency: 'EUR',
     openingHours: 'Tue-Sun 18:00-02:00',
   },
   {
@@ -317,7 +264,7 @@ export const PLACES: readonly Place[] = [
     name: 'Fair Hub Lisboa',
     category: 'service',
     description:
-      'Co-working and FairCoin exchange point. Desks by the day, fibre internet and on-site help getting started with FairCoin.',
+      'Co-working space accepting FairCoin payments. Desks by the day, fibre internet and on-site help getting started with FairCoin.',
     address: 'Rua das Janelas Verdes, 9',
     city: 'Lisbon',
     country: 'Portugal',
@@ -325,10 +272,6 @@ export const PLACES: readonly Place[] = [
     longitude: -9.1605,
     imageUrl: CATEGORY_IMAGE.service,
     website: 'https://fairhublisboa.example',
-    acceptsFairToFiat: true,
-    localCurrency: 'EUR',
-    fiatPayoutMethods: ['cash', 'bank'],
-    maxFiatPayout: 750,
     openingHours: 'Mon-Fri 09:00-19:00',
   },
   {
@@ -344,26 +287,7 @@ export const PLACES: readonly Place[] = [
     longitude: -8.6073,
     imageUrl: CATEGORY_IMAGE.shop,
     minimumSpend: 5,
-    localCurrency: 'EUR',
     openingHours: 'Mon-Sat 09:00-20:00',
-  },
-  {
-    id: 'fair-atm-paris',
-    name: 'Fair ATM Paris',
-    category: 'atm',
-    description:
-      'FairCoin exchange kiosk located inside a Belleville café, open during business hours.',
-    address: 'Rue de Belleville, 55',
-    city: 'Paris',
-    country: 'France',
-    latitude: 48.8724,
-    longitude: 2.3767,
-    imageUrl: CATEGORY_IMAGE.atm,
-    acceptsFairToFiat: true,
-    localCurrency: 'EUR',
-    fiatPayoutMethods: ['cash'],
-    maxFiatPayout: 200,
-    openingHours: 'Mon-Sat 10:00-20:00',
   },
 ] as const;
 

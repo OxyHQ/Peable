@@ -1,28 +1,101 @@
 # Peable
 
-<p align="center">
-  <b>A payments gateway with Stripe's ergonomics, over two rails.</b><br>
-  Payment intents, payment links, hosted checkout, signed webhooks, and an SDK to drive them.
-</p>
+Peable is a payments platform, a personal payment app, and the tools that connect
+payments to other websites and applications.
 
-<p align="center">
-  <sub>
-    <b>FairCoin is non-custodial by construction</b> — the Gateway holds no keys and cannot
-    spend. <b>The card rail is implemented and has not been exercised against a provider
-    sandbox</b>; see
-    <a href="docs/PEABLE-ROADMAP.md">the roadmap</a>, which marks every capability with
-    <i>impl</i> / <i>sandbox</i> / <i>deployed</i> / <i>live</i> separately, because a
-    merged commit is none of the last three.
-  </sub>
-</p>
+## Product direction
 
-<p align="center">
-  <a href="https://www.npmjs.com/package/@peable.to/sdk"><img alt="@peable.to/sdk" src="https://img.shields.io/npm/v/@peable.to/sdk?style=flat-square&label=%40peable.to%2Fsdk&labelColor=440151&color=D26AE7"></a>
-  <img alt="Bun" src="https://img.shields.io/badge/bun-1.0+-440151?style=flat-square&logo=bun&logoColor=white">
-  <img alt="Expo" src="https://img.shields.io/badge/Expo-57-440151?style=flat-square&logo=expo&logoColor=white">
-  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Drizzle-440151?style=flat-square&logo=postgresql&logoColor=white">
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-strict-440151?style=flat-square&logo=typescript&logoColor=white">
-</p>
+### Peable Platform
+
+Businesses and platforms use Peable to accept and manage payments through a
+merchant dashboard, APIs and services. The product covers payment requests,
+payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
+disputes, payment status and webhook notifications. The API foundation exists;
+the complete merchant dashboard remains to be built.
+
+### Peable App
+
+People use the app to send and receive payments, pay for goods and services,
+approve checkout requests and view their activity. Its current implementation is
+a self-custodial FairCoin wallet with Oxy identity, public profiles, receive codes,
+contacts and pockets. Signing stays with the user's device. Hosts without signing
+capability provide a read-only experience and hand payment approval to a capable
+device.
+
+### SDKs and Pay with Peable
+
+Peable integrates into both the server and the customer-facing experience:
+
+- **Server:** create and manage payments, checkout sessions, subscriptions,
+  connected sellers, refunds and other payment resources using authenticated APIs.
+- **Websites and apps:** present a **Pay with Peable** button and payment window,
+  let the buyer review and authorize the payment, and report its progress and result.
+- **Peable App:** approve a payment when the integrating surface cannot sign locally.
+
+The intended experience is a connected flow: the merchant creates the payment,
+the website or app opens Peable's payment window, the buyer authorizes it, and the
+merchant receives the verified result. Merchant credentials stay on the server.
+Opening or closing a window is never proof of payment.
+
+Today the browser SDK supplies an embeddable button, a QR payment window, app
+handoff and realtime status. The separate app payment sheet supports payments to
+people from Oxy apps. These are existing building blocks; a unified commercial
+payment window with the complete buyer flow is still a delivery target.
+
+### First integration: Mention Plus
+
+**Mention is the first target for the unified payment-window experience.** When a
+user opens Mention Plus and taps **Subscribe**, Mention must open the Peable
+payment window for that subscription. The buyer reviews the offer and payment
+method, authorizes payment, and sees the resulting status. Mention Plus remains bundled with Oxy One: Oxy owns the plan and verifies
+the payment/subscription through Peable; Mention reads the resulting entitlement.
+This integration does not introduce a separate Mention subscription price.
+Cancellation, failed payment and a pending confirmation must remain distinguishable.
+
+Mention's source integration opens a Pay with Peable dialog, validates the explicitly
+bound Oxy One offer, and continues through Oxy's authoritative hosted checkout.
+It retains the operation identity for status checks and interrupted-request recovery;
+closing a window does not grant Plus. This is not yet verified as a live purchase:
+the public central catalogue reported purchases unavailable on 2026-11-02.
+The full cross-device/payment acceptance remains a release requirement.
+
+### FairCoin is a payment method, not an exchange product
+
+Peable accepts FairCoin as a cryptocurrency for payments: sending, receiving and
+paying for goods or services. The FairCoin rail is self-custodial; the gateway
+holds watch-only public keys and cannot spend a user's funds.
+
+**Peable, Oxy and Oxy ecosystem applications do not buy or sell FairCoin and do not
+offer cryptocurrency exchange or brokerage.** Buying or selling FairCoin is outside
+this product and belongs to the FairCoin organization. “Buying” in Peable means
+paying a merchant for goods or services, not buying the currency.
+
+This is an explicit product boundary motivated by legal considerations, not a
+statement that regulatory review is complete. The inherited **Buy FAIR** screens,
+bridge purchase client and exchange/ATM discovery have been removed from the
+Peable experience. Historical local purchase records are retained without exposing
+a new currency-purchase flow.
+
+## What exists and what remains
+
+Implementation, external testing, deployment and availability for real payments
+are separate states. This table describes source capability, not production readiness.
+
+| Area | Implemented foundation | Remaining work or verification |
+|---|---|---|
+| Payments | Intents, links, sessions, idempotency, FairCoin settlement, card provider integration, signed webhooks and realtime status | End-to-end acceptance on the exact release and enabled environment |
+| Merchant operations | Administrative APIs; specific tax and contribution screens | Complete merchant dashboard and credential-management experience |
+| Marketplace payments | Connected sellers, onboarding, transfers, reversals, refunds and disputes | Full provider/device acceptance; dispute attachments; bank payout tracking |
+| Billing and tax | Customers, subscription checkout, portal, invoice reads, cancellation, tax calculation/reporting and native FairCoin periods | Broad self-service billing management and activation per approved offer; FairCoin renewal requires payment authorization |
+| Personal app | Identity, wallet, activity, sending/receiving, profiles, QR, payment approval and pockets | Physical-device acceptance and recovery/rotation verification |
+| Embedded payments | Browser button/QR/app handoff; separate app payment sheet | Unified merchant payment window; Mention Plus as the first target |
+| Financial operations | Per-payment provider settlement reads | Per-merchant ledger, fiat balances, reserves, bank payouts and reconciliation |
+| In-person payments | No terminal product | Terminal and contactless payment experience |
+
+Historical evidence includes real provider test-mode subscription checkout and
+lifecycle tests, plus deployment receipts. It does not verify today's deployment
+or all payment flows. See the [roadmap](docs/PEABLE-ROADMAP.md) for evidence,
+limitations and delivery priorities.
 
 ---
 
@@ -46,7 +119,7 @@ no network at all.
 </td>
 <td valign="top" width="50%">
 
-### 🧾 Stripe shaped on purpose
+### 🧾 Consistent payment resources
 
 `payment_intents`, `payment_links` and `checkout_sessions`, with `Idempotency-Key` on
 creates and HMAC signed webhooks carrying a timestamp against replay.
@@ -73,11 +146,12 @@ A Bun workspace monorepo. Everything is under `packages/`.
 | Path | Package | What it is |
 |---|---|---|
 | [`packages/backend`](packages/backend/) | `@peable.to/backend` | The Gateway. Express, Drizzle on PostgreSQL and Socket.IO on Bun |
-| [`packages/sdk`](packages/sdk/) | [`@peable.to/sdk`](https://www.npmjs.com/package/@peable.to/sdk) | The published SDK. Server client plus a browser checkout client |
+| [`packages/sdk`](packages/sdk/) | [`@peable.to/sdk`](https://www.npmjs.com/package/@peable.to/sdk) | Server SDK plus the separate `@peable.to/sdk/checkout` browser entry |
 | [`packages/checkout`](packages/checkout/) | `@peable.to/checkout` | The hosted, anonymous, payer facing checkout web app. Vite and React |
 | [`packages/frontend`](packages/frontend/) | `@peable.to/frontend` | Expo app for iOS, Android, web and Electron |
+| [`packages/contracts`](packages/contracts/) | `@peable.to/contracts` | Zod contribution contracts and generated OpenAPI |
 | [`packages/shared-types`](packages/shared-types/) | `@peable.to/shared-types` | The wire contract shared by all of the above |
-| [`packages/pay`](packages/pay/) | [`@peable.to/pay`](https://www.npmjs.com/package/@peable.to/pay) | Paying FROM an Oxy app: HD derivation, the UTXO set, coin selection |
+| [`packages/pay`](packages/pay/) | [`@peable.to/pay`](https://www.npmjs.com/package/@peable.to/pay) | Payment execution from an Oxy app; `@peable.to/pay/ui` separately exports the payment sheet |
 
 `shared-types` is the reason the webhook signer cannot drift: the Gateway signs and the
 SDK verifies through the same exported routine.
@@ -100,7 +174,7 @@ bun run dev:backend            # bun --watch, listens on 3001 by default
 bun run dev:frontend           # expo start --clear
 ```
 
-`checkout` and `sdk` have no root alias, so reach them through the workspace filter:
+`checkout` has no root shortcut; the SDK has `build:sdk`. Other commands use the workspace filter:
 
 ```bash
 bun run --filter @peable.to/checkout dev
@@ -160,8 +234,8 @@ There is no bespoke Peable API key. The SDK is configured with the **same
 short lived service token, and re mints when that token expires.
 
 The backend verifies callers with `@oxy.so/core/server`, using `createOxyAuthMiddleware`
-and `getRequiredOxyUserId` for human callers, `serviceAuth()` for merchant service tokens,
-and `authSocket()` for Socket.IO. There is no app local bearer parser.
+and `getRequiredOxyUserId` for human callers, `oxy.middleware.service()` for merchant service tokens,
+and `oxy.middleware.socket()` for Socket.IO. There is no app local bearer parser.
 
 The payer side is different by design: a payer is anonymous and proves nothing except
 possession of a payment intent's `clientSecret`, which travels in a request header rather

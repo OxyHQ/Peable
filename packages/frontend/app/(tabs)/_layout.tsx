@@ -34,11 +34,10 @@ import { hasIdentityKeystore } from '../../src/wallet/keystore';
 import { useWalletCapability } from '../../src/wallet/use-wallet-capability';
 
 /**
- * Send signs and Buy delivers to an address derived from the wallet's xpub, so
- * a read-only host does not offer them. Their screens also redirect a
- * read-only visitor home, for a typed URL.
+ * Send needs signing capability, so a read-only host does not offer it.
+ * The screen also redirects a read-only visitor home for a typed URL.
  */
-const READ_ONLY_HIDDEN_TABS: ReadonlySet<WalletTabName> = new Set(['send', 'buy']);
+const READ_ONLY_HIDDEN_TABS: ReadonlySet<WalletTabName> = new Set(['send']);
 
 /**
  * The public `/@username` profile (and, through the same dynamic segment, the
@@ -112,7 +111,6 @@ export default function TabLayout() {
         <Tabs.Screen name="map" />
         <Tabs.Screen name="send" />
         <Tabs.Screen name="receive" />
-        <Tabs.Screen name="buy" />
         <Tabs.Screen name="settings" />
         <Tabs.Screen name={PUBLIC_ROUTE} />
       </Tabs>
