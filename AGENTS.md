@@ -1,12 +1,27 @@
 # Peable
 
-Peable: a FairCoin payment gateway with Stripe-shaped ergonomics, plus the
-self-custodial wallet that spends on it. Bun monorepo, `packages/` layout.
+Peable: a payments platform, a self-custodial payment app, and server/browser
+SDKs for integrating payments. Bun monorepo, `packages/` layout.
 
 > Org-wide engineering standards (package manager, TypeScript, React, naming,
 > error handling, security, testing, git and PR conventions) live in
 > <https://github.com/OxyHQ/engineering>. This file carries only what is true of
 > Peable specifically. Versions are in `package.json`, never here.
+
+## Product boundary
+
+Peable accepts FairCoin for payments: sending, receiving and paying for goods or
+services. **Peable, Oxy and Oxy ecosystem apps never buy or sell FairCoin or offer
+currency exchange/brokerage.** Currency sales belong outside this product, to the
+FairCoin organization. Do not reintroduce the inherited Buy FAIR screens, bridge
+purchase client or currency-purchase navigation. This is a product boundary
+motivated by legal considerations, not a claim that regulatory review is complete.
+
+Mention Plus is the first target for the unified **Pay with Peable** window:
+Subscribe opens the payment experience. Mention Plus remains an Oxy One bundle
+entitlement; Oxy owns the plan, billing and verified entitlement decision. Do not
+create a separate Mention subscription price or grant Plus from a browser callback.
+Payment success requires the authoritative backend outcome, never a closed window.
 
 ## Packages
 
@@ -428,8 +443,9 @@ probe result is `"no-keystore"` and the route is `"read-only"`.
 capability, never on `initialized`.** `src/wallet/capability.ts` decides
 `full` / `read-only` / `pending` / `none`; `app/(tabs)/_layout.tsx` admits
 `read-only`, and each tab renders its keyless branch (home activity, profile
-receive code, settings without wallet sections). Send and Buy need a key, so
-the read-only rail and bar omit them and their screens redirect home.
+receive code, settings without wallet sections). Send needs a key, so
+the read-only rail and bar omit it and its screen redirects home. Currency
+purchase screens are not part of Peable on any host.
 
 Both wrong designs are easy to rebuild: naming the platform and redirecting
 bounced off a `(tabs)` that admitted only an initialized wallet, and rendering
