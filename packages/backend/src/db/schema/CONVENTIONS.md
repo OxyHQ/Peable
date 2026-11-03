@@ -29,6 +29,11 @@ through `generatedId()`. The time component makes them k-sortable, so the
 primary-key index stays append-mostly — which is also what lets the dashboard's
 keyset pagination order by `id desc`.
 
+**k-sortable is not ordered within a millisecond.** The 74 bits after the
+timestamp are random, so two ids minted in one millisecond sort either way
+about half the time. An `id` tiebreak is fine for a stable page walk and wrong
+wherever the ORDER is the meaning — see §Provider event arrival order.
+
 **`public_id` is a separate column, and the primary key is never the public
 id.** Four tables carry a Stripe-parity external identifier (`merch_…`, `pi_…`,
 `cs_…`, `link_…`) minted by `newId()`. It is `public_id` on all four, and `id`
@@ -396,6 +401,46 @@ not, which silently breaks any keyset built on one). `updated_at` is maintained
 by the application through drizzle's `$onUpdate` — so it fires on `db.update()`
 and on an `ON CONFLICT DO UPDATE` branch, and NOT on a raw `db.execute(sql\`update
 …\`)`. `social_receive_cursors` carries both columns.
+
+## Provider event arrival order
+
+The drain applies `provider_events` oldest first, and for two events about one
+object the order IS the meaning: a dispute's `created` before its
+`funds_withdrawn`, or the merchant is told "created" by the wrong event and
+never told the funds moved. `created_at` is millisecond precision and such
+pairs routinely share a millisecond, so the tiebreak decides — and it used to be
+the uuid v7 `id`, which inverted about half of them (§Ids).
+
+`received_seq` is the tiebreak: `bigint`, `NOT NULL`, defaulted to
+`nextval('provider_events_received_seq')` — numbered by the database at insert,
+never by the application. Decisions a reader would otherwise undo:
+
+- **A sequence default, not `GENERATED … AS IDENTITY`.** Adding an identity (or
+  any volatile default) in `ADD COLUMN` rewrites the hot table under ACCESS
+  EXCLUSIVE; a bare `ADD COLUMN` plus `SET DEFAULT` are both catalog-only
+  (`0069`), and identity cannot be attached to a nullable column at all.
+- **`CACHE 1`, stated in the schema.** A cached sequence hands each session its
+  own block, so two ingress connections would number interleaved deliveries out
+  of order.
+- **`bigint` is safe here only because it is never READ.** It appears in
+  `ORDER BY` and nowhere else — not in `EVENT_COLUMNS`, not on a DTO — because
+  postgres.js decodes `int8` as a string (§Counters). `mode: 'bigint'` makes the
+  query builder hand back a JS `bigint` if anything ever does select it.
+- **The rows that predate it are NEGATIVE** (`0070`, `-N … -1` by `created_at,
+  id`): the running image's inserts were already taking 1, 2, … from the
+  default, and every older row arrived before them.
+- **`NOT NULL` arrives in four steps** (`0069` DDL alone, `0070` backfill, `0071`
+  the CHECK `NOT VALID`, `0072` post: validate, `SET NOT NULL` without a scan,
+  drop the CHECK). The CHECK comes after the backfill because a `NOT VALID`
+  CHECK is still enforced on every UPDATE, and the running drain updates
+  pre-`0069` rows.
+- **Arrival order, not per-object serialization.** Stripe does not promise
+  delivery order, so most handlers already read the truth rather than trust the
+  sequence: intents reconcile with the provider, refunds read the refund's
+  state, accounts re-read, transfers take the provider's cumulative total. The
+  defect was the drain reordering events that DID arrive in order. Holding an
+  object's later events behind an earlier failure would let one event left
+  failed for an operator by design starve every later event about that payment.
 
 ## Testing
 

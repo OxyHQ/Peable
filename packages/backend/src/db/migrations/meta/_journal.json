@@ -484,6 +484,34 @@
       "when": 1793735256762,
       "tag": "0068_report_types_itemized_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1793736441095,
+      "tag": "0069_provider_events_received_seq",
+      "breakpoints": true
+    },
+    {
+      "idx": 70,
+      "version": "7",
+      "when": 1793736441938,
+      "tag": "0070_provider_events_received_seq_backfill",
+      "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1793736442832,
+      "tag": "0071_provider_events_received_seq_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793736443780,
+      "tag": "0072_provider_events_received_seq_validate",
+      "breakpoints": true
     }
   ]
 }

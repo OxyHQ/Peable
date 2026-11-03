@@ -138,13 +138,20 @@ export async function findProviderEventByIdentity(
 
 /**
  * The drain's batch: unprocessed, oldest first for the legacy drain.
- * Explicit recurring passes order by next attempt time, then stable ID: once
- * deferred work becomes due it must not regain priority over untouched work.
+ * Explicit recurring passes order by next attempt time: once deferred work
+ * becomes due it must not regain priority over untouched work.
  *
- * Ordered by `created_at` and served by the partial index of the same name, so
- * the scan is over the unprocessed rows alone rather than over the whole history
- * — which is what keeps this cheap once the table is large, and it only ever
- * grows.
+ * **The tiebreak is `received_seq`, the order the events ARRIVED in — never
+ * `id`.** `created_at` has millisecond precision, and two deliveries about one
+ * object routinely share a millisecond; a uuid v7 is random within its
+ * millisecond, so an `id` tiebreak drained about half of those pairs backwards
+ * (a dispute's `funds_withdrawn` before its `created`). `received_seq` is only
+ * ever ORDERED BY here and never read: it is an `int8`, which postgres.js
+ * decodes as a string.
+ *
+ * Filtered through the partial `provider_events_unprocessed_idx`, so the scan is
+ * over the unprocessed rows alone rather than over the whole history — which is
+ * what keeps this cheap once the table is large, and it only ever grows.
  */
 export async function findUnprocessedProviderEvents(
   db: DatabaseOrTransaction,
@@ -166,7 +173,7 @@ export async function findUnprocessedProviderEvents(
       options
         ? asc(sql`coalesce(${providerEvents.retryAfter}, ${providerEvents.createdAt})`)
         : asc(providerEvents.createdAt),
-      asc(providerEvents.id),
+      asc(providerEvents.receivedSeq),
     )
     .limit(limit);
   return rows as readonly ProviderEventRow[];

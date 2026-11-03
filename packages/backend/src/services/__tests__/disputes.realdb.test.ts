@@ -21,7 +21,7 @@ import {
 } from '../../db/providers/providerEventRepository';
 import { linkProviderObject } from '../../db/payments/paymentIntentRepository';
 import { listDisputesForIntent } from '../../db/disputes/disputeRepository';
-import { disputes, events } from '../../db/schema';
+import { disputes, events, providerEvents } from '../../db/schema';
 import { runProviderEventDrainPass } from '../providerEventDrain';
 import { redactProviderPayload } from '../providers/redact';
 import {
@@ -99,6 +99,29 @@ async function storeDisputeEvent(input: {
   });
   if (!id) throw new Error('the event was already stored');
   return id;
+}
+
+/**
+ * Make two stored events indistinguishable by everything the drain used to
+ * order on: the SAME `created_at` millisecond, and ids whose uuid order is the
+ * REVERSE of the order they arrived in.
+ *
+ * That is the shape a uuid v7 produces about half the time for two deliveries
+ * in one millisecond — it is random within the millisecond — so this is the
+ * flake, pinned. Only `received_seq`, assigned by the database at insert, still
+ * says which came first.
+ */
+async function sameMillisecondInverted(first: string, second: string): Promise<void> {
+  const instant = new Date(Date.now() - 1_000);
+  const suffix = first.slice(8);
+  await gatewayDb()
+    .update(providerEvents)
+    .set({ id: `00000000${suffix}`, createdAt: instant })
+    .where(eq(providerEvents.id, second));
+  await gatewayDb()
+    .update(providerEvents)
+    .set({ id: `ffffffff${suffix}`, createdAt: instant })
+    .where(eq(providerEvents.id, first));
 }
 
 async function linkedCardIntent(objectId: string) {
@@ -415,6 +438,39 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     const payload = stored.at(-1)?.event.data.object as Dispute;
     expect(payload.reason).toBe('product_not_received');
     expect(payload.evidence).toBeUndefined();
+  });
+
+  /**
+   * Two events about one dispute in the same millisecond, with ids that sort
+   * backwards, drain in the order they ARRIVED. Ordered by `id`, the
+   * `funds_withdrawn` ran first, CREATED the row and told the merchant
+   * "created"; the real `created` then changed nothing, and the merchant was
+   * never told the funds had been withdrawn.
+   *
+   * Asserted as a set, not a sequence: the misordering shows up as a MISSING
+   * notification, so this does not lean on the `events` ids' own order.
+   */
+  it('applies two same-millisecond events in arrival order, whatever their ids say', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_same_ms');
+    const base = {
+      intentObjectId: 'pi_stripe_dp_same_ms',
+      disputeObjectId: 'dp_stripe_same_ms',
+      reason: 'fraudulent',
+    };
+    const created = await storeDisputeEvent({
+      ...base,
+      type: 'charge.dispute.created',
+      status: 'needs_response',
+    });
+    const withdrawn = await storeDisputeEvent({ ...base, type: 'charge.dispute.funds_withdrawn' });
+    await sameMillisecondInverted(created, withdrawn);
+
+    await runProviderEventDrainPass();
+
+    expect((await deliveriesFor(intent.id)).sort()).toEqual([
+      'charge.dispute.created',
+      'charge.dispute.funds_withdrawn',
+    ]);
   });
 
   /** A close the merchant already recorded (`…/close`) is not news twice. */

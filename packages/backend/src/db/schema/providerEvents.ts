@@ -1,7 +1,27 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, index, jsonb, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import {
+  bigint,
+  boolean,
+  check,
+  index,
+  jsonb,
+  pgSequence,
+  pgTable,
+  text,
+  unique,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz } from '@oxy.so/db';
 import { PROVIDER_IDS } from './valueSets';
+
+/**
+ * Arrival order for `provider_events.received_seq`.
+ *
+ * `cache: 1` is load-bearing: a cached sequence hands each session its own
+ * block of values, so two ingress connections would number interleaved
+ * deliveries out of order. Postgres' default is 1; stating it keeps a later
+ * "optimisation" from silently undoing the ordering.
+ */
+export const providerEventsReceivedSeq = pgSequence('provider_events_received_seq', { cache: 1 });
 
 /**
  * The immutable envelope of everything a payment provider has told this
@@ -61,6 +81,24 @@ export const providerEvents = pgTable(
     /** Why processing failed, when it did. Operator-facing. */
     processingError: text(),
     createdAt: createdAt(),
+    /**
+     * The order this gateway RECEIVED the event in — the drain's tiebreak.
+     *
+     * `created_at` is millisecond precision, and two deliveries about one
+     * dispute routinely land in the same millisecond. The tiebreak used to be
+     * `id`, but a uuid v7 is random within its millisecond, so half of those
+     * pairs drained in the wrong order: a dispute's `funds_withdrawn` applied
+     * before its `created`, and the merchant was told "created" by the wrong
+     * event and never told the funds were withdrawn.
+     *
+     * Assigned by the database (`nextval` default), never by the application.
+     * `bigint`: postgres.js decodes `int8` as a STRING, so this column is for
+     * `ORDER BY` only and is deliberately absent from every read — see
+     * CONVENTIONS.md §Provider event arrival order.
+     */
+    receivedSeq: bigint({ mode: 'bigint' })
+      .notNull()
+      .default(sql`nextval('provider_events_received_seq')`),
   },
   (table) => [
     /**
