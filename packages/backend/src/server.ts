@@ -37,6 +37,8 @@ import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postg
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
 import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
+import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
+import { createEventsRouter } from './routes/events';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createSocialRouter } from './routes/social';
@@ -63,6 +65,7 @@ import type { SafeFetchFn } from './services/webhookDispatcher';
 import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './services/webhookOutbox';
 import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
 import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
+import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
 import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
@@ -72,9 +75,7 @@ import {
   requestIdMiddleware,
 } from './lib/requestId';
 import { IDEMPOTENT_REPLAYED_HEADER } from './lib/idempotency';
-
-/** Date-based API version, echoed on every response (Stripe-parity). */
-const PEABLE_VERSION = '2026-11-03';
+import { PEABLE_API_VERSION } from '@peable.to/shared-types';
 
 /**
  * Flat per-window cap for the IDENTITY-AGNOSTIC public payer routes
@@ -246,7 +247,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createOxyRateLimit(oxy, { auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE } }));
   app.use(express.json());
   app.use(((_req, res, next) => {
-    res.setHeader('Peable-Version', PEABLE_VERSION);
+    res.setHeader('Peable-Version', PEABLE_API_VERSION);
     next();
   }) as RequestHandler);
   const requireMerchant: RequestHandler =
@@ -282,6 +283,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createRefundsRouter({ requireMerchant }));
   app.use(createDisputesRouter({ requireMerchant }));
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
+  app.use(createWebhookEndpointsRouter({ requireMerchant }));
+  app.use(createEventsRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
@@ -386,6 +389,7 @@ export async function start(
     stopWebhookOutbox();
     stopExpirySweeper();
     stopIdempotencySweeper();
+    stopEventSweeper();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -411,6 +415,7 @@ export async function start(
   startWebhookOutbox({ safeFetch: undefined });
   startExpirySweeper();
   startIdempotencySweeper();
+  startEventSweeper();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

@@ -9,7 +9,7 @@ const merchant = {
   oxyAppId: LOCAL_TEST_APP,
   environment: 'development',
   livemode: false,
-  webhookUrl: null,
+  webhookEndpoints: 0,
 };
 it('configures a test-only recurring observer without a production entitlement target', () => {
   const result = localTestBillingConfiguration(merchant, 'acct_test');
@@ -22,7 +22,7 @@ for (const patch of [
   { livemode: true },
   { environment: 'production' },
   { oxyAppId: 'real-app' },
-  { webhookUrl: 'https://prod.example/webhook' },
+  { webhookEndpoints: 1 },
 ]) {
   it('rejects a nonlocal recurring owner', () =>
     expect(() => localTestBillingConfiguration({ ...merchant, ...patch }, 'acct_test')).toThrow());

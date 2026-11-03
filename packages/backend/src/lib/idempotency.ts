@@ -12,6 +12,7 @@ import {
 } from '../db/idempotency/idempotencyKeyRepository';
 import { sendError } from './http';
 import { requestIdOf } from './requestId';
+import { runInRequestContext, setRequestIdempotencyKey } from './requestContext';
 
 /**
  * Generic idempotency for every merchant `POST` (ADR 0014 D3).
@@ -196,6 +197,7 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     const claimId = await claimIdempotencyKey(db, request);
     if (claimId) {
       res.locals.idempotencyKey = key;
+      setRequestIdempotencyKey(key);
       captureResponse(res, claimId);
       next();
       return;
@@ -238,7 +240,19 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
   );
 }
 
-/** The middleware. See the module comment. */
+/**
+ * The middleware. See the module comment.
+ *
+ * It also opens the request context (`lib/requestContext.ts`): every merchant
+ * `POST` passes through here after authentication, so an event the handler's
+ * change produces records this request's `Request-Id` and, once admitted, its
+ * `Idempotency-Key` as `event.request`.
+ */
 export const idempotent: RequestHandler = (req, res, next) => {
-  handle(req, res, next).catch(next);
+  const run = () => {
+    handle(req, res, next).catch(next);
+  };
+  const requestId = requestIdOf(res);
+  if (requestId === undefined) run();
+  else runInRequestContext(requestId, run);
 };

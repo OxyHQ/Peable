@@ -25,7 +25,7 @@ import { enqueueReferenceSync } from '../oxyFiles/referenceSyncRepository';
  * one small reviewable change afterwards. Do not delete this as unreferenced.
  */
 
-/** A merchant row as every caller here reads it. `webhook_secret` is never selected. */
+/** A merchant row as every caller here reads it. `next_derivation_index` is never selected. */
 export interface MerchantRow {
   readonly id: string;
   readonly publicId: string;
@@ -35,7 +35,6 @@ export interface MerchantRow {
   readonly network: NetworkType | null;
   /** `null` on a card-only merchant. Nullable TOGETHER with `network`. */
   readonly xpub: string | null;
-  readonly webhookUrl: string | null;
   readonly requiredConfirmations: number;
   readonly livemode: boolean;
   readonly displayName: string | null;
@@ -54,7 +53,6 @@ const MERCHANT_COLUMNS = {
   environment: merchants.environment,
   network: merchants.network,
   xpub: merchants.xpub,
-  webhookUrl: merchants.webhookUrl,
   requiredConfirmations: merchants.requiredConfirmations,
   livemode: merchants.livemode,
   displayName: merchants.displayName,
@@ -94,8 +92,6 @@ export interface InsertMerchantParams {
   readonly network?: NetworkType | undefined;
   readonly xpub?: string | undefined;
   readonly publicId: string;
-  readonly webhookUrl?: string | undefined;
-  readonly webhookSecret?: string | undefined;
   readonly requiredConfirmations?: number | undefined;
   readonly displayName?: string | undefined;
   readonly avatarFileId?: string | undefined;
@@ -150,8 +146,6 @@ export async function insertMerchant(
           livemode: params.environment === 'production',
           network: params.network ?? null,
           xpub: params.xpub ?? null,
-          webhookUrl: params.webhookUrl ?? null,
-          webhookSecret: params.webhookSecret ?? null,
           ...(params.requiredConfirmations === undefined
             ? {}
             : { requiredConfirmations: params.requiredConfirmations }),
@@ -243,32 +237,12 @@ export async function findMerchantsByIds(
   return rows.map(toMerchantRow);
 }
 
-/**
- * The webhook target, read explicitly because `webhook_secret` is a protected
- * column — see `db/protectedColumns.ts`. Named separately from the merchant
- * reads so a delivery path is the only thing that ever loads a signing key, and
- * so the load stays greppable.
- */
-export async function findWebhookTarget(
-  db: DatabaseOrTransaction,
-  merchantId: string,
-): Promise<{ url: string; secret: string } | null> {
-  const [row] = await db
-    .select({ url: merchants.webhookUrl, secret: merchants.webhookSecret })
-    .from(merchants)
-    .where(eq(merchants.id, merchantId));
-  if (!row?.url || !row.secret) return null;
-  return { url: row.url, secret: row.secret };
-}
-
 export interface MerchantPatch {
-  readonly webhookUrl?: string | null | undefined;
-  readonly webhookSecret?: string | null | undefined;
   readonly requiredConfirmations?: number | undefined;
   /**
    * Branding is mutable, unlike `xpub`/`network`/`environment`: it names the
    * merchant to a payer and nothing derives from it. `null` clears the field,
-   * absent leaves it alone — the same contract `webhookUrl` already has.
+   * absent leaves it alone.
    */
   readonly displayName?: string | null | undefined;
   readonly avatarFileId?: string | null | undefined;
@@ -296,8 +270,6 @@ export async function updateMerchantSettings(
   patch: MerchantPatch,
 ): Promise<MerchantRow | null> {
   const values: Record<string, string | number | Date | null> = {};
-  if (patch.webhookUrl !== undefined) values.webhookUrl = patch.webhookUrl;
-  if (patch.webhookSecret !== undefined) values.webhookSecret = patch.webhookSecret;
   if (patch.requiredConfirmations !== undefined) {
     values.requiredConfirmations = patch.requiredConfirmations;
   }

@@ -14,7 +14,8 @@ export {
   socialReceiveCursors,
   socialSendAttributions,
 } from './social';
-export { webhookDeliveries } from './webhooks';
+export { events } from './events';
+export { webhookDeliveries, webhookEndpoints } from './webhooks';
 export { providerEvents } from './providerEvents';
 export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';

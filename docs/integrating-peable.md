@@ -290,8 +290,29 @@ capability only; it can never move funds. (`clientSecret` is the name of the
 
 ## 4. Webhooks — the source of truth for fulfillment
 
-Point a Gateway webhook at your endpoint, then verify every delivery with the
-**same** signer the Gateway uses (algorithm can't drift):
+Register a **webhook endpoint** — Peable generates its signing secret and shows
+it ONCE, in the create response:
+
+```ts
+const endpoint = await peable.webhookEndpoints.create({
+  url: 'https://shop.example/webhooks/peable',
+  enabled_events: ['payment_intent.settled', 'payment_intent.failed'], // or ['*']
+});
+// store endpoint.secret (whsec_…) as PEABLE_WEBHOOK_SECRET — it is never shown again
+```
+
+A merchant may hold up to 16 endpoints, each with its own `enabled_events` and
+secret. Every event is stored once (`peable.events.list()`, kept 30 days) and
+sent to each enabled endpoint whose `enabled_events` match it; a delivery that
+fails is retried with backoff for about three days, and an endpoint that fails
+every delivery for three days is disabled (`disabled_reason:
+'delivery_failures'`, re-enable with `update(id, { disabled: false })`). The
+URL must be `https` (plain `http` only in test mode), on port 443 or 80, and
+name a public host. `peable.webhookDeliveries.list({ webhook_endpoint })` is
+the log; `redeliver(id)` sends the same stored event again.
+
+Verify every delivery with the **same** signer the Gateway uses (algorithm
+can't drift):
 
 ```ts
 import { Peable, WEBHOOK_SIGNATURE_HEADER } from '@peable.to/sdk';
@@ -321,7 +342,16 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
 
 `event.data.object` is the full `PaymentIntent` — except for
 `payment_intent.disputed` and `payment_intent.dispute_closed`, which carry a
-`Dispute`. `event.created` is Unix seconds. `WebhookEventPayload` in `@peable.to/shared-types` is the total map
+`Dispute`. `event.created` is Unix seconds. The envelope also carries
+`api_version` (the wire it was stored under), `data.previous_attributes` (the
+moved fields' prior values, on a change) and `request` (`{ id,
+idempotency_key }` of the API call that caused it, both `null` otherwise).
+
+**Rotating the secret without a gap:** `peable.webhookEndpoints.rollSecret(id,
+{ expires_in_seconds: 3600 })` returns the new secret; for that hour every
+delivery carries one `v1=` signature per secret, so deploy the new one and
+`constructEvent` verifies with either — or pass both,
+`constructEvent(raw, header, [newSecret, oldSecret])`. `WebhookEventPayload` in `@peable.to/shared-types` is the total map
 of event type to resource, so a handler written against it cannot read the
 wrong shape.
 
@@ -605,7 +635,8 @@ SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ ac
 - [ ] Mercaria server: `PEABLE_PUBLIC_KEY` / `PEABLE_SECRET` / `PEABLE_WEBHOOK_SECRET` in env.
 - [ ] Mercaria server: create a Checkout Session at checkout, redirect to `session.url`
       (or embed `@peable.to/sdk/checkout`).
-- [ ] Mercaria server: webhook endpoint verifying `Peable-Signature`, fulfill on `settled`.
+- [ ] Mercaria server: register a webhook endpoint (`peable.webhookEndpoints.create`), store its
+      `secret`, verify `Peable-Signature` on every delivery, fulfill on `settled`.
 - [ ] Test the full flow on **testnet** end-to-end.
 - [ ] Go live: swap to a production-environment credential + `network: 'mainnet'`
       (gated on the mainnet items — see the roadmap).

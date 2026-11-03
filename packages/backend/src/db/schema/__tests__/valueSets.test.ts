@@ -8,6 +8,7 @@ import {
   NETWORK_TYPES,
   PAYMENT_INTENT_STATUS_VALUES,
   PROVIDER_IDS,
+  WEBHOOK_ENABLED_EVENTS,
   WEBHOOK_EVENT_TYPES,
 } from '../valueSets';
 
@@ -58,11 +59,19 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the eleven webhook event types', () => {
+  it('lists the twelve event types', () => {
     // 11th: `billing.observation.updated`, a wake-up delivered only to the
     // merchant that owns the recurring mirror, and only when the recurring
     // relay is explicitly enabled — never to a merchant that did not opt in.
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(11);
+    // 12th: `webhook_endpoint.test`, sent to one endpoint on request.
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(12);
+  });
+
+  /** The test event names its endpoint; it is never subscribed to. */
+  it('lets an endpoint subscribe to every type but the targeted ones, and to *', () => {
+    expect(WEBHOOK_ENABLED_EVENTS[0]).toBe('*');
+    expect(WEBHOOK_ENABLED_EVENTS).not.toContain('webhook_endpoint.test');
+    expect(WEBHOOK_ENABLED_EVENTS).toHaveLength(WEBHOOK_EVENT_TYPES.length);
   });
 
   /**
@@ -70,11 +79,9 @@ describe('closed value sets', () => {
    *
    * This used to assert that EVERY type began `payment_intent.`, which was true
    * and became a constraint nobody had chosen: `connected_account.updated` is
-   * about a seller, and its delivery names no payment intent at all. The prefix
-   * is load-bearing rather than cosmetic —
-   * `webhook_deliveries_intent_event_has_intent_check` keys on it to decide
-   * whether a delivery must carry an intent — so what is asserted now is the
-   * split, which is the thing the CHECK depends on.
+   * about a seller, and its event names no payment intent at all.
+   * `events_intent_event_has_intent_check` keys on the declared scope to decide
+   * whether an event must carry an intent, so what is asserted is the split.
    */
   it('splits into payment events and the ones that are not about a payment', () => {
     const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) => type.startsWith('payment_intent.'));
@@ -82,6 +89,7 @@ describe('closed value sets', () => {
     expect(WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))).toEqual([
       'billing.observation.updated',
       'connected_account.updated',
+      'webhook_endpoint.test',
     ]);
   });
 });

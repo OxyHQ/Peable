@@ -66,7 +66,6 @@ interface MerchantResponse {
   environment: string;
   network: string;
   xpub: string;
-  webhook_url?: string;
   required_confirmations: number;
   display_name?: string;
   avatar_file_id?: string;
@@ -322,7 +321,7 @@ describe('GET /v1/merchants/me', () => {
 });
 
 describe('PATCH /v1/merchants/me', () => {
-  test('updates webhook_url and required_confirmations', async () => {
+  test('updates display_name and required_confirmations, and refuses webhook_url', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -336,16 +335,25 @@ describe('PATCH /v1/merchants/me', () => {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webhook_url: 'https://merchant.example/new-hook',
+          display_name: 'New Name',
           required_confirmations: 3,
         }),
       });
       expect(res.status).toBe(200);
       const body = await readJson(res);
-      expect(body.webhook_url).toBe('https://merchant.example/new-hook');
+      expect(body.display_name).toBe('New Name');
       expect(body.required_confirmations).toBe(3);
       // xpub/network/environment are immutable via this route.
       expect(body.network).toBe('testnet');
+      expect('webhook_url' in body).toBe(false);
+
+      // Where events go is the webhook_endpoint resource now (ADR 0014 D4).
+      const refused = await fetch(`${url}/v1/merchants/me`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ webhook_url: 'https://merchant.example/hook' }),
+      });
+      expect(refused.status).toBe(400);
     } finally {
       s.close();
     }
@@ -486,7 +494,7 @@ describe('merchant branding', () => {
       });
 
       // Patching an unrelated field must not blank the name — `null` clears,
-      // absent means "leave alone", the same contract webhook_url already has.
+      // absent means "leave alone", as every nullable field.
       const patched = await fetch(`${url}/v1/merchants/me`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

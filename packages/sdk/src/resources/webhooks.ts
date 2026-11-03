@@ -1,7 +1,7 @@
 import { verifyWebhook, type WebhookEvent, type WebhookEventType } from '@peable.to/shared-types';
 import { PeableSignatureVerificationError } from '../core/errors';
 
-/** Header the Gateway's `webhookDispatcher.deliver` signs with (`Peable-Signature`). */
+/** The header every delivery is signed in. */
 export const WEBHOOK_SIGNATURE_HEADER = 'Peable-Signature';
 
 /** Default replay-tolerance window, matching the backend's own tests/usage. */
@@ -27,7 +27,12 @@ const WEBHOOK_EVENT_TYPES = {
   'payment_intent.dispute_closed': true,
   'billing.observation.updated': true,
   'connected_account.updated': true,
+  'webhook_endpoint.test': true,
 } satisfies Record<WebhookEventType, true>;
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
 
 /**
  * Structural guard for the parsed payload — the signature already proves the
@@ -46,6 +51,11 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     // biome-ignore lint/suspicious/noPrototypeBuiltins: the published SDK targets ES2020, and Object.hasOwn is ES2022
     Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
     Number.isSafeInteger(candidate.created) &&
+    typeof candidate.api_version === 'string' &&
+    typeof candidate.request === 'object' &&
+    candidate.request !== null &&
+    isNullableString(candidate.request.id) &&
+    isNullableString(candidate.request.idempotency_key) &&
     typeof candidate.data === 'object' &&
     candidate.data !== null &&
     'object' in candidate.data;
@@ -91,11 +101,17 @@ export class WebhooksResource {
    * sides. Throws `PeableSignatureVerificationError` on a bad/stale/tampered
    * signature or a malformed payload — never returns a partially-trusted
    * event.
+   *
+   * `endpointSecret` is the endpoint's `whsec_…` — or several, while you are
+   * rotating: the event is accepted when ANY `v1=` signature in the header
+   * matches ANY of them. During a `roll_secret` overlap Peable signs every
+   * delivery with both the new and the previous secret, so either side of
+   * your switch verifies it.
    */
   constructEvent(
     rawBody: string,
     signatureHeader: string,
-    endpointSecret: string,
+    endpointSecret: string | readonly string[],
     opts: ConstructEventOptions = {},
   ): WebhookEvent {
     const toleranceSec = opts.toleranceSec ?? DEFAULT_TOLERANCE_SEC;

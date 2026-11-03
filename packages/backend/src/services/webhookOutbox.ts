@@ -2,42 +2,55 @@
  * The webhook outbox dispatcher — what turns a durable promise into a delivery.
  *
  * `db/webhooks/webhookOutboxRepository.ts` owns the statements; this owns the
- * schedule, the attempt budget and the loop. Modelled on Mercaria's
- * `payment_outboxes` dispatcher, and on the settlement watcher next door: an
- * `.unref()`-ed timer that cannot hold a test run or the event loop open.
+ * schedule, the attempt budget and the loop. An `.unref()`-ed timer that cannot
+ * hold a test run or the event loop open.
  */
 import { randomUUID } from 'node:crypto';
 import { getDb } from '../db/postgres';
-import { findWebhookTarget } from '../db/merchants/merchantRepository';
+import { findEventById } from '../db/events/eventRepository';
+import {
+  findEndpointSigningTarget,
+  recordEndpointAttempt,
+} from '../db/webhooks/webhookEndpointRepository';
 import {
   claimDueDeliveries,
   recordDeliveryAttempt,
   releaseDeliveryClaim,
   type ClaimedDeliveryRow,
 } from '../db/webhooks/webhookOutboxRepository';
+import { toEventDTO } from '../lib/serialize';
 import { attemptDelivery, type SafeFetchFn } from './webhookDispatcher';
 
 /**
- * The backoff schedule, in milliseconds, one entry per elapsed attempt.
- *
- * Eight entries, reaching a little over eight hours in total — long enough to
- * ride out a merchant's deploy, a certificate renewal or a night, which is the
- * class of outage the previous 150ms budget could not survive. Bounded rather
- * than infinite because an endpoint that has been refusing for eight hours
- * needs an operator, not another request.
+ * The backoff schedule, in milliseconds, one entry per elapsed attempt —
+ * exponential, reaching a little under three days in total (Stripe's horizon,
+ * ADR 0014 D4). Long enough to ride out a merchant's deploy, a certificate
+ * renewal or a weekend; bounded, because an endpoint refusing for three days
+ * needs its owner, not another request — and by then
+ * `recordEndpointAttempt` has disabled it.
  *
  * Read by INDEX of the attempt just completed, so `SCHEDULE_MS[0]` is the wait
  * after the first failure. Running past the end is what makes a row `dead`.
  */
-const SCHEDULE_MS: readonly number[] = [
-  5_000,
-  30_000,
-  2 * 60_000,
-  10 * 60_000,
-  30 * 60_000,
-  2 * 60 * 60_000,
-  5 * 60 * 60_000,
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+export const WEBHOOK_RETRY_SCHEDULE_MS: readonly number[] = [
+  MINUTE,
+  5 * MINUTE,
+  30 * MINUTE,
+  2 * HOUR,
+  5 * HOUR,
+  10 * HOUR,
+  12 * HOUR,
+  12 * HOUR,
+  12 * HOUR,
+  12 * HOUR,
+  6 * HOUR,
 ];
+const SCHEDULE_MS = WEBHOOK_RETRY_SCHEDULE_MS;
+
+/** How long a claimed row whose event or endpoint cannot be read waits before it is tried again. */
+const UNREADABLE_RETRY_MS = MINUTE;
 
 /** Up to ±20% of the delay, so a shared outage does not resynchronize every retry. */
 const JITTER_FRACTION = 0.2;
@@ -137,25 +150,36 @@ async function deliverOne(
 ): Promise<'delivered' | 'retry' | 'terminal'> {
   const db = getDb();
 
-  // Re-read the target rather than trusting the row's snapshot: a merchant who
-  // moved their endpoint mid-backoff should receive the retry at the new one.
-  // This is also the one read allowed to select `webhook_secret`.
-  const target = await findWebhookTarget(db, row.merchantId);
-  if (!target) {
-    // Not an attempt and not the target's fault — the merchant removed their
-    // webhook configuration between enqueue and now. Terminal: there is nothing
-    // left to deliver to, and holding the row pending forever would keep a
-    // queue that no configuration can ever drain.
+  // Re-read the endpoint rather than trusting the row's snapshot: a merchant who
+  // moved their endpoint mid-backoff should receive the retry at the new URL,
+  // signed with the secret(s) live NOW. This is the one read of the secrets.
+  const target = await findEndpointSigningTarget(db, row.endpointId);
+  const event = await findEventById(db, row.eventId);
+  if (!target || !event) {
+    // Unreachable once the foreign keys hold (both cascade). Kept honest for a
+    // row written by an image that predates them: not an attempt, so it costs
+    // no budget, and it is tried again rather than abandoned.
+    await releaseDeliveryClaim(db, row.id, {
+      nextAttemptAt: new Date(now.getTime() + UNREADABLE_RETRY_MS),
+      reason: 'the event or the webhook endpoint of this delivery could not be read',
+    });
+    return 'retry';
+  }
+  if (target.status !== 'enabled') {
+    // Not an attempt and not the target's answer — the endpoint was disabled
+    // (by its owner, or by three days of failures) after this was enqueued.
+    // Terminal: holding it pending would keep a queue nothing will drain. It
+    // can still be redelivered by hand once the endpoint is enabled again.
     await releaseDeliveryClaim(db, row.id, {
       nextAttemptAt: null,
-      reason: 'merchant has no webhook endpoint configured',
+      reason: 'webhook endpoint is disabled',
     });
     return 'terminal';
   }
 
   const outcome = await attemptDelivery(
-    row.payload,
-    { url: target.url, secret: target.secret },
+    toEventDTO(event),
+    { url: target.url, secrets: target.secrets },
     deps.safeFetch ? { safeFetch: deps.safeFetch } : {},
   );
 
@@ -170,6 +194,15 @@ async function deliverOne(
     url: target.url,
     nextAttemptAt: delayMs === null ? null : new Date(now.getTime() + delayMs),
   });
+  const disabled = await recordEndpointAttempt(db, row.endpointId, {
+    delivered: outcome.kind === 'delivered',
+    now,
+  });
+  if (disabled) {
+    process.emitWarning(
+      `Peable disabled webhook endpoint ${row.endpointId}: every delivery failed for three days`,
+    );
+  }
 
   if (outcome.kind === 'delivered') return 'delivered';
   return delayMs === null ? 'terminal' : 'retry';

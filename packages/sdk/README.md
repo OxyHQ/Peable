@@ -21,6 +21,37 @@ offending field in bracket notation (`metadata[order_id]`), and `err.requestId`
 the response's `Request-Id` — quote it to Peable support. A request that is
 well-formed JSON but invalid is a 400, never a 422.
 
+### Webhooks: endpoints, events, deliveries
+
+An event (`evt_…`) is stored once, in the same transaction as the change it
+records, and kept 30 days (`peable.events.list({ type: 'payment_intent.*' })`).
+Each enabled webhook endpoint whose `enabled_events` match it receives one
+delivery, retried for about three days; an endpoint that fails every delivery
+for three days is disabled with `disabled_reason: 'delivery_failures'`.
+
+```ts
+const endpoint = await peable.webhookEndpoints.create({
+  url: 'https://shop.example/webhooks/peable',
+  enabled_events: ['payment_intent.settled'], // or ['*']
+});
+endpoint.secret; // whsec_… — returned only here and by rollSecret; store it
+
+// In the handler, with the RAW body:
+const event = peable.webhooks.constructEvent(rawBody, req.header(WEBHOOK_SIGNATURE_HEADER), secret);
+event.request; // { id, idempotency_key } of the API call that caused it, or nulls
+
+// Rotation without a gap: for an hour every delivery is signed with both secrets.
+const rolled = await peable.webhookEndpoints.rollSecret(endpoint.id, { expires_in_seconds: 3600 });
+peable.webhooks.constructEvent(rawBody, header, [rolled.secret!, secret]);
+
+for await (const delivery of peable.webhookDeliveries.list({ webhook_endpoint: endpoint.id })) {
+  if (delivery.last_status === 'dead') await peable.webhookDeliveries.redeliver(delivery.id);
+}
+```
+
+A merchant has no `webhook_url` any more: the endpoints are the only place
+events are sent.
+
 ### Idempotency: every POST, automatically
 
 Every `POST` the client sends carries an `Idempotency-Key` (ADR 0014 D3). When

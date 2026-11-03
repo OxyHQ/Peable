@@ -46,11 +46,11 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Secret credentials | 🟡 | Oxy application credentials; 2 scopes | Managed from Orbit over Oxy authority; per-resource scopes |
 | Publishable key | ❌ | Provider key of the payment's own mode returned inside `client_action` | `pk_test_` / `pk_live_` |
 | Test + live in one deployment | ✅ | `STRIPE_*_TEST` / `STRIPE_*_LIVE` side by side; credential selects the mode, stored rows resolve by their own; webhooks verified per mode on the same paths (ADR 0017) | |
-| Events API | ❌ | Envelopes exist only inside deliveries | `/v1/events`, 30 days |
-| Webhook endpoints | 🟡 | One URL per merchant, merchant-chosen secret, all events | `we_` resource, many per merchant, `enabled_events`, generated `whsec_`, rotation overlap, per-endpoint `api_version` |
-| Event catalog | 🟡 | 11 types | Stripe-equivalent catalog across all resources |
-| Retry schedule | 🟡 | ~8 h, 8 attempts | 3 days, auto-disable |
-| Delivery log + redeliver | 🟡 | Dashboard list; SVC/dashboard redeliver | Per endpoint, in Orbit and SDK |
+| Events API | ✅ | `evt_` stored in the transaction of its change (ADR 0014 D4); `GET /v1/events` (`type` exact or `prefix.*`, `created`, `delivery_success`) and `/v1/events/:id`; 30-day retention (sweeper + read horizon); envelope carries `api_version`, `previous_attributes`, `request {id, idempotency_key}`; SDK `events` | `types[]` filter; `pending_webhooks` |
+| Webhook endpoints | ✅ | `we_` resource (create/list/retrieve/update/delete), ≤ 16 per merchant, `enabled_events` incl. `*`, generated `whsec_` shown once, `roll_secret` with ≤ 24h dual-signature overlap, per-endpoint `api_version`, URL checked by the dispatcher's SSRF rules; `merchants.webhook_*` removed; SDK `webhookEndpoints` | Endpoint pinned to an older `api_version` once dated versions exist |
+| Event catalog | 🟡 | 11 types + `webhook_endpoint.test`; extensible through `WEBHOOK_EVENT_SCOPES` | Stripe-equivalent catalog across all resources |
+| Retry schedule | ✅ | ~3 days exponential with ±20% jitter; an endpoint failing continuously for 3 days is disabled (`disabled_reason: delivery_failures`) | |
+| Delivery log + redeliver | ✅ | One delivery per (event, endpoint); `GET /v1/webhook_deliveries` (`event`, `webhook_endpoint`), redeliver; Orbit dashboard: endpoints CRUD + roll + "send test event", events, deliveries; SDK `webhookDeliveries` | Prefixed delivery ids |
 
 ## Phase 2 — Payments core
 

@@ -4,62 +4,27 @@ import {
   UpstreamError,
   type SafeFetchResult,
 } from '@oxy.so/core/server';
-import {
-  signWebhook,
-  type WebhookEvent,
-  type WebhookEventPayload,
-  type WebhookEventType,
-} from '@peable.to/shared-types';
-import { newId } from '../lib/ids';
-import { toUnix } from '../lib/time';
+import { signWebhook, type WebhookEvent } from '@peable.to/shared-types';
 
 /** The concrete `safeFetch` signature — injected in tests, real one in prod. */
 export type SafeFetchFn = typeof import('@oxy.so/core/server').safeFetch;
 
-/** Where a merchant's signed webhook events are POSTed, and the signing secret. */
+/** Header every delivery is signed in. */
+export const WEBHOOK_SIGNATURE_HEADER = 'Peable-Signature';
+
+/**
+ * Where one delivery is POSTed, and every secret that signs it: the endpoint's
+ * current secret first, then a rolled one still inside its overlap window.
+ */
 export interface WebhookTarget {
   url: string;
-  secret: string;
+  secrets: readonly string[];
 }
 
 const MILLIS_PER_SECOND = 1000;
 const HTTP_OK_MIN = 200;
 const HTTP_OK_MAX = 300;
 const HTTP_SERVER_ERROR_MIN = 500;
-
-/**
- * Wrap a resource in a Stripe-parity `evt_` webhook envelope. `created` is the
- * emission time in Unix seconds; the resource sits under `data.object`.
- *
- * GENERIC over the event type, so `WebhookEventPayload` decides which resource
- * each one may carry. It used to take a `PaymentIntent` for every type, which
- * was true until the two dispute events arrived and would then have shipped a
- * settlement's payload under `payment_intent.disputed` — the compiler now
- * refuses that pairing at the one place events are built.
- */
-export function buildEvent<K extends WebhookEventType>(
-  type: K,
-  object: WebhookEventPayload[K],
-  /**
-   * The connected account (`ca_…`) the event is about — Stripe's
-   * `event.account` (ADR 0012 D7). Omitted, not `null`, on an event about the
-   * merchant's own payment, so the envelope of every existing event is
-   * byte-for-byte what it was.
-   */
-  account?: string | null,
-): WebhookEvent<K> {
-  return {
-    id: newId('evt'),
-    object: 'event',
-    // Every payload carries its own mode, and the envelope repeats it so a
-    // consumer can route an event without opening `data.object` (ADR 0017).
-    livemode: object.livemode,
-    type,
-    created: toUnix(new Date(Date.now())),
-    ...(account ? { account } : {}),
-    data: { object },
-  } as WebhookEvent<K>;
-}
 
 /** One attempt's conclusion, in the outbox's vocabulary. */
 export type AttemptOutcome =
@@ -91,14 +56,14 @@ export type AttemptOutcome =
  * every attempt destroys it in `finally`.
  */
 export async function attemptDelivery(
-  event: WebhookEvent | Record<string, unknown>,
+  event: WebhookEvent,
   target: WebhookTarget,
   deps: { safeFetch?: SafeFetchFn } = {},
 ): Promise<AttemptOutcome> {
   const safeFetch = deps.safeFetch ?? realSafeFetch;
   const rawBody = JSON.stringify(event);
   const timestamp = Math.floor(Date.now() / MILLIS_PER_SECOND);
-  const signature = signWebhook(target.secret, rawBody, timestamp);
+  const signature = signWebhook(target.secrets, rawBody, timestamp);
 
   let result: SafeFetchResult | null = null;
   try {
@@ -106,7 +71,7 @@ export async function attemptDelivery(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Peable-Signature': signature,
+        [WEBHOOK_SIGNATURE_HEADER]: signature,
       },
       body: rawBody,
     });

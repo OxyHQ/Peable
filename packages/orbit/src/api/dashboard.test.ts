@@ -119,6 +119,47 @@ describe('webhook deliveries', () => {
   });
 });
 
+describe('webhook endpoints and events', () => {
+  it('manages endpoints under the dashboard scope', async () => {
+    answer = (call) =>
+      call.method === 'GET' ? { object: 'list', data: [], has_more: false } : { id: 'we_1' };
+    await api.webhookEndpoints.list(scope);
+    await api.webhookEndpoints.create(scope, {
+      url: 'https://shop.example/hook',
+      enabled_events: ['*'],
+    });
+    await api.webhookEndpoints.update(scope, 'we_1', { disabled: true });
+    await api.webhookEndpoints.rollSecret(scope, 'we_1', 3600);
+    await api.webhookEndpoints.sendTest(scope, 'we_1');
+    await api.webhookEndpoints.delete(scope, 'we_1');
+    await api.events.list(scope, { type: 'payment_intent.*' });
+    await api.webhookDeliveries.list(scope, { webhook_endpoint: 'we_1' });
+    const base = '/v1/dashboard/applications/app%201';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${base}/webhook_endpoints?environment=development`, undefined],
+      [
+        'POST',
+        `${base}/webhook_endpoints?environment=development`,
+        { url: 'https://shop.example/hook', enabled_events: ['*'] },
+      ],
+      ['POST', `${base}/webhook_endpoints/we_1?environment=development`, { disabled: true }],
+      [
+        'POST',
+        `${base}/webhook_endpoints/we_1/roll_secret?environment=development`,
+        { expires_in_seconds: 3600 },
+      ],
+      ['POST', `${base}/webhook_endpoints/we_1/test?environment=development`, {}],
+      ['DELETE', `${base}/webhook_endpoints/we_1?environment=development`, undefined],
+      ['GET', `${base}/events?environment=development&type=payment_intent.*`, undefined],
+      [
+        'GET',
+        `${base}/webhook_deliveries?environment=development&webhook_endpoint=we_1`,
+        undefined,
+      ],
+    ]);
+  });
+});
+
 describe('merchant', () => {
   it('answers null when the application has no merchant in this environment', async () => {
     answer = () => {
@@ -136,7 +177,7 @@ describe('merchant', () => {
 
   it('registers with POST and updates with PATCH, sending the body as given', async () => {
     await api.merchant.register(scope, { display_name: 'Shop', required_confirmations: 3 });
-    await api.merchant.update(scope, { webhook_url: null });
+    await api.merchant.update(scope, { description: null });
     expect(calls).toEqual([
       {
         method: 'POST',
@@ -146,7 +187,7 @@ describe('merchant', () => {
       {
         method: 'PATCH',
         path: '/v1/dashboard/applications/app%201/merchant?environment=development',
-        options: { body: { webhook_url: null } },
+        options: { body: { description: null } },
       },
     ]);
   });

@@ -3,7 +3,11 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { z } from 'zod';
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
-import { LOCAL_TEST_APP, localTestBillingConfiguration } from './stripeTestBilling';
+import {
+  LOCAL_TEST_APP,
+  localTestBillingConfiguration,
+  localTestBillingOwner,
+} from './stripeTestBilling';
 
 async function run() {
   assertLocalStripeTestEnvironment(process.env);
@@ -30,7 +34,10 @@ async function run() {
     const db = await connectPostgres();
     const merchant = await findMerchantByAppEnvironment(db, LOCAL_TEST_APP, 'development');
     if (!merchant) throw new Error('Missing local merchant');
-    const configuration = localTestBillingConfiguration(merchant, account.id);
+    const configuration = localTestBillingConfiguration(
+      await localTestBillingOwner(db, merchant),
+      account.id,
+    );
     const cohort = configuration.cohorts[0];
     const runtime = await configureBillingRuntime(db, JSON.stringify(configuration));
     if (!cohort || !runtime) throw new Error('Missing local billing configuration');

@@ -17,9 +17,12 @@ import {
   seedDelivery,
   seedIntent,
   seedMerchant,
+  seedWebhookEndpoint,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createDashboardRouter } from '../dashboard';
+import { requestIdMiddleware } from '../../lib/requestId';
+import { must } from '../../__tests__/helpers/must';
 import { createFakeOxyFiles } from '../../__tests__/helpers/fakeOxyFiles';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic
@@ -139,6 +142,9 @@ beforeAll(async () => {
   });
 
   const app = express();
+  // As `createGateway` mounts it: every response, and every event a request
+  // causes, carries a `Request-Id`.
+  app.use(requestIdMiddleware);
   app.use(express.json());
   app.use(
     createDashboardRouter({
@@ -279,26 +285,36 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
 });
 
 describe('PATCH /v1/dashboard/applications/:applicationId/merchant', () => {
-  test('updates webhook_url and required_confirmations, never xpub', async () => {
+  test('updates display_name and required_confirmations, never xpub', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
       {
         method: 'PATCH',
         body: JSON.stringify({
-          webhook_url: 'https://merchant.example/rotated-hook',
+          display_name: 'Dashboard Shop',
           required_confirmations: 4,
         }),
       },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      webhook_url: string;
+      display_name: string;
       required_confirmations: number;
       xpub: string;
     };
-    expect(body.webhook_url).toBe('https://merchant.example/rotated-hook');
+    expect(body.display_name).toBe('Dashboard Shop');
     expect(body.required_confirmations).toBe(4);
     expect(body.xpub).toBe(XPUB);
+  });
+
+  /** Where events go is the webhook_endpoint resource now, not a merchant field. */
+  test('refuses webhook_url: endpoints replaced it', async () => {
+    const res = await authedFetch(
+      `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
+      { method: 'PATCH', body: JSON.stringify({ webhook_url: 'https://merchant.example/hook' }) },
+    );
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: { param: string } }).error.param).toBe('webhook_url');
   });
 });
 
@@ -404,14 +420,10 @@ describe('GET /v1/dashboard/applications/:applicationId/payment_intents/:id', ()
 });
 
 describe('GET /v1/dashboard/applications/:applicationId/webhook_deliveries + redeliver', () => {
-  test('lists deliveries and redelivers one', async () => {
-    // A dedicated intent, NOT a sibling describe block's fixture — see the
-    // order-independence note above.
+  test('lists the delivery log and redelivers to the endpoint as it is now', async () => {
     const devMerchant = await findMerchantByAppEnvironment(gatewayDb(), APP_ID, 'development');
-    expect(devMerchant).toBeTruthy();
-    // Unreachable once the assertion above has passed; it is what narrows the
-    // type for the seed calls, which `expect(...).toBeTruthy()` does not do.
-    if (!devMerchant) throw new Error('no development merchant');
+    if (!devMerchant) throw new Error('dev merchant fixture missing');
+
     const intent = await seedIntent(devMerchant, {
       publicId: 'pi_dash_webhook_1',
       amount: '3000000',
@@ -421,36 +433,46 @@ describe('GET /v1/dashboard/applications/:applicationId/webhook_deliveries + red
       idempotencyKey: 'idem_dash_webhook_1',
       expiresAt: new Date(Date.now() + 60_000),
     });
+    const { endpoint } = await seedWebhookEndpoint(devMerchant, {
+      url: 'https://merchant.example/redeliver-hook',
+    });
 
     const delivery = await seedDelivery(devMerchant, intent, {
-      eventId: 'evt_dash_0000000000000001',
+      endpoint,
       eventType: 'payment_intent.settled',
-      url: 'https://merchant.example/hook',
       pending: true,
     });
 
     const listRes = await authedFetch(
-      `/v1/dashboard/applications/${APP_ID}/webhook_deliveries?environment=development`,
+      `/v1/dashboard/applications/${APP_ID}/webhook_deliveries?environment=development&webhook_endpoint=${endpoint.publicId}`,
     );
     expect(listRes.status).toBe(200);
-    const listBody = (await listRes.json()) as { data: { id: string }[] };
-    expect(listBody.data.some((d) => d.id === delivery.id)).toBe(true);
+    const listBody = (await listRes.json()) as {
+      data: { id: string; event_id: string; webhook_endpoint_id: string }[];
+    };
+    expect(listBody.data.map((d) => d.id)).toEqual([delivery.id]);
+    expect(listBody.data[0]?.event_id).toBe(delivery.eventPublicId);
+    expect(listBody.data[0]?.webhook_endpoint_id).toBe(endpoint.publicId);
 
+    // A retry reaches where the endpoint IS.
+    await authedFetch(
+      `/v1/dashboard/applications/${APP_ID}/webhook_endpoints/${endpoint.publicId}?environment=development`,
+      { method: 'POST', body: JSON.stringify({ url: 'https://merchant.example/moved-hook' }) },
+    );
     const redeliverRes = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/webhook_deliveries/${delivery.id}/redeliver?environment=development`,
       { method: 'POST' },
     );
     expect(redeliverRes.status).toBe(200);
-    const redeliverBody = (await redeliverRes.json()) as { delivered: boolean };
+    const redeliverBody = (await redeliverRes.json()) as {
+      id: string;
+      delivered: boolean;
+      event_id: string;
+    };
     expect(redeliverBody.delivered).toBe(true);
-    // Redeliver targets the merchant's CURRENT `webhookUrl` (not whatever the
-    // fixture set it to initially) — read it fresh rather than asserting a
-    // literal, since an earlier PATCH test in this file may have rotated it
-    // (order-independence: this must pass regardless of sibling test order).
-    const currentMerchant = await findMerchantByAppEnvironment(gatewayDb(), APP_ID, 'development');
-    // `?? undefined`: `webhook_url` is a nullable COLUMN, so an unset webhook
-    // reads as `null` while the captured URL is `undefined`.
-    expect(capturedRedeliverFetches.at(-1)).toBe(currentMerchant?.webhookUrl ?? undefined);
+    expect(redeliverBody.id).not.toBe(delivery.id);
+    expect(redeliverBody.event_id).toBe(delivery.eventPublicId);
+    expect(capturedRedeliverFetches).toContain('https://merchant.example/moved-hook');
   });
 
   test('redelivering an unknown delivery id -> 404', async () => {
@@ -461,6 +483,137 @@ describe('GET /v1/dashboard/applications/:applicationId/webhook_deliveries + red
       { method: 'POST' },
     );
     expect(res.status).toBe(404);
+  });
+});
+
+describe('Orbit webhooks through the dashboard (ADR 0014 D4)', () => {
+  const base = `/v1/dashboard/applications/${APP_ID}`;
+
+  test('creates an endpoint showing its secret once, then manages it', async () => {
+    const created = await authedFetch(`${base}/webhook_endpoints?environment=development`, {
+      method: 'POST',
+      body: JSON.stringify({
+        url: 'https://merchant.example/orbit-hook',
+        enabled_events: ['payment_intent.settled'],
+        description: 'orders',
+        metadata: { team: 'payments' },
+      }),
+    });
+    expect(created.status).toBe(200);
+    const endpoint = (await created.json()) as {
+      id: string;
+      secret?: string;
+      livemode: boolean;
+      status: string;
+    };
+    expect(endpoint.id).toStartWith('we_');
+    expect(endpoint.secret).toStartWith('whsec_');
+    expect(endpoint.livemode).toBe(false);
+    expect(endpoint.status).toBe('enabled');
+
+    const read = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}?environment=development`,
+    );
+    expect(read.status).toBe(200);
+    expect(((await read.json()) as { secret?: string }).secret).toBeUndefined();
+
+    const listed = await authedFetch(`${base}/webhook_endpoints?environment=development`);
+    const page = (await listed.json()) as { data: { id: string; secret?: string }[] };
+    expect(page.data.some((row) => row.id === endpoint.id)).toBe(true);
+    expect(page.data.every((row) => row.secret === undefined)).toBe(true);
+
+    const disabled = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}?environment=development`,
+      { method: 'POST', body: JSON.stringify({ disabled: true }) },
+    );
+    expect(((await disabled.json()) as { disabled_reason: string }).disabled_reason).toBe(
+      'disabled_by_merchant',
+    );
+
+    const rolled = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}/roll_secret?environment=development`,
+      { method: 'POST', body: JSON.stringify({ expires_in_seconds: 3600 }) },
+    );
+    expect(rolled.status).toBe(200);
+    const rolledBody = (await rolled.json()) as { secret?: string };
+    expect(rolledBody.secret).toStartWith('whsec_');
+    expect(rolledBody.secret).not.toBe(endpoint.secret);
+
+    const deleted = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}?environment=development`,
+      { method: 'DELETE' },
+    );
+    expect(await deleted.json()).toEqual({
+      id: endpoint.id,
+      object: 'webhook_endpoint',
+      deleted: true,
+    });
+    const gone = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}?environment=development`,
+    );
+    expect(gone.status).toBe(404);
+  });
+
+  test('sends a test event to one endpoint, stored and listed as an event', async () => {
+    const created = await authedFetch(`${base}/webhook_endpoints?environment=development`, {
+      method: 'POST',
+      body: JSON.stringify({
+        url: 'https://merchant.example/test-hook',
+        enabled_events: ['payment_intent.failed'],
+      }),
+    });
+    const endpoint = (await created.json()) as { id: string };
+
+    const tested = await authedFetch(
+      `${base}/webhook_endpoints/${endpoint.id}/test?environment=development`,
+      { method: 'POST' },
+    );
+    expect(tested.status).toBe(200);
+    const delivery = (await tested.json()) as {
+      delivered: boolean;
+      event_type: string;
+      event_id: string;
+      webhook_endpoint_id: string;
+    };
+    expect(delivery).toMatchObject({
+      delivered: true,
+      event_type: 'webhook_endpoint.test',
+      webhook_endpoint_id: endpoint.id,
+    });
+    expect(capturedRedeliverFetches.at(-1)).toBe('https://merchant.example/test-hook');
+
+    const events = await authedFetch(
+      `${base}/events?environment=development&type=webhook_endpoint.*`,
+    );
+    const listed = (await events.json()) as {
+      data: { id: string; type: string; data: { object: { id: string } }; request: unknown }[];
+    };
+    const event = listed.data.find((row) => row.id === delivery.event_id);
+    expect(event?.type).toBe('webhook_endpoint.test');
+    expect(event?.data.object.id).toBe(endpoint.id);
+    // A dashboard write is a request too: the event names it.
+    expect(String((must(event).request as { id: string | null }).id)).toStartWith('req_');
+
+    const one = await authedFetch(`${base}/events/${delivery.event_id}?environment=development`);
+    expect(one.status).toBe(200);
+  });
+
+  test('refuses a non-member, and an unsafe URL', async () => {
+    const outsider = await authedFetch(`${base}/webhook_endpoints?environment=development`, {
+      userId: OUTSIDER_USER_ID,
+    });
+    expect(outsider.status).toBe(403);
+    const outsiderEvents = await authedFetch(`${base}/events?environment=development`, {
+      userId: OUTSIDER_USER_ID,
+    });
+    expect(outsiderEvents.status).toBe(403);
+
+    const unsafe = await authedFetch(`${base}/webhook_endpoints?environment=development`, {
+      method: 'POST',
+      body: JSON.stringify({ url: 'http://169.254.169.254/latest', enabled_events: ['*'] }),
+    });
+    expect(unsafe.status).toBe(400);
+    expect(((await unsafe.json()) as { error: { param: string } }).error.param).toBe('url');
   });
 });
 

@@ -11,10 +11,6 @@ import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server'
 import { getDb } from '../db/postgres';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
-  findDeliveryForMerchant,
-  listDeliveriesForMerchant,
-} from '../db/webhooks/webhookDeliveryRepository';
-import {
   assertAppMembership as realAssertAppMembership,
   type AppMembershipResult,
 } from '../services/appMembership';
@@ -33,10 +29,22 @@ import {
   paymentIntentListFilters,
   resolveMerchantByApp,
 } from './paymentIntents';
-import { redeliverWebhookDelivery } from './webhookDeliveries';
+import { answerWebhookDeliveryList, redeliverWebhookDelivery } from './webhookDeliveries';
+import {
+  answerWebhookEndpointList,
+  createWebhookEndpoint,
+  deleteWebhookEndpoint,
+  retrieveWebhookEndpoint,
+  rollWebhookEndpointSecret,
+  sendWebhookEndpointTest,
+  updateWebhookEndpoint,
+} from './webhookEndpoints';
+import { answerEventList, retrieveEvent } from './events';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import { answerList, listQuerySchema, parseQuery } from '../lib/list';
+import { listQuerySchema, parseQuery } from '../lib/list';
 
 /**
  * Every `/v1/dashboard/*` route is scoped to one `(applicationId, environment)`
@@ -143,8 +151,6 @@ const paymentIntentsListQuery = listQuerySchema({
   ...paymentIntentListFilters,
   ...dashboardScope,
 });
-
-const webhookDeliveriesListQuery = listQuerySchema(dashboardScope);
 
 /**
  * Build the `/v1/dashboard/*` router (F2.5 Phase 0 Task 2) — a human Oxy
@@ -280,57 +286,100 @@ export function createDashboardRouter(deps?: {
     }),
   );
 
-  router.get(
-    '/v1/dashboard/applications/:applicationId/webhook_deliveries',
-    requireOxyUser,
+  /**
+   * Orbit's webhooks surface: endpoints, events and the delivery log, through
+   * the SAME cores the service-authed routes run (`routes/webhookEndpoints.ts`,
+   * `routes/events.ts`, `routes/webhookDeliveries.ts`). Every one passes the
+   * dashboard's access gate first, then resolves the merchant of the
+   * (application, environment) — so a member of one application can never
+   * reach another's endpoints. The writes open the request context, so an event
+   * they cause records this request.
+   */
+  type MerchantCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
+  const asMember = (core: MerchantCore) =>
     wrap(async (req, res) => {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
       if (!access) return;
-
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
       if (!merchant) return;
+      await core(req, res, merchant);
+    });
+  const base = '/v1/dashboard/applications/:applicationId';
 
-      const query = parseQuery(req, res, webhookDeliveriesListQuery);
-      if (!query) return;
+  router.get(
+    `${base}/webhook_endpoints`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerWebhookEndpointList(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/webhook_endpoints`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(createWebhookEndpoint),
+  );
+  router.get(
+    `${base}/webhook_endpoints/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveWebhookEndpoint(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/webhook_endpoints/:id`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(updateWebhookEndpoint),
+  );
+  router.delete(
+    `${base}/webhook_endpoints/:id`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(deleteWebhookEndpoint),
+  );
+  router.post(
+    `${base}/webhook_endpoints/:id/roll_secret`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(rollWebhookEndpointSecret),
+  );
+  router.post(
+    `${base}/webhook_endpoints/:id/test`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember((req, res, merchant) => sendWebhookEndpointTest(req, res, merchant, { safeFetch })),
+  );
 
-      const db = getDb();
-      await answerList(req, res, {
-        query,
-        type: 'webhook_delivery',
-        merchantId: merchant.id,
-        // Delivery ids are `text`, so a cursor of any shape simply matches no
-        // row, and the ownership-scoped lookup produces the same 400.
-        cursor: async (id) => (await findDeliveryForMerchant(db, id, merchant.id))?.id ?? null,
-        // Each row carries its intent's PUBLIC id, joined in by the repository
-        // — resolving it per row here would be an N+1 sized by `limit`.
-        fetch: (page) => listDeliveriesForMerchant(db, { merchantId: merchant.id, page }),
-        serialize: (delivery) => toWebhookDeliveryDTO(delivery, delivery.intentPublicId),
-      });
-    }),
+  router.get(
+    `${base}/events`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerEventList(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/events/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveEvent(req, res, merchant, 'dashboard')),
+  );
+
+  router.get(
+    `${base}/webhook_deliveries`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerWebhookDeliveryList(req, res, merchant, 'dashboard')),
   );
 
   router.post(
-    '/v1/dashboard/applications/:applicationId/webhook_deliveries/:id/redeliver',
+    `${base}/webhook_deliveries/:id/redeliver`,
     requireOxyUser,
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-
+    requestContextMiddleware,
+    asMember(async (req, res, merchant) => {
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
         sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
-      res.status(200).json(toWebhookDeliveryDTO(result.delivery, result.intentPublicId));
+      res.status(200).json(toWebhookDeliveryDTO(result.delivery));
     }),
   );
 

@@ -11,6 +11,7 @@ import type { AddressInfo } from 'node:net';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import { Peable, type BillingRequestOptions } from '@peable.to/sdk';
 import {
+  PEABLE_API_VERSION,
   signWebhook,
   canonicalBillingAuthority,
   canonicalBillingTaxQuote,
@@ -21,6 +22,9 @@ import type { BillingTaxQuoteCalculator } from '../../services/billing/tax-quote
 import type { BillingTaxCheckoutAdapter } from '../../services/billing/tax-checkout';
 import { createSuiteDatabase, dropSuiteDatabase } from '../../db/testDatabase';
 import { insertMerchant } from '../../db/merchants/merchantRepository';
+import { insertEndpoint } from '../../db/webhooks/webhookEndpointRepository';
+import { findEventById } from '../../db/events/eventRepository';
+import { toEventDTO } from '../../lib/serialize';
 import { insertProviderEvent } from '../../db/providers/providerEventRepository';
 import { webhookDeliveries } from '../../db/schema';
 import { createBillingRouter } from '../../routes/billing';
@@ -122,10 +126,17 @@ async function initialize(input: {
     publicId: `merch_${randomUUID().replaceAll('-', '')}`,
     oxyAppId: input.appId,
     environment: 'production',
-    webhookUrl: 'https://example.invalid/synthetic',
-    webhookSecret: 'synthetic-only-secret',
   });
   if (!merchant) throw new Error('Merchant fixture missing');
+  await insertEndpoint(suite.db, {
+    publicId: `we_${randomUUID().replaceAll('-', '')}`,
+    merchantId: merchant.id,
+    url: 'https://example.invalid/synthetic',
+    enabledEvents: ['*'],
+    metadata: {},
+    apiVersion: PEABLE_API_VERSION,
+    secret: 'synthetic-only-secret',
+  });
   owner = { merchantId: merchant.id, oxyAppId: merchant.oxyAppId, environment: 'production' };
   deployment = { provider: 'stripe', platformAccountId: 'acct_fixture', livemode: true };
   cohorts = [
@@ -693,8 +704,15 @@ async function command(message: FixtureMessage) {
       return relayRecurringObservations({ db: suite.db, cohorts, enabled: message.input?.enabled });
     case 'deliveries': {
       const rows = await suite.db.select().from(webhookDeliveries);
-      return rows.map((row) => {
-        const raw = JSON.stringify(row.payload);
+      const rendered = await Promise.all(
+        rows.map(async (row) => {
+          const event = await findEventById(suite.db, row.eventId);
+          if (!event) throw new Error(`delivery ${row.id} names no event`);
+          return toEventDTO(event);
+        }),
+      );
+      return rendered.map((event) => {
+        const raw = JSON.stringify(event);
         const ts = Math.floor(Date.now() / 1000);
         const signature = signWebhook('synthetic-only-secret', raw, ts);
         return {

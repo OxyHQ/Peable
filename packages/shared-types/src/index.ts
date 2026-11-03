@@ -27,12 +27,28 @@ export {
   EXPIRABLE_STATUSES,
   canExpire,
 } from './paymentIntent';
-export type {
-  WebhookEventType,
-  WebhookEvent,
-  WebhookEventPayload,
-  BillingObservation,
+export {
+  PEABLE_API_VERSION,
+  type WebhookEventType,
+  type WebhookEvent,
+  type WebhookEventPayload,
+  type WebhookEventRequest,
+  type BillingObservation,
 } from './event';
+export {
+  WEBHOOK_ENDPOINT_STATUSES,
+  WEBHOOK_ENDPOINT_DISABLED_REASONS,
+  WEBHOOK_ENDPOINTS_MAX_PER_MERCHANT,
+  WEBHOOK_SECRET_ROLL_MAX_EXPIRES_IN_SECONDS,
+  type WebhookEnabledEvent,
+  type WebhookEndpoint,
+  type WebhookEndpointStatus,
+  type WebhookEndpointDisabledReason,
+  type DeletedWebhookEndpoint,
+  type CreateWebhookEndpointParams,
+  type UpdateWebhookEndpointParams,
+  type RollWebhookEndpointSecretParams,
+} from './webhookEndpoint';
 export type { Dispute, DisputeEvidence, DisputeStatus } from './dispute';
 export type {
   CapabilityStatus,

@@ -9,7 +9,12 @@ import type {
   TaxReport,
   TaxSettings,
   UpdateTaxSettingsParams,
+  CreateWebhookEndpointParams,
+  DeletedWebhookEndpoint,
+  UpdateWebhookEndpointParams,
   WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEvent,
 } from '@peable.to/shared-types';
 import { isOrbitApiError, type OrbitTransport, type Query, withQuery } from './transport';
 
@@ -40,6 +45,18 @@ export interface PageParams {
   starting_after?: string;
 }
 
+export interface EventListParams extends PageParams {
+  /** An exact type, or a prefix ending in `.*`. */
+  type?: string;
+}
+
+export interface DeliveryListParams extends PageParams {
+  /** Only the deliveries of this event (`evt_…`). */
+  event?: string;
+  /** Only the deliveries to this endpoint (`we_…`). */
+  webhook_endpoint?: string;
+}
+
 export interface PaymentIntentListParams extends PageParams {
   status?: PaymentIntentStatus;
 }
@@ -50,8 +67,6 @@ export interface RegisterMerchantBody {
   network?: 'mainnet' | 'testnet';
   /** A WATCH-ONLY account xpub. The gateway refuses a private extended key. */
   xpub?: string;
-  webhook_url?: string;
-  webhook_secret?: string;
   required_confirmations?: number;
   display_name?: string;
   description?: string;
@@ -59,8 +74,6 @@ export interface RegisterMerchantBody {
 
 /** `PATCH /merchant`: mirrors `patchMerchantBodySchema` (strict). `null` clears a field. */
 export interface UpdateMerchantBody {
-  webhook_url?: string | null;
-  webhook_secret?: string | null;
   required_confirmations?: number;
   display_name?: string | null;
   description?: string | null;
@@ -130,10 +143,54 @@ export function createDashboardApi(transport: OrbitTransport) {
         get<PaymentIntent>(dashboardPath(scope, `/payment_intents/${id(intentId)}`)),
     },
 
-    webhookDeliveries: {
+    /**
+     * Where this merchant's events are sent (ADR 0014 D4). `secret` is on the
+     * answer of `create` and `rollSecret` ONLY — show it then, or never.
+     */
+    webhookEndpoints: {
       list: (scope: DashboardScope, params: PageParams = {}) =>
+        list<WebhookEndpoint>(dashboardPath(scope, '/webhook_endpoints', { ...params })),
+      create: (scope: DashboardScope, body: CreateWebhookEndpointParams) =>
+        transport.request<WebhookEndpoint>('POST', dashboardPath(scope, '/webhook_endpoints'), {
+          body,
+        }),
+      update: (scope: DashboardScope, endpointId: string, body: UpdateWebhookEndpointParams) =>
+        transport.request<WebhookEndpoint>(
+          'POST',
+          dashboardPath(scope, `/webhook_endpoints/${id(endpointId)}`),
+          { body },
+        ),
+      delete: (scope: DashboardScope, endpointId: string) =>
+        transport.request<DeletedWebhookEndpoint>(
+          'DELETE',
+          dashboardPath(scope, `/webhook_endpoints/${id(endpointId)}`),
+        ),
+      /** `expiresInSeconds` keeps the previous secret signing beside the new one (≤ 24h). */
+      rollSecret: (scope: DashboardScope, endpointId: string, expiresInSeconds: number) =>
+        transport.request<WebhookEndpoint>(
+          'POST',
+          dashboardPath(scope, `/webhook_endpoints/${id(endpointId)}/roll_secret`),
+          { body: { expires_in_seconds: expiresInSeconds } },
+        ),
+      /** A `webhook_endpoint.test` event to this endpoint only; answers its delivery. */
+      sendTest: (scope: DashboardScope, endpointId: string) =>
+        transport.request<WebhookDelivery>(
+          'POST',
+          dashboardPath(scope, `/webhook_endpoints/${id(endpointId)}/test`),
+          { body: {} },
+        ),
+    },
+
+    /** Every event of the last 30 days, as its deliveries carried it. */
+    events: {
+      list: (scope: DashboardScope, params: EventListParams = {}) =>
+        list<WebhookEvent>(dashboardPath(scope, '/events', { ...params })),
+    },
+
+    webhookDeliveries: {
+      list: (scope: DashboardScope, params: DeliveryListParams = {}) =>
         list<WebhookDelivery>(dashboardPath(scope, '/webhook_deliveries', { ...params })),
-      /** Sends the stored envelope again, now, and answers with the updated delivery. */
+      /** Sends the same stored event again, now, as a new delivery, and answers with it. */
       redeliver: (scope: DashboardScope, deliveryId: string) =>
         transport.request<WebhookDelivery>(
           'POST',

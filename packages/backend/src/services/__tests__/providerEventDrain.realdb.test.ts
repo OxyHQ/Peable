@@ -21,7 +21,7 @@ import {
   findIntentByPublicId,
   linkProviderObject,
 } from '../../db/payments/paymentIntentRepository';
-import { webhookDeliveries } from '../../db/schema';
+import { events, webhookDeliveries } from '../../db/schema';
 import {
   runProviderEventDrainPass,
   ProviderEventDeferralError,
@@ -65,10 +65,11 @@ async function linkedCardIntent(objectId: string) {
 
 async function deliveriesFor(intentId: string): Promise<string[]> {
   const rows = await gatewayDb()
-    .select({ eventType: webhookDeliveries.eventType })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows.map((row) => row.eventType);
+    .select({ type: events.type })
+    .from(events)
+    .where(eq(events.paymentIntentId, intentId))
+    .orderBy(events.id);
+  return rows.map((row) => row.type);
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {

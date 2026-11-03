@@ -18,6 +18,7 @@ import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type {
   PaymentIntentRail,
   PaymentIntentStatus,
+  WebhookEnabledEvent,
   WebhookEventType,
 } from '@peable.to/shared-types';
 // TYPE-ONLY, and it must stay that way: the module it names imports the Stripe
@@ -198,11 +199,14 @@ export const DISPUTE_STATUSES = ['needs_response', 'under_review', 'won', 'lost'
 export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
 
 /**
- * What each event is ABOUT — and therefore what its delivery must name.
+ * What each event is ABOUT — and therefore what it must name. This map IS the
+ * event catalog: a new event type is an entry here (plus its payload in
+ * `WebhookEventPayload`), and the CHECKs that list types are derived from it.
  *
  * ## Declared, not inferred from the name
  *
- * `webhook_deliveries_intent_event_has_intent_check` used to key on the
+ * `events_intent_event_has_intent_check` (formerly on `webhook_deliveries`)
+ * used to key on the
  * `payment_intent.` PREFIX: an event whose type started with it had to carry a
  * `payment_intent_id`, and one that did not had to carry none. That worked for
  * the ten events that exist and made the naming convention load-bearing in a
@@ -235,6 +239,8 @@ export const WEBHOOK_EVENT_SCOPES = {
   // delivery names no intent — which is why the column is nullable at all.
   'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
+  // Sent to ONE endpoint on request; about the endpoint, never about a payment.
+  'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
 
 /**
@@ -262,6 +268,31 @@ export const WEBHOOK_EVENT_TYPES = Object.keys(WEBHOOK_EVENT_SCOPES) as readonly
 export const INTENT_WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_TYPES.filter(
   (type) => WEBHOOK_EVENT_SCOPES[type] === 'intent',
 );
+
+/**
+ * The event types never fanned out by subscription — sent only to the one
+ * endpoint they name. A webhook endpoint cannot list them in `enabled_events`.
+ */
+export const TARGETED_WEBHOOK_EVENT_TYPES = [
+  'webhook_endpoint.test',
+] as const satisfies readonly WebhookEventType[];
+
+/**
+ * What `webhook_endpoints.enabled_events` may hold: every subscribable event
+ * type, and `*` for all of them (including types added later).
+ */
+export const WEBHOOK_ENABLED_EVENTS: readonly WebhookEnabledEvent[] = [
+  '*',
+  ...WEBHOOK_EVENT_TYPES.filter(
+    (type) => !(TARGETED_WEBHOOK_EVENT_TYPES as readonly string[]).includes(type),
+  ),
+];
+
+/** Re-exported from the wire contract so the CHECK reads from the tuple the DTO is typed by. */
+export {
+  WEBHOOK_ENDPOINT_DISABLED_REASONS,
+  WEBHOOK_ENDPOINT_STATUSES,
+} from '@peable.to/shared-types';
 
 /**
  * Where one webhook delivery stands.

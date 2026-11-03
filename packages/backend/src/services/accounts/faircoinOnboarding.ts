@@ -34,7 +34,7 @@ import {
 import { findMerchantById } from '../../db/merchants/merchantRepository';
 import { getDb } from '../../db/postgres';
 import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
-import { enqueueConnectedAccountWebhook } from '../intentTransition';
+import { recordConnectedAccountEvent } from '../intentTransition';
 import { resolveMerchantDisplay } from '../merchantDisplay';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { AccountRailMissingError } from './connectedAccountService';
@@ -239,7 +239,7 @@ export async function registerFromOnboarding(input: {
     if (!(await consumeAccountLink(tx, link.id, now))) {
       throw new OnboardingRefusedError('link_expired', link.refreshUrl);
     }
-    await enqueueConnectedAccountWebhook(
+    await recordConnectedAccountEvent(
       tx,
       registered.account.merchantId,
       toConnectedAccountDTO(registered.account),

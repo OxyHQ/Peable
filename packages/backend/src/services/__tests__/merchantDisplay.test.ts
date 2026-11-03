@@ -24,7 +24,6 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
     environment: 'development',
     network: 'testnet',
     xpub: XPUB,
-    webhookUrl: null,
     requiredConfirmations: 1,
     livemode: false,
     displayName: null,

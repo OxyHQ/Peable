@@ -18,6 +18,7 @@ import { io as ioClient } from 'socket.io-client';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyAuthRequest, SafeFetchResult } from '@oxy.so/core/server';
 import { verifyWebhook } from '@peable.to/shared-types';
+import { must } from './helpers/must';
 import { merchants, paymentIntents } from '../db/schema';
 import { findMerchantByAppEnvironment, type MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentByPublicId } from '../db/payments/paymentIntentRepository';
@@ -319,7 +320,8 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   // by primary key descending, so `at(0)` is the most recent delivery.
   const lastDelivery = deliveryLog.at(0);
   expect(lastDelivery?.delivered).toBe(true);
-  expect(lastDelivery?.intentPublicId).toBe(created.id);
+  expect(lastDelivery?.eventType).toBe('payment_intent.settled');
+  expect((JSON.parse(hook.body) as { id: string }).id).toBe(must(lastDelivery).eventPublicId);
 
   // 8. Non-custody invariant: no private-key/seed field was ever persisted.
   // Every column of both rows, not a repository projection: a projection can

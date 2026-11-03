@@ -223,8 +223,13 @@ Decided per relation, never defaulted:
   cannot be deleted, and losing the money record is never the right consequence
   of removing a party. Nothing deletes any of these today; `restrict` states what
   would happen rather than leaving it to whoever writes that statement.
-- `cascade` on `webhook_deliveries.payment_intent_id`. A delivery log is
-  derived from its intent and has no meaning without it.
+- `cascade` on `events.payment_intent_id`, `webhook_deliveries.event_id` and
+  `webhook_deliveries.endpoint_id`. An event about a payment, and a delivery of
+  an event to an endpoint, are derived records with no meaning without what
+  they derive from; the 30-day event sweep and an endpoint's deletion rely on
+  the cascade to take the deliveries with them.
+- `set null` on `recurring_observation_outbox.event_id`: the relay's own record
+  is `relayed_at`, which outlives the swept event.
 - `cascade` on `idempotency_keys.merchant_id`, for the same reason: a stored
   answer is derived from a request to that merchant, lives 24 hours, and is
   not part of the money graph.
@@ -246,12 +251,11 @@ and are wrong:
   impossible. The migration is `post` and carries a backfill, because the
   outgoing image still writes `false` for every environment and the constraint
   cannot land while it serves.
-- **`(webhook_url IS NULL) = (webhook_secret IS NULL)`** would refuse a
-  currently-legal write. Both `POST /v1/merchants` and its PATCH accept either
-  field alone; the incoherent state is reachable and already handled, by
-  `routes/webhookDeliveries.ts` refusing to send when either is missing.
 - **`expires_at > created_at`** compares an application clock against a database
   default and would fail on skew, for no invariant anyone depends on.
+
+(The `(webhook_url IS NULL) = (webhook_secret IS NULL)` question went away
+with the columns: a webhook endpoint's url and secret are both `NOT NULL`.)
 
 Two that ARE there, because every writer was checked:
 
@@ -379,8 +383,9 @@ key; deleting the call reds that test and the wrong-network one, measured.
 
 ## Protected columns
 
-`db/protectedColumns.ts` withholds `merchants.webhook_secret` and
-`merchants.next_derivation_index` from every ordinary read, at the TYPE level.
+`db/protectedColumns.ts` withholds `webhook_endpoints.secret` /
+`previous_secret` and `merchants.next_derivation_index` from every ordinary
+read, at the TYPE level.
 `xpub` and `client_secret` are deliberately NOT in the registry: both appear in
 a DTO by design, so listing them would not withhold anything — it would only
 make every read name them explicitly, which is the opposite of a guard.
@@ -452,6 +457,46 @@ file references. Decisions a reader would otherwise undo:
 - **`oxy_file_events` is pruned after 45 days** by the reconciliation loop: Oxy
   expires an undelivered event after 30, so an older row dedupes nothing.
   `merchant_avatar_audit.event_id` therefore carries no foreign key to it.
+
+## Events and webhook endpoints (ADR 0014 D4)
+
+`events`, `webhook_endpoints` and `webhook_deliveries` (`schema/events.ts`,
+`schema/webhooks.ts`). Decisions a reader would otherwise undo:
+
+- **One writer, in the change's transaction.** `recordEvent`
+  (`services/events.ts`) inserts the event and its deliveries together; the
+  event is the record whether or not any endpoint wants it.
+- **The event is a snapshot.** `data_object` is the object as rendered under
+  `api_version`; deliveries carry no body and render the event at attempt time,
+  so every attempt and redelivery sends the same object.
+- **`livemode` is not a column** on any of the three (ADR 0017): each reads its
+  merchant's in the row's own statement.
+- **`events_intent_event_has_intent_check`** moved here from
+  `webhook_deliveries`, still keyed on the declared scope
+  (`WEBHOOK_EVENT_SCOPES`), not on a name prefix: the row is written inside the
+  money transaction.
+- **`webhook_endpoints_enabled_events_check`** is `<@ ARRAY[…]` over
+  `WEBHOOK_ENABLED_EVENTS` — every subscribable type and `*`, never the targeted
+  `webhook_endpoint.test` — so a type cannot be subscribed that the catalog
+  does not hold.
+- **`webhook_endpoints_secret_check` is only "non-empty".** A generated secret
+  is `whsec_` + 64 hex, but the endpoints migrated from `merchants.webhook_secret`
+  keep the merchant's value byte for byte so their receivers keep verifying.
+- **`(previous_secret IS NULL) = (previous_secret_expires_at IS NULL)`** and
+  **`(status = 'disabled') = (disabled_reason IS NOT NULL)`**: each pair is one
+  fact. The previous secret is only USED while its expiry is in the future,
+  judged by the database clock in `findEndpointSigningTarget`.
+- **The endpoint cap (16) is not a CHECK**: `insertEndpoint` locks the merchant
+  row and counts, so two concurrent creates cannot both pass at fifteen.
+- **The failure run is one statement** (`recordEndpointAttempt`): the
+  comparison with the three-day bound and the disable happen in the same
+  `UPDATE`, gated on `status = 'enabled'`.
+- **Retention is `@oxy.so/db/expiry`** on `events.created_at`
+  (`services/eventSweeper.ts`, 30 days), and every API read filters on the same
+  horizon, so correctness does not wait on the sweep.
+- **Migration `0040`/`0041` hand-build uuid v7 ids** (`pg_temp.peable_uuid7`)
+  for the backfilled rows, from the original instant, so the keyset walk keeps
+  creation order — a v4 from `gen_random_uuid()` would sort them randomly.
 
 ## Generic idempotency (ADR 0014 D3)
 

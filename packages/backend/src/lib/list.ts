@@ -1,5 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type { CreatedRange, KeysetPage } from '../db/keyset';
 import { type ExpandableType, expandObjects, parseExpand } from './expand';
 import { sendError, sendValidationError } from './http';
@@ -85,6 +86,32 @@ export function listQuerySchema<S extends z.ZodRawShape>(filters: S) {
 /** A retrieve's query: `expand[]` and nothing else unless the route says so. */
 export function retrieveQuerySchema<S extends z.ZodRawShape>(extra: S) {
   return z.object({ expand: expandParam.optional(), ...extra }).strict();
+}
+
+/**
+ * Which route family a shared handler core answers for. A dashboard request
+ * (`/v1/dashboard/applications/:applicationId/…`) carries `environment` beside
+ * the list parameters — its Test/Live toggle, validated by the dashboard's
+ * access gate — which the strict service-authed schema would refuse.
+ */
+export type QuerySurface = 'api' | 'dashboard';
+
+const dashboardQueryScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
+
+/** One list schema per surface, for a core shared by the API and the dashboard. */
+export function surfaceListQuery<S extends z.ZodRawShape>(filters: S) {
+  return {
+    api: listQuerySchema(filters),
+    dashboard: listQuerySchema({ ...filters, ...dashboardQueryScope }),
+  } as const;
+}
+
+/** One retrieve schema per surface. */
+export function surfaceRetrieveQuery() {
+  return {
+    api: retrieveQuerySchema({}),
+    dashboard: retrieveQuerySchema(dashboardQueryScope),
+  } as const;
 }
 
 export interface ListQuery {

@@ -51,3 +51,28 @@ test('verifyWebhook rejects a v1 of an unequal length without throwing', () => {
   const shortSig = `t=${TIMESTAMP},v1=deadbeef`;
   expect(verifyWebhook(SECRET, RAW_BODY, shortSig, TOLERANCE_SEC, TIMESTAMP)).toBe(false);
 });
+
+test('signWebhook with two secrets carries one v1 per secret, the first unchanged', () => {
+  const header = signWebhook([SECRET, 'whsec_previous'], RAW_BODY, TIMESTAMP);
+  expect(header.startsWith(EXPECTED_HEADER)).toBe(true);
+  expect(header.split(',').filter((part) => part.startsWith('v1='))).toHaveLength(2);
+});
+
+test('verifyWebhook accepts a dual-signed header with EITHER secret (rotation overlap)', () => {
+  const header = signWebhook(['whsec_new', 'whsec_old'], RAW_BODY, TIMESTAMP);
+  expect(verifyWebhook('whsec_new', RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP)).toBe(true);
+  expect(verifyWebhook('whsec_old', RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP)).toBe(true);
+  expect(verifyWebhook('whsec_other', RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP)).toBe(false);
+});
+
+test('verifyWebhook accepts a list of receiver secrets when any one matches', () => {
+  const header = signWebhook('whsec_new', RAW_BODY, TIMESTAMP);
+  expect(
+    verifyWebhook(['whsec_old', 'whsec_new'], RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP),
+  ).toBe(true);
+  expect(verifyWebhook(['whsec_old', ''], RAW_BODY, header, TOLERANCE_SEC, TIMESTAMP)).toBe(false);
+});
+
+test('signWebhook refuses an empty secret list', () => {
+  expect(() => signWebhook([], RAW_BODY, TIMESTAMP)).toThrow();
+});
