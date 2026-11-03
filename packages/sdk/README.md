@@ -113,3 +113,21 @@ supplies the corresponding review totals; it is not modeled as an automatically
 renewing subscription. The generic checkout shell blocks interactive dismissal
 while processing, while the host retains ownership of terminal outcomes and
 session teardown.
+
+Wallet observations are independent of spending permission. A ready public balance
+can be displayed without an authorization callback; loading, unavailable and error
+states never manufacture a zero. Retry/connect actions are optional host capabilities,
+not a new identity-to-wallet synchronization API.
+
+Installment presentation accepts supplied plan choices, decision states, dated
+schedules and optional repayment/APR/terms details. `validInstallmentQuote` checks
+structural consistency of integer amounts and dates only; it cannot authenticate a
+provider, establish eligibility or approve credit. The host binds selected quotes to
+the current order and merchant configuration. Method completion uses the compositor's
+forward continuation and explicit payment confirmation rather than charging on selection.
+
+External wallet presentation accepts authoritative observation phases. Waiting displays
+a QR/address and progress ring; detection/confirmation are distinct from settlement.
+The host owns observation and cancellation. Full addresses remain selectable and the
+optional copy callback must resolve successfully before the UI reports a copy. Local
+preview simulations and their nonpayable QR values stay in the consuming app.

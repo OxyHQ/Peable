@@ -20,7 +20,7 @@ export type PeableCheckoutSheetProps = Omit<
   messages?: Readonly<Record<string, string>>;
 };
 
-/** Controlled payment presentation. Only the host's onAuthorize callback can start a payment.
+/** Controlled payment presentation. Only host-supplied callbacks can start or observe a payment.
  * No credentials, payment requests, persistence or entitlement updates are owned by this component. */
 export function PeableCheckoutSheet({
   locale = 'en',
