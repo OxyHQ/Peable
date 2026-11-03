@@ -8,7 +8,9 @@ import type { AccountMember, AccountRole } from '@oxy.so/core';
  * - **Orbit**: every `/v1/dashboard/*` route asks oxy-api for the caller's
  *   membership of the application, which oxy-api grants on `app:read` — the
  *   application side of the account's `apps:read`. A member without it gets
- *   403 on every Orbit screen.
+ *   403 on every Orbit screen. What the CALLER may change is judged per action
+ *   on the application lane (`src/scope/permissions.ts`, the gateway's
+ *   `DASHBOARD_PERMISSIONS`); this page reads the account side of each member.
  * - **Peable Tax**: `billing:read` to look, `billing:manage` to change
  *   settings, registrations and approve (`routes/tax.ts`; manage implies read).
  *

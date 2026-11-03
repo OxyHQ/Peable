@@ -14,7 +14,7 @@ import type { WebhookEventType } from '@peable.to/shared-types';
 import { createGateway, type Gateway } from '../../server';
 import { createDashboardRouter } from '../dashboard';
 import { requestIdMiddleware } from '../../lib/requestId';
-import type { AppMembershipResult } from '../../services/appMembership';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { must } from '../../__tests__/helpers/must';
 import {
@@ -117,8 +117,9 @@ beforeAll(() => {
         (req as OxyAuthRequest).accessToken = `token-for-${userId}`;
         next();
       },
-      assertAppMembership: async (userId: string): Promise<AppMembershipResult> =>
-        userId === MEMBER ? { allowed: true, ownerAccountId: 'owner' } : { allowed: false },
+      access: stubOxyAccess({
+        application: (userId) => (userId === MEMBER ? { ownerAccountId: 'owner' } : undefined),
+      }),
     }),
   );
   dashboardServer = app.listen(0);

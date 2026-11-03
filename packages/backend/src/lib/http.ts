@@ -1,5 +1,9 @@
 import type { NextFunction, Request, Response, RequestHandler } from 'express';
-import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
+import {
+  createOxyAuthMiddleware,
+  type OxyAuthRequest,
+  type OxyServiceEnvironment,
+} from '@oxy.so/core/server';
 import type { ProviderError } from '../services/providers/provider';
 import { type ErrorCode, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary';
 import { oxy } from '../oxy';
@@ -241,6 +245,13 @@ export function oxyGuard(middleware: RequestHandler, code?: ErrorCode): RequestH
 export function requireScope(scope: string): RequestHandler {
   return oxyGuard(oxy.middleware.requireScope(scope), 'insufficient_scope');
 }
+
+/**
+ * End-user Oxy auth (a person's bearer), refusing in the ONE error envelope,
+ * built ONCE for the process: `server.ts` hands it to every user-authenticated
+ * router, and none builds its own.
+ */
+export const requireOxyUser: RequestHandler = oxyGuard(createOxyAuthMiddleware(oxy));
 
 /**
  * The scope check of a route EITHER party may call (a merchant credential or a

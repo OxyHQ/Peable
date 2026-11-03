@@ -26,6 +26,7 @@ import { describeError } from '@/api/transport';
 import { formatInstant, formatRelative, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
 import { deliveryStatusLabel } from '@/payments/status';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   eventPath,
   formatDuration,
@@ -39,6 +40,7 @@ import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { usePagedList } from '@/ui/paging';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { DeliveryStatusBadge, ToneBadge } from '@/ui/StatusBadge';
 import {
   buildEndpointBody,
@@ -111,6 +113,8 @@ function EndpointRow({
   const refresh = () => void queryClient.invalidateQueries({ queryKey: webhooksKey(scope) });
   const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
   const status = endpointStatus(endpoint);
+  const { can } = useDashboardPermissions();
+  const locked = !can('webhooks');
 
   const toggle = useMutation({
     mutationFn: () =>
@@ -176,7 +180,7 @@ function EndpointRow({
           appearance="outline"
           size="sm"
           loading={test.isPending}
-          disabled={!status.enabled}
+          disabled={!status.enabled || locked}
           onPress={() => test.mutate()}
         >
           {t('developers.endpoint.test')}
@@ -185,6 +189,7 @@ function EndpointRow({
           appearance="outline"
           size="sm"
           loading={toggle.isPending}
+          disabled={locked}
           onPress={() => toggle.mutate()}
         >
           {status.enabled ? t('developers.endpoint.disable') : t('developers.endpoint.enable')}
@@ -193,6 +198,7 @@ function EndpointRow({
           appearance="outline"
           size="sm"
           loading={roll.isPending}
+          disabled={locked}
           onPress={() => roll.mutate()}
         >
           {t('developers.endpoint.roll')}
@@ -202,6 +208,7 @@ function EndpointRow({
           tone="danger"
           size="sm"
           loading={remove.isPending}
+          disabled={locked}
           onPress={() => remove.mutate()}
         >
           {t('developers.endpoint.delete')}
@@ -283,6 +290,7 @@ function AddEndpoint({
 
 function Endpoints({ scope }: { scope: DashboardScope }) {
   const [revealed, setRevealed] = useState<WebhookEndpointWithSecret | null>(null);
+  const { can } = useDashboardPermissions();
   const pages = usePagedList(endpointKeys(scope), (startingAfter) =>
     dashboardApi.webhookEndpoints.list(scope, {
       limit: PAGE_SIZE,
@@ -299,7 +307,11 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
   return (
     <Section title={t('developers.endpoints')} description={t('developers.endpointsIntro')}>
       {revealed ? <RevealedSecret endpoint={revealed} onDismiss={() => setRevealed(null)} /> : null}
-      <AddEndpoint scope={scope} onCreated={setRevealed} />
+      {can('webhooks') ? (
+        <AddEndpoint scope={scope} onCreated={setRevealed} />
+      ) : (
+        <ActionPermissionNotice action="webhooks" />
+      )}
       {endpoints.length ? (
         endpoints.map((endpoint) => (
           <EndpointRow key={endpoint.id} scope={scope} endpoint={endpoint} onSecret={setRevealed} />
@@ -514,10 +526,13 @@ function DeliveryRow({
   delivery,
   onRedeliver,
   redelivering,
+  locked,
 }: {
   delivery: WebhookDelivery;
   onRedeliver: () => void;
   redelivering: boolean;
+  /** Redelivery needs `webhooks`; the Endpoints section's notice says why. */
+  locked: boolean;
 }) {
   const now = nowSeconds();
   return (
@@ -536,6 +551,7 @@ function DeliveryRow({
           appearance="outline"
           size="sm"
           loading={redelivering}
+          disabled={locked}
           onPress={onRedeliver}
           accessibilityLabel={`${t('developers.redeliver')} ${delivery.id}`}
         >
@@ -571,6 +587,7 @@ function DeliveryRow({
 
 function Deliveries({ scope }: { scope: DashboardScope }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const pages = usePagedList(deliveryKeys(scope), (startingAfter) =>
     dashboardApi.webhookDeliveries.list(scope, {
       limit: PAGE_SIZE,
@@ -603,6 +620,7 @@ function Deliveries({ scope }: { scope: DashboardScope }) {
             key={delivery.id}
             delivery={delivery}
             redelivering={redeliver.isPending && redeliver.variables === delivery.id}
+            locked={!can('webhooks')}
             onRedeliver={() => redeliver.mutate(delivery.id)}
           />
         ))

@@ -27,6 +27,12 @@ import {
   listFilesQuery as listFilesContractQuery,
 } from '@peable.to/contracts';
 import type { FilePurpose } from '@peable.to/shared-types';
+import {
+  type DashboardAction,
+  FILE_UPLOAD_ACTION,
+  FILE_UPLOAD_PURPOSES,
+  type FileUploadPurpose,
+} from '@peable.to/contracts/vocabulary';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findFileByPublicId, listFilesForMerchant } from '../db/files/fileRepository';
@@ -194,6 +200,19 @@ export const parseFileUpload: RequestHandler = (
     next();
   })().catch(next);
 };
+
+/**
+ * The dashboard action an upload or import needs: whatever its purpose is used
+ * for. Read off the body `parseFileUpload` left (or the JSON import's), BEFORE
+ * the core validates it — so a purpose that is not one of ours needs the
+ * strictest action, and the core then refuses it.
+ */
+export function fileUploadAction(req: Request): DashboardAction {
+  const purpose: unknown = (req.body as { purpose?: unknown } | undefined)?.purpose;
+  return (FILE_UPLOAD_PURPOSES as readonly unknown[]).includes(purpose)
+    ? FILE_UPLOAD_ACTION[purpose as FileUploadPurpose]
+    : 'money';
+}
 
 /** `POST /v1/files`. */
 export async function createFile(

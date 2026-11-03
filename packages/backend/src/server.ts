@@ -35,11 +35,12 @@ import { createServer, type Server as HttpServer } from 'node:http';
 import express, { type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
 import { oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
+import type { OxyAccess } from './services/oxyAccess';
 import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
-import { oxyGuard } from './lib/http';
+import { oxyGuard, requireOxyUser as oxyUserAuth } from './lib/http';
 import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
 import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
@@ -146,8 +147,10 @@ export interface GatewayDeps {
    * below so its tighter anonymous budget applies ONLY to those four routes).
    */
   publicRateLimit?: RequestHandler;
-  /** End-user Oxy auth for the social + enrich + dashboard routes (default `createOxyAuthMiddleware(oxy)`). */
+  /** End-user Oxy auth for every user-authenticated router (default `requireOxyUser` from `lib/http.ts`). */
   requireOxyUser?: RequestHandler;
+  /** What Oxy lets a signed-in person do (default the real `oxyAccess`). */
+  access?: OxyAccess;
   /**
    * Identity verifier used ONLY for a socket connection that presents a
    * handshake token (default `oxy.middleware.socket()`); a connection with no
@@ -318,17 +321,19 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
       windowMs: PUBLIC_RATE_LIMIT_WINDOW_MS,
     });
 
+  const requireOxyUser: RequestHandler = deps.requireOxyUser ?? oxyUserAuth;
+
   // Before every resource router: `/v1/charges/search` is not `/v1/charges/:id`.
   app.use(createSearchRouter({ requireMerchant }));
   app.use(createPaymentIntentsRouter({ requireMerchant, optionalServiceAuth }));
-  app.use(createSocialRouter({ requireOxyUser: deps.requireOxyUser }));
-  app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
+  app.use(createSocialRouter({ requireOxyUser }));
+  app.use(createEnrichRouter({ requireOxyUser }));
   app.use(createMerchantsRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createConnectedAccountsRouter({ requireMerchant }));
   app.use(createMoneyRouter({ requireMerchant }));
   // The SELLER's half of connected accounts (ADR 0012 D3): Oxy USER auth, never
   // a service credential — a platform cannot register a seller's key.
-  app.use(createConnectRouter({ requireOxyUser: deps.requireOxyUser }));
+  app.use(createConnectRouter({ requireOxyUser }));
   app.use(createTransfersRouter({ requireMerchant }));
   app.use(createRefundsRouter({ requireMerchant }));
   app.use(createChargesRouter({ requireMerchant }));
@@ -356,7 +361,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // once per process (ADR 0014 D5); `docs/openapi.json` is the committed copy.
   const openApiDocument = buildOpenApiDocument();
   app.get('/openapi.json', (_req, res) => res.json(openApiDocument));
-  app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
+  app.use(createContributionsRouter({ requireOxyUser, access: deps.access }));
   // Checkout (Orbit Phase 3): sessions price with Peable Tax when asked to.
   const checkout = { tax: deps.taxService };
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit, checkout }));
@@ -364,12 +369,13 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createBrandingRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
   app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
-  app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser: deps.requireOxyUser }));
+  app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser, access: deps.access }));
   app.use(createTaxComplianceRouter({ requireMerchant }));
-  app.use(createDashboardTaxComplianceRouter({ requireOxyUser: deps.requireOxyUser }));
+  app.use(createDashboardTaxComplianceRouter({ requireOxyUser, access: deps.access }));
   app.use(
     createDashboardRouter({
-      requireOxyUser: deps.requireOxyUser,
+      requireOxyUser,
+      access: deps.access,
       safeFetch: deps.safeFetch,
       files: deps.oxyFiles,
       checkout,

@@ -4,7 +4,8 @@ import type { Server } from 'node:http';
 import express, { type RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import type { TaxRegistration, TaxSettings } from '@peable.to/shared-types';
-import type { AppMembershipResult } from '../../services/appMembership';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
+import type { ApplicationAnswer } from '../../__tests__/helpers/oxyAccessStub';
 import {
   gatewayDb,
   seedMerchant,
@@ -16,13 +17,9 @@ import { createDashboardTaxRouter } from '../tax';
 
 const APP_ID = 'app_tax_dashboard';
 /** Members by user id: what oxy-api would report for each. */
-const MEMBERS: Record<string, AppMembershipResult> = {
-  owner: {
-    allowed: true,
-    permissions: ['app:read', 'billing:read', 'billing:manage'],
-    official: true,
-  },
-  viewer: { allowed: true, permissions: ['app:read', 'billing:read'], official: true },
+const MEMBERS: Record<string, ApplicationAnswer> = {
+  owner: { permissions: ['app:read', 'billing:read', 'billing:manage'], official: true },
+  viewer: { permissions: ['app:read', 'billing:read'], official: true },
 };
 const requireOxyUser: RequestHandler = (req, _res, next) => {
   const userId = req.header('X-Test-User-Id') ?? 'owner';
@@ -58,7 +55,7 @@ beforeAll(async () => {
     createDashboardTaxRouter({
       tax: createTaxService({ db: gatewayDb(), providers: [provider] }),
       requireOxyUser,
-      assertAppMembership: async (userId) => MEMBERS[userId] ?? { allowed: false },
+      access: stubOxyAccess({ application: (userId) => MEMBERS[userId] }),
     }),
   );
   server = app.listen(0);

@@ -19,6 +19,7 @@ import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { formatInstant, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { Section } from '@/ui/OrbitScreen';
@@ -61,6 +62,9 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
   const [report, setReport] = useState<TaxReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  // Every change here is a Peable Tax decision (`money`); the filing report is a read.
+  const { can } = useDashboardPermissions();
+  const locked = busy || !can('money');
   const [error, setError] = useState('');
   const generation = useRef(0);
 
@@ -151,7 +155,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
               value={legalName}
               onChange={setLegalName}
               autoCapitalize="words"
-              disabled={busy}
+              disabled={locked}
             />
             <View className="flex-row flex-wrap gap-4">
               <View className="flex-1 min-w-48">
@@ -161,7 +165,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   onChange={setCountry}
                   placeholder="US"
                   autoCapitalize="characters"
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-48">
@@ -171,7 +175,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   onChange={setState}
                   placeholder="DE"
                   autoCapitalize="characters"
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-48">
@@ -180,7 +184,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   value={postalCode}
                   onChange={setPostalCode}
                   autoCapitalize="characters"
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
             </View>
@@ -189,13 +193,14 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
               value={defaultTaxCode || null}
               options={codeOptions}
               onChange={setDefaultTaxCode}
-              disabled={busy}
+              disabled={locked}
             />
             <View className="flex-row justify-end">
               <Button
                 appearance="solid"
                 tone="accent"
                 loading={busy}
+                disabled={locked}
                 onPress={() =>
                   void run(async () => {
                     setSettings(
@@ -239,7 +244,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   <Button
                     appearance="outline"
                     size="sm"
-                    disabled={busy}
+                    disabled={locked}
                     onPress={() =>
                       void run(async () => {
                         await dashboardApi.tax.deleteRegistration(scope, row.id);
@@ -255,7 +260,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                     appearance="outline"
                     tone="danger"
                     size="sm"
-                    disabled={busy}
+                    disabled={locked}
                     onPress={() =>
                       void run(async () => {
                         await dashboardApi.tax.endRegistration(scope, row.id, nowSeconds());
@@ -276,7 +281,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   onChange={setRegCountry}
                   placeholder="IE"
                   autoCapitalize="characters"
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-40">
@@ -286,7 +291,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   onChange={setRegState}
                   placeholder="NY"
                   autoCapitalize="characters"
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-56">
@@ -298,7 +303,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                     label: t(`tax.scheme.${scheme}`),
                   }))}
                   onChange={(value) => setRegScheme(value as TaxRegistrationScheme)}
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
             </View>
@@ -306,12 +311,12 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
               label={t('tax.registrationNumber')}
               value={regNumber}
               onChange={setRegNumber}
-              disabled={busy}
+              disabled={locked}
             />
             <View className="flex-row justify-end">
               <Button
                 appearance="outline"
-                disabled={busy || !upper(regCountry)}
+                disabled={locked || !upper(regCountry)}
                 onPress={() =>
                   void run(async () => {
                     await dashboardApi.tax.addRegistration(scope, {
@@ -339,7 +344,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   label={t('tax.productRef')}
                   value={productRef}
                   onChange={setProductRef}
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
               <View className="flex-1 min-w-56">
@@ -348,14 +353,14 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
                   value={productCode || null}
                   options={codeOptions}
                   onChange={setProductCode}
-                  disabled={busy}
+                  disabled={locked}
                 />
               </View>
             </View>
             <View className="flex-row justify-end">
               <Button
                 appearance="outline"
-                disabled={busy || !productRef.trim() || !productCode}
+                disabled={locked || !productRef.trim() || !productCode}
                 onPress={() =>
                   void run(async () => {
                     await dashboardApi.tax.setProductCode(scope, productRef.trim(), productCode);
@@ -373,7 +378,7 @@ export function CollectionSettings({ scope }: { scope: DashboardScope }) {
               <Button
                 appearance="solid"
                 tone="accent"
-                disabled={busy || (settings.status === 'active' && pending === 0)}
+                disabled={locked || (settings.status === 'active' && pending === 0)}
                 onPress={() =>
                   void run(async () => {
                     const result = await dashboardApi.tax.approve(scope);

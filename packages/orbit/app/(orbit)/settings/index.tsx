@@ -25,9 +25,11 @@ import {
 } from '@/merchant/form';
 import { PaymentMethodsSettings } from '@/paymentMethods/PaymentMethodsSettings';
 import { modeForEnvironment } from '@/scope/scope';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { LanguageSettings } from '@/ui/LanguageSettings';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { PageSkeleton } from '@/ui/states';
 import { merchantQueryKey } from '@/merchant/useMerchant';
 
@@ -151,6 +153,8 @@ function MerchantSettings({
   merchant: Merchant | null;
 }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
+  const allowed = can('money');
   const [form, setForm] = useState<MerchantForm>(
     merchant ? formFromMerchant(merchant) : EMPTY_MERCHANT_FORM,
   );
@@ -209,15 +213,22 @@ function MerchantSettings({
         title={merchant ? undefined : t('settings.register')}
         description={merchant ? undefined : t('settings.registerIntro', { mode: modeLabel(scope) })}
       >
+        <ActionPermissionNotice action="money" />
         <MerchantFields
           form={form}
           setForm={setForm}
-          busy={save.isPending}
+          busy={save.isPending || !allowed}
           registering={!merchant}
           invalidConfirmations={invalidConfirmations}
         />
         <View className="flex-row justify-end pt-2">
-          <Button appearance="solid" tone="accent" loading={save.isPending} onPress={submit}>
+          <Button
+            appearance="solid"
+            tone="accent"
+            loading={save.isPending}
+            disabled={!allowed}
+            onPress={submit}
+          >
             {merchant ? t('action.save') : t('settings.register')}
           </Button>
         </View>

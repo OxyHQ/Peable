@@ -16,7 +16,9 @@ import { type DashboardScope, isMerchantMissing } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { t } from '@/i18n';
 import { moneyKeys, useAccount } from '@/money/useMoney';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import {
   AccountMissing,
   ErrorNotice,
@@ -42,6 +44,7 @@ const DESCRIPTOR_FIELDS: readonly BusinessField[] = ['statementDescriptor', 'pay
 
 function BusinessDetails({ scope, account }: { scope: DashboardScope; account: Account }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const current = businessFormOf(account);
   const [form, setForm] = useState<BusinessForm>(current);
   const [invalid, setInvalid] = useState<BusinessFormError | null>(null);
@@ -67,7 +70,7 @@ function BusinessDetails({ scope, account }: { scope: DashboardScope; account: A
     if (result.body === null) toast.success(t('business.nothingChanged'));
     else save.mutate(result.body);
   };
-  const busy = save.isPending;
+  const busy = save.isPending || !can('money');
   const field = (
     name: BusinessField,
     options: { keyboard?: 'url' | 'email-address' | 'number-pad'; multiline?: boolean } = {},
@@ -97,6 +100,7 @@ function BusinessDetails({ scope, account }: { scope: DashboardScope; account: A
 
   return (
     <View className="gap-6">
+      <ActionPermissionNotice action="money" />
       <Section title={t('business.profile')}>
         {PROFILE_FIELDS.map(({ field: name, keyboard, multiline }) =>
           field(name, { ...(keyboard ? { keyboard } : {}), ...(multiline ? { multiline } : {}) }),
@@ -106,7 +110,13 @@ function BusinessDetails({ scope, account }: { scope: DashboardScope; account: A
         {DESCRIPTOR_FIELDS.map((name) => field(name))}
       </Section>
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={busy} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={busy}
+          onPress={submit}
+        >
           {t('business.save')}
         </Button>
       </View>

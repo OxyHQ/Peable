@@ -29,6 +29,7 @@ import type { DashboardScope } from '../api/dashboard';
 import { formatSignedAmount } from '../format/money';
 import { formatInstant, nowSeconds } from '../format/time';
 import { t } from '../i18n';
+import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 import { Choice } from '../ui/Choice';
 import { FileUploadField } from '../ui/FileUploadField';
 import { FormField } from '../ui/FormField';
@@ -89,6 +90,8 @@ export function OverviewSection({ scope }: { scope: DashboardScope }) {
   const ruleSet = useCompliance(scope, 'ruleSet');
   const review = useReviewItems(scope);
   const [replay, setReplay] = useState<TaxAssessmentReplay | null>(null);
+  // Running an assessment is a Peable Tax decision (`money`); replaying one is a read.
+  const manage = useDashboardPermissions().can('money');
   const assess = useComplianceWrite(scope, () => taxComplianceApi.assess(scope));
   const check = useComplianceWrite(scope, async (assessmentId: string) => {
     setReplay(await taxComplianceApi.replay(scope, assessmentId));
@@ -125,6 +128,7 @@ export function OverviewSection({ scope }: { scope: DashboardScope }) {
               tone="accent"
               size="sm"
               loading={assess.isPending}
+              disabled={!manage}
               onPress={() => assess.mutate(undefined)}
             >
               {t('compliance.overview.run')}
@@ -247,6 +251,7 @@ export function OverviewSection({ scope }: { scope: DashboardScope }) {
 
 export function BusinessSection({ scope }: { scope: DashboardScope }) {
   const profile = useCompliance(scope, 'profile');
+  const manage = useDashboardPermissions().can('money');
   const locations = useCompliance(scope, 'locations');
   const destinations = useCompliance(scope, 'destinations');
   const [draft, setDraft] = useState<{
@@ -304,7 +309,11 @@ export function BusinessSection({ scope }: { scope: DashboardScope }) {
   if (!profile.data)
     return <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.business')} />;
   const busy =
-    save.isPending || addLocation.isPending || addDestination.isPending || endLocation.isPending;
+    !manage ||
+    save.isPending ||
+    addLocation.isPending ||
+    addDestination.isPending ||
+    endLocation.isPending;
 
   return (
     <View className="gap-6">
@@ -528,6 +537,7 @@ const NO_SCHEME = 'none';
 
 export function RegistrationsSection({ scope }: { scope: DashboardScope }) {
   const declarations = useCompliance(scope, 'declarations');
+  const manage = useDashboardPermissions().can('money');
   const [form, setForm] = useState({
     country: '',
     state: '',
@@ -568,7 +578,7 @@ export function RegistrationsSection({ scope }: { scope: DashboardScope }) {
     return (
       <PageSkeleton variant="table" accessibilityLabel={t('compliance.section.registrations')} />
     );
-  const busy = add.isPending || change.isPending;
+  const busy = !manage || add.isPending || change.isPending;
   const statusOptions = options(TAX_REGISTRATION_DECLARATION_STATUSES, 'compliance.status');
   const dated = form.status === 'registered' || form.status === 'ended';
 
@@ -742,6 +752,7 @@ export function DocumentsSection({ scope }: { scope: DashboardScope }) {
   const documents = useCompliance(scope, 'documents');
   const [uploaded, setUploaded] = useState<FileObject | null>(null);
   const [kind, setKind] = useState<TaxDocumentKind>('registration_certificate');
+  const manage = useDashboardPermissions().can('money');
   const attach = useComplianceWrite(scope, (file: string) =>
     taxComplianceApi.attachDocument(scope, { file, kind }),
   );
@@ -794,7 +805,7 @@ export function DocumentsSection({ scope }: { scope: DashboardScope }) {
           disabled={attach.isPending}
           onUploaded={setUploaded}
         />
-        {uploaded ? (
+        {uploaded && manage ? (
           <View className="gap-3">
             <Muted>
               {t('compliance.documents.ready', { name: uploaded.filename ?? uploaded.id })}
@@ -828,6 +839,7 @@ export function DocumentsSection({ scope }: { scope: DashboardScope }) {
 function ReviewRow({ scope, item }: { scope: DashboardScope; item: TaxReviewItem }) {
   const [decision, setDecision] = useState<TaxReviewDecision>('will_register');
   const [note, setNote] = useState('');
+  const manage = useDashboardPermissions().can('money');
   const decide = useComplianceWrite(scope, () =>
     taxComplianceApi.resolveReviewItem(scope, item.id, { decision, note: note.trim() || null }),
   );
@@ -856,7 +868,7 @@ function ReviewRow({ scope, item }: { scope: DashboardScope; item: TaxReviewItem
                 value={decision}
                 options={options(TAX_REVIEW_DECISIONS, 'compliance.decision')}
                 onChange={(value) => setDecision(value as TaxReviewDecision)}
-                disabled={decide.isPending}
+                disabled={decide.isPending || !manage}
               />
             </Cell>
             <Cell wide>
@@ -864,7 +876,7 @@ function ReviewRow({ scope, item }: { scope: DashboardScope; item: TaxReviewItem
                 label={t('compliance.review.note')}
                 value={note}
                 onChange={setNote}
-                disabled={decide.isPending}
+                disabled={decide.isPending || !manage}
               />
             </Cell>
           </Fields>
@@ -873,6 +885,7 @@ function ReviewRow({ scope, item }: { scope: DashboardScope; item: TaxReviewItem
               appearance="outline"
               size="sm"
               loading={decide.isPending}
+              disabled={!manage}
               onPress={() => decide.mutate(undefined)}
             >
               {t('compliance.review.record')}

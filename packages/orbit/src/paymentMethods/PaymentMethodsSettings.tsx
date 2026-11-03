@@ -16,9 +16,11 @@ import { dashboardApi } from '../api/client';
 import { isMerchantMissing, type DashboardScope } from '../api/dashboard';
 import { describeError } from '../api/transport';
 import { t } from '../i18n';
+import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 import { Choice } from '../ui/Choice';
 import { FormField } from '../ui/FormField';
 import { ErrorNotice, Section } from '../ui/OrbitScreen';
+import { ActionPermissionNotice } from '../ui/ActionPermissionNotice';
 import {
   canToggle,
   currenciesText,
@@ -52,6 +54,7 @@ function MethodRow({
   type: PaymentMethodConfigurationType;
 }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const entry = configuration[type];
   const toggle = useMutation({
     mutationFn: (on: boolean) =>
@@ -88,7 +91,7 @@ function MethodRow({
       <Switch
         accessibilityLabel={t('methods.toggle', { method: label })}
         checked={entry.display_preference.value === 'on'}
-        disabled={!canToggle(entry) || toggle.isPending}
+        disabled={!canToggle(entry) || !can('configure') || toggle.isPending}
         onCheckedChange={(on) => toggle.mutate(on)}
       />
     </View>
@@ -159,6 +162,8 @@ function ConfigurationSection({ scope }: { scope: DashboardScope }) {
 
 function DomainRow({ scope, domain }: { scope: DashboardScope; domain: PaymentMethodDomain }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
+  const allowed = can('configure');
   const refresh = () => void queryClient.invalidateQueries({ queryKey: domainKey(scope) });
   const toggle = useMutation({
     mutationFn: () =>
@@ -198,6 +203,7 @@ function DomainRow({ scope, domain }: { scope: DashboardScope; domain: PaymentMe
           appearance="outline"
           size="sm"
           loading={validate.isPending}
+          disabled={!allowed}
           onPress={() => validate.mutate()}
         >
           {t('domains.validate')}
@@ -206,6 +212,7 @@ function DomainRow({ scope, domain }: { scope: DashboardScope; domain: PaymentMe
           appearance="outline"
           size="sm"
           loading={toggle.isPending}
+          disabled={!allowed}
           onPress={() => toggle.mutate()}
         >
           {domain.enabled ? t('domains.disable') : t('domains.enable')}
@@ -217,6 +224,8 @@ function DomainRow({ scope, domain }: { scope: DashboardScope; domain: PaymentMe
 
 function AddDomain({ scope }: { scope: DashboardScope }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
+  const allowed = can('configure');
   const [input, setInput] = useState('');
   const [problem, setProblem] = useState<string | null>(null);
   const create = useMutation({
@@ -248,10 +257,16 @@ function AddDomain({ scope }: { scope: DashboardScope }) {
           placeholder="shop.example.com"
           hint={problem ?? t('domains.addHelp')}
           invalid={problem !== null}
-          disabled={create.isPending}
+          disabled={create.isPending || !allowed}
         />
       </View>
-      <Button appearance="solid" tone="accent" loading={create.isPending} onPress={submit}>
+      <Button
+        appearance="solid"
+        tone="accent"
+        loading={create.isPending}
+        disabled={!allowed}
+        onPress={submit}
+      >
         {t('domains.addAction')}
       </Button>
     </View>
@@ -301,6 +316,7 @@ function DomainsSection({ scope }: { scope: DashboardScope }) {
 export function PaymentMethodsSettings({ scope }: { scope: DashboardScope }) {
   return (
     <View className="gap-6">
+      <ActionPermissionNotice action="configure" />
       <ConfigurationSection scope={scope} />
       <DomainsSection scope={scope} />
     </View>

@@ -1,19 +1,17 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { oxy } from '../oxy';
-import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
+import { getRequiredOxyUserId } from '@oxy.so/core/server';
 import { type EnrichResponse, enrichParams } from '@peable.to/contracts';
 import { enrichAddresses } from '../services/enrichment';
-import { sendValidationError, wrap, oxyGuard } from '../lib/http';
+import { sendValidationError, wrap } from '../lib/http';
 
 /**
  * Build the transaction-enrichment router (spec §4.8). `requireOxyUser`
  * mirrors `createSocialRouter`'s injectable auth — the CALLER's own signed-in
  * Oxy session, since results are scoped to the caller's own payments.
  */
-export function createEnrichRouter(deps?: { requireOxyUser?: RequestHandler }): Router {
-  const requireOxyUser: RequestHandler =
-    deps?.requireOxyUser ?? oxyGuard(createOxyAuthMiddleware(oxy));
+export function createEnrichRouter(deps: { requireOxyUser: RequestHandler }): Router {
+  const { requireOxyUser } = deps;
   const router = Router();
 
   router.post(

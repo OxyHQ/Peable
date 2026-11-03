@@ -25,7 +25,9 @@ import {
   serverErrors,
 } from '@/links/linkForm';
 import { linkKeys } from '@/links/useLinks';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 
 function Created({ link, onAnother }: { link: PaymentLink; onAnother: () => void }) {
   const router = useRouter();
@@ -126,9 +128,16 @@ function Builder({ scope }: { scope: DashboardScope }) {
 }
 
 export default function NewPaymentLinkScreen() {
+  const { can } = useDashboardPermissions();
   return (
     <OrbitScreen title={t('links.new')} description={t('links.newIntro')}>
-      {({ scope }) => <Builder key={`${scope.applicationId}:${scope.environment}`} scope={scope} />}
+      {({ scope }) =>
+        can('configure') ? (
+          <Builder key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
+        ) : (
+          <ActionPermissionNotice action="configure" />
+        )
+      }
     </OrbitScreen>
   );
 }

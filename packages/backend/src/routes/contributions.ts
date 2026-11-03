@@ -1,5 +1,4 @@
 import { Router, type RequestHandler } from 'express';
-import { createOxyAuthMiddleware, type OxyAuthRequest } from '@oxy.so/core/server';
 import {
   createContributionSchema,
   contributionOperationKeySchema,
@@ -9,7 +8,6 @@ import {
   contributionScopeQuerySchema,
   type ContributionCollection,
 } from '@peable.to/contracts';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
   findLinkForMerchant,
@@ -18,7 +16,12 @@ import {
   type PaymentLinkRow,
 } from '../db/payments/paymentLinkRepository';
 import { createContributionLink, contributionRefunds } from '../db/payments/contributionRepository';
-import { authorizeContributionOrganization } from '../services/contributionAccess';
+import {
+  authorizeAccount,
+  authorizeApplication,
+  type OxyAccess,
+  oxyAccess,
+} from '../services/oxyAccess';
 import { resolveRail } from '../services/createIntent';
 import { resolveMerchantByApp } from './paymentIntents';
 import { newId } from '../lib/ids';
@@ -56,41 +59,44 @@ function dto(row: PaymentLinkRow) {
     created: toUnix(row.createdAt),
   });
 }
-export function createContributionsRouter(
-  deps: {
-    requireOxyUser?: RequestHandler;
-    authorize?: typeof authorizeContributionOrganization;
-  } = {},
-) {
+/**
+ * An organization's contribution links, managed by a signed-in member through
+ * the same gate as the dashboard (`services/oxyAccess.ts`): reading is `read`,
+ * creating or withdrawing a link is `configure` (`DASHBOARD_PERMISSIONS`). The
+ * path's organization must be an organization account, and the active
+ * application must be one it owns.
+ */
+export function createContributionsRouter(deps: {
+  requireOxyUser: RequestHandler;
+  access?: OxyAccess;
+}) {
   const router = Router();
-  const auth = deps.requireOxyUser ?? createOxyAuthMiddleware(oxy);
-  const authorize = deps.authorize ?? authorizeContributionOrganization;
+  const access = deps.access ?? oxyAccess;
   const root = '/v1/organizations/:organizationId/applications/:applicationId/contributions';
-  router.use(root, auth, (req, res, next) => {
+  router.use(root, deps.requireOxyUser, (req, res, next) => {
     void (async () => {
-      const token = (req as OxyAuthRequest).accessToken;
-      if (!token) {
-        sendError(res, 401, 'authentication_error', 'Sign in to manage contributions');
-        return;
-      }
       const org = req.params.organizationId,
         app = req.params.applicationId;
       if (!org || !app) {
         sendError(res, 400, 'invalid_request_error', 'Organization and application are required');
         return;
       }
-      try {
-        if (!(await authorize(token, org, app))) {
-          sendError(
-            res,
-            403,
-            'permission_error',
-            'Organization contribution management is not permitted',
-          );
-          return;
-        }
-      } catch {
-        sendError(res, 503, 'api_error', 'Organization access cannot be verified');
+      const action = req.method === 'GET' ? 'read' : 'configure';
+      const application = await authorizeApplication(req, res, app, action, access);
+      if (!application) return;
+      const organization = await authorizeAccount(req, res, org, access);
+      if (!organization) return;
+      if (
+        organization.kind !== 'organization' ||
+        application.ownerAccountId !== org ||
+        !application.active
+      ) {
+        sendError(
+          res,
+          403,
+          'permission_error',
+          'contributions are managed for an active application of the organization that owns it',
+        );
         return;
       }
       const scope = environmentOf.safeParse(req.query);

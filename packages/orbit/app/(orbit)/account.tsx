@@ -30,8 +30,10 @@ import {
 } from '@/money/requirements';
 import { moneyKeys, useAccount } from '@/money/useMoney';
 import { modeForEnvironment } from '@/scope/scope';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { orbitOrigin } from '@/ui/origin';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { ErrorNotice, Field, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
 import { PageSkeleton } from '@/ui/states';
@@ -50,6 +52,7 @@ async function openOnboarding(url: string): Promise<void> {
 
 function CreateAccount({ scope }: { scope: DashboardScope }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const [form, setForm] = useState<CreateAccountForm>(EMPTY_CREATE_ACCOUNT_FORM);
   const [invalid, setInvalid] = useState(false);
   const create = useMutation({
@@ -68,12 +71,13 @@ function CreateAccount({ scope }: { scope: DashboardScope }) {
     setInvalid(!result.ok);
     if (result.ok) create.mutate(result.body);
   };
-  const busy = create.isPending;
+  const busy = create.isPending || !can('money');
   return (
     <Section
       title={t('account.create.title')}
       description={t('account.create.intro', { mode: modeLabel(scope) })}
     >
+      <ActionPermissionNotice action="money" />
       <FormField
         label={t('account.create.country')}
         value={form.country}
@@ -105,7 +109,13 @@ function CreateAccount({ scope }: { scope: DashboardScope }) {
         </SegmentedControl>
       </View>
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={busy} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={create.isPending}
+          disabled={busy}
+          onPress={submit}
+        >
           {t('account.create.submit')}
         </Button>
       </View>
@@ -115,6 +125,7 @@ function CreateAccount({ scope }: { scope: DashboardScope }) {
 
 function Onboarding({ scope, account }: { scope: DashboardScope; account: Account }) {
   const action = onboardingAction(account);
+  const { can } = useDashboardPermissions();
   const link = useMutation({
     // Minted on the click and opened at once: a stored link is one that expired.
     mutationFn: () => dashboardApi.account.createLink(scope, onboardingLinkBody(orbitOrigin())),
@@ -123,11 +134,13 @@ function Onboarding({ scope, account }: { scope: DashboardScope; account: Accoun
   });
   return (
     <Section title={t('account.onboarding')} description={t('account.onboarding.help')}>
+      <ActionPermissionNotice action="money" />
       <View className="flex-row">
         <Button
           appearance={action === 'update' ? 'outline' : 'solid'}
           tone="accent"
           loading={link.isPending}
+          disabled={!can('money')}
           onPress={() => link.mutate()}
         >
           {t(`account.onboarding.${action}`)}

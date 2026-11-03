@@ -31,13 +31,26 @@ iOS and Android.
 | Contributions | Contribution links over Orbit's own transport, checked against `@peable.to/contracts` (only Orbit has them) | `/v1/organizations/:org/applications/:app/contributions*` |
 | Settings | Register or update the merchant for the selected application and mode: branding (display name, description), required confirmations, and — at registration — the optional FairCoin network + **watch-only** xpub; the **logo** (`business_logo` file, beside the avatar); **Payment methods**: one row per method of the selected configuration with an on/off switch, availability, the currencies it applies to and, when it cannot be offered, why (shown disabled, never hidden); **Wallet domains** for Apple Pay / Google Pay (add, check again, enable/disable, per-wallet status) | `GET/POST/PATCH …/merchant`, `POST …/files`, `GET/POST …/payment_method_configurations[/:id]`, `GET/POST …/payment_method_domains[/:id]`, `POST …/payment_method_domains/:id/validate` |
 | Settings › Business details | The merchant's own account's business profile (name, website, support email and page, what it sells, MCC) and its card and payout statement descriptors, checked as the gateway checks them; a field can be changed, not removed | `GET/POST …/account` |
-| Settings › Team | The members of the Oxy account that owns the application (direct, inherited, invited) and what each may do in Peable — Orbit (`apps:read`, what the membership check rests on), view / manage Peable Tax (`billing:read` / `billing:manage`) — read from their effective permissions, never their role name. Read-only: changes are made in Oxy Console (linked). Without `members:read` the page says so | Oxy `accounts.members.list`, `users.getMany` |
+| Settings › Team | The members of the Oxy account that owns the application (direct, inherited, invited) and what each may do in Peable — Orbit (`apps:read`, what reading rests on), view / manage Peable Tax (`billing:read` / `billing:manage`) — read from their effective ACCOUNT permissions, never their role name. What a change needs is per action (below). Read-only: changes are made in Oxy Console (linked). Without `members:read` the page says so | Oxy `accounts.members.list`, `users.getMany` |
 | Settings › Language | English or Spanish. The language is the Oxy account's (Oxy ADR 0022): `OxyProvider` resolves it — account, else guest choice, else the device / browser — and calls `setLocale`; the switcher changes it through Oxy (`setLanguage`), and every screen re-renders under the new catalog | Oxy |
 
 `…` is `/v1/dashboard/applications/:applicationId`, always with `?environment=`.
 Every call is made as the signed-in **Oxy user**; the gateway asks oxy-api for the
 caller's membership of the application on each request. There is no merchant
 credential in Orbit, and none may be added: a browser is not a place to keep one.
+
+**Each write needs a specific application permission, not mere membership.** The one
+map is `DASHBOARD_PERMISSIONS` in `@peable.to/contracts/vocabulary` (with
+`allowsDashboardAction` and `FILE_UPLOAD_ACTION`): `read` → `app:read` (every GET, the search, a report run),
+`configure` → `app:update` (branding and emails, the catalog, payment links, contribution
+links, payment methods and wallet domains, a logo), `webhooks` → `webhooks:update`,
+`money` → `billing:manage` (the merchant, the provider account and its onboarding,
+payouts, Connect, disputes, the billing engine, every Peable Tax change), `taxRead` →
+`billing:read` (Peable Tax reads; `billing:manage` contains it). The gateway refuses by
+it; Orbit judges the SAME map over the selected application's
+`callerMembership.permissions` from `apps.list` (`useDashboardPermissions().can(action)`,
+`src/scope/`) and disables or hides what the person lacks, with one `ActionPermissionNotice`
+per page or section naming the permission. The language switcher is personal and never gated.
 
 The wallet has no Tax or Contributions screen: those are Orbit's alone.
 

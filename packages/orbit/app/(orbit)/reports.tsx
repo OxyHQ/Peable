@@ -34,6 +34,7 @@ import { describeError, isOrbitApiError } from '@/api/transport';
 import { ORBIT_CURRENCY_DECIMALS } from '@/format/money';
 import { formatInstant, nowSeconds, utcDay } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   buildReportRunBody,
   downloadableFile,
@@ -98,6 +99,8 @@ function GetReport({
   setForm: (update: (prior: ReportRunForm) => ReportRunForm) => void;
 }) {
   const queryClient = useQueryClient();
+  // A run materialises the rows a download streams, so it is a READ (`app:read`).
+  const { can } = useDashboardPermissions();
   const [period, setPeriod] = useState<Period>('thisMonth');
   const [columnSet, setColumnSet] = useState<ColumnSet>('default');
   const [invalid, setInvalid] = useState<ReportRunFormError | null>(null);
@@ -293,7 +296,13 @@ function GetReport({
         >
           {t('reports.run.download')}
         </Button>
-        <Button appearance="solid" tone="accent" loading={create.isPending} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={create.isPending}
+          disabled={!can('read')}
+          onPress={submit}
+        >
           {pending && !create.isPending ? t('reports.run.retry') : t('reports.run.submit')}
         </Button>
       </View>

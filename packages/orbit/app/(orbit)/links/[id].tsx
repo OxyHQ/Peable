@@ -25,7 +25,9 @@ import {
   serverErrors,
 } from '@/links/linkForm';
 import { linkKeys, useLink } from '@/links/useLinks';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
@@ -74,6 +76,8 @@ function LineItems({ link }: { link: PaymentLink }) {
 
 function EditOptions({ scope, link }: { scope: DashboardScope; link: PaymentLink }) {
   const refresh = useRefresh(scope);
+  const { can } = useDashboardPermissions();
+  const locked = !can('configure');
   const [form, setForm] = useState<LinkOptionsForm>(() => linkOptionsOf(link));
   const [errors, setErrors] = useState<LinkFormErrors>({});
   const save = useMutation({
@@ -98,9 +102,20 @@ function EditOptions({ scope, link }: { scope: DashboardScope; link: PaymentLink
   };
   return (
     <Section title={t('links.options')}>
-      <LinkOptionsFields form={form} onChange={setForm} errors={errors} disabled={save.isPending} />
+      <LinkOptionsFields
+        form={form}
+        onChange={setForm}
+        errors={errors}
+        disabled={save.isPending || locked}
+      />
       <View className="flex-row justify-end">
-        <Button appearance="solid" tone="accent" loading={save.isPending} onPress={submit}>
+        <Button
+          appearance="solid"
+          tone="accent"
+          loading={save.isPending}
+          disabled={locked}
+          onPress={submit}
+        >
           {t('action.save')}
         </Button>
       </View>
@@ -110,6 +125,7 @@ function EditOptions({ scope, link }: { scope: DashboardScope; link: PaymentLink
 
 function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink }) {
   const refresh = useRefresh(scope);
+  const { can } = useDashboardPermissions();
   const toggle = useMutation({
     mutationFn: () => dashboardApi.paymentLinks.update(scope, link.id, { active: !link.active }),
     onSuccess: (updated) => {
@@ -120,6 +136,7 @@ function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink 
   });
   return (
     <View className="gap-6">
+      <ActionPermissionNotice action="configure" />
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {linkSummary(link) || link.id}
@@ -141,6 +158,7 @@ function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink 
                   appearance="outline"
                   size="sm"
                   loading={toggle.isPending}
+                  disabled={!can('configure')}
                   onPress={() => toggle.mutate()}
                 >
                   {link.active ? t('links.deactivate') : t('links.activate')}

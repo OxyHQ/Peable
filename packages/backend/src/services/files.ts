@@ -30,6 +30,9 @@ import {
   type FilePurpose,
   type FileType,
 } from '@peable.to/shared-types';
+import { Readable } from 'node:stream';
+import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
+import { readResponseBody } from '@oxy.so/core/server';
 import { newId } from '../lib/ids';
 import { toUnix } from '../lib/time';
 import { getDb } from '../db/postgres';
@@ -346,14 +349,17 @@ export async function readFileBytes(
   if (!link) {
     throw new FileRequestError(`${row.publicId} cannot be read and cannot be sent`, param);
   }
+  const unavailable = () =>
+    new FileStorageUnavailableError('the file could not be read right now; try again');
   const response = await fetch(link.url, { signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
-  if (!response.ok) {
-    throw new FileStorageUnavailableError('the file could not be read right now; try again');
-  }
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  if (bytes.byteLength !== row.size) {
-    // The bytes are not the ones this File recorded: never forward them.
-    throw new FileStorageUnavailableError('the file could not be read right now; try again');
-  }
-  return { bytes, mime: MIME_FOR[row.type] };
+  if (!response.ok || !response.body) throw unavailable();
+  // Bounded by the size this File recorded: one byte more is refused as it
+  // arrives, never buffered first and compared after.
+  const read = await readResponseBody(
+    Readable.fromWeb(response.body as NodeReadableStream<Uint8Array>),
+    { maxBytes: row.size, timeoutMs: READ_TIMEOUT_MS },
+  );
+  // Fewer bytes, or more, are not the ones this File recorded: never forward them.
+  if (read.kind !== 'ok' || read.body.byteLength !== row.size) throw unavailable();
+  return { bytes: new Uint8Array(read.body), mime: MIME_FOR[row.type] };
 }

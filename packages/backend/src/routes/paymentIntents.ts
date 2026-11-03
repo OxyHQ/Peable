@@ -216,7 +216,7 @@ export async function resolveMerchant(req: Request, res: Response): Promise<Merc
  * merchant — the application + environment come from the route param + query
  * (already validated + membership-checked by `routes/dashboard.ts` before this
  * is called). 404 (not 403): the caller's ACCESS to the application was
- * already proven by `assertAppMembership`, so a missing merchant here means
+ * already proven by the dashboard's gate (`routes/dashboardAccess.ts`), so a missing merchant here means
  * exactly what it says — nothing registered for this environment yet, not a
  * permission gap.
  */

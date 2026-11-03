@@ -22,6 +22,7 @@ import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server'
 import { Peable, WebhooksResource } from '@peable.to/sdk';
 import { signWebhook } from '@peable.to/shared-types';
 import { createGateway, type Gateway } from '../../server';
+import { stubOxyAccess } from '../../__tests__/helpers/oxyAccessStub';
 import { createDashboardRouter } from '../dashboard';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { apiRequestLogs } from '../../db/schema';
@@ -116,7 +117,7 @@ beforeAll(() => {
         (req as OxyAuthRequest).accessToken = 'token';
         next();
       },
-      assertAppMembership: async () => ({ allowed: true, ownerAccountId: 'owner' }),
+      access: stubOxyAccess({ application: () => ({ ownerAccountId: 'owner' }) }),
     }),
   );
   dashboard = app.listen(0);

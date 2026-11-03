@@ -16,6 +16,7 @@ import { connectKeys, useSeller } from '@/connect/useConnect';
 import { railLabel, readinessLabel, readinessTone } from '@/connect/vocabulary';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   disabledReasonLabel,
   REQUIREMENT_GROUPS,
@@ -23,6 +24,7 @@ import {
   requirementsClear,
 } from '@/money/requirements';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { orbitOrigin } from '@/ui/origin';
 import { CapabilityBadge, EnabledBadge, ToneBadge } from '@/ui/StatusBadge';
 import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
@@ -61,6 +63,7 @@ function MintedLink({ link }: { link: AccountLink }) {
 
 function Onboarding({ scope, seller }: { scope: DashboardScope; seller: ConnectedAccount }) {
   const [links, setLinks] = useState<Partial<Record<Rail, AccountLink>>>({});
+  const { can } = useDashboardPermissions();
   const mint = useMutation({
     mutationFn: (rail: Rail) =>
       dashboardApi.connectedAccounts.createLink(
@@ -91,6 +94,7 @@ function Onboarding({ scope, seller }: { scope: DashboardScope; seller: Connecte
                   tone="accent"
                   size="sm"
                   loading={mint.isPending && mint.variables === rail}
+                  disabled={!can('money')}
                   onPress={() => mint.mutate(rail)}
                 >
                   {t(`connect.onboarding.${rail}`)}
@@ -139,6 +143,7 @@ function Requirements({ seller }: { seller: ConnectedAccount }) {
 
 function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: ConnectedAccount }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const readiness = sellerReadiness(seller);
   const notSet = t('account.notSet');
   const refresh = useMutation({
@@ -153,6 +158,7 @@ function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: Connec
   const card = seller.rails.includes('card');
   return (
     <View className="gap-6">
+      <ActionPermissionNotice action="money" />
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {seller.external_ref}
@@ -170,6 +176,7 @@ function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: Connec
                     appearance="outline"
                     size="sm"
                     loading={refresh.isPending}
+                    disabled={!can('money')}
                     onPress={() => refresh.mutate()}
                   >
                     {t('connect.refresh')}

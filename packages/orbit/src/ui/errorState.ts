@@ -60,7 +60,9 @@ export function errorState(error: unknown): ErrorState {
     }
     if (status === 403 || error.type === 'permission_error') {
       const membership =
-        code === 'application_membership_required' || message === LEGACY_NOT_A_MEMBER;
+        code === 'application_membership_required' ||
+        code === 'account_membership_required' ||
+        message === LEGACY_NOT_A_MEMBER;
       const permission =
         code === 'permission_required' && error.param
           ? error.param

@@ -8,13 +8,13 @@
  * a 404 that looks like a missing charge.
  */
 import { Router } from 'express';
-import type { Request, RequestHandler, Response } from 'express';
-import type { MerchantRow } from '../db/merchants/merchantRepository';
+import type { RequestHandler } from 'express';
 import { SEARCHABLE_RESOURCES } from '@peable.to/shared-types';
 import { requireAuthenticated, wrap, requireScope } from '../lib/http';
 import { answerGlobalSearch, answerSearch } from '../lib/search/answer';
 import { SEARCH_RESOURCES } from '../lib/search/resources';
 import { resolveMerchant } from './paymentIntents';
+import type { DashboardGate } from './dashboardAccess';
 
 export function createSearchRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
@@ -38,31 +38,29 @@ export function createSearchRouter(deps: { requireMerchant: RequestHandler }): R
 /**
  * Orbit's search: each resource's search under the dashboard (the same core,
  * `surface: 'dashboard'`), and the global box over all of them
- * (`…/search?q=`). Every route passes the dashboard's membership gate first
- * (`asMember`), so a member searches only their application's merchant in the
- * environment the Test/Live toggle names.
+ * (`…/search?q=`). Every route is a `read` behind the dashboard's gate, so a
+ * member searches only their application's merchant in the environment the
+ * Test/Live toggle names.
  */
 export function mountSearchDashboardRoutes(
   router: Router,
   deps: {
     readonly base: string;
     readonly requireOxyUser: RequestHandler;
-    readonly asMember: (
-      core: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
-    ) => RequestHandler;
+    readonly gate: DashboardGate;
   },
 ): void {
   router.get(
     `${deps.base}/search`,
     deps.requireOxyUser,
-    deps.asMember((req, res, merchant) => answerGlobalSearch(req, res, merchant.id)),
+    deps.gate('read', (req, res, merchant) => answerGlobalSearch(req, res, merchant.id)),
   );
   for (const name of SEARCHABLE_RESOURCES) {
     const resource = SEARCH_RESOURCES[name];
     router.get(
       `${deps.base}/${name}/search`,
       deps.requireOxyUser,
-      deps.asMember((req, res, merchant) =>
+      deps.gate('read', (req, res, merchant) =>
         answerSearch(req, res, merchant.id, resource, 'dashboard'),
       ),
     );

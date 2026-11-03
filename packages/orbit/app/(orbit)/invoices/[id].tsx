@@ -14,6 +14,7 @@ import { invoiceActions, type InvoiceAction } from '@/billing/status';
 import { billingKeys, useInvoice } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
+import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import {
   DetailHeader,
   DetailLayout,
@@ -22,6 +23,7 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
 import { Timestamp } from '@/ui/data';
 import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
@@ -29,6 +31,7 @@ const fail = (error: unknown) => toast.error(describeError(error, t('error.gener
 
 function Actions({ scope, invoice }: { scope: DashboardScope; invoice: Invoice }) {
   const queryClient = useQueryClient();
+  const { can } = useDashboardPermissions();
   const act = useMutation({
     mutationFn: (action: InvoiceAction) => dashboardApi.invoices.act(scope, invoice.id, action),
     onSuccess: (_updated, action) => {
@@ -39,21 +42,25 @@ function Actions({ scope, invoice }: { scope: DashboardScope; invoice: Invoice }
   });
   const actions = invoiceActions(invoice);
   return (
-    <View className="flex-row flex-wrap gap-2">
-      {actions.map((action) => (
-        <Button
-          key={action}
-          appearance={action === 'finalize' ? 'solid' : 'outline'}
-          tone={action === 'finalize' ? 'accent' : action === 'void' ? 'danger' : undefined}
-          size="sm"
-          loading={act.isPending && act.variables === action}
-          onPress={() => act.mutate(action)}
-        >
-          {t(`invoice.action.${action}`)}
-        </Button>
-      ))}
-      <ExternalLink url={invoice.hosted_invoice_url} label={t('invoice.hostedPage')} />
-      <ExternalLink url={invoice.invoice_pdf} label={t('invoice.pdf')} />
+    <View className="gap-2">
+      {actions.length ? <ActionPermissionNotice action="money" /> : null}
+      <View className="flex-row flex-wrap gap-2">
+        {actions.map((action) => (
+          <Button
+            key={action}
+            appearance={action === 'finalize' ? 'solid' : 'outline'}
+            tone={action === 'finalize' ? 'accent' : action === 'void' ? 'danger' : undefined}
+            size="sm"
+            loading={act.isPending && act.variables === action}
+            disabled={!can('money')}
+            onPress={() => act.mutate(action)}
+          >
+            {t(`invoice.action.${action}`)}
+          </Button>
+        ))}
+        <ExternalLink url={invoice.hosted_invoice_url} label={t('invoice.hostedPage')} />
+        <ExternalLink url={invoice.invoice_pdf} label={t('invoice.pdf')} />
+      </View>
     </View>
   );
 }

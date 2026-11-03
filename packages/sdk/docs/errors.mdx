@@ -41,11 +41,15 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-119 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+120 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
 The `Peable-Account` header names no connected account of this platform.
+
+### `account_membership_required`
+
+The signed-in Oxy account is not a member of the Oxy account the path names (a contribution route's organization).
 
 ### `account_missing`
 
@@ -281,7 +285,7 @@ Another price already uses this `lookup_key`.
 
 ### `membership_unavailable`
 
-Oxy could not be asked whether the signed-in person is a member of this application; retry.
+Oxy could not be asked what the signed-in person may do on this application or account; retry.
 
 ### `merchant_missing`
 
@@ -341,7 +345,7 @@ Payouts cannot be created for this account.
 
 ### `permission_required`
 
-The member lacks an Oxy permission this needs; `param` names it (`billing:read`, `billing:manage`). An owner grants it in Oxy Console.
+The member lacks the Oxy permission this action needs; `param` names it (`app:update`, `webhooks:update`, `billing:read`, `billing:manage`). An owner grants it in Oxy Console.
 
 ### `portal_feature_disabled`
 
