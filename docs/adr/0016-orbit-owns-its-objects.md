@@ -41,10 +41,11 @@ providers are internal processing integrations, not the platform's identity.
    payment method (signing stays on the payer's device), so a FairCoin customer
    has no `pm_`, and a subscription on that rail renews by explicit payer action;
    the API exposes that as a capability, not as a fake object.
-5. **The legacy `/v1/billing/*` surface keeps its provider ids** for the
-   subscriptions already created through it (Mention Plus). It is frozen, not
-   extended; new billing is built on the native objects (ADR 0018), and existing
-   subscriptions migrate individually.
+5. **The provider-id billing surface (`/v1/billing/*`) is replaced, not kept.**
+   Native billing (ADR 0018) takes over everything it serves — Mention Plus and
+   the oxy personal plans included — and the routes, contracts and SDK methods
+   that pass provider ids are deleted in the same change that moves their
+   consumers. No frozen copy remains.
 
 ## Consequences
 

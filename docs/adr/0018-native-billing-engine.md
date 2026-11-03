@@ -1,6 +1,7 @@
 # ADR 0018 — Orbit runs its own billing engine
 
 **Status:** accepted.
+**Supersedes, when implemented:** ADR 0010 (card rail) and ADR 0013's renewal hold.
 **Date:** 2026-11-03.
 
 ## Context
@@ -46,9 +47,12 @@ the periods and invoices itself and collects each one with a PaymentIntent.
    active entitlements per customer, which is the authoritative access answer an
    app such as Mention asks — including access granted by another product (Mention
    Plus through Oxy One) without a second purchase.
-7. **The legacy Stripe Billing surface stays for what it already serves** (ADR
-   0010, 0013 and 0016 §5) until each subscription is migrated; it gains no new
-   features.
+7. **The Stripe Billing proxy is removed when the engine lands** (ADR 0016 §5).
+   Subscriptions created through it are migrated onto native objects —
+   customer, saved payment method, subscription with its current period — and the
+   provider subscription is cancelled at the end of its paid period with no
+   second charge. ADR 0010 and ADR 0013's draft hold are superseded for card
+   billing at that point; their tax-reversal rules carry over.
 
 ## Consequences
 

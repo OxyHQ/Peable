@@ -1,4 +1,4 @@
-# ADR 0014 — Orbit API conventions, and a dated version that can change them
+# ADR 0014 — Orbit API conventions: one wire, changed at the root
 
 **Status:** accepted.
 **Date:** 2026-11-03.
@@ -41,33 +41,34 @@ Every Orbit resource on the new version uses:
 | Object identity | `id` (public, prefixed — `pi_`, `cus_`, …) and `object` on every object, including lists and errors' nested objects |
 | Mode | `livemode: boolean` on every object |
 | Time | `created` and every other instant as **integer Unix seconds** |
-| Money | `amount` as a base-unit **string** (unchanged — a FAIR amount does not fit a JS number) plus a lowercase ISO-ish `currency` (`eur`, `usd`, `fair`) |
+| Money | `amount` as a base-unit **string** (a FAIR amount does not fit a JS number) plus an uppercase ISO 4217 `currency` (`EUR`, `USD`; `FAIR` for FairCoin) |
 | Metadata | `metadata: Record<string,string>` on every mutable resource; ≤ 50 keys, key ≤ 40 chars, value ≤ 500 chars; an empty string value unsets a key |
 | Lists | `{object:'list', data, has_more, url}`; `limit` (1–100, default 10), `starting_after`, `ending_before`, `created[gt|gte|lt|lte]` |
 | Expansion | `expand[]`, dot paths, max depth 4, always resolved inside the caller's merchant scope |
 | Errors | `{error:{type, code?, decline_code?, param?, message, doc_url?, request_id}}` |
-| Status codes | 400 invalid request, 401 authentication, 402 payment refused (`card_error`), 403 permission, 404 not found, 409 conflict / idempotency in flight, 422 **not used** on the new version, 429 rate limit, 5xx ours |
+| Status codes | 400 invalid request, 401 authentication, 402 payment refused (`card_error`), 403 permission, 404 not found, 409 conflict / idempotency in flight, 422 **not used**, 429 rate limit, 5xx ours |
 | Request id | `Request-Id` response header on every response, and `request_id` inside every error body |
 
 Amounts stay strings — that is the one deliberate departure from Stripe, and it
 is a correctness rule (`CONVENTIONS.md` §Money), not a style.
 
-### D2 — Versions are dated, pinned, and translated at the edge
+### D2 — A clean cut, no legacy wire
 
-- A request may send `Peable-Version: YYYY-MM-DD`. Without it, the merchant's
-  pinned version applies (stored on the merchant, set to the latest version at
-  registration, upgraded only by the merchant).
-- Handlers produce ONE internal representation. Versioning lives in
-  `backend/src/lib/apiVersion/`: an ordered list of versions, each with request
-  and response transforms that convert between it and the next. A response is
-  produced at the latest version and walked back to the caller's.
-- `2026-07-18` is frozen as the **legacy** version: its transforms reproduce
-  today's camelCase/ISO/422 wire byte-for-byte, proven by snapshot tests, so no
-  published SDK or existing integration changes behaviour.
-- The first Orbit version introduces D1. Later breaking changes add a version;
-  additive changes (a new field, a new endpoint, a new event type) do not.
-- A webhook endpoint carries its own `api_version`; its events are rendered at
-  that version (D4).
+There is ONE wire. The handlers, serializers, `shared-types`, SDKs, hosted
+checkout and apps are changed at the root to speak D1 directly; there is no
+legacy version kept alive and no translation layer at the edge rewriting one
+shape into another. A layer like that would be a second contract every change
+has to keep true, and an object would have two spellings depending on who asked.
+
+- The change lands in lockstep: the gateway, `@peable.to/shared-types`,
+  `@peable.to/sdk` and `@peable.to/pay` (new majors), `packages/checkout` and
+  `packages/frontend` in the same release, and every Oxy consumer (Mention,
+  Mercaria, Homiio, the oxy API) upgraded to those majors.
+- `Peable-Version` names the date of the wire on every response. Dated,
+  side-by-side versions are a tool for when external merchants depend on the API;
+  adopting them is a later decision, and it will be made with the same rule —
+  no legacy surface kept beyond its replacement.
+- A webhook payload is the same object the API returns (D4).
 
 ### D3 — Idempotency is generic, and it replays
 
@@ -89,7 +90,7 @@ moves twice. The generic layer sits in front of them.
 An event is stored once (`evt_…`, queryable for 30 days via `/v1/events`) in the
 same transaction that records the change — the rule `transitionIntent` already
 enforces for webhook enqueueing (ADR 0001 D7). A webhook delivery is that event
-rendered at the endpoint's `api_version` and sent to one endpoint.
+sent to one endpoint.
 
 ### D5 — The contract is the source of truth
 
@@ -100,11 +101,11 @@ generated document drifts, as it already does for contributions.
 
 ## Consequences
 
-- The published `@peable.to/sdk` keeps working unchanged against the legacy
-  version; the SDK 1.0 major moves to the Orbit version and pins it.
+- Every published package that carries the wire takes a major version, and its
+  consumers move with it; nothing keeps speaking the old shape.
 - Internal invariants are untouched: public vs internal ids, the status
-  compare-and-swap, the reservation statement, non-custody. A new version changes
-  how a fact is *spelled*, never what the gateway decides.
+  compare-and-swap, the reservation statement, non-custody. The wire changes how
+  a fact is *spelled*, never what the gateway decides.
 - The provider's API version (`providers/stripe/apiVersion.ts`) remains a separate
   pin; Orbit's version never leaks the provider's.
 - A 500 never carries `err.message` on any version; the request id is how support

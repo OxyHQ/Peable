@@ -24,8 +24,9 @@ not run.
 1. **The provider registry is keyed by `(provider, mode)`**, built from
    `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE` (each optional; a
    missing key makes that mode's card rail unavailable, answered as 503 like any
-   unavailable rail). The legacy `STRIPE_SECRET_KEY` is read as whichever mode its
-   prefix declares, so an existing deployment keeps working unchanged.
+   unavailable rail). `STRIPE_SECRET_KEY` is removed in the same change; the
+   deploy secrets and SSM parameters are renamed with it, and the gateway refuses
+   to boot if a key's prefix disagrees with the mode it was configured for.
 2. **The mode comes from the credential**: `production` ⟺ live, every other Oxy
    environment ⟺ test — exactly `environmentMatchesMode`. The guard stops refusing
    and starts selecting; it still runs before the first provider call of every
