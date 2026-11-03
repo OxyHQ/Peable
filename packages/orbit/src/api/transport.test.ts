@@ -138,20 +138,17 @@ describe('createOrbitTransport', () => {
     expect(error.requestId).toBe('req_h');
   });
 
-  it('keeps the message of a legacy `{error: string}` body', async () => {
-    const { client } = fakeClient(Response.json({ error: 'forbidden' }, { status: 403 }));
-    const error = (await createOrbitTransport(client)
-      .request('GET', '/v1/x')
-      .catch((e: unknown) => e)) as OrbitApiError;
-    expect(error.status).toBe(403);
-    expect(error.message).toBe('forbidden');
-  });
-
-  it("reads the Oxy auth middleware's 401 by its sentence, as an authentication error", async () => {
+  it('a 401 in the envelope is the session state', async () => {
     const { client } = fakeClient(
       Response.json(
-        { error: 'Unauthorized', message: 'Authentication required' },
-        { status: 401, headers: { 'Request-Id': 'req_401' } },
+        {
+          error: {
+            type: 'authentication_error',
+            message: 'Authentication required',
+            request_id: 'req_401',
+          },
+        },
+        { status: 401 },
       ),
     );
     const error = (await createOrbitTransport(client)
@@ -159,7 +156,6 @@ describe('createOrbitTransport', () => {
       .catch((e: unknown) => e)) as OrbitApiError;
     expect(error.type).toBe('authentication_error');
     expect(error.message).toBe('Authentication required');
-    expect(error.requestId).toBe('req_401');
     expect(errorState(error)).toEqual({ kind: 'session', requestId: 'req_401' });
   });
 

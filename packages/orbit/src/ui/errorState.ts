@@ -49,18 +49,11 @@ export type ErrorState =
       requestId: string | null;
     };
 
-/** Pre-`merchant_missing`-code gateways said only this; kept for the deploy window. */
-const LEGACY_MERCHANT_MISSING = 'no merchant registered for this application in this environment';
-const LEGACY_NOT_A_MEMBER = 'you are not a member of this application';
-
-/** `billing:manage` in "billing:manage is required for tax settings". */
-const PERMISSION_IN_MESSAGE = /^([a-z_]+:[a-z_]+) is required\b/;
-
 export function errorState(error: unknown): ErrorState {
   if (isOrbitApiError(error)) {
     const requestId = error.requestId ?? null;
     const { status, code, message } = error;
-    if (status === 404 && (code === 'merchant_missing' || message === LEGACY_MERCHANT_MISSING)) {
+    if (status === 404 && code === 'merchant_missing') {
       return { kind: 'merchant_missing' };
     }
     if (status === 404 && code === 'account_missing') return { kind: 'account_missing' };
@@ -68,17 +61,13 @@ export function errorState(error: unknown): ErrorState {
       return { kind: 'feature_unavailable', feature: 'tax' };
     }
     if (status === 403 || error.type === 'permission_error') {
+      // Read from the envelope's structured fields only (ADR 0014 D1): the
+      // code says which refusal, `param` names the missing permission.
       const membership =
-        code === 'application_membership_required' ||
-        code === 'account_membership_required' ||
-        message === LEGACY_NOT_A_MEMBER;
-      const permission =
-        code === 'permission_required' && error.param
-          ? error.param
-          : (PERMISSION_IN_MESSAGE.exec(message)?.[1] ?? null);
+        code === 'application_membership_required' || code === 'account_membership_required';
       return {
         kind: 'permission',
-        permission: membership ? null : permission,
+        permission: code === 'permission_required' ? (error.param ?? null) : null,
         membership,
         readOnly: false,
         requestId,

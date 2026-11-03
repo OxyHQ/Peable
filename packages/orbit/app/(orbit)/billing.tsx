@@ -32,7 +32,7 @@ import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { PermissionNotice, PageSkeleton } from '@/ui/states';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -304,8 +304,7 @@ function BillingBody({ scope }: { scope: DashboardScope }) {
   if (settings.isPending)
     return <PageSkeleton variant="form" accessibilityLabel={t('billing.title')} />;
   if (settings.isError) {
-    if (isMerchantMissing(settings.error))
-      return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(settings.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />;
   }
   return (

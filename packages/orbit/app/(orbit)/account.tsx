@@ -34,7 +34,7 @@ import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { orbitOrigin } from '@/ui/origin';
 import { PermissionNotice, PageSkeleton } from '@/ui/states';
-import { ErrorNotice, Field, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, Field, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
 
 const modeLabel = (scope: DashboardScope) =>
@@ -274,7 +274,7 @@ function AccountLoader({ scope }: { scope: DashboardScope }) {
   if (query.isPending)
     return <PageSkeleton variant="form" accessibilityLabel={t('account.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(query.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   if (query.data === null) return <CreateAccount scope={scope} />;

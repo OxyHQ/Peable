@@ -31,7 +31,7 @@ import {
   AccountMissing,
   ErrorNotice,
   ListFooter,
-  MerchantMissing,
+  SetupPayments,
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
@@ -192,8 +192,7 @@ function Balances({ scope }: { scope: DashboardScope }) {
   if (balance.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('balances.title')} />;
   if (balance.isError) {
-    if (isMerchantMissing(balance.error))
-      return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(balance.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={balance.error} onRetry={() => void balance.refetch()} />;
   }
   // No fiat account: say so and point at Account — never a row of zeros.

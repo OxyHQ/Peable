@@ -123,9 +123,6 @@ export function SetupPayments({ environment }: { environment: OrbitEnvironment }
   );
 }
 
-/** @deprecated name kept for the screens that import it: the first-run state. */
-export const MerchantMissing = SetupPayments;
-
 /**
  * What a money screen shows when the merchant has no fiat account in this
  * mode (`account_missing`): an explanation and the way to open one — never a

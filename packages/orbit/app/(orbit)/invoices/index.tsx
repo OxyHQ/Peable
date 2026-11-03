@@ -8,7 +8,7 @@ import { invoiceStatusLabel, ORBIT_INVOICE_STATUSES } from '@/billing/status';
 import { useInvoicePages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen } from '@/ui/OrbitScreen';
 import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
@@ -23,7 +23,7 @@ function InvoiceList({ scope, status }: { scope: DashboardScope; status: Invoice
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('invoices.title')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const rows = pages.data.pages.flatMap((page) => page.data);

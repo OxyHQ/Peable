@@ -32,7 +32,7 @@ import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
 import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { Toggle } from '@/ui/Toggle';
 import { merchantQueryKey } from '@/merchant/useMerchant';
 
@@ -337,7 +337,7 @@ function Settings({ scope }: { scope: DashboardScope }) {
   const error = merchant.error ?? branding.error ?? emails.error;
   if (error || merchant.data === null) {
     if (merchant.data === null || isMerchantMissing(error)) {
-      return <MerchantMissing environment={scope.environment} />;
+      return <SetupPayments environment={scope.environment} />;
     }
     return (
       <ErrorNotice

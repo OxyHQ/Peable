@@ -60,7 +60,7 @@ import {
 } from '@/reports/useReports';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { PageSkeleton } from '@/ui/states';
 
 const ALL_CURRENCIES = 'all';
@@ -458,7 +458,7 @@ function Reports({ scope }: { scope: DashboardScope }) {
     return <PageSkeleton variant="table" accessibilityLabel={t('reports.title')} />;
   const failure = types.error ?? runs.error;
   if (failure) {
-    if (isMerchantMissing(failure)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(failure)) return <SetupPayments environment={scope.environment} />;
     return (
       <ErrorNotice
         error={failure}

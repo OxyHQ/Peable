@@ -39,7 +39,7 @@ import {
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { usePagedList } from '@/ui/paging';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { DeliveryStatusBadge, ToneBadge } from '@/ui/StatusBadge';
 import {
@@ -299,7 +299,7 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
   if (pages.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('developers.endpoints')} />;
   if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const endpoints = pages.data.pages.flatMap((page) => page.data);
@@ -381,7 +381,7 @@ function Events({ scope }: { scope: DashboardScope }) {
   if (pages.isPending)
     body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('developers.events')} />;
   else if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   } else {
     const events = pages.data.pages.flatMap((page) => page.data);
@@ -475,7 +475,7 @@ function RequestLogs({ scope }: { scope: DashboardScope }) {
   if (pages.isPending)
     body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('developers.logs')} />;
   else if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(pages.error)) return <SetupPayments environment={scope.environment} />;
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   } else {
     const logs = pages.data.pages.flatMap((page) => page.data);

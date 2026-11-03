@@ -19,13 +19,7 @@ import { moneyKeys, useAccount } from '@/money/useMoney';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { PermissionNotice, PageSkeleton } from '@/ui/states';
-import {
-  AccountMissing,
-  ErrorNotice,
-  MerchantMissing,
-  OrbitScreen,
-  Section,
-} from '@/ui/OrbitScreen';
+import { AccountMissing, ErrorNotice, SetupPayments, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const PROFILE_FIELDS: readonly {
   field: BusinessField;
@@ -128,7 +122,7 @@ function BusinessLoader({ scope }: { scope: DashboardScope }) {
   if (query.isPending)
     return <PageSkeleton variant="form" accessibilityLabel={t('business.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(query.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   if (query.data === null) return <AccountMissing environment={scope.environment} />;

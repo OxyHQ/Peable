@@ -49,7 +49,7 @@ import {
   ErrorNotice,
   Field,
   ListFooter,
-  MerchantMissing,
+  SetupPayments,
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
@@ -378,8 +378,7 @@ function Payouts({ scope }: { scope: DashboardScope }) {
   if (account.isPending)
     return <PageSkeleton variant="table" accessibilityLabel={t('payouts.title')} />;
   if (account.isError) {
-    if (isMerchantMissing(account.error))
-      return <MerchantMissing environment={scope.environment} />;
+    if (isMerchantMissing(account.error)) return <SetupPayments environment={scope.environment} />;
     return <ErrorNotice error={account.error} onRetry={() => void account.refetch()} />;
   }
   if (account.data === null) return <AccountMissing environment={scope.environment} />;
