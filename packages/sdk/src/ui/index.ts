@@ -36,3 +36,5 @@ export type {
   PeableRewardOffer,
   OrderRewardScreen,
 } from './orderRewards';
+
+export type { PreparedCardAuthorization, ProviderCardPreparation } from './preparedCard';

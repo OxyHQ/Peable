@@ -17,16 +17,30 @@
 const PROVIDER_SDK_URL = 'https://js.stripe.com/v3/';
 
 /** Minimal shapes — only what this app calls. The SDK's own types are not a dependency. */
+export interface ProviderFieldEvent {
+  complete?: boolean;
+  empty?: boolean;
+  error?: { message?: string };
+  brand?: string;
+}
 export interface ProviderElement {
   mount(selector: string | HTMLElement): void;
-  on?(event: 'ready' | 'loaderror', callback: () => void): void;
+  on?(
+    event: 'ready' | 'loaderror' | 'change' | 'focus' | 'blur',
+    callback: (event?: ProviderFieldEvent) => void,
+  ): void;
+  update?(options: Record<string, unknown>): void;
+  focus?(): void;
   unmount(): void;
   destroy(): void;
 }
 
 export interface ProviderElements {
   update?(options: Record<string, unknown>): void;
-  create(type: 'payment', options?: Record<string, unknown>): ProviderElement;
+  create(
+    type: 'payment' | 'cardNumber' | 'cardExpiry' | 'cardCvc',
+    options?: Record<string, unknown>,
+  ): ProviderElement;
   getElement(type: 'payment'): ProviderElement | null;
 }
 
@@ -37,6 +51,26 @@ export interface ProviderConfirmResult {
 
 export interface ProviderSdk {
   elements(options: Record<string, unknown>): ProviderElements;
+  createPaymentMethod?(data: {
+    type: 'card';
+    card: ProviderElement;
+    billing_details: { address: { country: string; postal_code: string } };
+  }): Promise<{
+    error?: { message?: string };
+    paymentMethod?: { id: string; card?: { brand?: string; last4?: string } };
+  }>;
+  confirmCardPayment?(
+    clientSecret: string,
+    data: {
+      payment_method:
+        | string
+        | {
+            card: ProviderElement;
+            billing_details: { address: { country: string; postal_code: string } };
+          };
+      return_url?: string;
+    },
+  ): Promise<ProviderConfirmResult>;
   confirmPayment(options: {
     elements: ProviderElements;
     confirmParams?: Record<string, unknown>;

@@ -132,19 +132,31 @@ The host owns observation and cancellation. Full addresses remain selectable and
 optional copy callback must resolve successfully before the UI reports a copy. Local
 preview simulations and their nonpayable QR values stay in the consuming app.
 
-`PeableProviderFields` is an optional browser-capability adapter for the existing
-provider-origin Payment Element. It accepts the payer client's `client_action`,
-reports a guarded confirmation callback, and keeps raw card fields inside the
-provider iframe. A resolved confirmation reports provider acceptance, not
-settlement. The host must keep the field mounted while authentication is in
-progress (`CheckoutSheet.interactionBlocked`) and observe the gateway for final
-status. Native hosts without the browser capability receive an unavailable state;
-this does not introduce a native card-capture implementation.
+`PeableProviderFields` renders the same Bloom `CardForm` used by the rest of
+checkout. Only number, expiry and security-code inputs are provider-origin hosted
+fields in atomic Bloom slots. Billing country/postcode, labels, validation chrome
+and layout remain Bloom; no full processor form or competing payment selector is
+embedded. Link autofill is disabled through the supported hosted-card option.
+The split hosted Elements are an explicit compatibility choice for this layout;
+they remain supported, while Payment Element is the provider's preferred general
+integration. This choice never routes raw card values through React or Peable.
+
+Completeness publishes a **preparation** callback. Continue tokenizes the secure
+fields without charging, returning masked metadata and an opaque, in-memory
+prepared authorization. The host may then unmount the input fields and show its
+Bloom confirmation. Only explicit Pay calls `authorization.confirm()`. The handle
+survives field unmount, rejects concurrent confirmation, and must be disposed on
+close, a new card, or an intent change. It owns no persistence or saved-card grant.
+Provider acceptance still means pending: the host observes gateway settlement;
+subscriptions additionally require authoritative active/paid readiness.
 
 The hosted checkout and this UI share `loadProviderSdk` through the anonymous
 `/checkout` browser entry. React/Bloom remain unreachable from that entry or the
-server root. Appearance uses Bloom's current theme via the provider API, with
-bounded loading/readiness timeouts and retry. It never reads iframe card values.
+server root. Provider text styling uses current Bloom typography/colors without
+recreating secure frames on theme changes; the surrounding chrome is Bloom itself.
+Postal code is optional unless explicitly required by the host. Readiness timeouts
+and errors permit retry. Native hosts without browser-hosted-field capability
+remain unavailable rather than falling back to raw card capture.
 
 ### Order details and optional rewards
 

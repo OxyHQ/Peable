@@ -1,5 +1,10 @@
 const messages = {
   en: {
+    'provider.card.number': 'Card number',
+    'provider.card.expiry': 'Expiration date',
+    'provider.card.securityCode': 'Security code',
+    'provider.card.country': 'Country',
+    'provider.card.postcode': 'Postal code',
     'order.order': 'Order details',
     'order.reward': 'A thank-you for your order',
     'order.categories': 'What would you like?',
@@ -149,6 +154,11 @@ const messages = {
     title: '',
   },
   es: {
+    'provider.card.number': 'Número de tarjeta',
+    'provider.card.expiry': 'Fecha de caducidad',
+    'provider.card.securityCode': 'Código de seguridad',
+    'provider.card.country': 'País',
+    'provider.card.postcode': 'Código postal',
     'order.order': 'Detalles del pedido',
     'order.reward': 'Un detalle por tu pedido',
     'order.categories': '¿Qué te gustaría?',
