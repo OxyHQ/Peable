@@ -7,6 +7,7 @@ import { checkoutMessage } from './messages';
 import { loadProviderSdk, type ProviderElement } from '../browser/providerJs';
 import { prepareCardAuthorization, type ProviderCardPreparation } from './preparedCard';
 import type { PeableProviderFieldsProps } from './providerFieldTypes';
+import { matchingCardAction } from './cardReadiness';
 
 type SecureField = 'number' | 'expiry' | 'securityCode';
 const fields: readonly SecureField[] = ['number', 'expiry', 'securityCode'];
@@ -24,6 +25,7 @@ const countryCodes =
 /** The same Bloom CardForm layout, with only its three sensitive inputs hosted by the processor. */
 export function PeableProviderCardFields({
   action,
+  cardConfiguration,
   locale = 'en',
   disabled = false,
   requirePostalCode = false,
@@ -34,6 +36,9 @@ export function PeableProviderCardFields({
   unavailableLabel = checkoutMessage(locale, 'provider.unavailable'),
 }: PeableProviderFieldsProps) {
   const { colors } = useTheme();
+  const publishableKey = cardConfiguration?.publishableKey ?? action?.publishableKey;
+  const actionRef = useRef(action);
+  actionRef.current = action;
   const [billing, setBilling] = useState({ country: '', postcode: '' });
   const billingRef = useRef(billing);
   billingRef.current = billing;
@@ -75,6 +80,7 @@ export function PeableProviderCardFields({
   const publish = () =>
     callbacks.current.onReady(
       !disabled &&
+        matchingCardAction(actionRef.current, publishableKey) &&
         fields.every((field) => complete.current[field]) &&
         billingRef.current.country &&
         (!requirePostalCode || billingRef.current.postcode.trim())
@@ -86,7 +92,7 @@ export function PeableProviderCardFields({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Billing completeness updates the published callback without remounting secure fields.
   useEffect(() => {
     publishRef.current();
-  }, [billing, requirePostalCode, disabled]);
+  }, [billing, requirePostalCode, disabled, action, publishableKey]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: An explicit retry recreates provider-owned fields for this same intent.
   useEffect(() => {
     let active = true;
@@ -109,18 +115,14 @@ export function PeableProviderCardFields({
       setPhase('unavailable');
     };
     const timeout = setTimeout(fail, 20000);
-    if (
-      typeof document === 'undefined' ||
-      action.kind !== 'client_secret' ||
-      !action.publishableKey
-    ) {
+    if (typeof document === 'undefined' || !publishableKey) {
       fail();
       return;
     }
     void loadProviderSdk()
       .then((factory) => {
         if (!active) return;
-        const provider = factory(action.publishableKey ?? '', {
+        const provider = factory(publishableKey, {
           locale: locale.startsWith('es') ? 'es' : locale.startsWith('en') ? 'en' : 'auto',
         });
         if (!provider.confirmCardPayment || !provider.createPaymentMethod) {
@@ -169,7 +171,8 @@ export function PeableProviderCardFields({
         };
         confirm.current = async () => {
           const card = elements.current.number;
-          if (!active || busy || !card || disabledRef.current)
+          const authority = matchingCardAction(actionRef.current, publishableKey);
+          if (!active || busy || !card || !authority || disabledRef.current)
             return { prepared: false, error: checkoutMessage(locale, 'provider.busy') };
           busy = true;
           try {
@@ -177,7 +180,7 @@ export function PeableProviderCardFields({
               provider: tokenProvider,
               card,
               billing: billingRef.current,
-              clientSecret: action.value,
+              clientSecret: authority.value,
               returnUrl,
               messages: {
                 busy: checkoutMessage(locale, 'provider.busy'),
@@ -186,11 +189,30 @@ export function PeableProviderCardFields({
                 failed: checkoutMessage(locale, 'provider.failed'),
               },
             });
-            if (!active) {
+            if (!active || actionRef.current?.value !== authority.value) {
               if (result.prepared) result.authorization.dispose();
               return { prepared: false, error: checkoutMessage(locale, 'provider.closed') };
             }
-            return result;
+            if (!result.prepared) return result;
+            const authorization = result.authorization;
+            return {
+              prepared: true,
+              authorization: {
+                card: authorization.card,
+                dispose: () => authorization.dispose(),
+                confirm: () => {
+                  const current = matchingCardAction(actionRef.current, publishableKey);
+                  if (current?.value !== authority.value) {
+                    authorization.dispose();
+                    return Promise.resolve({
+                      accepted: false,
+                      error: checkoutMessage(locale, 'provider.closed'),
+                    });
+                  }
+                  return authorization.confirm();
+                },
+              },
+            };
           } catch {
             return { prepared: false, error: checkoutMessage(locale, 'provider.failed') };
           } finally {
@@ -209,15 +231,7 @@ export function PeableProviderCardFields({
       elements.current = {};
       complete.current = {};
     };
-  }, [
-    action.kind,
-    action.value,
-    action.publishableKey,
-    locale,
-    returnUrl,
-    retry,
-    unavailableLabel,
-  ]);
+  }, [publishableKey, locale, returnUrl, retry, unavailableLabel]);
   const label = (field: SecureField | 'country' | 'postcode') =>
     checkoutMessage(locale, `provider.card.${field}`);
   if (typeof document === 'undefined')
