@@ -9,6 +9,9 @@
 
 export { merchants } from './merchants';
 export { checkoutSessions, paymentIntents, paymentLinks } from './payments';
+export { customerProviderBindings, customers, paymentMethods } from './customers';
+export { charges } from './charges';
+export { setupIntents } from './setupIntents';
 export {
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
   socialReceiveCursors,

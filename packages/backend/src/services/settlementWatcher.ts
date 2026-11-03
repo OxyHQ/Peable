@@ -2,10 +2,9 @@ import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findWatchableIntents } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
-import { findMerchantById } from '../db/merchants/merchantRepository';
 import { toBaseUnits } from '../lib/money';
 import { applyEvent } from './intentState';
-import { transitionIntent } from './intentTransition';
+import { recordVerifiedChainPayment, transitionIntent } from './intentTransition';
 import { verifyPayment } from './explorer';
 
 /**
@@ -17,50 +16,46 @@ import { verifyPayment } from './explorer';
 const POLL_INTERVAL_MS = 5_000;
 
 /**
- * Intents that require settlement tracking sit in exactly these two states with
- * a payer-reported `txid`. Terminal/pre-broadcast intents are never polled.
+ * Intents that require settlement tracking are FairCoin intents in
+ * `processing` with a payer-reported `txid` (ADR 0019 — the old `broadcast` and
+ * `confirming`). `requires_action` (nothing broadcast) and the terminal
+ * statuses are never polled.
  */
-const WATCHABLE_STATUSES: readonly PaymentIntentStatus[] = ['broadcast', 'confirming'];
+const WATCHABLE_STATUSES: readonly PaymentIntentStatus[] = ['processing'];
 
 export interface WatcherDeps {
   getTransaction: typeof import('./explorer').getTransaction;
   /**
-   * Invoked once per actual status change, with the intent AS PERSISTED by
-   * that change — the row `transitionIntent` returned, never the pre-update
-   * one. The new state exists only in the returned row.
+   * Invoked once per actual write — a status change, or a new confirmation
+   * count — with the intent AS PERSISTED by it, never the pre-update one.
    */
   onChange: (intent: PaymentIntentRow) => void | Promise<void>;
 }
 
 /**
- * Compute the status a watchable intent should advance to for the observed
- * on-chain fact, chaining pure `applyEvent` transitions:
+ * The status a watched intent should be in for the observed on-chain fact:
  *
- *  - the tx is present but does not satisfy the amount  → `underpaid` → `failed`
- *  - paid, confirmations below the threshold            → `mempool_seen` → `confirming`
- *  - paid, confirmations at/above the threshold         → …→ `confirmed` → `settled`
- *
- * `applyEvent` is idempotent on a re-poll (e.g. `mempool_seen` while already
- * `confirming`), so a state that has not moved returns unchanged.
+ *  - the tx is present but does not pay the amount  → `underpaid` → `canceled`
+ *  - paid, confirmations below the threshold        → still `processing`
+ *  - paid, confirmations at/above the threshold     → `confirmed` → `succeeded`
  */
 function nextStatusFor(
-  current: 'broadcast' | 'confirming',
   paid: boolean,
   confirmations: number,
   requiredConfirmations: number,
 ): PaymentIntentStatus {
-  if (!paid) {
-    return applyEvent(current, 'underpaid');
-  }
-
-  const confirming = current === 'broadcast' ? applyEvent(current, 'mempool_seen') : current;
-
-  if (confirmations < requiredConfirmations) {
-    return confirming;
-  }
-
-  return applyEvent(confirming, 'confirmed');
+  if (!paid) return applyEvent('processing', 'underpaid', 'faircoin');
+  if (confirmations < requiredConfirmations) return 'processing';
+  return applyEvent('processing', 'confirmed', 'faircoin');
 }
+
+/** Peable's words for an underpayment (ADR 0019): the coins are at the address and are not enough. */
+const UNDERPAID_ERROR = {
+  type: 'payment_error',
+  code: 'payment_underpaid',
+  decline_code: null,
+  message: 'The transaction paid less than the amount due.',
+} as const;
 
 /**
  * Tip-driven, non-custodial settlement watcher. It only ever *reads* the chain
@@ -96,40 +91,32 @@ export class SettlementWatcher {
     // loop must not throw on one row and stop reconciling the rest.
     if (txid === null || address === null || network === null) return;
 
-    const current = intent.status;
-    if (current !== 'broadcast' && current !== 'confirming') return;
+    if (intent.status !== 'processing') return;
 
     const tx = await this.deps.getTransaction(txid, network);
-    // Not yet visible on-chain — this is the "not the right tx yet" case; skip
-    // and re-check next tick. Only a returned tx can move the intent to failed.
     if (tx === null) return;
 
-    const db = getDb();
-    const merchant = await findMerchantById(db, intent.merchantId);
-    const requiredConfirmations = merchant?.requiredConfirmations ?? 1;
-
+    const requiredConfirmations = intent.requiredConfirmations;
     const { paid, confirmations } = verifyPayment(tx, address, toBaseUnits(intent.amount));
 
-    const next = nextStatusFor(current, paid, confirmations, requiredConfirmations);
-    if (next === current) return;
+    const next = nextStatusFor(paid, confirmations, requiredConfirmations);
+    if (next === 'processing') {
+      // Still confirming. The payment is PROVEN, which accepts its billing
+      // invoice (idempotently), and a new confirmation count is written so the
+      // wire's `faircoin.confirmations` is live — no status change, no event.
+      await recordVerifiedChainPayment(intent);
+      if (confirmations === intent.confirmations) return;
+    }
 
-    // The status, the confirmation count AND the merchant's outbox row move in
-    // ONE transaction, and `onChange` receives what the database actually
-    // stored. A row that vanished between the poll and the update is not an
-    // error: there is simply nothing to announce.
-    //
-    // `transitionIntent` rather than `updateIntentState`: an event enqueued
-    // after this commit rather than inside it is an event a crash loses, with
-    // the intent already settled and nothing recording that a merchant was
-    // never told.
     const result = await transitionIntent(intent.id, {
-      from: current,
+      from: 'processing',
       status: next,
       confirmations,
+      ...(next === 'canceled'
+        ? { cancellationReason: 'underpaid' as const, lastPaymentError: UNDERPAID_ERROR }
+        : {}),
+      chainVerified: paid,
     });
-    // Both failures are the same non-event HERE: a row that moved (the expiry
-    // sweeper got there first) or vanished has nothing this poll should
-    // announce, and the next tick re-reads whatever it became.
     if (result.kind !== 'updated') return;
 
     await this.deps.onChange(result.row);

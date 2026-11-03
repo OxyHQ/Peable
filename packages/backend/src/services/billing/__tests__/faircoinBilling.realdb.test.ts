@@ -155,8 +155,8 @@ async function fixture() {
   }
   async function submit(row: Awaited<ReturnType<typeof invoice>>) {
     await transitionIntent(must(row.paymentIntentId), {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'a'.repeat(64),
     });
   }
@@ -254,7 +254,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     const f = await fixture();
     const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'abandoned');
     const row = await f.invoice(first);
-    await transitionIntent(must(row.paymentIntentId), { from: 'created', status: 'expired' });
+    await transitionIntent(must(row.paymentIntentId), {
+      from: 'requires_action',
+      status: 'canceled',
+      cancellationReason: 'abandoned',
+    });
     const results = await Promise.allSettled([
       f.service.createCheckoutSession(f.owner, await f.input(), 'retry-one'),
       f.service.createCheckoutSession(f.owner, await f.input(), 'retry-two'),
@@ -268,8 +272,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     expect(
       (
         await transitionIntent(must(row.paymentIntentId), {
-          from: 'broadcast',
-          status: 'confirming',
+          from: 'processing',
+          status: 'processing',
+          chainVerified: true,
         })
       ).kind,
     ).toBe('stale');
@@ -284,7 +289,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     const first = await f.service.createCheckoutSession(f.owner, await f.input(), 'confirming');
     const row = await f.invoice(first);
     await f.submit(row);
-    await transitionIntent(must(row.paymentIntentId), { from: 'broadcast', status: 'confirming' });
+    // The watcher proved the payment while it confirms: same status, accepted.
+    await transitionIntent(must(row.paymentIntentId), {
+      from: 'processing',
+      status: 'processing',
+      chainVerified: true,
+    });
     f.advance(600_000);
     expect((await f.service.retrieveCheckout(f.owner, first.id)).status).toBe('open');
     await expect(
@@ -303,7 +313,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
       'reconciliation_required',
     );
     expect(must(await findIntentById(gatewayDb(), must(row.paymentIntentId))).status).toBe(
-      'broadcast',
+      'processing',
     );
     expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
       'incomplete',
@@ -324,7 +334,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
       }),
       onChange: () => {},
     }).check();
-    expect(must(await findIntentById(gatewayDb(), intent.id)).status).toBe('failed');
+    const underpaid = must(await findIntentById(gatewayDb(), intent.id));
+    expect(underpaid.status).toBe('canceled');
+    expect(underpaid.cancellationReason).toBe('underpaid');
     await expect(f.service.retrieveCheckout(f.owner, checkout.id)).rejects.toThrow(
       'reconciliation_required',
     );

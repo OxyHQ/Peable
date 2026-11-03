@@ -180,6 +180,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep',
       network: null,
       address: null,
       provider: 'stripe',
+      status: 'requires_payment_method' as const,
       clientSecret: 'cs_x',
       idempotencyKey: uuidv7(),
       metadata: {},
@@ -187,7 +188,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep',
     });
     if (!intent) throw new Error('could not seed the intent');
     await linkProviderObject(gatewayDb(), intent.id, 'stripe', 'pi_stripe_for_settlement');
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'succeeded',
+    });
     intentInternalId = intent.id;
   });
 

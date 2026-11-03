@@ -4,8 +4,16 @@ import { z } from 'zod';
 import { oxy } from '../oxy';
 import { verifySecret } from '@oxy.so/core/server';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
+import { randomUUID } from 'node:crypto';
 import {
+  MERCHANT_CANCELLATION_REASONS,
+  PAYMENT_INTENT_CAPTURE_METHODS,
+  PAYMENT_INTENT_SETUP_FUTURE_USAGES,
   PAYMENT_INTENT_STATUSES,
+  isBaseUnitString,
+  type CancelPaymentIntentParams,
+  type CapturePaymentIntentParams,
+  type ConfirmPaymentIntentParams,
   type CreatePaymentIntentParams,
   type PaymentIntentStatus,
   type UpdatePaymentIntentParams,
@@ -14,31 +22,45 @@ import { getDb } from '../db/postgres';
 import { findMerchantByAppEnvironment } from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
+  findIntentById,
   findIntentByPublicId,
   findIntentForMerchant,
   listIntentsForMerchant,
-  updateIntentMetadata,
+  setIntentPaymentMethod,
+  updateIntentDetails,
 } from '../db/payments/paymentIntentRepository';
+import { findLiveCustomerForMerchant } from '../db/customers/customerRepository';
+import { findPaymentMethodForMerchant } from '../db/customers/paymentMethodRepository';
 import type { IntentStateResult, PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   AccountNotReadyError,
+  assertUsablePaymentMethod,
   ConnectedAccountNotFoundError,
   createIntent,
   IdempotencyConflictError,
+  IntentParameterError,
   NetworkMismatchError,
   RailMismatchError,
   RailUnavailableError,
 } from '../services/createIntent';
+import { ensureProviderCustomer } from '../services/customers/providerCustomer';
+import { selectStoredProvider } from '../services/providers/environmentGuard';
+import { ProviderError } from '../services/providers/provider';
 import { findAccountByPublicId } from '../db/accounts/connectedAccountRepository';
 import { redactProviderMessage } from '../services/providers/redact';
 import { cancelCardPaymentAtProvider } from '../services/cardCancellation';
-import { reconcileIntentWithProvider } from '../services/intentReconciliation';
+import {
+  applyProviderPaymentResult,
+  reconcileIntentWithProvider,
+} from '../services/intentReconciliation';
 import { resolveClientAction } from '../services/clientAction';
 import { applyEvent } from '../services/intentState';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPaymentIntentDTO } from '../lib/serialize';
+import { emailSchema, shippingSchema, toShipping } from '../lib/addressSchema';
 import {
   sendError,
+  sendProviderError,
   wrap,
   requireServiceApp,
   requireAuthenticated,
@@ -46,6 +68,7 @@ import {
 } from '../lib/http';
 import { railBodyFields } from '../lib/railSchema';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
+import { requestIdOf } from '../lib/requestId';
 import { expandObjects, parseExpand } from '../lib/expand';
 import {
   answerList,
@@ -116,6 +139,8 @@ export const paymentIntentListFilters = {
     .optional(),
   /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
   connected_account: z.string().min(1).max(255).optional(),
+  /** Only this customer's payments (`cus_…`, ADR 0016). */
+  customer: z.string().min(1).max(255).optional(),
 } as const;
 
 const listPaymentIntentsQuery = listQuerySchema(paymentIntentListFilters);
@@ -123,12 +148,75 @@ const listPaymentIntentsQuery = listQuerySchema(paymentIntentListFilters);
 /** A merchant retrieve takes `expand[]`; the payer's takes `client_secret` and nothing to expand. */
 const retrieveIntentQuery = retrieveQuerySchema({});
 
+/** `""` clears a field, Stripe's rule for an update. */
+const clearable = <T extends z.ZodType>(schema: T) => z.union([schema, z.literal('')]);
+
 const updateBodySchema = z
   .object({
     metadata: metadataUpdateSchema.optional(),
+    description: clearable(z.string().max(1000)).optional(),
+    receipt_email: clearable(emailSchema).optional(),
+    shipping: clearable(shippingSchema).optional(),
     expand: expandParam.optional(),
   } satisfies Record<keyof UpdatePaymentIntentParams | 'expand', z.ZodType>)
   .strict();
+
+const idParam = z.string().min(1).max(255);
+
+const confirmBodySchema = z
+  .object({
+    payment_method: idParam.optional(),
+    off_session: z.boolean().optional(),
+    setup_future_usage: z
+      .enum(PAYMENT_INTENT_SETUP_FUTURE_USAGES as ['on_session', 'off_session'])
+      .optional(),
+    return_url: z.string().url().max(2048).optional(),
+    receipt_email: emailSchema.optional(),
+    shipping: shippingSchema.optional(),
+    expand: expandParam.optional(),
+  } satisfies Record<keyof ConfirmPaymentIntentParams | 'expand', z.ZodType>)
+  .strict();
+
+const captureBodySchema = z
+  .object({
+    amount_to_capture: z
+      .string()
+      .refine(isBaseUnitString, 'amount_to_capture must be a minor-unit integer string')
+      .refine((value) => value !== '0', 'amount_to_capture must be positive')
+      .optional(),
+    expand: expandParam.optional(),
+  } satisfies Record<keyof CapturePaymentIntentParams | 'expand', z.ZodType>)
+  .strict();
+
+const cancelBodySchema = z
+  .object({
+    cancellation_reason: z.enum(MERCHANT_CANCELLATION_REASONS).optional(),
+    expand: expandParam.optional(),
+  } satisfies Record<keyof CancelPaymentIntentParams | 'expand', z.ZodType>)
+  .strict();
+
+/** Stripe's answer for an operation the intent's status does not allow. */
+function sendUnexpectedState(res: Response, intent: PaymentIntentRow, operation: string): void {
+  sendError(
+    res,
+    400,
+    'invalid_request_error',
+    `this payment intent is '${intent.status}' and cannot be ${operation}`,
+    'payment_intent_unexpected_state',
+  );
+}
+
+/** A FairCoin payment has nothing to confirm or capture server-side (ADR 0019). */
+function sendCardOnly(res: Response, operation: string, param?: string): void {
+  sendError(
+    res,
+    400,
+    'invalid_request_error',
+    `${operation} is card only: a FairCoin payment is completed by the payer's own wallet broadcasting a transaction`,
+    'parameter_invalid',
+    param,
+  );
+}
 
 /**
  * The `connected_account` a create body may carry (ADR 0012 D5). Shared by the
@@ -168,6 +256,30 @@ const createBodySchema = z
     ...connectedAccountBodyField,
     metadata: metadataCreateSchema.optional(),
     expires_in_seconds: z.number().int().positive().optional(),
+    payment_method_types: z
+      .array(z.enum(['card', 'faircoin']))
+      .min(1)
+      .max(1)
+      .optional(),
+    customer: idParam.optional(),
+    payment_method: idParam.optional(),
+    confirm: z.boolean().optional(),
+    off_session: z.boolean().optional(),
+    setup_future_usage: z
+      .enum(PAYMENT_INTENT_SETUP_FUTURE_USAGES as ['on_session', 'off_session'])
+      .optional(),
+    capture_method: z.enum(PAYMENT_INTENT_CAPTURE_METHODS as ['automatic', 'manual']).optional(),
+    receipt_email: emailSchema.optional(),
+    description: z.string().max(1000).optional(),
+    // Stripe's bound; the account prefix and this together must fit 22.
+    statement_descriptor_suffix: z
+      .string()
+      .min(1)
+      .max(22)
+      .regex(/^[^<>\\'"*]*$/, 'statement_descriptor_suffix may not contain < > \\ \' " *')
+      .optional(),
+    shipping: shippingSchema.optional(),
+    return_url: z.string().url().max(2048).optional(),
   } satisfies Record<keyof CreatePaymentIntentParams, z.ZodType>)
   .strict();
 
@@ -247,6 +359,8 @@ export interface ListPaymentIntentsQuery extends ListQuery {
   readonly status?: PaymentIntentStatus | undefined;
   /** A seller's PUBLIC `ca_…`; resolved and ownership-checked below. */
   readonly connected_account?: string | undefined;
+  /** A customer's PUBLIC `cus_…`; resolved and ownership-checked below. */
+  readonly customer?: string | undefined;
 }
 
 /**
@@ -274,6 +388,13 @@ export async function answerPaymentIntentList(
   );
   if (!account.ok) return;
   const connectedAccountId = account.id;
+  const customer = await resolveListReference(
+    res,
+    'customer',
+    query.customer,
+    async (publicId) => (await findLiveCustomerForMerchant(db, publicId, merchantId))?.id ?? null,
+  );
+  if (!customer.ok) return;
 
   await answerList(req, res, {
     query,
@@ -284,7 +405,13 @@ export async function answerPaymentIntentList(
     // intent is a 400 exactly like an unknown one.
     cursor: async (publicId) => (await findIntentForMerchant(db, publicId, merchantId))?.id ?? null,
     fetch: (page) =>
-      listIntentsForMerchant(db, { merchantId, status: query.status, connectedAccountId, page }),
+      listIntentsForMerchant(db, {
+        merchantId,
+        status: query.status,
+        connectedAccountId,
+        customerId: customer.id,
+        page,
+      }),
     serialize: toPaymentIntentDTO,
   });
 }
@@ -348,6 +475,24 @@ export function createPaymentIntentsRouter(deps: {
           metadata: params.metadata,
           expiresInSeconds: params.expires_in_seconds,
           ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
+          ...(params.payment_method_types !== undefined
+            ? { paymentMethodTypes: params.payment_method_types }
+            : {}),
+          ...(params.customer !== undefined ? { customer: params.customer } : {}),
+          ...(params.payment_method !== undefined ? { paymentMethod: params.payment_method } : {}),
+          ...(params.confirm !== undefined ? { confirm: params.confirm } : {}),
+          ...(params.off_session !== undefined ? { offSession: params.off_session } : {}),
+          ...(params.setup_future_usage !== undefined
+            ? { setupFutureUsage: params.setup_future_usage }
+            : {}),
+          ...(params.capture_method !== undefined ? { captureMethod: params.capture_method } : {}),
+          ...(params.receipt_email !== undefined ? { receiptEmail: params.receipt_email } : {}),
+          ...(params.description !== undefined ? { description: params.description } : {}),
+          ...(params.statement_descriptor_suffix !== undefined
+            ? { statementDescriptorSuffix: params.statement_descriptor_suffix }
+            : {}),
+          ...(params.shipping !== undefined ? { shipping: toShipping(params.shipping) } : {}),
+          ...(params.return_url !== undefined ? { returnUrl: params.return_url } : {}),
         });
         res.status(reused ? 200 : 201).json({
           ...toPaymentIntentDTO(intent),
@@ -369,6 +514,14 @@ export function createPaymentIntentsRouter(deps: {
         // server fault. Which mistake they made is in the message.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
           sendError(res, 400, 'invalid_request_error', err.message);
+          return;
+        }
+        if (err instanceof IntentParameterError) {
+          sendError(res, 400, 'invalid_request_error', err.message, err.code, err.param);
+          return;
+        }
+        if (err instanceof ProviderError) {
+          sendProviderError(res, err);
           return;
         }
         if (sendConnectedAccountRefusal(res, err)) return;
@@ -531,11 +684,11 @@ export function createPaymentIntentsRouter(deps: {
   /**
    * Update an intent — Stripe's `POST /v1/payment_intents/:id`.
    *
-   * Only `metadata` is mutable. The amount, rail and address ARE the payment,
-   * and the status moves only through its own operations (`transitionIntent`),
-   * so a generic update can never be a back door into the state machine.
-   * Sends no webhook: a metadata change is the merchant's own bookkeeping, and
-   * the event catalog has no `payment_intent.updated` to carry it.
+   * The merchant's own fields only: `metadata`, `description`, `receipt_email`,
+   * `shipping`. The amount, rail and address ARE the payment, and the status
+   * moves only through its own operations (`transitionIntent`), so a generic
+   * update can never be a back door into the state machine. Sends no webhook:
+   * it is the merchant's own bookkeeping.
    */
   router.post(
     '/v1/payment_intents/:id',
@@ -560,10 +713,26 @@ export function createPaymentIntentsRouter(deps: {
       if (!expand) return;
 
       const db = getDb();
-      const result =
-        parsed.data.metadata === undefined
-          ? ((await findIntentForMerchant(db, id, merchant.id)) ?? 'missing')
-          : await updateIntentMetadata(db, id, merchant.id, parsed.data.metadata);
+      const body = parsed.data;
+      const nothing =
+        body.metadata === undefined &&
+        body.description === undefined &&
+        body.receipt_email === undefined &&
+        body.shipping === undefined;
+      const result = nothing
+        ? ((await findIntentForMerchant(db, id, merchant.id)) ?? 'missing')
+        : await updateIntentDetails(db, id, merchant.id, {
+            metadata: body.metadata,
+            ...(body.description !== undefined
+              ? { description: body.description === '' ? null : body.description }
+              : {}),
+            ...(body.receipt_email !== undefined
+              ? { receiptEmail: body.receipt_email === '' ? null : body.receipt_email }
+              : {}),
+            ...(body.shipping !== undefined
+              ? { shipping: body.shipping === '' ? null : toShipping(body.shipping) }
+              : {}),
+          });
       if (result === 'missing') {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
@@ -673,7 +842,7 @@ export function createPaymentIntentsRouter(deps: {
           res,
           400,
           'invalid_request_error',
-          'this payment needs no client action; its address is on the intent',
+          'this payment needs no client action; it is paid by sending coins to its next_action.faircoin_payment address',
         );
         return;
       }
@@ -690,8 +859,20 @@ export function createPaymentIntentsRouter(deps: {
     }),
   );
 
+  /**
+   * Confirm a CARD payment server-side with a saved payment method (ADR 0019) —
+   * Stripe's `POST /v1/payment_intents/:id/confirm`.
+   *
+   * The method is the body's `pm_…` or the intent's own, and it must be
+   * attached to the intent's customer: the provider charges a saved card
+   * through that customer. A decline is not an error from the provider's side —
+   * the payment returns to `requires_payment_method` with `last_payment_error`
+   * — and is answered 402 `card_error` carrying the intent, Stripe's shape. A
+   * challenge answers 200 with `status: 'requires_action'` and
+   * `next_action: use_peable_sdk`; the payer's client completes it.
+   */
   router.post(
-    '/v1/payment_intents/:id/reject',
+    '/v1/payment_intents/:id/confirm',
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
@@ -699,16 +880,269 @@ export function createPaymentIntentsRouter(deps: {
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
       const { id } = req.params;
       if (!id) {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
+      const parsed = confirmBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const body = parsed.data;
+      const expand = parseExpand(res, 'payment_intent', body.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const intent = await findIntentForMerchant(db, id, merchant.id);
+      if (!intent) {
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
+        return;
+      }
+      if (intent.rail !== 'card') {
+        sendCardOnly(res, 'confirm', 'payment_method');
+        return;
+      }
+      if (
+        intent.status !== 'requires_payment_method' &&
+        intent.status !== 'requires_confirmation' &&
+        intent.status !== 'requires_action'
+      ) {
+        sendUnexpectedState(res, intent, 'confirmed');
+        return;
+      }
+
+      const methodId = body.payment_method ?? intent.paymentMethodPublicId;
+      if (methodId === null) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          'confirming needs a payment_method',
+          'parameter_missing',
+          'payment_method',
+        );
+        return;
+      }
+      const paymentMethod = await findPaymentMethodForMerchant(db, methodId, merchant.id);
+      if (!paymentMethod) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          `no such payment method: '${methodId}'`,
+          'resource_missing',
+          'payment_method',
+        );
+        return;
+      }
+      const customer =
+        intent.customerPublicId === null
+          ? null
+          : await findLiveCustomerForMerchant(db, intent.customerPublicId, merchant.id);
+      try {
+        assertUsablePaymentMethod(paymentMethod, customer);
+      } catch (error) {
+        if (error instanceof IntentParameterError) {
+          sendError(res, 400, 'invalid_request_error', error.message, error.code, error.param);
+          return;
+        }
+        throw error;
+      }
+      if (customer === null) throw new Error('assertUsablePaymentMethod admitted no customer');
+
+      const provider = intent.provider
+        ? selectStoredProvider(intent.provider, intent.livemode)
+        : undefined;
+      if (!provider || !intent.providerObjectId) {
+        sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
+        return;
+      }
+
+      // The method (and what came with it) recorded first, under the status
+      // CAS: a confirmation racing another cannot repoint a payment that moved.
+      const prepared = await setIntentPaymentMethod(db, intent.id, intent.status, {
+        paymentMethodId: paymentMethod.id,
+        setupFutureUsage: body.setup_future_usage,
+        receiptEmail: body.receipt_email,
+        ...(body.shipping !== undefined ? { shipping: toShipping(body.shipping) } : {}),
+      });
+      if (!prepared) {
+        const current = await findIntentById(db, intent.id);
+        sendStaleOrMissing(
+          res,
+          current ? { kind: 'stale', current: current.status } : { kind: 'missing' },
+        );
+        return;
+      }
+
+      try {
+        const customerObjectId = await ensureProviderCustomer(customer, provider);
+        const result = await provider.confirm({
+          intentId: intent.publicId,
+          providerObjectId: intent.providerObjectId,
+          paymentMethodObjectId: paymentMethod.providerObjectId,
+          customerObjectId,
+          ...(body.off_session === true ? { offSession: true } : {}),
+          ...(body.setup_future_usage !== undefined
+            ? { setupFutureUsage: body.setup_future_usage }
+            : {}),
+          ...(body.return_url !== undefined ? { returnUrl: body.return_url } : {}),
+          // One provider operation per Peable request: the generic key when the
+          // caller sent one (a retry is the same confirmation), otherwise fresh
+          // — a second confirm after a decline is a NEW attempt.
+          idempotencyKey: `confirm:${intent.publicId}:${idempotencyKeyOf(res) ?? randomUUID()}`,
+        });
+        await applyProviderPaymentResult(prepared, result);
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          sendProviderError(res, error);
+          return;
+        }
+        throw error;
+      }
+
+      const current = (await findIntentById(db, intent.id)) ?? prepared;
+      const dto = toPaymentIntentDTO(current);
+      await expandObjects([dto], 'payment_intent', expand, merchant.id);
+      if (current.status === 'requires_payment_method' && current.lastPaymentError !== null) {
+        res.status(402).json({
+          error: {
+            type: 'card_error',
+            ...(current.lastPaymentError.code ? { code: current.lastPaymentError.code } : {}),
+            ...(current.lastPaymentError.decline_code
+              ? { decline_code: current.lastPaymentError.decline_code }
+              : {}),
+            message: current.lastPaymentError.message,
+            payment_intent: dto,
+            request_id: requestIdOf(res) ?? null,
+          },
+        });
+        return;
+      }
+      res.status(200).json(dto);
+    }),
+  );
+
+  /**
+   * Capture a held authorization (`capture_method: manual`, `requires_capture`)
+   * — in full, or `amount_to_capture` of it; the rest is released. Card only.
+   */
+  router.post(
+    '/v1/payment_intents/:id/capture',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = captureBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const expand = parseExpand(res, 'payment_intent', parsed.data.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const intent = await findIntentForMerchant(db, id, merchant.id);
+      if (!intent) {
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
+        return;
+      }
+      if (intent.rail !== 'card') {
+        sendCardOnly(res, 'capture', 'amount_to_capture');
+        return;
+      }
+      if (intent.status !== 'requires_capture') {
+        sendUnexpectedState(res, intent, 'captured');
+        return;
+      }
+      const amountToCapture = parsed.data.amount_to_capture;
+      if (amountToCapture !== undefined && BigInt(amountToCapture) > BigInt(intent.amount)) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          `amount_to_capture cannot exceed the authorized ${intent.amount}`,
+          'parameter_invalid',
+          'amount_to_capture',
+        );
+        return;
+      }
+      const provider = intent.provider
+        ? selectStoredProvider(intent.provider, intent.livemode)
+        : undefined;
+      if (!provider || !intent.providerObjectId) {
+        sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
+        return;
+      }
+
+      let outcome: Awaited<ReturnType<typeof applyProviderPaymentResult>>;
+      try {
+        const result = await provider.capture({
+          intentId: intent.publicId,
+          providerObjectId: intent.providerObjectId,
+          // One capture per payment: a retry is the same capture.
+          idempotencyKey: `capture:${intent.publicId}`,
+          ...(amountToCapture !== undefined ? { amountToCapture } : {}),
+        });
+        outcome = await applyProviderPaymentResult(intent, result, {
+          amountReceived: amountToCapture ?? intent.amount,
+        });
+      } catch (error) {
+        if (error instanceof ProviderError) {
+          sendProviderError(res, error);
+          return;
+        }
+        throw error;
+      }
+      if (outcome.kind === 'irreconcilable') {
+        sendError(res, 409, 'invalid_request_error', redactProviderMessage(outcome.error));
+        return;
+      }
+      const current = (await findIntentById(db, intent.id)) ?? intent;
+      const dto = toPaymentIntentDTO(current);
+      await expandObjects([dto], 'payment_intent', expand, merchant.id);
+      res.status(200).json(dto);
+    }),
+  );
+
+  /**
+   * Cancel a payment — Stripe's `POST /v1/payment_intents/:id/cancel`, which
+   * replaces `/reject` (ADR 0019). Allowed while nothing is moving money:
+   * `requires_payment_method`, `requires_confirmation`, `requires_action`, and a
+   * held authorization (`requires_capture`, which a cancellation releases).
+   */
+  router.post(
+    '/v1/payment_intents/:id/cancel',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = cancelBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const expand = parseExpand(res, 'payment_intent', parsed.data.expand, { list: false });
+      if (!expand) return;
+      const reason = parsed.data.cancellation_reason;
 
       const intent = await findIntentForMerchant(getDb(), id, merchant.id);
       if (!intent) {
@@ -718,67 +1152,60 @@ export function createPaymentIntentsRouter(deps: {
 
       let nextStatus: PaymentIntentStatus;
       try {
-        nextStatus = applyEvent(intent.status, 'reject');
-      } catch (err) {
-        sendError(
-          res,
-          409,
-          'invalid_request_error',
-          err instanceof Error ? err.message : 'illegal state transition',
-        );
+        nextStatus = applyEvent(intent.status, 'cancel', intent.rail);
+      } catch {
+        sendUnexpectedState(res, intent, 'canceled');
+        return;
+      }
+      if (nextStatus === intent.status) {
+        // Already cancelled: the answer to a cancel is the cancelled intent.
+        const dto = toPaymentIntentDTO(intent);
+        await expandObjects([dto], 'payment_intent', expand, merchant.id);
+        res.status(200).json(dto);
         return;
       }
 
       /**
        * Cancel at the PROVIDER first, and only then announce it.
        *
-       * This route used to move the row and emit `payment_intent.rejected`
-       * while the acquirer knew nothing: the payer's browser still held a live
-       * confirmation credential for a PaymentIntent that remained confirmable,
-       * so a payment the merchant had been told was rejected could complete
-       * minutes later — against an intent in a terminal status, for an order
-       * already released.
+       * A local cancellation alone would leave the payer's browser holding a
+       * live confirmation credential for a provider payment that stays
+       * confirmable — a payment the merchant was told is cancelled could
+       * complete minutes later. The cancellation can LOSE:
        *
-       * The cancellation can LOSE, and the answers are not symmetric:
-       *
-       *  - `settled` means the payer confirmed first. The gateway reconciles to
-       *    the truth and answers 409 rather than announcing a cancellation it
-       *    cannot deliver.
-       *  - `unknown` means the provider could not be reached. The payment is
-       *    still live and its state is unknown, so nothing is written: a 502
-       *    tells the merchant to try again, which is the only safe answer.
-       *  - `nothing_to_cancel` is the FairCoin rail, where there is no provider
-       *    and the local transition has always been the whole of it.
+       *  - `settled`: the payer confirmed first; reconcile to the truth and 400.
+       *  - `in_flight`: the provider still has it in flight; not cancellable yet.
+       *  - `unknown`: the provider could not be reached; 502, nothing written.
+       *  - `nothing_to_cancel`: the FairCoin rail, where the local transition is
+       *    the whole of it.
        */
       const cancellation = await cancelCardPaymentAtProvider(
         intent,
-        // Derived from the intent's own id, so a retry after a lost response
-        // presents the same key rather than being a second operation.
+        // Derived from the intent's own id: a retry is the same cancellation.
         `cancel:${intent.publicId}`,
+        reason,
       );
       if (cancellation.kind === 'settled') {
         const reconciled = await reconcileIntentWithProvider(intent);
         sendError(
           res,
-          409,
+          400,
           'invalid_request_error',
-          'this payment was completed by the payer before it could be rejected' +
+          'this payment was completed by the payer before it could be canceled' +
             (reconciled.kind === 'applied' || reconciled.kind === 'agreed'
               ? `; it is '${reconciled.status}'`
               : ''),
+          'payment_intent_unexpected_state',
         );
         return;
       }
       if (cancellation.kind === 'in_flight') {
-        // The provider did not cancel it, and still has it in flight. Rejecting
-        // locally here is the exact failure this call exists to prevent: the
-        // payer can still complete a payment the merchant has been told is
-        // rejected.
         sendError(
           res,
-          409,
+          400,
           'invalid_request_error',
-          `the provider still has this payment in flight ('${cancellation.status}'); it cannot be rejected yet`,
+          `the provider still has this payment in flight ('${cancellation.status}'); it cannot be canceled yet`,
+          'payment_intent_unexpected_state',
         );
         return;
       }
@@ -787,26 +1214,23 @@ export function createPaymentIntentsRouter(deps: {
           res,
           502,
           'api_error',
-          `the payment could not be cancelled at the provider: ${redactProviderMessage(cancellation.error)}`,
+          `the payment could not be canceled at the provider: ${redactProviderMessage(cancellation.error)}`,
         );
         return;
       }
-      // `transitionIntent`, not `updateIntentState`. This route mutated the
-      // status and returned, so `payment_intent.rejected` was emitted by NO
-      // path a merchant could trigger — the only way to see one was the
-      // settlement watcher, which never produces that status, or a manual
-      // redelivery of a row that therefore never existed. The event type has
-      // been in the published contract since the first release.
-      const rejected = await transitionIntent(intent.id, {
+      const canceled = await transitionIntent(intent.id, {
         from: intent.status,
         status: nextStatus,
+        ...(reason !== undefined ? { cancellationReason: reason } : {}),
       });
-      if (rejected.kind !== 'updated') {
-        sendStaleOrMissing(res, rejected);
+      if (canceled.kind !== 'updated') {
+        sendStaleOrMissing(res, canceled);
         return;
       }
-      announceIntentChange(rejected.row);
-      res.status(200).json(toPaymentIntentDTO(rejected.row));
+      announceIntentChange(canceled.row);
+      const dto = toPaymentIntentDTO(canceled.row);
+      await expandObjects([dto], 'payment_intent', expand, merchant.id);
+      res.status(200).json(dto);
     }),
   );
 
@@ -842,9 +1266,21 @@ export function createPaymentIntentsRouter(deps: {
         return;
       }
 
+      // A card payment has no transaction to report: its payer confirms through
+      // the provider, never here.
+      if (intent.rail !== 'faircoin') {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          'submit_tx is FairCoin only; a card payment is confirmed through the provider',
+        );
+        return;
+      }
+
       let nextStatus: PaymentIntentStatus;
       try {
-        nextStatus = applyEvent(intent.status, 'broadcast');
+        nextStatus = applyEvent(intent.status, 'broadcast', 'faircoin');
       } catch (err) {
         sendError(
           res,
@@ -854,15 +1290,11 @@ export function createPaymentIntentsRouter(deps: {
         );
         return;
       }
-      // Status and txid move in ONE statement: `payment_intents_broadcast_requires_txid_check`
-      // refuses `broadcast` without the txid beside it, so two writes could not
-      // satisfy the constraint in either order.
-      //
-      // `broadcast` maps to no webhook event — a merchant acts on outcomes, not
-      // on a payer pressing send — so `transitionIntent` enqueues nothing here.
-      // It is still the right entry point: the announce below is what puts the
-      // "payment sent, waiting to be seen on-chain" frame on the payer's own
-      // checkout page, which this route previously left to the next poll.
+      // Status and txid move in ONE statement: `payment_intents_processing_requires_txid_check`
+      // refuses a FairCoin `processing` without the txid beside it, so two
+      // writes could not satisfy the constraint in either order. The merchant
+      // is told `payment_intent.processing`, and the announce puts the
+      // "payment sent, confirming" frame on the payer's own checkout page.
       const broadcast = await transitionIntent(intent.id, {
         from: intent.status,
         status: nextStatus,

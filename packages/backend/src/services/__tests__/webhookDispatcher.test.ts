@@ -1,3 +1,4 @@
+import { intentDTO } from '../../__tests__/helpers/intentFixture';
 import { test, expect } from 'bun:test';
 import { IncomingMessage } from 'node:http';
 import { Socket } from 'node:net';
@@ -13,30 +14,11 @@ const TARGET: WebhookTarget = {
   secrets: [SECRET],
 };
 
-const INTENT: PaymentIntent = {
-  id: 'pi_0000000000000000000000a1',
-  object: 'payment_intent',
-  livemode: false,
-  status: 'settled',
-  rail: 'faircoin',
-  amount: '100000000',
-  currency: 'FAIR',
-  network: 'testnet',
-  address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3',
-  merchant_id: 'merch_1',
-  connected_account: null,
-  txid: 'tx_1',
-  confirmations: 2,
-  client_secret: 'pi_0000000000000000000000a1_secret_x',
-  metadata: {},
-  expires_at: 1_784_332_800,
-  created: 1_784_332_800,
-  updated_at: 1_784_332_800,
-};
+const INTENT: PaymentIntent = intentDTO();
 
 /** A stored event as the dispatcher renders it (`toEventDTO`). */
 function buildEvent(
-  type: 'payment_intent.settled' | 'payment_intent.failed',
+  type: 'payment_intent.succeeded' | 'payment_intent.payment_failed',
   object: PaymentIntent,
 ): WebhookEvent {
   return {
@@ -79,7 +61,7 @@ test('delivers a correctly-signed webhook and destroys the response on 2xx', asy
     return result;
   };
 
-  const event = buildEvent('payment_intent.settled', INTENT);
+  const event = buildEvent('payment_intent.succeeded', INTENT);
   const outcome = await attemptDelivery(event, TARGET, { safeFetch: fakeSafeFetch });
 
   expect(outcome).toEqual({ kind: 'delivered' });
@@ -116,7 +98,7 @@ test('makes exactly one request, whatever the response', async () => {
       calls += 1;
       return fakeResult(status).result;
     };
-    await attemptDelivery(buildEvent('payment_intent.settled', INTENT), TARGET, {
+    await attemptDelivery(buildEvent('payment_intent.succeeded', INTENT), TARGET, {
       safeFetch: fakeSafeFetch,
     });
     expect(calls).toBe(1);
@@ -130,22 +112,26 @@ test('makes exactly one request, whatever the response', async () => {
  */
 test('classifies a 5xx as retryable and a 4xx as refused', async () => {
   const { result: serverError, wasDestroyed: serverDestroyed } = fakeResult(503);
-  const retry = await attemptDelivery(buildEvent('payment_intent.settled', INTENT), TARGET, {
+  const retry = await attemptDelivery(buildEvent('payment_intent.succeeded', INTENT), TARGET, {
     safeFetch: async () => serverError,
   });
   expect(retry.kind).toBe('retry');
   expect(serverDestroyed()).toBe(true);
 
   const { result: rejected, wasDestroyed: rejectedDestroyed } = fakeResult(422);
-  const refused = await attemptDelivery(buildEvent('payment_intent.failed', INTENT), TARGET, {
-    safeFetch: async () => rejected,
-  });
+  const refused = await attemptDelivery(
+    buildEvent('payment_intent.payment_failed', INTENT),
+    TARGET,
+    {
+      safeFetch: async () => rejected,
+    },
+  );
   expect(refused.kind).toBe('refused');
   expect(rejectedDestroyed()).toBe(true);
 });
 
 test('an SsrfRejection is refused, not retried', async () => {
-  const outcome = await attemptDelivery(buildEvent('payment_intent.settled', INTENT), TARGET, {
+  const outcome = await attemptDelivery(buildEvent('payment_intent.succeeded', INTENT), TARGET, {
     safeFetch: async () => {
       throw new SsrfRejection('blocked');
     },
@@ -161,7 +147,7 @@ test('an SsrfRejection is refused, not retried', async () => {
  * this way round.
  */
 test('an unrecognised error is retryable', async () => {
-  const outcome = await attemptDelivery(buildEvent('payment_intent.settled', INTENT), TARGET, {
+  const outcome = await attemptDelivery(buildEvent('payment_intent.succeeded', INTENT), TARGET, {
     safeFetch: async () => {
       throw new Error('something nobody anticipated');
     },
@@ -179,7 +165,7 @@ test('signs with every secret of the target, one v1 each', async () => {
   let signature: string | undefined;
   let body: string | undefined;
   await attemptDelivery(
-    buildEvent('payment_intent.settled', INTENT),
+    buildEvent('payment_intent.succeeded', INTENT),
     { url: TARGET.url, secrets: ['whsec_new', 'whsec_old'] },
     {
       safeFetch: async (_url, options) => {

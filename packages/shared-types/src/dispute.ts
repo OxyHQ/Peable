@@ -4,8 +4,8 @@ import type { PaymentIntent } from './paymentIntent';
  * A dispute — the card network holding a settled payment's money while a
  * cardholder contests it.
  *
- * Published because `payment_intent.disputed` and `payment_intent.dispute_closed`
- * carry it as their `data.object`. It was route-local at first, with the webhook
+ * Published because `charge.dispute.created`, `charge.dispute.updated` and
+ * `charge.dispute.closed` carry it as their `data.object`. It was route-local at first, with the webhook
  * carrying the PaymentIntent and the detail reachable only through
  * `GET /v1/payment_intents/:id/disputes`. That was inconsistent with the reason
  * those two events exist: `disputed` is a DEADLINE, and a merchant who has to

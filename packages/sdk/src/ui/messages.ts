@@ -41,8 +41,8 @@ const messages = {
     'step.confirmation': 'Confirm payment',
     'faircoin.transfer.awaiting': 'Waiting for your transfer',
     'faircoin.transfer.detected': 'Transfer detected',
-    'faircoin.transfer.confirming': 'Confirming your payment',
-    'faircoin.transfer.settled': 'Payment complete',
+    'faircoin.transfer.processing': 'Confirming your payment',
+    'faircoin.transfer.succeeded': 'Payment complete',
     'faircoin.transfer.failure': 'The payment could not be completed',
     'faircoin.transfer.expired': 'This payment request has expired',
 
@@ -195,8 +195,8 @@ const messages = {
     'step.confirmation': 'Confirmar pago',
     'faircoin.transfer.awaiting': 'Esperando tu transferencia',
     'faircoin.transfer.detected': 'Transferencia detectada',
-    'faircoin.transfer.confirming': 'Confirmando tu pago',
-    'faircoin.transfer.settled': 'Pago completado',
+    'faircoin.transfer.processing': 'Confirmando tu pago',
+    'faircoin.transfer.succeeded': 'Pago completado',
     'faircoin.transfer.failure': 'No se pudo completar el pago',
     'faircoin.transfer.expired': 'Esta solicitud de pago ha caducado',
 

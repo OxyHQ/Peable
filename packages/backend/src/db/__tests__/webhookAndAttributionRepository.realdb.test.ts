@@ -57,6 +57,7 @@ async function makeIntent(merchant: MerchantRow) {
       network: merchant.network,
       address: `T${unique}`,
       provider: null,
+      status: 'requires_action' as const,
       clientSecret: `pi_${unique}_secret_x`,
       idempotencyKey: unique,
       metadata: {},
@@ -108,7 +109,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     async function enqueueFor(
       merchant: MerchantRow,
       intent: { id: string },
-      type: 'payment_intent.settled' | 'payment_intent.failed' = 'payment_intent.settled',
+      type:
+        | 'payment_intent.succeeded'
+        | 'payment_intent.payment_failed' = 'payment_intent.succeeded',
       url = 'https://merchant.example/hook',
     ): Promise<string> {
       const event = await insertEvent(must(suite).db, {
@@ -141,7 +144,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       intent: { id: string },
       url = 'https://merchant.example/hook',
     ) {
-      const id = await enqueueFor(merchant, intent, 'payment_intent.settled', url);
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded', url);
       await recordDeliveryAttempt(must(suite).db, {
         id,
         outcome: { kind: 'delivered' },
@@ -164,7 +167,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueFor(merchant, intent, 'payment_intent.settled');
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       const row = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       expect(row?.lastStatus).toBe('pending');
@@ -184,7 +187,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const okId = await enqueueFor(merchant, intent, 'payment_intent.settled');
+      const okId = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
       await recordDeliveryAttempt(must(suite).db, {
         id: okId,
         outcome: { kind: 'delivered' },
@@ -195,7 +198,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(ok?.lastStatus).toBe('delivered');
       expect(ok?.delivered).toBe(true);
 
-      const badId = await enqueueFor(merchant, intent, 'payment_intent.failed');
+      const badId = await enqueueFor(merchant, intent, 'payment_intent.payment_failed');
       await recordDeliveryAttempt(must(suite).db, {
         id: badId,
         outcome: { kind: 'refused', reason: 'target responded 410' },
@@ -220,7 +223,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueFor(merchant, intent, 'payment_intent.settled');
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       // Retrying: still pending, still scheduled.
       await recordDeliveryAttempt(must(suite).db, {
@@ -250,7 +253,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a pending delivery with no schedule', async () => {
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
-      const id = await enqueueFor(merchant, intent, 'payment_intent.settled');
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       let raised: unknown;
       try {

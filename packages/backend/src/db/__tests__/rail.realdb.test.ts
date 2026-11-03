@@ -47,6 +47,7 @@ function cardIntentParams(merchantId: string, overrides: Record<string, unknown>
     network: null,
     address: null,
     provider: 'stripe' as const,
+    status: 'requires_payment_method' as const,
     clientSecret: `pi_${unique}_secret_x`,
     idempotencyKey: unique,
     metadata: {},
@@ -81,18 +82,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
    * refused the FIRST successful card payment, in production, with every test
    * green, because no fixture could reach that state before the rail existed.
    */
-  test('a card intent reaches settled with no txid', async () => {
+  test('a card intent reaches processing and succeeded with no txid', async () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
 
+    const processing = await updateIntentState(gatewayDb(), must(intent).id, {
+      from: 'requires_payment_method',
+      status: 'processing',
+    });
+    expect(processing.kind).toBe('updated');
     const settled = await updateIntentState(gatewayDb(), must(intent).id, {
-      from: 'created',
-      status: 'settled',
+      from: 'processing',
+      status: 'succeeded',
     });
 
     expect(settled.kind).toBe('updated');
     const row = settled.kind === 'updated' ? settled.row : undefined;
-    expect(row?.status).toBe('settled');
+    expect(row?.status).toBe('succeeded');
     expect(row?.txid).toBeNull();
   });
 
@@ -155,24 +161,30 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
     ).rejects.toThrow();
   });
 
-  test('a card intent cannot reach a chain status', async () => {
+  test('a card intent can never carry a transaction id', async () => {
     const merchant = await seedMerchant();
     const intent = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
     await expect(
       updateIntentState(gatewayDb(), must(intent).id, {
-        from: 'created',
-        status: 'confirming',
+        from: 'requires_payment_method',
+        status: 'processing',
         txid: 'deadbeef',
       }),
     ).rejects.toThrow();
   });
 
-  test('a FairCoin intent cannot reach a card status', async () => {
+  test('a FairCoin intent cannot reach a card-only status', async () => {
     const merchant = await seedMerchant();
-    const intent = await seedIntent(merchant);
-    await expect(
-      updateIntentState(gatewayDb(), intent.id, { from: intent.status, status: 'requires_action' }),
-    ).rejects.toThrow();
+    for (const status of [
+      'requires_payment_method',
+      'requires_confirmation',
+      'requires_capture',
+    ] as const) {
+      const intent = await seedIntent(merchant);
+      await expect(
+        updateIntentState(gatewayDb(), intent.id, { from: intent.status, status }),
+      ).rejects.toThrow();
+    }
   });
 
   /**
@@ -202,23 +214,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
 
   /**
    * `findWatchableIntents` filters on the RAIL, not only on the status list its
-   * one caller happens to pass. `settled` is a shared status: the day this query
-   * is asked for one, a card payment reaching the settlement watcher would be
-   * verified against a null address.
+   * one caller happens to pass. Since ADR 0019 `processing` is a shared status:
+   * a card payment reaching the settlement watcher would be verified against a
+   * null address.
    */
   test('the watchable query never returns a card intent', async () => {
     const merchant = await seedMerchant();
     const card = await insertPaymentIntent(gatewayDb(), cardIntentParams(merchant.id));
-    await updateIntentState(gatewayDb(), must(card).id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), must(card).id, {
+      from: 'requires_payment_method',
+      status: 'processing',
+    });
 
     const faircoin = await seedIntent(merchant);
     await updateIntentState(gatewayDb(), faircoin.id, {
       from: faircoin.status,
-      status: 'broadcast',
+      status: 'processing',
       txid: 'a'.repeat(64),
     });
 
-    const watchable = await findWatchableIntents(gatewayDb(), ['broadcast', 'settled']);
+    const watchable = await findWatchableIntents(gatewayDb(), ['processing']);
 
     expect(watchable.map((row) => row.id)).toEqual([faircoin.id]);
   });
@@ -234,7 +249,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the card rail', () => {
       .values({
         id: uuidv7(),
         publicId: `pi_${unique}`,
-        status: 'created',
+        status: 'requires_action',
         amount: '100000000',
         network: merchant.network,
         address: `T${unique}`,

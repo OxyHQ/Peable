@@ -85,7 +85,7 @@ export interface PeableCheckoutClient {
    * page POLLS.
    *
    * @throws {PeableInvalidRequestError} when the payment can no longer be paid
-   *   — a settled, expired or rejected payment has no next step, and a page
+   *   — a payment that succeeded or was cancelled has no next step, and a page
    *   handed one would render a card form over a finished payment.
    */
   getClientAction(id: string, clientSecret: string): Promise<PeableClientAction>;

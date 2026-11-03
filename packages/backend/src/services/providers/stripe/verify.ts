@@ -15,47 +15,36 @@ import type { ProviderEventEnvelope, ProviderPaymentStatus } from '../provider';
 /**
  * Stripe's PaymentIntent status → the gateway's.
  *
- * A TOTAL function over Stripe's own union, so a status Stripe adds is a
- * compile error here rather than a payment that silently maps to nothing.
- *
- * The two `requires_*` collapses are deliberate:
- *  - `requires_payment_method` is `created` and not `failed`. A payer who
- *    abandoned a checkout and a payer whose card was declined both land here,
- *    and treating it as failure would close intents nobody has tried to pay.
- *  - `requires_confirmation` is also `created`: the client has not acted yet.
- *  - `requires_capture` is `processing`, not `succeeded`. The money is
- *    authorized and NOT captured; calling it succeeded would settle an order
- *    against funds nobody has taken.
+ * The identity since ADR 0019 — the gateway adopted Stripe's seven statuses —
+ * and still a TOTAL function over Stripe's own union, so a status Stripe adds
+ * is a compile error here rather than a payment that silently maps to nothing.
  */
 export function mapPaymentIntentStatus(status: Stripe.PaymentIntent.Status): ProviderPaymentStatus {
   switch (status) {
     case 'requires_payment_method':
     case 'requires_confirmation':
-      return 'created';
     case 'requires_action':
-      return 'requires_action';
     case 'processing':
     case 'requires_capture':
-      return 'processing';
     case 'succeeded':
-      return 'succeeded';
     case 'canceled':
-      return 'canceled';
+      return status;
   }
 }
 
 /**
  * The event types that say something about a PAYMENT's state.
  *
- * A map rather than a switch inside the envelope builder, so the set is
- * enumerable — the ingress route filters on it, and a test can walk it.
+ * `payment_failed` maps to `failed` — an ATTEMPT failed; the payment itself is
+ * back at `requires_payment_method` and the drain records the error with it.
  */
-const PAYMENT_STATUS_FOR_EVENT: Readonly<Record<string, ProviderPaymentStatus>> = {
+const PAYMENT_STATUS_FOR_EVENT: Readonly<Record<string, ProviderPaymentStatus | 'failed'>> = {
   'payment_intent.succeeded': 'succeeded',
   'payment_intent.payment_failed': 'failed',
   'payment_intent.processing': 'processing',
   'payment_intent.canceled': 'canceled',
   'payment_intent.requires_action': 'requires_action',
+  'payment_intent.amount_capturable_updated': 'requires_capture',
 };
 
 /**

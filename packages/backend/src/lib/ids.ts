@@ -21,6 +21,10 @@ function randomHex(byteLength: number): string {
 export function newId(
   prefix:
     | 'pi'
+    | 'ch'
+    | 'cus'
+    | 'pm'
+    | 'seti'
     | 'evt'
     | 'merch'
     | 'link'

@@ -303,8 +303,8 @@ test('contribution confirmations use the existing non-custodial watcher and CAS 
   const intent = await findIntentByPublicId(gatewayDb(), minted.id);
   if (!intent?.address) throw new Error('Expected watch-only address');
   await transitionIntent(intent.id, {
-    from: 'created',
-    status: 'broadcast',
+    from: 'requires_action',
+    status: 'processing',
     txid: 'contribution_fixture_tx',
   });
   const address = intent.address;
@@ -324,15 +324,16 @@ test('contribution confirmations use the existing non-custodial watcher and CAS 
     },
   });
   await watcher.check();
-  expect((await findIntentByPublicId(gatewayDb(), minted.id))?.status).toBe('confirming');
+  expect((await findIntentByPublicId(gatewayDb(), minted.id))?.status).toBe('processing');
   confirmations = 10;
   await watcher.check();
   await watcher.check();
-  expect(changes).toEqual(['confirming', 'settled']);
+  // 0 confirmations writes nothing new; 10 succeeds in one write.
+  expect(changes).toEqual(['succeeded']);
   const report = contributionCollectionListSchema.parse(
     await (await request(`${root}/${link.id}/collections?environment=development`)).json(),
   );
-  expect(report.data[0]?.status).toBe('settled');
+  expect(report.data[0]?.status).toBe('succeeded');
   expect(report.data[0]?.refunds).toEqual([]);
 });
 test('disabled links recover a previously minted attempt but refuse a new operation', async () => {

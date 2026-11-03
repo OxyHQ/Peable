@@ -1,9 +1,18 @@
 import type { Response } from 'express';
 import { findAccountsByPublicIds } from '../db/accounts/connectedAccountRepository';
 import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentRepository';
+import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
+import { findCustomersForMerchantByPublicIds } from '../db/customers/customerRepository';
+import { findPaymentMethodsForMerchantByPublicIds } from '../db/customers/paymentMethodRepository';
 import { getDb } from '../db/postgres';
 import { sendError } from './http';
-import { toPaymentIntentDTO } from './serialize';
+import {
+  toChargeDTO,
+  toCustomerDTO,
+  toDeletedCustomerDTO,
+  toPaymentIntentDTO,
+  toPaymentMethodDTO,
+} from './serialize';
 import { toConnectedAccountDTO } from './serializeSettlement';
 
 /**
@@ -38,6 +47,10 @@ import { toConnectedAccountDTO } from './serializeSettlement';
 /** Every object type that appears at the root of a response that accepts `expand[]`. */
 export type ExpandableType =
   | 'payment_intent'
+  | 'charge'
+  | 'customer'
+  | 'payment_method'
+  | 'setup_intent'
   | 'checkout_session'
   | 'refund'
   | 'transfer'
@@ -51,10 +64,21 @@ export type ExpandableType =
   | 'tax.transaction';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
-type TargetType = 'payment_intent' | 'connected_account';
+type TargetType = 'payment_intent' | 'connected_account' | 'charge' | 'customer' | 'payment_method';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
-  payment_intent: { connected_account: 'connected_account' },
+  // `latest_charge` is the one reference named for its ROLE, not its type —
+  // Stripe's spelling; it expands to a `charge`.
+  payment_intent: {
+    connected_account: 'connected_account',
+    customer: 'customer',
+    payment_method: 'payment_method',
+    latest_charge: 'charge',
+  },
+  charge: { payment_intent: 'payment_intent' },
+  customer: {},
+  payment_method: { customer: 'customer' },
+  setup_intent: { customer: 'customer', payment_method: 'payment_method' },
   checkout_session: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
   refund: { payment_intent: 'payment_intent' },
   transfer: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
@@ -76,6 +100,27 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findIntentsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toPaymentIntentDTO(row),
+      ]),
+    ),
+  charge: async (merchantId, ids) =>
+    new Map(
+      (await findChargesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toChargeDTO(row),
+      ]),
+    ),
+  customer: async (merchantId, ids) =>
+    new Map(
+      (await findCustomersForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        row.deletedAt === null ? toCustomerDTO(row) : toDeletedCustomerDTO(row),
+      ]),
+    ),
+  payment_method: async (merchantId, ids) =>
+    new Map(
+      (await findPaymentMethodsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toPaymentMethodDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

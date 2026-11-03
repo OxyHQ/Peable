@@ -103,8 +103,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     expect(result.applied).toBeGreaterThanOrEqual(1);
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe('settled');
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.settled');
+    expect(after?.status).toBe('succeeded');
+    expect(await deliveriesFor(intent.id)).toContain('payment_intent.succeeded');
   });
 
   it('fails a declined payment and tells the merchant', async () => {
@@ -113,32 +113,35 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
 
     await runProviderEventDrainPass();
 
+    // ADR 0019: a declined attempt returns the payment to
+    // `requires_payment_method` with Peable's own error — the intent is still
+    // payable, and the merchant is told.
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe('failed');
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.failed');
+    expect(after?.status).toBe('requires_payment_method');
+    expect(after?.lastPaymentError?.type).toBe('card_error');
+    expect(after?.lastPaymentError?.message).toBe('The payment attempt failed.');
+    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.payment_failed']);
   });
 
   /**
-   * A provider cancellation is a REJECTION, not an expiry. Expiry is this
+   * A provider cancellation is `automatic`, not `abandoned`. Expiry is this
    * gateway's own clock running out, and conflating the two would put payments
    * the sweeper never touched into its numbers.
    */
-  it('treats a provider cancellation as a rejection', async () => {
+  it('records a provider cancellation as automatic', async () => {
     const intent = await linkedCardIntent('pi_stripe_canceled');
     await storeEvent('payment_intent.canceled', 'pi_stripe_canceled');
 
     await runProviderEventDrainPass();
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe('rejected');
+    expect(after?.status).toBe('canceled');
+    expect(after?.cancellationReason).toBe('automatic');
+    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.canceled']);
   });
 
-  /**
-   * The pre-payment statuses tell a merchant nothing they act on, so they move
-   * the intent and enqueue NOTHING. A merchant integrating on Stripe-shaped
-   * ergonomics acts on outcomes.
-   */
-  it('moves the intent to processing without enqueueing an event', async () => {
+  /** Stripe's catalogue (ADR 0019): every transition but a fresh start is an event. */
+  it('moves the intent to processing and tells the merchant', async () => {
     const intent = await linkedCardIntent('pi_stripe_processing');
     await storeEvent('payment_intent.processing', 'pi_stripe_processing');
 
@@ -146,7 +149,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
 
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
     expect(after?.status).toBe('processing');
-    expect(await deliveriesFor(intent.id)).toEqual([]);
+    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.processing']);
   });
 
   /**
@@ -154,7 +157,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
    *
    * Stripe redelivers, and it redelivers events for payments that are long
    * settled. This must be an ordinary no-op — and it must NOT enqueue a second
-   * `payment_intent.settled`, or a merchant releasing inventory on that event
+   * `payment_intent.succeeded`, or a merchant releasing inventory on that event
    * releases it twice.
    */
   it('absorbs a redelivery without moving the intent or duplicating the event', async () => {
@@ -163,7 +166,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     await runProviderEventDrainPass();
 
     const deliveriesAfterFirst = await deliveriesFor(intent.id);
-    expect(deliveriesAfterFirst).toEqual(['payment_intent.settled']);
+    expect(deliveriesAfterFirst).toEqual(['payment_intent.succeeded']);
 
     // The provider sends it again, under a new event id — which is what a
     // redelivery of an already-2xx'd event looks like when the endpoint is
@@ -173,8 +176,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
 
     expect(second.noop).toBeGreaterThanOrEqual(1);
     const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    expect(after?.status).toBe('settled');
-    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.settled']);
+    expect(after?.status).toBe('succeeded');
+    expect(await deliveriesFor(intent.id)).toEqual(['payment_intent.succeeded']);
   });
 
   /**
@@ -199,14 +202,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     // Still unprocessed, and therefore still in the drain's set.
     const stored = await findProviderEventById(gatewayDb(), eventId);
     expect(stored?.processedAt).toBeNull();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
+      'requires_payment_method',
+    );
 
     // The create finishes.
     await linkProviderObject(gatewayDb(), intent.id, 'stripe', 'pi_stripe_racing');
 
     const second = await runProviderEventDrainPass();
     expect(second.applied).toBeGreaterThanOrEqual(1);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
     expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
   });
 
@@ -265,7 +270,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     const result = await runProviderEventDrainPass();
     expect(result.failed).toBeGreaterThanOrEqual(1);
     expect(result.applied).toBeGreaterThanOrEqual(1);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
   });
 
   /**
@@ -283,7 +288,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     // database still holds the deliberately-failing rows the two cases above
     // left, and they are counted by every later pass.
     await runProviderEventDrainPass();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
   });
 
   /**
@@ -297,7 +302,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
 
     const result = await runProviderEventDrainPass();
     expect(result.applied).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), chain.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), chain.publicId))?.status).toBe(
+      'requires_action',
+    );
   });
   it('reaches later recurring and one-off events when every pass is beyond the retry backoff', async () => {
     // This suite shares rows across its cases: isolate the queue, not the seeded merchant.
@@ -375,7 +382,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     expect(second.applied).toBe(2);
     expect(second.unmatched).toBe(48);
     expect((await findProviderEventById(gatewayDb(), must(valid)))?.processedAt).not.toBeNull();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
     for (const id of blocked)
       expect((await findProviderEventById(gatewayDb(), id))?.processedAt).toBeNull();
     time = new Date(time.getTime() + 60_001);
@@ -434,7 +441,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the provider event drain', () => {
     expect(must(failure).progress).toMatchObject({ examined: 2, applied: 1, unmatched: 1 });
     expect(must(failure).pendingEventIds).toEqual([must(blocked)]);
     expect((await findProviderEventById(gatewayDb(), valid))?.processedAt).not.toBeNull();
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
     const deliveriesBefore = await gatewayDb().select().from(webhookDeliveries);
     time = new Date(time.getTime() + 60_001);
     await retryProviderEventDrainDeferral(must(failure), { now: () => time });

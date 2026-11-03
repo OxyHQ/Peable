@@ -52,6 +52,9 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // Applied well before `0010` was authored; the migrator confirmed it by
   // naming `0011`/`0012` as the stranded pair and not this one.
   '0009_fuzzy_misty_knight': 'applied in production before 0010 existed',
+  // The contract half of events and webhook endpoints (ADR 0014 D4) ships in
+  // its own release (#194), deployed before ADR 0019's `0042`–`0045` exist.
+  '0041_drop_merchant_webhook_columns': 'released with #194 before 0042 (ADR 0019) was authored',
 };
 
 interface Migration {

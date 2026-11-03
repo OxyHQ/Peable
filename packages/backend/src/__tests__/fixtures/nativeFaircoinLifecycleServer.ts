@@ -249,8 +249,8 @@ async function settle(checkoutId: string) {
   const invoice = must(row);
   const intent = must(await findIntentById(suite.db, must(invoice.paymentIntentId)));
   await transitionIntent(intent.id, {
-    from: 'created',
-    status: 'broadcast',
+    from: 'requires_action',
+    status: 'processing',
     txid: randomUUID().replaceAll('-', '').repeat(2),
   });
   const updated = must(await findIntentById(suite.db, intent.id));

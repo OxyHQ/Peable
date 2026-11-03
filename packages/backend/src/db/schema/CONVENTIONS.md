@@ -259,23 +259,21 @@ with the columns: a webhook endpoint's url and secret are both `NOT NULL`.)
 
 Two that ARE there, because every writer was checked:
 
-- `payment_intents_broadcast_requires_txid_check`. `submit_tx` is the only path
-  to `broadcast` and sets `txid` in the same write; `confirming` and `settled`
-  are reached only by the settlement watcher, which selects on `txid` being
-  present. `failed` is deliberately outside the set — `approved → failed` is
-  legal and pairs with no txid.
+- `payment_intents_processing_requires_txid_check` (was `…_broadcast_requires_txid_check`
+  before ADR 0019). A FairCoin `processing` or `succeeded` intent has a txid:
+  `submit_tx` is the only path to a chain `processing` and sets `txid` in the
+  same write, and `succeeded` is reached only by the settlement watcher, which
+  selects on `txid` being present. `canceled` is deliberately outside the set —
+  an expired intent has no txid and an underpaid one has one.
 
-  **This CHECK also decides which fixture can test the code around it, and that
-  is not a coincidence.** A mutation survived here: dropping `isNotNull(txid)`
-  from `findWatchableIntents` left the whole suite green, because every
-  txid-less fixture was `created` and the STATUS predicate excluded it before
-  the txid predicate was ever reached. The obvious discriminating fixture — a
-  txid-less `broadcast` row — is UNREPRESENTABLE, because this constraint
-  forbids exactly it. So the only status that both permits a missing txid and
-  reaches that query is `failed`, the one status left out of the set above. The
-  constraint and the fixture that tests around it are one design decision seen
-  from two sides; narrowing the constraint later would silently remove the only
-  fixture that can exercise the predicate.
+  **This CHECK also decides which fixture can test the code around it.** A
+  mutation survived here: dropping `isNotNull(txid)` from `findWatchableIntents`
+  left the suite green, because every txid-less fixture was excluded by the
+  STATUS predicate before the txid predicate was reached. A txid-less
+  `processing` FairCoin row is UNREPRESENTABLE, so the discriminating fixture is
+  a `canceled` one — the only status that holds rows both with a txid
+  (underpaid) and without (expired). Narrowing the constraint later would
+  silently remove it.
 - `webhook_deliveries_status_agrees_check`. `delivered` and `last_status` are two
   spellings of one fact and both writers derive the second from the first; the
   CHECK is that derivation, where the two cannot come apart.
@@ -525,3 +523,41 @@ body it answered. Decisions a reader would otherwise undo:
 - **Retention is `@oxy.so/db/expiry`** (`services/idempotencySweeper.ts`), on the
   indexed `expires_at`. Correctness does not wait on it: the read ignores an
   expired row and the claim takes one over.
+
+
+## Payments core (ADR 0019)
+
+- **`payment_intents` statuses are Stripe's seven**; `CARD_ONLY_STATUSES`
+  (`requires_payment_method`, `requires_confirmation`, `requires_capture`) are
+  refused on the chain by `payment_intents_card_statuses_are_card_check`, and
+  the card-only fields (`payment_method_id`, `setup_future_usage`,
+  `capture_method = 'manual'`, `statement_descriptor_suffix`) by
+  `payment_intents_card_only_fields_check`.
+- **`canceled_at` ⇔ `status = 'canceled'`, and `cancellation_reason` only on a
+  cancelled row** (`payment_intents_canceled_agrees_check`). The one writer is
+  `updateIntentState` (and the sweeper's claim), which stamps both in the
+  transition's own statement.
+- **`amount_received` is stored, `amount_refunded` is not.** The first is a fact
+  of the transition (a partial capture receives less) and is `'0'` outside
+  `succeeded` (`payment_intents_amount_received_agrees_check`); the second is
+  the sum of succeeded refunds, read in the same statement as the row — the
+  refund rows are its one home.
+- **A scalar subquery in a column map that every RETURNING shares must be
+  table-qualified in raw SQL.** drizzle renders column references UNqualified in
+  `INSERT/UPDATE … RETURNING`, and an unqualified `"id"` inside a subquery over
+  `charges` or `refunds` binds to THAT table's `id` — a silently wrong answer,
+  not an error. `latestChargePublicId` and `amountRefunded` are written with
+  `"payment_intents"."id"` for that reason (measured).
+- **`charges`: one per payment intent** (`charges_payment_intent_id_key`),
+  written by `ensureChargeForIntent` in the transition's transaction; `outcome`
+  and `payment_method_details` are a provider snapshot, NULL until read.
+- **`customers` are tombstoned, never deleted** (`deleted_at`): payment intents
+  and payment methods reference them with `restrict`. `payment_methods` and
+  `payment_intents` reference a customer through `(customer_id, merchant_id)`,
+  so a row can only name its own merchant's customer; the customer's default
+  method references `(default_payment_method_id, id) → payment_methods (id,
+  customer_id)`, so it can only be one of its OWN attached methods — detaching it
+  clears the default first, in the same transaction.
+- **`customer_provider_bindings` hold the provider customer** — the binding of
+  ADR 0016 D2, never serialized, one per (customer, provider); its mode is the
+  merchant's (ADR 0017).

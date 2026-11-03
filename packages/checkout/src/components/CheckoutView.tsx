@@ -23,21 +23,16 @@ export interface CheckoutViewProps {
   billingQuote?: BillingFaircoinFxQuote;
 }
 
+/** A FairCoin payment waits for the payer's broadcast in `requires_action` (ADR 0019). */
 const AWAITING_PAYMENT_STATUSES: ReadonlySet<PaymentIntent['status']> = new Set([
-  'created',
-  'awaiting_approval',
+  'requires_action',
 ]);
 
 /**
  * Statuses nothing can follow — the fallback poller stops here rather than
  * re-reading a row that can no longer change.
  */
-const TERMINAL_STATUSES: ReadonlySet<PaymentIntent['status']> = new Set([
-  'settled',
-  'expired',
-  'failed',
-  'rejected',
-]);
+const TERMINAL_STATUSES: ReadonlySet<PaymentIntent['status']> = new Set(['succeeded', 'canceled']);
 
 /**
  * How often the REST fallback re-reads the intent when the realtime channel
@@ -194,10 +189,11 @@ export function CheckoutView({
          * they had no way to make.
          *
          * `isPayableCardIntent` and not `awaitingPayment`: the two rails wait
-         * in different statuses. A card payment sits in `created` or
-         * `requires_action`, and a DECLINED one (`failed`) is still payable —
-         * the provider returns it to a confirmable state and the payer can try
-         * another card on the same payment.
+         * in different statuses. A card payment waits in
+         * `requires_payment_method`, `requires_confirmation` or
+         * `requires_action`, and a DECLINED one is back in
+         * `requires_payment_method` with `last_payment_error` — still payable,
+         * on the same payment, with another card.
          */
         <CardPayment intent={intent} />
       ) : (

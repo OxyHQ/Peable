@@ -66,14 +66,20 @@ interface IntentResponse {
   status: string;
   amount: string;
   currency: string;
-  network: string;
-  address: string;
   merchant_id: string;
-  txid: string | null;
-  confirmations: number;
+  faircoin: {
+    network: string;
+    address: string;
+    txid: string | null;
+    confirmations: number;
+    required_confirmations: number;
+  } | null;
+  next_action: { type: string; faircoin_payment?: { address: string; uri: string } } | null;
+  cancellation_reason?: string | null;
+  canceled_at?: number | null;
   metadata: Record<string, string>;
   client_secret?: string;
-  error?: { type: string; message: string };
+  error?: { type: string; code?: string; param?: string; message: string };
 }
 
 let server: Server;
@@ -169,13 +175,18 @@ describe('POST /v1/payment_intents', () => {
     expect(status).toBe(201);
     expect(body.id).toMatch(/^pi_[0-9a-f]{24}$/);
     expect(body.object).toBe('payment_intent');
-    expect(body.status).toBe('created');
+    expect(body.status).toBe('requires_action');
     expect(body.amount).toBe('150000000');
     expect(body.currency).toBe('FAIR');
-    expect(body.network).toBe('testnet');
-    expect(body.address).toBe(FIRST_ADDRESS);
+    expect(body.faircoin?.network).toBe('testnet');
+    expect(body.faircoin?.address).toBe(FIRST_ADDRESS);
+    expect(body.faircoin?.txid).toBeNull();
+    // What the payer does next: send exactly the amount to the address.
+    expect(body.next_action?.type).toBe('faircoin_payment');
+    expect(body.next_action?.faircoin_payment?.uri).toBe(`faircoin:${FIRST_ADDRESS}?amount=1.5`);
+    // The merchant's PUBLIC id, never its internal uuid.
+    expect(body.merchant_id).toMatch(/^merch_/);
     expect(body.metadata.orderId).toBe('o1');
-    expect(body.txid).toBeNull();
     expect(typeof body.client_secret).toBe('string');
     expect(body.client_secret?.startsWith(`${body.id}_secret_`)).toBe(true);
   });
@@ -343,7 +354,7 @@ describe('GET /v1/payment_intents/:id', () => {
     expect(res.status).toBe(200);
     const body = await readJson(res);
     expect(body.id).toBe(created.body.id);
-    expect(body.address).toBe(created.body.address);
+    expect(body.faircoin?.address).toBe(created.body.faircoin?.address);
   });
 
   test('merchant-authed, unknown id -> 404', async () => {
@@ -433,7 +444,7 @@ describe('GET /v1/payment_intents/:id', () => {
 });
 
 describe('POST /v1/payment_intents/:id/submit_tx (payer path)', () => {
-  test('the right client_secret sets txid and moves to broadcast', async () => {
+  test('the right client_secret sets txid and moves to processing', async () => {
     const created = await createIntent('idem-submit-ok');
     const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/submit_tx`, {
       method: 'POST',
@@ -445,8 +456,9 @@ describe('POST /v1/payment_intents/:id/submit_tx (payer path)', () => {
     });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.txid).toBe('a'.repeat(64));
-    expect(body.status).toBe('broadcast');
+    expect(body.faircoin?.txid).toBe('a'.repeat(64));
+    expect(body.status).toBe('processing');
+    expect(body.next_action).toBeNull();
   });
 
   test('a wrong client_secret → 403 and does not mutate the intent', async () => {
@@ -465,23 +477,70 @@ describe('POST /v1/payment_intents/:id/submit_tx (payer path)', () => {
     // `public_id` — the internal primary key is a uuid no response carries.
     const reloaded = await findIntentByPublicId(gatewayDb(), created.body.id);
     expect(reloaded?.txid).toBeNull();
-    expect(reloaded?.status).toBe('created');
+    expect(reloaded?.status).toBe('requires_action');
   });
 });
 
-describe('POST /v1/payment_intents/:id/reject', () => {
-  test('moves the intent to rejected', async () => {
+describe('POST /v1/payment_intents/:id/cancel', () => {
+  test('cancels the intent, with the reason given', async () => {
     const created = await createIntent('idem-reject');
-    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, {
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/cancel`, {
       method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cancellation_reason: 'duplicate' }),
     });
     expect(res.status).toBe(200);
     const body = await readJson(res);
-    expect(body.status).toBe('rejected');
+    expect(body.status).toBe('canceled');
+    expect(body.cancellation_reason).toBe('duplicate');
+    expect(typeof body.canceled_at).toBe('number');
+  });
+
+  test('a reason outside the merchant set is a 400 naming the field', async () => {
+    const created = await createIntent('idem-cancel-bad-reason');
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/cancel`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cancellation_reason: 'underpaid' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await readJson(res)).error as { param?: string }).param).toBe('cancellation_reason');
+  });
+
+  test('/reject is gone (ADR 0019)', async () => {
+    const created = await createIntent('idem-reject-gone');
+    const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, {
+      method: 'POST',
+    });
+    expect(res.status).toBe(404);
+  });
+
+  test('a FairCoin intent cannot be confirmed or captured server-side', async () => {
+    const created = await createIntent('idem-confirm-chain');
+    for (const operation of ['confirm', 'capture']) {
+      const res = await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/${operation}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: '{}',
+      });
+      expect([operation, res.status]).toEqual([operation, 400]);
+      const error = (await readJson(res)).error as { param?: string };
+      expect(error.param).toBe(operation === 'confirm' ? 'payment_method' : 'amount_to_capture');
+    }
+  });
+
+  test('card-only create parameters are refused on the FairCoin rail, naming the field', async () => {
+    const res = await fetch(`${baseUrl}/v1/payment_intents`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ amount: '1000', network: 'testnet', capture_method: 'manual' }),
+    });
+    expect(res.status).toBe(400);
+    expect(((await readJson(res)).error as { param?: string }).param).toBe('capture_method');
   });
 
   test('no service app credentials at all -> 401', async () => {
-    const created = await createIntent('idem-reject-noauth');
+    const created = await createIntent('idem-cancel-noauth');
     const app = express();
     app.use(express.json());
     app.use(
@@ -494,7 +553,7 @@ describe('POST /v1/payment_intents/:id/reject', () => {
     const noAuthAddress = noAuthServer.address() as AddressInfo;
     try {
       const res = await fetch(
-        `http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents/${created.body.id}/reject`,
+        `http://127.0.0.1:${noAuthAddress.port}/v1/payment_intents/${created.body.id}/cancel`,
         { method: 'POST' },
       );
       expect(res.status).toBe(401);
@@ -506,7 +565,7 @@ describe('POST /v1/payment_intents/:id/reject', () => {
   });
 
   test('a credential without payments:write is rejected (403)', async () => {
-    const created = await createIntent('idem-reject-noscope');
+    const created = await createIntent('idem-cancel-noscope');
     const noScopeRequireMerchant: RequestHandler = (req, _res, next) => {
       (req as OxyAuthRequest).serviceApp = {
         appId: TEST_APP_ID,
@@ -531,14 +590,14 @@ describe('POST /v1/payment_intents/:id/reject', () => {
     const noScopeAddress = noScopeServer.address() as AddressInfo;
     try {
       const res = await fetch(
-        `http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents/${created.body.id}/reject`,
+        `http://127.0.0.1:${noScopeAddress.port}/v1/payment_intents/${created.body.id}/cancel`,
         { method: 'POST' },
       );
       expect(res.status).toBe(403);
 
       // The WIRE id again — `public_id` in Postgres, not the primary key.
       const reloaded = await findIntentByPublicId(gatewayDb(), created.body.id);
-      expect(reloaded?.status).toBe('created');
+      expect(reloaded?.status).toBe('requires_action');
     } finally {
       await new Promise<void>((resolve, reject) => {
         noScopeServer.close((err) => (err ? reject(err) : resolve()));
@@ -567,11 +626,11 @@ describe('GET /v1/payment_intents (list)', () => {
 
   test('filters by status', async () => {
     const created = await createIntent('idem-list-status');
-    await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/reject`, { method: 'POST' });
+    await fetch(`${baseUrl}/v1/payment_intents/${created.body.id}/cancel`, { method: 'POST' });
 
-    const res = await fetch(`${baseUrl}/v1/payment_intents?status=rejected`);
+    const res = await fetch(`${baseUrl}/v1/payment_intents?status=canceled`);
     const body = (await res.json()) as { data: IntentResponse[] };
-    expect(body.data.every((intent) => intent.status === 'rejected')).toBe(true);
+    expect(body.data.every((intent) => intent.status === 'canceled')).toBe(true);
     expect(body.data.some((intent) => intent.id === created.body.id)).toBe(true);
   });
 

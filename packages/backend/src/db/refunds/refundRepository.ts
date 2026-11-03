@@ -9,7 +9,6 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { paymentIntents, refunds } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -384,10 +383,9 @@ export async function listRefundsForIntent(
   return rows.map(toRow);
 }
 
-/** A refund plus the two facts of its payment the wire carries: its `pi_…` and its status. */
+/** A refund plus its payment's `pi_…`, which the wire carries. */
 export interface RefundWithIntentRow extends RefundRow {
   readonly paymentIntentPublicId: string;
-  readonly paymentStatus: PaymentIntentStatus;
 }
 
 export interface ListRefundsParams {
@@ -399,7 +397,7 @@ export interface ListRefundsParams {
 
 /**
  * One page of a merchant's refunds, newest first (`db/keyset.ts`), each with
- * its payment's PUBLIC id and status joined in — the DTO promises both, and a
+ * its payment's PUBLIC id joined in — the DTO promises it, and a
  * per-row lookup would be an N+1 the caller sizes through `limit`.
  */
 export async function listRefundsForMerchant(
@@ -411,7 +409,6 @@ export async function listRefundsForMerchant(
     .select({
       ...REFUND_COLUMNS,
       paymentIntentPublicId: paymentIntents.publicId,
-      paymentStatus: paymentIntents.status,
     })
     .from(refunds)
     .innerJoin(paymentIntents, eq(paymentIntents.id, refunds.paymentIntentId))

@@ -301,7 +301,7 @@ export async function readLocalSubscription(
   const item = verified.subscription.items.data[0];
   let ready = false;
   if (
-    intent.status === 'settled' &&
+    intent.status === 'succeeded' &&
     verified.subscription.status === 'active' &&
     verified.invoice.status === 'paid'
   ) {

@@ -2,12 +2,12 @@ import { test, expect } from 'bun:test';
 import { signWebhook, verifyWebhook } from '../webhookSigner';
 
 const SECRET = 'whsec_test_secret';
-const RAW_BODY = JSON.stringify({ id: 'evt_123', type: 'payment_intent.settled' });
+const RAW_BODY = JSON.stringify({ id: 'evt_123', type: 'payment_intent.succeeded' });
 const TIMESTAMP = 1700000000;
 const TOLERANCE_SEC = 300;
 // Stable vector: HMAC-SHA256 over `${TIMESTAMP}.${RAW_BODY}` keyed by SECRET.
 const EXPECTED_HEADER =
-  't=1700000000,v1=02b01667b628438dddffe52578043279a46c4411afabc2b83998986bb312ef33';
+  't=1700000000,v1=4a444f0b337026383657499c82ee16800bfbef2ca4a9c2391a7c1e21f262d969';
 
 test('signWebhook produces a stable Stripe-style signature header', () => {
   expect(signWebhook(SECRET, RAW_BODY, TIMESTAMP)).toBe(EXPECTED_HEADER);
@@ -20,7 +20,11 @@ test('verifyWebhook accepts a valid header within tolerance', () => {
 
 test('verifyWebhook rejects a tampered body', () => {
   const header = signWebhook(SECRET, RAW_BODY, TIMESTAMP);
-  const tampered = JSON.stringify({ id: 'evt_123', type: 'payment_intent.settled', amount: '999' });
+  const tampered = JSON.stringify({
+    id: 'evt_123',
+    type: 'payment_intent.succeeded',
+    amount: '999',
+  });
   expect(verifyWebhook(SECRET, tampered, header, TOLERANCE_SEC, TIMESTAMP + 10)).toBe(false);
 });
 

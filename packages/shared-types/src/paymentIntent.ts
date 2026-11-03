@@ -1,10 +1,14 @@
 // The PaymentIntent contract — the single source of truth shared by the Peable
-// Gateway backend, SDK, and frontend. Mirrors Stripe's PaymentIntent shape over
-// two rails: the non-custodial FairCoin lifecycle, and a fiat card payment
-// served by a provider behind the gateway (ADR 0001).
-import type { ConnectedAccount } from './settlement';
+// Gateway backend, SDK, and frontend. Stripe's PaymentIntent, at the root
+// (ADR 0019): one status vocabulary over two rails — the non-custodial FairCoin
+// lifecycle, and a fiat card payment served by a provider behind the gateway
+// (ADR 0001).
+import type { Charge } from './charge';
+import type { Customer } from './customer';
 import type { CurrencyCode } from './money';
 import type { NetworkType } from './network';
+import type { PaymentMethod } from './paymentMethod';
+import type { ConnectedAccount } from './settlement';
 
 /**
  * Which rail moves the money (ADR 0001 D1).
@@ -18,130 +22,87 @@ export type PaymentIntentRail = 'faircoin' | 'card';
 /** {@link PaymentIntentRail} as the tuple the database CHECK reads. */
 export const PAYMENT_INTENT_RAILS: readonly PaymentIntentRail[] = ['faircoin', 'card'];
 
+/**
+ * Stripe's seven statuses, and no others (ADR 0019).
+ *
+ * The FairCoin rail walks four of them: it is created in `requires_action`
+ * (the payer must broadcast a transaction — `next_action.faircoin_payment`),
+ * moves to `processing` once a transaction is reported and while it confirms,
+ * and ends `succeeded` or `canceled`. A card walks all seven.
+ */
 export type PaymentIntentStatus =
-  | 'created'
-  | 'awaiting_approval'
-  | 'approved'
-  | 'broadcast'
-  | 'confirming'
+  | 'requires_payment_method'
+  | 'requires_confirmation'
   | 'requires_action'
   | 'processing'
-  | 'settled'
-  | 'refunded'
-  | 'partially_refunded'
-  | 'expired'
-  | 'failed'
-  | 'rejected';
+  | 'requires_capture'
+  | 'canceled'
+  | 'succeeded';
 
 /**
- * Which statuses belong to which rail (ADR 0001 D5).
+ * The statuses only a CARD payment can reach (ADR 0019).
  *
- * The four chain states describe a transaction on a blockchain and the four
- * card states describe an authorization at a card acquirer; neither set is
- * expressible on the other rail. Mapping a card authorization onto `broadcast`
- * would be cheaper and would be a lie — nothing was broadcast, there is no
- * transaction, and `payment_intents_broadcast_requires_txid_check` would then
- * be demanding a txid from a payment that can never have one.
- *
- * `db/schema/payments.ts` renders these two sets into CHECK constraints, so the
- * restriction holds against a write that skipped the application.
+ * A FairCoin payment has no payment method to require (the payer's wallet signs
+ * on their own device), nothing to confirm server-side, and no authorization
+ * to capture — coins either arrive or they do not. `db/schema/payments.ts`
+ * renders this set into a CHECK, so the restriction holds against a write that
+ * skipped the application.
  */
-export const CHAIN_ONLY_STATUSES: readonly PaymentIntentStatus[] = [
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
-];
-
 export const CARD_ONLY_STATUSES: readonly PaymentIntentStatus[] = [
-  'requires_action',
-  'processing',
-  'refunded',
-  'partially_refunded',
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_capture',
 ];
 
 /**
- * Legal forward transitions of the PaymentIntent lifecycle. Terminal states
- * (refunded/expired/failed/rejected) allow no further transition here — the one
- * documented exception, a reorg dropping `settled` back to `confirming`, is
- * modelled by the backend state machine, not this happy-path table.
+ * Legal transitions of the PaymentIntent lifecycle.
  *
- * ONE table for both rails, deliberately. It answers "is this a legal lifecycle
- * edge at all"; WHICH rail may reach a given status is the separate, structural
- * question the two sets above answer, in the database. A rail-parameterised
- * table would put the same restriction in two places and let them disagree.
+ * ONE table for both rails. It answers "is this a legal lifecycle edge at all";
+ * WHICH rail may reach a given status is the separate, structural question
+ * {@link CARD_ONLY_STATUSES} answers in the database, and which EVENT may walk
+ * an edge is `LEGAL_SOURCES` in the backend's `services/intentState.ts`.
  *
  * Self-transitions are absent because `applyEvent` short-circuits on
- * `current === target` before consulting this table — that is the idempotent
- * re-poll of the settlement watcher, and a second partial refund, which change
- * an amount without changing a status.
+ * `current === target` — the idempotent re-poll of the settlement watcher.
+ *
+ * `succeeded` has no outgoing edge here. Its one exception — a chain reorg
+ * dropping a FairCoin payment back below its confirmation threshold,
+ * `succeeded → processing` — is modelled by the backend state machine, not this
+ * table. Refunds are not statuses: money coming back is `amount_refunded` and
+ * the refunds themselves (ADR 0019).
  */
 const ALLOWED: Record<PaymentIntentStatus, readonly PaymentIntentStatus[]> = {
-  // `created` supports three paths: the rich wallet flow (→ awaiting_approval →
-  // approved → broadcast), the minimal path where the payer pays out-of-band
-  // and reports the txid directly (→ broadcast), and the card path (→
-  // requires_action for an SCA challenge, → processing, or straight to settled
-  // for a charge that confirms in one call). `failed` is reachable from here
-  // because a card can be declined on first confirmation, having never been
-  // anything else; no FairCoin path uses that edge, since `underpaid` is only
-  // emitted for an intent that already carries a txid.
-  created: [
-    'awaiting_approval',
-    'broadcast',
+  requires_payment_method: [
+    'requires_confirmation',
     'requires_action',
     'processing',
-    'settled',
-    'failed',
-    'rejected',
-    'expired',
+    'requires_capture',
+    'succeeded',
+    'canceled',
   ],
-  awaiting_approval: ['approved', 'rejected', 'expired'],
-  approved: ['broadcast', 'failed'],
-  broadcast: ['confirming', 'failed'],
-  confirming: ['settled', 'failed'],
-  requires_action: ['processing', 'settled', 'failed', 'expired', 'rejected'],
-  processing: ['settled', 'failed'],
-  /**
-   * A failed ATTEMPT is not a failed payment, on the card rail.
-   *
-   * `payment_intent.payment_failed` means one authorization attempt was
-   * declined; Stripe returns the PaymentIntent to `requires_payment_method` and
-   * the payer can confirm it again with another card. With `failed` terminal,
-   * the later `payment_intent.succeeded` was an ILLEGAL transition — so the
-   * drain recorded a processing failure and retried it forever, the payment
-   * stayed `failed`, and a merchant who had been paid was told their payment
-   * had been declined.
-   *
-   * On the chain rail `failed` means `underpaid`, which IS terminal — coins
-   * arrived and were not enough. Nothing here opens that door: `underpaid` is
-   * emitted only by the settlement watcher, and `LEGAL_SOURCES` in
-   * `services/intentState.ts` keeps every `card_*` event to card statuses and
-   * the chain's `confirmed` to `confirming`. This table answers "is the edge
-   * legal at all"; which rail may walk it is the separate question those two
-   * guards answer.
-   */
-  failed: ['requires_action', 'processing', 'settled'],
-  // Money coming back requires money to have arrived, so both refund states are
-  // reachable only from `settled`.
-  settled: ['refunded', 'partially_refunded'],
-  /**
-   * ...and money coming back can be UNDONE, which is why these edges run both
-   * ways.
-   *
-   * A refund is not final when the provider accepts it: a bank can reject one
-   * days later, and the provider then says so (`refund.failed`). Without a path
-   * back, a payment whose only refund failed would claim `refunded` forever —
-   * the merchant's books saying money went back that is still with them, and no
-   * transition anywhere able to correct it.
-   *
-   * The target is always recomputed from the SUM of succeeded refunds
-   * (`applyRefundToIntent`), never stepped, so these edges describe where that
-   * sum can legally land rather than a sequence anyone walks.
-   */
-  partially_refunded: ['refunded', 'settled'],
-  refunded: ['partially_refunded', 'settled'],
-  expired: [],
-  rejected: [],
+  requires_confirmation: [
+    'requires_payment_method',
+    'requires_action',
+    'processing',
+    'requires_capture',
+    'succeeded',
+    'canceled',
+  ],
+  // FairCoin: the payer broadcasts (→ processing), or the intent is cancelled
+  // or expires (→ canceled). Card: an SCA challenge resolved either way.
+  requires_action: [
+    'requires_payment_method',
+    'processing',
+    'requires_capture',
+    'succeeded',
+    'canceled',
+  ],
+  // FairCoin: confirmed (→ succeeded) or underpaid (→ canceled). Card: an async
+  // method settled, was authorized, or failed back to `requires_payment_method`.
+  processing: ['requires_payment_method', 'requires_capture', 'succeeded', 'canceled'],
+  requires_capture: ['processing', 'succeeded', 'canceled'],
+  succeeded: [],
+  canceled: [],
 };
 
 export function isValidStatusTransition(
@@ -151,123 +112,187 @@ export function isValidStatusTransition(
   return ALLOWED[from].includes(to);
 }
 
-/** Every legal `PaymentIntentStatus`, derived from `ALLOWED`'s keys — the
- * single source of truth consumed by the Gateway's list-route status filter. */
+/** Every `PaymentIntentStatus`, derived from `ALLOWED`'s keys. */
 export const PAYMENT_INTENT_STATUSES: readonly PaymentIntentStatus[] = Object.keys(
   ALLOWED,
 ) as PaymentIntentStatus[];
 
-/**
- * The statuses a payer can still complete a payment FROM.
- *
- * **Twice now this question has been answered by walking the transition table,
- * and twice the table has moved underneath it.**
- *
- * The hosted checkout first asked leaf-ness — "has this status no outgoing
- * edges" — which meant `settled` while `settled` had none. Adding the refund
- * transitions (`settled → refunded | partially_refunded`) gave it edges, so a
- * settled payment stopped looking finished, and the checkout began REUSING a
- * remembered settled intent instead of minting a fresh one: a payer who had
- * already paid saw their old receipt forever, with no way to pay the link
- * again.
- *
- * The fix was reachability — "is `settled` still reachable" — and that held
- * until refunds could be UNDONE. `refunded → settled` (a bank rejecting a
- * refund days later) makes `settled` reachable from `settled` in two steps, so
- * reachability answers `true` for a payment that is finished, and the original
- * bug returns unchanged.
- *
- * So the set is stated, not derived. It is exactly the statuses in which the
- * gateway is still waiting on the PAYER — which is what the question means, in
- * the payer's own terms, and is the one formulation no edge added elsewhere can
- * silently change. `paymentIntent.test.ts` pins it against the table: every
- * member must still be able to reach `settled` without passing through a
- * post-settlement status, and no non-member may.
- */
-const PAYABLE_STATUSES: ReadonlySet<PaymentIntentStatus> = new Set([
-  'created',
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
-  'requires_action',
-  'processing',
-]);
+/** The statuses that end a payment: nothing leaves them (bar the reorg exception). */
+export const TERMINAL_STATUSES: readonly PaymentIntentStatus[] = ['succeeded', 'canceled'];
 
 /**
  * Whether a payer can still complete a payment against an intent in this
- * status.
- *
- * `settled` answers `false`: it is where paying ENDS. `partially_refunded`
- * answers `false` too — money can still move, but not from the payer.
+ * status — every non-terminal one. Stated, not derived from reachability:
+ * `paymentIntent.test.ts` pins it against the table.
  */
 export function canStillBePaid(status: PaymentIntentStatus): boolean {
-  return PAYABLE_STATUSES.has(status);
-}
-
-/**
- * The statuses a payment reaches only AFTER the payer has finished.
- *
- * Exported for the gate below rather than for production use: the property that
- * makes `PAYABLE_STATUSES` checkable is that a payable status reaches `settled`
- * without going through one of these.
- */
-export const POST_SETTLEMENT_STATUSES: readonly PaymentIntentStatus[] = [
-  'settled',
-  'refunded',
-  'partially_refunded',
-];
-
-/**
- * Whether `settled` is reachable from `status` without passing through a
- * post-settlement status. The derivation `canStillBePaid` used to BE, kept as
- * the thing that checks it rather than as the thing that answers it.
- */
-export function reachesSettlementFromPayer(status: PaymentIntentStatus): boolean {
-  const blocked = new Set<PaymentIntentStatus>(POST_SETTLEMENT_STATUSES);
-  // A payment that has ALREADY settled is one the payer has finished with,
-  // whatever edges lead out of it. Checked before the walk rather than inside
-  // it, because `partially_refunded → settled` is a direct edge and the walk
-  // would find it in one step — and that edge is a refund being undone, not a
-  // payer paying.
-  if (blocked.has(status)) return false;
-
-  const seen = new Set<PaymentIntentStatus>();
-  const queue: PaymentIntentStatus[] = [...ALLOWED[status]];
-
-  while (queue.length > 0) {
-    const next = queue.shift() as PaymentIntentStatus;
-    if (next === 'settled') return true;
-    if (seen.has(next) || blocked.has(next)) continue;
-    seen.add(next);
-    queue.push(...ALLOWED[next]);
-  }
-  return false;
+  return !TERMINAL_STATUSES.includes(status);
 }
 
 /**
  * The statuses an intent may still EXPIRE from (ADR 0012 D9).
  *
- * Exactly those whose transition list contains `expired`: the gateway is
- * waiting on a PERSON who has not paid. Once a FairCoin payer has reported a
- * broadcast (`broadcast`), or the chain is confirming it (`confirming`), the
- * intent NEVER expires, whatever `expiresAt` says — coins are moving and the
- * settlement watcher owns the row. A platform must therefore never cancel an
- * order because `expiresAt` passed: it releases a reservation on
- * `payment_intent.expired` (or `rejected`), and on nothing else.
+ * The gateway is waiting on a PERSON who has not paid: a FairCoin payer who has
+ * not broadcast (`requires_action`), or a card payer who has not completed a
+ * payment method or a challenge. Once a FairCoin payer has reported a
+ * transaction (`processing`) the intent NEVER expires, whatever `expires_at`
+ * says — coins are moving and the settlement watcher owns the row. An
+ * authorization held for capture (`requires_capture`) is the merchant's to
+ * capture or cancel and does not expire either.
  *
- * Stated rather than derived, for `PAYABLE_STATUSES`' reason; the gateway's
- * test suite pins it against the transition table.
+ * Expiry is a cancellation with `cancellation_reason: 'abandoned'`: a platform
+ * releases a reservation on `payment_intent.canceled`.
  */
 export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
-  'created',
-  'awaiting_approval',
+  'requires_payment_method',
+  'requires_confirmation',
   'requires_action',
 ];
 
 /** Whether an intent in this status can still expire. See {@link EXPIRABLE_STATUSES}. */
 export function canExpire(status: PaymentIntentStatus): boolean {
   return EXPIRABLE_STATUSES.includes(status);
+}
+
+/**
+ * Why an intent was cancelled — Stripe's reasons, plus `underpaid`.
+ *
+ *  - `abandoned` — it expired: the payer never paid (the expiry sweeper).
+ *  - `requested_by_customer` / `duplicate` / `fraudulent` — the merchant said so
+ *    through `POST /v1/payment_intents/:id/cancel`.
+ *  - `underpaid` — FairCoin only: a transaction arrived at the address and paid
+ *    less than the amount. Peable never holds those coins, so it cannot ask for
+ *    the difference on the same intent; `last_payment_error` says what happened.
+ *  - `automatic` — the provider cancelled it on its own.
+ *
+ * `null` on a cancelled intent whose cause was never recorded (one cancelled
+ * without a reason, or migrated from the pre-0019 `rejected`).
+ */
+export type PaymentIntentCancellationReason =
+  | 'abandoned'
+  | 'automatic'
+  | 'duplicate'
+  | 'fraudulent'
+  | 'requested_by_customer'
+  | 'underpaid';
+
+export const PAYMENT_INTENT_CANCELLATION_REASONS: readonly PaymentIntentCancellationReason[] = [
+  'abandoned',
+  'automatic',
+  'duplicate',
+  'fraudulent',
+  'requested_by_customer',
+  'underpaid',
+];
+
+/** The reasons a MERCHANT may give `POST /v1/payment_intents/:id/cancel`. */
+export const MERCHANT_CANCELLATION_REASONS = [
+  'abandoned',
+  'duplicate',
+  'fraudulent',
+  'requested_by_customer',
+] as const satisfies readonly PaymentIntentCancellationReason[];
+
+/** When a card is captured: at confirmation, or by `POST …/capture` (card only). */
+export type PaymentIntentCaptureMethod = 'automatic' | 'manual';
+export const PAYMENT_INTENT_CAPTURE_METHODS: readonly PaymentIntentCaptureMethod[] = [
+  'automatic',
+  'manual',
+];
+
+/** Card only: keep the payment method on the customer for later (ADR 0016). */
+export type PaymentIntentSetupFutureUsage = 'on_session' | 'off_session';
+export const PAYMENT_INTENT_SETUP_FUTURE_USAGES: readonly PaymentIntentSetupFutureUsage[] = [
+  'on_session',
+  'off_session',
+];
+
+/** The payment method types a rail accepts. One per rail today. */
+export type PaymentMethodType = 'card' | 'faircoin';
+
+/** Why the last attempt failed. Peable's words, never the provider's raw prose. */
+export interface PaymentIntentLastPaymentError {
+  /** `card_error` for a declined card; `payment_error` for a FairCoin underpayment. */
+  type: 'card_error' | 'payment_error' | 'api_error';
+  code: string | null;
+  decline_code: string | null;
+  message: string;
+}
+
+/** A postal address — Stripe's shape. */
+export interface Address {
+  line1: string | null;
+  line2: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+  /** ISO 3166-1 alpha-2. */
+  country: string | null;
+}
+
+export interface Shipping {
+  name: string;
+  phone: string | null;
+  address: Address;
+  carrier: string | null;
+  tracking_number: string | null;
+}
+
+/** An address as a request carries it: every field optional. */
+export interface AddressParams {
+  line1?: string;
+  line2?: string;
+  city?: string;
+  state?: string;
+  postal_code?: string;
+  country?: string;
+}
+
+/** Shipping as a request carries it: only `name` and `address` are required. */
+export interface ShippingParams {
+  name: string;
+  phone?: string;
+  address: AddressParams;
+  carrier?: string;
+  tracking_number?: string;
+}
+
+/**
+ * What the payer must do next (`status: 'requires_action'`).
+ *
+ *  - `faircoin_payment` — send exactly `amount` (base units) to `address` on
+ *    `network`; `uri` is the BIP21-style `faircoin:` URI a wallet scans.
+ *  - `use_peable_sdk` — a card challenge; `@peable.to/sdk/checkout` fetches the
+ *    provider's confirmation credential through `POST …/client_action` and
+ *    completes it. The credential is never on the intent itself.
+ */
+export type PaymentIntentNextAction =
+  | {
+      type: 'faircoin_payment';
+      faircoin_payment: {
+        address: string;
+        network: NetworkType;
+        amount: string;
+        currency: 'FAIR';
+        uri: string;
+      };
+    }
+  | { type: 'use_peable_sdk' };
+
+/**
+ * The chain side of a FairCoin payment. `null` on a card payment.
+ *
+ * `txid` and `confirmations` describe the transaction the payer reported:
+ * `null`/`0` while the intent is `requires_action`, and the watcher's count
+ * against `required_confirmations` while it is `processing`.
+ */
+export interface PaymentIntentFaircoin {
+  network: NetworkType;
+  /** Watch-only receive address derived per intent from the merchant's (or seller's) xpub. */
+  address: string;
+  txid: string | null;
+  confirmations: number;
+  required_confirmations: number;
 }
 
 export interface PaymentIntent {
@@ -281,85 +306,124 @@ export interface PaymentIntent {
   status: PaymentIntentStatus;
   /** Which rail moves this payment. Decides which fields below are populated. */
   rail: PaymentIntentRail;
+  payment_method_types: PaymentMethodType[];
   /**
    * Amount in the currency's SMALLEST unit as a canonical integer string.
    * Never a float, and never interpretable without `currency`: m⊜ (10^-8 FAIR)
    * on the faircoin rail, cents on a fiat one.
    */
   amount: string;
+  /** What can still be captured: the authorized amount while `requires_capture`, else `"0"`. */
+  amount_capturable: string;
+  /** What was received: the captured amount once `succeeded`, else `"0"`. */
+  amount_received: string;
+  /** The sum of SUCCEEDED refunds on this payment. Refund state lives on the refunds. */
+  amount_refunded: string;
   currency: CurrencyCode;
-  /** FairCoin rail only. `null` on a card payment, which has no network. */
-  network: NetworkType | null;
-  /**
-   * Watch-only receive address derived per-intent from the merchant xpub.
-   * FairCoin rail only; `null` on a card payment, which reserves no address.
-   */
-  address: string | null;
+  capture_method: PaymentIntentCaptureMethod;
+  setup_future_usage: PaymentIntentSetupFutureUsage | null;
+  /** `cus_…`, or the {@link Customer} with `expand[]=customer`. */
+  customer: string | Customer | null;
+  /** `pm_…`, or the {@link PaymentMethod} with `expand[]=payment_method`. Card only. */
+  payment_method: string | PaymentMethod | null;
+  /** `ch_…`, or the {@link Charge} with `expand[]=latest_charge`. Card only. */
+  latest_charge: string | Charge | null;
+  next_action: PaymentIntentNextAction | null;
+  last_payment_error: PaymentIntentLastPaymentError | null;
+  cancellation_reason: PaymentIntentCancellationReason | null;
+  canceled_at: number | null;
+  description: string | null;
+  receipt_email: string | null;
+  /** Card only. */
+  statement_descriptor_suffix: string | null;
+  shipping: Shipping | null;
+  /** The chain side. FairCoin rail only; `null` on a card payment. */
+  faircoin: PaymentIntentFaircoin | null;
+  /** The merchant's PUBLIC `merch_…`. */
   merchant_id: string;
   /**
    * The seller this payment is made ON BEHALF OF (`ca_…`), or `null` for a
    * payment to the merchant itself (ADR 0012 D5). On-behalf payments are
-   * FairCoin only, and `address` derives from that seller's own key.
-   *
-   * The seller's `ca_…`, or the {@link ConnectedAccount} itself when the
-   * request asked for `expand[]=connected_account`.
+   * FairCoin only, and `faircoin.address` derives from that seller's own key.
    */
   connected_account: string | ConnectedAccount | null;
-  txid: string | null;
-  /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
-  confirmations: number;
   client_secret: string;
   metadata: Record<string, string>;
-  /**
-   * When an UNPAID intent expires. Meaningful only while {@link canExpire}
-   * is true for `status` — see `canExpire` below.
-   */
+  /** When an UNPAID intent expires. Meaningful only while `can_expire`. */
   expires_at: number;
-  /**
-   * Whether this intent can still expire (ADR 0012 D9). `false` once the payer
-   * has reported a broadcast: a FairCoin payment that is `broadcast` or
-   * `confirming` NEVER expires, so a platform must not cancel the order for it.
-   *
-   * Optional in the type only for fixtures written against earlier versions;
-   * a gateway at this version always sends it.
-   */
-  can_expire?: boolean;
+  /** Whether this intent can still expire (ADR 0012 D9). */
+  can_expire: boolean;
   created: number;
   updated_at: number;
 }
 
+/** `POST /v1/payment_intents`. */
 export interface CreatePaymentIntentParams {
   /** Amount in the currency's smallest unit, as a canonical integer string. */
   amount: string;
-  /**
-   * Defaults to `'faircoin'` — the rail this gateway shipped with, so every
-   * integration written before ADR 0001 keeps working unchanged.
-   */
+  /** Defaults to `'faircoin'`. */
   rail?: PaymentIntentRail;
   /** Required on the faircoin rail; refused on the card rail, which has none. */
   network?: NetworkType;
   /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
   currency?: CurrencyCode;
+  /** Must name the rail's own type: `['card']` or `['faircoin']`. */
+  payment_method_types?: PaymentMethodType[];
+  /** `cus_…`. */
+  customer?: string;
+  /** `pm_…`, card only. A saved payment method of `customer`. */
+  payment_method?: string;
+  /** Card only: confirm in the same call (needs `payment_method`). */
+  confirm?: boolean;
+  /** Card only, with `confirm`: the customer is not present (needs `customer`). */
+  off_session?: boolean;
+  /** Card only. */
+  setup_future_usage?: PaymentIntentSetupFutureUsage;
+  /** Card only. Defaults to `'automatic'`. */
+  capture_method?: PaymentIntentCaptureMethod;
+  receipt_email?: string;
+  description?: string;
+  /** Card only. */
+  statement_descriptor_suffix?: string;
+  shipping?: ShippingParams;
   metadata?: Record<string, string>;
   expires_in_seconds?: number;
-  /**
-   * Create the payment ON BEHALF OF this connected account (`ca_…`) — the
-   * address derives from the seller's own key and the coins go straight to
-   * their wallet (ADR 0012 D5). FairCoin only: combined with `rail: 'card'` it
-   * is refused. The account's FairCoin half must be `active` and `network`
-   * must be the account's network.
-   */
+  /** FairCoin only: pay this seller (`ca_…`, ADR 0012 D5). */
   connected_account?: string;
+  /** Card only, with `confirm`: where a redirect-based challenge returns. */
+  return_url?: string;
 }
 
 /**
- * `POST /v1/payment_intents/:id`. Only the merchant's own `metadata` is
- * mutable on an intent: everything else is either the payment itself or the
- * state machine's, which moves only through its own operations.
- *
- * `metadata` is a PATCH: named keys are set, a key sent as `""` is removed,
- * keys not named are kept.
+ * `POST /v1/payment_intents/:id`. The merchant's own bookkeeping only —
+ * the amount, rail and status are the payment and move through their own
+ * operations. `metadata` is a PATCH (`""` unsets a key).
  */
 export interface UpdatePaymentIntentParams {
   metadata?: Record<string, string>;
+  description?: string;
+  receipt_email?: string;
+  shipping?: ShippingParams;
+}
+
+/** `POST /v1/payment_intents/:id/confirm` (card only). */
+export interface ConfirmPaymentIntentParams {
+  /** `pm_…`; defaults to the intent's own. */
+  payment_method?: string;
+  off_session?: boolean;
+  setup_future_usage?: PaymentIntentSetupFutureUsage;
+  return_url?: string;
+  receipt_email?: string;
+  shipping?: ShippingParams;
+}
+
+/** `POST /v1/payment_intents/:id/capture` (card only, `requires_capture`). */
+export interface CapturePaymentIntentParams {
+  /** Base units, at most the authorized amount; defaults to all of it. */
+  amount_to_capture?: string;
+}
+
+/** `POST /v1/payment_intents/:id/cancel`. */
+export interface CancelPaymentIntentParams {
+  cancellation_reason?: (typeof MERCHANT_CANCELLATION_REASONS)[number];
 }

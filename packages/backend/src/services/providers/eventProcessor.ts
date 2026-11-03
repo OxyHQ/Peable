@@ -42,7 +42,15 @@ import {
   type RefundStatus,
 } from '../../db/refunds/refundRepository';
 import { newId } from '../../lib/ids';
-import { applyRefundToIntent } from '../refunds/refundService';
+import { emitRefundEvents } from '../refunds/refundService';
+import { syncChargeFromProvider, syncChargeSnapshot } from '../charges';
+import { saveIntentPaymentMethod } from '../customers/paymentMethodService';
+import { applySetupResult } from '../customers/setupIntentService';
+import { findSetupIntentByProviderObject } from '../../db/customers/setupIntentRepository';
+import { isSetupHoldingProvider } from './provider';
+import { selectStoredProvider } from './environmentGuard';
+import { toLastPaymentError } from '../intentReconciliation';
+import type { ProviderPaymentError } from './provider';
 import { findAccountByProviderAccountId } from '../../db/accounts/connectedAccountRepository';
 import {
   applyTransferReversal,
@@ -53,7 +61,8 @@ import { getDb } from '../../db/postgres';
 import { applyEvent, type IntentEvent } from '../intentState';
 import { reconcileIntentWithProvider } from '../intentReconciliation';
 import { announceIntentChange, recordDisputeEvent, transitionIntent } from '../intentTransition';
-import { upsertDispute } from '../../db/disputes/disputeRepository';
+import { kickWebhookOutbox } from '../webhookOutbox';
+import { findDisputeByProviderObject, upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
 import { redactProviderMessage } from './redact';
@@ -81,17 +90,25 @@ import { providerModeConfigured } from './registry';
  * trusts over the code beneath it.
  */
 const INTENT_EVENT_FOR: Readonly<Record<string, IntentEvent>> = {
-  'payment_intent.succeeded': 'card_settled',
+  'payment_intent.succeeded': 'card_succeeded',
   'payment_intent.payment_failed': 'card_failed',
   'payment_intent.canceled': 'card_canceled',
   'payment_intent.processing': 'card_processing',
   'payment_intent.requires_action': 'card_requires_action',
-  // Stripe's name for "the payer has to do something" on some API versions.
-  // Listed alongside rather than instead of: which one arrives depends on the
-  // account's API version, and a gateway that pinned only one would silently
-  // stop showing SCA challenges when Stripe changed the name.
-  'payment_intent.amount_capturable_updated': 'card_processing',
+  // Authorized and held for capture (ADR 0019, `capture_method: manual`).
+  'payment_intent.amount_capturable_updated': 'card_requires_capture',
 };
+
+/**
+ * Charge events that mean "re-read the charge's outcome and card" — the
+ * `ch_…` snapshot (ADR 0019). They move no status; refunds and disputes on the
+ * charge have their own handlers below.
+ */
+const CHARGE_SNAPSHOT_EVENTS: ReadonlySet<string> = new Set([
+  'charge.succeeded',
+  'charge.captured',
+  'charge.updated',
+]);
 
 /** Which key in `object_ids` names the payment this event is about. */
 const PAYMENT_OBJECT_KEY = 'payment_intent';
@@ -306,6 +323,12 @@ export async function processProviderEvent(
     if (event.type in DISPUTE_STATUS_FOR_EVENT) {
       return await handleDisputeEvent(db, event);
     }
+    if (SETUP_INTENT_EVENTS.has(event.type)) {
+      return await handleSetupIntentEvent(db, event);
+    }
+    if (CHARGE_SNAPSHOT_EVENTS.has(event.type)) {
+      return await handleChargeEvent(db, event);
+    }
 
     const intentEvent = INTENT_EVENT_FOR[event.type];
     if (!intentEvent) {
@@ -346,7 +369,7 @@ export async function processProviderEvent(
     // payment is ordinary and must not look like an error.
     let target: ReturnType<typeof applyEvent>;
     try {
-      target = applyEvent(intent.status, intentEvent);
+      target = applyEvent(intent.status, intentEvent, intent.rail);
     } catch {
       /**
        * The event cannot legally act from where the row stands, which is not
@@ -387,7 +410,11 @@ export async function processProviderEvent(
       return { kind: 'failed', error: message };
     }
 
-    if (target === intent.status) {
+    // A failed attempt is news even when the status does not move: a decline
+    // on an intent still waiting for a payment method is recorded with its
+    // codes, and the merchant gets `payment_intent.payment_failed`.
+    const failed = intentEvent === 'card_failed';
+    if (target === intent.status && !failed) {
       await markProviderEventProcessed(db, event.id);
       return { kind: 'noop', intentId: intent.id };
     }
@@ -395,6 +422,8 @@ export async function processProviderEvent(
     const result = await transitionIntent(intent.id, {
       from: intent.status,
       status: target,
+      ...(failed ? { lastPaymentError: toLastPaymentError(readPaymentError(event.payload)) } : {}),
+      ...(target === 'canceled' ? { cancellationReason: 'automatic' as const } : {}),
     });
     if (result.kind !== 'updated') {
       // The row moved between the read and the update — which this comment has
@@ -415,6 +444,11 @@ export async function processProviderEvent(
     // Outside the transition's transaction, and after it — a socket frame is
     // not durable and must never be sent for a change that did not commit.
     announceIntentChange(updated);
+    if (updated.status === 'succeeded' || updated.status === 'requires_capture') {
+      await syncChargeFromProvider(updated);
+      // A payment that saved its card (ADR 0016): register the `pm_…`. Best-effort.
+      await saveIntentPaymentMethod(updated);
+    }
     return { kind: 'applied', intentId: updated.id, status: updated.status };
   } catch (error) {
     // Redacted before it is stored: a provider's message quotes the input back,
@@ -568,17 +602,16 @@ async function handleRefundEvent(
     // move. The payment's status is still recomputed from whatever rows exist:
     // the refund that produced this charge event arrives as its own
     // `refund.created`/`refund.updated`, and those are what import it.
+    // Since ADR 0019 nothing is recomputed from it: the payment's status does
+    // not move with a refund, and `amount_refunded` is read from the rows.
     const chargeId = event.objectIds.charge;
     const byCharge = chargeId ? await findIntentByProviderCharge(db, provider, chargeId) : null;
     if (byCharge) {
       const crossed = await refuseCrossMode(db, event, byCharge);
       if (crossed) return crossed;
-      await applyRefundToIntent(byCharge);
     }
     await markProviderEventProcessed(db, event.id);
-    return byCharge
-      ? { kind: 'applied', intentId: byCharge.id, status: byCharge.status }
-      : { kind: 'no_mapping' };
+    return byCharge ? { kind: 'noop', intentId: byCharge.id } : { kind: 'no_mapping' };
   }
 
   const detail = readRefundDetail(event.payload);
@@ -588,9 +621,9 @@ async function handleRefundEvent(
     const imported = await importRefundFromEvent(db, event, refundObjectId, detail);
     if (!imported) return { kind: 'unmatched' };
     if ('failed' in imported) return imported.failed;
-    const status = await applyRefundToIntent(imported.intent);
     await markProviderEventProcessed(db, event.id);
-    return { kind: 'applied', intentId: imported.intent.id, status };
+    kickWebhookOutbox();
+    return { kind: 'applied', intentId: imported.intent.id, status: imported.status };
   }
 
   const intent = await findIntentById(db, refund.paymentIntentId);
@@ -605,13 +638,23 @@ async function handleRefundEvent(
   // from the rows. `applyRefundState` refuses to move a row that already
   // reached a terminal state, so a `pending` arriving after the `succeeded`
   // that followed it cannot walk the money back.
-  if (detail.status !== null) {
-    await applyRefundState(db, refund.id, detail.status, detail.failureCode);
-  }
-
-  const status = await applyRefundToIntent(intent);
+  //
+  // The row and the merchant's `refund.*` / `charge.refunded` commit together
+  // (ADR 0001 D7).
+  const status = detail.status;
+  const moved =
+    status === null
+      ? null
+      : await db.transaction(async (tx) => {
+          const row = await applyRefundState(tx, refund.id, status, detail.failureCode);
+          if (row) await emitRefundEvents(tx, intent, row, refund.status);
+          return row;
+        });
   await markProviderEventProcessed(db, event.id);
-  return { kind: 'applied', intentId: intent.id, status };
+  if (moved) kickWebhookOutbox();
+  return moved
+    ? { kind: 'applied', intentId: intent.id, status: moved.status }
+    : { kind: 'noop', intentId: intent.id };
 }
 
 /** What a refund payload says, narrowed to what a row needs. */
@@ -666,7 +709,11 @@ async function importRefundFromEvent(
   event: ProviderEventRow,
   refundObjectId: string,
   detail: RefundDetail,
-): Promise<{ readonly intent: PaymentIntentRow } | { readonly failed: ProcessOutcome } | null> {
+): Promise<
+  | { readonly intent: PaymentIntentRow; readonly status: string }
+  | { readonly failed: ProcessOutcome }
+  | null
+> {
   if (detail.amount === null) return null;
 
   const provider = event.provider as ProviderId;
@@ -681,20 +728,26 @@ async function importRefundFromEvent(
   const crossed = await refuseCrossMode(db, event, intent);
   if (crossed) return { failed: crossed };
 
-  await importProviderRefund(db, {
-    publicId: newId('re'),
-    merchantId: intent.merchantId,
-    paymentIntentId: intent.id,
-    amount: detail.amount,
-    currency: intent.currency,
-    provider,
-    providerObjectId: refundObjectId,
-    // Defaults to `pending` rather than `succeeded` when the payload says
-    // nothing: claiming money came back is the answer that is expensive to be
-    // wrong about, and the next `refund.updated` corrects it.
-    status: detail.status ?? 'pending',
+  const amount = detail.amount;
+  const imported = await db.transaction(async (tx) => {
+    const row = await importProviderRefund(tx, {
+      publicId: newId('re'),
+      merchantId: intent.merchantId,
+      paymentIntentId: intent.id,
+      amount,
+      currency: intent.currency,
+      provider,
+      providerObjectId: refundObjectId,
+      // Defaults to `pending` rather than `succeeded` when the payload says
+      // nothing: claiming money came back is the answer that is expensive to be
+      // wrong about, and the next `refund.updated` corrects it.
+      status: detail.status ?? 'pending',
+    });
+    // `refund.created` (and `charge.refunded` if it already succeeded) with the row.
+    if (row) await emitRefundEvents(tx, intent, row, null);
+    return row;
   });
-  return { intent };
+  return { intent, status: imported?.status ?? detail.status ?? 'pending' };
 }
 
 /**
@@ -719,12 +772,12 @@ async function importRefundFromEvent(
  * ## The merchant is told ONCE
  *
  * `upsertDispute` reports whether it created the row, and only a creation
- * enqueues `payment_intent.disputed`. A provider WILL redeliver — receipt is
+ * enqueues `charge.dispute.created`. A provider WILL redeliver — receipt is
  * acknowledged before processing — and a merchant told twice that one payment
  * is disputed has no way to tell that from two disputes on it.
  *
  * A close is the exception and enqueues every time it changes the status,
- * because `dispute_closed` carries the outcome and arriving twice with the same
+ * because `charge.dispute.closed` carries the outcome and arriving twice with the same
  * outcome is idempotent for the merchant in a way "you have a new dispute" is
  * not.
  */
@@ -799,6 +852,7 @@ async function handleDisputeEvent(
    * payment they were never told about, with a deadline they never saw.
    */
   const { dispute } = await db.transaction(async (tx) => {
+    const before = await findDisputeByProviderObject(tx, provider, disputeObjectId);
     const upserted = await upsertDispute(tx, {
       merchantId: intent.merchantId,
       paymentIntentId: intent.id,
@@ -811,16 +865,23 @@ async function handleDisputeEvent(
       evidenceDueAt: closed ? null : detail.evidenceDueAt,
     });
 
-    if (upserted.created || closed) {
-      // The DISPUTE is the payload, not the intent. `disputed` is a deadline,
-      // and a merchant who has to make a second call to learn when evidence is
-      // due is a merchant who can miss it while their integration works as
-      // documented.
+    // The DISPUTE is the payload, not the intent. `created` is a deadline, and
+    // a merchant who has to make a second call to learn when evidence is due is
+    // a merchant who can miss it while their integration works as documented.
+    // `updated` only when the status moved — a redelivery is not news.
+    const eventType = upserted.created
+      ? ('charge.dispute.created' as const)
+      : closed
+        ? ('charge.dispute.closed' as const)
+        : before !== null && before.status !== upserted.dispute.status
+          ? ('charge.dispute.updated' as const)
+          : null;
+    if (eventType !== null) {
       await recordDisputeEvent(
         tx,
         intent,
         toDisputeDTO(upserted.dispute, intent.publicId),
-        upserted.created ? 'payment_intent.disputed' : 'payment_intent.dispute_closed',
+        eventType,
       );
     }
     return upserted;
@@ -891,4 +952,105 @@ function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | nu
     // readable outcome became `won`.
     status: toDisputeStatus(fields.status),
   };
+}
+
+/**
+ * A charge changed at the provider (`charge.succeeded|captured|updated`):
+ * re-read its outcome and card into the `ch_…` snapshot. The stored payload is
+ * redacted, so the snapshot is never read from it.
+ */
+async function handleChargeEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
+  const chargeId = event.objectIds.charge;
+  if (!chargeId) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const paymentObjectId = event.objectIds[PAYMENT_OBJECT_KEY];
+  const intent = paymentObjectId
+    ? await findIntentByProviderObject(db, provider, paymentObjectId)
+    : await findIntentByProviderCharge(db, provider, chargeId);
+  if (!intent) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, intent);
+  if (crossed) return crossed;
+  await syncChargeSnapshot(intent, chargeId);
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: intent.id };
+}
+
+/**
+ * The failed attempt's CODES out of a stored `payment_intent.payment_failed`
+ * — `code`, `decline_code` and `type` are on the redaction allow-list; the
+ * provider's `message` is not, and is never wanted (Peable writes its own).
+ */
+function readPaymentError(payload: Record<string, unknown>): ProviderPaymentError {
+  const data = payload.data;
+  const object =
+    typeof data === 'object' && data !== null ? (data as Record<string, unknown>).object : null;
+  const error =
+    typeof object === 'object' && object !== null
+      ? (object as Record<string, unknown>).last_payment_error
+      : null;
+  if (typeof error !== 'object' || error === null) return { type: 'card_error' };
+  const fields = error as Record<string, unknown>;
+  const text = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 && value !== '[redacted]' ? value : undefined;
+  const code = text(fields.code);
+  const declineCode = text(fields.decline_code);
+  return {
+    type: fields.type === 'card_error' || fields.type === undefined ? 'card_error' : 'api_error',
+    ...(code !== undefined ? { code } : {}),
+    ...(declineCode !== undefined ? { declineCode } : {}),
+  };
+}
+
+/**
+ * SetupIntent events (ADR 0016). All of them mean the same thing — "re-read
+ * this SetupIntent" — because the stored payload is redacted and a fresh read
+ * is the only trustworthy account of what changed; the read is then applied
+ * through `applySetupResult`, the one path a provider SetupIntent becomes a
+ * transition (compare-and-swap, events in the same commit, the `pm_…` created
+ * on success).
+ */
+const SETUP_INTENT_EVENTS: ReadonlySet<string> = new Set([
+  'setup_intent.succeeded',
+  'setup_intent.setup_failed',
+  'setup_intent.requires_action',
+  'setup_intent.canceled',
+  'setup_intent.created',
+]);
+
+async function handleSetupIntentEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
+  const objectId = event.objectIds.setup_intent;
+  if (!objectId) {
+    await markProviderEventFailed(db, event.id, `no setup_intent id on a ${event.type}`);
+    return { kind: 'failed', error: `no setup_intent id on a ${event.type}` };
+  }
+  const setup = await findSetupIntentByProviderObject(db, provider, objectId);
+  // The two-step create's window, as for a payment: retried, not dropped.
+  if (!setup) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, setup);
+  if (crossed) return crossed;
+  const adapter = selectStoredProvider(setup.provider, setup.livemode);
+  if (!adapter || !isSetupHoldingProvider(adapter)) {
+    const message = `the ${setup.provider} rail cannot read setup intents in this mode`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: 'failed', error: message };
+  }
+  const outcome = await applySetupResult(setup, await adapter.getSetup(objectId));
+  if (outcome.kind === 'irreconcilable') {
+    await markProviderEventFailed(db, event.id, redactProviderMessage(outcome.error));
+    return { kind: 'failed', error: outcome.error };
+  }
+  await markProviderEventProcessed(db, event.id);
+  return outcome.kind === 'applied'
+    ? { kind: 'applied', intentId: setup.id, status: outcome.row.status }
+    : { kind: 'noop', intentId: setup.id };
 }

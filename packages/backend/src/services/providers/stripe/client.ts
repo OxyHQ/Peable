@@ -139,14 +139,21 @@ async function call<T>(
 // Payments
 // ---------------------------------------------------------------------------
 
-export function createStripePaymentIntent(
+export async function createStripePaymentIntent(
   mode: ProviderMode,
   params: Stripe.PaymentIntentCreateParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
-  return call(mode, 'createPayment', (stripe) =>
-    stripe.paymentIntents.create(params, { idempotencyKey }),
-  );
+  try {
+    return await getStripeClient(mode).paymentIntents.create(params, { idempotencyKey });
+  } catch (error) {
+    // `confirm: true` at create: a decline is an answer, as in
+    // `confirmStripePaymentIntent` below.
+    if (params.confirm && error instanceof Stripe.errors.StripeCardError && error.payment_intent) {
+      return error.payment_intent;
+    }
+    throw toProviderError(error, 'createPayment');
+  }
 }
 
 export function retrieveStripePaymentIntent(
@@ -159,22 +166,112 @@ export function retrieveStripePaymentIntent(
 export function cancelStripePaymentIntent(
   mode: ProviderMode,
   id: string,
+  params: Stripe.PaymentIntentCancelParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
   // The idempotency key is a REQUEST OPTION (third argument), not a body
   // parameter. Passing it as the second argument type-checks in some SDK
   // versions and silently sends it as a field Stripe ignores — so the retry
   // that this key exists to make safe would create a second effect.
-  return call(mode, 'cancel', (stripe) => stripe.paymentIntents.cancel(id, {}, { idempotencyKey }));
+  return call(mode, 'cancel', (stripe) =>
+    stripe.paymentIntents.cancel(id, params, { idempotencyKey }),
+  );
 }
 
 export function captureStripePaymentIntent(
   mode: ProviderMode,
   id: string,
+  params: Stripe.PaymentIntentCaptureParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
   return call(mode, 'capture', (stripe) =>
-    stripe.paymentIntents.capture(id, {}, { idempotencyKey }),
+    stripe.paymentIntents.capture(id, params, { idempotencyKey }),
+  );
+}
+
+/**
+ * Confirm server-side. A DECLINE is the provider's answer, not a failure: Stripe
+ * throws a card error carrying the PaymentIntent it left in
+ * `requires_payment_method` with `last_payment_error`, and that object is what
+ * is returned — so the caller records the decline instead of a 5xx.
+ */
+export async function confirmStripePaymentIntent(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentIntentConfirmParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentIntent> {
+  try {
+    return await getStripeClient(mode).paymentIntents.confirm(id, params, { idempotencyKey });
+  } catch (error) {
+    if (error instanceof Stripe.errors.StripeCardError && error.payment_intent) {
+      return error.payment_intent;
+    }
+    throw toProviderError(error, 'confirm');
+  }
+}
+
+/** A charge, for its outcome and card details — the `ch_…` snapshot (ADR 0019). */
+export function retrieveStripeCharge(mode: ProviderMode, id: string): Promise<Stripe.Charge> {
+  return call(mode, 'getStatus', (stripe) => stripe.charges.retrieve(id));
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+export function createStripeCustomer(
+  mode: ProviderMode,
+  params: Stripe.CustomerCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Customer> {
+  return call(mode, 'customer', (stripe) => stripe.customers.create(params, { idempotencyKey }));
+}
+
+// ---------------------------------------------------------------------------
+// SetupIntents and payment methods (ADR 0016)
+// ---------------------------------------------------------------------------
+
+export function createStripeSetupIntent(
+  mode: ProviderMode,
+  params: Stripe.SetupIntentCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) => stripe.setupIntents.create(params, { idempotencyKey }));
+}
+
+export function retrieveStripeSetupIntent(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) => stripe.setupIntents.retrieve(id));
+}
+
+export function cancelStripeSetupIntent(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.SetupIntentCancelParams,
+  idempotencyKey: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) =>
+    stripe.setupIntents.cancel(id, params, { idempotencyKey }),
+  );
+}
+
+export function retrieveStripePaymentMethod(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.PaymentMethod> {
+  return call(mode, 'paymentMethod', (stripe) => stripe.paymentMethods.retrieve(id));
+}
+
+export function detachStripePaymentMethod(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethod> {
+  return call(mode, 'paymentMethod', (stripe) =>
+    stripe.paymentMethods.detach(id, {}, { idempotencyKey }),
   );
 }
 

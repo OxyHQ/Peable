@@ -44,12 +44,12 @@ describe('dashboardPath', () => {
   it('adds defined query values after the environment', () => {
     expect(
       dashboardPath(live, '/payment_intents', {
-        status: 'settled',
+        status: 'succeeded',
         limit: 25,
         starting_after: undefined,
       }),
     ).toBe(
-      '/v1/dashboard/applications/app_live/payment_intents?environment=production&status=settled&limit=25',
+      '/v1/dashboard/applications/app_live/payment_intents?environment=production&status=succeeded&limit=25',
     );
   });
 });
@@ -77,7 +77,7 @@ describe('payment intents', () => {
   it('lists with the status filter and the cursor', async () => {
     answer = () => ({ object: 'list', data: [{ id: 'pi_2' }], has_more: true });
     const page = await api.paymentIntents.list(scope, {
-      status: 'failed',
+      status: 'canceled',
       limit: 20,
       starting_after: 'pi_1',
     });
@@ -86,7 +86,7 @@ describe('payment intents', () => {
     expect(calls).toEqual([
       {
         method: 'GET',
-        path: '/v1/dashboard/applications/app%201/payment_intents?environment=development&status=failed&limit=20&starting_after=pi_1',
+        path: '/v1/dashboard/applications/app%201/payment_intents?environment=development&status=canceled&limit=20&starting_after=pi_1',
       },
     ]);
   });

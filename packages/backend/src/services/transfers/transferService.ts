@@ -54,7 +54,7 @@ export class TransfersUnavailableError extends Error {
 /** The payment is not in a state a transfer can draw on. */
 export class PaymentNotSettledError extends Error {
   constructor(status: string) {
-    super(`a transfer needs a settled payment; this one is '${status}'`);
+    super(`a transfer needs a succeeded payment; this one is '${status}'`);
     this.name = 'PaymentNotSettledError';
   }
 }
@@ -192,7 +192,7 @@ async function resolveSourceCharge(
  * settlement of a payment has no transfer rows to lock.
  */
 export async function createTransfer(input: CreateTransferInput): Promise<CreateTransferResult> {
-  if (input.intent.status !== 'settled') {
+  if (input.intent.status !== 'succeeded') {
     throw new PaymentNotSettledError(input.intent.status);
   }
   if (!input.intent.provider || !input.intent.providerObjectId) {

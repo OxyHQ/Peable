@@ -1,23 +1,14 @@
 import type { PaymentIntent, PaymentIntentStatus } from '@peable.to/shared-types';
 import { sumBaseUnits } from '../format/money';
 
-/** Reached settlement: money arrived, whatever has been refunded since. */
-const GROSS: ReadonlySet<PaymentIntentStatus> = new Set([
-  'settled',
-  'partially_refunded',
-  'refunded',
-]);
-/** The gateway is still waiting on the payer or the network (`canStillBePaid`). */
+/** The gateway is still waiting on the payer, the network or the merchant (`canStillBePaid`). */
 const OPEN: ReadonlySet<PaymentIntentStatus> = new Set([
-  'created',
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
+  'requires_payment_method',
+  'requires_confirmation',
   'requires_action',
   'processing',
+  'requires_capture',
 ]);
-const UNSUCCESSFUL: ReadonlySet<PaymentIntentStatus> = new Set(['failed', 'rejected', 'expired']);
 
 export interface CurrencyVolume {
   currency: string;
@@ -41,9 +32,11 @@ export interface PaymentSummary {
   complete: boolean;
   succeeded: number;
   open: number;
+  /** Canceled: expired unpaid, underpaid, or canceled by the merchant or the provider. */
   unsuccessful: number;
+  /** Payments with any money refunded (`amount_refunded` above zero). */
   refunded: number;
-  /** Gross volume of payments that reached settlement, per currency (refunds not netted). */
+  /** Gross volume RECEIVED by succeeded payments, per currency (refunds not netted). */
   volume: CurrencyVolume[];
 }
 
@@ -62,15 +55,17 @@ export function summarizePayments(
   for (const intent of intents) {
     if (oldest === null || intent.created < oldest) oldest = intent.created;
     if (newest === null || intent.created > newest) newest = intent.created;
-    if (GROSS.has(intent.status)) {
+    if (intent.status === 'succeeded') {
       succeeded += 1;
+      // What was received — a partial capture takes less than the amount.
       const list = amounts.get(intent.currency) ?? [];
-      list.push(intent.amount);
+      list.push(intent.amount_received);
       amounts.set(intent.currency, list);
     }
-    if (intent.status === 'refunded' || intent.status === 'partially_refunded') refunded += 1;
+    // A refund is an amount, not a status (ADR 0019): any money back counts.
+    if (intent.amount_refunded !== '0') refunded += 1;
     if (OPEN.has(intent.status)) open += 1;
-    if (UNSUCCESSFUL.has(intent.status)) unsuccessful += 1;
+    if (intent.status === 'canceled') unsuccessful += 1;
   }
 
   const volume = [...amounts.entries()]

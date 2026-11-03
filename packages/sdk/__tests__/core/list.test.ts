@@ -139,12 +139,12 @@ describe('expand, filters and updates on the wire', () => {
   test('list sends created ranges, filters and expand[]', async () => {
     const { fetch, requests } = pagingGateway();
     await new PaymentIntentsResource(buildTestClient(fetch)).list({
-      status: 'settled',
+      status: 'succeeded',
       created: { gte: 1_800_000_000 },
       expand: ['data.connected_account'],
     });
     const url = new URL(requests.filter((r) => r.url.startsWith(TEST_GATEWAY_URL))[0]?.url ?? '');
-    expect(url.searchParams.get('status')).toBe('settled');
+    expect(url.searchParams.get('status')).toBe('succeeded');
     expect(url.searchParams.get('created[gte]')).toBe('1800000000');
     expect(url.searchParams.getAll('expand[]')).toEqual(['data.connected_account']);
   });

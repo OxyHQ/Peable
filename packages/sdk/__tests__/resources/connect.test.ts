@@ -16,6 +16,7 @@ import {
   type WebhookEvent,
 } from '@peable.to/shared-types';
 import { Peable } from '../../src';
+import { paymentIntentFixture } from '../support/intentFixture';
 import {
   AccountLinksResource,
   ConnectedAccountsResource,
@@ -57,27 +58,24 @@ const SELLER: ConnectedAccount = {
   updated_at: 1792108800,
 };
 
-const ON_BEHALF: PaymentIntent = {
+const ON_BEHALF: PaymentIntent = paymentIntentFixture({
   id: 'pi_onbehalf',
-  object: 'payment_intent',
-  livemode: false,
-  status: 'created',
-  rail: 'faircoin',
   amount: '250000000',
-  currency: 'FAIR',
-  network: 'testnet',
-  address: 'tFairSellerAddress',
+  faircoin: {
+    network: 'testnet',
+    address: 'tFairSellerAddress',
+    txid: null,
+    confirmations: 0,
+    required_confirmations: 1,
+  },
   merchant_id: 'merch_platform',
   connected_account: 'ca_seller',
-  txid: null,
-  confirmations: 0,
   client_secret: 'pi_onbehalf_secret_x',
   metadata: { order: 'o_1' },
   expires_at: 1792109700,
-  can_expire: true,
   created: 1792108800,
   updated_at: 1792108800,
-};
+});
 
 function gateway(body: unknown, status = 200) {
   return createMockFetch((req) => {
@@ -241,16 +239,18 @@ describe('payments on behalf of a seller', () => {
 
 describe('the platform webhook for an on-behalf payment', () => {
   test('is typed, carries the seller on `event.account`, and says whether it can still expire', () => {
-    const event: WebhookEvent<'payment_intent.confirming'> = {
+    const event: WebhookEvent<'payment_intent.processing'> = {
       id: 'evt_1',
       object: 'event',
       livemode: false,
-      type: 'payment_intent.confirming',
+      type: 'payment_intent.processing',
       created: 1792109100,
       account: 'ca_seller',
       api_version: '2026-11-03',
       request: { id: null, idempotency_key: null },
-      data: { object: { ...ON_BEHALF, status: 'confirming', can_expire: false } },
+      data: {
+        object: { ...ON_BEHALF, status: 'processing', next_action: null, can_expire: false },
+      },
     };
     const raw = JSON.stringify(event);
     const header = signWebhook('whsec_platform', raw, 1_760_000_000);
@@ -260,9 +260,9 @@ describe('the platform webhook for an on-behalf payment', () => {
     });
 
     expect(parsed.account).toBe('ca_seller');
-    if (parsed.type === 'payment_intent.confirming') {
+    if (parsed.type === 'payment_intent.processing') {
       expect(parsed.data.object.connected_account).toBe('ca_seller');
-      // A broadcast/confirming payment NEVER expires: never cancel the order for it.
+      // A processing (broadcast) payment NEVER expires: never cancel the order for it.
       expect(parsed.data.object.can_expire).toBe(false);
       expect(canExpire(parsed.data.object.status)).toBe(false);
     } else {

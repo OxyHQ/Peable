@@ -13,7 +13,8 @@ Decisions: [0014](../adr/0014-orbit-api-conventions-and-versioning.md) conventio
 and versioning · [0015](../adr/0015-orbit-funds-flow.md) funds flow ·
 [0016](../adr/0016-orbit-owns-its-objects.md) native objects ·
 [0017](../adr/0017-test-and-live-in-one-deployment.md) test and live ·
-[0018](../adr/0018-native-billing-engine.md) billing engine.
+[0018](../adr/0018-native-billing-engine.md) billing engine ·
+[0019](../adr/0019-stripe-payment-intent-model.md) PaymentIntent model.
 
 Legend: ✅ present · 🟡 partial · ❌ absent · ⛔ out of scope
 
@@ -48,7 +49,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Test + live in one deployment | ✅ | `STRIPE_*_TEST` / `STRIPE_*_LIVE` side by side; credential selects the mode, stored rows resolve by their own; webhooks verified per mode on the same paths (ADR 0017) | |
 | Events API | ✅ | `evt_` stored in the transaction of its change (ADR 0014 D4); `GET /v1/events` (`type` exact or `prefix.*`, `created`, `delivery_success`) and `/v1/events/:id`; 30-day retention (sweeper + read horizon); envelope carries `api_version`, `previous_attributes`, `request {id, idempotency_key}`; SDK `events` | `types[]` filter; `pending_webhooks` |
 | Webhook endpoints | ✅ | `we_` resource (create/list/retrieve/update/delete), ≤ 16 per merchant, `enabled_events` incl. `*`, generated `whsec_` shown once, `roll_secret` with ≤ 24h dual-signature overlap, per-endpoint `api_version`, URL checked by the dispatcher's SSRF rules; `merchants.webhook_*` removed; SDK `webhookEndpoints` | Endpoint pinned to an older `api_version` once dated versions exist |
-| Event catalog | 🟡 | 11 types + `webhook_endpoint.test`; extensible through `WEBHOOK_EVENT_SCOPES` | Stripe-equivalent catalog across all resources |
+| Event catalog | 🟡 | Stripe's names (ADR 0019): `payment_intent.created\|requires_action\|processing\|amount_capturable_updated\|succeeded\|payment_failed\|canceled`, `charge.refunded`, `charge.dispute.*`, `refund.*`, `customer.*`, `payment_method.*`, `setup_intent.*`, `connected_account.updated` + `webhook_endpoint.test` | `charge.succeeded\|captured\|updated`, Billing, payouts as those resources land |
 | Retry schedule | ✅ | ~3 days exponential with ±20% jitter; an endpoint failing continuously for 3 days is disabled (`disabled_reason: delivery_failures`) | |
 | Delivery log + redeliver | ✅ | One delivery per (event, endpoint); `GET /v1/webhook_deliveries` (`event`, `webhook_endpoint`), redeliver; Orbit dashboard: endpoints CRUD + roll + "send test event", events, deliveries; SDK `webhookDeliveries` | Prefixed delivery ids |
 
@@ -57,13 +58,14 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | PaymentIntent create/retrieve/list | ✅ | | |
-| PI update / confirm (server) / capture / cancel | 🟡 | `POST /v1/payment_intents/:id` (metadata); `/reject` | confirm/capture/cancel, with `cancellation_reason` |
-| Manual capture | ❌ | Automatic only | `capture_method: manual`, `amount_to_capture` |
-| Customers | ❌ | Only `ensureCustomer` on Stripe for billing | Native `cus_` (ADR 0016) |
-| PaymentMethods | ❌ | — | Native `pm_`, attach/detach/list |
-| SetupIntents / off-session | ❌ | — | `seti_`, `setup_future_usage`, `off_session` |
-| PI fields (receipt email, descriptor, shipping, description) | ❌ | — | Present |
-| Charges | ❌ | Provider charge id internal | Read-only `ch_` with `outcome`, `receipt_url` |
+| PaymentIntent status model | ✅ | Stripe's seven statuses on both rails, `cancellation_reason`/`canceled_at`, `last_payment_error`, `next_action` (`faircoin_payment`, `use_peable_sdk`), refunds as `amount_refunded` (ADR 0019); data migrated (`0043`) | |
+| PI update / confirm (server) / capture / cancel | ✅ | `POST /v1/payment_intents/:id` (metadata, description, receipt_email, shipping); `/confirm` (saved `payment_method`, 402 `card_error` on decline, `requires_action` for 3DS); `/capture` (`amount_to_capture`); `/cancel` (`cancellation_reason`, cancels at the provider first); `/reject` removed | `increment_authorization` |
+| Manual capture | ✅ | `capture_method: manual` → `requires_capture` (`amount_capturable`) → `/capture`, partial | |
+| Customers | ✅ | Native `cus_` (ADR 0016): CRUD, list (`email`), tombstone delete, `invoice_settings.default_payment_method`; provider customer a lazy per-mode binding | Billing (`/v1/billing/*`) still on provider ids until ADR 0018 |
+| PaymentMethods | ✅ | Native `pm_` created by a succeeded SetupIntent or a `setup_future_usage` payment; retrieve, list (`customer=`), update (billing details, metadata), permanent detach | Re-attach; non-card types |
+| SetupIntents / off-session | ✅ | `seti_` (create/retrieve/list/cancel, payer `client_action`), `setup_future_usage`, `off_session` confirm | Payer-side `confirmSetup` in `@peable.to/sdk/checkout` |
+| PI fields (receipt email, descriptor, shipping, description) | ✅ | All four; `statement_descriptor_suffix` card only and the one forwarded to the provider | Peable-sent receipts (Phase 3) |
+| Charges | 🟡 | Read-only `ch_` per succeeded card authorization: retrieve, list (`payment_intent=`), expandable `latest_charge`; `outcome`, `payment_method_details.card`, `amount_captured/refunded`, `captured`, `refunded`, `disputed` | `receipt_url` (Peable receipts, Phase 3), `balance_transaction` (ledger, Phase 5) |
 | Refunds | 🟡 | Create; retrieve; list (global, `payment_intent=`, per intent); no reason | update/cancel; `reason`; `metadata`; fee/transfer reversal flags |
 | Disputes | 🟡 | Retrieve; list (global, `payment_intent=`, per intent); text evidence, one shot | close; `metadata`; file evidence (still not stored) |
 | Files | ❌ | — | `file_` over Oxy Files |

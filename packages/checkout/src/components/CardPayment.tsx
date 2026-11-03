@@ -36,6 +36,15 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
 
   const [phase, setPhase] = useState<'loading' | 'ready' | 'confirming' | 'unavailable'>('loading');
   const [error, setError] = useState<string | null>(null);
+  /**
+   * The gateway's word on the last attempt (`last_payment_error`, ADR 0019) —
+   * shown when this page has nothing more recent, so a payer returning to a
+   * declined payment learns why before they try another card.
+   */
+  const declined =
+    intent.status === 'requires_payment_method'
+      ? (intent.last_payment_error?.message ?? null)
+      : null;
 
   /**
    * Fetch the credential and mount the provider's fields.
@@ -157,9 +166,9 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
         </p>
       )}
 
-      {error !== null && (
+      {(error ?? declined) !== null && (
         <p className="card-payment__error" role="alert">
-          {error}
+          {error ?? declined}
         </p>
       )}
 
@@ -188,18 +197,17 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
  * Exported so `CheckoutView` asks ONE question rather than re-deriving the
  * condition, the same way `isChainIntent` owns the other rail's.
  *
- * `failed` is deliberately included. A declined attempt returns the provider's
- * payment to a confirmable state and the payer can try another card on the same
- * payment — the gateway's state machine accepts a success after a declined
- * attempt for exactly this reason. Dropping them onto a dead status panel
- * because their first card was declined would lose a sale the payer was still
- * trying to make.
+ * A declined attempt is included: it returns the payment to
+ * `requires_payment_method` with `last_payment_error` (ADR 0019), and the payer
+ * can try another card on the same payment. Dropping them onto a dead status
+ * panel because their first card was declined would lose a sale the payer was
+ * still trying to make.
  */
 export function isPayableCardIntent(intent: PaymentIntent): boolean {
   return (
     intent.rail === 'card' &&
-    (intent.status === 'created' ||
-      intent.status === 'requires_action' ||
-      intent.status === 'failed')
+    (intent.status === 'requires_payment_method' ||
+      intent.status === 'requires_confirmation' ||
+      intent.status === 'requires_action')
   );
 }

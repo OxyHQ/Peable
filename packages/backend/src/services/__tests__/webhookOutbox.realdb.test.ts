@@ -119,15 +119,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
     const merchant = await seedMerchant();
     const intent = await seedIntent(merchant);
 
-    const moved = await transitionIntent(intent.id, { from: intent.status, status: 'rejected' });
+    const moved = await transitionIntent(intent.id, { from: intent.status, status: 'canceled' });
 
-    expect(moved.kind === 'updated' && moved.row.status).toBe('rejected');
+    expect(moved.kind === 'updated' && moved.row.status).toBe('canceled');
     const stored = await gatewayDb()
       .select()
       .from(events)
       .where(eq(events.paymentIntentId, intent.id));
     expect(stored).toHaveLength(1);
-    expect(stored[0]?.type).toBe('payment_intent.rejected');
+    expect(stored[0]?.type).toBe('payment_intent.canceled');
     expect(stored[0]?.previousAttributes).toEqual({ status: intent.status });
     expect(stored[0]?.apiVersion).toBe('2026-11-03');
     // No request context: a background change records `request: null`.
@@ -143,7 +143,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
       gatewayDb().transaction(async (tx) => {
         await recordEvent(tx, {
           merchantId: merchant.id,
-          type: 'payment_intent.settled',
+          type: 'payment_intent.succeeded',
           object: toPaymentIntentDTO(intent),
           paymentIntentId: intent.id,
         });
@@ -160,7 +160,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
     const merchant = await seedMerchant();
     const intent = await seedIntent(merchant);
 
-    await transitionIntent(intent.id, { from: intent.status, status: 'rejected' });
+    await transitionIntent(intent.id, { from: intent.status, status: 'canceled' });
 
     const [event] = await eventsOf(intent.id);
     expect(event).toBeDefined();
@@ -171,10 +171,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
     const merchant = await seedMerchant();
     const all = await seedWebhookEndpoint(merchant, { enabledEvents: ['*'] });
     const exact = await seedWebhookEndpoint(merchant, {
-      enabledEvents: ['payment_intent.rejected', 'payment_intent.settled'],
+      enabledEvents: ['payment_intent.canceled', 'payment_intent.succeeded'],
     });
     const other = await seedWebhookEndpoint(merchant, {
-      enabledEvents: ['payment_intent.settled'],
+      enabledEvents: ['payment_intent.succeeded'],
     });
     const disabled = await seedWebhookEndpoint(merchant, { enabledEvents: ['*'] });
     await updateEndpoint(gatewayDb(), disabled.endpoint.publicId, merchant.id, { disabled: true });
@@ -183,7 +183,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
     await seedWebhookEndpoint(stranger, { enabledEvents: ['*'] });
     const intent = await seedIntent(merchant);
 
-    await transitionIntent(intent.id, { from: intent.status, status: 'rejected' });
+    await transitionIntent(intent.id, { from: intent.status, status: 'canceled' });
 
     const [event] = await eventsOf(intent.id);
     const reached = (await deliveriesOf(must(event).id)).map((row) => row.endpointId).sort();
@@ -216,7 +216,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the webhook outbox', () => {
     expect(body).toMatchObject({
       id: delivery.eventPublicId,
       object: 'event',
-      type: 'payment_intent.settled',
+      type: 'payment_intent.succeeded',
       api_version: '2026-11-03',
       livemode: false,
       request: { id: null, idempotency_key: null },

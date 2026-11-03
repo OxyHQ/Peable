@@ -624,7 +624,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
       const intent = await seedIntent(merchant, { rail: 'card', amount: '100', currency: 'USD' });
       const paymentRef = `pi_oneoff_${randomUUID()}`;
       await linkProviderObject(gatewayDb(), intent.id, 'stripe', paymentRef);
-      await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+      await updateIntentState(gatewayDb(), intent.id, {
+        from: 'requires_payment_method',
+        status: 'succeeded',
+      });
       const eventId = await event('invoice', 'unused', {
         type: 'refund.created',
         apiVersion,
@@ -636,9 +639,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
       expect(await processProviderEvent(stored, options)).toMatchObject({
         kind: 'applied',
         intentId: intent.id,
-        status: 'refunded',
+        status: 'succeeded',
       });
-      expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('refunded');
+      // ADR 0019: the refund is a row; the payment stays succeeded with its total.
+      const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
+      expect(after?.status).toBe('succeeded');
+      expect(after?.amountRefunded).toBe('100');
       expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
       expect(readSnapshot).not.toHaveBeenCalled();
       expect(await rows()).toHaveLength(0);

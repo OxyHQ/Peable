@@ -98,7 +98,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook endpoints', () => {
   test('create shows the generated secret once; reads never do', async () => {
     const created = await call('POST', '/v1/webhook_endpoints', {
       url: 'https://merchant.example/hook',
-      enabled_events: ['payment_intent.settled', 'payment_intent.settled'],
+      enabled_events: ['payment_intent.succeeded', 'payment_intent.succeeded'],
       metadata: { team: 'orders' },
     });
     expect(created.status).toBe(200);
@@ -107,7 +107,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook endpoints', () => {
       object: 'webhook_endpoint',
       livemode: false,
       url: 'https://merchant.example/hook',
-      enabled_events: ['payment_intent.settled'],
+      enabled_events: ['payment_intent.succeeded'],
       status: 'enabled',
       disabled_reason: null,
       description: null,
@@ -193,7 +193,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook endpoints', () => {
 
     const updated = await call('POST', `/v1/webhook_endpoints/${id}`, {
       url: 'https://merchant.example/v2',
-      enabled_events: ['payment_intent.failed'],
+      enabled_events: ['payment_intent.payment_failed'],
       description: '',
       metadata: { a: '', c: '3' },
       disabled: true,
@@ -201,7 +201,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('webhook endpoints', () => {
     expect(updated.status).toBe(200);
     expect(updated.json).toMatchObject({
       url: 'https://merchant.example/v2',
-      enabled_events: ['payment_intent.failed'],
+      enabled_events: ['payment_intent.payment_failed'],
       description: null,
       metadata: { b: '2', c: '3' },
       status: 'disabled',
@@ -270,36 +270,40 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
     const intent = await seedIntent(merchant);
     const rejected = await call(
       'POST',
-      `/v1/payment_intents/${intent.publicId}/reject`,
-      {},
+      `/v1/payment_intents/${intent.publicId}/cancel`,
+      { cancellation_reason: 'duplicate' },
       {
-        'Idempotency-Key': 'reject-1',
+        'Idempotency-Key': 'cancel-1',
       },
     );
     expect(rejected.status).toBe(200);
-    const list = await call('GET', '/v1/events?type=payment_intent.rejected');
+    const list = await call('GET', '/v1/events?type=payment_intent.canceled');
     const [event] = must(list.json.data as Json[]);
     expect(must(event).request).toEqual({
       id: rejected.headers.get('Request-Id'),
-      idempotency_key: 'reject-1',
+      idempotency_key: 'cancel-1',
     });
     expect(must(event).data).toMatchObject({
-      object: { id: intent.publicId, status: 'rejected' },
-      previous_attributes: { status: 'created' },
+      object: { id: intent.publicId, status: 'canceled', cancellation_reason: 'duplicate' },
+      previous_attributes: { status: 'requires_action' },
     });
   });
 
   test('lists newest first, filters by exact type, prefix and created, retrieves by id', async () => {
     const one = await seedIntent(merchant);
     const two = await seedIntent(merchant);
-    await transitionIntent(one.id, { from: one.status, status: 'rejected' });
-    await transitionIntent(two.id, { from: two.status, status: 'expired' });
+    await transitionIntent(one.id, { from: one.status, status: 'canceled' });
+    await transitionIntent(two.id, {
+      from: two.status,
+      status: 'processing',
+      txid: 'a'.repeat(64),
+    });
 
     const all = await call('GET', '/v1/events');
     const data = all.json.data as Json[];
     expect(data.map((row) => row.type)).toEqual([
-      'payment_intent.expired',
-      'payment_intent.rejected',
+      'payment_intent.processing',
+      'payment_intent.canceled',
     ]);
     expect(data[0]).toMatchObject({
       object: 'event',
@@ -308,8 +312,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
       request: { id: null, idempotency_key: null },
     });
 
-    const exact = await call('GET', '/v1/events?type=payment_intent.rejected');
-    expect((exact.json.data as Json[]).map((row) => row.type)).toEqual(['payment_intent.rejected']);
+    const exact = await call('GET', '/v1/events?type=payment_intent.canceled');
+    expect((exact.json.data as Json[]).map((row) => row.type)).toEqual(['payment_intent.canceled']);
     const prefix = await call('GET', '/v1/events?type=payment_intent.*');
     expect(prefix.json.data as Json[]).toHaveLength(2);
     const otherPrefix = await call('GET', '/v1/events?type=connected_account.*');
@@ -328,7 +332,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('events', () => {
       'GET',
       `/v1/events?limit=1&starting_after=${String(must((paged.json.data as Json[])[0]).id)}`,
     );
-    expect(must((next.json.data as Json[])[0]).type).toBe('payment_intent.rejected');
+    expect(must((next.json.data as Json[])[0]).type).toBe('payment_intent.canceled');
 
     const id = String(must(data[0]).id);
     const read = await call('GET', `/v1/events/${id}`);

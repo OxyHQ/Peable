@@ -266,15 +266,6 @@ export interface Refund {
   amount: string;
   currency: CurrencyCode | string;
   status: RefundStatus;
-  /**
-   * Where the PAYMENT stands after this refund.
-   *
-   * On the refund deliberately: a caller that has just refunded needs to know
-   * whether the payment is now `partially_refunded` or `refunded`, and making
-   * them re-read the intent is a round trip whose answer can move on before it
-   * arrives.
-   */
-  payment_status: string;
   failure_code: string | null;
   created: number;
   updated_at: number;

@@ -92,6 +92,10 @@ import {
 import { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
 import { DisputesResource, MerchantsResource } from './resources/merchants';
 import { RefundsResource } from './resources/refunds';
+import { ChargesResource } from './resources/charges';
+import { CustomersResource } from './resources/customers';
+import { PaymentMethodsResource } from './resources/paymentMethods';
+import { SetupIntentsResource } from './resources/setupIntents';
 import { TransfersResource } from './resources/transfers';
 
 /**
@@ -141,6 +145,14 @@ export class Peable {
   readonly accountLinks: AccountLinksResource;
   /** Money going back to a payer. */
   readonly refunds: RefundsResource;
+  /** Read-only: the authorization a card payment obtained (`ch_…`). */
+  readonly charges: ChargesResource;
+  /** Customers (`cus_…`, ADR 0016). */
+  readonly customers: CustomersResource;
+  /** A customer's saved cards (`pm_…`), born attached by a SetupIntent. */
+  readonly paymentMethods: PaymentMethodsResource;
+  /** Saving a card for later without charging it (`seti_…`). */
+  readonly setupIntents: SetupIntentsResource;
   /** Money going out to a seller, and coming back from one. */
   readonly transfers: TransfersResource;
   /** Read-only: the network initiates these. */
@@ -181,6 +193,10 @@ export class Peable {
     this.accounts = this.connectedAccounts;
     this.accountLinks = new AccountLinksResource(this.connectedAccounts);
     this.refunds = new RefundsResource(client);
+    this.charges = new ChargesResource(client);
+    this.customers = new CustomersResource(client);
+    this.paymentMethods = new PaymentMethodsResource(client);
+    this.setupIntents = new SetupIntentsResource(client);
     this.transfers = new TransfersResource(client);
     this.disputes = new DisputesResource(client);
   }
@@ -200,6 +216,7 @@ export {
   PeableInvalidRequestError,
   PeablePermissionError,
   PeableApiError,
+  PeableCardError,
   PeableSignatureVerificationError,
 } from './core/errors';
 export type { PeableErrorType, PeableErrorDetails } from './core/errors';
@@ -236,13 +253,26 @@ export type {
   CheckoutSession,
   CreateCheckoutSessionParams,
   CreatePaymentIntentParams,
+  CancelPaymentIntentParams,
+  CapturePaymentIntentParams,
+  Charge,
+  ConfirmPaymentIntentParams,
   PaymentIntent,
+  PaymentIntentCancellationReason,
+  PaymentIntentLastPaymentError,
+  PaymentIntentNextAction,
   PaymentIntentStatus,
+  UpdatePaymentIntentParams,
   WebhookEvent,
   WebhookEventType,
 } from '@peable.to/shared-types';
 /** Whether an intent can still expire — `false` once a FairCoin payer has broadcast (ADR 0012 D9). */
-export { canExpire, EXPIRABLE_STATUSES } from '@peable.to/shared-types';
+export {
+  canExpire,
+  canStillBePaid,
+  EXPIRABLE_STATUSES,
+  TERMINAL_STATUSES,
+} from '@peable.to/shared-types';
 export type {
   DisputeEvidenceParams,
   DisputeList,
@@ -250,6 +280,28 @@ export type {
   UpdateMerchantParams,
 } from './resources/merchants';
 export type { CreateRefundParams, RefundList } from './resources/refunds';
+export { ChargesResource } from './resources/charges';
+export type { ChargeList, ChargeListParams } from './resources/charges';
+export type {
+  BillingDetails,
+  CancelSetupIntentParams,
+  CardDetails,
+  CreateCustomerParams,
+  CreateSetupIntentParams,
+  Customer,
+  DeletedCustomer,
+  PaymentMethod,
+  SetupIntent,
+  SetupIntentStatus,
+  UpdateCustomerParams,
+  UpdatePaymentMethodParams,
+} from '@peable.to/shared-types';
+export { CustomersResource } from './resources/customers';
+export type { CustomerList, CustomerListParams } from './resources/customers';
+export { PaymentMethodsResource } from './resources/paymentMethods';
+export type { PaymentMethodList, PaymentMethodListParams } from './resources/paymentMethods';
+export { SetupIntentsResource } from './resources/setupIntents';
+export type { SetupIntentList, SetupIntentListParams } from './resources/setupIntents';
 export type {
   CreateTransferParams,
   ReverseTransferParams,

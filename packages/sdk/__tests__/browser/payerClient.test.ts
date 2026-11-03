@@ -10,6 +10,7 @@ import { afterEach, describe, expect, mock, test } from 'bun:test';
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { createMockFetch } from '../support/mockFetch';
 import { TEST_GATEWAY_URL } from '../support/testGateway';
+import { paymentIntentFixture, processingFixture } from '../support/intentFixture';
 
 interface FakeManager {
   on: ReturnType<typeof mock>;
@@ -83,26 +84,21 @@ afterEach(() => {
   ioCalls.length = 0;
 });
 
-const INTENT: PaymentIntent = {
+const INTENT: PaymentIntent = paymentIntentFixture({
   id: 'pi_1',
-  object: 'payment_intent',
-  livemode: false,
-  status: 'created',
-  rail: 'faircoin',
   amount: '100',
-  currency: 'FAIR',
-  network: 'testnet',
-  address: 'TAddr1',
-  merchant_id: 'merch_1',
-  connected_account: null,
-  txid: null,
-  confirmations: 0,
+  faircoin: {
+    network: 'testnet',
+    address: 'TAddr1',
+    txid: null,
+    confirmations: 0,
+    required_confirmations: 1,
+  },
   client_secret: 'secret_1',
-  metadata: {},
   expires_at: 1784505600,
   created: 1784419200,
   updated_at: 1784419200,
-};
+});
 
 describe('getPaymentIntent', () => {
   test('GETs /v1/payment_intents/:id with client_secret as the X-Peable-Client-Secret header and returns the DTO', async () => {
@@ -184,7 +180,16 @@ describe('getPaymentIntent', () => {
 
 describe('submitTx', () => {
   test('POSTs /v1/payment_intents/:id/submit_tx with {client_secret, txid} and returns the DTO', async () => {
-    const broadcast: PaymentIntent = { ...INTENT, status: 'broadcast', txid: 'tx_abc' };
+    const broadcast: PaymentIntent = processingFixture({
+      id: 'pi_1',
+      faircoin: {
+        network: 'testnet',
+        address: 'TAddr1',
+        txid: 'tx_abc',
+        confirmations: 0,
+        required_confirmations: 1,
+      },
+    });
     const { fetch: fetchImpl, requests } = createMockFetch(() => ({
       status: 200,
       json: broadcast,
@@ -254,12 +259,12 @@ describe('subscribe', () => {
     const listener = socket.on.mock.calls[0]?.[1] as (intent: PaymentIntent) => void;
     expect(socket.on.mock.calls[0]?.[0]).toBe('intent.updated');
 
-    listener({ ...INTENT, id: 'pi_OTHER', status: 'broadcast' });
-    listener({ ...INTENT, id: 'pi_1', status: 'broadcast' });
+    listener({ ...INTENT, id: 'pi_OTHER', status: 'processing' });
+    listener({ ...INTENT, id: 'pi_1', status: 'processing' });
 
     expect(updates).toHaveLength(1);
     expect(updates[0]?.id).toBe('pi_1');
-    expect(updates[0]?.status).toBe('broadcast');
+    expect(updates[0]?.status).toBe('processing');
   });
 
   test('unsubscribe removes the listener, removes the reconnect handler, and disconnects the socket', async () => {
@@ -309,7 +314,7 @@ describe('subscribe', () => {
     expect(intentUpdatedCalls).toHaveLength(1);
 
     const listener = intentUpdatedCalls[0]?.[1] as (intent: PaymentIntent) => void;
-    listener({ ...INTENT, id: 'pi_1', status: 'broadcast' });
+    listener({ ...INTENT, id: 'pi_1', status: 'processing' });
     expect(updates).toHaveLength(1);
   });
 
@@ -480,7 +485,7 @@ describe('subscribe', () => {
     const listener = socket.on.mock.calls.find(([event]) => event === 'intent.updated')?.[1] as (
       intent: PaymentIntent,
     ) => void;
-    listener({ ...INTENT, id: 'pi_1', status: 'broadcast' });
+    listener({ ...INTENT, id: 'pi_1', status: 'processing' });
     expect(updates).toHaveLength(1);
   });
 });

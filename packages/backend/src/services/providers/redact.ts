@@ -99,6 +99,10 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'peableintentid',
   'peabletransferid',
   'peableaccountid',
+  'peablecustomerid',
+  'peablesetupintentid',
+  'setupintent',
+  'paymentmethod',
 ]);
 
 /** How deep to walk before giving up. A provider envelope is nested 3–4 levels. */

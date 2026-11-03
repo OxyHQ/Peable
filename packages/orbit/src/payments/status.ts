@@ -1,43 +1,36 @@
-import type { PaymentIntentStatus, WebhookDeliveryStatus } from '@peable.to/shared-types';
+import type {
+  PaymentIntentCancellationReason,
+  PaymentIntentStatus,
+  WebhookDeliveryStatus,
+} from '@peable.to/shared-types';
 
 /**
- * Every payment status, in lifecycle order. Restated from `shared-types`
- * (whose root barrel a browser bundle must not load, see `format/money.ts`);
- * `status.test.ts` pins it to `PAYMENT_INTENT_STATUSES`.
+ * Every payment status, in lifecycle order — Stripe's seven (ADR 0019).
+ * Restated from `shared-types` (whose root barrel a browser bundle must not
+ * load, see `format/money.ts`); `status.test.ts` pins it to
+ * `PAYMENT_INTENT_STATUSES`.
  */
 export const ORBIT_PAYMENT_STATUSES: readonly PaymentIntentStatus[] = [
-  'created',
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
+  'requires_payment_method',
+  'requires_confirmation',
   'requires_action',
   'processing',
-  'settled',
-  'partially_refunded',
-  'refunded',
-  'failed',
-  'rejected',
-  'expired',
+  'requires_capture',
+  'succeeded',
+  'canceled',
 ];
 
 /** Bloom's semantic tones, the subset Orbit paints statuses with. */
 export type StatusTone = 'neutral' | 'info' | 'success' | 'warning' | 'danger';
 
 const PAYMENT_TONES: Record<PaymentIntentStatus, StatusTone> = {
-  created: 'neutral',
-  awaiting_approval: 'warning',
-  approved: 'info',
-  broadcast: 'info',
-  confirming: 'info',
+  requires_payment_method: 'neutral',
+  requires_confirmation: 'neutral',
   requires_action: 'warning',
   processing: 'info',
-  settled: 'success',
-  partially_refunded: 'neutral',
-  refunded: 'neutral',
-  failed: 'danger',
-  rejected: 'danger',
-  expired: 'neutral',
+  requires_capture: 'warning',
+  succeeded: 'success',
+  canceled: 'danger',
 };
 
 export function paymentStatusTone(status: PaymentIntentStatus): StatusTone {
@@ -45,23 +38,31 @@ export function paymentStatusTone(status: PaymentIntentStatus): StatusTone {
 }
 
 const PAYMENT_LABELS: Record<PaymentIntentStatus, string> = {
-  created: 'Created',
-  awaiting_approval: 'Awaiting approval',
-  approved: 'Approved',
-  broadcast: 'Broadcast',
-  confirming: 'Confirming',
-  requires_action: 'Requires action',
+  requires_payment_method: 'Awaiting payment method',
+  requires_confirmation: 'Awaiting confirmation',
+  requires_action: 'Awaiting payer',
   processing: 'Processing',
-  settled: 'Succeeded',
-  partially_refunded: 'Partially refunded',
-  refunded: 'Refunded',
-  failed: 'Failed',
-  rejected: 'Rejected',
-  expired: 'Expired',
+  requires_capture: 'Authorized',
+  succeeded: 'Succeeded',
+  canceled: 'Canceled',
 };
 
 export function paymentStatusLabel(status: PaymentIntentStatus): string {
   return PAYMENT_LABELS[status] ?? status;
+}
+
+const CANCELLATION_LABELS: Record<PaymentIntentCancellationReason, string> = {
+  abandoned: 'Expired unpaid',
+  automatic: 'Canceled by the provider',
+  duplicate: 'Duplicate',
+  fraudulent: 'Fraudulent',
+  requested_by_customer: 'Requested by the customer',
+  underpaid: 'Underpaid',
+};
+
+/** Why a canceled payment ended, in the merchant's words; `null` when nobody said. */
+export function cancellationReasonLabel(reason: PaymentIntentCancellationReason | null): string {
+  return reason === null ? 'No reason given' : (CANCELLATION_LABELS[reason] ?? reason);
 }
 
 const DELIVERY_TONES: Record<WebhookDeliveryStatus, StatusTone> = {

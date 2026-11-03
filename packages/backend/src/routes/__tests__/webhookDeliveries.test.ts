@@ -85,7 +85,7 @@ beforeAll(async () => {
     expiresAt: new Date(Date.now() + 60_000),
   });
   const delivery = await seedDelivery(merchant, intent, {
-    eventType: 'payment_intent.settled',
+    eventType: 'payment_intent.succeeded',
     pending: true,
   });
   deliveryId = delivery.id;
@@ -185,7 +185,7 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
       expiresAt: new Date(Date.now() + 60_000),
     });
     const otherDelivery = await seedDelivery(otherMerchant, otherIntent, {
-      eventType: 'payment_intent.settled',
+      eventType: 'payment_intent.succeeded',
     });
 
     const res = await fetch(`${baseUrl}/v1/webhook_deliveries/${otherDelivery.id}/redeliver`, {

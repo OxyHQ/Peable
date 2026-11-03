@@ -41,35 +41,26 @@ function eventWith(overrides: Partial<Stripe.Event> = {}): Stripe.Event {
 }
 
 describe('mapPaymentIntentStatus', () => {
-  test('maps every status Stripe can report', () => {
+  /**
+   * The identity since ADR 0019 — Peable adopted Stripe's seven — and still
+   * total over Stripe's union. `requires_capture` stays `requires_capture`: an
+   * authorization NOT captured is never `succeeded`, which would settle an
+   * order against money nobody has taken.
+   */
+  test('maps every status Stripe can report to itself', () => {
     for (const status of ALL_STRIPE_STATUSES) {
-      expect(typeof mapPaymentIntentStatus(status)).toBe('string');
+      expect(mapPaymentIntentStatus(status)).toBe(status);
     }
   });
 
-  /**
-   * The one that would settle an order against money nobody has taken.
-   * `requires_capture` means authorized and NOT captured.
-   */
-  test('requires_capture is processing, never succeeded', () => {
-    expect(mapPaymentIntentStatus('requires_capture')).toBe('processing');
-  });
-
-  /**
-   * And the one that would close intents nobody has tried to pay. A payer who
-   * abandoned a checkout and a payer whose card was declined both land on
-   * `requires_payment_method`.
-   */
-  test('requires_payment_method is created, never failed', () => {
-    expect(mapPaymentIntentStatus('requires_payment_method')).toBe('created');
-    expect(mapPaymentIntentStatus('requires_confirmation')).toBe('created');
-  });
-
-  test('succeeded and canceled carry across unchanged', () => {
-    expect(mapPaymentIntentStatus('succeeded')).toBe('succeeded');
-    expect(mapPaymentIntentStatus('canceled')).toBe('canceled');
-    expect(mapPaymentIntentStatus('requires_action')).toBe('requires_action');
-    expect(mapPaymentIntentStatus('processing')).toBe('processing');
+  test('a payment_failed event reports a failed ATTEMPT, an authorization is requires_capture', () => {
+    expect(
+      toProviderEventEnvelope(eventWith({ type: 'payment_intent.payment_failed' })).paymentStatus,
+    ).toBe('failed');
+    expect(
+      toProviderEventEnvelope(eventWith({ type: 'payment_intent.amount_capturable_updated' }))
+        .paymentStatus,
+    ).toBe('requires_capture');
   });
 });
 

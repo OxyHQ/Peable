@@ -65,7 +65,7 @@ describe('webhookEndpoints', () => {
     const { client, gateway } = harness({ ...ENDPOINT, secret: 'whsec_abc' });
     const endpoints = new WebhookEndpointsResource(client);
     const created = await endpoints.create(
-      { url: ENDPOINT.url, enabled_events: ['payment_intent.settled'] },
+      { url: ENDPOINT.url, enabled_events: ['payment_intent.succeeded'] },
       { idempotencyKey: 'we-1' },
     );
     const request = last(gateway);
@@ -74,7 +74,7 @@ describe('webhookEndpoints', () => {
     expect(request.headers.get('Idempotency-Key')).toBe('we-1');
     expect(JSON.parse(request.body ?? '{}')).toEqual({
       url: ENDPOINT.url,
-      enabled_events: ['payment_intent.settled'],
+      enabled_events: ['payment_intent.succeeded'],
     });
     expect(created.secret).toBe('whsec_abc');
   });
