@@ -96,8 +96,8 @@ export function createOwnedBillingRecurringReader(options: {
           periods: [
             {
               itemRef: 'owned_subscription',
-              start: sub.current_period_start,
-              end: sub.current_period_end,
+              start: new Date(sub.current_period_start * 1000).toISOString(),
+              end: new Date(sub.current_period_end * 1000).toISOString(),
             },
           ],
           hasMorePeriods: false,
@@ -130,7 +130,13 @@ export function createOwnedBillingRecurringReader(options: {
         amountRefunded: value.amount_refunded,
         paymentIntentRef: value.payment_intent_id,
         chargeRef: value.charge_id,
-        periods: [{ itemRef: value.line_id, start: value.period_start, end: value.period_end }],
+        periods: [
+          {
+            itemRef: value.line_id,
+            start: new Date(value.period_start * 1000).toISOString(),
+            end: new Date(value.period_end * 1000).toISOString(),
+          },
+        ],
         hasMorePeriods: false,
       };
     },
