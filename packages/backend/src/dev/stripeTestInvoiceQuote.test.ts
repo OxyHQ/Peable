@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 import { localInvoiceQuote } from './stripeTestInvoiceQuote';
-test('actual inclusive invoice amounts remain one total', () => {
+test('actual inclusive invoice amounts remain one total, as base-unit strings', () => {
   expect(
     localInvoiceQuote(
       {
@@ -10,27 +10,27 @@ test('actual inclusive invoice amounts remain one total', () => {
       },
       'inclusive',
     ),
-  ).toEqual({ subtotalMinorUnits: 557, taxMinorUnits: 42, totalMinorUnits: 599, inclusive: true });
+  ).toEqual({ amount_subtotal: '557', amount_tax: '42', amount_total: '599', inclusive: true });
 });
 test('recorded zero is distinct from absent provider tax evidence', () => {
   expect(
     localInvoiceQuote({ total: 599, total_excluding_tax: 599, total_taxes: [] }, 'inclusive')
-      ?.taxMinorUnits,
-  ).toBe(0);
+      ?.amount_tax,
+  ).toBe('0');
   expect(
     localInvoiceQuote({ total: 599, total_excluding_tax: null, total_taxes: [] }, 'inclusive'),
-  ).toBeUndefined();
+  ).toBeNull();
   expect(
     localInvoiceQuote({ total: 599, total_excluding_tax: 599, total_taxes: null }, 'inclusive'),
-  ).toBeUndefined();
+  ).toBeNull();
 });
 test('conflicting amounts or exclusive treatment are omitted, never invented', () => {
   expect(
     localInvoiceQuote({ total: 599, total_excluding_tax: 557, total_taxes: [] }, 'inclusive'),
-  ).toBeUndefined();
+  ).toBeNull();
   expect(
     localInvoiceQuote({ total: 599, total_excluding_tax: 599, total_taxes: [] }, 'exclusive'),
-  ).toBeUndefined();
+  ).toBeNull();
   expect(
     localInvoiceQuote(
       {
@@ -40,5 +40,5 @@ test('conflicting amounts or exclusive treatment are omitted, never invented', (
       },
       'inclusive',
     ),
-  ).toBeUndefined();
+  ).toBeNull();
 });

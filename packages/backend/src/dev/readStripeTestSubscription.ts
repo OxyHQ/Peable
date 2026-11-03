@@ -56,7 +56,7 @@ async function run() {
         checkout: state.id,
         status: state.status,
         subscription: state.subscription?.provider_subscription_id ?? null,
-        subscriptionStatus: state.subscription?.status ?? null,
+        subscription_status: state.subscription?.status ?? null,
         invoice,
       }),
     );

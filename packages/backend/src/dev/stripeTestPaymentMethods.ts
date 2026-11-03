@@ -1,7 +1,9 @@
+/** One Peable method this isolated harness offer could take (ADR 0014 wire). */
 export interface LocalPaymentMethodCapability {
-  id: 'card' | 'bank' | 'installments' | 'faircoin';
+  type: 'card' | 'bank' | 'installments' | 'faircoin';
   available: boolean;
-  reason?: string;
+  /** Why it cannot be offered here; `null` when it can. */
+  unavailable_reason: string | null;
 }
 /** Offer capabilities of this isolated subscription harness, not account-wide methods.
  * The calling context verifies its merchant has no receive key/network. */
@@ -10,12 +12,16 @@ export function localSubscriptionPaymentMethods(
 ): LocalPaymentMethodCapability[] {
   return [
     {
-      id: 'card',
+      type: 'card',
       available: cardAvailable,
-      ...(cardAvailable ? {} : { reason: 'subscription_method_not_configured' }),
+      unavailable_reason: cardAvailable ? null : 'subscription_method_not_configured',
     },
-    { id: 'bank', available: false, reason: 'subscription_method_not_configured' },
-    { id: 'installments', available: false, reason: 'installment_offer_not_configured' },
-    { id: 'faircoin', available: false, reason: 'merchant_receive_key_missing' },
+    { type: 'bank', available: false, unavailable_reason: 'subscription_method_not_configured' },
+    {
+      type: 'installments',
+      available: false,
+      unavailable_reason: 'installment_offer_not_configured',
+    },
+    { type: 'faircoin', available: false, unavailable_reason: 'merchant_receive_key_missing' },
   ];
 }

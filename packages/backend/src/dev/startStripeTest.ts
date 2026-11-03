@@ -52,7 +52,7 @@ async function run() {
         withLocalSubscriptionBootstrap(async () => {
           const { created } = await createLocalStripeTestIntent(key, interval);
           const snapshot = await readLocalSubscription(created.intent.publicId);
-          return { ...snapshot, clientSecret: created.intent.clientSecret };
+          return { ...snapshot, client_secret: created.intent.clientSecret };
         }),
     }),
   );

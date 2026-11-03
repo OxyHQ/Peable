@@ -51,9 +51,12 @@ bun --env-file=.env.local packages/backend/src/dev/seedStripeTestCheckout.ts
 The seed registers a card-only development merchant (no fabricated FairCoin
 key) and calls the real `createIntent` service. It writes a mode0600 payer
 artifact to `~/.local/share/peable-stripe-test/checkout.json`; stdout contains
-only public identifiers and the artifact path. The artifact contains
-`apiUrl`, a publishable key, the Peable intent/client secret and provider client
-action. It must stay outside source control and logs. The frontend may receive
+only public identifiers and the artifact path (`account`, `merchant`,
+`payment_intent`, `reused`, `artifact`). The artifact is
+`{object: "local_test_checkout", livemode: false, api_url, payment_intent}`, where
+`payment_intent` is exactly what `POST /v1/payment_intents` answers the payer's
+client: the PaymentIntent, its `client_secret` and its
+`client_action {kind, value, publishable_key}`. It must stay outside source control and logs. The frontend may receive
 only this payer capability; no application credential or provider secret.
 
 The local runner binds only loopback and does not publish workload telemetry.
@@ -163,12 +166,14 @@ customer, subscription, initial invoice and payment identities, account mode,
 amount and currency are verified before exposing any payer action. Signed
 provider events still drive the existing intent transitions/outbox.
 
-The no-store response includes `kind: subscription`, `environment: test`, the
-Peable `intentId` and payer `clientSecret`, subscription ID, interval, amount,
-currency and actual provider period dates. Keep capabilities in component memory,
+The no-store response is the subscription snapshot (see **Wire** below) plus the
+payer `client_secret`: `object: "local_test_subscription"`, `livemode: false`, the
+Peable `payment_intent`, the provider `subscription`, `interval`, `amount`,
+`currency` and the actual provider period (`current_period_start` /
+`current_period_end`). Keep capabilities in component memory,
 never browser storage, URL fragments, query strings or logs. Ordinary anonymous
 payer client-action APIs return the first-invoice confirmation capability.
-`GET /__local/checkout-test/:intentId/subscription` requires the same local
+`GET /__local/checkout-test/:paymentIntent/subscription` requires the same local
 origin/Host and `X-Peable-Client-Secret`. Its `ready` flag requires the signed
 Peable settlement, active subscription, and the existing strict Billing paid
 invoice proof, including actual charge, amount and refund reconciliation. No
@@ -213,11 +218,12 @@ the reviewed version and bound, the already-stored signed monthly subscription
 and invoice events produced active/paid snapshots locally. No external webhook
 target or production entitlement consumer is configured.
 
-The subscription snapshot also carries offer-specific `paymentMethods` entries
-for card, bank, installments and FairCoin. Only a method actually supported by
+The subscription snapshot also carries offer-specific `payment_methods` entries
+(`{type, available, unavailable_reason}`) for card, bank, installments and
+FairCoin. Only a method actually supported by
 this offer/adapter is available. The card-entry processor configuration must not
 hide the other Peable choices in the application. This local merchant has no
-watch-only receive key or network, so FairCoin reports
+watch-only receive key or network, so FairCoin's `unavailable_reason` is
 `merchant_receive_key_missing`; bank reports
 `subscription_method_not_configured`, and installments reports
 `installment_offer_not_configured`. These are facts about this isolated offer,
@@ -245,8 +251,9 @@ still require network round trips. No subscription is created on page view.
 
 `GET /__local/checkout-test/config` is a read-only preparation endpoint with the
 same loopback Host, allowed Origin and `X-Peable-Local-Test: 1` boundary. It
-returns the test publishable key, public merchant/product scope, validated
-monthly/annual catalogue amounts, method capabilities and a 60-second expiry.
+returns `object: "local_checkout_configuration"`: the test `publishable_key`, the
+public `merchant` and `product`, the validated monthly/annual `prices`, the
+`payment_methods` capabilities and `expires_at` sixty seconds out.
 It creates no customer, subscription or payment. Account, method configuration
 and both prices are read in parallel; concurrent page warmups share the public
 configuration for at most 60 seconds. Credential/configuration changes refuse
@@ -259,3 +266,61 @@ confirmation. Preparation supplies no tax quote, payment capability or proof of
 payment; the real binding and signed paid-readiness checks remain mandatory.
 Measured local preparation was 459ms cold and below 1ms warm, with only four
 provider GETs cold and no provider writes.
+
+## Wire
+
+The harness speaks the Orbit wire (ADR 0014), the same as `/v1`: snake_case
+fields, `object` and `livemode` on every object, amounts as base-unit strings
+beside an uppercase `currency`, instants as integer Unix seconds, `null` for what
+is not known, and every refusal in the standard envelope
+`{error: {type, code, param?, message, request_id}}`. There are no aliases for
+the older camelCase fields.
+
+`GET /__local/checkout-test/config` → `local_checkout_configuration`:
+
+| Field | Type |
+|---|---|
+| `object` | `"local_checkout_configuration"` |
+| `livemode` | `false` |
+| `publishable_key` | `pk_test_…` |
+| `merchant` | the local merchant's `merch_…` |
+| `product` | `"peable_local_mention_plus"` |
+| `currency` | `"USD"` |
+| `prices.month` / `prices.year` | `{unit_amount: "599" \| "5750", interval}` |
+| `payment_methods[]` | `{type: card\|bank\|installments\|faircoin, available, unavailable_reason: string \| null}` |
+| `expires_at` | Unix seconds |
+
+`POST /__local/checkout-test` (body `{"interval": "month" | "year"}`, nothing
+else) and `GET /__local/checkout-test/:paymentIntent/subscription` →
+`local_test_subscription` (the POST adds `client_secret`):
+
+| Field | Type |
+|---|---|
+| `object` | `"local_test_subscription"` |
+| `livemode` | `false` |
+| `payment_intent` | Peable `pi_…` |
+| `subscription` | provider subscription id |
+| `interval` | `month` \| `year` |
+| `amount` | base-unit string (`"599"`) |
+| `currency` | `"USD"` |
+| `subscription_status`, `invoice_status`, `payment_status` | provider / Peable status, `invoice_status` nullable |
+| `ready` | boolean, see above |
+| `tax` | `{amount_subtotal, amount_tax, amount_total, inclusive}` (strings) or `null` |
+| `payment_methods[]` | as above |
+| `current_period_start`, `current_period_end` | Unix seconds or `null` |
+
+Refusals:
+
+| Status | `type` | `code` | When |
+|---|---|---|---|
+| 403 | `permission_error` | `local_test_request_required` | wrong peer, Host, Origin, opt-in header, content type or missing capability |
+| 400 | `invalid_request_error` | `parameter_invalid` (`param: Idempotency-Key`) | missing or malformed `Idempotency-Key` |
+| 400 | `invalid_request_error` | `parameter_invalid` (`param` names the field) | any body but `{interval}` |
+| 429 | `rate_limit_error` | `rate_limited` | more than ten creates a minute (`Retry-After: 60`) |
+| 503 | `api_error` | `local_test_configuration_unavailable` / `local_test_unavailable` / `local_test_subscription_unavailable` | the boundary re-check or the provider read failed; nothing is echoed |
+
+The CLI artifacts follow the same rules. `subscription-<interval>.json` is
+`{object: "local_test_subscription_checkout", livemode: false, account, owner:
+{merchant_id, oxy_app_id, environment}, interval, amount, currency, session}`, and
+`readStripeTestSubscription.ts` prints `{checkout, status, subscription,
+subscription_status, invoice}`.

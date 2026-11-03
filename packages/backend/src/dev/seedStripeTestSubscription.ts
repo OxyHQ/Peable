@@ -110,10 +110,16 @@ async function run() {
     await writeFile(
       output,
       JSON.stringify({
+        object: 'local_test_subscription_checkout',
+        livemode: false,
         account: account.id,
-        owner,
+        owner: {
+          merchant_id: owner.merchantId,
+          oxy_app_id: owner.oxyAppId,
+          environment: owner.environment,
+        },
         interval,
-        amountMinorUnits: selected.amount,
+        amount: String(selected.amount),
         currency: 'USD',
         session,
       }),
@@ -143,9 +149,9 @@ void run().catch((error: unknown) => {
   console.error(
     JSON.stringify({
       issues: info?.issues?.map((i) => ({ path: i.path, code: i.code })),
-      errorType: safe(info?.name),
+      error_type: safe(info?.name),
       code: safe(info?.code),
-      databaseCode: safe(info?.cause?.code),
+      database_code: safe(info?.cause?.code),
       constraint: safe(info?.cause?.constraint_name),
     }),
   );

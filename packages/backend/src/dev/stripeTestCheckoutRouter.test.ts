@@ -8,6 +8,11 @@ let server: Server | undefined;
 afterEach(async () => {
   if (server) await new Promise<void>((resolve) => server?.close(() => resolve()));
 });
+/** The standard envelope's `error` object (ADR 0014 D1). */
+async function errorOf(response: Response): Promise<Record<string, unknown>> {
+  const body = (await response.json()) as { error: Record<string, unknown> };
+  return body.error;
+}
 async function harness(assertEnvironment = () => {}) {
   const keys: string[] = [];
   const app = express();
@@ -15,14 +20,17 @@ async function harness(assertEnvironment = () => {}) {
   app.use(
     createLocalStripeTestCheckoutRouter({
       assertEnvironment,
-      prepare: async () => ({ environment: 'test', publishableKey: 'pk_test_public' }),
+      prepare: async () => ({
+        object: 'local_checkout_configuration',
+        publishable_key: 'pk_test_public',
+      }),
       read: async (id, capability) => {
         if (id !== 'pi_local' || capability !== 'payer-capability') throw new Error('not found');
-        return { ready: false, invoiceStatus: 'open' };
+        return { ready: false, invoice_status: 'open' };
       },
       create: async (key) => {
         keys.push(key);
-        return { intentId: 'pi_local', clientSecret: 'payer-capability' };
+        return { payment_intent: 'pi_local', client_secret: 'payer-capability' };
       },
     }),
   );
@@ -65,7 +73,10 @@ describe('loopback test checkout entry', () => {
     const r = await h.request();
     expect(r.status).toBe(200);
     expect(r.headers.get('cache-control')).toBe('no-store');
-    expect(await r.json()).toEqual({ intentId: 'pi_local', clientSecret: 'payer-capability' });
+    expect(await r.json()).toEqual({
+      payment_intent: 'pi_local',
+      client_secret: 'payer-capability',
+    });
     await h.request();
     expect(h.keys).toEqual(['stable-operation-12345', 'stable-operation-12345']);
   });
@@ -102,7 +113,14 @@ describe('loopback test checkout entry', () => {
     permitted = false;
     const r = await h.request();
     expect(r.status).toBe(503);
-    expect(await r.json()).toEqual({ error: 'local_test_unavailable' });
+    expect(await r.json()).toEqual({
+      error: {
+        type: 'api_error',
+        code: 'local_test_unavailable',
+        message: 'the local test checkout could not be created',
+        request_id: null,
+      },
+    });
     expect(h.keys).toHaveLength(0);
   });
   test('subscription read requires the exact payer capability and allowed origin', async () => {
@@ -115,6 +133,37 @@ describe('loopback test checkout entry', () => {
       403,
     );
   });
+  test('answers every refusal in the standard error envelope', async () => {
+    const h = await harness();
+    const outside = await h.request({ Origin: 'https://mention.earth' });
+    expect(await outside.json()).toEqual({
+      error: {
+        type: 'permission_error',
+        code: 'local_test_request_required',
+        message: 'this route answers only the local test checkout on loopback',
+        request_id: null,
+      },
+    });
+    expect(await errorOf(await h.request({ 'Idempotency-Key': 'short' }))).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'parameter_invalid',
+      param: 'Idempotency-Key',
+    });
+    expect(await errorOf(await h.request({}, '{"interval":"month","amount":1}'))).toMatchObject({
+      type: 'invalid_request_error',
+      code: 'parameter_invalid',
+      param: 'amount',
+    });
+    expect(await errorOf(await h.request({}, '{"interval":"week"}'))).toMatchObject({
+      type: 'invalid_request_error',
+      param: 'interval',
+    });
+    expect(await errorOf(await h.read('pi_other'))).toMatchObject({
+      type: 'api_error',
+      code: 'local_test_subscription_unavailable',
+    });
+    expect(h.keys).toHaveLength(0);
+  });
   test('bounds requests even when different operation keys are supplied', async () => {
     const h = await harness();
     for (let i = 0; i < 10; i++)
@@ -122,6 +171,10 @@ describe('loopback test checkout entry', () => {
     const limited = await h.request();
     expect(limited.status).toBe(429);
     expect(limited.headers.get('retry-after')).toBe('60');
+    expect(await errorOf(limited)).toMatchObject({
+      type: 'rate_limit_error',
+      code: 'rate_limited',
+    });
     expect(h.keys).toHaveLength(10);
   });
 });
@@ -131,7 +184,10 @@ test('readonly preparation returns public fields without creating a payment and 
   const response = await h.prepare();
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('no-store');
-  expect(await response.json()).toEqual({ environment: 'test', publishableKey: 'pk_test_public' });
+  expect(await response.json()).toEqual({
+    object: 'local_checkout_configuration',
+    publishable_key: 'pk_test_public',
+  });
   const invalidHeaders: Record<string, string>[] = [
     { Origin: 'https://mention.earth' },
     { Host: 'attacker.example' },
