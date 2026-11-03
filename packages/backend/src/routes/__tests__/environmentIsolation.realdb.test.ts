@@ -189,6 +189,14 @@ async function post(path: string, body: unknown, headers: Record<string, string>
   return { status: response.status, body: (await response.json()) as Body };
 }
 
+async function get(path: string) {
+  const response = await fetch(`${baseUrl}${path}`);
+  return {
+    status: response.status,
+    body: (await response.json()) as { data?: readonly { livemode: boolean }[] },
+  };
+}
+
 /** A settled card payment of this credential's merchant, linked at the provider. */
 async function settledCardPayment(environment: OxyServiceEnvironment, publicId: string) {
   const merchant = await seedMerchant({ oxyAppId: APP_ID, environment });
@@ -328,6 +336,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('test and live in one deployment', () =
       expect(body.livemode).toBe(true);
       expect(providerCalls).toEqual(['live:refund']);
     });
+  });
+
+  /**
+   * The list and retrieve surfaces read rows back, so they say which world
+   * each object belongs to — derived from the row's merchant, the same source
+   * the provider client was selected by.
+   */
+  test("lists report every object in the credential's own mode", async () => {
+    const dev = await get('/v1/refunds');
+    expect(dev.status).toBe(200);
+    expect(dev.body.data?.length).toBeGreaterThan(0);
+    expect(dev.body.data?.every((refund) => refund.livemode === false)).toBe(true);
+    const devSessions = await get('/v1/checkout_sessions');
+    expect(devSessions.body.data?.length).toBeGreaterThan(0);
+    expect(devSessions.body.data?.every((session) => session.livemode === false)).toBe(true);
+
+    credentialEnvironment = 'production';
+    const prod = await get('/v1/refunds');
+    expect(prod.body.data?.length).toBeGreaterThan(0);
+    expect(prod.body.data?.every((refund) => refund.livemode === true)).toBe(true);
+    expect(providerCalls).toEqual([]);
   });
 
   describe('a mode with no key is a card rail that is off', () => {
