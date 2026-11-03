@@ -5,15 +5,24 @@ import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
 import { verifySecret } from '@oxy.so/core/server';
-import type { CreateCheckoutSessionParams } from '@peable.to/shared-types';
+import type {
+  CreateCheckoutSessionParams,
+  UpdateCheckoutSessionParams,
+} from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findMerchantById } from '../db/merchants/merchantRepository';
-import { findIntentById } from '../db/payments/paymentIntentRepository';
+import {
+  findIntentById,
+  findIntentForMerchant,
+  findIntentsByIds,
+} from '../db/payments/paymentIntentRepository';
 import {
   findSessionByIntentId,
   findSessionByPublicId,
   findSessionForMerchant,
   insertCheckoutSession,
+  listSessionsForMerchant,
+  updateSessionMetadata,
 } from '../db/payments/checkoutSessionRepository';
 import {
   createIntent,
@@ -40,12 +49,39 @@ import {
 } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
+import { expandObjects, parseExpand } from '../lib/expand';
+import {
+  answerList,
+  expandParam,
+  listQuerySchema,
+  parseQuery,
+  resolveListReference,
+  retrieveQuerySchema,
+} from '../lib/list';
+import {
+  METADATA_LIMIT_MESSAGE,
+  metadataCreateSchema,
+  metadataUpdateSchema,
+} from '../lib/metadata';
+
+/** `GET /v1/checkout_sessions`: every session, or the one wrapping a payment. */
+const listSessionsQuery = listQuerySchema({
+  payment_intent: z.string().min(1).max(255).optional(),
+});
+const retrieveSessionQuery = retrieveQuerySchema({});
+
+const updateBodySchema = z
+  .object({
+    metadata: metadataUpdateSchema.optional(),
+    expand: expandParam.optional(),
+  } satisfies Record<keyof UpdateCheckoutSessionParams | 'expand', z.ZodType>)
+  .strict();
 
 const createBodySchema = z
   .object({
     ...railBodyFields,
     ...connectedAccountBodyField,
-    metadata: z.record(z.string(), z.string()).optional(),
+    metadata: metadataCreateSchema.optional(),
     success_url: z.string().url().optional(),
     cancel_url: z.string().url().optional(),
   } satisfies Record<keyof CreateCheckoutSessionParams, z.ZodType>)
@@ -198,6 +234,65 @@ export function createCheckoutSessionsRouter(deps: {
     }),
   );
 
+  /** Every session of the merchant, newest first — or the one wrapping `payment_intent=pi_…`. */
+  router.get(
+    '/v1/checkout_sessions',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const query = parseQuery(req, res, listSessionsQuery);
+      if (!query) return;
+
+      const db = getDb();
+      const intent = await resolveListReference(
+        res,
+        'payment_intent',
+        query.payment_intent,
+        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+      );
+      if (!intent.ok) return;
+
+      await answerList(req, res, {
+        query,
+        type: 'checkout_session',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findSessionForMerchant(db, publicId, merchant.id))?.id ?? null,
+        fetch: async (page) => {
+          const sessions = await listSessionsForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          });
+          // The DTO reads the wrapped intent (its `pi_…`, `client_secret`,
+          // seller), so the page's intents are read in ONE query, not per row.
+          const intents = new Map(
+            (
+              await findIntentsByIds(
+                db,
+                sessions.data.map((s) => s.paymentIntentId),
+              )
+            ).map((row) => [row.id, row]),
+          );
+          return {
+            hasMore: sessions.hasMore,
+            data: sessions.data.map((session) => {
+              const wrapped = intents.get(session.paymentIntentId);
+              if (!wrapped) {
+                throw new Error(`checkout session ${session.publicId} wraps an unreadable intent`);
+              }
+              return { session, intent: wrapped };
+            }),
+          };
+        },
+        serialize: ({ session, intent: wrapped }) => toCheckoutSessionDTO(session, wrapped),
+      });
+    }),
+  );
+
   router.get(
     '/v1/checkout_sessions/:id',
     requireMerchant,
@@ -216,6 +311,10 @@ export function createCheckoutSessionsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
+      const query = parseQuery(req, res, retrieveSessionQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'checkout_session', query.expand, { list: false });
+      if (!expand) return;
 
       const db = getDb();
       const session = await findSessionForMerchant(db, id, merchant.id);
@@ -231,7 +330,65 @@ export function createCheckoutSessionsRouter(deps: {
         sendError(res, 404, 'invalid_request_error', 'checkout session not found');
         return;
       }
-      res.status(200).json(toCheckoutSessionDTO(session, intent));
+      const dto = toCheckoutSessionDTO(session, intent);
+      await expandObjects([dto], 'checkout_session', expand, merchant.id);
+      res.status(200).json(dto);
+    }),
+  );
+
+  /**
+   * Update a session — `POST`, Stripe's verb. Only the merchant's `metadata`
+   * is mutable: the amount, rail and seller are the wrapped payment's.
+   */
+  router.post(
+    '/v1/checkout_sessions/:id',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = updateBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const expand = parseExpand(res, 'checkout_session', parsed.data.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const session =
+        parsed.data.metadata === undefined
+          ? ((await findSessionForMerchant(db, id, merchant.id)) ?? 'missing')
+          : await updateSessionMetadata(db, id, merchant.id, parsed.data.metadata);
+      if (session === 'missing') {
+        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
+        return;
+      }
+      if (session === 'limit_exceeded') {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          METADATA_LIMIT_MESSAGE,
+          'parameter_invalid',
+          'metadata',
+        );
+        return;
+      }
+      const intent = await findIntentById(db, session.paymentIntentId);
+      if (!intent) {
+        throw new Error(`checkout session ${session.publicId} wraps an unreadable intent`);
+      }
+      const dto = toCheckoutSessionDTO(session, intent);
+      await expandObjects([dto], 'checkout_session', expand, merchant.id);
+      res.status(200).json(dto);
     }),
   );
 

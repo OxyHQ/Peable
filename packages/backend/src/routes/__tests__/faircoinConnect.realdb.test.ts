@@ -501,7 +501,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     expect(first.status).toBe(201);
     expect(first.json.address).toBe(deriveIntentAddress(key, 0, 0, network));
-    expect(first.json.connected_account_id).toBe(seller.id);
+    expect(first.json.connected_account).toBe(seller.id);
     expect(first.json.network).toBe('testnet');
     expect(first.json.can_expire).toBe(true);
 
@@ -606,12 +606,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       success_url: 'https://platform.example/ok',
     });
     expect(res.status).toBe(201);
-    expect(res.json.connected_account_id).toBe(seller.id);
+    expect(res.json.connected_account).toBe(seller.id);
     expect(res.json.success_url).toBe('https://platform.example/ok');
     expect(res.json.network).toBe('testnet');
-    const intent = must(
-      await findIntentByPublicId(gatewayDb(), String(res.json.payment_intent_id)),
-    );
+    const intent = must(await findIntentByPublicId(gatewayDb(), String(res.json.payment_intent)));
     expect(intent.address).toBe(
       deriveIntentAddress(testXpubFor('testnet', 44), 0, 0, getNetwork('testnet')),
     );
@@ -633,7 +631,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const event = must(events.find((row) => row.intentId === intent.id));
     expect(event.payload.account).toBe(seller.id);
     const object = (event.payload.data as Json).object as Json;
-    expect(object.connected_account_id).toBe(seller.id);
+    expect(object.connected_account).toBe(seller.id);
     expect(object.can_expire).toBe(false);
   });
 

@@ -5,7 +5,7 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
-import type { CreatePaymentLinkParams } from '@peable.to/shared-types';
+import type { CreatePaymentLinkParams, UpdatePaymentLinkParams } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findMerchantById } from '../db/merchants/merchantRepository';
 import {
@@ -39,31 +39,36 @@ import {
 import { idempotent } from '../lib/idempotency';
 import { resolveMerchant } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
+import { answerList, listQuerySchema, parseQuery } from '../lib/list';
+import {
+  METADATA_LIMIT_MESSAGE,
+  metadataCreateSchema,
+  metadataUpdateSchema,
+} from '../lib/metadata';
 
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 100;
-
-const listQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
-  starting_after: z.string().optional(),
+const listLinksQuery = listQuerySchema({
+  active: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
 });
 
 const createBodySchema = z
   .object({
     ...railBodyFields,
-    metadata: z.record(z.string(), z.string()).optional(),
+    metadata: metadataCreateSchema.optional(),
     success_url: z.string().url().optional(),
   } satisfies Record<keyof CreatePaymentLinkParams, z.ZodType>)
   .strict();
 
 // Only `active`/`metadata`/`success_url` are mutable — a link's price must be
 // immutable once shared, so `amount`/`network` are deliberately absent here.
-const patchBodySchema = z
+const updateBodySchema = z
   .object({
     active: z.boolean().optional(),
-    metadata: z.record(z.string(), z.string()).optional(),
+    metadata: metadataUpdateSchema.optional(),
     success_url: z.string().url().nullable().optional(),
-  })
+  } satisfies Record<keyof UpdatePaymentLinkParams, z.ZodType>)
   .strict();
 
 /**
@@ -155,38 +160,22 @@ export function createPaymentLinksRouter(deps: {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const parsed = listQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const { starting_after } = parsed.data;
-      const limit = parsed.data.limit ?? DEFAULT_LIST_LIMIT;
+      const query = parseQuery(req, res, listLinksQuery);
+      if (!query) return;
 
       const db = getDb();
-
-      // The cursor arrives as a public `link_…`; the keyset walk runs on the
-      // primary key, so it is resolved here, ownership-scoped — a cursor
-      // naming another merchant's link is a 400 exactly like an unknown one.
-      let after: string | undefined;
-      if (starting_after) {
-        const cursor = await findLinkForMerchant(db, starting_after, merchant.id);
-        if (!cursor) {
-          sendError(
-            res,
-            400,
-            'invalid_request_error',
-            'starting_after references an unknown payment link',
-          );
-          return;
-        }
-        after = cursor.id;
-      }
-
-      const page = await listLinksForMerchant(db, { merchantId: merchant.id, limit, after });
-      const data = page.data.map((link) => toPaymentLinkDTO(link));
-
-      res.status(200).json({ object: 'list', data, has_more: page.hasMore });
+      await answerList(req, res, {
+        query,
+        type: 'payment_link',
+        merchantId: merchant.id,
+        // The cursor arrives as a public `link_…`, resolved ownership-scoped —
+        // a cursor naming another merchant's link is a 400 like an unknown one.
+        cursor: async (publicId) =>
+          (await findLinkForMerchant(db, publicId, merchant.id))?.id ?? null,
+        fetch: (page) =>
+          listLinksForMerchant(db, { merchantId: merchant.id, active: query.active, page }),
+        serialize: toPaymentLinkDTO,
+      });
     }),
   );
 
@@ -218,16 +207,22 @@ export function createPaymentLinksRouter(deps: {
     }),
   );
 
-  router.patch(
+  /**
+   * Update a link — `POST`, as every update on this API is (Stripe's verb).
+   * There is no PATCH: one verb per operation, so an integration written
+   * against either spelling cannot half-work.
+   */
+  router.post(
     '/v1/payment_links/:id',
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const parsed = patchBodySchema.safeParse(req.body);
+      const parsed = updateBodySchema.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -253,8 +248,19 @@ export function createPaymentLinksRouter(deps: {
         metadata: params.metadata,
         successUrl: params.success_url,
       });
-      if (!link) {
+      if (link === 'missing') {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
+        return;
+      }
+      if (link === 'limit_exceeded') {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          METADATA_LIMIT_MESSAGE,
+          'parameter_invalid',
+          'metadata',
+        );
         return;
       }
       res.status(200).json(toPaymentLinkDTO(link));

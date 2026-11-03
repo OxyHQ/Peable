@@ -28,7 +28,8 @@ test('CheckoutSession is assignable from a representative literal', () => {
   const session: CheckoutSession = {
     id: 'cs_abc',
     object: 'checkout_session',
-    payment_intent_id: INTENT.id,
+    payment_intent: INTENT.id,
+    connected_account: null,
     client_secret: INTENT.client_secret,
     amount: INTENT.amount,
     network: INTENT.network,

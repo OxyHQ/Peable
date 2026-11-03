@@ -25,8 +25,8 @@ import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
-import { findIntentById, findIntentByPublicId } from '../db/payments/paymentIntentRepository';
-import { findDisputeByPublicId, listDisputesForIntent } from '../db/disputes/disputeRepository';
+import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
+import { findDisputeByPublicId, listDisputesForMerchant } from '../db/disputes/disputeRepository';
 import {
   DisputeNotAnswerableError,
   DisputesUnanswerableError,
@@ -46,7 +46,23 @@ import {
   wrap,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
+import { expandObjects, parseExpand } from '../lib/expand';
+import {
+  answerList,
+  listQuerySchema,
+  parseQuery,
+  resolveListReference,
+  retrieveQuerySchema,
+} from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
+
+/** `GET /v1/disputes`: every dispute of the merchant, or of one payment. */
+const listDisputesQuery = listQuerySchema({
+  payment_intent: z.string().min(1).max(255).optional(),
+});
+/** The per-payment sub-list: the payment is in the path. */
+const listIntentDisputesQuery = listQuerySchema({});
+const retrieveDisputeQuery = retrieveQuerySchema({});
 
 /**
  * How long one evidence field may be.
@@ -115,21 +131,108 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
+      const query = parseQuery(req, res, listIntentDisputesQuery);
+      if (!query) return;
 
       const db = getDb();
-      const intent = await findIntentByPublicId(db, intentId);
-      // ONE 404 for both "does not exist" and "is not yours": distinguishing
-      // them tells a caller whether another merchant's `pi_…` is real.
-      if (!intent || intent.merchantId !== merchant.id) {
+      // ONE 404 for both "does not exist" and "is not yours", scoped in the
+      // predicate: distinguishing them tells a caller whether another
+      // merchant's `pi_…` is real.
+      const intent = await findIntentForMerchant(db, intentId, merchant.id);
+      if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
-      const rows = await listDisputesForIntent(db, intent.id);
-      res.status(200).json({
-        object: 'list',
-        data: rows.map((row) => toDisputeDTO(row, intent.publicId)),
+      await answerList(req, res, {
+        query,
+        type: 'dispute',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findDisputeByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listDisputesForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          }),
+        serialize: (row) => toDisputeDTO(row, row.paymentIntentPublicId),
       });
+    }),
+  );
+
+  /** Every dispute of the merchant, newest first — or of one payment, `payment_intent=pi_…`. */
+  router.get(
+    '/v1/disputes',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const query = parseQuery(req, res, listDisputesQuery);
+      if (!query) return;
+
+      const db = getDb();
+      const intent = await resolveListReference(
+        res,
+        'payment_intent',
+        query.payment_intent,
+        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+      );
+      if (!intent.ok) return;
+
+      await answerList(req, res, {
+        query,
+        type: 'dispute',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findDisputeByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listDisputesForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          }),
+        serialize: (row) => toDisputeDTO(row, row.paymentIntentPublicId),
+      });
+    }),
+  );
+
+  /** One dispute, by `dp_…`, scoped to the merchant in the predicate. */
+  router.get(
+    '/v1/disputes/:disputeId',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { disputeId } = req.params;
+      if (!disputeId) {
+        sendError(res, 400, 'invalid_request_error', 'disputeId is required');
+        return;
+      }
+      const query = parseQuery(req, res, retrieveDisputeQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'dispute', query.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const dispute = await findDisputeByPublicId(db, merchant.id, disputeId);
+      if (!dispute) {
+        sendError(res, 404, 'invalid_request_error', 'dispute not found');
+        return;
+      }
+      const intent = await findIntentById(db, dispute.paymentIntentId);
+      if (!intent) {
+        // `disputes.payment_intent_id` carries a foreign key with `on delete
+        // restrict`; stated so loosening it fails loudly.
+        throw new Error(`dispute ${dispute.publicId} names an intent that cannot be read`);
+      }
+      const dto = toDisputeDTO(dispute, intent.publicId);
+      await expandObjects([dto], 'dispute', expand, merchant.id);
+      res.status(200).json(dto);
     }),
   );
 

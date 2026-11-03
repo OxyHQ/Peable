@@ -48,8 +48,8 @@ const TRANSFER: Transfer = {
   id: 'tr_1',
   object: 'transfer',
   external_ref: 'order_1',
-  connected_account_id: 'ca_1',
-  payment_intent_id: 'pi_1',
+  connected_account: 'ca_1',
+  payment_intent: 'pi_1',
   amount: '5000',
   currency: 'EUR',
   amount_reversed: '0',
@@ -64,7 +64,7 @@ const REFUND: Refund = {
   object: 'refund',
   external_ref: 'refund_1',
   origin: 'merchant',
-  payment_intent_id: 'pi_1',
+  payment_intent: 'pi_1',
   amount: '2500',
   currency: 'EUR',
   status: 'succeeded',
@@ -149,16 +149,16 @@ describe('TransfersResource', () => {
     const resource = new TransfersResource(buildTestClient(fetchImpl));
 
     const transfer = await resource.create({
-      payment_intent_id: 'pi_1',
-      connected_account_id: 'ca_1',
+      payment_intent: 'pi_1',
+      connected_account: 'ca_1',
       external_ref: 'order_1',
       amount: '5000',
     });
 
     expect(transfer).toEqual(TRANSFER);
     expect(JSON.parse(callOf(requests)?.body ?? '{}')).toEqual({
-      payment_intent_id: 'pi_1',
-      connected_account_id: 'ca_1',
+      payment_intent: 'pi_1',
+      connected_account: 'ca_1',
       external_ref: 'order_1',
       amount: '5000',
     });
@@ -201,12 +201,12 @@ describe('RefundsResource', () => {
     const resource = new RefundsResource(buildTestClient(fetchImpl));
 
     const refund = await resource.create({
-      payment_intent_id: 'pi_1',
+      payment_intent: 'pi_1',
       external_ref: 'refund_1',
       amount: '2500',
     });
     expect(JSON.parse(callOf(requests)?.body ?? '{}')).toEqual({
-      payment_intent_id: 'pi_1',
+      payment_intent: 'pi_1',
       external_ref: 'refund_1',
       amount: '2500',
     });
@@ -245,7 +245,7 @@ describe('settlement reporting', () => {
   test('carries nulls with a status rather than zeros', async () => {
     const { fetch: fetchImpl, requests } = gateway({
       object: 'settlement',
-      payment_intent_id: 'pi_1',
+      payment_intent: 'pi_1',
       status: 'unknown',
       gross: null,
       fee: null,

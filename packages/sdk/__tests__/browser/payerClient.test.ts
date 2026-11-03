@@ -93,6 +93,7 @@ const INTENT: PaymentIntent = {
   network: 'testnet',
   address: 'TAddr1',
   merchant_id: 'merch_1',
+  connected_account: null,
   txid: null,
   confirmations: 0,
   client_secret: 'secret_1',

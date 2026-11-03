@@ -1,5 +1,13 @@
-import type { Dispute, DisputeEvidence, Merchant } from '@peable.to/shared-types';
+import type {
+  Dispute,
+  DisputeEvidence,
+  ExpandParams,
+  List,
+  ListParams,
+  Merchant,
+} from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * The merchant this credential speaks for, and the disputes raised against it.
@@ -60,9 +68,11 @@ export interface UpdateMerchantParams {
   description?: string | null;
 }
 
-export interface DisputeList {
-  object: 'list';
-  data: Dispute[];
+export type DisputeList = List<Dispute>;
+
+export interface DisputeListParams extends ListParams {
+  /** Only the disputes of this payment (`pi_…`). */
+  payment_intent?: string;
 }
 
 export class MerchantsResource {
@@ -77,7 +87,7 @@ export class MerchantsResource {
   }
 
   update(params: UpdateMerchantParams): Promise<Merchant> {
-    return this.client.request<Merchant>('PATCH', '/v1/merchants/me', { body: params });
+    return this.client.request<Merchant>('POST', '/v1/merchants/me', { body: params });
   }
 }
 
@@ -118,10 +128,33 @@ export type DisputeEvidenceParams = DisputeEvidence;
 export class DisputesResource {
   constructor(private readonly client: RestClient) {}
 
-  listForPaymentIntent(paymentIntentId: string): Promise<DisputeList> {
-    return this.client.request<DisputeList>(
-      'GET',
-      `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/disputes`,
+  /** One dispute, by `dp_…`. `expand: ['payment_intent']` returns the payment itself. */
+  retrieve(id: string, params: ExpandParams = {}): Promise<Dispute> {
+    return this.client.request<Dispute>('GET', `/v1/disputes/${encodeURIComponent(id)}`, {
+      query: { expand: params.expand },
+    });
+  }
+
+  /** Every dispute, newest first — or one payment's, with `payment_intent`. */
+  list(params: DisputeListParams = {}): ApiListPromise<Dispute> {
+    return listPromise(
+      (page: DisputeListParams) =>
+        this.client.request<DisputeList>('GET', '/v1/disputes', {
+          query: listQuery(page, { payment_intent: page.payment_intent }),
+        }),
+      params,
+    );
+  }
+
+  listForPaymentIntent(paymentIntentId: string, params: ListParams = {}): ApiListPromise<Dispute> {
+    return listPromise(
+      (page: ListParams) =>
+        this.client.request<DisputeList>(
+          'GET',
+          `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/disputes`,
+          { query: listQuery(page) },
+        ),
+      params,
     );
   }
 

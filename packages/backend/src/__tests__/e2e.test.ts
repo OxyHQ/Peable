@@ -283,7 +283,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   const beforeDispatch = (
     await listDeliveriesForMerchant(gatewayDb(), {
       merchantId: merchantRow.id,
-      limit: 50,
+      page: { limit: 50 },
     })
   ).data;
   expect(beforeDispatch.at(0)?.lastStatus).toBe('pending');
@@ -311,7 +311,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
   const deliveryLog = (
     await listDeliveriesForMerchant(gatewayDb(), {
       merchantId: merchantRow.id,
-      limit: 50,
+      page: { limit: 50 },
     })
   ).data;
   expect(deliveryLog.length).toBeGreaterThan(0);

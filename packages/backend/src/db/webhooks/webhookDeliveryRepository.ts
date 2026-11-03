@@ -1,7 +1,8 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { WebhookDeliveryStatus, WebhookEventType } from '@peable.to/shared-types';
 import { paymentIntents, webhookDeliveries } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
+import { keyset, type KeysetPage } from '../keyset';
 
 /**
  * READS for `webhook_deliveries` — what the merchant API and the dashboard ask
@@ -99,9 +100,8 @@ export async function findDeliveryForMerchant(
 
 export interface ListDeliveriesParams {
   readonly merchantId: string;
-  readonly limit: number;
-  /** The cursor row's id, already resolved and ownership-checked by the caller. */
-  readonly after?: string | undefined;
+  /** Cursors already resolved and ownership-checked by the caller. */
+  readonly page: KeysetPage;
 }
 
 /**
@@ -148,20 +148,13 @@ export async function listDeliveriesForMerchant(
   db: DatabaseOrTransaction,
   params: ListDeliveriesParams,
 ): Promise<{ data: WebhookDeliveryWithIntentRow[]; hasMore: boolean }> {
-  const conditions = [eq(webhookDeliveries.merchantId, params.merchantId)];
-  if (params.after !== undefined) conditions.push(lt(webhookDeliveries.id, params.after));
-
+  const walk = keyset(webhookDeliveries.id, webhookDeliveries.createdAt, params.page);
   const rows = await db
     .select({ ...DELIVERY_COLUMNS, intentPublicId: paymentIntents.publicId })
     .from(webhookDeliveries)
     .leftJoin(paymentIntents, eq(paymentIntents.id, webhookDeliveries.paymentIntentId))
-    .where(and(...conditions))
-    .orderBy(desc(webhookDeliveries.id))
-    .limit(params.limit + 1);
-
-  const hasMore = rows.length > params.limit;
-  return {
-    data: (hasMore ? rows.slice(0, params.limit) : rows).map(toDeliveryWithIntentRow),
-    hasMore,
-  };
+    .where(and(eq(webhookDeliveries.merchantId, params.merchantId), walk.where))
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map(toDeliveryWithIntentRow));
 }

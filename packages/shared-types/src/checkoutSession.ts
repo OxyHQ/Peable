@@ -6,12 +6,14 @@ import type { CurrencyCode } from './money';
 import type { NetworkType } from './network';
 import type { MerchantDisplay } from './merchantDisplay';
 import type { PaymentIntent, PaymentIntentRail } from './paymentIntent';
+import type { ConnectedAccount } from './settlement';
 
 /** The merchant/SDK-facing DTO — returned on create and by merchant retrieve. */
 export interface CheckoutSession {
   id: string;
   object: 'checkout_session';
-  payment_intent_id: string;
+  /** The wrapped payment's `pi_…`, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
+  payment_intent: string | PaymentIntent;
   /** The wrapped intent's `client_secret`, returned to the merchant on create. */
   client_secret: string;
   amount: string;
@@ -20,10 +22,10 @@ export interface CheckoutSession {
   /** FairCoin rail only; `null` on a card session. */
   network: NetworkType | null;
   /**
-   * The seller the wrapped payment is made on behalf of (`ca_…`), or `null`
-   * (ADR 0012 D5). Optional in the type for older fixtures; always sent.
+   * The seller the wrapped payment is made on behalf of (`ca_…`, or the
+   * object with `expand[]=connected_account`), or `null` (ADR 0012 D5).
    */
-  connected_account_id?: string | null;
+  connected_account: string | ConnectedAccount | null;
   metadata: Record<string, string>;
   success_url?: string;
   cancel_url?: string;
@@ -63,4 +65,9 @@ export interface CreateCheckoutSessionParams {
   cancel_url?: string;
   /** Pay this seller (`ca_…`) rather than the merchant — see `CreatePaymentIntentParams.connectedAccount`. */
   connected_account?: string;
+}
+
+/** `POST /v1/checkout_sessions/:id` — the merchant's `metadata`, as a patch. */
+export interface UpdateCheckoutSessionParams {
+  metadata?: Record<string, string>;
 }

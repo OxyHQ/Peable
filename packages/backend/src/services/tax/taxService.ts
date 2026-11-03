@@ -14,7 +14,6 @@ import {
   type TaxReportRow,
   type TaxSettings,
   type TaxTransaction,
-  type TaxTransactionList,
   type TaxTransactionReversal,
 } from '@peable.to/shared-types';
 import type { Database, DatabaseOrTransaction } from '../../db/postgres';
@@ -27,6 +26,7 @@ import {
   taxTransactions,
 } from '../../db/schema/tax';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
+import { keyset, type KeysetPage } from '../../db/keyset';
 import { newId } from '../../lib/ids';
 import { paramFromPath } from '../../lib/http';
 import { fromUnix, toUnix, toUnixOrNull } from '../../lib/time';
@@ -171,12 +171,11 @@ export const createTaxCalculationSchema = z
     line_items: lineItemsSchema,
   })
   .strict();
-export const listTaxTransactionsSchema = z
+/** The filing window of a report: `from` inclusive, `to` exclusive, Unix seconds. */
+export const taxReportQuerySchema = z
   .object({
     from: z.coerce.number().pipe(unixSeconds),
     to: z.coerce.number().pipe(unixSeconds),
-    limit: z.coerce.number().int().positive().max(1000).optional(),
-    starting_after: z.string().optional(),
   })
   .strict();
 
@@ -872,15 +871,41 @@ export function createTaxService(options: TaxServiceOptions) {
       if (!row) throw new TaxError('not_found');
       return row.result;
     },
-    async listTransactions(merchant: MerchantRow, raw: unknown): Promise<TaxTransactionList> {
-      const input = parse(listTaxTransactionsSchema, raw);
-      const limit = input.limit ?? 100;
-      const rows = await transactionsBetween(db, merchant.id, input, limit + 1);
-      return {
-        object: 'list',
-        data: rows.slice(0, limit).map(transactionDto),
-        has_more: rows.length > limit,
-      };
+    /** A `taxtxn_…` cursor's primary key, inside the merchant's scope; `null` when it names nothing there. */
+    async findTransactionKey(merchant: MerchantRow, publicId: string): Promise<string | null> {
+      const [row] = await db
+        .select({ id: taxTransactions.id })
+        .from(taxTransactions)
+        .where(
+          and(eq(taxTransactions.merchantId, merchant.id), eq(taxTransactions.publicId, publicId)),
+        );
+      return row?.id ?? null;
+    },
+    /**
+     * One page of `GET /v1/tax/transactions`, newest first like every list
+     * (`db/keyset.ts`). `created[...]` filters `committed_at` — the tax date a
+     * filing period is judged by, which is what a caller narrowing by date
+     * means here.
+     */
+    async listTransactions(
+      merchant: MerchantRow,
+      page: KeysetPage,
+    ): Promise<{ data: TaxTransaction[]; hasMore: boolean }> {
+      const walk = keyset(taxTransactions.id, taxTransactions.committedAt, page);
+      const original = alias(taxTransactions, 'original');
+      const rows = await db
+        .select({
+          transaction: taxTransactions,
+          calculation: taxCalculations,
+          originalPublicId: original.publicId,
+        })
+        .from(taxTransactions)
+        .innerJoin(taxCalculations, eq(taxCalculations.id, taxTransactions.calculationId))
+        .leftJoin(original, eq(original.id, taxTransactions.reversalOfId))
+        .where(and(eq(taxTransactions.merchantId, merchant.id), walk.where))
+        .orderBy(walk.orderBy)
+        .limit(walk.limit);
+      return walk.finish(rows.map(transactionDto));
     },
     /**
      * Record a refund the rail cannot report itself: a FairCoin payment is
@@ -924,10 +949,7 @@ export function createTaxService(options: TaxServiceOptions) {
     /** Totals per jurisdiction, registration, tax type and rate — the lines a
      * return (an OSS return, a state filing) is prepared from. */
     async report(merchant: MerchantRow, raw: unknown): Promise<TaxReport> {
-      const input = parse(
-        listTaxTransactionsSchema.omit({ limit: true, starting_after: true }),
-        raw,
-      );
+      const input = parse(taxReportQuerySchema, raw);
       const schemes = new Map(
         (
           await db

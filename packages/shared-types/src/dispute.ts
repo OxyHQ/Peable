@@ -1,3 +1,5 @@
+import type { PaymentIntent } from './paymentIntent';
+
 /**
  * A dispute — the card network holding a settled payment's money while a
  * cardholder contests it.
@@ -27,8 +29,8 @@ export type DisputeStatus = 'needs_response' | 'under_review' | 'won' | 'lost';
 export interface Dispute {
   id: string;
   object: 'dispute';
-  /** The PUBLIC `pi_…` id, which is what every other contract here calls `id`. */
-  payment_intent_id: string;
+  /** The disputed payment's `pi_…`, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
+  payment_intent: string | PaymentIntent;
   /**
    * Amount in the currency's smallest unit as a canonical integer string —
    * the same encoding every other money field on these contracts uses.

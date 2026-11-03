@@ -48,6 +48,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     network: 'testnet',
     address: 'TAddressExample1111111111111111111',
     merchant_id: 'merch_1',
+    connected_account: null,
     txid: null,
     confirmations: 0,
     client_secret: 'session_secret_abc',

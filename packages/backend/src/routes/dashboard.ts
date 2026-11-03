@@ -29,16 +29,14 @@ import {
 import type { AvatarActor } from '../services/oxyFiles/merchantAvatar';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import {
+  answerPaymentIntentList,
+  paymentIntentListFilters,
   resolveMerchantByApp,
-  listQuerySchema,
-  listPaymentIntentsForMerchant,
 } from './paymentIntents';
 import { redeliverWebhookDelivery } from './webhookDeliveries';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 100;
+import { answerList, listQuerySchema, parseQuery } from '../lib/list';
 
 /**
  * Every `/v1/dashboard/*` route is scoped to one `(applicationId, environment)`
@@ -134,10 +132,19 @@ export async function resolveDashboardAccess(
   };
 }
 
-const webhookDeliveriesListQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
-  starting_after: z.string().optional(),
+/**
+ * The dashboard's lists take `environment` beside the list parameters (the
+ * Test/Live toggle); it is validated by `resolveDashboardAccess` and declared
+ * here only so the strict list schema does not refuse it.
+ */
+const dashboardScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
+
+const paymentIntentsListQuery = listQuerySchema({
+  ...paymentIntentListFilters,
+  ...dashboardScope,
 });
+
+const webhookDeliveriesListQuery = listQuerySchema(dashboardScope);
 
 /**
  * Build the `/v1/dashboard/*` router (F2.5 Phase 0 Task 2) — a human Oxy
@@ -238,19 +245,9 @@ export function createDashboardRouter(deps?: {
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
       if (!merchant) return;
 
-      const parsed = listQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-
-      const result = await listPaymentIntentsForMerchant(merchant.id, parsed.data);
-      if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
-        return;
-      }
-      const data = result.data.map((intent) => toPaymentIntentDTO(intent));
-      res.status(200).json({ object: 'list', data, has_more: result.hasMore });
+      const query = parseQuery(req, res, paymentIntentsListQuery);
+      if (!query) return;
+      await answerPaymentIntentList(req, res, merchant.id, query);
     }),
   );
 
@@ -293,47 +290,22 @@ export function createDashboardRouter(deps?: {
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
       if (!merchant) return;
 
-      const parsed = webhookDeliveriesListQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const { starting_after } = parsed.data;
-      const limit = parsed.data.limit ?? DEFAULT_LIST_LIMIT;
+      const query = parseQuery(req, res, webhookDeliveriesListQuery);
+      if (!query) return;
 
       const db = getDb();
-
-      // The id-shape guard is gone with the ObjectId it existed for: delivery
-      // ids are `text`, so a cursor of any shape simply matches no row, and
-      // the ownership-scoped lookup below produces the SAME 400 it always did.
-      let after: string | undefined;
-      if (starting_after) {
-        const cursor = await findDeliveryForMerchant(db, starting_after, merchant.id);
-        if (!cursor) {
-          sendError(
-            res,
-            400,
-            'invalid_request_error',
-            'starting_after references an unknown webhook delivery',
-          );
-          return;
-        }
-        after = cursor.id;
-      }
-
-      // Each row carries its intent's PUBLIC id, joined in by the repository.
-      // `WebhookDelivery.intentId` is a shipped wire field holding the `pi_…`,
-      // and resolving it per row here would be an N+1 whose size the client
-      // chooses through `limit`.
-      const page = await listDeliveriesForMerchant(db, {
+      await answerList(req, res, {
+        query,
+        type: 'webhook_delivery',
         merchantId: merchant.id,
-        limit,
-        after,
+        // Delivery ids are `text`, so a cursor of any shape simply matches no
+        // row, and the ownership-scoped lookup produces the same 400.
+        cursor: async (id) => (await findDeliveryForMerchant(db, id, merchant.id))?.id ?? null,
+        // Each row carries its intent's PUBLIC id, joined in by the repository
+        // — resolving it per row here would be an N+1 sized by `limit`.
+        fetch: (page) => listDeliveriesForMerchant(db, { merchantId: merchant.id, page }),
+        serialize: (delivery) => toWebhookDeliveryDTO(delivery, delivery.intentPublicId),
       });
-      const data = page.data.map((delivery) =>
-        toWebhookDeliveryDTO(delivery, delivery.intentPublicId),
-      );
-      res.status(200).json({ object: 'list', data, has_more: page.hasMore });
     }),
   );
 

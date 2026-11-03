@@ -69,7 +69,7 @@
     },
     "packages/contracts": {
       "name": "@peable.to/contracts",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "dependencies": {
         "zod": "^4.6.7",
       },
@@ -218,7 +218,7 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.8.0",
+      "version": "0.9.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:0.2.1",
         "@peable.to/shared-types": "workspace:0.5.1",
@@ -245,7 +245,7 @@
     },
     "packages/shared-types": {
       "name": "@peable.to/shared-types",
-      "version": "0.6.0",
+      "version": "0.7.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:0.2.1",
       },

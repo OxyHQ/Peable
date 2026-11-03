@@ -48,7 +48,7 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     merchant_id: row.merchantId,
     // The PUBLIC `ca_…`, read in the same statement as the row. Never the
     // internal `connectedAccountId` — that is a uuid this contract never names.
-    connected_account_id: row.connectedAccountPublicId ?? null,
+    connected_account: row.connectedAccountPublicId ?? null,
     txid: row.txid,
     confirmations: row.confirmations,
     client_secret: row.clientSecret,
@@ -199,10 +199,10 @@ export function toPublicPaymentLinkDTO(
 /**
  * Serialize a persisted CheckoutSession row to its merchant/SDK-facing DTO.
  * The wrapped intent is passed in rather than re-fetched here, and supplies
- * both `payment_intent_id` and `client_secret` — the session row itself
+ * both `payment_intent` and `client_secret` — the session row itself
  * deliberately never stores a copy of the secret.
  *
- * `payment_intent_id` is the intent's PUBLIC `pi_…`, not the internal reference
+ * `payment_intent` is the intent's PUBLIC `pi_…`, not the internal reference
  * the session stores, because that is what the shipped contract carries.
  */
 export function toCheckoutSessionDTO(
@@ -212,7 +212,7 @@ export function toCheckoutSessionDTO(
   return {
     id: row.publicId,
     object: 'checkout_session',
-    payment_intent_id: intent.publicId,
+    payment_intent: intent.publicId,
     client_secret: intent.clientSecret,
     amount: row.amount,
     currency: row.currency,
@@ -220,7 +220,7 @@ export function toCheckoutSessionDTO(
     network: row.network,
     // From the INTENT, which carries the public `ca_…`; the session row holds
     // only the internal id.
-    connected_account_id: intent.connectedAccountPublicId ?? null,
+    connected_account: intent.connectedAccountPublicId ?? null,
     metadata: row.metadata,
     success_url: row.successUrl ?? undefined,
     cancel_url: row.cancelUrl ?? undefined,
@@ -269,7 +269,7 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
   return {
     id: row.publicId,
     object: 'dispute',
-    payment_intent_id: paymentIntentPublicId,
+    payment_intent: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
     status: row.status,

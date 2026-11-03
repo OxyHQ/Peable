@@ -2,6 +2,7 @@
 // Gateway backend, SDK, and frontend. Mirrors Stripe's PaymentIntent shape over
 // two rails: the non-custodial FairCoin lifecycle, and a fiat card payment
 // served by a provider behind the gateway (ADR 0001).
+import type { ConnectedAccount } from './settlement';
 import type { CurrencyCode } from './money';
 import type { NetworkType } from './network';
 
@@ -295,10 +296,10 @@ export interface PaymentIntent {
    * payment to the merchant itself (ADR 0012 D5). On-behalf payments are
    * FairCoin only, and `address` derives from that seller's own key.
    *
-   * Optional in the type only so fixtures written against earlier versions
-   * still compile; a gateway at this version always sends it.
+   * The seller's `ca_…`, or the {@link ConnectedAccount} itself when the
+   * request asked for `expand[]=connected_account`.
    */
-  connected_account_id?: string | null;
+  connected_account: string | ConnectedAccount | null;
   txid: string | null;
   /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
   confirmations: number;
@@ -344,4 +345,16 @@ export interface CreatePaymentIntentParams {
    * must be the account's network.
    */
   connected_account?: string;
+}
+
+/**
+ * `POST /v1/payment_intents/:id`. Only the merchant's own `metadata` is
+ * mutable on an intent: everything else is either the payment itself or the
+ * state machine's, which moves only through its own operations.
+ *
+ * `metadata` is a PATCH: named keys are set, a key sent as `""` is removed,
+ * keys not named are kept.
+ */
+export interface UpdatePaymentIntentParams {
+  metadata?: Record<string, string>;
 }

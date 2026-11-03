@@ -18,6 +18,7 @@ export const contributionRoutes = [
     method: 'post',
     path,
     operationId: 'createContribution',
+    idempotencyKey: true,
     body: createContributionSchema,
     response: contributionLinkSchema,
     status: 201,
@@ -30,7 +31,7 @@ export const contributionRoutes = [
     status: 200,
   },
   {
-    method: 'patch',
+    method: 'post',
     path: `${path}/{id}`,
     operationId: 'setContributionActive',
     body: contributionPatchSchema,
@@ -74,8 +75,37 @@ export function contributionOpenApi() {
           description: 'The id of the last object on the previous page.',
           schema: { type: 'string' },
         },
+        {
+          in: 'query',
+          name: 'ending_before',
+          description:
+            'The id of the first object on the current page; pages backwards, newest first.',
+          schema: { type: 'string' },
+        },
+        {
+          in: 'query',
+          name: 'created',
+          description: 'Unix seconds: one second, or `created[gt|gte|lt|lte]`.',
+          style: 'deepObject',
+          explode: true,
+          schema: {
+            oneOf: [
+              { type: 'integer', minimum: 0 },
+              {
+                type: 'object',
+                additionalProperties: false,
+                properties: {
+                  gt: { type: 'integer', minimum: 0 },
+                  gte: { type: 'integer', minimum: 0 },
+                  lt: { type: 'integer', minimum: 0 },
+                  lte: { type: 'integer', minimum: 0 },
+                },
+              },
+            ],
+          },
+        },
       );
-    if (route.method === 'post')
+    if ('idempotencyKey' in route)
       parameters.push({
         in: 'header',
         name: 'Idempotency-Key',

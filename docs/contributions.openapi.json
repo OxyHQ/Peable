@@ -298,6 +298,51 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the first object on the current page; pages backwards, newest first.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: one second, or `created[gt|gte|lt|lte]`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
           }
         ],
         "responses": {
@@ -406,9 +451,12 @@
                     },
                     "has_more": {
                       "type": "boolean"
+                    },
+                    "url": {
+                      "type": "string"
                     }
                   },
-                  "required": ["object", "data", "has_more"],
+                  "required": ["object", "data", "has_more", "url"],
                   "additionalProperties": false
                 }
               }
@@ -460,7 +508,7 @@
       }
     },
     "/v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}": {
-      "patch": {
+      "post": {
         "operationId": "setContributionActive",
         "security": [
           {
@@ -721,6 +769,51 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "ending_before",
+            "description": "The id of the first object on the current page; pages backwards, newest first.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "created",
+            "description": "Unix seconds: one second, or `created[gt|gte|lt|lte]`.",
+            "style": "deepObject",
+            "explode": true,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "gt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "gte": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lt": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "lte": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              ]
+            }
           }
         ],
         "responses": {
@@ -819,9 +912,12 @@
                     },
                     "has_more": {
                       "type": "boolean"
+                    },
+                    "url": {
+                      "type": "string"
                     }
                   },
-                  "required": ["object", "data", "has_more"],
+                  "required": ["object", "data", "has_more", "url"],
                   "additionalProperties": false
                 }
               }

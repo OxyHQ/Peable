@@ -1,23 +1,22 @@
 import type {
   CreatePaymentIntentParams,
+  ExpandParams,
+  List,
+  ListParams,
   PaymentIntent,
   PaymentIntentStatus,
+  UpdatePaymentIntentParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
-export interface PaymentIntentListParams {
+export interface PaymentIntentListParams extends ListParams {
   status?: PaymentIntentStatus;
-  limit?: number;
-  starting_after?: string;
   /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
   connected_account?: string;
 }
 
-export interface PaymentIntentList {
-  object: 'list';
-  data: PaymentIntent[];
-  has_more: boolean;
-}
+export type PaymentIntentList = List<PaymentIntent>;
 
 /**
  * The payer's next step, as the gateway reports it.
@@ -73,22 +72,48 @@ export class PaymentIntentsResource {
     });
   }
 
-  retrieve(id: string): Promise<PaymentIntent> {
+  /** `expand: ['connected_account']` returns the seller instead of its `ca_…`. */
+  retrieve(id: string, params: ExpandParams = {}): Promise<PaymentIntent> {
     return this.client.request<PaymentIntent>(
       'GET',
       `/v1/payment_intents/${encodeURIComponent(id)}`,
+      { query: { expand: params.expand } },
     );
   }
 
-  list(params: PaymentIntentListParams = {}): Promise<PaymentIntentList> {
-    return this.client.request<PaymentIntentList>('GET', '/v1/payment_intents', {
-      query: {
-        status: params.status,
-        limit: params.limit,
-        starting_after: params.starting_after,
-        connected_account: params.connected_account,
-      },
-    });
+  /**
+   * Your payments, newest first. Await it for one page, or iterate it —
+   * `for await (const intent of peable.paymentIntents.list())` — to walk every
+   * page.
+   */
+  list(params: PaymentIntentListParams = {}): ApiListPromise<PaymentIntent> {
+    return listPromise(
+      (page: PaymentIntentListParams) =>
+        this.client.request<PaymentIntentList>('GET', '/v1/payment_intents', {
+          query: listQuery(page, {
+            status: page.status,
+            connected_account: page.connected_account,
+          }),
+        }),
+      params,
+    );
+  }
+
+  /**
+   * Update a payment's `metadata` — the only mutable field. A patch: named
+   * keys are set, a key sent as `''` is removed, others are kept. At most 50
+   * keys, 40-character keys and 500-character values.
+   */
+  update(
+    id: string,
+    params: UpdatePaymentIntentParams & ExpandParams,
+    options: { idempotencyKey?: string } = {},
+  ): Promise<PaymentIntent> {
+    return this.client.request<PaymentIntent>(
+      'POST',
+      `/v1/payment_intents/${encodeURIComponent(id)}`,
+      { body: params, idempotencyKey: options.idempotencyKey },
+    );
   }
 
   /**

@@ -1,4 +1,4 @@
-import { and, desc, eq, lt } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
@@ -6,6 +6,8 @@ import { uuidv7 } from '@oxy.so/db';
 import { paymentLinks } from '../schema';
 import type { StoredContribution } from '../schema/payments';
 import type { DatabaseOrTransaction } from '../postgres';
+import { keyset, type KeysetPage } from '../keyset';
+import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 
 /**
  * Reads and writes for `payment_links` — a shareable, reusable generator of
@@ -160,9 +162,12 @@ export async function findLinkForMerchant(
 export interface ListLinksParams {
   readonly merchantId: string;
   readonly active?: boolean | undefined;
-  readonly limit: number;
-  /** Internal id of the already-resolved, ownership-checked `starting_after` cursor. */
-  readonly after?: string | undefined;
+  /**
+   * Only the contribution links of this organization (`payment_links.contribution
+   * ->> 'organizationId'`). Absent: every link, contribution or not.
+   */
+  readonly contributionOrganizationId?: string | undefined;
+  readonly page: KeysetPage;
 }
 
 /** One page, newest first. Same ordering contract as `listIntentsForMerchant` — read its note. */
@@ -170,24 +175,29 @@ export async function listLinksForMerchant(
   db: DatabaseOrTransaction,
   params: ListLinksParams,
 ): Promise<{ data: PaymentLinkRow[]; hasMore: boolean }> {
-  const conditions = [eq(paymentLinks.merchantId, params.merchantId)];
-  if (params.active !== undefined) conditions.push(eq(paymentLinks.active, params.active));
-  if (params.after !== undefined) conditions.push(lt(paymentLinks.id, params.after));
-
+  const walk = keyset(paymentLinks.id, paymentLinks.createdAt, params.page);
   const rows = await db
     .select(LINK_COLUMNS)
     .from(paymentLinks)
-    .where(and(...conditions))
-    .orderBy(desc(paymentLinks.id))
-    .limit(params.limit + 1);
-
-  const hasMore = rows.length > params.limit;
-  return { data: (hasMore ? rows.slice(0, params.limit) : rows).map(toLinkRow), hasMore };
+    .where(
+      and(
+        eq(paymentLinks.merchantId, params.merchantId),
+        params.active === undefined ? undefined : eq(paymentLinks.active, params.active),
+        params.contributionOrganizationId === undefined
+          ? undefined
+          : sql`${paymentLinks.contribution}->>'organizationId' = ${params.contributionOrganizationId}`,
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map(toLinkRow));
 }
 
 export interface PaymentLinkPatch {
   readonly active?: boolean | undefined;
-  readonly metadata?: Record<string, string> | undefined;
+  /** A patch, merged in the statement — see `db/metadata.ts`. */
+  readonly metadata?: MetadataPatch | undefined;
   readonly successUrl?: string | null | undefined;
 }
 
@@ -201,26 +211,34 @@ export interface PaymentLinkPatch {
  * is stronger than validating against it.
  *
  * Scoped to the merchant in the same statement, so a patch cannot reach a link
- * the caller does not own.
+ * the caller does not own. `limit_exceeded` is a metadata patch whose MERGED
+ * bag would pass 50 keys — a different answer from a missing link (400, not 404).
  */
 export async function updatePaymentLink(
   db: DatabaseOrTransaction,
   publicId: string,
   merchantId: string,
   patch: PaymentLinkPatch,
-): Promise<PaymentLinkRow | null> {
+): Promise<PaymentLinkRow | 'missing' | 'limit_exceeded'> {
   const values: Record<string, unknown> = {};
   if (patch.active !== undefined) values.active = patch.active;
-  if (patch.metadata !== undefined) values.metadata = patch.metadata;
   if (patch.successUrl !== undefined) values.successUrl = patch.successUrl;
+  const merged =
+    patch.metadata === undefined
+      ? undefined
+      : mergedMetadata(paymentLinks.metadata, patch.metadata);
+  if (merged !== undefined) values.metadata = merged;
   if (Object.keys(values).length === 0) {
-    return findLinkForMerchant(db, publicId, merchantId);
+    return (await findLinkForMerchant(db, publicId, merchantId)) ?? 'missing';
   }
 
+  const scope = and(eq(paymentLinks.publicId, publicId), eq(paymentLinks.merchantId, merchantId));
   const [row] = await db
     .update(paymentLinks)
     .set(values)
-    .where(and(eq(paymentLinks.publicId, publicId), eq(paymentLinks.merchantId, merchantId)))
+    .where(merged === undefined ? scope : and(scope, metadataWithinLimit(merged)))
     .returning(LINK_COLUMNS);
-  return row ? toLinkRow(row) : null;
+  if (row) return toLinkRow(row);
+  if (merged === undefined) return 'missing';
+  return (await findLinkForMerchant(db, publicId, merchantId)) ? 'limit_exceeded' : 'missing';
 }

@@ -1,3 +1,5 @@
+import type { List, ListParams } from './list';
+
 /**
  * Peable Tax — the wire contract.
  *
@@ -267,20 +269,14 @@ export interface CreateTaxReversalParams {
   amount?: number;
 }
 
-export interface TaxTransactionList {
-  object: 'list';
-  data: TaxTransaction[];
-  has_more: boolean;
-}
+export type TaxTransactionList = List<TaxTransaction>;
 
-export interface ListTaxTransactionsParams {
-  /** Inclusive, Unix seconds. */
-  from: number;
-  /** Exclusive, Unix seconds. */
-  to: number;
-  limit?: number;
-  starting_after?: string;
-}
+/**
+ * `GET /v1/tax/transactions`. `created` filters on `committed_at` — the tax
+ * date a filing period is judged by — and the list is newest first, like every
+ * other list.
+ */
+export type ListTaxTransactionsParams = Omit<ListParams, 'expand'>;
 
 /** One filing line: totals per jurisdiction, registration, tax type and rate. */
 export interface TaxReportRow {

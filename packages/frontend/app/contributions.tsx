@@ -21,7 +21,7 @@ import { SafeAreaView } from '@/ui/safe-area-view';
 
 type Collections = ContributionCollectionList;
 type Pending = { key: string; body: CreateContribution };
-const NO_COLLECTIONS: Collections = { object: 'list', data: [], has_more: false };
+const NO_COLLECTIONS: Collections = { object: 'list', data: [], has_more: false, url: '' };
 /** A stored operation is replayed only when its body is still a valid request. */
 function storedPending(stored: string): Pending | null {
   const value: unknown = JSON.parse(stored);

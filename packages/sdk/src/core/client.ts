@@ -5,6 +5,7 @@
 
 import { randomUUID } from 'node:crypto';
 import { resolveRequestTimeout } from './config';
+import { encodeQuery, type QueryValue } from './list';
 import { errorFromResponse, PeableApiError } from './errors';
 import type { ServiceTokenProvider } from './serviceToken';
 import { timeoutSignal } from './timeoutSignal';
@@ -13,7 +14,8 @@ const HTTP_UNAUTHORIZED = 401;
 
 export interface RestClientRequestOptions {
   body?: unknown;
-  query?: Record<string, string | number | undefined>;
+  /** Arrays encode as `key[]=v`, objects as `key[sub]=v` — see `encodeQuery`. */
+  query?: Readonly<Record<string, QueryValue>>;
   /**
    * Sent as `Idempotency-Key`. On a POST without one, the client mints a uuid
    * per call — the same key for every attempt of that call — so a retry of
@@ -37,16 +39,9 @@ export interface RestClientConfig {
 function buildUrl(
   baseURL: string,
   path: string,
-  query: Record<string, string | number | undefined> | undefined,
+  query: Readonly<Record<string, QueryValue>> | undefined,
 ): string {
-  const search = new URLSearchParams();
-  if (query) {
-    for (const [key, value] of Object.entries(query)) {
-      if (value === undefined) continue;
-      search.set(key, String(value));
-    }
-  }
-  const queryString = search.toString();
+  const queryString = encodeQuery(query);
   return `${baseURL}${path}${queryString ? `?${queryString}` : ''}`;
 }
 
