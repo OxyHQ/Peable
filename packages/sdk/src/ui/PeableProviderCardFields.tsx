@@ -201,11 +201,12 @@ export function PeableProviderCardFields({
               return { prepared: false, error: checkoutMessage(locale, 'provider.busy') };
             busy = true;
             const snapshot = { ...sessionAuthority };
+            const billingSnapshot = { ...billingRef.current };
             try {
               return await prepareCheckoutSessionCard({
                 provider,
                 card,
-                billing: billingRef.current,
+                billing: billingSnapshot,
                 action: snapshot,
                 returnUrl,
                 messages: {
@@ -216,6 +217,8 @@ export function PeableProviderCardFields({
                 },
                 isCurrent: () =>
                   active &&
+                  billingRef.current.country === billingSnapshot.country &&
+                  billingRef.current.postcode === billingSnapshot.postcode &&
                   !actionRef.current &&
                   Object.entries(snapshot).every(
                     ([key, value]) => sessionRef.current?.[key as keyof typeof snapshot] === value,
