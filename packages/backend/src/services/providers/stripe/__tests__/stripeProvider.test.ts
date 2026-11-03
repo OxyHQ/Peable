@@ -33,6 +33,12 @@ mock.module('../client', () => ({
     throw new Error('the adapter must not reach the SDK directly');
   },
   resetStripeClient: () => undefined,
+  retrieveStripeChargeWithBalance: async () => {
+    throw new Error('not used by these tests');
+  },
+  updateStripeDispute: async () => {
+    throw new Error('not used by these tests');
+  },
   toProviderError: (error: unknown) => error,
   createStripePaymentIntent: async (...args: unknown[]) => {
     record('createStripePaymentIntent', args);
@@ -132,6 +138,8 @@ describe('StripePaymentProvider', () => {
       Record<string, unknown>,
       string,
     ];
+    expect(params.automatic_payment_methods).toEqual({ enabled: true });
+    expect(params.allowed_payment_method_types).toBeUndefined();
     expect(params.amount).toBe(2500);
     // Lowercase: Stripe's ISO code, not the gateway's uppercase set.
     expect(params.currency).toBe('eur');
@@ -142,6 +150,45 @@ describe('StripePaymentProvider', () => {
     expect(result.providerObjectId).toBe('pi_1');
     expect(result.status).toBe('created');
     expect(result.clientAction).toEqual({ kind: 'client_secret', value: 'pi_1_secret_x' });
+  });
+
+  test('pins an immutable integration method allowlist without changing the dynamic default', async () => {
+    const methods: Array<'card'> = ['card'];
+    const provider = new StripePaymentProvider({
+      allowedPaymentMethodTypes: methods,
+    });
+    methods.length = 0;
+    await provider.createPayment({
+      intentId: 'pi_card_entry',
+      amount: { amount: '599', currency: 'USD' },
+      idempotencyKey: 'pay:pi_card_entry',
+      metadata: {},
+    });
+    const [params] = argsOf('createStripePaymentIntent') as [Record<string, unknown>];
+    expect(params.allowed_payment_method_types).toEqual(['card']);
+    expect(params.automatic_payment_methods).toBeUndefined();
+    expect(params.payment_method_types).toBeUndefined();
+  });
+
+  test('selects one integration configuration without a conflicting allowlist', async () => {
+    const provider = new StripePaymentProvider({ paymentMethodConfiguration: 'pmc_local' });
+    await provider.createPayment({
+      intentId: 'pi_configured',
+      amount: { amount: '599', currency: 'USD' },
+      idempotencyKey: 'pay:pi_configured',
+      metadata: {},
+    });
+    const [params] = argsOf('createStripePaymentIntent') as [Record<string, unknown>];
+    expect(params.payment_method_configuration).toBe('pmc_local');
+    expect(params.automatic_payment_methods).toEqual({ enabled: true });
+    expect(params.allowed_payment_method_types).toBeUndefined();
+    expect(
+      () =>
+        new StripePaymentProvider({
+          paymentMethodConfiguration: 'pmc_local',
+          allowedPaymentMethodTypes: ['card'],
+        }),
+    ).toThrow('either');
   });
 
   /**
