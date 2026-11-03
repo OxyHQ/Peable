@@ -1,0 +1,15 @@
+/*
+ * Tailwind v4 + NativeWind + Bloom's design tokens, and the `@source` globs that
+ * scan Bloom and the Oxy SDK for the classNames their own components use. The
+ * preset's globs are relative to its own file, so they resolve in this hoisted
+ * monorepo (`bunfig.toml`) without restating them here.
+ *
+ * Nothing below restates a Bloom token: Bloom's `theme.css` already defines
+ * every `--color-*` Orbit uses (`bg-background`, `text-muted-foreground`,
+ * `border-border`, ...). A restatement would re-skin Bloom from the inside
+ * (~/Oxy/docs/frontend-conventions.md).
+ */
+@import "@oxy.so/app-preset/base.css";
+
+@source "./app/**/*.{js,jsx,ts,tsx}";
+@source "./src/**/*.{js,jsx,ts,tsx}";

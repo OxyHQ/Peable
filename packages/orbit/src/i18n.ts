@@ -1,0 +1,261 @@
+/**
+ * Orbit's own words. English only in this first version: `OxyProvider` is told
+ * so (`SUPPORTED_LOCALES`), so Oxy never resolves a language Orbit cannot
+ * render. When a second catalog lands, this becomes react-i18next driven by
+ * `OxyProvider`'s `language.onChange` (~/Oxy/docs/frontend-conventions.md).
+ *
+ * The `tax.*` and `contributions.*` strings are the wallet screens' strings,
+ * carried over with those screens.
+ */
+export const SUPPORTED_LOCALES = ['en'];
+export const FALLBACK_LOCALE = 'en';
+
+const en: Record<string, string> = {
+  'app.name': 'Orbit',
+  'app.byline': 'by Peable',
+  'error.generic': 'Something went wrong. Try again.',
+  'action.retry': 'Try again',
+  'action.loadMore': 'Load more',
+  'action.save': 'Save',
+  'action.cancel': 'Cancel',
+  'action.copy': 'Copy',
+  'action.back': 'Back',
+  'notFound.title': 'Page not found',
+  'notFound.body': 'There is nothing at this address in Orbit.',
+  'notFound.action': 'Go to Home',
+
+  'nav.home': 'Home',
+  'nav.payments': 'Payments',
+  'nav.developers': 'Developers',
+  'nav.tax': 'Tax',
+  'nav.contributions': 'Contributions',
+  'nav.settings': 'Settings',
+
+  'signin.title': 'Orbit by Peable',
+  'signin.subtitle':
+    'The workspace for your business on Peable: payments, webhooks, tax and contributions.',
+  'signin.button': 'Sign in with Oxy',
+
+  'scope.organization': 'Organization',
+  'scope.application': 'Application',
+  'scope.mode': 'Mode',
+  'scope.test': 'Test',
+  'scope.live': 'Live',
+  'scope.chooseOrganization': 'Choose an organization',
+  'scope.chooseApplication': 'Choose an application',
+  'scope.testBanner': 'Test mode: you are looking at test data. Nothing here moves real money.',
+  'scope.noOrganizations.title': 'No organization yet',
+  'scope.noOrganizations.body':
+    'Orbit works on an organization’s Oxy applications. Create or join an organization in Oxy, then come back.',
+  'scope.noApplications.title': 'No active application',
+  'scope.noApplications.body':
+    'This organization has no active Oxy application. Create one in Oxy Console to take payments with Peable.',
+  'scope.loading': 'Loading your organizations',
+
+  'merchant.missing.title': 'No merchant in this mode',
+  'merchant.missing.body':
+    'This application has no Peable merchant in {mode} mode yet. Register one in Settings to start taking payments.',
+  'merchant.missing.action': 'Open Settings',
+
+  'home.title': 'Home',
+  'home.sampleNote':
+    'Computed in your browser from the {count} most recent payments{since}. This is not a report: older payments are not included.',
+  'home.sampleNoteComplete':
+    'Computed in your browser from all {count} payments in this mode{since}.',
+  'home.since': ' since {date}',
+  'home.succeeded': 'Succeeded',
+  'home.open': 'In progress',
+  'home.unsuccessful': 'Failed, rejected or expired',
+  'home.refunded': 'Refunded (fully or partly)',
+  'home.volume': 'Gross volume',
+  'home.volumeHelp': 'Payments that reached settlement, before refunds.',
+  'home.noVolume': 'No settled payments in this sample.',
+  'home.empty.title': 'No payments yet',
+  'home.empty.body': 'Payments your integration creates in this mode appear here.',
+  'home.recent': 'Recent payments',
+  'home.viewAll': 'View all payments',
+
+  'payments.title': 'Payments',
+  'payments.filter': 'Status',
+  'payments.allStatuses': 'All statuses',
+  'payments.empty.title': 'No payments',
+  'payments.empty.body': 'No payment in this mode matches the filter.',
+  'payments.column.amount': 'Amount',
+  'payments.column.status': 'Status',
+  'payments.column.id': 'Payment',
+  'payments.column.rail': 'Method',
+  'payments.column.created': 'Created',
+  'payments.rail.card': 'Card',
+  'payments.rail.faircoin': 'FairCoin',
+
+  'payment.title': 'Payment',
+  'payment.notFound': 'No payment with this id in this mode.',
+  'payment.timeline': 'Timeline',
+  'payment.timelineNote':
+    'Times are shown where the payment records them: creation, its latest change and its expiry.',
+  'payment.details': 'Details',
+  'payment.metadata': 'Metadata',
+  'payment.noMetadata': 'No metadata.',
+  'payment.field.id': 'ID',
+  'payment.field.amount': 'Amount',
+  'payment.field.baseUnits': 'Base units',
+  'payment.field.status': 'Status',
+  'payment.field.rail': 'Method',
+  'payment.field.network': 'Network',
+  'payment.field.address': 'Receive address',
+  'payment.field.txid': 'Transaction',
+  'payment.field.confirmations': 'Confirmations',
+  'payment.field.connectedAccount': 'On behalf of',
+  'payment.field.mode': 'Mode',
+  'payment.field.created': 'Created',
+  'payment.field.updated': 'Last updated',
+  'payment.field.expires': 'Expires',
+
+  'developers.title': 'Developers',
+  'developers.webhooks': 'Webhooks',
+  'developers.webhooksIntro':
+    'Every event Peable sent, or is about to send, to this merchant’s webhook URL. A delivery that was refused or gave up can be sent again.',
+  'developers.empty.title': 'No webhook deliveries',
+  'developers.empty.body':
+    'Deliveries appear once this merchant has a webhook URL and a payment changes status.',
+  'developers.attempts': '{count} attempt(s)',
+  'developers.nextAttempt': 'Next attempt {at}',
+  'developers.lastError': 'Last error: {error}',
+  'developers.redeliver': 'Redeliver',
+  'developers.redelivered': 'Delivery sent again.',
+  'developers.payment': 'Payment {id}',
+  'developers.endpoint': 'Endpoint',
+
+  'settings.title': 'Settings',
+  'settings.merchant': 'Merchant',
+  'settings.merchantIntro':
+    'The Peable merchant of this application in {mode} mode. Test and live are separate merchants.',
+  'settings.register': 'Register merchant',
+  'settings.registerIntro':
+    'Register this application as a Peable merchant in {mode} mode. A card-only merchant needs nothing else; to also accept FairCoin, add the network and a WATCH-ONLY account xpub.',
+  'settings.saved': 'Merchant saved.',
+  'settings.registered': 'Merchant registered.',
+  'settings.branding': 'Branding',
+  'settings.displayName': 'Display name',
+  'settings.description': 'Description',
+  'settings.webhooks': 'Webhooks',
+  'settings.webhookUrl': 'Webhook URL',
+  'settings.webhookSecret': 'Webhook signing secret',
+  'settings.webhookSecretHelp':
+    'Peable never shows a stored secret. Leave empty to keep the current one; enter a new one to replace it.',
+  'settings.clearWebhook': 'Remove webhook URL',
+  'settings.confirmations': 'Required confirmations',
+  'settings.confirmationsHelp': 'FairCoin confirmations before a payment counts as settled.',
+  'settings.faircoin': 'FairCoin',
+  'settings.network': 'Network',
+  'settings.cardOnly': 'Card only',
+  'settings.xpub': 'Watch-only account xpub',
+  'settings.xpubHelp':
+    'A PUBLIC extended key. Peable refuses a private key: it can never spend your funds.',
+  'settings.merchantId': 'Merchant ID',
+  'settings.environment': 'Environment',
+  'settings.created': 'Registered',
+  'settings.invalidConfirmations': 'Required confirmations must be a whole number of 1 or more.',
+
+  'tax.heading': 'Peable Tax',
+  'tax.intro':
+    'Record where your business is registered to collect tax. Peable collects only there, from customer location evidence captured at checkout, and records every other sale as not registered. Registering with a tax authority is your business’s job.',
+  'tax.error': 'Something went wrong. Try again.',
+  'tax.badgeActive': 'Active',
+  'tax.badgeDraft': 'Draft',
+  'tax.statusActive': 'Tax collection is approved.',
+  'tax.statusDraft': 'Draft: no sale can be priced until the owner approves.',
+  'tax.provider': 'Calculated by {provider}.',
+  'tax.noProvider': 'No tax provider: only unregistered (zero-tax) sales can be priced.',
+  'tax.approvedAt': 'Approved {at}',
+  'tax.seller': 'Seller',
+  'tax.legalName': 'Legal name',
+  'tax.headOfficeCountry': 'Head office country (ISO code)',
+  'tax.headOfficeState': 'Head office state or province (optional)',
+  'tax.postalCode': 'Head office postal code (optional)',
+  'tax.defaultCode': 'Default product tax code',
+  'tax.save': 'Save settings',
+  'tax.registrations': 'Registrations',
+  'tax.registrationsHelp':
+    'Add each registration your business holds. A new registration takes effect only once the owner approves.',
+  'tax.scheme.standard': 'Standard',
+  'tax.scheme.simplified': 'Simplified (non-resident)',
+  'tax.scheme.eu_oss_union': 'EU OSS (Union)',
+  'tax.scheme.eu_oss_non_union': 'EU OSS (non-Union)',
+  'tax.scheme.us_state_sales_tax': 'US state sales tax',
+  'tax.scheme.ca_provincial': 'Canadian provincial',
+  'tax.registration.pending_approval': 'Awaiting approval',
+  'tax.registration.scheduled': 'Scheduled',
+  'tax.registration.active': 'Active',
+  'tax.registration.expired': 'Ended',
+  'tax.remove': 'Remove',
+  'tax.end': 'End registration now',
+  'tax.country': 'Country (ISO code)',
+  'tax.state': 'State or province (US and Canada)',
+  'tax.scheme': 'Scheme',
+  'tax.registrationNumber': 'Registration number (optional)',
+  'tax.addRegistration': 'Add registration',
+  'tax.products': 'Product tax codes',
+  'tax.productsHelp': 'A product without its own code uses the default.',
+  'tax.productRef': 'Product or plan id',
+  'tax.productCode': 'Tax code',
+  'tax.setProductCode': 'Set tax code',
+  'tax.approve': 'Approve',
+  'tax.approveHelp':
+    'Approving activates these settings and {count} pending registration(s), and mirrors them to the tax provider.',
+  'tax.approveButton': 'Approve tax settings',
+  'tax.report': 'Filing report',
+  'tax.from': 'From (YYYY-MM-DD)',
+  'tax.to': 'To, inclusive (YYYY-MM-DD)',
+  'tax.runReport': 'Show report',
+  'tax.reportEmpty': 'No paid sales in this period.',
+  'tax.reportAmounts': 'Taxable {taxable} · tax {tax} {currency}',
+
+  'contributions.heading': 'One-time contribution links',
+  'contributions.intro':
+    'Contribution links for the selected organization and its registered Peable application. Contributions go directly to its watch-only FairCoin account.',
+  'contributions.productionHelp':
+    'This selects the production merchant registration. Check its configured FairCoin network.',
+  'contributions.testHelp':
+    'This selects the test merchant registration. Check the FairCoin network on each link before paying.',
+  'contributions.purpose': 'Purpose / destination of contributions',
+  'contributions.amountMode': 'Amount',
+  'contributions.fixed': 'Fixed amount',
+  'contributions.free': 'Donor chooses',
+  'contributions.amount': 'Amount (FAIR)',
+  'contributions.expiry': 'Optional end date (YYYY-MM-DD, UTC)',
+  'contributions.retryHelp':
+    'Retrying the same link creation. Its details remain fixed until the result is known.',
+  'contributions.retry': 'Retry creation',
+  'contributions.create': 'Create contribution link',
+  'contributions.links': 'Contribution links',
+  'contributions.freeAmount': 'Donor chooses amount',
+  'contributions.active': 'Active',
+  'contributions.disabled': 'Disabled',
+  'contributions.ends': 'Ends {date}',
+  'contributions.copy': 'Copy link',
+  'contributions.copied': 'Link copied.',
+  'contributions.disable': 'Disable link',
+  'contributions.enable': 'Enable link',
+  'contributions.view': 'View payments and refunds',
+  'contributions.moreLinks': 'More links',
+  'contributions.payments': 'Payments and refunds',
+  'contributions.refundHelp':
+    'The gateway holds no FairCoin spending keys and cannot create or verify refunds. An empty refund list does not prove no separate wallet transfer occurred.',
+  'contributions.empty': 'No payments yet.',
+  'contributions.noLinks': 'No contribution links yet.',
+  'contributions.morePayments': 'More payments',
+  'contributions.refund': 'Refund {amount} · {status}',
+  'contributions.error': 'Request failed. Try again.',
+};
+
+export type TranslationParams = Record<string, string | number>;
+
+/** The English string for `key`, with `{name}` placeholders filled. Unknown keys render as the key. */
+export function t(key: string, params?: TranslationParams): string {
+  const template = en[key] ?? key;
+  if (!params) return template;
+  return template.replace(/\{(\w+)\}/g, (match, name: string) =>
+    Object.hasOwn(params, name) ? String(params[name]) : match,
+  );
+}

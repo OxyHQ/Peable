@@ -39,3 +39,8 @@ packages/frontend/*
 # build context for nothing.
 packages/pay/*
 !packages/pay/package.json
+
+# Orbit (the merchant dashboard) is an Expo web app the backend never imports:
+# only its manifest, for the frozen workspace install.
+packages/orbit/*
+!packages/orbit/package.json

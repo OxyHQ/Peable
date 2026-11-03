@@ -128,14 +128,14 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 
 | Capability | State | Today | Target |
 |---|---|---|---|
-| Merchant dashboard | ❌ | Tax and Contributions inside the wallet app | Expo web + Bloom at orbit.peable.to |
-| Payments / refunds / disputes UI | ❌ | API only | Present |
+| Merchant dashboard | 🟡 | `packages/orbit`: Expo web + Bloom, Oxy sign-in, organization/application picker, Rail navigation; Tax and Contributions ported (still also in the wallet until removed there) | Deployed at orbit.peable.to; every area below |
+| Payments / refunds / disputes UI | 🟡 | Payments list (status filter, `starting_after` paging) and detail (amount by currency decimals, timeline from the intent's own fields, metadata); Home counts/volume computed client-side from the first page. No refunds or disputes UI | Present |
 | Customers / catalog / subscriptions / invoices UI | ❌ | — | Present |
 | Payment Links builder | ❌ | — | Present |
 | Balances / payouts / reports | ❌ | — | Present |
-| Developers (keys, webhooks, events, logs) | ❌ | — | Present |
+| Developers (keys, webhooks, events, logs) | 🟡 | Webhook delivery log (status, attempts, last error, next attempt) with Redeliver; merchant webhook URL/secret in Settings | Keys, endpoints, events, request logs |
 | Team and roles | 🟡 | Oxy membership checks on dashboard routes | Orbit settings over Oxy membership |
-| Test/live toggle | 🟡 | `?environment=` on dashboard routes | UI toggle |
+| Test/live toggle | ✅ | Orbit's Test / Live toggle maps to `?environment=` (`development` / `production`) on every dashboard call | |
 
 ## Phase 7 — Developer experience
 

@@ -28,7 +28,7 @@ closed sheet or browser callback.
 
 ## Packages
 
-There are **seven**. Four are published to npm, so a change in
+There are **eight**. Four are published to npm, so a change in
 `contracts`, `shared-types`, `sdk` or `pay` is an external API change, not an
 internal refactor.
 
@@ -36,6 +36,7 @@ internal refactor.
 |---|---|---|
 | `packages/backend/` | `@peable.to/backend` | Express + Socket.IO gateway API. PostgreSQL-native — see below |
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
+| `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
 | `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
@@ -90,11 +91,13 @@ from a laptop — `~/Oxy/docs/npm-releases.md`.
 bun run dev:frontend    # expo start --clear
 bun run dev:backend     # bun --watch src/server.ts
 bun run build:frontend  # expo export --platform web
+bun run dev:orbit       # Orbit, expo start --web on :8082
+bun run build:orbit     # Orbit, expo export --platform web
 bun run build:backend   # tsc
 bun run build:shared-types
 ```
 
-The named root shortcuts only cover `frontend`, `backend` and `shared-types`.
+The named root shortcuts only cover `frontend`, `orbit`, `backend` and `shared-types`.
 **`checkout` has no root shortcut and `sdk` only `build:sdk`**: reach them with
 `bun run --filter @peable.to/checkout <script>` (`dev` is `vite`, `build` is
 `vite build`) and `bun run --filter @peable.to/sdk <script>`, or run the script from
@@ -543,7 +546,8 @@ Deployments never synchronize credentials from GitHub. Peable uses its own
 Provision and rotate real values in AWS, then review their task-definition
 references with the matching provider account, mode and merchant cohort.
 
-It and the two Pages deploys (`deploy-frontend.yml`, `deploy-checkout.yml`)
+It and the three Pages deploys (`deploy-frontend.yml`, `deploy-checkout.yml`,
+`deploy-orbit.yml` → Pages project `peable-orbit`, orbit.peable.to)
 start on `workflow_run` after CI succeeds on a push to main, never beside it.
 A `scope` job runs `.github/scripts/deploy-scope.sh`: it holds an older commit
 only while a newer main commit has a live or green CI run (a bot push starts

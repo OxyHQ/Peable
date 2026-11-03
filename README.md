@@ -13,8 +13,10 @@ Businesses and platforms use Peable to accept and manage payments through
 **Orbit by Peable**, the central merchant workspace, alongside APIs and services. The product covers payment requests,
 payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
 disputes, payment status and webhook notifications. The API foundation exists;
-Orbit is a separate merchant application, not a screen inside the personal wallet.
-Its unfinished workspace is deferred and excluded from this payment release.
+Orbit is a separate merchant application, not a screen inside the personal wallet:
+[`packages/orbit`](packages/orbit/), served at orbit.peable.to. Its first version
+covers payments, webhook deliveries, merchant settings, tax and contributions; the
+rest of the workspace is still to come and is excluded from this payment release.
 Orbit will bring payment operations, customers, subscriptions, refunds,
 disputes, settlement, reports and developer tools into one place. Developer tools
 include application credentials and webhook configuration/diagnostics, with the
@@ -122,7 +124,7 @@ are separate states. This table describes source capability, not production read
 | Area | Implemented foundation | Remaining work or verification |
 |---|---|---|
 | Payments | Intents, links, sessions, idempotency, FairCoin settlement, card provider integration, signed webhooks and realtime status | End-to-end acceptance on the exact release and enabled environment |
-| Merchant operations | Administrative APIs; specific tax and contribution screens | Complete centralized merchant workspace and credential-management experience |
+| Merchant operations | Administrative APIs; Orbit (payments, webhook log and redelivery, merchant settings, tax, contributions) | Complete centralized merchant workspace and credential-management experience |
 | Marketplace payments | Connected sellers, onboarding, transfers, reversals, refunds and disputes | Full provider/device acceptance; dispute attachments; bank payout tracking |
 | Billing and tax | Customers, subscription checkout, portal, invoice reads, cancellation, tax calculation/reporting and native FairCoin periods | Broad self-service billing management and activation per approved offer; FairCoin renewal requires payment authorization |
 | Personal app | Identity, wallet, activity, sending/receiving, profiles, QR, payment approval and pockets | Physical-device acceptance and recovery/rotation verification |
@@ -189,6 +191,7 @@ A Bun workspace monorepo. Everything is under `packages/`.
 | [`packages/sdk`](packages/sdk/) | [`@peable.to/sdk`](https://www.npmjs.com/package/@peable.to/sdk) | Server SDK plus the separate `@peable.to/sdk/checkout` browser entry |
 | [`packages/checkout`](packages/checkout/) | `@peable.to/checkout` | The hosted, anonymous, payer facing checkout web app. Vite and React |
 | [`packages/frontend`](packages/frontend/) | `@peable.to/frontend` | Expo app for iOS, Android, web and Electron |
+| [`packages/orbit`](packages/orbit/) | `@peable.to/orbit` | Orbit by Peable, the merchant dashboard. Expo web first, Bloom, Oxy sign-in |
 | [`packages/contracts`](packages/contracts/) | `@peable.to/contracts` | Zod contribution contracts and generated OpenAPI |
 | [`packages/shared-types`](packages/shared-types/) | `@peable.to/shared-types` | The wire contract shared by all of the above |
 | [`packages/pay`](packages/pay/) | [`@peable.to/pay`](https://www.npmjs.com/package/@peable.to/pay) | Payment execution from an Oxy app; `@peable.to/pay/ui` separately exports the payment sheet |
@@ -212,6 +215,7 @@ Or one at a time:
 ```bash
 bun run dev:backend            # bun --watch, listens on 3001 by default
 bun run dev:frontend           # expo start --clear
+bun run dev:orbit              # Orbit on http://localhost:8082
 ```
 
 `checkout` has no root shortcut; the SDK has `build:sdk`. Other commands use the workspace filter:
@@ -226,10 +230,10 @@ bun run --filter @peable.to/sdk dev
 
 <br>
 
-**Root**: `dev`, `dev:frontend`, `dev:backend`, `build`, `build:shared-types`,
-`build:frontend`, `build:backend`, `test`, `lint`, `lint:fix`, `format`, `clean`,
-`start:frontend`, `start:backend`. `lint` is Biome (`biome check .`) over the whole
-repo plus the frontend's minimal Expo ESLint; `format` / `lint:fix` write Biome's fixes.
+**Root**: `dev`, `dev:frontend`, `dev:orbit`, `dev:backend`, `build`, `build:shared-types`,
+`build:frontend`, `build:orbit`, `build:backend`, `test`, `lint`, `lint:fix`, `format`, `clean`,
+`start:frontend`, `start:orbit`, `start:backend`. `lint` is Biome (`biome check .`) over the whole
+repo plus the frontend's and Orbit's minimal Expo ESLint; `format` / `lint:fix` write Biome's fixes.
 
 | Package | Scripts |
 |---|---|
@@ -237,6 +241,7 @@ repo plus the frontend's minimal Expo ESLint; `format` / `lint:fix` write Biome'
 | `@peable.to/sdk` | `build` (cjs, esm and types), `dev`, `typecheck`, `test`, `clean` |
 | `@peable.to/checkout` | `dev`, `build`, `preview`, `typecheck`, `test` |
 | `@peable.to/frontend` | `dev`, `start`, `android`, `ios`, `web`, `electron`, `build`, `electron:build`, `typecheck`, `lint`, `test` |
+| `@peable.to/orbit` | `dev`, `start`, `web`, `build` (web export), `typecheck`, `lint`, `test` |
 | `@peable.to/shared-types` | same build trio as the SDK, plus `dev`, `typecheck`, `test`, `clean` |
 
 </details>

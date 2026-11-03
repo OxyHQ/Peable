@@ -356,6 +356,8 @@ function readOrigins(raw: string | undefined): string[] {
     ...new Set([
       'https://peable.to',
       'https://checkout.peable.to',
+      // Orbit by Peable, the merchant dashboard (`packages/orbit`).
+      'https://orbit.peable.to',
       ...(raw ?? '')
         .split(',')
         .map((origin) => origin.trim())
