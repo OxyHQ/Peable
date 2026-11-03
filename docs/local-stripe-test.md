@@ -210,3 +210,20 @@ the real owned invoice proof needed2242ms for its multiple provider reads. With
 the reviewed version and bound, the already-stored signed monthly subscription
 and invoice events produced active/paid snapshots locally. No external webhook
 target or production entitlement consumer is configured.
+
+The subscription snapshot also carries offer-specific `paymentMethods` entries
+for card, bank, installments and FairCoin. Only a method actually supported by
+this offer/adapter is available. The card-entry processor configuration must not
+hide the other Peable choices in the application. This local merchant has no
+watch-only receive key or network, so FairCoin reports
+`merchant_receive_key_missing`; bank reports
+`subscription_method_not_configured`, and installments reports
+`installment_offer_not_configured`. These are facts about this isolated offer,
+not claims that Peable lacks those product capabilities.
+
+The native FairCoin Billing rail requires a matching merchant cohort, the
+merchant's own watch-only xpub/network, approved configured offers, a fiscal quote
+authority, a signing-key reference for invoice authority, and a fresh quote from
+the configured Explorer USD price source. Its renewals are payer-initiated.
+Never invent a receiving key, balance, payable QR/address or FX quote to make an
+unconfigured method look active.

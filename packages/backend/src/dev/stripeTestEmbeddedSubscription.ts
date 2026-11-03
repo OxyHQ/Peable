@@ -1,3 +1,7 @@
+import {
+  localSubscriptionPaymentMethods,
+  type LocalPaymentMethodCapability,
+} from './stripeTestPaymentMethods';
 import { localInvoiceQuote, type LocalInvoiceQuote } from './stripeTestInvoiceQuote';
 import { voidUnpaidInitialInvoice } from './stripeTestInvoiceCancellation';
 import { verifySecret } from '@oxy.so/core/server';
@@ -246,6 +250,7 @@ export interface LocalSubscriptionSnapshot {
   paymentStatus: string;
   ready: boolean;
   tax?: LocalInvoiceQuote;
+  paymentMethods: LocalPaymentMethodCapability[];
   currentPeriodStart?: string;
   currentPeriodEnd?: string;
 }
@@ -286,6 +291,9 @@ export async function readLocalSubscription(
     interval: verified.interval,
     amountMinorUnits: verified.selected.amount,
     currency: 'USD' as const,
+    paymentMethods: localSubscriptionPaymentMethods(
+      verified.pi.payment_method_types.includes('card'),
+    ),
     tax: localInvoiceQuote(verified.invoice, item?.price.tax_behavior ?? 'unspecified'),
     subscriptionStatus: verified.subscription.status,
     invoiceStatus: verified.invoice.status,
