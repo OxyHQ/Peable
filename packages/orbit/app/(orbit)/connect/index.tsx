@@ -44,8 +44,7 @@ import { railLabel, readinessLabel, readinessTone } from '@/connect/vocabulary';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { LoadMore } from '@/ui/paging';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { ToneBadge } from '@/ui/StatusBadge';
 
 const SELLER_ERRORS: Record<SellerFormError, string> = {
@@ -251,7 +250,7 @@ function Sellers({ scope }: { scope: DashboardScope }) {
           description={t('connect.sellers.empty.body')}
         />
       )}
-      <LoadMore pages={pages} />
+      <ListFooter pages={pages} />
     </Section>
   );
 }

@@ -2,7 +2,7 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Dispute } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import {
@@ -20,7 +20,7 @@ import { useDisputePages } from '@/disputes/useDisputes';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
-import { ErrorNotice, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
 
 const COLUMNS = {
@@ -118,17 +118,7 @@ function DisputeList({ scope }: { scope: DashboardScope }) {
   return (
     <View className="gap-4">
       <DisputesTable disputes={disputes} />
-      {pages.hasNextPage ? (
-        <View className="items-center">
-          <Button
-            appearance="outline"
-            loading={pages.isFetchingNextPage}
-            onPress={() => void pages.fetchNextPage()}
-          >
-            {t('action.loadMore')}
-          </Button>
-        </View>
-      ) : null}
+      <ListFooter pages={pages} />
     </View>
   );
 }

@@ -26,7 +26,7 @@ import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const filterOptions = () => [
   { value: 'active', label: t('products.filter.active') },
@@ -187,17 +187,7 @@ function ProductList({ scope, filter }: { scope: DashboardScope; filter: Product
             description={t('products.empty.body')}
           />
         )}
-        {pages.hasNextPage ? (
-          <View className="items-center pt-2">
-            <Button
-              appearance="outline"
-              loading={pages.isFetchingNextPage}
-              onPress={() => void pages.fetchNextPage()}
-            >
-              {t('action.loadMore')}
-            </Button>
-          </View>
-        ) : null}
+        <ListFooter pages={pages} />
       </Section>
     </View>
   );
@@ -209,7 +199,7 @@ export default function ProductsScreen() {
     <OrbitScreen
       title={t('products.title')}
       description={t('products.description')}
-      actions={<ActiveFilter value={filter} onChange={setFilter} />}
+      filters={<ActiveFilter value={filter} onChange={setFilter} />}
     >
       {({ scope }) => <ProductList scope={scope} filter={filter} />}
     </OrbitScreen>

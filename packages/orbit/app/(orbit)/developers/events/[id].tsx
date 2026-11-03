@@ -2,10 +2,9 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { WebhookEvent } from '@peable.to/shared-types';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
@@ -150,21 +149,8 @@ function EventLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function EventScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('developers.event')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/developers'))}
-        >
-          {t('nav.developers')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('developers.event')}>
       {({ scope }) => (id ? <EventLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

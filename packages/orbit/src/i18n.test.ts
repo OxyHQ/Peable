@@ -4,6 +4,7 @@ import { MONEY_EN, MONEY_ES } from './money/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
+import { SHELL_EN, SHELL_ES } from './shell/strings';
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -33,10 +34,11 @@ describe('catalogs', () => {
     }
   });
 
-  it('spells the reports screen and the search box in both, with the same placeholders', () => {
+  it('spells the reports screen, the search box and the shell in both, with the same placeholders', () => {
     for (const [english, spanish] of [
       [REPORTS_EN, REPORTS_ES],
       [SEARCH_EN, SEARCH_ES],
+      [SHELL_EN, SHELL_ES],
     ] as const) {
       expect(Object.keys(spanish).sort()).toEqual(Object.keys(english).sort());
       for (const [key, text] of Object.entries(english)) {

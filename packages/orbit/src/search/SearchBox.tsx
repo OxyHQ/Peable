@@ -58,7 +58,7 @@ function ResultRow({ row }: { row: SearchRow }) {
  * the gateway is asked; results are grouped by resource, newest first, at most
  * five each, and open the screen each object has.
  */
-export function SearchBox({ scope }: { scope: DashboardScope }) {
+export function SearchBox({ scope, autoFocus }: { scope: DashboardScope; autoFocus?: boolean }) {
   const [input, setInput] = useState('');
   const term = useDebounced(searchTerm(input), SEARCH_DEBOUNCE_MS);
   const results = useQuery({
@@ -117,6 +117,7 @@ export function SearchBox({ scope }: { scope: DashboardScope }) {
         onClearText={() => setInput('')}
         autoCapitalize="none"
         autoCorrect={false}
+        autoFocus={autoFocus}
       />
       {panel ? (
         <View className="gap-3 rounded-2xl border border-border bg-card p-4">

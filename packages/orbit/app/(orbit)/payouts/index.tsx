@@ -47,6 +47,7 @@ import {
   AccountMissing,
   ErrorNotice,
   Field,
+  ListFooter,
   MerchantMissing,
   OrbitScreen,
   Section,
@@ -338,17 +339,7 @@ function PayoutList({ scope }: { scope: DashboardScope }) {
             />
           }
         />
-        {pages.hasNextPage ? (
-          <View className="items-center">
-            <Button
-              appearance="outline"
-              loading={pages.isFetchingNextPage}
-              onPress={() => void pages.fetchNextPage()}
-            >
-              {t('action.loadMore')}
-            </Button>
-          </View>
-        ) : null}
+        <ListFooter pages={pages} />
       </View>
     );
   }

@@ -1,9 +1,7 @@
 import { Linking, View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useAuth } from '@oxy.so/services/ui/client';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { Loading } from '@oxy.so/bloom/loading';
 import {
   Table,
@@ -191,22 +189,8 @@ function Team({ context }: { context: OrbitScopeValue }) {
 }
 
 export default function TeamScreen() {
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('team.title')}
-      description={t('team.description')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))}
-        >
-          {t('settings.back')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('team.title')} description={t('team.description')}>
       {(context) => <Team context={context} />}
     </OrbitScreen>
   );

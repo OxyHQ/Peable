@@ -14,7 +14,7 @@ import { linkSummary } from '@/links/linkForm';
 import { LinkShare } from '@/links/LinkShare';
 import { type LinkFilter, useLinkPages } from '@/links/useLinks';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const filterOptions = () => [
   { value: 'active', label: t('links.filter.active') },
@@ -88,17 +88,7 @@ function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter
           description={t('links.empty.body')}
         />
       )}
-      {pages.hasNextPage ? (
-        <View className="items-center pt-2">
-          <Button
-            appearance="outline"
-            loading={pages.isFetchingNextPage}
-            onPress={() => void pages.fetchNextPage()}
-          >
-            {t('action.loadMore')}
-          </Button>
-        </View>
-      ) : null}
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -111,19 +101,19 @@ export default function PaymentLinksScreen() {
       title={t('links.title')}
       description={t('links.description')}
       actions={
-        <View className="flex-row flex-wrap items-end gap-3">
-          <View className="w-56">
-            <Choice
-              size="sm"
-              label={t('links.filter')}
-              value={filterValue(filter)}
-              options={filterOptions()}
-              onChange={(next) => setFilter(next === 'all' ? null : next === 'active')}
-            />
-          </View>
-          <Button appearance="solid" tone="accent" onPress={() => router.push('/links/new')}>
-            {t('links.new')}
-          </Button>
+        <Button appearance="solid" tone="accent" onPress={() => router.push('/links/new')}>
+          {t('links.new')}
+        </Button>
+      }
+      filters={
+        <View className="w-56">
+          <Choice
+            size="sm"
+            label={t('links.filter')}
+            value={filterValue(filter)}
+            options={filterOptions()}
+            onChange={(next) => setFilter(next === 'all' ? null : next === 'active')}
+          />
         </View>
       }
     >

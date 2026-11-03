@@ -1,5 +1,5 @@
 import { View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Payout } from '@peable.to/shared-types';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
@@ -8,7 +8,6 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isAccountMissing, isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
@@ -18,7 +17,15 @@ import { t } from '@/i18n';
 import { BalanceTransactionsTable } from '@/money/BalanceTransactionsTable';
 import { moneyKeys, usePayout, usePayoutReconciliation } from '@/money/useMoney';
 import { canCancelPayout } from '@/money/vocabulary';
-import { AccountMissing, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import {
+  AccountMissing,
+  DetailLayout,
+  ErrorNotice,
+  Field,
+  ListFooter,
+  OrbitScreen,
+  Section,
+} from '@/ui/OrbitScreen';
 import { PayoutStatusBadge } from '@/ui/StatusBadge';
 
 function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payout }) {
@@ -62,17 +69,7 @@ function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payo
           <EmptyState variant="compact" title={t('payout.reconciliation.empty')} description="" />
         }
       />
-      {pages.hasNextPage ? (
-        <View className="items-center">
-          <Button
-            appearance="outline"
-            loading={pages.isFetchingNextPage}
-            onPress={() => void pages.fetchNextPage()}
-          >
-            {t('action.loadMore')}
-          </Button>
-        </View>
-      ) : null}
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -108,41 +105,46 @@ function PayoutDetail({ scope, payout }: { scope: DashboardScope; payout: Payout
           </Button>
         ) : null}
       </View>
-      <Section title={t('payout.details')}>
-        <Field label={t('payout.field.id')} value={payout.id} mono />
-        <Field
-          label={t('payout.field.amount')}
-          value={formatSignedAmount(payout.amount, payout.currency)}
-        />
-        <Field
-          label={t('payout.field.status')}
-          value={<PayoutStatusBadge status={payout.status} />}
-        />
-        <Field label={t('payout.field.arrival')} value={formatInstant(payout.arrival_date)} />
-        <Field label={t('payout.field.method')} value={t(`payout.method.${payout.method}`)} />
-        <Field label={t('payout.field.type')} value={t(`payout.type.${payout.type}`)} />
-        <Field
-          label={t('payout.field.origin')}
-          value={t(payout.automatic ? 'payout.origin.automatic' : 'payout.origin.manual')}
-        />
-        {payout.failure_code ? (
-          <Field label={t('payout.field.failureCode')} value={payout.failure_code} mono />
-        ) : null}
-        <Field label={t('payout.field.description')} value={payout.description ?? notSet} />
-        <Field
-          label={t('payout.field.statementDescriptor')}
-          value={payout.statement_descriptor ?? notSet}
-        />
-        {payout.balance_transaction ? (
-          <Field
-            label={t('payout.field.balanceTransaction')}
-            value={payout.balance_transaction}
-            mono
-          />
-        ) : null}
-        <Field label={t('payout.field.created')} value={formatInstant(payout.created)} />
-      </Section>
-      <Reconciliation scope={scope} payout={payout} />
+      <DetailLayout
+        aside={
+          <Section title={t('payout.details')}>
+            <Field label={t('payout.field.id')} value={payout.id} mono />
+            <Field
+              label={t('payout.field.amount')}
+              value={formatSignedAmount(payout.amount, payout.currency)}
+            />
+            <Field
+              label={t('payout.field.status')}
+              value={<PayoutStatusBadge status={payout.status} />}
+            />
+            <Field label={t('payout.field.arrival')} value={formatInstant(payout.arrival_date)} />
+            <Field label={t('payout.field.method')} value={t(`payout.method.${payout.method}`)} />
+            <Field label={t('payout.field.type')} value={t(`payout.type.${payout.type}`)} />
+            <Field
+              label={t('payout.field.origin')}
+              value={t(payout.automatic ? 'payout.origin.automatic' : 'payout.origin.manual')}
+            />
+            {payout.failure_code ? (
+              <Field label={t('payout.field.failureCode')} value={payout.failure_code} mono />
+            ) : null}
+            <Field label={t('payout.field.description')} value={payout.description ?? notSet} />
+            <Field
+              label={t('payout.field.statementDescriptor')}
+              value={payout.statement_descriptor ?? notSet}
+            />
+            {payout.balance_transaction ? (
+              <Field
+                label={t('payout.field.balanceTransaction')}
+                value={payout.balance_transaction}
+                mono
+              />
+            ) : null}
+            <Field label={t('payout.field.created')} value={formatInstant(payout.created)} />
+          </Section>
+        }
+      >
+        <Reconciliation scope={scope} payout={payout} />
+      </DetailLayout>
     </View>
   );
 }
@@ -169,21 +171,8 @@ function PayoutLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function PayoutScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('payout.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/payouts'))}
-        >
-          {t('nav.payouts')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('payout.title')}>
       {({ scope }) => (id ? <PayoutLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

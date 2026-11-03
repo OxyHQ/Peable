@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Account, UpdateAccountParams } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import {
@@ -128,22 +126,8 @@ function BusinessLoader({ scope }: { scope: DashboardScope }) {
 }
 
 export default function BusinessScreen() {
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('business.title')}
-      description={t('business.description')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/settings'))}
-        >
-          {t('settings.back')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('business.title')} description={t('business.description')}>
       {({ scope }) => (
         <BusinessLoader key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
       )}

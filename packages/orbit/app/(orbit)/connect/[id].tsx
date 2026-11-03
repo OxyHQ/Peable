@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AccountLink, ConnectedAccount } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
@@ -25,7 +24,7 @@ import {
   requirementLabels,
   requirementsClear,
 } from '@/money/requirements';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { orbitOrigin } from '@/ui/origin';
 import { CapabilityBadge, EnabledBadge, ToneBadge } from '@/ui/StatusBadge';
 
@@ -161,84 +160,98 @@ function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: Connec
         </Text>
         <ToneBadge tone={readinessTone(readiness)} label={readinessLabel(readiness)} />
       </View>
-      <Section
-        title={t('account.status')}
-        actions={
-          card ? (
-            <Button
-              appearance="outline"
-              size="sm"
-              loading={refresh.isPending}
-              onPress={() => refresh.mutate()}
+      <DetailLayout
+        aside={
+          <>
+            <Section
+              title={t('account.status')}
+              actions={
+                card ? (
+                  <Button
+                    appearance="outline"
+                    size="sm"
+                    loading={refresh.isPending}
+                    onPress={() => refresh.mutate()}
+                  >
+                    {t('connect.refresh')}
+                  </Button>
+                ) : undefined
+              }
             >
-              {t('connect.refresh')}
-            </Button>
-          ) : undefined
+              <Field label={t('connect.field.id')} value={seller.id} mono />
+              <Field label={t('connect.field.externalRef')} value={seller.external_ref} mono />
+              <Field
+                label={t('connect.column.rails')}
+                value={seller.rails.map(railLabel).join(', ')}
+              />
+              {card ? (
+                <>
+                  <Field
+                    label={t('connect.field.payable')}
+                    value={<EnabledBadge enabled={seller.payable} />}
+                  />
+                  <Field
+                    label={t('account.charges')}
+                    value={<EnabledBadge enabled={seller.charges_enabled} />}
+                  />
+                  <Field
+                    label={t('account.payouts')}
+                    value={<EnabledBadge enabled={seller.payouts_enabled} />}
+                  />
+                  <Field
+                    label={t('account.capability.card_payments')}
+                    value={<CapabilityBadge status={seller.card_payments_capability} />}
+                  />
+                  <Field
+                    label={t('account.capability.transfers')}
+                    value={<CapabilityBadge status={seller.transfers_capability} />}
+                  />
+                  <Field label={t('account.country')} value={seller.country ?? notSet} />
+                  <Field
+                    label={t('account.defaultCurrency')}
+                    value={seller.default_currency?.toUpperCase() ?? notSet}
+                  />
+                </>
+              ) : null}
+              <Field
+                label={t('account.lastSynced')}
+                value={
+                  seller.last_synced_at === null
+                    ? t('account.never')
+                    : formatInstant(seller.last_synced_at)
+                }
+              />
+              <Field label={t('connect.column.created')} value={formatInstant(seller.created)} />
+            </Section>
+            {seller.faircoin ? (
+              <Section title={t('connect.faircoin')} description={t('connect.faircoinIntro')}>
+                <Field label={t('settings.network')} value={seller.faircoin.network} />
+                <Field
+                  label={t('connect.field.faircoinStatus')}
+                  value={t(`connect.faircoinStatus.${seller.faircoin.status}`)}
+                />
+                <Field
+                  label={t('connect.field.oxyUser')}
+                  value={seller.faircoin.oxy_user_id}
+                  mono
+                />
+                <Field
+                  label={t('connect.field.registered')}
+                  value={
+                    seller.faircoin.registered_at === null
+                      ? t('account.never')
+                      : formatInstant(seller.faircoin.registered_at)
+                  }
+                />
+              </Section>
+            ) : null}
+          </>
         }
       >
-        <Field label={t('connect.field.id')} value={seller.id} mono />
-        <Field label={t('connect.field.externalRef')} value={seller.external_ref} mono />
-        <Field label={t('connect.column.rails')} value={seller.rails.map(railLabel).join(', ')} />
-        {card ? (
-          <>
-            <Field
-              label={t('connect.field.payable')}
-              value={<EnabledBadge enabled={seller.payable} />}
-            />
-            <Field
-              label={t('account.charges')}
-              value={<EnabledBadge enabled={seller.charges_enabled} />}
-            />
-            <Field
-              label={t('account.payouts')}
-              value={<EnabledBadge enabled={seller.payouts_enabled} />}
-            />
-            <Field
-              label={t('account.capability.card_payments')}
-              value={<CapabilityBadge status={seller.card_payments_capability} />}
-            />
-            <Field
-              label={t('account.capability.transfers')}
-              value={<CapabilityBadge status={seller.transfers_capability} />}
-            />
-            <Field label={t('account.country')} value={seller.country ?? notSet} />
-            <Field
-              label={t('account.defaultCurrency')}
-              value={seller.default_currency?.toUpperCase() ?? notSet}
-            />
-          </>
-        ) : null}
-        <Field
-          label={t('account.lastSynced')}
-          value={
-            seller.last_synced_at === null
-              ? t('account.never')
-              : formatInstant(seller.last_synced_at)
-          }
-        />
-        <Field label={t('connect.column.created')} value={formatInstant(seller.created)} />
-      </Section>
-      {seller.faircoin ? (
-        <Section title={t('connect.faircoin')} description={t('connect.faircoinIntro')}>
-          <Field label={t('settings.network')} value={seller.faircoin.network} />
-          <Field
-            label={t('connect.field.faircoinStatus')}
-            value={t(`connect.faircoinStatus.${seller.faircoin.status}`)}
-          />
-          <Field label={t('connect.field.oxyUser')} value={seller.faircoin.oxy_user_id} mono />
-          <Field
-            label={t('connect.field.registered')}
-            value={
-              seller.faircoin.registered_at === null
-                ? t('account.never')
-                : formatInstant(seller.faircoin.registered_at)
-            }
-          />
-        </Section>
-      ) : null}
-      <Onboarding scope={scope} seller={seller} />
-      {card ? <Requirements seller={seller} /> : null}
-      <Transfers scope={scope} seller={seller.id} />
+        <Onboarding scope={scope} seller={seller} />
+        {card ? <Requirements seller={seller} /> : null}
+        <Transfers scope={scope} seller={seller.id} />
+      </DetailLayout>
     </View>
   );
 }
@@ -265,21 +278,8 @@ function SellerLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function SellerScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('connect.seller')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/connect'))}
-        >
-          {t('nav.connect')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('connect.seller')}>
       {({ scope }) =>
         id ? (
           <SellerLoader

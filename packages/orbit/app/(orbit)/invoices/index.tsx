@@ -4,12 +4,12 @@ import type { InvoiceStatus } from '@peable.to/shared-types';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { InvoiceRow, LoadMore } from '@/billing/BillingParts';
+import { InvoiceRow } from '@/billing/BillingParts';
 import { invoiceStatusLabel, ORBIT_INVOICE_STATUSES } from '@/billing/status';
 import { useInvoicePages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
 // Built at render: the language can change while Orbit is open.
@@ -37,11 +37,7 @@ function InvoiceList({ scope, status }: { scope: DashboardScope; status: Invoice
           description={t('invoices.empty.body')}
         />
       )}
-      <LoadMore
-        visible={pages.hasNextPage}
-        loading={pages.isFetchingNextPage}
-        onPress={() => void pages.fetchNextPage()}
-      />
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -52,7 +48,7 @@ export default function InvoicesScreen() {
     <OrbitScreen
       title={t('invoices.title')}
       description={t('invoices.description')}
-      actions={
+      filters={
         <View className="w-56">
           <Choice
             size="sm"

@@ -4,12 +4,12 @@ import type { SubscriptionStatus } from '@peable.to/shared-types';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { LoadMore, SubscriptionRow } from '@/billing/BillingParts';
+import { SubscriptionRow } from '@/billing/BillingParts';
 import { ORBIT_SUBSCRIPTION_STATUSES, subscriptionStatusLabel } from '@/billing/status';
 import { useSubscriptionPages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 type Filter = SubscriptionStatus | 'all' | null;
 const CURRENT = 'current';
@@ -42,11 +42,7 @@ function SubscriptionList({ scope, filter }: { scope: DashboardScope; filter: Fi
           description={t('subscriptions.empty.body')}
         />
       )}
-      <LoadMore
-        visible={pages.hasNextPage}
-        loading={pages.isFetchingNextPage}
-        onPress={() => void pages.fetchNextPage()}
-      />
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -57,7 +53,7 @@ export default function SubscriptionsScreen() {
     <OrbitScreen
       title={t('subscriptions.title')}
       description={t('subscriptions.description')}
-      actions={
+      filters={
         <View className="w-56">
           <Choice
             size="sm"
