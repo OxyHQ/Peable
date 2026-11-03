@@ -111,6 +111,11 @@ import {
   ProductsResource,
   PromotionCodesResource,
 } from './resources/catalog';
+import { AccountResource } from './resources/account';
+import { BalanceResource, BalanceTransactionsResource } from './resources/balance';
+import { PayoutsResource } from './resources/payouts';
+import { ApplicationFeesResource } from './resources/applicationFees';
+import { ReportsResource } from './resources/reports';
 
 /**
  * The merchant-authed client.
@@ -159,8 +164,23 @@ export class Peable {
    * Stripe Connect integration reads the way its authors expect.
    */
   readonly accounts: ConnectedAccountsResource;
-  /** Onboarding links, Stripe-named: `accountLinks.create({ account, rail, … })`. */
+  /**
+   * Onboarding links, Stripe-named: `accountLinks.create({ account, rail, … })`
+   * for a seller, or without `account` for the merchant's own fiat account.
+   */
   readonly accountLinks: AccountLinksResource;
+  /** The merchant's own fiat account (ADR 0015 §1): readiness, requirements, payout schedule. */
+  readonly account: AccountResource;
+  /** Available, pending and informational funds, per currency — a mirror of the provider. */
+  readonly balance: BalanceResource;
+  /** Every movement of the balance (`txn_…`). */
+  readonly balanceTransactions: BalanceTransactionsResource;
+  /** The provider paying the balance out to the merchant's bank (`po_…`). */
+  readonly payouts: PayoutsResource;
+  /** Read-only: Orbit's fee taken on a payment (`fee_…`). */
+  readonly applicationFees: ApplicationFeesResource;
+  /** Ledger reports: `payoutReconciliation({ payout })`. */
+  readonly reports: ReportsResource;
   /** Money going back to a payer. */
   readonly refunds: RefundsResource;
   /** Read-only: the authorization a card payment obtained (`ch_…`). */
@@ -225,7 +245,13 @@ export class Peable {
     this.merchants = new MerchantsResource(client);
     this.connectedAccounts = new ConnectedAccountsResource(client);
     this.accounts = this.connectedAccounts;
-    this.accountLinks = new AccountLinksResource(this.connectedAccounts);
+    this.account = new AccountResource(client);
+    this.accountLinks = new AccountLinksResource(this.connectedAccounts, this.account);
+    this.balance = new BalanceResource(client);
+    this.balanceTransactions = new BalanceTransactionsResource(client);
+    this.payouts = new PayoutsResource(client);
+    this.applicationFees = new ApplicationFeesResource(client);
+    this.reports = new ReportsResource(client);
     this.refunds = new RefundsResource(client);
     this.charges = new ChargesResource(client);
     this.customers = new CustomersResource(client);
@@ -264,6 +290,7 @@ export type { PeableErrorType, PeableErrorDetails } from './core/errors';
 
 export type {
   GatewayClient,
+  PeableRequestOptions,
   RestClient,
   RestClientRequestOptions,
   RestClientStreamOptions,
@@ -395,7 +422,71 @@ export {
   PAYMENT_METHOD_CONFIGURATION_TYPES,
   PAYMENT_METHOD_CURRENCIES,
 } from '@peable.to/shared-types';
-export type { CreateRefundParams, RefundList } from './resources/refunds';
+export type {
+  CreateRefundParams,
+  RefundList,
+  RefundListParams,
+  UpdateRefundParams,
+} from './resources/refunds';
+export type {
+  Refund,
+  RefundOrigin,
+  RefundReason,
+  RefundStatus,
+  AccountRequirements,
+} from '@peable.to/shared-types';
+export { REFUND_REASONS } from '@peable.to/shared-types';
+export { AccountResource } from './resources/account';
+export type { CreateMerchantAccountLinkParams } from './resources/account';
+export { BalanceResource, BalanceTransactionsResource } from './resources/balance';
+export type { BalanceTransactionList, BalanceTransactionListParams } from './resources/balance';
+export { PayoutsResource } from './resources/payouts';
+export type { PayoutList, PayoutListParams } from './resources/payouts';
+export { ApplicationFeesResource } from './resources/applicationFees';
+export type {
+  ApplicationFeeList,
+  ApplicationFeeListParams,
+  FeeRefundList,
+} from './resources/applicationFees';
+export { ReportsResource } from './resources/reports';
+export type { PayoutReconciliationParams } from './resources/reports';
+/** The money wire shapes (ADR 0015): the account, the balance and its ledger, payouts, fees. */
+export type {
+  Account,
+  AccountBusinessProfile,
+  AccountCapabilityStatus,
+  AccountPayoutSchedule,
+  AccountSettings,
+  AccountType,
+  ApplicationFee,
+  Balance,
+  BalanceAmount,
+  BalanceTransaction,
+  BalanceTransactionFeeDetail,
+  BalanceTransactionStatus,
+  BalanceTransactionType,
+  CreatePayoutParams,
+  FeeRefund,
+  ListBalanceTransactionsParams,
+  ListPayoutsParams,
+  Payout,
+  PayoutInterval,
+  PayoutReconciliationReport,
+  PayoutStatus,
+  PayoutWeeklyAnchor,
+  PaymentIntentTransferData,
+  ReconciliationMismatch,
+  ReconciliationMismatchKind,
+  UpdateAccountParams,
+} from '@peable.to/shared-types';
+export {
+  BALANCE_TRANSACTION_STATUSES,
+  BALANCE_TRANSACTION_TYPES,
+  PAYOUT_INTERVALS,
+  PAYOUT_STATUSES,
+  PAYOUT_WEEKLY_ANCHORS,
+  RECONCILIATION_MISMATCH_KINDS,
+} from '@peable.to/shared-types';
 export { ChargesResource } from './resources/charges';
 export type { ChargeList, ChargeListParams } from './resources/charges';
 export type {

@@ -3,6 +3,7 @@ import {
   assertList,
   createDashboardApi,
   dashboardPath,
+  isAccountMissing,
   isMerchantMissing,
   type DashboardScope,
 } from './dashboard';
@@ -380,5 +381,147 @@ describe('payment method domains', () => {
     ]);
     expect(calls[1]?.options).toEqual({ body: { domain_name: 'shop.example.com' } });
     expect(calls[2]?.options).toEqual({ body: { enabled: false } });
+  });
+});
+
+describe('money (ADR 0015)', () => {
+  const base = '/v1/dashboard/applications/app%201';
+  const accountMissing = () => {
+    throw new OrbitApiError({
+      status: 404,
+      type: 'invalid_request_error',
+      code: 'account_missing',
+      message: 'No fiat account',
+    });
+  };
+
+  it('answers null for account_missing on the account and the balance, never zeros', async () => {
+    answer = accountMissing;
+    expect(await api.account.retrieve(scope)).toBeNull();
+    expect(await api.balance.retrieve(scope)).toBeNull();
+    expect(calls.map((call) => call.path)).toEqual([
+      `${base}/account?environment=development`,
+      `${base}/balance?environment=development`,
+    ]);
+  });
+
+  it('does not take a missing merchant for a missing account', async () => {
+    answer = () => {
+      throw new OrbitApiError({ status: 404, type: 'invalid_request_error', message: 'none' });
+    };
+    await expect(api.balance.retrieve(scope)).rejects.toThrow('none');
+  });
+
+  it('opens or updates the account and mints an onboarding link', async () => {
+    answer = () => ({ id: 'ca_1' });
+    await api.account.update(scope, { country: 'ES', business_type: 'company' });
+    await api.account.createLink(scope, {
+      return_url: 'https://orbit.example/account',
+      refresh_url: 'https://orbit.example/account?refresh=1',
+      type: 'account_onboarding',
+    });
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: `${base}/account?environment=development`,
+        options: { body: { country: 'ES', business_type: 'company' } },
+      },
+      {
+        method: 'POST',
+        path: `${base}/account_links?environment=development`,
+        options: {
+          body: {
+            return_url: 'https://orbit.example/account',
+            refresh_url: 'https://orbit.example/account?refresh=1',
+            type: 'account_onboarding',
+          },
+        },
+      },
+    ]);
+  });
+
+  it('lists balance transactions with their filters and the cursor', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.balanceTransactions.list(live, {
+      type: 'payout',
+      limit: 25,
+      starting_after: 'txn_9',
+    });
+    await api.balanceTransactions.retrieve(live, 'txn_1');
+    expect(calls.map((call) => call.path)).toEqual([
+      '/v1/dashboard/applications/app_live/balance_transactions?environment=production&type=payout&limit=25&starting_after=txn_9',
+      '/v1/dashboard/applications/app_live/balance_transactions/txn_1?environment=production',
+    ]);
+  });
+
+  it('lists, creates with the form key, retrieves and cancels payouts', async () => {
+    answer = (call) =>
+      call.method === 'GET' && !call.path.includes('/po_')
+        ? { object: 'list', data: [], has_more: false }
+        : { id: 'po_1' };
+    await api.payouts.list(scope, { status: 'pending' });
+    await api.payouts.create(scope, { amount: '1000', currency: 'EUR' }, 'key-1');
+    await api.payouts.retrieve(scope, 'po_1');
+    await api.payouts.cancel(scope, 'po_1');
+    expect(calls).toEqual([
+      { method: 'GET', path: `${base}/payouts?environment=development&status=pending` },
+      {
+        method: 'POST',
+        path: `${base}/payouts?environment=development`,
+        options: { body: { amount: '1000', currency: 'EUR' }, idempotencyKey: 'key-1' },
+      },
+      { method: 'GET', path: `${base}/payouts/po_1?environment=development` },
+      { method: 'POST', path: `${base}/payouts/po_1/cancel?environment=development` },
+    ]);
+  });
+
+  it('reads the payout reconciliation report and keeps its summary beside the page', async () => {
+    answer = () => ({
+      object: 'list',
+      data: [{ id: 'txn_1' }],
+      has_more: false,
+      url: '/v1/reports/payout_reconciliation',
+      payout: 'po_1',
+      status: 'complete',
+      currency: 'eur',
+      summary: { count: 1, amount: '100', fee: '3', net: '97' },
+    });
+    const report = await api.reports.payoutReconciliation(scope, 'po_1', { limit: 100 });
+    expect(report.summary).toEqual({ count: 1, amount: '100', fee: '3', net: '97' });
+    expect(report.data).toEqual([{ id: 'txn_1' } as never]);
+    expect(calls[0]?.path).toBe(
+      `${base}/reports/payout_reconciliation?environment=development&payout=po_1&limit=100`,
+    );
+  });
+
+  it('refuses a reconciliation report that is not a list', async () => {
+    answer = () => ({ summary: {} });
+    await expect(api.reports.payoutReconciliation(scope, 'po_1')).rejects.toThrow('not a list');
+  });
+
+  it('lists reconciliation mismatches', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.reconciliationMismatches.list(scope, { limit: 100 });
+    expect(calls[0]?.path).toBe(
+      `${base}/reconciliation_mismatches?environment=development&limit=100`,
+    );
+  });
+});
+
+describe('isAccountMissing', () => {
+  it('is the account_missing 404 only, and is not a missing merchant', () => {
+    const missing = new OrbitApiError({
+      status: 404,
+      type: 'invalid_request_error',
+      code: 'account_missing',
+      message: '',
+    });
+    expect(isAccountMissing(missing)).toBe(true);
+    expect(isMerchantMissing(missing)).toBe(false);
+    expect(
+      isAccountMissing(
+        new OrbitApiError({ status: 404, type: 'invalid_request_error', message: '' }),
+      ),
+    ).toBe(false);
   });
 });

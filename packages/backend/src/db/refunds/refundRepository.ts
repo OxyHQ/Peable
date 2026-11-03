@@ -14,8 +14,10 @@ import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
+import type { RefundReason } from '@peable.to/shared-types';
+import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 
-export type RefundStatus = 'pending' | 'succeeded' | 'failed';
+export type RefundStatus = 'pending' | 'succeeded' | 'failed' | 'canceled';
 
 /** Who created a refund row — this API, or the provider. */
 export type RefundOrigin = 'merchant' | 'provider';
@@ -40,6 +42,11 @@ export interface RefundRow {
   readonly provider: ProviderId;
   readonly providerObjectId: string | null;
   readonly failureCode: string | null;
+  readonly reason: RefundReason | null;
+  readonly metadata: Record<string, string>;
+  /** The destination-charge reversal flags this refund was asked for (ADR 0015 §3). */
+  readonly refundApplicationFee: boolean;
+  readonly reverseTransfer: boolean;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -58,6 +65,10 @@ const REFUND_COLUMNS = {
   provider: refunds.provider,
   providerObjectId: refunds.providerObjectId,
   failureCode: refunds.failureCode,
+  reason: refunds.reason,
+  metadata: refunds.metadata,
+  refundApplicationFee: refunds.refundApplicationFee,
+  reverseTransfer: refunds.reverseTransfer,
   createdAt: refunds.createdAt,
   updatedAt: refunds.updatedAt,
 } as const;
@@ -74,6 +85,10 @@ export interface InsertRefundParams {
   readonly amount: string;
   readonly currency: CurrencyCode;
   readonly provider: ProviderId;
+  readonly reason?: RefundReason | null;
+  readonly metadata?: Record<string, string>;
+  readonly refundApplicationFee?: boolean;
+  readonly reverseTransfer?: boolean;
 }
 
 /**
@@ -100,6 +115,10 @@ export async function insertRefund(
         amount: params.amount,
         currency: params.currency,
         provider: params.provider,
+        reason: params.reason ?? null,
+        metadata: params.metadata ?? {},
+        refundApplicationFee: params.refundApplicationFee ?? false,
+        reverseTransfer: params.reverseTransfer ?? false,
       })
       .returning(REFUND_COLUMNS);
     return row ? toRow(row) : null;
@@ -327,8 +346,56 @@ export async function sumCommittedRefunds(
       total: sql<string>`coalesce(sum(${refunds.amount}::numeric), 0)::text`,
     })
     .from(refunds)
-    .where(and(eq(refunds.paymentIntentId, paymentIntentId), sql`${refunds.status} <> 'failed'`));
+    .where(
+      and(
+        eq(refunds.paymentIntentId, paymentIntentId),
+        // A failed or canceled refund moved nothing and never will.
+        sql`${refunds.status} not in ('failed', 'canceled')`,
+      ),
+    );
   return row?.total ?? '0';
+}
+
+/**
+ * Patch a refund's metadata (ADR 0014 D1), merged in SQL. `null` when the row
+ * is not this merchant's or the merged bag would exceed the key limit — the
+ * caller tells the two apart with a read.
+ */
+export async function updateRefundMetadata(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  refundId: string,
+  patch: MetadataPatch,
+): Promise<RefundRow | null> {
+  const merged = mergedMetadata(refunds.metadata, patch);
+  const [row] = await db
+    .update(refunds)
+    .set({ metadata: merged })
+    .where(
+      and(
+        eq(refunds.id, refundId),
+        eq(refunds.merchantId, merchantId),
+        metadataWithinLimit(merged),
+      ),
+    )
+    .returning(REFUND_COLUMNS);
+  return row ? toRow(row) : null;
+}
+
+/**
+ * Record that the provider canceled the refund. Compare-and-swap on `pending`:
+ * a refund that already succeeded or failed is not canceled after the fact.
+ */
+export async function markRefundCanceled(
+  db: DatabaseOrTransaction,
+  refundId: string,
+): Promise<RefundRow | null> {
+  const [row] = await db
+    .update(refunds)
+    .set({ status: 'canceled' })
+    .where(and(eq(refunds.id, refundId), eq(refunds.status, 'pending')))
+    .returning(REFUND_COLUMNS);
+  return row ? toRow(row) : null;
 }
 
 /** The merchant's own address for a refund — the idempotency lookup. */

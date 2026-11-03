@@ -17,6 +17,7 @@ import { TabBar, TabBarButton, useTabBarFootprint } from '@oxy.so/bloom/tab-bar'
 import { useTheme } from '@oxy.so/bloom/theme';
 import { RiAlarmWarningLine } from '@oxy.so/bloom/icons/RiAlarmWarningLine';
 import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
+import { RiBankLine } from '@oxy.so/bloom/icons/RiBankLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
 import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
@@ -24,7 +25,9 @@ import { RiPriceTag3Line } from '@oxy.so/bloom/icons/RiPriceTag3Line';
 import { RiReceiptLine } from '@oxy.so/bloom/icons/RiReceiptLine';
 import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
+import { RiStore2Line } from '@oxy.so/bloom/icons/RiStore2Line';
 import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
+import { RiWallet3Line } from '@oxy.so/bloom/icons/RiWallet3Line';
 import { t } from '../i18n';
 
 export type OrbitTab =
@@ -32,6 +35,9 @@ export type OrbitTab =
   | 'payments'
   | 'products'
   | 'disputes'
+  | 'balances'
+  | 'payouts'
+  | 'account'
   | 'developers'
   | 'tax'
   | 'contributions'
@@ -48,6 +54,9 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
     icon: RiAlarmWarningLine,
     activeIcon: RiAlarmWarningLine,
   },
+  balances: { labelKey: 'nav.balances', icon: RiWallet3Line, activeIcon: RiWallet3Line },
+  payouts: { labelKey: 'nav.payouts', icon: RiBankLine, activeIcon: RiBankLine },
+  account: { labelKey: 'nav.account', icon: RiStore2Line, activeIcon: RiStore2Line },
   developers: {
     labelKey: 'nav.developers',
     icon: RiTerminalBoxLine,
@@ -68,6 +77,9 @@ export const ORBIT_TABS: readonly OrbitTab[] = [
   'payments',
   'products',
   'disputes',
+  'balances',
+  'payouts',
+  'account',
   'developers',
   'tax',
   'contributions',

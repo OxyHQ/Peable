@@ -1,3 +1,4 @@
+import { decideChargeRouting, providerRoutingFor } from './money/chargeRouting';
 import { randomUUID } from 'node:crypto';
 import type { NetworkType } from '@fairco.in/core';
 import type {
@@ -201,6 +202,13 @@ export interface CreateIntentInput {
   statementDescriptorSuffix?: string;
   shipping?: Shipping;
   returnUrl?: string;
+  /**
+   * Card only — a platform acting for one of its connected accounts
+   * (ADR 0015 §2): the destination charge it asks for, by PUBLIC ids.
+   */
+  applicationFeeAmount?: string;
+  transferData?: { destination: string; amount?: string };
+  onBehalfOf?: string;
 }
 
 /**
@@ -580,6 +588,9 @@ async function attachProviderPayment(
       ? { statementDescriptorSuffix: intent.statementDescriptorSuffix }
       : {}),
     ...offered,
+    // The destination charge the ROW recorded (ADR 0015 §2) — a resumed create
+    // sends the same charge under the same idempotency key.
+    ...(await providerRoutingFor(intent)),
     ...extras,
   });
 
@@ -662,8 +673,13 @@ function replayConflict(
     currency: CurrencyCode;
     /** The seller's INTERNAL id, or `null` for a payment to the merchant. */
     connectedAccountId: string | null;
+    /** Where a destination charge's funds go (INTERNAL id), or `null`. */
+    transferDestinationId: string | null;
   },
 ): string | null {
+  if ((existing.transferDestinationId ?? null) !== requested.transferDestinationId) {
+    return 'this Idempotency-Key already names a payment with a different destination';
+  }
   // WHO is paid is part of the operation (ADR 0012 D5). Answering a replay that
   // names another seller with the stored intent would hand the platform an
   // address on the wrong seller's key.
@@ -740,6 +756,34 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       ? await resolveCardMethodsOrRefuse(merchant, currency, input, paymentMethod !== null)
       : null;
 
+  // The destination charge (ADR 0015 §2), decided once and stored on the row.
+  if (rail !== 'card') {
+    for (const [field, param] of [
+      ['applicationFeeAmount', 'application_fee_amount'],
+      ['transferData', 'transfer_data'],
+      ['onBehalfOf', 'on_behalf_of'],
+    ] as const) {
+      if (input[field] !== undefined) {
+        throw new IntentParameterError(
+          `${param} is card only: a FairCoin payment goes straight to the payee's own key`,
+          param,
+        );
+      }
+    }
+  }
+  const routing =
+    rail === 'card'
+      ? await decideChargeRouting(merchant, {
+          amount,
+          currency,
+          ...(input.applicationFeeAmount !== undefined
+            ? { applicationFeeAmount: input.applicationFeeAmount }
+            : {}),
+          ...(input.transferData !== undefined ? { transferData: input.transferData } : {}),
+          ...(input.onBehalfOf !== undefined ? { onBehalfOf: input.onBehalfOf } : {}),
+        })
+      : null;
+
   // Which provider will move this money, SELECTED by the credential's
   // environment (ADR 0017: production ⟺ live) and decided ONCE. Resolved
   // before the idempotency lookup and before the insert: the replay path calls
@@ -759,7 +803,13 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const existing = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (existing) {
-      const conflict = replayConflict(existing, { amount, rail, currency, connectedAccountId });
+      const conflict = replayConflict(existing, {
+        amount,
+        rail,
+        currency,
+        connectedAccountId,
+        transferDestinationId: routing?.transferDestinationId ?? null,
+      });
       if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: existing, reused: true, clientAction: await clientActionFor(existing) };
     }
@@ -810,6 +860,10 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       paymentLinkId: input.paymentLinkId,
       merchantId: merchant.id,
       connectedAccountId,
+      transferDestinationId: routing?.transferDestinationId ?? null,
+      transferAmount: routing?.transferAmount ?? null,
+      onBehalfOfId: routing?.onBehalfOfId ?? null,
+      applicationFeeAmount: routing?.applicationFeeAmount ?? null,
       rail,
       amount,
       currency,
@@ -869,7 +923,13 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   if (idempotencyKey) {
     const winner = await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey);
     if (winner) {
-      const conflict = replayConflict(winner, { amount, rail, currency, connectedAccountId });
+      const conflict = replayConflict(winner, {
+        amount,
+        rail,
+        currency,
+        connectedAccountId,
+        transferDestinationId: routing?.transferDestinationId ?? null,
+      });
       if (conflict) throw new IdempotencyConflictError(conflict);
       return { intent: winner, reused: true, clientAction: await clientActionFor(winner) };
     }

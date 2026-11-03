@@ -73,7 +73,11 @@ export type ExpandableType =
   | 'request_log'
   | 'file'
   | 'payment_method_configuration'
-  | 'payment_method_domain';
+  | 'payment_method_domain'
+  | 'balance_transaction'
+  | 'payout'
+  | 'application_fee'
+  | 'reconciliation_mismatch';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -118,6 +122,11 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   price: { product: 'product' },
   coupon: {},
   promotion_code: { coupon: 'coupon', customer: 'customer' },
+  // ADR 0015's mirrors name their sources by public id; none expands yet.
+  balance_transaction: {},
+  payout: {},
+  application_fee: {},
+  reconciliation_mismatch: {},
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;

@@ -18,6 +18,10 @@
  * else's business.
  */
 import type {
+  Account,
+  AccountBusinessProfile,
+  AccountRequirements,
+  AccountSettings,
   ConnectedAccount,
   ConnectedAccountFaircoin,
   ConnectedAccountRail,
@@ -26,6 +30,7 @@ import type {
 import {
   faircoinStatusOf,
   hasCardHalf,
+  type CardConnectedAccountRow,
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
@@ -43,6 +48,11 @@ export type ConnectedAccountDTO = ConnectedAccount;
  * carry it.
  */
 export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccountDTO {
+  if (row.externalRef === null) {
+    // The merchant's OWN account is an `account`, never a `connected_account`:
+    // every seller read filters on the role, so reaching this is a defect.
+    throw new Error(`account ${row.publicId} is the merchant's own, not a seller`);
+  }
   const rails: ConnectedAccountRail[] = [];
   if (hasCardHalf(row)) rails.push('card');
   if (row.network !== null) rails.push('faircoin');
@@ -63,16 +73,64 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
     charges_enabled: row.chargesEnabled,
     transfers_capability: row.transfersCapability,
     card_payments_capability: row.cardPaymentsCapability,
-    requirements: {
-      currently_due: row.requirementsCurrentlyDue,
-      eventually_due: row.requirementsEventuallyDue,
-      past_due: row.requirementsPastDue,
-      pending_verification: row.requirementsPendingVerification,
-    },
-    disabled_reason_codes: row.disabledReasonCodes,
+    requirements: toRequirements(row),
     last_synced_at: toUnixOrNull(row.lastSyncedAt),
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/** Stripe's requirements shape: identifiers, and the provider's one summary reason. */
+function toRequirements(row: ConnectedAccountRow): AccountRequirements {
+  return {
+    currently_due: [...row.currentlyDue],
+    eventually_due: [...row.eventuallyDue],
+    past_due: [...row.pastDue],
+    pending_verification: [...row.pendingVerification],
+    disabled_reason: row.disabledReasonCodes[0] ?? null,
+  };
+}
+
+const EMPTY_BUSINESS_PROFILE: AccountBusinessProfile = {
+  name: null,
+  url: null,
+  support_email: null,
+  support_url: null,
+  product_description: null,
+  mcc: null,
+};
+
+const EMPTY_SETTINGS: AccountSettings = {
+  payouts: { schedule: null, statement_descriptor: null },
+  payments: { statement_descriptor: null },
+  branding: { primary_color: null, secondary_color: null },
+};
+
+/**
+ * The `account` object (ADR 0015 §1) — the merchant's own account, or a seller's
+ * read through `Peable-Account`. Card half only; the provider's `acct_…` never
+ * crosses. Before the first provider read carried a profile or settings, they
+ * are rendered empty (every field `null`), which is what is known.
+ */
+export function toAccountDTO(row: CardConnectedAccountRow): Account {
+  return {
+    id: row.publicId,
+    object: 'account',
+    livemode: row.livemode,
+    type: row.role === 'merchant' ? 'merchant' : 'connected',
+    country: row.country,
+    default_currency: row.defaultCurrency,
+    business_profile: row.businessProfile ?? EMPTY_BUSINESS_PROFILE,
+    capabilities: {
+      card_payments: row.cardPaymentsCapability,
+      transfers: row.transfersCapability,
+    },
+    requirements: toRequirements(row),
+    charges_enabled: row.chargesEnabled,
+    payouts_enabled: row.payoutsEnabled,
+    settings: row.settings ?? EMPTY_SETTINGS,
+    last_synced_at: toUnixOrNull(row.lastSyncedAt),
+    created: toUnix(row.createdAt),
   };
 }
 

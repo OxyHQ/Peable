@@ -57,6 +57,18 @@ export interface PaymentIntentRow {
    * serializer has to look it up (or reach for the internal id instead).
    */
   readonly connectedAccountPublicId?: string | null;
+  /**
+   * A destination charge (ADR 0015 §2), card only: INTERNAL account ids (what
+   * the columns reference) and their PUBLIC `ca_…` read in the same statement,
+   * plus the transfer amount and Orbit's fee instruction. Optional in the type,
+   * as `connectedAccountId` is, so an older fixture still describes a row.
+   */
+  readonly transferDestinationId?: string | null;
+  readonly transferDestinationPublicId?: string | null;
+  readonly transferAmount?: string | null;
+  readonly onBehalfOfId?: string | null;
+  readonly onBehalfOfPublicId?: string | null;
+  readonly applicationFeeAmount?: string | null;
   readonly txid: string | null;
   readonly confirmations: number;
   /** Card rail only — `null` on a FairCoin intent, where the chain is the provider. */
@@ -138,6 +150,16 @@ const INTENT_COLUMNS = {
   connectedAccountPublicId: sql<
     string | null
   >`(select ${connectedAccounts.publicId} from ${connectedAccounts} where ${connectedAccounts.id} = ${paymentIntents.connectedAccountId})`,
+  transferDestinationId: paymentIntents.transferDestinationId,
+  transferDestinationPublicId: sql<string | null>`${sql.raw(
+    '(select ca.public_id from connected_accounts ca where ca.id = "payment_intents"."transfer_destination_id")',
+  )}`,
+  transferAmount: paymentIntents.transferAmount,
+  onBehalfOfId: paymentIntents.onBehalfOfId,
+  onBehalfOfPublicId: sql<string | null>`${sql.raw(
+    '(select ca.public_id from connected_accounts ca where ca.id = "payment_intents"."on_behalf_of_id")',
+  )}`,
+  applicationFeeAmount: paymentIntents.applicationFeeAmount,
   txid: paymentIntents.txid,
   confirmations: paymentIntents.confirmations,
   provider: paymentIntents.provider,
@@ -223,6 +245,14 @@ export interface InsertPaymentIntentParams {
    * `payment_intents_connected_account_network_fkey` refuses the row.
    */
   readonly connectedAccountId?: string | null;
+  /**
+   * The destination charge decided by `services/money/chargeModel.ts`
+   * (ADR 0015 §2). Card only; every one NULL on a platform charge.
+   */
+  readonly transferDestinationId?: string | null;
+  readonly transferAmount?: string | null;
+  readonly onBehalfOfId?: string | null;
+  readonly applicationFeeAmount?: string | null;
   readonly rail: PaymentIntentRail;
   readonly amount: string;
   readonly currency: CurrencyCode;
@@ -291,6 +321,10 @@ export async function insertPaymentIntent(
       provider: params.provider,
       merchantId: params.merchantId,
       connectedAccountId: params.connectedAccountId ?? null,
+      transferDestinationId: params.transferDestinationId ?? null,
+      transferAmount: params.transferAmount ?? null,
+      onBehalfOfId: params.onBehalfOfId ?? null,
+      applicationFeeAmount: params.applicationFeeAmount ?? null,
       customerId: params.customerId ?? null,
       paymentMethodId: params.paymentMethodId ?? null,
       paymentMethodTypes: params.paymentMethodTypes ? [...params.paymentMethodTypes] : null,

@@ -51,8 +51,15 @@ export interface Charge {
   payment_method_details: { type: 'card'; card: CardDetails } | null;
   /** Peable-hosted receipts land with Phase 3; the provider's own URL never reaches the wire. */
   receipt_url: string | null;
-  /** A Peable balance transaction (`txn_…`) once the ledger exists (Phase 5). */
+  /**
+   * The ledger's `txn_…` for this charge once the provider's balance
+   * transaction was ingested (ADR 0015 §4); `null` until then — never a guess.
+   */
   balance_transaction: string | null;
+  /** Orbit's `fee_…` taken on this charge, once the provider created it. */
+  application_fee: string | null;
+  /** The fee instructed on the payment (`application_fee_amount`), or `null`. */
+  application_fee_amount: string | null;
   description: string | null;
   receipt_email: string | null;
   metadata: Record<string, string>;

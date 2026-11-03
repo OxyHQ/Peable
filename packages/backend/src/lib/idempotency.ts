@@ -186,9 +186,24 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
   }
   // The request log reads it at the end instead of looking it up again.
   res.locals.merchant = merchant;
+  await claimAndRun(req, res, merchant.id, key, next);
+}
 
+/**
+ * Claim `key` for one merchant and run the request under it, or answer the
+ * replay / conflict. Shared by the service-authed middleware and the Orbit
+ * dashboard (whose merchant is resolved only after its membership check).
+ */
+async function claimAndRun(
+  req: Request,
+  res: Response,
+  merchantId: string,
+  key: string,
+  next: () => void,
+): Promise<void> {
+  const db = getDb();
   const request: IdempotentRequest = {
-    merchantId: merchant.id,
+    merchantId,
     key,
     method: req.method,
     path: req.originalUrl.split('?')[0] ?? req.path,
@@ -205,7 +220,7 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
       return;
     }
 
-    const existing = await findIdempotencyKey(db, merchant.id, key);
+    const existing = await findIdempotencyKey(db, merchantId, key);
     // Released (a 5xx) or expired between the claim and this read: claim again.
     if (!existing) continue;
 
@@ -240,6 +255,36 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     409,
     'A request with this Idempotency-Key is still in progress. Retry once it has finished.',
   );
+}
+
+/**
+ * The generic idempotency layer for a route whose merchant is resolved inside
+ * the handler — the Orbit dashboard's money writes (`routes/dashboard.ts`).
+ * Without an `Idempotency-Key` it simply runs.
+ */
+export async function runIdempotent(
+  req: Request,
+  res: Response,
+  merchantId: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const key = req.header(IDEMPOTENCY_KEY_HEADER);
+  if (key === undefined) return run();
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    sendError(
+      res,
+      400,
+      'invalid_request_error',
+      'Idempotency-Key must be 1 to 255 printable ASCII characters.',
+      'idempotency_key_invalid',
+    );
+    return;
+  }
+  let task: Promise<void> = Promise.resolve();
+  await claimAndRun(req, res, merchantId, key, () => {
+    task = run();
+  });
+  await task;
 }
 
 /**

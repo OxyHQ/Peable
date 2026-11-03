@@ -20,7 +20,10 @@ import {
 } from '@peable.to/shared-types';
 import { CARD_RAIL_PAYMENT_METHOD_TYPES } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
-import { findMerchantByAppEnvironment } from '../db/merchants/merchantRepository';
+import {
+  findMerchantByAppEnvironment,
+  syncMerchantFirstParty,
+} from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
   findIntentById,
@@ -68,6 +71,7 @@ import {
   requireAuthenticated,
   sendValidationError,
 } from '../lib/http';
+import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { railBodyFields } from '../lib/railSchema';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 import { requestIdOf } from '../lib/requestId';
@@ -286,6 +290,23 @@ const createBodySchema = z
       .optional(),
     shipping: shippingSchema.optional(),
     return_url: z.string().url().max(2048).optional(),
+    // A destination charge for one of the platform's connected accounts
+    // (ADR 0015 §2). Card only; `services/money/chargeRouting.ts` decides.
+    application_fee_amount: z
+      .string()
+      .refine(isBaseUnitString, 'application_fee_amount must be a minor-unit integer string')
+      .optional(),
+    transfer_data: z
+      .object({
+        destination: idParam,
+        amount: z
+          .string()
+          .refine(isBaseUnitString, 'transfer_data.amount must be a minor-unit integer string')
+          .optional(),
+      })
+      .strict()
+      .optional(),
+    on_behalf_of: idParam.optional(),
   } satisfies Record<keyof CreatePaymentIntentParams, z.ZodType>)
   .strict();
 
@@ -329,9 +350,13 @@ export async function resolveMerchant(req: Request, res: Response): Promise<Merc
     sendError(res, 403, 'permission_error', 'no merchant registered for this app');
     return null;
   }
+  // The credential's VERIFIED authority (Oxy ADR 0049) decides whether this is
+  // one of Oxy's own products (ADR 0015 §2); the row mirrors it for the paths
+  // that carry no credential (the dashboard, the event drain).
+  const synced = await syncMerchantFirstParty(getDb(), merchant, serviceApp.firstParty);
   // The request log (`lib/requestLog.ts`) records the request under it.
-  res.locals.merchant = merchant;
-  return merchant;
+  res.locals.merchant = synced;
+  return synced;
 }
 
 /**
@@ -504,6 +529,20 @@ export function createPaymentIntentsRouter(deps: {
             : {}),
           ...(params.shipping !== undefined ? { shipping: toShipping(params.shipping) } : {}),
           ...(params.return_url !== undefined ? { returnUrl: params.return_url } : {}),
+          ...(params.application_fee_amount !== undefined
+            ? { applicationFeeAmount: params.application_fee_amount }
+            : {}),
+          ...(params.transfer_data !== undefined
+            ? {
+                transferData: {
+                  destination: params.transfer_data.destination,
+                  ...(params.transfer_data.amount !== undefined
+                    ? { amount: params.transfer_data.amount }
+                    : {}),
+                },
+              }
+            : {}),
+          ...(params.on_behalf_of !== undefined ? { onBehalfOf: params.on_behalf_of } : {}),
         });
         res.status(reused ? 200 : 201).json({
           ...toPaymentIntentDTO(intent),
@@ -531,6 +570,7 @@ export function createPaymentIntentsRouter(deps: {
           sendError(res, 400, 'invalid_request_error', err.message, err.code, err.param);
           return;
         }
+        if (sendMoneyRefusal(res, err)) return;
         if (err instanceof ProviderError) {
           sendProviderError(res, err);
           return;

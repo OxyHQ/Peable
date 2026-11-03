@@ -3,6 +3,18 @@ import type {
   CreatePaymentMethodDomainParams,
   CreatePriceParams,
   CreateProductParams,
+  Account,
+  AccountLink,
+  Balance,
+  BalanceTransaction,
+  BalanceTransactionType,
+  CreateAccountLinkParams,
+  CreatePayoutParams,
+  Payout,
+  PayoutReconciliationReport,
+  PayoutStatus,
+  ReconciliationMismatch,
+  UpdateAccountParams,
   CreateTaxRegistrationParams,
   DeletedProduct,
   Dispute,
@@ -111,6 +123,19 @@ export interface UploadFileParams {
   filename?: string;
 }
 
+export interface BalanceTransactionListParams extends PageParams {
+  type?: BalanceTransactionType;
+  /** `po_…`: only what that payout paid out. */
+  payout?: string;
+  /** The object that caused it (`ch_…`, `re_…`, …). */
+  source?: string;
+  currency?: string;
+}
+
+export interface PayoutListParams extends PageParams {
+  status?: PayoutStatus;
+}
+
 /** `POST /merchant`: mirrors the gateway's `createMerchantBodySchema` (strict). */
 export interface RegisterMerchantBody {
   /** The FairCoin half: both `network` and `xpub`, or neither (a card-only merchant). */
@@ -162,7 +187,16 @@ export function assertList<T>(body: unknown): ListPage<T> {
  * it, so a screen can tell "register first" apart from a real failure.
  */
 export function isMerchantMissing(error: unknown): boolean {
-  return isOrbitApiError(error) && error.status === 404;
+  return isOrbitApiError(error) && error.status === 404 && !isAccountMissing(error);
+}
+
+/**
+ * The merchant exists but has no fiat provider account in this mode (ADR
+ * 0015): 404 with `code: 'account_missing'`. A screen shows "open an account",
+ * never a zero balance.
+ */
+export function isAccountMissing(error: unknown): boolean {
+  return isOrbitApiError(error) && error.status === 404 && error.code === 'account_missing';
 }
 
 const id = (value: string) => encodeURIComponent(value);
@@ -186,6 +220,85 @@ export function createDashboardApi(transport: OrbitTransport) {
         transport.request<Merchant>('POST', dashboardPath(scope, '/merchant'), { body }),
       update: (scope: DashboardScope, body: UpdateMerchantBody) =>
         transport.request<Merchant>('PATCH', dashboardPath(scope, '/merchant'), { body }),
+    },
+
+    /**
+     * The merchant's own fiat account at the provider (ADR 0015 §1), mirrored.
+     * `retrieve` answers `null` for `account_missing`; any other refusal throws.
+     */
+    account: {
+      async retrieve(scope: DashboardScope): Promise<Account | null> {
+        try {
+          return await get<Account>(dashboardPath(scope, '/account'));
+        } catch (error) {
+          if (isAccountMissing(error)) return null;
+          throw error;
+        }
+      },
+      /** Opens the account the first time (country + business type); updates it afterwards. */
+      update: (scope: DashboardScope, body: UpdateAccountParams) =>
+        transport.request<Account>('POST', dashboardPath(scope, '/account'), { body }),
+      /** A single-use hosted onboarding link: open it at once, never store it. */
+      createLink: (scope: DashboardScope, body: CreateAccountLinkParams) =>
+        transport.request<AccountLink>('POST', dashboardPath(scope, '/account_links'), { body }),
+    },
+
+    balance: {
+      /** `null` for `account_missing`: no account has no balance — never zeros. */
+      async retrieve(scope: DashboardScope): Promise<Balance | null> {
+        try {
+          return await get<Balance>(dashboardPath(scope, '/balance'));
+        } catch (error) {
+          if (isAccountMissing(error)) return null;
+          throw error;
+        }
+      },
+    },
+
+    balanceTransactions: {
+      list: (scope: DashboardScope, params: BalanceTransactionListParams = {}) =>
+        list<BalanceTransaction>(dashboardPath(scope, '/balance_transactions', { ...params })),
+      retrieve: (scope: DashboardScope, transactionId: string) =>
+        get<BalanceTransaction>(dashboardPath(scope, `/balance_transactions/${id(transactionId)}`)),
+    },
+
+    /** Executed by the provider, always; Orbit instructs a manual one and mirrors the rest. */
+    payouts: {
+      list: (scope: DashboardScope, params: PayoutListParams = {}) =>
+        list<Payout>(dashboardPath(scope, '/payouts', { ...params })),
+      retrieve: (scope: DashboardScope, payoutId: string) =>
+        get<Payout>(dashboardPath(scope, `/payouts/${id(payoutId)}`)),
+      /** `idempotencyKey` is kept by the form across retries of the same instruction. */
+      create: (scope: DashboardScope, body: CreatePayoutParams, idempotencyKey?: string) =>
+        transport.request<Payout>('POST', dashboardPath(scope, '/payouts'), {
+          body,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        }),
+      cancel: (scope: DashboardScope, payoutId: string) =>
+        transport.request<Payout>('POST', dashboardPath(scope, `/payouts/${id(payoutId)}/cancel`)),
+    },
+
+    reports: {
+      /** The balance transactions one payout paid out, with `summary` over all of them. */
+      async payoutReconciliation(
+        scope: DashboardScope,
+        payoutId: string,
+        params: PageParams = {},
+      ): Promise<PayoutReconciliationReport> {
+        const body = await get<unknown>(
+          dashboardPath(scope, '/reports/payout_reconciliation', { payout: payoutId, ...params }),
+        );
+        const page = assertList<BalanceTransaction>(body);
+        return { ...(body as PayoutReconciliationReport), ...page };
+      },
+    },
+
+    /** What the daily reconciliation found disagreeing with the provider. Never auto-corrected. */
+    reconciliationMismatches: {
+      list: (scope: DashboardScope, params: PageParams = {}) =>
+        list<ReconciliationMismatch>(
+          dashboardPath(scope, '/reconciliation_mismatches', { ...params }),
+        ),
     },
 
     paymentIntents: {

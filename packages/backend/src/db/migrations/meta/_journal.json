@@ -365,6 +365,48 @@
       "when": 1793728213347,
       "tag": "0051_orbit_disputes_methods_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1793729995213,
+      "tag": "0052_orbit_money_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "7",
+      "when": 1793729997071,
+      "tag": "0053_merchants_first_party",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1793729998481,
+      "tag": "0054_connected_accounts_money",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
+      "version": "7",
+      "when": 1793729999342,
+      "tag": "0055_connected_accounts_merchant_role_idx",
+      "breakpoints": true
+    },
+    {
+      "idx": 56,
+      "version": "7",
+      "when": 1793730000307,
+      "tag": "0056_payment_intents_destination_charges",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1793730001523,
+      "tag": "0057_orbit_money_contract",
+      "breakpoints": true
     }
   ]
 }

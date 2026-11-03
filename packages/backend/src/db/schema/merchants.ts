@@ -127,6 +127,18 @@ export const merchants = pgTable(
      */
     businessLogoFileId: text(),
     description: text(),
+    /**
+     * Whether this merchant is one of Oxy's OWN products (ADR 0015 §2): its card
+     * payments are platform charges with Oxy as merchant of record and no
+     * application fee, its ledger is fed from the platform account, and the
+     * third-party live gate does not apply to it.
+     *
+     * A mirror of the VERIFIED authority of the credential that last acted for
+     * the merchant (`authority: 'first_party'`, Oxy ADR 0049 — never branding or
+     * tier), written by `resolveMerchant` when it differs. A dashboard request
+     * carries no service credential and reads it from here.
+     */
+    firstParty: boolean().notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

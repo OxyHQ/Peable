@@ -21,6 +21,7 @@
 // Peable deploy and not a merchant migration. No `acct_…`, no `tr_…` of
 // theirs, no provider name. A reviewer should be able to check that by what is
 // absent from these interfaces.
+import type { AccountRequirements } from './account';
 import type { CurrencyCode } from './money';
 import type { NetworkType } from './network';
 import type { PaymentIntent } from './paymentIntent';
@@ -114,17 +115,12 @@ export interface ConnectedAccount {
   transfers_capability: CapabilityStatus | null;
   card_payments_capability: CapabilityStatus | null;
   /**
-   * COUNTS of outstanding requirements, never the requirements themselves and
-   * never their values. The gateway records that a seller owes a document; it
-   * does not learn what the document says.
+   * What the provider is waiting on — requirement IDENTIFIERS, never their
+   * values (the gateway records that a seller owes a document; it never learns
+   * what the document says) — and the provider's own `disabled_reason`. The
+   * same shape as `Account.requirements`.
    */
-  requirements: {
-    currently_due: number;
-    eventually_due: number;
-    past_due: number;
-    pending_verification: number;
-  };
-  disabled_reason_codes: readonly string[];
+  requirements: AccountRequirements;
   last_synced_at: number | null;
   created: number;
   updated_at: number;
@@ -238,8 +234,16 @@ export interface Settlement {
   exchange_rate: number | null;
 }
 
-/** Where one refund stands — the MONEY's own lifecycle, not the payment's. */
-export type RefundStatus = 'pending' | 'succeeded' | 'failed';
+/**
+ * Where one refund stands — the MONEY's own lifecycle, not the payment's.
+ * `canceled` only through `POST /v1/refunds/:id/cancel`, where the provider
+ * still allows it.
+ */
+export type RefundStatus = 'pending' | 'succeeded' | 'failed' | 'canceled';
+
+/** Stripe's refund reasons. */
+export const REFUND_REASONS = ['duplicate', 'fraudulent', 'requested_by_customer'] as const;
+export type RefundReason = (typeof REFUND_REASONS)[number];
 
 /**
  * Who created a refund.
@@ -266,7 +270,33 @@ export interface Refund {
   amount: string;
   currency: CurrencyCode | string;
   status: RefundStatus;
+  reason: RefundReason | null;
   failure_code: string | null;
+  metadata: Record<string, string>;
   created: number;
   updated_at: number;
+}
+
+/** `POST /v1/refunds`. */
+export interface CreateRefundParams {
+  /** The `pi_…` being refunded. */
+  payment_intent: string;
+  /** YOUR id for this refund. The idempotency. */
+  external_ref: string;
+  /** Minor units, as a canonical integer string. Zero is refused. */
+  amount: string;
+  reason?: RefundReason;
+  metadata?: Record<string, string>;
+  /**
+   * Also refund Orbit's application fee, in proportion to the amount refunded
+   * (a payment that carried one: a destination charge, ADR 0015 §2).
+   */
+  refund_application_fee?: boolean;
+  /** Also reverse the transfer to the destination account, in proportion. */
+  reverse_transfer?: boolean;
+}
+
+/** `POST /v1/refunds/:id` — the merchant's own bookkeeping; `metadata` is a patch. */
+export interface UpdateRefundParams {
+  metadata?: Record<string, string>;
 }

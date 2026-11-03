@@ -681,3 +681,51 @@ writer). Decisions a reader would otherwise undo:
   for a TEST-MODE row only, so a stream hears of a row at its commit and never
   of a rollback, and live commits never take the notify queue's lock. The
   stream reads the row back through its repository; the payload is never a copy.
+
+## Orbit money (ADR 0015)
+
+`fee_schedules`, `application_fees`, `application_fee_refunds`, `payouts`,
+`balance_transactions`, `ledger_entries` and `reconciliation_mismatches`
+(`schema/money.ts`), plus `connected_accounts.role` and the destination-charge
+fields on `payment_intents`. Decisions a reader would otherwise undo:
+
+- **The merchant's own account is a `connected_accounts` row**, not a new
+  table: `role = 'merchant'`, `(role = 'merchant') = (external_ref IS NULL)`,
+  card half only (`connected_accounts_merchant_role_is_card_check`), one per
+  merchant (`connected_accounts_merchant_role_key`, partial). A second table
+  would give one provider-account kind two snapshot writers and two refresh
+  paths. Requirement COUNTS became identifier LISTS (`currently_due` …), the
+  counts dropped post-deploy.
+- **Ledger amounts are SIGNED** (`SIGNED_BASE_UNIT_STRING_PATTERN`, no `-0`): a
+  refund or payout takes money out. Every other money column keeps the
+  non-negative pattern.
+- **`balance_transactions.fee` and `.net` are NULL together**, and when known
+  `amount - fee = net` (`balance_transactions_net_agrees_check`) — the
+  provider's own arithmetic, restated where a writer cannot break it.
+- **`informational` ⇔ FairCoin ⇔ no provider**
+  (`balance_transactions_informational_agrees_check`): coins Orbit never held
+  can never sit in a payable balance.
+- **Idempotent ingestion is `ingestion_key`** (`<provider>:<provider id>`, or
+  `faircoin:<intent>:<n>` for the n-th informational row of a payment, so a
+  reorg's reversal and a re-confirmation are distinct rows).
+- **The zero sum is not a CHECK** — it spans rows. `postJournal` refuses an
+  unbalanced journal before inserting; `ledger_entries_transaction_kind_balance_type_key`
+  makes a journal of each kind post once per transaction; the reconciliation
+  re-proves the sum (`unbalanced_journal`).
+- **`source_type` / `source_id` have no foreign key**: the source is one of six
+  tables by public id, and a provider source Orbit never saw is a legitimate
+  NULL.
+- **Every reference into an account is `(connected_account_id, merchant_id)` →
+  `connected_accounts (id, merchant_id)`** — the account is the row's own
+  merchant's, the companion-reference rule of ADR 0001 D6.
+- **A payout instruction is a row before it is a provider object**
+  (`provider_object_id` NULL, unique where set), the two-step every money
+  movement uses; `automatic ⇔ origin = 'provider'`, and a provider-origin row
+  always has its object.
+- **`reconciliation_mismatches` keeps one OPEN row per (kind, subject)**
+  (partial unique); `subject` is a provider id or a journal id and is never
+  serialized.
+- **The hot-table DDL is split** (`0053` merchants, `0054`/`0055`
+  connected_accounts, `0056` payment_intents; `0052` the new tables), every constraint added to an
+  existing table is `NOT VALID`, and the post migration validates them and drops
+  the requirement counts.

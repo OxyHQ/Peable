@@ -31,6 +31,11 @@
  */
 
 import type {
+  AccountBusinessProfile,
+  AccountSettings,
+  BalanceTransactionType,
+  PayoutStatus,
+  RefundReason,
   BillingDetails,
   CardDetails,
   CardRailPaymentMethodType,
@@ -94,7 +99,11 @@ export type ProviderStage =
   // Customers, saved payment methods and SetupIntents (ADR 0016).
   | 'customer'
   | 'paymentMethod'
-  | 'setup';
+  | 'setup'
+  // Orbit money (ADR 0015): reading balance transactions, payouts and fees —
+  // `balance` degrades a mirror read and moves nothing; `payout` instructs one.
+  | 'balance'
+  | 'payout';
 
 /**
  * A failure from a payment provider.
@@ -230,6 +239,15 @@ export interface CreatePaymentRequest {
   readonly paymentMethodTypes?: readonly CardRailPaymentMethodType[];
   /** The provider configuration (a binding of a `pmc_…`) whose methods to offer. */
   readonly paymentMethodConfigurationObjectId?: string;
+  /**
+   * A DESTINATION charge (ADR 0015 §2): the provider account the funds go to,
+   * the amount transferred (absent: the whole amount less the fee), and
+   * Orbit's fee, kept by the platform out of the destination's funds.
+   * `onBehalfOf` above makes the destination the merchant of record.
+   */
+  readonly transferDestination?: string;
+  readonly transferAmount?: string;
+  readonly applicationFeeAmount?: string;
 }
 
 export interface ProviderPaymentResult {
@@ -296,6 +314,11 @@ export interface RefundRequest {
   readonly amount: ProviderAmount;
   readonly idempotencyKey: string;
   readonly metadata: Readonly<Record<string, string>>;
+  readonly reason?: RefundReason;
+  /** Destination charges: refund Orbit's fee in proportion. */
+  readonly refundApplicationFee?: boolean;
+  /** Destination charges: pull the funds back from the destination in proportion. */
+  readonly reverseTransfer?: boolean;
 }
 
 export interface ProviderRefundResult {
@@ -306,7 +329,7 @@ export interface ProviderRefundResult {
    * does not move with a refund (ADR 0019); `amount_refunded` is the sum of the
    * succeeded rows.
    */
-  readonly state: 'pending' | 'succeeded' | 'failed';
+  readonly state: 'pending' | 'succeeded' | 'failed' | 'canceled';
   readonly failureCode?: string;
 }
 
@@ -472,6 +495,27 @@ export interface ProviderAccountSnapshot {
   readonly pendingVerification: readonly string[];
   readonly disabledReason?: string;
   readonly defaultCurrency?: CurrencyCode;
+  /** The account's business profile and settings as the provider holds them (ADR 0015 §1). */
+  readonly businessProfile: AccountBusinessProfile;
+  readonly settings: AccountSettings;
+}
+
+/**
+ * The settings Orbit writes to a merchant's account. Every field optional;
+ * an omitted one is left as the provider holds it.
+ */
+export interface ProviderAccountUpdate {
+  readonly businessProfile?: Partial<AccountBusinessProfile>;
+  readonly payoutSchedule?: {
+    readonly interval: 'manual' | 'daily' | 'weekly' | 'monthly';
+    readonly delayDays?: number;
+    readonly weeklyAnchor?: string;
+    readonly monthlyAnchor?: number;
+  };
+  readonly payoutStatementDescriptor?: string;
+  readonly paymentsStatementDescriptor?: string;
+  readonly brandingPrimaryColor?: string;
+  readonly brandingSecondaryColor?: string;
 }
 
 export interface CreateAccountRequest {
@@ -482,10 +526,18 @@ export interface CreateAccountRequest {
   readonly businessType: 'individual' | 'company';
   readonly idempotencyKey: string;
   readonly metadata: Readonly<Record<string, string>>;
+  /**
+   * A marketplace `seller` (express dashboard, as before) or the merchant's
+   * OWN account (ADR 0015 §1: no provider dashboard — Orbit is the only one
+   * the merchant sees).
+   */
+  readonly role: 'seller' | 'merchant';
 }
 
 export interface AccountLinkRequest {
   readonly providerAccountId: string;
+  /** Defaults to `account_onboarding`. */
+  readonly type?: 'account_onboarding' | 'account_update';
   /** Where the provider sends a payer whose link expired mid-flow. */
   readonly refreshUrl: string;
   readonly returnUrl: string;
@@ -505,6 +557,176 @@ export interface AccountHoldingProvider extends PaymentProvider {
   createAccount(request: CreateAccountRequest): Promise<ProviderAccountSnapshot>;
   accountLink(request: AccountLinkRequest): Promise<{ url: string; expiresAt: Date }>;
   getAccount(providerAccountId: string): Promise<ProviderAccountSnapshot>;
+}
+
+/**
+ * A provider whose accounts' settings Orbit can write (ADR 0015 §1: payout
+ * schedule, statement descriptors, business profile, branding). Its own
+ * capability: a rail can hold accounts without letting the platform configure
+ * them.
+ */
+export interface AccountConfiguringProvider extends AccountHoldingProvider {
+  /** Write settings to the account and read it back. */
+  updateAccount(
+    providerAccountId: string,
+    update: ProviderAccountUpdate,
+    idempotencyKey: string,
+  ): Promise<ProviderAccountSnapshot>;
+}
+
+export function isAccountConfiguringProvider(
+  provider: PaymentProvider,
+): provider is AccountConfiguringProvider {
+  return (
+    isAccountHoldingProvider(provider) &&
+    typeof (provider as Partial<AccountConfiguringProvider>).updateAccount === 'function'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Orbit money (ADR 0015): the provider's balance, payouts and fees, mirrored
+// ---------------------------------------------------------------------------
+
+/** One provider balance transaction, in Orbit's vocabulary. Every figure verbatim. */
+export interface ProviderBalanceTransaction {
+  readonly providerObjectId: string;
+  readonly amount: string;
+  readonly fee: string;
+  readonly net: string;
+  /** Upper-case. */
+  readonly currency: string;
+  readonly type: BalanceTransactionType;
+  readonly reportingCategory: string;
+  readonly status: 'available' | 'pending';
+  readonly availableOn: Date | null;
+  readonly created: Date;
+  readonly description: string | null;
+  readonly exchangeRate: string | null;
+  readonly feeDetails: readonly {
+    readonly amount: string;
+    readonly currency: string;
+    readonly type: 'application_fee' | 'processing_fee' | 'tax' | 'other';
+  }[];
+  /** The provider object that caused it, and what kind of object that is. */
+  readonly sourceObjectId: string | null;
+  readonly sourceKind:
+    | 'charge'
+    | 'refund'
+    | 'payout'
+    | 'application_fee'
+    | 'application_fee_refund'
+    | 'transfer'
+    | 'dispute'
+    | null;
+  /**
+   * For a destination charge's funds on the destination account: the PLATFORM
+   * charge they came from, which is the one Orbit holds.
+   */
+  readonly originatingChargeObjectId: string | null;
+}
+
+export interface ProviderPayout {
+  readonly providerObjectId: string;
+  readonly amount: string;
+  readonly currency: string;
+  readonly status: PayoutStatus;
+  readonly method: 'standard' | 'instant';
+  readonly type: 'bank_account' | 'card';
+  readonly automatic: boolean;
+  readonly arrivalDate: Date | null;
+  readonly description: string | null;
+  readonly statementDescriptor: string | null;
+  readonly failureCode: string | null;
+  readonly created: Date;
+}
+
+export interface ProviderApplicationFee {
+  readonly providerObjectId: string;
+  readonly amount: string;
+  readonly currency: string;
+  /** The PLATFORM charge it was taken on (the one a payment intent names). */
+  readonly chargeObjectId: string | null;
+  /** The provider account it was taken from. */
+  readonly accountObjectId: string | null;
+  readonly refunds: readonly {
+    readonly providerObjectId: string;
+    readonly amount: string;
+    readonly currency: string;
+    readonly created: Date;
+  }[];
+  readonly created: Date;
+}
+
+export interface ListBalanceTransactionsRequest {
+  /** The provider account; `null` for the platform's own. */
+  readonly account: string | null;
+  readonly createdGte?: Date;
+  readonly createdLt?: Date;
+  /** Only those this provider payout paid out. */
+  readonly payout?: string;
+  readonly startingAfter?: string;
+  readonly limit: number;
+}
+
+/**
+ * A provider whose balance, payouts and fees Orbit can mirror (ADR 0015 §4–§5).
+ * Optional like every capability: the FairCoin rail holds no balance.
+ */
+export interface MoneyMirroringProvider extends PaymentProvider {
+  listBalanceTransactions(
+    request: ListBalanceTransactionsRequest,
+  ): Promise<{ data: ProviderBalanceTransaction[]; hasMore: boolean }>;
+  /**
+   * The balance transactions of ONE platform charge — the charge's own and its
+   * refunds' — for a first-party merchant, whose money is on the platform
+   * account and is attributed charge by charge.
+   */
+  getChargeBalanceTransactions(chargeObjectId: string): Promise<ProviderBalanceTransaction[]>;
+  getPayout(account: string, providerObjectId: string): Promise<ProviderPayout>;
+  listPayouts(request: {
+    readonly account: string;
+    readonly createdGte?: Date;
+    readonly startingAfter?: string;
+    readonly limit: number;
+  }): Promise<{ data: ProviderPayout[]; hasMore: boolean }>;
+  /** An instruction: the provider executes it from the account's available balance. */
+  createPayout(request: {
+    readonly account: string;
+    readonly payoutId: string;
+    readonly amount: string;
+    readonly currency: string;
+    readonly method: 'standard' | 'instant';
+    readonly description?: string;
+    readonly statementDescriptor?: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPayout>;
+  cancelPayout(request: {
+    readonly account: string;
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPayout>;
+  getApplicationFee(providerObjectId: string): Promise<ProviderApplicationFee>;
+  /** Cancel a refund the provider still holds (`requires_action`); otherwise a permanent error. */
+  cancelRefund(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderRefundResult>;
+}
+
+export function isMoneyMirroringProvider(
+  provider: PaymentProvider,
+): provider is MoneyMirroringProvider {
+  const candidate = provider as Partial<MoneyMirroringProvider>;
+  return (
+    typeof candidate.listBalanceTransactions === 'function' &&
+    typeof candidate.getChargeBalanceTransactions === 'function' &&
+    typeof candidate.getPayout === 'function' &&
+    typeof candidate.listPayouts === 'function' &&
+    typeof candidate.createPayout === 'function' &&
+    typeof candidate.cancelPayout === 'function' &&
+    typeof candidate.getApplicationFee === 'function' &&
+    typeof candidate.cancelRefund === 'function'
+  );
 }
 
 /**

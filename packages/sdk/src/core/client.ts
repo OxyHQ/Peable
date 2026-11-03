@@ -31,6 +31,12 @@ export interface RestClientRequestOptions {
    * retry ACROSS calls (after a crash, from a queue) converge too.
    */
   idempotencyKey?: string;
+  /**
+   * Sent as `Peable-Account`: a PLATFORM acting on one of its connected
+   * accounts (`ca_…`). The gateway accepts it only on the account, balance,
+   * payout and reconciliation routes and refuses it (400) everywhere else.
+   */
+  peableAccount?: string;
   headers?: Record<string, string>;
 }
 
@@ -39,6 +45,29 @@ export interface RestClientStreamOptions {
   headers?: Record<string, string>;
   /** Aborts the connection — the only way a long-lived stream ends early. */
   signal?: AbortSignal;
+}
+
+/**
+ * The per-request options a resource method takes as its last argument.
+ *
+ * `peableAccount` sends `Peable-Account: ca_…`, so a marketplace platform reads
+ * or acts on one of its sellers' accounts with its own credential.
+ */
+export interface PeableRequestOptions {
+  /** See `RestClientRequestOptions.idempotencyKey`. Only meaningful on a POST. */
+  idempotencyKey?: string;
+  /** A connected account (`ca_…`) to act on, sent as `Peable-Account`. */
+  peableAccount?: string;
+}
+
+/** The `PeableRequestOptions` a caller passed, as `RestClientRequestOptions` fields. */
+export function requestOptionsOf(
+  options: PeableRequestOptions | undefined,
+): Pick<RestClientRequestOptions, 'idempotencyKey' | 'peableAccount'> {
+  return {
+    ...(options?.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
+    ...(options?.peableAccount === undefined ? {} : { peableAccount: options.peableAccount }),
+  };
 }
 
 export interface RestClient {
@@ -108,6 +137,7 @@ export function createRestClient(
     }
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.idempotencyKey !== undefined) headers['Idempotency-Key'] = opts.idempotencyKey;
+    if (opts.peableAccount !== undefined) headers['Peable-Account'] = opts.peableAccount;
     if (opts.headers) Object.assign(headers, opts.headers);
 
     // One deadline over the headers AND the body, released once both are in.

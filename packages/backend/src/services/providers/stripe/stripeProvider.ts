@@ -51,11 +51,28 @@ import {
   createStripePaymentMethodDomain,
   updateStripePaymentMethodDomain,
   validateStripePaymentMethodDomain,
+  cancelStripePayout,
+  cancelStripeRefund,
+  createStripePayout,
+  listStripeBalanceTransactions,
+  listStripePayouts,
+  retrieveStripeApplicationFee,
+  retrieveStripeChargeWithLedger,
+  retrieveStripePayout,
+  updateStripeAccount,
 } from './client';
 import { toDisputeStatus } from '../disputeStatus';
 import {
+  toAccountSettings,
+  toBusinessProfile,
+  toProviderApplicationFee,
+  toProviderBalanceTransaction,
+  toProviderPayout,
+  toStripeAccountUpdate,
+} from './money';
+import {
   ProviderError,
-  type AccountHoldingProvider,
+  type AccountConfiguringProvider,
   type CancelPaymentRequest,
   type CapturePaymentRequest,
   type ChargeReadingProvider,
@@ -96,6 +113,12 @@ import {
   type RefundRequest,
   type ReverseTransferRequest,
   type SettlingPaymentProvider,
+  type ListBalanceTransactionsRequest,
+  type MoneyMirroringProvider,
+  type ProviderAccountUpdate,
+  type ProviderApplicationFee,
+  type ProviderBalanceTransaction,
+  type ProviderPayout,
 } from '../provider';
 import { mapPaymentIntentStatus, toProviderEventEnvelope } from './verify';
 import { fromUnix } from '../../../lib/time';
@@ -115,7 +138,7 @@ export type StripeWebhookScope = 'platform' | 'connect';
  */
 function toStripeAmount(
   amount: string,
-  stage: 'createPayment' | 'capture' | 'refund' | 'transfer',
+  stage: 'createPayment' | 'capture' | 'refund' | 'transfer' | 'payout',
 ): number {
   const value = Number(amount);
   if (!Number.isSafeInteger(value)) {
@@ -326,14 +349,15 @@ export interface StripePaymentProviderOptions {
 export class StripePaymentProvider
   implements
     SettlingPaymentProvider,
-    AccountHoldingProvider,
+    AccountConfiguringProvider,
     DisputeHandlingProvider,
     SettlementReportingProvider,
     ChargeReadingProvider,
     CustomerHoldingProvider,
     SetupHoldingProvider,
     PaymentMethodConfiguringProvider,
-    DomainRegisteringProvider
+    DomainRegisteringProvider,
+    MoneyMirroringProvider
 {
   readonly id = 'stripe' as const;
   readonly mode: ProviderMode;
@@ -392,6 +416,21 @@ export class StripePaymentProvider
       // conversation can find the charge and its transfers from one id.
       transfer_group: request.intentId,
       ...(request.onBehalfOf !== undefined ? { on_behalf_of: request.onBehalfOf } : {}),
+      // A destination charge (ADR 0015 §2): the funds go to the merchant's own
+      // account and Orbit's fee stays with the platform.
+      ...(request.transferDestination !== undefined
+        ? {
+            transfer_data: {
+              destination: request.transferDestination,
+              ...(request.transferAmount !== undefined
+                ? { amount: toStripeAmount(request.transferAmount, 'createPayment') }
+                : {}),
+            },
+          }
+        : {}),
+      ...(request.applicationFeeAmount !== undefined
+        ? { application_fee_amount: toStripeAmount(request.applicationFeeAmount, 'createPayment') }
+        : {}),
       ...(request.captureMethod === 'manual' ? { capture_method: 'manual' as const } : {}),
       ...(request.customerObjectId !== undefined ? { customer: request.customerObjectId } : {}),
       ...(request.paymentMethodObjectId !== undefined
@@ -473,22 +512,126 @@ export class StripePaymentProvider
         payment_intent: request.providerObjectId,
         amount: toStripeAmount(request.amount.amount, 'refund'),
         metadata: { ...request.metadata, peable_refund_id: request.refundId },
+        ...(request.reason !== undefined ? { reason: request.reason } : {}),
+        ...(request.refundApplicationFee ? { refund_application_fee: true } : {}),
+        ...(request.reverseTransfer ? { reverse_transfer: true } : {}),
       },
       request.idempotencyKey,
     );
+    return toRefundResult(refund);
+  }
 
-    return {
-      providerObjectId: refund.id,
-      state:
-        refund.status === 'succeeded'
-          ? 'succeeded'
-          : refund.status === 'failed'
-            ? 'failed'
-            : 'pending',
-      ...(refund.failure_reason !== undefined && refund.failure_reason !== null
-        ? { failureCode: refund.failure_reason }
+  async cancelRefund(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderRefundResult> {
+    return toRefundResult(
+      await cancelStripeRefund(this.mode, request.providerObjectId, request.idempotencyKey),
+    );
+  }
+
+  // -------------------------------------------------------------------------
+  // Orbit money (ADR 0015): balance transactions, payouts, application fees
+  // -------------------------------------------------------------------------
+
+  async listBalanceTransactions(
+    request: ListBalanceTransactionsRequest,
+  ): Promise<{ data: ProviderBalanceTransaction[]; hasMore: boolean }> {
+    const created: Stripe.RangeQueryParam = {};
+    if (request.createdGte) created.gte = Math.floor(request.createdGte.getTime() / 1000);
+    if (request.createdLt) created.lt = Math.floor(request.createdLt.getTime() / 1000);
+    const page = await listStripeBalanceTransactions(this.mode, request.account, {
+      limit: request.limit,
+      ...(Object.keys(created).length > 0 ? { created } : {}),
+      ...(request.payout !== undefined ? { payout: request.payout } : {}),
+      ...(request.startingAfter !== undefined ? { starting_after: request.startingAfter } : {}),
+    });
+    return { data: page.data.map(toProviderBalanceTransaction), hasMore: page.has_more };
+  }
+
+  async getChargeBalanceTransactions(
+    chargeObjectId: string,
+  ): Promise<ProviderBalanceTransaction[]> {
+    const charge = await retrieveStripeChargeWithLedger(this.mode, chargeObjectId);
+    const out: ProviderBalanceTransaction[] = [];
+    if (typeof charge.balance_transaction === 'object' && charge.balance_transaction !== null) {
+      out.push(toProviderBalanceTransaction(charge.balance_transaction));
+    }
+    for (const refund of charge.refunds?.data ?? []) {
+      if (typeof refund.balance_transaction === 'object' && refund.balance_transaction !== null) {
+        out.push(toProviderBalanceTransaction(refund.balance_transaction));
+      }
+    }
+    return out;
+  }
+
+  async getPayout(account: string, providerObjectId: string): Promise<ProviderPayout> {
+    return toProviderPayout(await retrieveStripePayout(this.mode, account, providerObjectId));
+  }
+
+  async listPayouts(request: {
+    readonly account: string;
+    readonly createdGte?: Date;
+    readonly startingAfter?: string;
+    readonly limit: number;
+  }): Promise<{ data: ProviderPayout[]; hasMore: boolean }> {
+    const page = await listStripePayouts(this.mode, request.account, {
+      limit: request.limit,
+      ...(request.createdGte
+        ? { created: { gte: Math.floor(request.createdGte.getTime() / 1000) } }
         : {}),
-    };
+      ...(request.startingAfter !== undefined ? { starting_after: request.startingAfter } : {}),
+    });
+    return { data: page.data.map(toProviderPayout), hasMore: page.has_more };
+  }
+
+  async createPayout(request: {
+    readonly account: string;
+    readonly payoutId: string;
+    readonly amount: string;
+    readonly currency: string;
+    readonly method: 'standard' | 'instant';
+    readonly description?: string;
+    readonly statementDescriptor?: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPayout> {
+    const payout = await createStripePayout(
+      this.mode,
+      request.account,
+      {
+        amount: toStripeAmount(request.amount, 'payout'),
+        currency: toStripeCurrency(request.currency),
+        method: request.method,
+        ...(request.description !== undefined ? { description: request.description } : {}),
+        ...(request.statementDescriptor !== undefined
+          ? { statement_descriptor: request.statementDescriptor }
+          : {}),
+        metadata: { peable_payout_id: request.payoutId },
+      },
+      request.idempotencyKey,
+    );
+    return toProviderPayout(payout);
+  }
+
+  async cancelPayout(request: {
+    readonly account: string;
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPayout> {
+    return toProviderPayout(
+      await cancelStripePayout(
+        this.mode,
+        request.account,
+        request.providerObjectId,
+        request.idempotencyKey,
+      ),
+    );
+  }
+
+  async getApplicationFee(providerObjectId: string): Promise<ProviderApplicationFee> {
+    return toProviderApplicationFee(
+      await retrieveStripeApplicationFee(this.mode, providerObjectId),
+    );
   }
 
   async getStatus(providerObjectId: string): Promise<ProviderPaymentResult> {
@@ -921,7 +1064,10 @@ export class StripePaymentProvider
         // the v1 API carrying `requirement_collection: stripe` — the property
         // that keeps identity documents out of this database, obtained by
         // construction rather than by assertion.
-        dashboard: 'express',
+        // A marketplace seller keeps the express dashboard it always had; a
+        // merchant's OWN account has none — Orbit is the only dashboard the
+        // merchant sees (ADR 0015 §1).
+        dashboard: request.role === 'merchant' ? 'none' : 'express',
         identity: { country: request.country, entity_type: request.businessType },
         defaults: {
           responsibilities: {
@@ -961,7 +1107,7 @@ export class StripePaymentProvider
       account: request.providerAccountId,
       refresh_url: request.refreshUrl,
       return_url: request.returnUrl,
-      type: 'account_onboarding',
+      type: request.type ?? 'account_onboarding',
       // Collect what will EVENTUALLY be due, not only what is due now.
       // Otherwise a seller completes onboarding, starts selling, and has payouts
       // interrupted weeks later by a requirement that was always coming.
@@ -998,7 +1144,24 @@ export class StripePaymentProvider
               account.default_currency.toUpperCase() as ProviderAccountSnapshot['defaultCurrency'],
           }
         : {}),
+      businessProfile: toBusinessProfile(account),
+      settings: toAccountSettings(account),
     };
+  }
+
+  async updateAccount(
+    providerAccountId: string,
+    update: ProviderAccountUpdate,
+    idempotencyKey: string,
+  ): Promise<ProviderAccountSnapshot> {
+    await updateStripeAccount(
+      this.mode,
+      providerAccountId,
+      toStripeAccountUpdate(update),
+      idempotencyKey,
+    );
+    // Read back through the same v1 read every snapshot comes from.
+    return this.getAccount(providerAccountId);
   }
 
   // -------------------------------------------------------------------------
@@ -1034,6 +1197,24 @@ export class StripePaymentProvider
         : {}),
     };
   }
+}
+
+/** A Stripe refund in the gateway's vocabulary — the refund's own state, codes only. */
+function toRefundResult(refund: Stripe.Refund): ProviderRefundResult {
+  return {
+    providerObjectId: refund.id,
+    state:
+      refund.status === 'succeeded'
+        ? 'succeeded'
+        : refund.status === 'failed'
+          ? 'failed'
+          : refund.status === 'canceled'
+            ? 'canceled'
+            : 'pending',
+    ...(refund.failure_reason !== undefined && refund.failure_reason !== null
+      ? { failureCode: refund.failure_reason }
+      : {}),
+  };
 }
 
 /** An expandable Stripe reference's id, whichever shape it arrived in. */

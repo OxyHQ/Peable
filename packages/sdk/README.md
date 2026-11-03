@@ -345,6 +345,75 @@ an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once 
 payer has broadcast, so never cancel an order on `expires_at` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
 
+### Connect & money (0.17.0, ADR 0015)
+
+Fiat funds never reach a Peable bank account: a merchant that takes cards has
+its OWN provider account, opened and onboarded through Peable. Orbit mirrors
+that account's balance, balance transactions and payouts into a double-entry
+ledger reconciled against the provider daily, and instructs payouts the
+provider executes. Nothing here is computed by Orbit — a figure the provider
+has not given is `null`, never `0`.
+
+```ts
+// The merchant's own account. The first update opens it (country + business_type).
+let account = await peable.account.retrieve(); // 404 code 'account_missing' when there is none
+account = await peable.account.update({
+  settings: { payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday' } } },
+});
+account.requirements.currently_due; // ['individual.verification.document', …] — identifiers, never values
+
+// Hosted onboarding. Mint on click, never store; a return proves nothing — read the account back.
+const link = await peable.accountLinks.create({
+  return_url: 'https://you.example/account',
+  refresh_url: 'https://you.example/account?refresh=1',
+});
+
+// The balance, per currency. `informational` is FairCoin received in the merchant's
+// own wallet: on the books, never payable.
+const balance = await peable.balance.retrieve();
+for await (const txn of peable.balanceTransactions.list({ type: 'charge', currency: 'eur' })) {
+  // txn.amount is signed; txn.fee / txn.net are null when the provider gave no figure
+}
+
+// Payouts: the provider executes them. `create` is for a manual schedule.
+const payout = await peable.payouts.create(
+  { amount: '10000', currency: 'EUR' },
+  { idempotencyKey: `payout:${weekId}` },
+);
+await peable.payouts.cancel(payout.id); // while still pending
+const report = await peable.reports.payoutReconciliation({ payout: payout.id });
+report.summary; // { count, amount, fee, net } over every transaction the payout paid out
+
+// Orbit's fee on a destination charge, and its refunds.
+const fees = await peable.applicationFees.list({ payment_intent: 'pi_…' });
+await peable.applicationFees.listRefunds(fees.data[0].id);
+```
+
+**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`
+(without `account`), `balance`, `balanceTransactions`, `payouts` and
+`reports.payoutReconciliation` take a last `{ peableAccount: 'ca_…' }` option,
+sent as the `Peable-Account` header, to read or act on one of the platform's
+connected accounts with the platform's own credential. Every other route refuses
+the header with a 400.
+
+```ts
+await peable.balance.retrieve({ peableAccount: seller.id });
+await peable.payouts.create(
+  { amount: '5000', currency: 'EUR' },
+  { peableAccount: seller.id, idempotencyKey: `payout:${seller.id}:${day}` },
+);
+```
+
+Card payments for a seller: `paymentIntents.create({ …, transfer_data: { destination:
+'ca_…' }, application_fee_amount: '150' })` (a destination charge), or `on_behalf_of`
+to make the seller the merchant of record.
+
+**Refunds** gain `reason`, `metadata`, `refund_application_fee` and
+`reverse_transfer` on `create`, plus `refunds.update(id, { metadata })` and
+`refunds.cancel(id)` — read the answer's `status`; only `canceled` means the
+money stayed. Events: `account.updated`, `application_fee.created|refunded`,
+`payout.created|updated|paid|failed|canceled` and `balance.available`.
+
 ### Optional checkout presentation (local development)
 
 `@peable.to/sdk/checkout/ui` exposes the controlled `PeableCheckoutSheet` and

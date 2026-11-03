@@ -17,6 +17,7 @@ import {
 } from '@peable.to/shared-types';
 import { Peable } from '../../src';
 import { paymentIntentFixture } from '../support/intentFixture';
+import { requirementsFixture } from '../support/moneyFixtures';
 import {
   AccountLinksResource,
   ConnectedAccountsResource,
@@ -51,8 +52,7 @@ const SELLER: ConnectedAccount = {
   charges_enabled: false,
   transfers_capability: null,
   card_payments_capability: null,
-  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
-  disabled_reason_codes: [],
+  requirements: requirementsFixture(),
   last_synced_at: null,
   created: 1792108800,
   updated_at: 1792108800,

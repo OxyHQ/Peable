@@ -19,6 +19,13 @@ import {
 import { WebhooksResource } from '../../src/resources/webhooks';
 import { PeableSignatureVerificationError } from '../../src/core/errors';
 import { processingFixture } from '../support/intentFixture';
+import {
+  accountFixture,
+  applicationFeeFixture,
+  balanceFixture,
+  payoutFixture,
+  requirementsFixture,
+} from '../support/moneyFixtures';
 
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
@@ -203,8 +210,10 @@ const account: ConnectedAccount = {
   charges_enabled: false,
   transfers_capability: 'pending',
   card_payments_capability: null,
-  requirements: { currently_due: 1, eventually_due: 1, past_due: 0, pending_verification: 0 },
-  disabled_reason_codes: [],
+  requirements: requirementsFixture({
+    currently_due: ['external_account'],
+    eventually_due: ['external_account'],
+  }),
   last_synced_at: null,
   created: EVENT.created,
   updated_at: EVENT.created,
@@ -229,6 +238,8 @@ const charge: Charge = {
   payment_method_details: null,
   receipt_url: null,
   balance_transaction: null,
+  application_fee: null,
+  application_fee_amount: null,
   description: null,
   receipt_email: null,
   metadata: {},
@@ -244,7 +255,9 @@ const refund: Refund = {
   amount: '500',
   currency: 'EUR',
   status: 'succeeded',
+  reason: null,
   failure_code: null,
+  metadata: {},
   created: EVENT.created,
   updated_at: EVENT.created,
 };
@@ -420,6 +433,15 @@ const payloads = {
   'promotion_code.created': promotionCode,
   'promotion_code.updated': { ...promotionCode, active: false },
   'connected_account.updated': account,
+  'account.updated': accountFixture(),
+  'application_fee.created': applicationFeeFixture(),
+  'application_fee.refunded': applicationFeeFixture({ amount_refunded: '150', refunded: true }),
+  'payout.created': payoutFixture(),
+  'payout.updated': payoutFixture({ status: 'in_transit' }),
+  'payout.paid': payoutFixture({ status: 'paid' }),
+  'payout.failed': payoutFixture({ status: 'failed', failure_code: 'account_closed' }),
+  'payout.canceled': payoutFixture({ status: 'canceled' }),
+  'balance.available': balanceFixture(),
   'billing.observation.updated': {
     object: 'billing_observation',
     livemode: false,

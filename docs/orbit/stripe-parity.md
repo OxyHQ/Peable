@@ -49,7 +49,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Test + live in one deployment | ✅ | `STRIPE_*_TEST` / `STRIPE_*_LIVE` side by side; credential selects the mode, stored rows resolve by their own; webhooks verified per mode on the same paths (ADR 0017) | |
 | Events API | ✅ | `evt_` stored in the transaction of its change (ADR 0014 D4); `GET /v1/events` (`type` exact or `prefix.*`, `created`, `delivery_success`) and `/v1/events/:id`; 30-day retention (sweeper + read horizon); envelope carries `api_version`, `previous_attributes`, `request {id, idempotency_key}`; SDK `events` | `types[]` filter; `pending_webhooks` |
 | Webhook endpoints | ✅ | `we_` resource (create/list/retrieve/update/delete), ≤ 16 per merchant, `enabled_events` incl. `*`, generated `whsec_` shown once, `roll_secret` with ≤ 24h dual-signature overlap, per-endpoint `api_version`, URL checked by the dispatcher's SSRF rules; `POST /v1/webhook_endpoints/:id/test` (Orbit's "send test event" for an integration, SDK `sendTestEvent`); `merchants.webhook_*` removed; SDK `webhookEndpoints` | Endpoint pinned to an older `api_version` once dated versions exist |
-| Event catalog | 🟡 | Stripe's names (ADR 0019): `payment_intent.created\|requires_action\|processing\|amount_capturable_updated\|succeeded\|payment_failed\|canceled`, `charge.refunded`, `charge.dispute.*`, `refund.*`, `customer.*`, `payment_method.*`, `setup_intent.*`, `connected_account.updated`, the catalog's `product.created\|updated\|deleted`, `price.created\|updated`, `coupon.created\|updated\|deleted`, `promotion_code.created\|updated` (ADR 0018) + `webhook_endpoint.test` | `charge.succeeded\|captured\|updated`, Billing, payouts as those resources land |
+| Event catalog | 🟡 | Stripe's names (ADR 0019): `payment_intent.created\|requires_action\|processing\|amount_capturable_updated\|succeeded\|payment_failed\|canceled`, `charge.refunded`, `charge.dispute.*`, `refund.*`, `customer.*`, `payment_method.*`, `setup_intent.*`, `connected_account.updated`, the catalog's `product.created\|updated\|deleted`, `price.created\|updated`, `coupon.created\|updated\|deleted`, `promotion_code.created\|updated` (ADR 0018), `account.updated`, `application_fee.*`, `payout.*`, `balance.available` (ADR 0015) + `webhook_endpoint.test` | `charge.succeeded\|captured\|updated`, Billing |
 | Retry schedule | ✅ | ~3 days exponential with ±20% jitter; an endpoint failing continuously for 3 days is disabled (`disabled_reason: delivery_failures`) | |
 | Delivery log + redeliver | ✅ | One delivery per (event, endpoint); `GET /v1/webhook_deliveries` (`event`, `webhook_endpoint`), redeliver; Orbit dashboard: endpoints CRUD + roll + "send test event", events, deliveries; SDK `webhookDeliveries` | Prefixed delivery ids |
 
@@ -65,8 +65,8 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | PaymentMethods | ✅ | Native `pm_` created by a succeeded SetupIntent or a `setup_future_usage` payment; retrieve, list (`customer=`), update (billing details, metadata), permanent detach | Re-attach; non-card types |
 | SetupIntents / off-session | ✅ | `seti_` (create/retrieve/list/cancel, payer `client_action`), `setup_future_usage`, `off_session` confirm | Payer-side `confirmSetup` in `@peable.to/sdk/checkout` |
 | PI fields (receipt email, descriptor, shipping, description) | ✅ | All four; `statement_descriptor_suffix` card only and the one forwarded to the provider | Peable-sent receipts (Phase 3) |
-| Charges | 🟡 | Read-only `ch_` per succeeded card authorization: retrieve, list (`payment_intent=`), expandable `latest_charge`; `outcome`, `payment_method_details.card`, `amount_captured/refunded`, `captured`, `refunded`, `disputed` | `receipt_url` (Peable receipts, Phase 3), `balance_transaction` (ledger, Phase 5) |
-| Refunds | 🟡 | Create; retrieve; list (global, `payment_intent=`, per intent); no reason | update/cancel; `reason`; `metadata`; fee/transfer reversal flags |
+| Charges | 🟡 | Read-only `ch_` per succeeded card authorization: retrieve, list (`payment_intent=`), expandable `latest_charge`; `outcome`, `payment_method_details.card`, `amount_captured/refunded`, `captured`, `refunded`, `disputed`, `balance_transaction`, `application_fee(_amount)` | `receipt_url` (Peable receipts, Phase 3) |
+| Refunds | ✅ | Create (`reason`, `metadata`, `refund_application_fee`, `reverse_transfer`); retrieve; update (`metadata`); cancel where the provider allows; list (global, `payment_intent=`, per intent) | |
 | Disputes | ✅ | Stripe's object: retrieve (with `evidence`, read live), list (`payment_intent=`, `charge=`, per intent); `POST /v1/disputes/:id` stages a draft at the provider (`submit: false`, no words stored here) or submits once (`submit: true`, second refused 409); 17 text + 9 file fields (`file_…` of purpose `dispute_evidence`, bytes uploaded to the provider at submission only); `…/close` accepts (lost); `evidence_details {due_by, has_evidence, past_due, submission_count, submitted_at}`, `charge` (expandable), `is_charge_refundable`, `metadata`, `reason` as Stripe's enum; `charge.dispute.created\|updated\|closed\|funds_withdrawn\|funds_reinstated` | `balance_transactions` (ledger, Phase 5); `enhanced_evidence`, `duplicate_charge_id` |
 | Files | ✅ | `file_` over Oxy Files: `POST /v1/files` (multipart bytes, or `oxy_file` for a merchant-owned logo through the one ownership check), retrieve, list (`purpose=`); purposes `dispute_evidence`, `business_logo`, `identity_document`, `additional_verification` with per-purpose type (sniffed from the bytes) and size limits; Peable-owned private storage (public for logos), reference sync in the row's transaction, nightly reconciliation; file events withhold/remove; `url` only for an available logo | File links; `identity_document` consumed by Peable-hosted onboarding |
 | Wallets (Apple/Google Pay) | ✅ | `payment_method_domains` (`pmd_`: create with validation, list, retrieve, update `enabled`, `…/validate`) registered at the provider; wallets per configuration; Express Checkout in the hosted checkout and `@peable.to/sdk/checkout` (Apple Pay and Google Pay only) | |
@@ -115,16 +115,18 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 
 | Capability | State | Today | Target |
 |---|---|---|---|
-| Connected accounts | ✅ | Marketplace sellers (card + FairCoin halves) | Every fiat merchant too |
-| Onboarding | 🟡 | Stripe-hosted links; Peable FairCoin link | + embedded onboarding in Orbit |
-| Separate charges & transfers | ✅ | | |
-| Destination charges / `on_behalf_of` | ❌ | Card `connectedAccount` refused | Per ADR 0015 |
-| Application fees | ❌ | — | `application_fees`, refunds of fees |
-| `Peable-Account` header | ❌ | — | Act on behalf of a connected account |
-| Account resource | 🟡 | `merchants/me` | `/v1/account` with capabilities/requirements/settings |
-| Ledger / balance transactions | ❌ | Per-payment settlement read | Double-entry, `txn_` |
-| Balance | ❌ | — | Mirror of the merchant's provider account |
-| Payouts | ❌ | `payouts_enabled` flag only | `po_` mirror, schedule, reconciliation |
+| Connected accounts | ✅ | Marketplace sellers (card + FairCoin halves) and the merchant's OWN account (`role = 'merchant'`, Accounts v2, `dashboard: none`); requirements as identifier lists (Stripe's shape) | |
+| Account resource | ✅ | `GET/POST /v1/account` (`business_profile`, `capabilities`, `requirements`, `charges_enabled`, `payouts_enabled`, `settings` payouts schedule / descriptors / branding), opened with `country` + `business_type`, settings written to the provider and read back; `account.updated`; `merchants/me` kept as the registration (ADR 0015 as built) | |
+| Onboarding | 🟡 | Hosted account links (`POST /v1/account_links`, `account_onboarding` / `account_update`) for the merchant and per seller; Peable FairCoin link | Embedded onboarding in Orbit |
+| Separate charges & transfers | ✅ | Marketplaces without an own account | |
+| Destination charges / `on_behalf_of` | ✅ | Automatic for a merchant with an onboarded account; `transfer_data {destination, amount}`, `on_behalf_of`, `application_fee_amount` on PI create for a platform's sellers; first-party merchants stay platform charges with no fee | |
+| Application fees | ✅ | `fee_schedules` (bps + fixed per currency, `card`) or the deployment default; `fee_…` / `fr_…` from the provider's own fee object; list/retrieve/refunds list; `application_fee.created\|refunded`; refunds take `refund_application_fee`, `reverse_transfer` | Fee schedule management in Orbit (operator data today) |
+| `Peable-Account` header | ✅ | On account, account links, balance, balance transactions, payouts and the payout reconciliation report; 400 elsewhere; SDK `peableAccount` | |
+| Ledger / balance transactions | ✅ | Double-entry `ledger_entries` (every journal sums to zero), `txn_…` mirrored verbatim from the provider, idempotent ingestion, releases; list (`type`, `payout`, `source`, `currency`, `created`) and retrieve; `Charge.balance_transaction` | `expand` of `source` |
+| Balance | ✅ | `GET /v1/balance` available / pending / informational (FairCoin) from the ledger; 404 `account_missing` without an account; `balance.available` | |
+| Payouts | ✅ | `po_…` mirrored from `payout.*`, `POST /v1/payouts` on a manual schedule (the provider executes), cancel, schedule in `/v1/account` settings; `payout.created\|updated\|paid\|failed\|canceled` | Instant payout eligibility |
+| Reconciliation | ✅ | Daily per account (7-day window): mismatches recorded, warned, listed in Orbit, never auto-corrected; `GET /v1/reports/payout_reconciliation?payout=` | Scheduled report exports |
+| Live release gate | ✅ | `ORBIT_THIRD_PARTY_LIVE_PAYMENTS=false` by default: no live account, destination charge or payout for a non-Oxy merchant (403 `live_payments_gated`) | Opened after the ADR 0015 legal review |
 
 ## Phase 6 — Orbit app (`packages/orbit`)
 
@@ -135,7 +137,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Payment methods settings | ✅ | Settings → Payment methods: per-method on/off for the selected `pmc_` (default first), availability, currencies and the capability reason for anything unavailable (shown disabled, never hidden); Wallet domains (add, check again, enable/disable, Apple Pay / Google Pay status with its detail) | |
 | Customers / catalog / subscriptions / invoices UI | 🟡 | Products: list (active/archived), create with a first price, edit, archive, delete, prices per product (add, archive, set default) over the dashboard catalog routes | Coupons and promotion codes, customers, subscriptions, invoices |
 | Payment Links builder | ❌ | — | Present |
-| Balances / payouts / reports | ❌ | — | Present |
+| Balances / payouts / reports | 🟡 | Balances (available / pending / FairCoin informational, balance transactions, open reconciliation mismatches), Payouts (list, detail with its reconciliation report, manual payout, cancel, schedule), Account (onboarding status, requirements, start/resume onboarding) | Reports beyond payout reconciliation |
 | Developers (keys, webhooks, events, logs) | 🟡 | Webhook delivery log (status, attempts, last error, next attempt) with Redeliver; merchant webhook URL/secret in Settings; backend routes for request logs (`/v1/dashboard/applications/:id/request_logs`) | Keys, endpoints, events, request logs UI |
 | Team and roles | 🟡 | Oxy membership checks on dashboard routes | Orbit settings over Oxy membership |
 | Test/live toggle | ✅ | Orbit's Test / Live toggle maps to `?environment=` (`development` / `production`) on every dashboard call | |

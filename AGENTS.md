@@ -280,7 +280,7 @@ a wire object stores the wire shape (migration `0036` converted them).
 
 Routes (`src/routes/`): `charges`, `checkoutSessions`, `connect`,
 `connectedAccounts`, `coupons`, `customers`, `dashboard`, `disputes`, `enrich`,
-`files`, `merchants`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
+`files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
 `refunds`, `setupIntents`, `social`, `tax`, `transfers`, `webhookDeliveries`,
@@ -434,7 +434,8 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `transferReversalRepository`), `refunds/` (`refundRepository`), `disputes/`
 (`disputeRepository`), `files/` (`fileRepository`), `paymentMethods/`
 (`paymentMethodConfigurationRepository`: configurations, their provider
-bindings, wallet domains).
+bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
+`applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`).
 
 **Payment method breadth is a card-rail intersection, decided once per
 payment.** `services/paymentMethods/configuration.ts`: a merchant's
@@ -491,6 +492,47 @@ Five, and each one exists because its absence was a defect:
   payment to `requires_payment_method` with `last_payment_error`, confirmable
   again; an `underpaid` chain payment is `canceled`, and the rail argument of
   `applyEvent` plus `LEGAL_SOURCES` keep the two apart.
+
+### Orbit money: the merchant's account, fees, ledger, payouts (ADR 0015)
+
+Fiat funds stay at the provider in an account that belongs to the merchant;
+Orbit instructs and MIRRORS. There is no Peable-held balance and no table that
+could represent one — a design that adds one supersedes ADR 0015 first.
+
+- **The merchant's own account is a `connected_accounts` row with
+  `role = 'merchant'`** (one per merchant, card half only, no `external_ref`),
+  opened by `services/accounts/merchantAccount.ts` through the same seller
+  machinery with `dashboard: 'none'`. Every SELLER read filters on the role
+  (`IS_SELLER` in the repository); `toConnectedAccountDTO` throws on a merchant
+  row rather than serialize it as a seller. `/v1/merchants/me` is the
+  registration and stays separate.
+- **The charge is decided once, at create, and replayed from the row**
+  (`services/money/chargeRouting.ts`, `providerRoutingFor`): first-party →
+  platform charge, no fee; own onboarded account → destination charge
+  `on_behalf_of` it with the fee schedule's fee; own account still onboarding →
+  409, never a silent platform charge; no own account → platform charge.
+  First-party is `merchants.first_party`, mirrored from the credential's
+  VERIFIED `authority: 'first_party'` by `resolveMerchant` — never branding or
+  tier.
+- **The live gate is `config.orbit.thirdPartyLivePayments`**
+  (`ORBIT_THIRD_PARTY_LIVE_PAYMENTS`, default false): `assertLiveMoneyAllowed`
+  sits at opening an account, a destination charge and a payout. Do not add a
+  live money path for a non-first-party merchant without it.
+- **The ledger is never invented.** `balance_transactions` hold the provider's
+  own figures verbatim, keyed by the provider id (`ingestion_key`); a
+  re-ingested transaction whose figures differ is a reconciliation mismatch,
+  not an update. `postJournal` is the ONE writer of `ledger_entries` and refuses
+  a journal that does not sum to zero. A balance is read from the entries,
+  never stored. A merchant without an account has no balance (404
+  `account_missing`), never zeros.
+- **Reconciliation records, it does not correct** (`services/money/reconciliation.ts`):
+  compare first, record mismatches, then the ordinary ingestion; the next run
+  resolves what it no longer sees.
+- **FairCoin is informational** — `recordFaircoinLedger` in `transitionIntent`'s
+  transaction, reversed by a reorg; never payable.
+- **`Peable-Account`** is accepted only on the routes in
+  `PEABLE_ACCOUNT_ROUTES` (`routes/money.ts`) and refused elsewhere by
+  `refuseMisplacedPeableAccount`.
 
 **A dispute response is one shot, and none of its words are stored — the
 provider is the store of a draft.** `POST /v1/disputes/:id` (Stripe's) STAGES

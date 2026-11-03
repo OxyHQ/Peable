@@ -1,6 +1,8 @@
 // Event envelope — Stripe's event names (ADR 0019) with the resource object
 // nested under `data.object`. Stored once (`/v1/events`, 30 days) and delivered
 // HMAC-signed to every matching webhook endpoint (ADR 0014 D4).
+import type { Account } from './account';
+import type { ApplicationFee, Balance, Payout } from './balance';
 import type { Charge } from './charge';
 import type { Coupon, Price, Product, PromotionCode } from './catalog';
 import type { Customer } from './customer';
@@ -111,6 +113,23 @@ export interface WebhookEventPayload {
    * intent.
    */
   'connected_account.updated': ConnectedAccount;
+  /**
+   * The merchant's OWN fiat account changed (ADR 0015 §1) — readiness,
+   * requirements, settings. Emitted when a field the merchant acts on moved.
+   */
+  'account.updated': Account;
+  /** Orbit's fee was taken on a succeeded charge (ADR 0015 §3). */
+  'application_fee.created': ApplicationFee;
+  /** Part or all of a fee went back (a refund with `refund_application_fee`). */
+  'application_fee.refunded': ApplicationFee;
+  /** A payout of the merchant's account, mirrored from the provider (ADR 0015 §5). */
+  'payout.created': Payout;
+  'payout.updated': Payout;
+  'payout.paid': Payout;
+  'payout.failed': Payout;
+  'payout.canceled': Payout;
+  /** Funds became available in the account; carries the balance read from the ledger. */
+  'balance.available': Balance;
   'billing.observation.updated': BillingObservation;
   /**
    * A synthetic event sent to ONE endpoint when its owner asks to test it
