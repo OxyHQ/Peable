@@ -431,7 +431,9 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
     throw new BillingError('identity_conflict');
   const provider = createStripeBillingProvider(parsed.deployment, client, {
     portalConfigurationRef: parsed.portalConfigurationRef,
-    embeddedPublishableKey: config.stripe[mode]?.cardRail ? config.stripe[mode]?.publishableKey : undefined,
+    embeddedPublishableKey: config.stripe[mode]?.cardRail
+      ? config.stripe[mode]?.publishableKey
+      : undefined,
   });
   // An invalid account or unsafe Portal setting is a boot failure before listening.
   await provider.verifyDeployment();
