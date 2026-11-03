@@ -242,6 +242,9 @@ test('rejects signed malformed recurring wake-ups rather than treating them as p
     { revision: 1.5 },
     { resource_kind: 'payer' },
     { resource_id: '' },
+    { subscription_id: '' },
+    { subscription_id: 42 },
+    { subscription_id: 'sub_unsafe/path' },
     { observed_at: '2026-10-01T00:00:00Z' },
     { observed_at: 1.5 },
     { amount_paid: '2999' },
@@ -261,5 +264,27 @@ test('rejects signed malformed recurring wake-ups rather than treating them as p
     expect(() =>
       new WebhooksResource().constructEvent(raw, signWebhook(SECRET, raw, timestamp), SECRET),
     ).toThrow(PeableSignatureVerificationError);
+  }
+});
+
+test('accepts an optional signed subscription hint without requiring it on older deliveries', () => {
+  const timestamp = Math.floor(Date.now() / 1000);
+  for (const hint of [undefined, 'sub_owned']) {
+    const raw = JSON.stringify({
+      ...EVENT,
+      type: 'billing.observation.updated',
+      data: {
+        object: {
+          ...payloads['billing.observation.updated'],
+          ...(hint ? { subscription_id: hint } : {}),
+        },
+      },
+    });
+    const event = new WebhooksResource().constructEvent(
+      raw,
+      signWebhook(SECRET, raw, timestamp),
+      SECRET,
+    );
+    expect(event.data.object).toMatchObject(payloads['billing.observation.updated']);
   }
 });
