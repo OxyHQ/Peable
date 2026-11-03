@@ -232,7 +232,13 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       // address with no attribution row.
       const reservation = await reserveNextSocialAddress(recipient.id, network);
       if (!reservation) {
-        sendError(res, 409, 'keyless_recipient', 'recipient has not set up an Oxy identity yet');
+        sendError(
+          res,
+          409,
+          'invalid_request_error',
+          'recipient has not set up an Oxy identity yet',
+          'keyless_recipient',
+        );
         return;
       }
 

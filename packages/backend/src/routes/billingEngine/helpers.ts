@@ -27,11 +27,7 @@ export function idParam(req: Request, res: Response, name = 'id'): string | null
   return value;
 }
 
-export function parseBody<T>(
-  req: Request,
-  res: Response,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-): T | null {
+export function parseBody<T>(req: Request, res: Response, schema: z.ZodType<T, unknown>): T | null {
   const parsed = schema.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);

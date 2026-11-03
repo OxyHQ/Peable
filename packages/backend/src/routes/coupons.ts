@@ -77,7 +77,7 @@ const createBodySchema = z
   .strict()
   .superRefine((body, ctx) => {
     const issue = (path: string, message: string) =>
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+      ctx.addIssue({ code: 'custom', path: [path], message });
     if ((body.percent_off === undefined) === (body.amount_off === undefined)) {
       issue('percent_off', 'a coupon takes exactly one of percent_off and amount_off');
     }

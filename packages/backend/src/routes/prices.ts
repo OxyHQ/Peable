@@ -52,7 +52,7 @@ const updateBodySchema = z
   .superRefine((body, ctx) => {
     if (body.transfer_lookup_key && (body.lookup_key === undefined || body.lookup_key === null)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['transfer_lookup_key'],
         message: 'transfer_lookup_key needs a lookup_key',
       });

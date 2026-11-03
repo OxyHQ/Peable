@@ -7,7 +7,7 @@ import {
   contributionPatchSchema,
   contributionLinkSchema,
   type ContributionCollection,
-} from '@peable.to/contracts';
+} from '@peable.to/contracts/contributions';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {

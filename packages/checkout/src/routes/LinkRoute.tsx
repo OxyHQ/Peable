@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { decimalContributionAmount, formatContributionAmount } from '@peable.to/contracts';
+import {
+  decimalContributionAmount,
+  formatContributionAmount,
+} from '@peable.to/contracts/contributions';
 import type { PublicPaymentLink } from '@peable.to/shared-types';
 import { BrandHeader } from '../components/BrandHeader';
 import { DisplayCurrency } from '../components/DisplayCurrency';

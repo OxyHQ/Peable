@@ -81,7 +81,7 @@ function issuer(ctx: z.RefinementCtx): { issue: Issue; failed: () => boolean } {
   return {
     issue: (path, message) => {
       failed = true;
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+      ctx.addIssue({ code: 'custom', path, message });
     },
     failed: () => failed,
   };
@@ -300,7 +300,7 @@ export const createPriceBodySchema = z
   .transform((input, ctx) => {
     if (input.transfer_lookup_key && input.lookup_key === undefined) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['transfer_lookup_key'],
         message: 'transfer_lookup_key needs a lookup_key',
       });

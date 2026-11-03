@@ -9,7 +9,7 @@ import {
   type ContributionLink,
   type ContributionList,
   type CreateContribution,
-} from '@peable.to/contracts';
+} from '@peable.to/contracts/contributions';
 import type { ListParams } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
@@ -85,4 +85,4 @@ export type {
   ContributionList,
   ContributionCollection,
   ContributionCollectionList,
-} from '@peable.to/contracts';
+} from '@peable.to/contracts/contributions';

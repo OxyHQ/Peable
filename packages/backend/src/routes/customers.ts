@@ -2,12 +2,23 @@
  * Customers (`cus_…`, ADR 0016) — Stripe's surface: create, retrieve, update,
  * delete, list (`email=` exact). A deleted customer is a tombstone that still
  * retrieves, as `{id, object: 'customer', deleted: true}`.
+ *
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `customerRoutes`): this file validates with those objects and decides
+ * nothing about the wire's shape.
  */
 import { findLiveTestClockForMerchant } from '../db/billingEngine/testClockRepository';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { z } from 'zod';
-import type { CreateCustomerParams } from '@peable.to/shared-types';
+import {
+  METADATA_LIMIT_MESSAGE,
+  createCustomerParams,
+  expandOnlyQuery,
+  listCustomersQuery,
+  toAddress,
+  toShipping,
+  updateCustomerParams,
+} from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
@@ -22,74 +33,11 @@ import {
   updateCustomerFields,
 } from '../services/customers/customerService';
 import { toCustomerDTO, toDeletedCustomerDTO } from '../lib/serialize';
-import {
-  addressSchema,
-  emailSchema,
-  shippingSchema,
-  toAddress,
-  toShipping,
-} from '../lib/addressSchema';
 import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  expandParam,
-  listQuerySchema,
-  parseQuery,
-  retrieveQuerySchema,
-} from '../lib/list';
-import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
+import { answerList, parseQuery } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
-
-/** `""` clears a field on an update, Stripe's rule. */
-const clearable = <T extends z.ZodType>(schema: T) => z.union([schema, z.literal('')]);
-
-const name = z.string().max(500);
-const phone = z.string().max(40);
-const description = z.string().max(1000);
-
-const createBodySchema = z
-  .object({
-    email: emailSchema.optional(),
-    name: name.optional(),
-    phone: phone.optional(),
-    description: description.optional(),
-    address: addressSchema.optional(),
-    shipping: shippingSchema.optional(),
-    invoice_settings: z
-      .object({ default_payment_method: z.string().min(1).max(255).optional() })
-      .strict()
-      .optional(),
-    metadata: metadataCreateSchema.optional(),
-    test_clock: z.string().min(1).max(255).optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CreateCustomerParams | 'expand', z.ZodType>)
-  .strict();
-
-const updateBodySchema = z
-  .object({
-    email: clearable(emailSchema).optional(),
-    name: clearable(name).optional(),
-    phone: clearable(phone).optional(),
-    description: clearable(description).optional(),
-    address: clearable(addressSchema).optional(),
-    shipping: clearable(shippingSchema).optional(),
-    invoice_settings: z
-      .object({ default_payment_method: clearable(z.string().min(1).max(255)).optional() })
-      .strict()
-      .optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listCustomersQuery = listQuerySchema({ email: z.string().min(1).max(512).optional() });
-const retrieveCustomerQuery = retrieveQuerySchema({});
 
 function clear<T>(value: T | '' | undefined): T | null | undefined {
   if (value === undefined) return undefined;
@@ -109,7 +57,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      const parsed = createBodySchema.safeParse(req.body ?? {});
+      const parsed = createCustomerParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -209,7 +157,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const query = parseQuery(req, res, retrieveCustomerQuery);
+      const query = parseQuery(req, res, expandOnlyQuery);
       if (!query) return;
       const expand = parseExpand(res, 'customer', query.expand, { list: false });
       if (!expand) return;
@@ -242,7 +190,7 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = updateBodySchema.safeParse(req.body ?? {});
+      const parsed = updateCustomerParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

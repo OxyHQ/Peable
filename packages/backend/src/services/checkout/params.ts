@@ -113,7 +113,7 @@ const customFieldSchema = z
   .strict()
   .superRefine((field, ctx) => {
     const issue = (path: string[], message: string) =>
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path, message });
+      ctx.addIssue({ code: 'custom', path, message });
     if (field.type === 'dropdown' && !field.dropdown) {
       issue(['dropdown'], 'a dropdown field needs dropdown.options');
     }
@@ -146,7 +146,7 @@ export const customFieldsSchema = z
   .superRefine((fields, ctx) => {
     const keys = fields.map((field) => field.key);
     if (new Set(keys).size !== keys.length) {
-      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'custom field keys must be unique' });
+      ctx.addIssue({ code: 'custom', message: 'custom field keys must be unique' });
     }
   });
 
@@ -260,7 +260,7 @@ const lineItemPriceDataSchema = z
   .superRefine((data, ctx) => {
     if ((data.product === undefined) === (data.product_data === undefined)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['product'],
         message: 'exactly one of product and product_data',
       });
@@ -279,7 +279,7 @@ export const sessionLineItemSchema = z
   .superRefine((line, ctx) => {
     if ((line.price === undefined) === (line.price_data === undefined)) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['price'],
         message: 'exactly one of price and price_data',
       });
@@ -314,7 +314,7 @@ function adjustableIssues(
   if (!adjustable.enabled) {
     if (adjustable.minimum !== undefined || adjustable.maximum !== undefined) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['adjustable_quantity', 'enabled'],
         message: 'minimum and maximum need adjustable_quantity.enabled',
       });
@@ -325,13 +325,13 @@ function adjustableIssues(
   if (!bounds) return;
   if (bounds.minimum > bounds.maximum) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['adjustable_quantity', 'minimum'],
       message: 'minimum cannot exceed maximum',
     });
   } else if (quantity < bounds.minimum || quantity > bounds.maximum) {
     ctx.addIssue({
-      code: z.ZodIssueCode.custom,
+      code: 'custom',
       path: ['quantity'],
       message: `quantity must be between ${bounds.minimum} and ${bounds.maximum}`,
     });
@@ -385,7 +385,7 @@ export const createSessionBodySchema = z
   .strict()
   .superRefine((body, ctx) => {
     const issue = (path: string, message: string) =>
-      ctx.addIssue({ code: z.ZodIssueCode.custom, path: [path], message });
+      ctx.addIssue({ code: 'custom', path: [path], message });
     const mode = body.mode ?? 'payment';
     if (mode === 'setup') {
       if (body.line_items) issue('line_items', 'a setup session has no line items');

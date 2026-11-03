@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import { z } from 'zod';
+import type { ErrorCode } from '@peable.to/contracts/vocabulary';
 import { sendError, sendValidationError } from '../lib/http';
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
 
@@ -23,7 +24,7 @@ function refuseOutsideBoundary(res: Response): void {
 }
 
 /** A failure behind the boundary, without echoing what failed (provider payloads stay out). */
-function unavailable(res: Response, code: string, message: string): void {
+function unavailable(res: Response, code: ErrorCode, message: string): void {
   sendError(res, 503, 'api_error', message, code);
 }
 

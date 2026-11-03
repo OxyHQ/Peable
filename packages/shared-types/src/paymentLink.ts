@@ -6,7 +6,7 @@
 // A contribution link (an Oxy organization's FairCoin collection,
 // `@peable.to/contracts`) is a payment link whose one line is the contribution
 // itself — a fixed amount, or one the payer chooses — rather than a price.
-import type { ContributionDetails } from '@peable.to/contracts';
+import type { ContributionDetails } from '@peable.to/contracts/contributions';
 import type { CheckoutBranding } from './branding';
 import type {
   CheckoutAdjustableQuantity,

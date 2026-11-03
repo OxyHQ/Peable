@@ -224,43 +224,10 @@ export interface PaymentIntentLastPaymentError {
   message: string;
 }
 
-/** A postal address — Stripe's shape. */
-export interface Address {
-  line1: string | null;
-  line2: string | null;
-  city: string | null;
-  state: string | null;
-  postal_code: string | null;
-  /** ISO 3166-1 alpha-2. */
-  country: string | null;
-}
+import type { Shipping, ShippingParams } from '@peable.to/contracts';
 
-export interface Shipping {
-  name: string;
-  phone: string | null;
-  address: Address;
-  carrier: string | null;
-  tracking_number: string | null;
-}
-
-/** An address as a request carries it: every field optional. */
-export interface AddressParams {
-  line1?: string;
-  line2?: string;
-  city?: string;
-  state?: string;
-  postal_code?: string;
-  country?: string;
-}
-
-/** Shipping as a request carries it: only `name` and `address` are required. */
-export interface ShippingParams {
-  name: string;
-  phone?: string;
-  address: AddressParams;
-  carrier?: string;
-  tracking_number?: string;
-}
+/** A postal address — Stripe's shape (the contract's). */
+export type { Address, AddressParams, Shipping, ShippingParams } from '@peable.to/contracts';
 
 /**
  * What the payer must do next (`status: 'requires_action'`).

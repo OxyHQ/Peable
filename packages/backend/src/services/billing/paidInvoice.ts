@@ -64,8 +64,8 @@ export async function readOwnedInvoiceState(
     invoice.amount_due !== invoice.total
   )
     throw new BillingError('invalid_provider_response', 502);
-  const page = (schema: z.ZodTypeAny) =>
-    z.object({ has_more: z.literal(false), data: z.array(schema).length(1) });
+  const page = <T extends z.ZodType>(schema: T) =>
+    z.object({ has_more: z.literal(false), data: z.tuple([schema]) });
   const line = page(
     z.object({
       id: ref,

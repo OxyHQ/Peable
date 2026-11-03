@@ -11,7 +11,10 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { contributionAmountSchema, contributionOperationKeySchema } from '@peable.to/contracts';
+import {
+  contributionAmountSchema,
+  contributionOperationKeySchema,
+} from '@peable.to/contracts/contributions';
 import { findBranding } from '../db/merchants/brandingRepository';
 import { findMerchantById, type MerchantRow } from '../db/merchants/merchantRepository';
 import {

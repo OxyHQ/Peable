@@ -28,6 +28,7 @@
  * watcher leaves the row alone.
  */
 import { randomBytes } from 'node:crypto';
+import type { ErrorCode } from '@peable.to/contracts/vocabulary';
 import type { SimulatedFaircoinOutcome } from '@peable.to/shared-types';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import { reportFaircoinBroadcast } from './faircoinBroadcast';
@@ -40,7 +41,7 @@ export type SimulationResult =
       readonly kind: 'refused';
       readonly status: 400 | 409;
       readonly message: string;
-      readonly code?: string;
+      readonly code?: ErrorCode;
     };
 
 /** A txid that names no transaction: see the module comment. */

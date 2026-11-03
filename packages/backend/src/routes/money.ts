@@ -223,14 +223,14 @@ const updateAccountBodySchema = z
               .superRefine((schedule, ctx) => {
                 if (schedule.weekly_anchor !== undefined && schedule.interval !== 'weekly') {
                   ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
+                    code: 'custom',
                     path: ['weekly_anchor'],
                     message: 'weekly_anchor is for a weekly schedule',
                   });
                 }
                 if (schedule.monthly_anchor !== undefined && schedule.interval !== 'monthly') {
                   ctx.addIssue({
-                    code: z.ZodIssueCode.custom,
+                    code: 'custom',
                     path: ['monthly_anchor'],
                     message: 'monthly_anchor is for a monthly schedule',
                   });

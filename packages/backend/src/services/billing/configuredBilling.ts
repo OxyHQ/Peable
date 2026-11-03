@@ -245,10 +245,10 @@ export async function configureBillingRuntime(
   }
   let entries: Record<string, unknown>[];
   try {
-    const requested = z.record(z.unknown()).parse(JSON.parse(raw));
+    const requested = z.record(z.string(), z.unknown()).parse(JSON.parse(raw));
     entries = Object.hasOwn(requested, 'rails')
       ? z
-          .object({ rails: z.array(z.record(z.unknown())).min(1).max(8) })
+          .object({ rails: z.array(z.record(z.string(), z.unknown())).min(1).max(8) })
           .strict()
           .parse(requested).rails
       : [requested];

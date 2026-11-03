@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response, RequestHandler } from 'express';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { ProviderError } from '../services/providers/provider';
+import { type ErrorCode, type ErrorType, errorDocUrl } from '@peable.to/contracts/vocabulary';
 import { redactProviderMessage } from '../services/providers/redact';
 import { requestIdOf } from './requestId';
 
@@ -41,6 +42,9 @@ export function sendProviderError(res: Response, error: ProviderError): void {
  *   (`account_not_ready`, `idempotency_error`, …).
  * - `param` names the offending request field in bracket notation
  *   (`metadata[order_id]`, `line_items[0][price]`), when there is one.
+ * - `doc_url` is the code's entry on https://docs.peable.to/errors. `code` is
+ *   an `ErrorCode`, the contract's closed list the errors page is rendered
+ *   from, so a code without documentation does not compile.
  * - `request_id` is the `Request-Id` of this response, so support can find it.
  *
  * 422 is never used: a request that is well-formed JSON but invalid is a 400,
@@ -49,20 +53,35 @@ export function sendProviderError(res: Response, error: ProviderError): void {
 export function sendError(
   res: Response,
   status: number,
-  type: string,
+  type: ErrorType,
   message: string,
-  code?: string,
+  code?: ErrorCode,
   param?: string,
+  extra?: { readonly decline_code?: string },
 ): void {
-  res.status(status).json({
+  res.status(status).json(errorBody(res, type, message, code, param, extra));
+}
+
+/** The envelope `sendError` answers with, for a caller that writes the response itself. */
+export function errorBody(
+  res: Response,
+  type: ErrorType,
+  message: string,
+  code?: ErrorCode,
+  param?: string,
+  extra?: { readonly decline_code?: string },
+) {
+  return {
     error: {
       type,
       ...(code ? { code } : {}),
+      ...(extra?.decline_code ? { decline_code: extra.decline_code } : {}),
       ...(param ? { param } : {}),
       message,
+      ...(code ? { doc_url: errorDocUrl(code) } : {}),
       request_id: requestIdOf(res) ?? null,
     },
-  });
+  };
 }
 
 /** A Zod issue path in Stripe's bracket notation: `['metadata','a']` → `metadata[a]`. */

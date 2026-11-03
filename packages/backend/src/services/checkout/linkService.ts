@@ -81,21 +81,21 @@ const afterCompletionSchema = z
   .superRefine((value, ctx) => {
     if (value.type === 'redirect' && !value.redirect) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['redirect'],
         message: 'redirect.url is required',
       });
     }
     if (value.type === 'redirect' && value.hosted_confirmation) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['hosted_confirmation'],
         message: 'hosted_confirmation is for type hosted_confirmation',
       });
     }
     if (value.type === 'hosted_confirmation' && value.redirect) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['redirect'],
         message: 'redirect is for type redirect',
       });

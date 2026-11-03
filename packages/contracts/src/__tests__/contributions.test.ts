@@ -6,7 +6,7 @@ import {
   createContributionSchema,
   decimalContributionAmount,
   formatContributionAmount,
-} from '../index';
+} from '../contributions';
 test('FAIR precision uses exact integer arithmetic across all eight decimals', () => {
   expect(decimalContributionAmount('0.00000001')).toBe('1');
   expect(decimalContributionAmount('1.25000001')).toBe('125000001');

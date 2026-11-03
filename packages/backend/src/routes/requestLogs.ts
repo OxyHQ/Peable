@@ -33,7 +33,7 @@ import { resolveMerchant } from './paymentIntents';
 const statusFilter = z.union([
   z.coerce.number().int().min(100).max(599),
   z.enum(['2xx', '3xx', '4xx', '5xx']),
-]) as z.ZodType<RequestLogStatusFilter, z.ZodTypeDef, unknown>;
+]) as z.ZodType<RequestLogStatusFilter, unknown>;
 
 const requestLogFilters = {
   status: statusFilter.optional(),

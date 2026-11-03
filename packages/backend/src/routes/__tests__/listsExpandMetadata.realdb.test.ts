@@ -316,7 +316,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
 
       const bad = await call('GET', '/v1/payment_intents?created[after]=1');
       expect(bad.status).toBe(400);
-      expect(bad.json.error?.param).toBe('created');
+      expect(bad.json.error?.param).toBe('created[after]');
     });
   });
 

@@ -10,7 +10,7 @@ export {
   decimalsFor,
   isCurrencyCode,
 } from './money';
-export type { NetworkType } from './network';
+export { NETWORK_TYPES, type NetworkType } from './network';
 export type { ExpandParams, List, ListParams, RangeQuery } from './list';
 export {
   type Address,
@@ -46,16 +46,19 @@ export {
   canStillBePaid,
   isValidStatusTransition,
 } from './paymentIntent';
-export type { CardDetails, Charge, ChargeOutcome } from './charge';
+export type { Charge, ChargeOutcome } from './charge';
 export type {
   CreateCustomerParams,
   Customer,
   DeletedCustomer,
+  ListCustomersParams,
   UpdateCustomerParams,
 } from './customer';
 export type {
-  AttachPaymentMethodParams,
   BillingDetails,
+  CardDetails,
+  DetachPaymentMethodParams,
+  ListPaymentMethodsParams,
   PaymentMethod,
   UpdatePaymentMethodParams,
 } from './paymentMethod';

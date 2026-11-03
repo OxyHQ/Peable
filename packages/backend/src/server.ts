@@ -1,4 +1,4 @@
-import { contributionOpenApi } from '@peable.to/contracts/openapi';
+import { buildOpenApiDocument } from '@peable.to/contracts/openapi';
 import { startFaircoinRenewalWorker } from './services/billing/faircoin-renewal-worker';
 import {
   configureBillingRuntime,
@@ -344,7 +344,10 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   registerSubscriptionCheckoutFulfiller(billingEngineCheckoutFulfiller);
   app.use(createBillingEngineRouter({ requireMerchant }));
   app.use(createPublicBillingRouter({ publicRateLimit }));
-  app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
+  // The whole public API's OpenAPI 3.1 document, generated from the contracts
+  // once per process (ADR 0014 D5); `docs/openapi.json` is the committed copy.
+  const openApiDocument = buildOpenApiDocument();
+  app.get('/openapi.json', (_req, res) => res.json(openApiDocument));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   // Checkout (Orbit Phase 3): sessions price with Peable Tax when asked to.
   const checkout = { tax: deps.taxService };

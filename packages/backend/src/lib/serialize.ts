@@ -19,7 +19,7 @@ import type {
   WebhookEvent,
 } from '@peable.to/shared-types';
 import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/shared-types';
-import type { ContributionDetails } from '@peable.to/contracts';
+import type { ContributionDetails } from '@peable.to/contracts/contributions';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';

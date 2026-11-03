@@ -68,7 +68,7 @@ const createBodySchema = z
           (restrictions.minimum_amount_currency === undefined)
         ) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: ['minimum_amount_currency'],
             message: 'minimum_amount and minimum_amount_currency go together',
           });

@@ -108,11 +108,7 @@ function guarded(handler: (req: Request, res: Response) => Promise<void>): Reque
   });
 }
 
-function body<T>(
-  req: Request,
-  res: Response,
-  schema: z.ZodType<T, z.ZodTypeDef, unknown>,
-): T | null {
+function body<T>(req: Request, res: Response, schema: z.ZodType<T, unknown>): T | null {
   const parsed = schema.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);

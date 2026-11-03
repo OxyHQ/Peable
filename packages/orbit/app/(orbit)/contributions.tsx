@@ -10,7 +10,7 @@ import {
   type ContributionCollectionList,
   type ContributionLink,
   type CreateContribution,
-} from '@peable.to/contracts';
+} from '@peable.to/contracts/contributions';
 import type { ContributionScope } from '@peable.to/sdk/contributions';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';

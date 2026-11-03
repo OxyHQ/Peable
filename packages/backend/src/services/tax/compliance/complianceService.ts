@@ -288,7 +288,7 @@ const resolveSchema = z
   .superRefine((input, ctx) => {
     if ((input.decision === 'not_required' || input.decision === 'accepted_risk') && !input.note)
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['note'],
         message: `a ${input.decision} decision records the owner's reason in note`,
       });

@@ -1,4 +1,7 @@
-import { contributionCollectionListSchema, contributionListSchema } from '@peable.to/contracts';
+import {
+  contributionCollectionListSchema,
+  contributionListSchema,
+} from '@peable.to/contracts/contributions';
 import type { PublicPaymentLink } from '@peable.to/shared-types';
 import { afterAll, beforeAll, expect, test } from 'bun:test';
 import express, { type RequestHandler } from 'express';

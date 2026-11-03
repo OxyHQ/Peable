@@ -4,19 +4,7 @@
 // side is `PaymentIntent.faircoin`.
 import type { CurrencyCode } from './money';
 import type { PaymentIntent } from './paymentIntent';
-import type { BillingDetails } from './paymentMethod';
-
-/** Card details safe to show: never the number, never the CVC. */
-export interface CardDetails {
-  brand: string | null;
-  last4: string | null;
-  exp_month: number | null;
-  exp_year: number | null;
-  /** ISO 3166-1 alpha-2 of the issuer. */
-  country: string | null;
-  /** `credit`, `debit`, `prepaid` or `unknown`. */
-  funding: string | null;
-}
+import type { BillingDetails, CardDetails } from './paymentMethod';
 
 export interface ChargeOutcome {
   /** `approved_by_network`, `declined_by_network`, `not_sent_to_network`, `reversed_after_approval`. */
