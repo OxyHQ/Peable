@@ -200,6 +200,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       }),
       listInvoiceCreditNotes: async () => ({ has_more: false, data: [] }),
       async createCheckout(params) {
+        expect(params.adaptive_pricing).toEqual({ enabled: false });
         record('checkout', params);
         // What Stripe computes from the bound price and the manual rate.
         const amountTax = Math.round((2999 * rate) / 100);

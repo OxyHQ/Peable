@@ -196,6 +196,8 @@ export function createStripePeableTaxCheckout(options: {
       const raw = await client.createCheckout(
         {
           mode: 'subscription',
+          // The signed quote's currency must survive hosted checkout unchanged.
+          adaptive_pricing: { enabled: false },
           customer: checkout.providerCustomerId,
           line_items: [
             {
