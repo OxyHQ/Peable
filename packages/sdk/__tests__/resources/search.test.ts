@@ -4,16 +4,12 @@
  * encoded the way the gateway reads them, and auto-pagination follows
  * `next_page` — with the SAME query — until it is `null`.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type { SearchResult } from '@peable.to/shared-types';
 import { Peable } from '../../src';
 import { PeableAPIError } from '../../src/core/errors';
-import { InvoicesResource, SubscriptionsResource } from '../../src/resources/billingEngine';
-import { ChargesResource } from '../../src/resources/charges';
 import { GeneratedClient } from '../../src/generated/resources';
-import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
-import { PricesResource, ProductsResource } from '../../src/resources/catalog';
-import { RefundsResource } from '../../src/resources/refunds';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import { buildTestClient, serviceTokenMintResponse } from '../support/testGateway';
 
@@ -45,14 +41,14 @@ describe('search', () => {
     );
     const client = buildTestClient(mock.fetch);
     const params = { query: 'created>0' };
-    await new PaymentIntentsResource(client).search(params);
-    await new ChargesResource(client).search(params);
+    await resources(client).paymentIntents.search(params);
+    await resources(client).charges.search(params);
     await new GeneratedClient(client).customers.search(params);
-    await new ProductsResource(client).search(params);
-    await new PricesResource(client).search(params);
-    await new RefundsResource(client).search(params);
-    await new SubscriptionsResource(client).search(params);
-    await new InvoicesResource(client).search(params);
+    await resources(client).products.search(params);
+    await resources(client).prices.search(params);
+    await resources(client).refunds.search(params);
+    await resources(client).subscriptions.search(params);
+    await resources(client).invoices.search(params);
     expect(callsOf(mock.requests).map((r) => new URL(r.url).pathname)).toEqual([
       '/v1/payment_intents/search',
       '/v1/charges/search',
@@ -116,7 +112,7 @@ describe('search', () => {
         ? serviceTokenMintResponse()
         : { status: 200, json: { ...result([{ id: 'pi_1' }], null), total_count: 1 } },
     );
-    const page = await new PaymentIntentsResource(buildTestClient(mock.fetch)).search({
+    const page = await resources(buildTestClient(mock.fetch)).paymentIntents.search({
       query: 'status:"succeeded"',
       expand: ['total_count'],
     });
@@ -131,7 +127,7 @@ describe('search', () => {
         ? serviceTokenMintResponse()
         : { status: 200, json: result([{ id: 'ch_1' }], 'tok_same') },
     );
-    const charges = new ChargesResource(buildTestClient(mock.fetch));
+    const charges = resources(buildTestClient(mock.fetch)).charges;
     await expect(
       charges.search({ query: 'refunded:true' }).autoPagingToArray({ limit: 100 }),
     ).rejects.toBeInstanceOf(PeableAPIError);

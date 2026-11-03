@@ -98,23 +98,26 @@ type AtPath<T, P extends string> = P extends `${infer Head}.${infer Rest}`
     ? T[P]
     : never;
 
-type Generated<K extends OperationId> = RouteMap[K]['sdk'] extends string
-  ? AtPath<GeneratedResources, RouteMap[K]['sdk']>
+/** The `sdk` path of a generated operation: a `service` route that names one. */
+type SdkOf<K extends OperationId> = RouteMap[K] extends { auth: 'service'; sdk: infer S extends string }
+  ? S
   : never;
+
+type Generated<K extends OperationId> = AtPath<GeneratedResources, SdkOf<K>>;
 
 type MethodFn = (...args: never[]) => unknown;
 
 /** Every generated operation whose parameters or result differ from its contract's. */
 type Mismatched = {
-  [K in OperationId]: RouteMap[K]['sdk'] extends string
-    ? Generated<K> extends MethodFn
+  [K in OperationId]: [SdkOf<K>] extends [never]
+    ? never
+    : Generated<K> extends MethodFn
       ? Equals<Parameters<Generated<K>>, ArgsOf<RouteMap[K]>> extends true
         ? Equals<ReturnType<Generated<K>>, ResultOf<RouteMap[K]>> extends true
           ? never
           : K
         : K
-      : K
-    : never;
+      : K;
 }[OperationId];
 
 // On a mismatch the error names the operations: "Type 'true' is not assignable

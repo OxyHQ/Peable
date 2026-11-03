@@ -20,6 +20,10 @@
 // - whether `params` is optional: when the input object has no required key;
 // - the SSE event name of a stream: its event schema's `object` literal.
 //
+// Only `service` routes are generated: the server SDK authenticates with a
+// service token, so a `public` (payer) or `user` (Oxy session) route is never
+// a method here, even when it names an `sdk` path.
+//
 // `__tests__/generated/types.test.ts` proves every generated signature equals
 // the one derived from the contract types alone.
 
@@ -160,6 +164,9 @@ function specOf(route: RouteContract, sdk: string): RouteSpec {
     kind,
     account: route.peableAccount === true,
     ...(streamEvent === undefined ? {} : { streamEvent }),
+    ...('kind' in route.response && route.response.kind === 'binary'
+      ? { accept: route.response.contentType }
+      : {}),
   };
 }
 
@@ -178,7 +185,10 @@ export function buildTree(routes: readonly RouteContract[]): {
   const root = namespace([]);
   const specs: RouteSpec[] = [];
   for (const route of routes) {
-    if (route.sdk === undefined) continue;
+    // The server SDK speaks with a service token: a payer (`public`) route
+    // belongs to the browser entry and a `user` route to an Oxy session,
+    // whatever `sdk` name they carry.
+    if (route.sdk === undefined || route.auth !== 'service') continue;
     const segments = route.sdk.split('.');
     if (segments.length < 2 || !segments.every((segment) => IDENTIFIER.test(segment))) {
       throw new Error(`${route.operationId}: sdk '${route.sdk}' is not a dotted method path`);

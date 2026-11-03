@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { resources } from '../support/testGateway';
 import type { MerchantBranding, MerchantEmailSettings } from '@peable.to/shared-types';
-import { MerchantsResource } from '../../src/resources/merchants';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
   buildTestClient,
@@ -40,7 +40,7 @@ function resourceAnswering(json: unknown) {
     if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
     return { status: 200, json };
   });
-  return { merchants: new MerchantsResource(buildTestClient(fetchImpl)), requests };
+  return { merchants: resources(buildTestClient(fetchImpl)).merchants, requests };
 }
 
 describe('merchants.branding', () => {

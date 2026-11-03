@@ -1,8 +1,16 @@
 import { describe, expect, it } from 'bun:test';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { canonicalBillingTaxQuote, type BillingTaxQuote } from '@peable.to/shared-types';
-import { BillingResource } from '../../src/resources/billing';
-import type { RestClient, RestClientRequestOptions } from '../../src/core/client';
+import type { GatewayClient, RestClient, RestClientRequestOptions } from '../../src/core/client';
+import { withBillingAuthority } from '../../src/overlays/billingAuthority';
+import { resources } from '../support/testGateway';
+
+/** `peable.billing` over `client`, verifying with `taxQuoteAuthorityKeys`. */
+function QuoteBilling(client: RestClient, taxQuoteAuthorityKeys?: Readonly<Record<string, string>>) {
+  return withBillingAuthority(resources(client as GatewayClient).billing, {
+    ...(taxQuoteAuthorityKeys === undefined ? {} : { taxQuoteAuthorityKeys }),
+  });
+}
 
 function fixture() {
   const keys = generateKeyPairSync('ed25519');
@@ -68,12 +76,12 @@ function fixture() {
 describe('pinned SDK tax quote authority', () => {
   it('remains closed without configured issuer keys and uses only the Peable SDK route', async () => {
     const value = fixture();
-    await expect(new BillingResource(value.client).createTaxQuote(value.request)).rejects.toThrow(
+    await expect(QuoteBilling(value.client).createTaxQuote(value.request)).rejects.toThrow(
       'unconfigured',
     );
     expect(value.paths).toHaveLength(0);
     expect(
-      await new BillingResource(value.client, undefined, value.pinned).createTaxQuote(
+      await QuoteBilling(value.client, value.pinned).createTaxQuote(
         value.request,
       ),
     ).toEqual(value.result);
@@ -81,7 +89,7 @@ describe('pinned SDK tax quote authority', () => {
   });
   it('rejects pinned-signature tampering, foreign evidence and expired signed quotations', async () => {
     const value = fixture();
-    const resource = new BillingResource(value.client, undefined, value.pinned);
+    const resource = QuoteBilling(value.client, value.pinned);
     value.result.quote.invoice_issuer_id = 'tampered_issuer';
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
     value.resign();

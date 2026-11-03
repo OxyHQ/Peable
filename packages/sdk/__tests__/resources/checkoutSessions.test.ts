@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { resources } from '../support/testGateway';
 import { PeableIdempotencyError } from '../../src/core/errors';
-import { CheckoutResource } from '../../src/resources/checkoutSessions';
 import { checkoutSessionFixture, lineItemFixture } from '../support/checkoutFixture';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
@@ -22,7 +22,7 @@ describe('CheckoutResource.sessions', () => {
         json: { ...checkoutSessionFixture, id: 'cs_1' },
       };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     const params = {
       line_items: [
@@ -64,7 +64,7 @@ describe('CheckoutResource.sessions', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 201, json: { id: 'cs_1', object: 'checkout_session' } };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     await checkout.sessions.create(
       { line_items: [{ price: 'price_1', quantity: 1 }] },
@@ -101,7 +101,7 @@ describe('CheckoutResource.sessions', () => {
       }
       return { status: replay ? 200 : 201, json: { id, object: 'checkout_session' } };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
     const params = { line_items: [{ price: 'price_1', quantity: 1 }] };
 
     // The lost response is retried automatically, under the same key.
@@ -129,7 +129,7 @@ describe('CheckoutResource.sessions', () => {
         },
       };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     const failure = checkout.sessions.create(
       { line_items: [{ price: 'price_2', quantity: 1 }] },
@@ -146,7 +146,7 @@ describe('CheckoutResource.sessions', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { id: 'cs_1', object: 'checkout_session' } };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     await checkout.sessions.retrieve('cs_1');
 
@@ -161,7 +161,7 @@ describe('CheckoutResource.sessions', () => {
         json: { object: 'list', data: [], has_more: false, url: '/v1/checkout_sessions' },
       };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     await checkout.sessions.list({
       payment_link: 'link_1',
@@ -185,7 +185,7 @@ describe('CheckoutResource.sessions', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { ...checkoutSessionFixture, status: 'expired' } };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     const session = await checkout.sessions.expire('cs_fixture');
 
@@ -218,7 +218,7 @@ describe('CheckoutResource.sessions', () => {
       page += 1;
       return { status: 200, json };
     });
-    const checkout = new CheckoutResource(buildTestClient(fetchImpl));
+    const checkout = resources(buildTestClient(fetchImpl)).checkout;
 
     const items = await checkout.sessions
       .listLineItems('cs_1', { expand: ['data.price'] })

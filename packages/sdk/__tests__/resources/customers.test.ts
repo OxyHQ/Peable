@@ -2,10 +2,10 @@
  * Customers, payment methods and SetupIntents (ADR 0016) — the routes and the
  * shapes an integrator would otherwise have to guess.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type { Customer, PaymentMethod, SetupIntent } from '@peable.to/shared-types';
 import { GeneratedClient } from '../../src/generated/resources';
-import { SetupIntentsResource } from '../../src/resources/setupIntents';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
   buildTestClient,
@@ -151,7 +151,7 @@ describe('paymentMethods (generated)', () => {
 describe('SetupIntentsResource', () => {
   test('creates for a customer, retrieves, lists and cancels', async () => {
     const created = gateway(SETUP, 201);
-    await new SetupIntentsResource(buildTestClient(created.fetch)).create({
+    await resources(buildTestClient(created.fetch)).setupIntents.create({
       customer: 'cus_1',
       usage: 'off_session',
     });
@@ -162,7 +162,7 @@ describe('SetupIntentsResource', () => {
     });
 
     const retrieved = gateway(SETUP);
-    await new SetupIntentsResource(buildTestClient(retrieved.fetch)).retrieve('seti_1', {
+    await resources(buildTestClient(retrieved.fetch)).setupIntents.retrieve('seti_1', {
       expand: ['payment_method'],
     });
     expect(callOf(retrieved.requests)?.url).toBe(
@@ -170,13 +170,13 @@ describe('SetupIntentsResource', () => {
     );
 
     const listed = gateway({ object: 'list', data: [SETUP], has_more: false });
-    await new SetupIntentsResource(buildTestClient(listed.fetch)).list({ customer: 'cus_1' });
+    await resources(buildTestClient(listed.fetch)).setupIntents.list({ customer: 'cus_1' });
     expect(callOf(listed.requests)?.url).toBe(
       `${TEST_GATEWAY_URL}/v1/setup_intents?customer=cus_1`,
     );
 
     const canceled = gateway({ ...SETUP, status: 'canceled', cancellation_reason: 'abandoned' });
-    const answer = await new SetupIntentsResource(buildTestClient(canceled.fetch)).cancel(
+    const answer = await resources(buildTestClient(canceled.fetch)).setupIntents.cancel(
       'seti_1',
       {
         cancellation_reason: 'abandoned',

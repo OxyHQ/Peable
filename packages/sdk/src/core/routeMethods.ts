@@ -64,6 +64,8 @@ export interface RouteSpec {
   readonly account: boolean;
   /** On a stream: the SSE `event:` name of the objects it carries. */
   readonly streamEvent?: string;
+  /** On a binary route: the content type it answers, sent as `Accept`. */
+  readonly accept?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,7 +217,10 @@ function routeMethod(client: GatewayClient, spec: RouteSpec): (...args: unknown[
           client.request(spec.method, pathOf(), requestOf(spec, params, options)))();
       case 'binary':
         return (async () =>
-          client.download(spec.method, pathOf(), requestOf(spec, params, options)))();
+          client.download(spec.method, pathOf(), {
+            ...requestOf(spec, params, options),
+            ...(spec.accept === undefined ? {} : { headers: { Accept: spec.accept } }),
+          }))();
       case 'list':
         return listPromise(
           async (page: Record<string, unknown>) =>

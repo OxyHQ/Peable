@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PaymentLinksResource } from '../../src/resources/paymentLinks';
+import { resources } from '../support/testGateway';
 import { lineItemFixture, paymentLinkFixture } from '../support/checkoutFixture';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
@@ -18,7 +18,7 @@ describe('PaymentLinksResource (v2)', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 201, json: paymentLinkFixture };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
     const params = {
       line_items: [
         {
@@ -52,7 +52,7 @@ describe('PaymentLinksResource (v2)', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 201, json: paymentLinkFixture };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
 
     await resource.create(
       { line_items: [{ price: 'price_fixture', quantity: 1 }] },
@@ -67,7 +67,7 @@ describe('PaymentLinksResource (v2)', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: paymentLinkFixture };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
 
     await resource.retrieve('link_1');
 
@@ -79,7 +79,7 @@ describe('PaymentLinksResource (v2)', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { object: 'list', data: [], has_more: false } };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
 
     await resource.list({ limit: 20, starting_after: 'link_0', active: true });
 
@@ -95,7 +95,7 @@ describe('PaymentLinksResource (v2)', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { ...paymentLinkFixture, active: false } };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
 
     await resource.update('link_1', { active: false, restrictions: '' });
 
@@ -113,7 +113,7 @@ describe('PaymentLinksResource (v2)', () => {
         json: { object: 'list', data: [lineItemFixture], has_more: false, url: '' },
       };
     });
-    const resource = new PaymentLinksResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).paymentLinks;
 
     const page = await resource.listLineItems('link_1', { expand: ['data.price'] });
 

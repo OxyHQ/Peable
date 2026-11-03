@@ -7,6 +7,7 @@
  * to guess — and that nothing in the SDK can carry a seller's key: the
  * platform never supplies one.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import {
   canExpire,
@@ -18,12 +19,6 @@ import {
 import { Peable } from '../../src';
 import { paymentIntentFixture } from '../support/intentFixture';
 import { requirementsFixture } from '../support/moneyFixtures';
-import {
-  AccountLinksResource,
-  ConnectedAccountsResource,
-} from '../../src/resources/connectedAccounts';
-import { CheckoutSessionsResource } from '../../src/resources/checkoutSessions';
-import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
 import { WebhooksResource } from '../../src/resources/webhooks';
 import { PeableInvalidRequestError } from '../../src/core/errors';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
@@ -95,17 +90,18 @@ function bodyOf(request: CapturedRequest): unknown {
 }
 
 describe('Peable — the Stripe-named Connect namespaces', () => {
-  test('`accounts` IS `connectedAccounts`, and `accountLinks` exists', () => {
+  test('`connectedAccounts` and `accountLinks` exist; the `accounts` alias is gone', () => {
     const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
-    expect(peable.accounts).toBe(peable.connectedAccounts);
-    expect(peable.accountLinks).toBeInstanceOf(AccountLinksResource);
+    expect(typeof peable.connectedAccounts.create).toBe('function');
+    expect(typeof peable.accountLinks.create).toBe('function');
+    expect('accounts' in peable).toBe(false);
   });
 });
 
 describe('accounts', () => {
   test('opens a FairCoin-only seller: network and Oxy user, no key and no card fields', async () => {
     const { fetch: fetchImpl, requests } = gateway(SELLER, 201);
-    const accounts = new ConnectedAccountsResource(buildTestClient(fetchImpl));
+    const accounts = resources(buildTestClient(fetchImpl)).connectedAccounts;
 
     const account = await accounts.create({
       external_ref: 'store_42',
@@ -124,11 +120,11 @@ describe('accounts', () => {
 
   test('retrieves and lists', async () => {
     const one = gateway(SELLER);
-    await new ConnectedAccountsResource(buildTestClient(one.fetch)).retrieve('ca_seller');
+    await resources(buildTestClient(one.fetch)).connectedAccounts.retrieve('ca_seller');
     expect(callOf(one.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/connected_accounts/ca_seller`);
 
     const page = gateway({ object: 'list', data: [SELLER], has_more: false });
-    const list = await new ConnectedAccountsResource(buildTestClient(page.fetch)).list({
+    const list = await resources(buildTestClient(page.fetch)).connectedAccounts.list({
       limit: 10,
     });
     expect(list.data[0]?.rails).toEqual(['faircoin']);
@@ -145,12 +141,11 @@ describe('accountLinks', () => {
       expires_at: 1792112400,
     };
     const { fetch: fetchImpl, requests } = gateway(link, 201);
-    const links = new AccountLinksResource(
-      new ConnectedAccountsResource(buildTestClient(fetchImpl)),
-    );
+    // A seller's link is the seller's own route; `accountLinks.create` is the
+    // merchant's own fiat account (or a seller's with `peableAccount`).
+    const accounts = resources(buildTestClient(fetchImpl)).connectedAccounts;
 
-    const created = await links.create({
-      account: 'ca_seller',
+    const created = await accounts.createAccountLink('ca_seller', {
       rail: 'faircoin',
       return_url: 'https://mercaria.co/sell/payments/done',
       refresh_url: 'https://mercaria.co/sell/payments/refresh',
@@ -171,7 +166,7 @@ describe('accountLinks', () => {
 describe('payments on behalf of a seller', () => {
   test('paymentIntents.create sends connected_account and an explicit FairCoin rail', async () => {
     const { fetch: fetchImpl, requests } = gateway(ON_BEHALF, 201);
-    const intents = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const intents = resources(buildTestClient(fetchImpl)).paymentIntents;
 
     const intent = await intents.create(
       {
@@ -192,7 +187,7 @@ describe('payments on behalf of a seller', () => {
 
   test("lists one seller's payments", async () => {
     const { fetch: fetchImpl, requests } = gateway({ object: 'list', data: [], has_more: false });
-    await new PaymentIntentsResource(buildTestClient(fetchImpl)).list({
+    await resources(buildTestClient(fetchImpl)).paymentIntents.list({
       connected_account: 'ca_seller',
     });
     expect(callOf(requests).url).toBe(
@@ -205,7 +200,7 @@ describe('payments on behalf of a seller', () => {
       { id: 'cs_1', connected_account: 'ca_seller' },
       201,
     );
-    await new CheckoutSessionsResource(buildTestClient(fetchImpl)).create({
+    await resources(buildTestClient(fetchImpl)).checkout.sessions.create({
       line_items: [{ price: 'price_fair', quantity: 1 }],
       connected_account: 'ca_seller',
     });
@@ -223,7 +218,7 @@ describe('payments on behalf of a seller', () => {
       },
       409,
     );
-    const intents = new PaymentIntentsResource(buildTestClient(fetchImpl));
+    const intents = resources(buildTestClient(fetchImpl)).paymentIntents;
     const error = await intents
       .create(
         { amount: '1', network: 'testnet', connected_account: 'ca_seller' },
