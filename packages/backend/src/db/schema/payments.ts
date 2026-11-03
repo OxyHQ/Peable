@@ -1,4 +1,3 @@
-import type { ContributionDetails } from '@peable.to/contracts';
 import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 import {
@@ -280,7 +279,7 @@ export const paymentIntents = pgTable(
      * gateway can make: the second needs an FX conversion at settlement time
      * that nothing here performs, and would quietly store an amount whose unit
      * disagrees with the coins that arrive. `assertRailCurrency` in
-     * `services/createIntent.ts` refuses both with a 422; this is the same rule
+     * `services/createIntent.ts` refuses both with a 400; this is the same rule
      * where a write that skipped it still has to pass.
      */
     check(
@@ -518,6 +517,23 @@ export const checkoutSessions = pgTable(
 );
 
 /**
+ * A contribution link's details AS STORED in `payment_links.contribution`.
+ *
+ * The storage shape, not the wire's: the keys are the ones
+ * `payment_links_contribution_shape` reads (`organizationId`, `amountMode`) and
+ * `expiresAt` is ISO-8601. The wire's `ContributionDetails`
+ * (`@peable.to/contracts`, snake_case, Unix seconds) is rendered from it by
+ * `toContributionDetails` in `lib/serialize.ts`, so a wire change never reaches
+ * a CHECK constraint.
+ */
+export interface StoredContribution {
+  readonly organizationId: string;
+  readonly purpose: string;
+  readonly amountMode: 'fixed' | 'free';
+  readonly expiresAt: string | null;
+}
+
+/**
  * A shareable, reusable generator of payment intents.
  *
  * A link's price is immutable once shared: only `active`, `metadata` and
@@ -539,7 +555,7 @@ export const paymentLinks = pgTable(
     rail: text().notNull().default('faircoin'),
     /** FairCoin rail only — NULL on a card link. See ADR 0001 D6. */
     network: text(),
-    contribution: jsonb().$type<ContributionDetails>(),
+    contribution: jsonb().$type<StoredContribution>(),
     contributionKey: text(),
     active: boolean().notNull().default(true),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),

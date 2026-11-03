@@ -45,6 +45,23 @@ export function createInternalErrorHandler(
       res.end();
       return;
     }
+    // A body the JSON parser refused (malformed, or over the size limit) is the
+    // caller's mistake, not ours: body-parser marks it with a 4xx `status` and
+    // `expose: true`. Answered as the request error it is, in the one envelope.
+    const status = clientErrorStatus(err);
+    if (status !== null) {
+      res.status(status).json({
+        error: {
+          type: 'invalid_request_error',
+          message:
+            status === 413
+              ? 'The request body is too large.'
+              : 'The request body could not be parsed.',
+          request_id: requestId ?? null,
+        },
+      });
+      return;
+    }
     res.status(500).json({
       error: {
         type: 'api_error',
@@ -53,6 +70,15 @@ export function createInternalErrorHandler(
       },
     });
   };
+}
+
+/** The 4xx a body parser attached to its error, or `null` for any other error. */
+function clientErrorStatus(err: unknown): number | null {
+  if (typeof err !== 'object' || err === null) return null;
+  const { status, expose } = err as { status?: unknown; expose?: unknown };
+  return expose === true && typeof status === 'number' && status >= 400 && status < 500
+    ? status
+    : null;
 }
 
 function defaultLog(requestId: string | undefined, req: Request, err: unknown): void {

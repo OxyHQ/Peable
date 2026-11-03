@@ -123,8 +123,8 @@ test('normal flow: a single connection and a single subscribe succeed', async ()
   }
 
   const ack = await result.socket.emitWithAck('subscribe', {
-    intentId: INTENT_ID,
-    clientSecret: CLIENT_SECRET,
+    intent_id: INTENT_ID,
+    client_secret: CLIENT_SECRET,
   });
   expect(ack.ok).toBe(true);
 
@@ -138,8 +138,8 @@ test('authed flow: a connection presenting a valid identity token still connects
   }
 
   const ack = await result.socket.emitWithAck('subscribe', {
-    intentId: INTENT_ID,
-    clientSecret: CLIENT_SECRET,
+    intent_id: INTENT_ID,
+    client_secret: CLIENT_SECRET,
   });
   expect(ack.ok).toBe(true);
 
@@ -213,16 +213,16 @@ test('per-socket subscribe throttle: exceeding the cap rejects further subscribe
   // Spend the whole per-socket budget on otherwise-valid subscribe calls.
   for (let i = 0; i < SUBSCRIBE_MAX_PER_WINDOW; i += 1) {
     const ack = await socket.emitWithAck('subscribe', {
-      intentId: INTENT_ID,
-      clientSecret: CLIENT_SECRET,
+      intent_id: INTENT_ID,
+      client_secret: CLIENT_SECRET,
     });
     expect(ack.ok).toBe(true);
   }
 
   // One more is over budget — throttled, not a capability failure.
   const throttledAck = await socket.emitWithAck('subscribe', {
-    intentId: INTENT_ID,
-    clientSecret: CLIENT_SECRET,
+    intent_id: INTENT_ID,
+    client_secret: CLIENT_SECRET,
   });
   expect(throttledAck.ok).toBe(false);
   expect(socket.connected).toBe(true);

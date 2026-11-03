@@ -163,14 +163,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
   test('refunds a payment and reports the public ids only', async () => {
     const pi = await settledIntent('10000');
     const { status, json } = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_r1',
+      payment_intent_id: pi,
+      external_ref: 'order_r1',
       amount: '2500',
     });
 
     expect(status).toBe(201);
     expect(json.object).toBe('refund');
-    expect(json.paymentIntentId).toBe(pi);
+    expect(json.payment_intent_id).toBe(pi);
     expect(json.status).toBe('succeeded');
     // The provider's own refund id is not the merchant's business.
     expect(JSON.stringify(json)).not.toContain('re_stripe');
@@ -183,14 +183,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
   test('a repeated refund answers 200 and calls the provider once', async () => {
     const pi = await settledIntent('10000');
     const first = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_dup',
+      payment_intent_id: pi,
+      external_ref: 'order_dup',
       amount: '2500',
     });
     providerCalls.length = 0;
     const second = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_dup',
+      payment_intent_id: pi,
+      external_ref: 'order_dup',
       amount: '2500',
     });
 
@@ -207,15 +207,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
   test('answers a retry even though the balance no longer accommodates it', async () => {
     const pi = await settledIntent('1000');
     const first = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_exhaust',
+      payment_intent_id: pi,
+      external_ref: 'order_exhaust',
       amount: '1000',
     });
     expect(first.status).toBe(201);
 
     const retry = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_exhaust',
+      payment_intent_id: pi,
+      external_ref: 'order_exhaust',
       amount: '1000',
     });
     expect(retry.status).toBe(200);
@@ -225,16 +225,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
   /**
    * `'0'` is a canonical integer string and passes the shared predicate, so it
    * is refused separately — a zero refund would consume the merchant's
-   * `externalRef` and make the REAL refund for that order impossible to create.
+   * `external_ref` and make the REAL refund for that order impossible to create.
    */
   test('refuses a zero refund, which the amount predicate alone would accept', async () => {
     const pi = await settledIntent('10000');
     const { status, json } = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_zero',
+      payment_intent_id: pi,
+      external_ref: 'order_zero',
       amount: '0',
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(String((json.error as Record<string, string>).message)).toContain('not a refund');
   });
 
@@ -242,22 +242,22 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
     const pi = await settledIntent('10000');
     for (const amount of ['10.50', '-1', '01', '']) {
       const { status } = await call('POST', '/v1/refunds', {
-        paymentIntentId: pi,
-        externalRef: `order_bad_${amount || 'empty'}`,
+        payment_intent_id: pi,
+        external_ref: `order_bad_${amount || 'empty'}`,
         amount,
       });
-      expect([amount, status]).toEqual([amount, 422]);
+      expect([amount, status]).toEqual([amount, 400]);
     }
   });
 
   test('refuses more than the payment has left', async () => {
     const pi = await settledIntent('1000');
     const { status } = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_over',
+      payment_intent_id: pi,
+      external_ref: 'order_over',
       amount: '1001',
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   /**
@@ -268,15 +268,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
   test('lists the refunds and what is still refundable', async () => {
     const pi = await settledIntent('10000');
     await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_list',
+      payment_intent_id: pi,
+      external_ref: 'order_list',
       amount: '4000',
     });
 
     const { status, json } = await call('GET', `/v1/payment_intents/${pi}/refunds`);
     expect(status).toBe(200);
     expect((json.data as unknown[]).length).toBe(1);
-    expect(json.remainingRefundable).toBe('6000');
+    expect(json.remaining_refundable).toBe('6000');
   });
 
   test('does not refund, read or list across merchants', async () => {
@@ -284,8 +284,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the refund API', () => {
     actingApp = otherMerchant.oxyAppId;
 
     const refund = await call('POST', '/v1/refunds', {
-      paymentIntentId: pi,
-      externalRef: 'order_cross',
+      payment_intent_id: pi,
+      external_ref: 'order_cross',
       amount: '100',
     });
     const list = await call('GET', `/v1/payment_intents/${pi}/refunds`);

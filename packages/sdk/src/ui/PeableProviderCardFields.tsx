@@ -36,7 +36,7 @@ export function PeableProviderCardFields({
   unavailableLabel = checkoutMessage(locale, 'provider.unavailable'),
 }: PeableProviderFieldsProps) {
   const { colors } = useTheme();
-  const publishableKey = cardConfiguration?.publishableKey ?? action?.publishableKey;
+  const publishableKey = cardConfiguration?.publishableKey ?? action?.publishable_key;
   const actionRef = useRef(action);
   actionRef.current = action;
   const [billing, setBilling] = useState({ country: '', postcode: '' });

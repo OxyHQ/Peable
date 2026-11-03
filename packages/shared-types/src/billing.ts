@@ -294,7 +294,7 @@ export type BillingCheckoutOperationRecovery =
   | {
       state: 'succeeded';
       source: BillingCheckoutOperationSource;
-      checkout: { id: string; expires_at: string; url?: string };
+      checkout: { id: string; expires_at: number; url?: string };
     };
 
 export interface BillingFaircoinFxQuote {

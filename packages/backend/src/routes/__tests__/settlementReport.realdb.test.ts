@@ -82,14 +82,14 @@ let counter = 0;
 
 interface Body {
   readonly object?: string;
-  readonly paymentIntentId?: string;
+  readonly payment_intent_id?: string;
   readonly status?: string;
   readonly gross?: string | null;
   readonly fee?: string | null;
   readonly net?: string | null;
   readonly currency?: string | null;
-  readonly availableOn?: string | null;
-  readonly exchangeRate?: number | null;
+  readonly available_on?: number | null;
+  readonly exchange_rate?: number | null;
 }
 
 async function get(path: string): Promise<{ status: number; json: Body }> {
@@ -147,7 +147,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('reporting what a payment came to', () 
       fee: '204',
       net: '9796',
       currency: 'EUR',
-      availableOn: '2026-09-26T00:00:00.000Z',
+      availableOn: new Date('2026-09-26T00:00:00.000Z'),
       exchangeRate: null,
     };
   });
@@ -168,11 +168,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('reporting what a payment came to', () 
 
     expect(status).toBe(200);
     expect(json.object).toBe('settlement');
-    expect(json.paymentIntentId).toBe(intent.publicId);
+    expect(json.payment_intent_id).toBe(intent.publicId);
     expect(json.status).toBe('available');
     expect(json.fee).toBe('204');
     expect(json.net).toBe('9796');
-    expect(json.availableOn).toBe('2026-09-26T00:00:00.000Z');
+    expect(json.available_on).toBe(Date.parse('2026-09-26T00:00:00.000Z') / 1000);
     // The CHARGE, not the payment: fees attach to the charge.
     expect(providerCalls).toContain(`getSettlement:ch_stripe_${intent.publicId}`);
   });

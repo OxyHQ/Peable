@@ -87,8 +87,8 @@ interface Body {
   readonly id?: string;
   readonly object?: string;
   readonly status?: string;
-  readonly evidenceSubmittedAt?: string | null;
-  readonly evidenceDueAt?: string | null;
+  readonly evidence_submitted_at?: number | null;
+  readonly evidence_due_at?: number | null;
   readonly error?: { readonly type: string; readonly message: string };
 }
 
@@ -168,14 +168,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     const dispute = await openDispute();
 
     const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      productDescription: 'A blue enamel mug, 350ml',
-      shippingTrackingNumber: 'TRACK-1',
-      uncategorizedText: 'The buyer collected this in person on the 3rd.',
+      product_description: 'A blue enamel mug, 350ml',
+      shipping_tracking_number: 'TRACK-1',
+      uncategorized_text: 'The buyer collected this in person on the 3rd.',
     });
 
     expect(status).toBe(201);
     expect(json.object).toBe('dispute');
-    expect(json.evidenceSubmittedAt).not.toBeNull();
+    expect(json.evidence_submitted_at).not.toBeNull();
 
     const call = providerCalls.find((entry) => entry.fn === 'submitDisputeEvidence');
     expect(call?.request.providerObjectId).toBe(dispute.providerObjectId);
@@ -190,7 +190,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
    */
   test('submits once, however many times it is asked', async () => {
     const dispute = await openDispute();
-    const body = { uncategorizedText: 'The goods were delivered and signed for.' };
+    const body = { uncategorized_text: 'The goods were delivered and signed for.' };
 
     const first = await post(`/v1/disputes/${dispute.publicId}/evidence`, body);
     providerCalls.length = 0;
@@ -198,7 +198,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
 
     expect(first.status).toBe(201);
     expect(second.status).toBe(200);
-    expect(second.json.evidenceSubmittedAt).toBe(first.json.evidenceSubmittedAt);
+    expect(second.json.evidence_submitted_at).toBe(first.json.evidence_submitted_at);
     // Nothing reached the provider the second time.
     expect(providerCalls).toHaveLength(0);
   });
@@ -214,10 +214,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
   test('keeps none of the evidence, only the fact that it was submitted', async () => {
     const dispute = await openDispute();
     await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      customerName: 'Jane Buyer',
-      customerEmailAddress: 'jane@example.com',
-      billingAddress: '3 Flat Street, Springfield',
-      uncategorizedText: 'She collected it herself.',
+      customer_name: 'Jane Buyer',
+      customer_email_address: 'jane@example.com',
+      billing_address: '3 Flat Street, Springfield',
+      uncategorized_text: 'She collected it herself.',
     });
 
     const stored = await findDisputeByProviderObject(
@@ -246,7 +246,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     const dispute = await openDispute({ dueAt: new Date(Date.now() - 1000) });
 
     const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: 'Late.',
+      uncategorized_text: 'Late.',
     });
 
     expect(status).toBe(409);
@@ -259,7 +259,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     const dispute = await openDispute({ status: 'won', dueAt: null });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: 'Anything.',
+      uncategorized_text: 'Anything.',
     });
 
     expect(status).toBe(409);
@@ -293,7 +293,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
       trackingNumber: 'TRACK-2',
     });
 
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(providerCalls).toHaveLength(0);
   });
 
@@ -314,7 +314,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: 'Not mine to answer.',
+      uncategorized_text: 'Not mine to answer.',
     });
 
     expect(status).toBe(404);
@@ -336,7 +336,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     });
 
     const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorizedText: 'Delivered and signed for.',
+      uncategorized_text: 'Delivered and signed for.',
     });
 
     expect(status).toBe(502);

@@ -48,7 +48,7 @@ function messageFor(error: unknown, platform: string): string {
       return t('connect.error.wrongSeller');
     case 409:
       return t('connect.error.conflict');
-    case 422:
+    case 400:
       return t('connect.error.invalidKey');
     default:
       return t('connect.error.generic');
@@ -115,7 +115,7 @@ export default function ConnectOnboardingScreen() {
       // anything else ends the flow.
       const retryable =
         caught instanceof ConnectOnboardingError &&
-        (caught.status === 409 || caught.status === 422);
+        (caught.status === 409 || caught.status === 400);
       setPhase(retryable ? 'ready' : 'error');
     }
   }, [token, keyToRegister, platformName]);

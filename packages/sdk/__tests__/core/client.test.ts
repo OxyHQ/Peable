@@ -113,15 +113,41 @@ describe('createRestClient', () => {
 
   test('maps a non-2xx nested-envelope response to a typed PeableError', async () => {
     const { fetch: fetchImpl } = createMockFetch(() => ({
-      status: 422,
-      json: { error: { type: 'invalid_request_error', message: 'bad amount' } },
+      status: 400,
+      headers: { 'Request-Id': 'req_abc' },
+      json: {
+        error: {
+          type: 'invalid_request_error',
+          code: 'parameter_invalid',
+          param: 'amount',
+          message: 'bad amount',
+          request_id: 'req_abc',
+        },
+      },
     }));
     const { provider } = fakeTokenProvider(['tok_1']);
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
 
-    await expect(
-      client.request('POST', '/v1/payment_intents', { body: {} }),
-    ).rejects.toBeInstanceOf(PeableInvalidRequestError);
+    const failure = await client
+      .request('POST', '/v1/payment_intents', { body: {} })
+      .catch((error: unknown) => error);
+    expect(failure).toBeInstanceOf(PeableInvalidRequestError);
+    expect(failure).toMatchObject({ statusCode: 400, param: 'amount', requestId: 'req_abc' });
+  });
+
+  test('takes the request id from the Request-Id header on a flat auth refusal', async () => {
+    const { fetch: fetchImpl } = createMockFetch(() => ({
+      status: 403,
+      headers: { 'Request-Id': 'req_flat' },
+      json: { error: 'INSUFFICIENT_SCOPE', message: 'missing scope' },
+    }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
+
+    await expect(client.request('GET', '/v1/payment_intents')).rejects.toMatchObject({
+      requestId: 'req_flat',
+      code: 'INSUFFICIENT_SCOPE',
+    });
   });
 
   test('on 401, invalidates the token and retries once with a fresh token', async () => {

@@ -57,7 +57,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
         ]);
         if (cancelled) return;
 
-        if (action.kind !== 'client_secret' || !action.publishableKey) {
+        if (action.kind !== 'client_secret' || !action.publishable_key) {
           // A redirect-style action, or a deployment with no publishable key
           // configured. Neither is something this component can render, and
           // saying so beats mounting an empty box.
@@ -66,7 +66,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
           return;
         }
 
-        const sdk = factory(action.publishableKey);
+        const sdk = factory(action.publishable_key);
         const elements = sdk.elements({ clientSecret: action.value });
         const element = elements.create('payment');
         if (!mountRef.current) return;

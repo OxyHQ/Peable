@@ -7,6 +7,7 @@ import { createHash } from 'node:crypto';
 import { and, eq, isNotNull, isNull } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { z } from 'zod';
+import { fromUnix } from '../../lib/time';
 import { findMerchantById } from '../merchants/merchantRepository';
 import {
   BillingError,
@@ -282,12 +283,12 @@ export async function claimBillingOperation(
         parsed.priceBindingId ?? '',
       );
       if (
-        source.merchantId !== merchantPublicId ||
-        source.appId !== owner.oxyAppId ||
+        source.merchant_id !== merchantPublicId ||
+        source.app_id !== owner.oxyAppId ||
         source.environment !== owner.environment ||
         (source.mode === 'live') !== deployment.livemode ||
-        source.storeId !== customer.externalSubjectRef ||
-        source.planId !== price.planRef ||
+        source.store_id !== customer.externalSubjectRef ||
+        source.plan_id !== price.planRef ||
         snapshot.offer.providerPriceId !== price.providerRef ||
         snapshot.offer.planId !== price.planRef ||
         snapshot.quoteDigest !==
@@ -390,7 +391,7 @@ export async function completeBillingOperation(
   now = new Date(),
 ): Promise<void> {
   const result = parseBillingResult(operation.operation, input);
-  const resultExpiresAt = 'expiresAt' in result ? new Date(result.expiresAt) : null;
+  const resultExpiresAt = 'expires_at' in result ? fromUnix(result.expires_at) : null;
   if (resultExpiresAt && resultExpiresAt <= now) throw new BillingError('result_expired');
   const [finished] = await tx
     .update(billingOperations)
@@ -597,7 +598,7 @@ export async function completeRecoveredBillingCheckout(
   now: Date,
 ) {
   const parsed = parseBillingResult('checkout', result);
-  if (!('id' in parsed) || typeof parsed.id !== 'string' || !('expiresAt' in parsed))
+  if (!('id' in parsed) || typeof parsed.id !== 'string' || !('expires_at' in parsed))
     throw new BillingError('invalid_provider_response');
   const [updated] = await db
     .update(billingOperations)
@@ -605,7 +606,7 @@ export async function completeRecoveredBillingCheckout(
       state: 'succeeded',
       result: parsed,
       providerObjectRef: parsed.id,
-      resultExpiresAt: new Date(parsed.expiresAt),
+      resultExpiresAt: fromUnix(parsed.expires_at),
       completedAt: now,
       leaseToken: null,
       leaseExpiresAt: null,

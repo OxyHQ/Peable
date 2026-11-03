@@ -13,7 +13,7 @@
  *
  * That was right while the port was missing and it was never a destination.
  * The deadline was exposed and the response was not, so a merchant could read
- * `evidenceDueAt`, watch it pass, and lose a dispute this gateway had told them
+ * `evidence_due_at`, watch it pass, and lose a dispute this gateway had told them
  * about and given them no way to answer. `DisputeHandlingProvider` exists now;
  * the POST is below.
  *
@@ -42,6 +42,7 @@ import {
   sendEnvironmentMismatch,
   sendError,
   sendProviderError,
+  sendValidationError,
   wrap,
 } from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
@@ -71,26 +72,26 @@ const evidenceField = z.string().min(1).max(EVIDENCE_FIELD_MAX).optional();
  */
 const evidenceBodySchema = z
   .object({
-    productDescription: evidenceField,
-    customerName: evidenceField,
-    customerEmailAddress: evidenceField,
-    customerPurchaseIp: evidenceField,
-    billingAddress: evidenceField,
-    shippingAddress: evidenceField,
-    shippingCarrier: evidenceField,
-    shippingDate: evidenceField,
-    shippingTrackingNumber: evidenceField,
-    serviceDate: evidenceField,
-    accessActivityLog: evidenceField,
-    cancellationPolicyDisclosure: evidenceField,
-    cancellationRebuttal: evidenceField,
-    duplicateChargeExplanation: evidenceField,
-    refundPolicyDisclosure: evidenceField,
-    refundRefusalExplanation: evidenceField,
-    uncategorizedText: evidenceField,
+    product_description: evidenceField,
+    customer_name: evidenceField,
+    customer_email_address: evidenceField,
+    customer_purchase_ip: evidenceField,
+    billing_address: evidenceField,
+    shipping_address: evidenceField,
+    shipping_carrier: evidenceField,
+    shipping_date: evidenceField,
+    shipping_tracking_number: evidenceField,
+    service_date: evidenceField,
+    access_activity_log: evidenceField,
+    cancellation_policy_disclosure: evidenceField,
+    cancellation_rebuttal: evidenceField,
+    duplicate_charge_explanation: evidenceField,
+    refund_policy_disclosure: evidenceField,
+    refund_refusal_explanation: evidenceField,
+    uncategorized_text: evidenceField,
   } satisfies Record<keyof DisputeEvidence, typeof evidenceField>)
   // Unknown keys are REFUSED rather than dropped. A merchant who sent
-  // `trackingNumber` instead of `shippingTrackingNumber` would otherwise submit
+  // `tracking_number` instead of `shipping_tracking_number` would otherwise submit
   // — finally — a response missing the field they were relying on, and find out
   // when the dispute is decided.
   .strict();
@@ -110,7 +111,7 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
 
       const { intentId } = req.params;
       if (!intentId) {
-        sendError(res, 422, 'invalid_request_error', 'intentId is required');
+        sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
 
@@ -157,18 +158,13 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
 
       const { disputeId } = req.params;
       if (!disputeId) {
-        sendError(res, 422, 'invalid_request_error', 'disputeId is required');
+        sendError(res, 400, 'invalid_request_error', 'disputeId is required');
         return;
       }
 
       const parsed = evidenceBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -201,7 +197,7 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
         if (error instanceof DisputeNotAnswerableError) {
           // 409: the request is well-formed and the dispute is simply not in a
           // state that accepts it — closed, or past its deadline. Neither is
-          // fixable by editing the body, which a 422 would suggest.
+          // fixable by editing the body, which a 400 would suggest.
           sendError(res, 409, 'invalid_request_error', error.message);
           return;
         }

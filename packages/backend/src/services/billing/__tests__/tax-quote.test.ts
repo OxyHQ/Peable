@@ -2,6 +2,7 @@ import { describe, expect, it } from 'bun:test';
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { canonicalBillingTaxQuote, type BillingTaxQuote } from '@peable.to/shared-types';
 import { createVerifiedBillingTaxQuote, type BillingTaxQuoteCalculator } from '../tax-quote';
+import { toUnix } from '../../../lib/time';
 
 function fixture() {
   const keys = generateKeyPairSync('ed25519');
@@ -12,13 +13,13 @@ function fixture() {
     environment: 'development' as const,
   };
   const request = {
-    storeId: 'payer_fixture',
-    planId: 'plan_fixture',
-    customerLocationEvidenceId: 'location_fixture',
+    store_id: 'payer_fixture',
+    plan_id: 'plan_fixture',
+    customer_location_evidence_id: 'location_fixture',
   };
   const product = {
     configurationApproved: true as const,
-    planId: request.planId,
+    planId: request.plan_id,
     currency: 'USD',
     grossMinorUnits: 2999,
     taxTreatment: 'inclusive' as const,
@@ -30,8 +31,8 @@ function fixture() {
     coverageEvidenceId: 'coverage_fixture',
   };
   const location = {
-    id: request.customerLocationEvidenceId,
-    storeId: request.storeId,
+    id: request.customer_location_evidence_id,
+    storeId: request.store_id,
     appId: owner.oxyAppId,
     country: 'RO',
     mode: 'test' as const,
@@ -54,7 +55,7 @@ function fixture() {
     async calculate({ source }) {
       calls++;
       const result: BillingTaxQuote = tamper({
-        schema_version: 1,
+        schema_version: 2,
         source,
         quote: {
           id: 'quote_fixture',
@@ -71,8 +72,8 @@ function fixture() {
           coverage_evidence_id: product.coverageEvidenceId,
           tax_rate_evidence_id: 'rate_fixture',
           customer_location_evidence_id: location.id,
-          quoted_at: now.toISOString(),
-          expires_at: '2026-10-07T12:01:00.000Z',
+          quoted_at: toUnix(now),
+          expires_at: toUnix(new Date('2026-10-07T12:01:00.000Z')),
         },
         signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
       });
@@ -109,8 +110,9 @@ describe('provider-neutral Peable tax quote gate', () => {
         () => value.now,
       ),
     ).toMatchObject({
-      source: { merchantId: 'merch_fixture', storeId: 'payer_fixture' },
-      quote: { grossMinorUnits: 2999, taxMinorUnits: 499, country: 'RO' },
+      schema_version: 2,
+      source: { merchant_id: 'merch_fixture', store_id: 'payer_fixture' },
+      quote: { gross_minor_units: 2999, tax_minor_units: 499, country: 'RO' },
     });
     expect(value.calls()).toBe(1);
   });
@@ -157,7 +159,7 @@ describe('provider-neutral Peable tax quote gate', () => {
         () => value.now,
       ),
     ).rejects.toThrow('not_found');
-    value.location.storeId = value.request.storeId;
+    value.location.storeId = value.request.store_id;
     value.location.expiresAt = value.now.toISOString();
     await expect(
       createVerifiedBillingTaxQuote(

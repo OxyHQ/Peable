@@ -36,6 +36,7 @@ import {
 } from './tax-checkout';
 import type { FinalInvoiceAuthorityReader } from './invoice-authority';
 import type { StripeBillingClient } from './stripeBillingProvider';
+import { toUnix } from '../../lib/time';
 
 export type StripeTaxOffer = z.infer<typeof billingTaxOfferSchema>;
 
@@ -68,15 +69,15 @@ const TAX_LABELS: Readonly<Record<string, string>> = {
  * no percentage of at most four decimals reproduces the amount, and the sale
  * must not be charged.
  */
-export function exactTaxRatePercentage(quote: {
-  grossMinorUnits: number;
-  netMinorUnits: number;
-  taxMinorUnits: number;
-  taxTreatment: 'inclusive' | 'exclusive';
-}): number | null {
-  const tax = BigInt(quote.taxMinorUnits);
-  const exclusive = quote.taxTreatment === 'exclusive';
-  const base = BigInt(exclusive ? quote.netMinorUnits : quote.grossMinorUnits);
+export function exactTaxRatePercentage(
+  quote: Pick<
+    BillingTaxQuote['quote'],
+    'gross_minor_units' | 'net_minor_units' | 'tax_minor_units' | 'tax_treatment'
+  >,
+): number | null {
+  const tax = BigInt(quote.tax_minor_units);
+  const exclusive = quote.tax_treatment === 'exclusive';
+  const base = BigInt(exclusive ? quote.net_minor_units : quote.gross_minor_units);
   const denominator = exclusive ? base : base - tax;
   if (tax <= 0n || denominator <= 0n) return null;
   for (let decimals = 0; decimals <= 4; decimals++) {
@@ -182,7 +183,7 @@ export function createStripePeableTaxCheckout(options: {
     async createCheckout({ owner, deployment, checkout, snapshot }, key) {
       if (!client.createTaxRate || !client.expireCheckout) throw new BillingError('not_found', 404);
       const quote = snapshot.taxQuote.quote;
-      const expiresAt = Math.floor(Date.parse(quote.expiresAt) / 1000);
+      const expiresAt = quote.expires_at;
       if (expiresAt * 1000 - now().getTime() < MIN_CHECKOUT_LIFETIME_MS)
         throw new BillingError('result_expired');
       const taxRate = await createFrozenTaxRate(
@@ -235,8 +236,8 @@ export function createStripePeableTaxCheckout(options: {
           url: billingReturnUrl,
           expires_at: z.literal(expiresAt),
           currency: z.literal(quote.currency.toLowerCase()),
-          amount_total: z.literal(quote.grossMinorUnits),
-          total_details: z.object({ amount_tax: z.literal(quote.taxMinorUnits) }),
+          amount_total: z.literal(quote.gross_minor_units),
+          total_details: z.object({ amount_tax: z.literal(quote.tax_minor_units) }),
           automatic_tax: z.object({ enabled: z.literal(false) }),
         })
         .safeParse(raw);
@@ -250,7 +251,7 @@ export function createStripePeableTaxCheckout(options: {
         providerCustomerId: session.data.customer,
         livemode: session.data.livemode,
         url: session.data.url,
-        expiresAt: new Date(expiresAt * 1000).toISOString(),
+        expiresAt,
       };
     },
   };
@@ -277,13 +278,13 @@ export function createPeableCardInvoiceAuthority(options: {
       const snapshot = billingTaxCheckoutSnapshotSchema.parse(taxCheckoutSnapshot);
       const tax = snapshot.taxQuote.quote;
       const lines = include?.taxLines
-        ? await invoiceTaxLines(db, owner.merchantId, tax.taxRateEvidenceId)
+        ? await invoiceTaxLines(db, owner.merchantId, tax.tax_rate_evidence_id)
         : undefined;
       if (lines === null) throw new BillingError('not_found', 404);
       const mode = paid.livemode ? ('live' as const) : ('test' as const);
       const issuedAt = now();
       const authority: BillingFinalInvoiceAuthority = {
-        schema_version: 1,
+        schema_version: 2,
         method: 'card',
         source: {
           invoice_id: paid.invoice_id,
@@ -300,16 +301,16 @@ export function createPeableCardInvoiceAuthority(options: {
         invoice: {
           platform: 'peable',
           currency: tax.currency,
-          gross_minor_units: tax.grossMinorUnits,
-          net_minor_units: tax.netMinorUnits,
-          tax_minor_units: tax.taxMinorUnits,
+          gross_minor_units: tax.gross_minor_units,
+          net_minor_units: tax.net_minor_units,
+          tax_minor_units: tax.tax_minor_units,
           merchant_fee_minor_units: 0,
-          tax_treatment: tax.taxTreatment,
-          seller_id: tax.sellerId,
-          invoice_issuer_id: tax.invoiceIssuerId,
+          tax_treatment: tax.tax_treatment,
+          seller_id: tax.seller_id,
+          invoice_issuer_id: tax.invoice_issuer_id,
           tax_quote_id: tax.id,
-          customer_location_evidence_id: tax.customerLocationEvidenceId,
-          tax_rate_evidence_id: tax.taxRateEvidenceId,
+          customer_location_evidence_id: tax.customer_location_evidence_id,
+          tax_rate_evidence_id: tax.tax_rate_evidence_id,
           context: {
             payer_account_id: paid.store_id,
             beneficiary_account_id: paid.store_id,
@@ -321,8 +322,8 @@ export function createPeableCardInvoiceAuthority(options: {
             mode,
             environment: owner.environment,
           },
-          issued_at: issuedAt.toISOString(),
-          expires_at: new Date(+issuedAt + 60_000).toISOString(),
+          issued_at: toUnix(issuedAt),
+          expires_at: toUnix(issuedAt) + 60,
           ...(lines ? { tax_lines: lines } : {}),
         },
         signature: { algorithm: 'Ed25519', key_id: keyId, value: '' },

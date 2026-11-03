@@ -23,7 +23,8 @@ import {
   registerFromOnboarding,
 } from '../services/accounts/faircoinOnboarding';
 import { WatchOnlyViolationError } from '../services/watchOnly';
-import { sendError, wrap } from '../lib/http';
+import { requestIdOf } from '../lib/requestId';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 
 /**
  * An extended public key is 111 characters in base58check; the bound is a
@@ -47,7 +48,8 @@ function sendRefusal(res: Response, error: OnboardingRefusedError): void {
       code: error.code,
       message: error.message,
       // Only on an expired link: where the seller goes to get a fresh one.
-      ...(error.refreshUrl ? { refreshUrl: error.refreshUrl } : {}),
+      ...(error.refreshUrl ? { refresh_url: error.refreshUrl } : {}),
+      request_id: requestIdOf(res) ?? null,
     },
   });
 }
@@ -109,12 +111,7 @@ export function createConnectRouter(deps?: { requireOxyUser?: RequestHandler }):
       if (!token) return;
       const parsed = registerBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       try {
@@ -138,7 +135,7 @@ export function createConnectRouter(deps?: { requireOxyUser?: RequestHandler }):
         // A key that can spend, or one for the other chain. Refused and never
         // stored — the message says which.
         if (error instanceof WatchOnlyViolationError) {
-          sendError(res, 422, 'invalid_request_error', error.message, 'watch_only_violation');
+          sendError(res, 400, 'invalid_request_error', error.message, 'watch_only_violation');
           return;
         }
         throw error;

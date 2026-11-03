@@ -9,6 +9,7 @@ import {
   type BillingDeployment,
 } from './contracts';
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
+import { toUnix } from '../../lib/time';
 
 /** Unknown responses are projected with a whitelist; no raw provider payload persists. */
 export interface StripeBillingClient {
@@ -94,9 +95,6 @@ const subscription = z.object({
       .length(1),
   }),
 });
-function iso(value: number | null) {
-  return value === null ? null : new Date(value * 1000).toISOString();
-}
 export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubscription {
   const parsed = subscription.parse(raw);
   const item = parsed.items.data[0];
@@ -111,11 +109,12 @@ export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubsc
     status: parsed.status,
     interval: item.price.recurring.interval,
     cancel_at_period_end: parsed.cancel_at_period_end,
-    current_period_start: new Date(item.current_period_start * 1000).toISOString(),
-    current_period_end: new Date(item.current_period_end * 1000).toISOString(),
-    trial_ends_at: iso(parsed.trial_end),
-    cancel_at: iso(parsed.cancel_at),
-    cancelled_at: iso(parsed.canceled_at),
+    // Stripe already answers in Unix seconds, the wire's own unit.
+    current_period_start: item.current_period_start,
+    current_period_end: item.current_period_end,
+    trial_ends_at: parsed.trial_end,
+    cancel_at: parsed.cancel_at,
+    cancelled_at: parsed.canceled_at,
   };
 }
 export function createStripeBillingProvider(
@@ -212,7 +211,7 @@ export function createStripeBillingProvider(
         providerCustomerId: session.customer,
         livemode: session.livemode,
         url: session.url,
-        expiresAt: new Date(session.expires_at * 1000).toISOString(),
+        expiresAt: session.expires_at,
       };
     },
     async createPortalSession(input, key) {
@@ -244,7 +243,7 @@ export function createStripeBillingProvider(
         providerCustomerId: session.customer,
         livemode: session.livemode,
         url: session.url,
-        expiresAt: new Date(now().getTime() + 60_000).toISOString(),
+        expiresAt: toUnix(new Date(now().getTime() + 60_000)),
       };
     },
     async retrieveSubscription(id) {

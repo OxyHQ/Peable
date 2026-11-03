@@ -110,7 +110,7 @@ export interface WebhookEventPayload {
  *
  * ```ts
  * if (event.type === 'payment_intent.disputed') {
- *   event.data.object.evidenceDueAt; // Dispute, not PaymentIntent
+ *   event.data.object.evidence_due_at; // Dispute, not PaymentIntent
  * }
  * ```
  *

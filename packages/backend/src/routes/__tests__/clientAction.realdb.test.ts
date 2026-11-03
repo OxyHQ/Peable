@@ -95,8 +95,8 @@ interface Body {
   readonly object?: string;
   readonly kind?: string;
   readonly value?: string;
-  readonly publishableKey?: string;
-  readonly client_action?: { readonly value: string; readonly publishableKey?: string };
+  readonly publishable_key?: string;
+  readonly client_action?: { readonly value: string; readonly publishable_key?: string };
   readonly error?: { readonly type: string; readonly message: string };
 }
 
@@ -207,7 +207,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
      * pointed at, so a compiled-in key would be the wrong mode the first time a
      * test deployment used the same page.
      */
-    expect(json.publishableKey).toBe('pk_test_abc');
+    expect(json.publishable_key).toBe('pk_test_abc');
     // Never cached. The body carries a credential.
     expect(cacheControl).toBe('no-store');
   });
@@ -291,7 +291,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
       `/v1/payment_intents/${intent.publicId}/client_action`,
     );
 
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(json.error?.message).toContain('address');
   });
 

@@ -67,18 +67,18 @@ describe('POST /v1/enrich', () => {
 
   test('422s on an empty addresses array', async () => {
     const { status, body } = await postEnrich({ addresses: [] });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
   test('422s when the batch exceeds the max size', async () => {
     const addresses = Array.from({ length: 51 }, (_, i) => `TAddr${i}`);
     const { status } = await postEnrich({ addresses });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   test('422s on a missing addresses field', async () => {
     const { status } = await postEnrich({});
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 });

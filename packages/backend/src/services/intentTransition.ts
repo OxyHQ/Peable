@@ -100,7 +100,7 @@ export async function transitionIntent(
       // transaction in the same transaction: no filing can miss a paid sale.
       for (const invoice of accepted)
         await commitTaxTransaction(tx, {
-          calculationPublicId: invoice.taxSnapshot.taxQuote.quote.taxRateEvidenceId,
+          calculationPublicId: invoice.taxSnapshot.taxQuote.quote.tax_rate_evidence_id,
           reference: invoice.id,
           rail: 'faircoin',
           committedAt: result.row.updatedAt,

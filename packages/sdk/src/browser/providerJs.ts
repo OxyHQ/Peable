@@ -6,7 +6,7 @@
 //
 // ## Why the key is not compiled in
 //
-// `publishableKey` arrives from the gateway, with the confirmation credential,
+// `publishable_key` arrives from the gateway, with the confirmation credential,
 // on the one response that already proved the caller may pay this payment. The
 // checkout is deployed ONCE and serves whichever gateway `VITE_GATEWAY_URL`
 // points at, so a key baked into this bundle would be the wrong mode the first

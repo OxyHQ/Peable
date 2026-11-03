@@ -84,7 +84,7 @@ beforeAll(async () => {
     idempotencyKey: 'idem_redeliver',
     expiresAt: new Date(Date.now() + 60_000),
   });
-  // The PUBLIC `pi_…`: `WebhookDelivery.intentId` on the wire carries that, not
+  // The PUBLIC `pi_…`: `WebhookDelivery.intent_id` on the wire carries that, not
   // the internal reference the delivery row stores.
   intentId = intent.publicId;
 
@@ -122,9 +122,9 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
       method: 'POST',
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { delivered: boolean; intentId: string };
+    const body = (await res.json()) as { delivered: boolean; intent_id: string };
     expect(body.delivered).toBe(true);
-    expect(body.intentId).toBe(intentId);
+    expect(body.intent_id).toBe(intentId);
     expect(capturedFetches.at(-1)).toBe('https://merchant.example/hook');
 
     const after = await countDeliveriesForMerchant(merchantId);

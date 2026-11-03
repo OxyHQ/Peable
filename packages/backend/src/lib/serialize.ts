@@ -11,19 +11,22 @@ import type {
   WebhookDelivery,
 } from '@peable.to/shared-types';
 import { canExpire } from '@peable.to/shared-types';
+import type { ContributionDetails } from '@peable.to/contracts';
 import { config } from '../config';
+import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { PaymentLinkRow } from '../db/payments/paymentLinkRepository';
 import type { CheckoutSessionRow } from '../db/payments/checkoutSessionRepository';
 import type { DisputeRow } from '../db/disputes/disputeRepository';
+import type { StoredContribution } from '../db/schema/payments';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
 
 /**
  * Serialize a persisted PaymentIntent row to its public `PaymentIntent` DTO
  * (the wire/contract shape shared with the SDK, webhooks, and the wallet).
  * The internal-only `idempotencyKey` is deliberately omitted — the repository
- * never selects it — and dates become ISO strings.
+ * never selects it — and instants become Unix seconds (ADR 0014 D1).
  *
  * `id` is the PUBLIC `pi_…`, which is what the wire contract has always
  * carried; the value lives in `public_id` beside the internal primary key. Emitting
@@ -50,12 +53,12 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     confirmations: row.confirmations,
     client_secret: row.clientSecret,
     metadata: row.metadata,
-    expires_at: row.expiresAt.toISOString(),
+    expires_at: toUnix(row.expiresAt),
     // ADR 0012 D9: a broadcast or confirming payment never expires, whatever
     // `expiresAt` says — said per intent so a platform never has to know the set.
     can_expire: canExpire(row.status),
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -78,8 +81,8 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
     display_name: row.displayName ?? undefined,
     avatar_file_id: row.avatarFileId ?? undefined,
     description: row.description ?? undefined,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -89,7 +92,7 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
  *
  * `intentPublicId` is a SEPARATE parameter rather than a field of the row,
  * because the delivery stores the intent's internal primary key while
- * `WebhookDelivery.intentId` on the wire carries the public `pi_…`. The two
+ * `WebhookDelivery.intent_id` on the wire carries the public `pi_…`. The two
  * callers get it two different ways — the list path joins it in
  * (`listDeliveriesForMerchant` returns `intentPublicId` per row) and the
  * redelivery path already holds the intent row it loaded — so requiring it
@@ -122,9 +125,23 @@ export function toWebhookDeliveryDTO(
     // "there is nothing to say", and a `lastError: null` on a delivered
     // delivery reads like an error field a consumer has to check.
     ...(row.lastError !== null ? { last_error: row.lastError } : {}),
-    ...(row.nextAttemptAt !== null ? { next_attempt_at: row.nextAttemptAt.toISOString() } : {}),
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    ...(row.nextAttemptAt !== null ? { next_attempt_at: toUnix(row.nextAttemptAt) } : {}),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/**
+ * A contribution's stored details on the wire: snake_case, and the expiry as
+ * Unix seconds. The stored shape keeps the keys its CHECK constraint reads
+ * (`StoredContribution`); this is the one place the two meet.
+ */
+export function toContributionDetails(stored: StoredContribution): ContributionDetails {
+  return {
+    organization_id: stored.organizationId,
+    purpose: stored.purpose,
+    amount_mode: stored.amountMode,
+    expires_at: stored.expiresAt === null ? null : toUnix(new Date(stored.expiresAt)),
   };
 }
 
@@ -144,18 +161,18 @@ export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
     active:
       row.active &&
       (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
-    ...(row.contribution ? { contribution: row.contribution } : {}),
+    ...(row.contribution ? { contribution: toContributionDetails(row.contribution) } : {}),
     metadata: row.metadata,
     success_url: row.successUrl ?? undefined,
     url: `${config.checkoutBaseUrl}/l/${row.publicId}`,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
 /**
  * Serialize a persisted PaymentLink row to what an UNAUTHENTICATED
- * checkout-page visitor may see: no `metadata`, no `successUrl`, no internal
+ * checkout-page visitor may see: no `metadata`, no `success_url`, no internal
  * ids beyond the public one. `merchant` is resolved separately by
  * `services/merchantDisplay.ts` and passed in — this function never touches
  * the network to build it.
@@ -174,7 +191,7 @@ export function toPublicPaymentLinkDTO(
     active:
       row.active &&
       (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
-    ...(row.contribution ? { contribution: row.contribution } : {}),
+    ...(row.contribution ? { contribution: toContributionDetails(row.contribution) } : {}),
     merchant,
   };
 }
@@ -182,10 +199,10 @@ export function toPublicPaymentLinkDTO(
 /**
  * Serialize a persisted CheckoutSession row to its merchant/SDK-facing DTO.
  * The wrapped intent is passed in rather than re-fetched here, and supplies
- * both `paymentIntentId` and `clientSecret` — the session row itself
+ * both `payment_intent_id` and `client_secret` — the session row itself
  * deliberately never stores a copy of the secret.
  *
- * `paymentIntentId` is the intent's PUBLIC `pi_…`, not the internal reference
+ * `payment_intent_id` is the intent's PUBLIC `pi_…`, not the internal reference
  * the session stores, because that is what the shipped contract carries.
  */
 export function toCheckoutSessionDTO(
@@ -208,8 +225,8 @@ export function toCheckoutSessionDTO(
     success_url: row.successUrl ?? undefined,
     cancel_url: row.cancelUrl ?? undefined,
     url: `${config.checkoutBaseUrl}/c/${row.publicId}`,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -217,8 +234,8 @@ export function toCheckoutSessionDTO(
  * Serialize a persisted CheckoutSession row to what the checkout page
  * loads at `/c/:id`, authorized by possession of the wrapped intent's
  * `client_secret` (see `routes/checkoutSessions.ts`'s public GET). Reuses
- * `toPaymentIntentDTO`'s output unchanged for `paymentIntent` — it already
- * carries `clientSecret`, which the page needs to open the socket and to
+ * `toPaymentIntentDTO`'s output unchanged for `payment_intent` — it already
+ * carries `client_secret`, which the page needs to open the socket and to
  * `submit_tx`.
  */
 export function toCheckoutSessionPublicDTO(
@@ -257,10 +274,10 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
     currency: row.currency,
     status: row.status,
     reason: row.reason,
-    evidence_due_at: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
-    evidence_submitted_at: row.evidenceSubmittedAt ? row.evidenceSubmittedAt.toISOString() : null,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    evidence_due_at: toUnixOrNull(row.evidenceDueAt),
+    evidence_submitted_at: toUnixOrNull(row.evidenceSubmittedAt),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 

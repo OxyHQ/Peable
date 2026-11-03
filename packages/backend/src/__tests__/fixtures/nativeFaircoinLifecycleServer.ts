@@ -1,6 +1,7 @@
 /** Local-only native FairCoin acceptance fixture. Real routes, SDK, PostgreSQL and
  * settlement watcher; synthetic identity, price, fiscal declarations and node observations.
  * No external request, wallet signing or economic transfer is possible. */
+import { toUnix } from '../../lib/time';
 import { createInterface } from 'node:readline';
 import { generateKeyPairSync, randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
@@ -156,14 +157,14 @@ async function initialize(input: {
                 country: 'RO',
                 state: null,
                 level: 'country',
-                displayName: 'SYNTHETIC_NOT_REAL_TAX',
-                taxType: 'vat',
-                ratePercentage: '20.0',
-                taxableAmount:
+                display_name: 'SYNTHETIC_NOT_REAL_TAX',
+                tax_type: 'vat',
+                rate_percentage: '20.0',
+                taxable_amount:
                   line.taxBehavior === 'inclusive' ? line.amount - amountTax : line.amount,
                 amount: amountTax,
                 inclusive: line.taxBehavior === 'inclusive',
-                taxabilityReason: 'standard_rated',
+                taxability_reason: 'standard_rated',
               },
             ],
           };
@@ -197,9 +198,9 @@ async function initialize(input: {
       amount_base_units: String(BigInt(amount) * 1000000n),
       usd_per_fair: '1',
       source: 'SYNTHETIC_NOT_REAL_FX',
-      observed_at: clock().toISOString(),
-      quoted_at: new Date(+clock() - 1000).toISOString(),
-      expires_at: new Date(+clock() + 300000).toISOString(),
+      observed_at: toUnix(clock()),
+      quoted_at: toUnix(new Date(+clock() - 1000)),
+      expires_at: toUnix(new Date(+clock() + 300000)),
       rounding: 'ceil_to_base_unit',
     }),
   });

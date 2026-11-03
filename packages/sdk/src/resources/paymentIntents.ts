@@ -27,7 +27,7 @@ export interface PaymentIntentList {
  * it is a capability over the payment at the acquirer, and it is read live from
  * the provider precisely so nothing here has to keep one.
  *
- * `publishableKey` is the provider's PUBLIC key, served here rather than
+ * `publishable_key` is the provider's PUBLIC key, served here rather than
  * configured in the client, so a page that talks to more than one deployment
  * cannot mount a live card form over a test payment.
  */
@@ -35,7 +35,7 @@ export interface PaymentIntentClientAction {
   object: 'client_action';
   kind: 'client_secret' | 'redirect';
   value: string;
-  publishableKey?: string;
+  publishable_key?: string;
 }
 
 export interface CreatePaymentIntentOptions {
@@ -52,7 +52,7 @@ export class PaymentIntentsResource {
   constructor(private readonly client: RestClient) {}
 
   /**
-   * Create a payment. With `connectedAccount: 'ca_…'` it is made ON BEHALF OF
+   * Create a payment. With `connected_account: 'ca_…'` it is made ON BEHALF OF
    * that seller (ADR 0012): FairCoin only, the address derives from the
    * seller's own key so the coins go straight to their wallet, and you still
    * own the payment and receive its webhooks (each tagged `event.account`).

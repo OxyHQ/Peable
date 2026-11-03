@@ -18,7 +18,8 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
       fetch: read({ price: 0.12, source: 'wfair-base', updatedAt: now.toISOString() }),
     });
     expect(quote.amount_base_units).toBe('24991666667');
-    expect(Date.parse(quote.expires_at) - +now).toBe(600_000);
+    expect(quote.expires_at - Math.floor(+now / 1000)).toBe(600);
+    expect(quote.quoted_at).toBe(Math.floor(+now / 1000));
     for (const body of [
       { price: null },
       null,

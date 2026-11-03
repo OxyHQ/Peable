@@ -68,7 +68,7 @@ export function LinkRoute() {
     try {
       if (linkState.data.contribution) {
         const requested =
-          linkState.data.contribution.amountMode === 'fixed'
+          linkState.data.contribution.amount_mode === 'fixed'
             ? linkState.data.amount
             : decimalContributionAmount(amount);
         const operation = beginContribution(linkId, requested);
@@ -135,7 +135,7 @@ export function LinkRoute() {
     <main className="checkout-page">
       <MerchantIdentity merchant={link.merchant} />
       {link.contribution && <p>{link.contribution.purpose}</p>}
-      {link.contribution?.amountMode === 'free' ? (
+      {link.contribution?.amount_mode === 'free' ? (
         <label>
           Contribution amount ({link.currency})
           <input
@@ -155,7 +155,7 @@ export function LinkRoute() {
           {link.currency}
         </p>
       )}
-      {link.currency === 'FAIR' && link.contribution?.amountMode !== 'free' && (
+      {link.currency === 'FAIR' && link.contribution?.amount_mode !== 'free' && (
         <DisplayCurrency amount={link.amount} />
       )}
       {locked && (

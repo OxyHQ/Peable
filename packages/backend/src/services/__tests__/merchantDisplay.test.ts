@@ -37,7 +37,7 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
   };
 }
 
-test('resolves displayName + avatarUrl + description when all identity fields are set', async () => {
+test('resolves name + avatar_url + description when all identity fields are set', async () => {
   const merchant = merchantRow({
     publicId: 'merch_test_display_1',
     oxyAppId: 'app_display_1',
@@ -52,7 +52,7 @@ test('resolves displayName + avatarUrl + description when all identity fields ar
     name: 'Mercaria',
     // The public-CDN builder (`oxy.assets.publicUrl`) — never a
     // hand-built `cloud.oxy.so` string — with the ecosystem's 'thumb' variant.
-    avatarUrl: 'https://cloud.oxy.so/file_mercaria_logo?variant=thumb',
+    avatar_url: 'https://cloud.oxy.so/file_mercaria_logo?variant=thumb',
     description: 'Marketplace',
   });
 });

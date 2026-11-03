@@ -97,9 +97,9 @@ const INTENT: PaymentIntent = {
   confirmations: 0,
   client_secret: 'secret_1',
   metadata: {},
-  expires_at: '2026-07-20T00:00:00.000Z',
-  created: '2026-07-19T00:00:00.000Z',
-  updated_at: '2026-07-19T00:00:00.000Z',
+  expires_at: 1784505600,
+  created: 1784419200,
+  updated_at: 1784419200,
 };
 
 describe('getPaymentIntent', () => {
@@ -227,7 +227,7 @@ describe('submitTx', () => {
 });
 
 describe('subscribe', () => {
-  test('connects anonymously (no auth option) and emits subscribe with {intentId, clientSecret}', async () => {
+  test('connects anonymously (no auth option) and emits subscribe with {intent_id, client_secret}', async () => {
     const socket = installFakeSocket({ ok: true });
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
@@ -237,8 +237,8 @@ describe('subscribe', () => {
     expect(ioCalls[0]?.url).toBe(TEST_GATEWAY_URL);
     expect(ioCalls[0]?.opts).toEqual({ transports: ['websocket'] });
     expect(socket.emitWithAck).toHaveBeenCalledWith('subscribe', {
-      intentId: 'pi_1',
-      clientSecret: 'secret_1',
+      intent_id: 'pi_1',
+      client_secret: 'secret_1',
     });
   });
 
@@ -275,7 +275,7 @@ describe('subscribe', () => {
     expect(socket.disconnect).toHaveBeenCalledTimes(1);
   });
 
-  test('on Manager reconnect, re-emits subscribe with the same {intentId, clientSecret} without duplicating the intent.updated listener', async () => {
+  test('on Manager reconnect, re-emits subscribe with the same {intent_id, client_secret} without duplicating the intent.updated listener', async () => {
     const socket = installFakeSocket([{ ok: true }, { ok: true }]);
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
     const updates: PaymentIntent[] = [];
@@ -292,8 +292,8 @@ describe('subscribe', () => {
 
     expect(socket.emitWithAck).toHaveBeenCalledTimes(2);
     expect(socket.emitWithAck).toHaveBeenNthCalledWith(2, 'subscribe', {
-      intentId: 'pi_1',
-      clientSecret: 'secret_1',
+      intent_id: 'pi_1',
+      client_secret: 'secret_1',
     });
     // `intent.updated` must still be registered exactly once — a reconnect
     // must never re-add the listener (which would double-fire onUpdate).

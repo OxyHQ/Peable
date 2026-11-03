@@ -28,7 +28,7 @@ const MS_PER_SECOND = 1000;
  * Thrown when a caller's `network` doesn't match the merchant's configured
  * network — the data-integrity firewall (F2.0 task 1a) that keeps a
  * `PaymentIntent.network` label truthful about the network its watch-only
- * `address` actually encodes. Routes translate this into a 422.
+ * `address` actually encodes. Routes translate this into a 400.
  */
 export class NetworkMismatchError extends Error {
   constructor(
@@ -51,7 +51,7 @@ export class NetworkMismatchError extends Error {
  * A separate error from `NetworkMismatchError` because it is a DIFFERENT
  * mistake: that one is a caller naming the wrong chain, this one is a caller
  * naming a combination that is not a payment at all. Routes translate both into
- * a 422, and the message is what tells the integrator which they made.
+ * a 400, and the message is what tells the integrator which they made.
  */
 export class RailMismatchError extends Error {
   constructor(message: string) {
@@ -181,7 +181,7 @@ export interface CreateIntentResult {
  * The card rail is configured off, or half-configured, on this deployment.
  *
  * Separate from `RailMismatchError` because it is not the caller's fault and
- * they cannot fix it by sending different fields — it is a 503, not a 422. A
+ * they cannot fix it by sending different fields — it is a 503, not a 400. A
  * merchant seeing "the card rail requires an explicit currency" for a
  * deployment that simply has no Stripe key would spend the afternoon editing
  * their request.
@@ -284,7 +284,7 @@ export function resolveRail(
     // Not pedantry: a card intent carrying a network makes the composite
     // reference to `merchants (id, network)` BIND, tying a card charge to a
     // chain — and `payment_intents_card_has_no_chain_fields_check` refuses it
-    // one layer down anyway, as a 500 instead of this 422.
+    // one layer down anyway, as a 500 instead of this 400.
     throw new RailMismatchError('the card rail has no network');
   }
   return { rail, currency, network: null };

@@ -2,6 +2,7 @@ import { z } from 'zod';
 import type { BillingPaidInvoice, BillingInvoiceState } from '@peable.to/shared-types';
 import { BillingError } from './contracts';
 import type { StripeBillingClient } from './stripeBillingProvider';
+import { toUnix } from '../../lib/time';
 const ref = z.string().min(1).max(128);
 const amount = z.number().int().safe().nonnegative();
 const seconds = z
@@ -207,10 +208,11 @@ export async function readOwnedInvoiceState(
     amount_paid: String(invoice.amount_paid),
     net_amount: net === null ? null : String(net),
     tax_amount: net === null ? null : String(invoice.total - net),
-    period_start: new Date(line.period.start * 1000).toISOString(),
-    period_end: new Date(line.period.end * 1000).toISOString(),
-    paid_at: new Date(payment.status_transitions.paid_at * 1000).toISOString(),
-    observed_at: clock().toISOString(),
+    // Stripe answers in Unix seconds, the wire's own unit.
+    period_start: line.period.start,
+    period_end: line.period.end,
+    paid_at: payment.status_transitions.paid_at,
+    observed_at: toUnix(clock()),
   };
 }
 

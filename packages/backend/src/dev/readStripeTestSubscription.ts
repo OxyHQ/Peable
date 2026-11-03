@@ -37,11 +37,11 @@ async function run() {
     const { evidenceRef: _evidenceRef, ...owner } = cohort;
     const state = await runtime.service.retrieveCheckout(owner, artifact.session.id);
     const invoice =
-      state.subscription && state.initialInvoiceId
+      state.subscription && state.initial_invoice_id
         ? await runtime.service.retrieveInvoiceState(
             owner,
             state.subscription.provider_subscription_id,
-            state.initialInvoiceId,
+            state.initial_invoice_id,
           )
         : null;
     console.info(

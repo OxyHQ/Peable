@@ -12,6 +12,11 @@ export interface ContributionScope {
   applicationId: string;
   environment: 'development' | 'staging' | 'production';
 }
+/** One page of a list: `starting_after` is the last id of the previous page. */
+export interface ContributionPage {
+  limit?: number;
+  starting_after?: string;
+}
 /** Human management uses an Oxy linked-client transport; never a merchant service token. */
 export class ContributionsResource {
   constructor(private readonly client: RestClient) {}
@@ -27,7 +32,7 @@ export class ContributionsResource {
       }),
     );
   }
-  async list(scope: ContributionScope, page: { cursor?: string; limit?: number } = {}) {
+  async list(scope: ContributionScope, page: ContributionPage = {}) {
     return contributionListSchema.parse(
       await this.client.request('GET', this.path(scope), {
         query: { environment: scope.environment, ...page },
@@ -35,17 +40,17 @@ export class ContributionsResource {
     );
   }
   async *iterate(scope: ContributionScope) {
-    let cursor: string | undefined;
+    let startingAfter: string | undefined;
     const seen = new Set<string>();
-    do {
-      const page = await this.list(scope, cursor ? { cursor } : {});
-      yield* page.items;
-      cursor = page.nextCursor ?? undefined;
-      if (cursor) {
-        if (seen.has(cursor)) throw new Error('Repeated contribution cursor');
-        seen.add(cursor);
-      }
-    } while (cursor);
+    for (;;) {
+      const page = await this.list(scope, startingAfter ? { starting_after: startingAfter } : {});
+      yield* page.data;
+      const last = page.data[page.data.length - 1]?.id;
+      if (!page.has_more || last === undefined) return;
+      if (seen.has(last)) throw new Error('Repeated contribution page');
+      seen.add(last);
+      startingAfter = last;
+    }
   }
   async setActive(scope: ContributionScope, id: string, active: boolean) {
     return contributionLinkSchema.parse(
@@ -55,11 +60,7 @@ export class ContributionsResource {
       }),
     );
   }
-  async collections(
-    scope: ContributionScope,
-    id: string,
-    page: { cursor?: string; limit?: number } = {},
-  ) {
+  async collections(scope: ContributionScope, id: string, page: ContributionPage = {}) {
     return contributionCollectionListSchema.parse(
       await this.client.request(
         'GET',
@@ -73,4 +74,7 @@ export type {
   CreateContribution,
   ContributionLink,
   ContributionDetails,
+  ContributionList,
+  ContributionCollection,
+  ContributionCollectionList,
 } from '@peable.to/contracts';

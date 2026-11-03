@@ -8,17 +8,17 @@ function fixture() {
   const keys = generateKeyPairSync('ed25519');
   const now = new Date();
   const request = {
-    storeId: 'payer_fixture',
-    planId: 'plan_fixture',
-    customerLocationEvidenceId: 'location_fixture',
+    store_id: 'payer_fixture',
+    plan_id: 'plan_fixture',
+    customer_location_evidence_id: 'location_fixture',
   };
   const result: BillingTaxQuote = {
-    schema_version: 1,
+    schema_version: 2,
     source: {
       merchant_id: 'merch_fixture',
       app_id: 'app_fixture',
-      store_id: request.storeId,
-      plan_id: request.planId,
+      store_id: request.store_id,
+      plan_id: request.plan_id,
       mode: 'test',
       environment: 'development',
     },
@@ -36,9 +36,9 @@ function fixture() {
       country: 'RO',
       coverage_evidence_id: 'coverage_fixture',
       tax_rate_evidence_id: 'rate_fixture',
-      customer_location_evidence_id: request.customerLocationEvidenceId,
-      quoted_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + 60_000).toISOString(),
+      customer_location_evidence_id: request.customer_location_evidence_id,
+      quoted_at: Math.floor(+now / 1000),
+      expires_at: Math.floor(+now / 1000) + 60,
     },
     signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
   };
@@ -88,8 +88,15 @@ describe('pinned SDK tax quote authority', () => {
     value.result.quote.customer_location_evidence_id = 'another_location';
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
-    value.result.quote.customer_location_evidence_id = value.request.customerLocationEvidenceId;
-    value.result.quote.expires_at = new Date(Date.now() - 1).toISOString();
+    value.result.quote.customer_location_evidence_id = value.request.customer_location_evidence_id;
+    value.result.quote.expires_at = Math.floor(Date.now() / 1000) - 1;
+    value.resign();
+    await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
+    // Only schema version 2 (Unix-second instants) is accepted, even when signed.
+    value.result.quote.expires_at = Math.floor(Date.now() / 1000) + 60;
+    value.resign();
+    expect(await resource.createTaxQuote(value.request)).toEqual(value.result);
+    (value.result as { schema_version: number }).schema_version = 1;
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
   });

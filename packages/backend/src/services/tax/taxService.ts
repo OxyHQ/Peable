@@ -28,6 +28,9 @@ import {
 } from '../../db/schema/tax';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { newId } from '../../lib/ids';
+import { paramFromPath } from '../../lib/http';
+import { fromUnix, toUnix, toUnixOrNull } from '../../lib/time';
+import { unixSeconds } from '../billing/contracts';
 import { isKnownTaxCode, NONTAXABLE_TAX_CODE } from './codes';
 import { createTaxLocationEvidenceSchema, evaluateEvidence, taxAddressSchema } from './evidence';
 import {
@@ -55,21 +58,42 @@ export type TaxErrorCode =
   | 'tax_calculation_unavailable'
   | 'tax_provider_registration_mismatch';
 
+/** 422 is never used (ADR 0014 D1): a well-formed request Peable refuses is a 400. */
 const STATUS: Record<TaxErrorCode, number> = {
   not_found: 404,
-  invalid_tax_request: 422,
-  invalid_tax_code: 422,
-  invalid_registration: 422,
+  invalid_tax_request: 400,
+  invalid_tax_code: 400,
+  invalid_registration: 400,
   registration_immutable: 409,
   tax_settings_not_active: 409,
-  approval_incomplete: 422,
+  approval_incomplete: 400,
   approval_requires_provider: 409,
-  customer_location_insufficient: 422,
-  customer_location_conflicting: 422,
-  customer_location_invalid: 422,
+  customer_location_insufficient: 400,
+  customer_location_conflicting: 400,
+  customer_location_invalid: 400,
   customer_location_expired: 409,
   tax_calculation_unavailable: 503,
   tax_provider_registration_mismatch: 503,
+};
+
+/** What each refusal means, for the error's human `message`; the machine
+ * reason is the `code` beside it. */
+const MESSAGE: Record<TaxErrorCode, string> = {
+  not_found: 'No such tax object.',
+  invalid_tax_request: 'The tax request is invalid.',
+  invalid_tax_code: 'Unknown tax code.',
+  invalid_registration: 'The tax registration is invalid.',
+  registration_immutable: 'An approved or ended registration cannot be changed this way.',
+  tax_settings_not_active: 'Tax settings have not been approved by the owner.',
+  approval_incomplete: 'Tax settings are not complete enough to approve.',
+  approval_requires_provider: 'Registered sales need a tax provider; this application has none.',
+  customer_location_insufficient: 'The customer location evidence is insufficient.',
+  customer_location_conflicting: 'The customer location evidence is conflicting.',
+  customer_location_invalid: 'The tax provider could not use the customer location.',
+  customer_location_expired: 'The customer location evidence has expired.',
+  tax_calculation_unavailable: 'Tax could not be calculated right now.',
+  tax_provider_registration_mismatch:
+    'The tax provider does not collect where Peable is registered; nothing was quoted.',
 };
 
 export class TaxError extends Error {
@@ -77,8 +101,10 @@ export class TaxError extends Error {
   constructor(
     readonly code: TaxErrorCode,
     readonly detail?: string,
+    /** The offending request field, in bracket notation, when there is one. */
+    readonly param?: string,
   ) {
-    super(detail ? `${code}: ${detail}` : code);
+    super(detail ? `${MESSAGE[code]} ${detail}` : MESSAGE[code]);
     this.name = 'TaxError';
     this.status = STATUS[code];
   }
@@ -91,10 +117,10 @@ const MAX_CALCULATION_LIFETIME_MS = 24 * 3600_000;
 
 const settingsUpdateSchema = z
   .object({
-    legalName: z.string().trim().min(1).max(200).nullable().optional(),
-    headOffice: taxAddressSchema.nullable().optional(),
-    defaultTaxCode: z.string().optional(),
-    defaultTaxBehavior: z.enum(['inclusive', 'exclusive']).optional(),
+    legal_name: z.string().trim().min(1).max(200).nullable().optional(),
+    head_office: taxAddressSchema.nullable().optional(),
+    default_tax_code: z.string().optional(),
+    default_tax_behavior: z.enum(['inclusive', 'exclusive']).optional(),
   })
   .strict();
 const registrationCreateSchema = z
@@ -105,12 +131,12 @@ const registrationCreateSchema = z
       .regex(/^[A-Z0-9]{1,3}$/)
       .nullish(),
     scheme: z.enum(TAX_REGISTRATION_SCHEMES),
-    registrationNumber: z.string().trim().min(1).max(64).nullish(),
-    activeFrom: z.string().datetime().optional(),
-    expiresAt: z.string().datetime().nullish(),
+    registration_number: z.string().trim().min(1).max(64).nullish(),
+    active_from: unixSeconds.optional(),
+    expires_at: unixSeconds.nullish(),
   })
   .strict();
-const registrationUpdateSchema = z.object({ expiresAt: z.string().datetime() }).strict();
+const registrationUpdateSchema = z.object({ expires_at: unixSeconds }).strict();
 const productRef = z
   .string()
   .min(1)
@@ -123,8 +149,8 @@ const lineItemsSchema = z
         reference: z.string().min(1).max(200),
         amount: z.number().int().nonnegative().safe(),
         quantity: z.number().int().positive().max(1_000_000).optional(),
-        taxCode: z.string().optional(),
-        taxBehavior: z.enum(['inclusive', 'exclusive']).optional(),
+        tax_code: z.string().optional(),
+        tax_behavior: z.enum(['inclusive', 'exclusive']).optional(),
       })
       .strict(),
   )
@@ -137,20 +163,20 @@ const lineItemsSchema = z
 export const createTaxCalculationSchema = z
   .object({
     currency: z.string().regex(/^[A-Za-z]{3}$/),
-    customerLocationEvidenceId: z
+    customer_location_evidence_id: z
       .string()
       .min(1)
       .max(128)
       .regex(/^[A-Za-z0-9_.:-]+$/),
-    lineItems: lineItemsSchema,
+    line_items: lineItemsSchema,
   })
   .strict();
 export const listTaxTransactionsSchema = z
   .object({
-    from: z.string().datetime(),
-    to: z.string().datetime(),
+    from: z.coerce.number().pipe(unixSeconds),
+    to: z.coerce.number().pipe(unixSeconds),
     limit: z.coerce.number().int().positive().max(1000).optional(),
-    startingAfter: z.string().optional(),
+    starting_after: z.string().optional(),
   })
   .strict();
 
@@ -169,8 +195,6 @@ type SettingsRow = typeof taxSettings.$inferSelect;
 type RegistrationRow = typeof taxRegistrations.$inferSelect;
 type EvidenceRow = typeof taxLocationEvidence.$inferSelect;
 type CalculationRow = typeof taxCalculations.$inferSelect;
-
-const iso = (value: Date | null | undefined) => (value ? value.toISOString() : null);
 
 export interface TaxServiceOptions {
   db: Database;
@@ -213,9 +237,9 @@ export function createTaxService(options: TaxServiceOptions) {
       default_tax_behavior: row?.defaultTaxBehavior ?? 'exclusive',
       calculation_account: row?.calculationAccount ?? 'none',
       provider: providerFor(merchant, row)?.id ?? null,
-      approved_at: iso(row?.approvedAt),
+      approved_at: toUnixOrNull(row?.approvedAt),
       approved_by: row?.approvedBy ?? null,
-      updated_at: iso(row?.updatedAt),
+      updated_at: toUnixOrNull(row?.updatedAt),
     };
   }
   function registrationDto(row: RegistrationRow, at = now()): TaxRegistration {
@@ -233,12 +257,12 @@ export function createTaxService(options: TaxServiceOptions) {
       state: row.state,
       scheme: row.scheme,
       registration_number: row.registrationNumber,
-      active_from: (row.activeFrom ?? row.createdAt).toISOString(),
-      expires_at: iso(row.expiresAt),
+      active_from: toUnix(row.activeFrom ?? row.createdAt),
+      expires_at: toUnixOrNull(row.expiresAt),
       status,
-      approved_at: iso(row.approvedAt),
+      approved_at: toUnixOrNull(row.approvedAt),
       provider_registration_ref: row.providerRef,
-      created: row.createdAt.toISOString(),
+      created: toUnix(row.createdAt),
     };
   }
   function evidenceDto(merchant: MerchantRow, row: EvidenceRow): TaxLocationEvidence {
@@ -255,15 +279,21 @@ export function createTaxService(options: TaxServiceOptions) {
         country: item.country,
         state: item.state,
       })),
-      observed_at: row.observedAt.toISOString(),
-      expires_at: row.expiresAt.toISOString(),
+      observed_at: toUnix(row.observedAt),
+      expires_at: toUnix(row.expiresAt),
       livemode: merchant.livemode,
     };
   }
   function parse<T extends z.ZodTypeAny>(schema: T, raw: unknown): z.infer<T> {
     const result = schema.safeParse(raw);
-    if (!result.success)
-      throw new TaxError('invalid_tax_request', result.error.issues[0]?.message ?? 'invalid');
+    if (!result.success) {
+      const issue = result.error.issues[0];
+      throw new TaxError(
+        'invalid_tax_request',
+        issue?.message,
+        issue ? paramFromPath(issue.path) : undefined,
+      );
+    }
     return result.data;
   }
   /** Approved registrations in force at `at` that cover the location. */
@@ -299,16 +329,16 @@ export function createTaxService(options: TaxServiceOptions) {
     /** Any change returns the settings to draft: an approval covers what was approved. */
     async updateSettings(merchant: MerchantRow, raw: unknown): Promise<TaxSettings> {
       const input = parse(settingsUpdateSchema, raw);
-      if (input.defaultTaxCode !== undefined && !isKnownTaxCode(input.defaultTaxCode))
-        throw new TaxError('invalid_tax_code', input.defaultTaxCode);
+      if (input.default_tax_code !== undefined && !isKnownTaxCode(input.default_tax_code))
+        throw new TaxError('invalid_tax_code', input.default_tax_code);
       const values = {
-        ...(input.legalName !== undefined ? { legalName: input.legalName } : {}),
-        ...(input.headOffice !== undefined
-          ? { headOffice: input.headOffice as TaxAddress | null }
+        ...(input.legal_name !== undefined ? { legalName: input.legal_name } : {}),
+        ...(input.head_office !== undefined
+          ? { headOffice: input.head_office as TaxAddress | null }
           : {}),
-        ...(input.defaultTaxCode !== undefined ? { defaultTaxCode: input.defaultTaxCode } : {}),
-        ...(input.defaultTaxBehavior !== undefined
-          ? { defaultTaxBehavior: input.defaultTaxBehavior }
+        ...(input.default_tax_code !== undefined ? { defaultTaxCode: input.default_tax_code } : {}),
+        ...(input.default_tax_behavior !== undefined
+          ? { defaultTaxBehavior: input.default_tax_behavior }
           : {}),
       };
       const [row] = await db
@@ -334,10 +364,13 @@ export function createTaxService(options: TaxServiceOptions) {
       const state = input.state ?? null;
       const problem = validateRegistration(input.country, state, input.scheme);
       if (problem) throw new TaxError('invalid_registration', problem);
-      const activeFrom = input.activeFrom ? new Date(input.activeFrom) : null;
-      const expiresAt = input.expiresAt ? new Date(input.expiresAt) : null;
+      const activeFrom = input.active_from !== undefined ? fromUnix(input.active_from) : null;
+      const expiresAt =
+        input.expires_at !== undefined && input.expires_at !== null
+          ? fromUnix(input.expires_at)
+          : null;
       if (expiresAt && +expiresAt <= +(activeFrom ?? now()))
-        throw new TaxError('invalid_registration', 'expiresAt must follow activeFrom');
+        throw new TaxError('invalid_registration', 'expires_at must follow active_from');
       const [row] = await db
         .insert(taxRegistrations)
         .values({
@@ -346,7 +379,7 @@ export function createTaxService(options: TaxServiceOptions) {
           country: input.country,
           state,
           scheme: input.scheme,
-          registrationNumber: input.registrationNumber ?? null,
+          registrationNumber: input.registration_number ?? null,
           activeFrom,
           expiresAt,
         })
@@ -387,7 +420,7 @@ export function createTaxService(options: TaxServiceOptions) {
       raw: unknown,
     ): Promise<TaxRegistration> {
       const input = parse(registrationUpdateSchema, raw);
-      const expiresAt = new Date(input.expiresAt);
+      const expiresAt = fromUnix(input.expires_at);
       const [row] = await db
         .select()
         .from(taxRegistrations)
@@ -400,7 +433,7 @@ export function createTaxService(options: TaxServiceOptions) {
       if (!row) throw new TaxError('not_found');
       if (row.expiresAt && +row.expiresAt <= +now()) throw new TaxError('registration_immutable');
       if (+expiresAt < +now() - 60_000 || (row.activeFrom && +expiresAt <= +row.activeFrom))
-        throw new TaxError('invalid_registration', 'expiresAt cannot be in the past');
+        throw new TaxError('invalid_registration', 'expires_at cannot be in the past');
       const settings = await settingsRow(merchant);
       const calculating = providerFor(merchant, settings);
       if (row.providerRef && calculating?.endRegistration) {
@@ -441,12 +474,7 @@ export function createTaxService(options: TaxServiceOptions) {
         .from(taxProductCodes)
         .where(eq(taxProductCodes.merchantId, merchant.id))
         .orderBy(asc(taxProductCodes.productRef));
-      return rows.map((row) => ({
-        object: 'tax.product',
-        productRef: row.productRef,
-        taxCode: row.taxCode,
-        updatedAt: row.updatedAt.toISOString(),
-      }));
+      return rows.map(productCodeDto);
     },
     async setProductCode(
       merchant: MerchantRow,
@@ -454,7 +482,7 @@ export function createTaxService(options: TaxServiceOptions) {
       raw: unknown,
     ): Promise<TaxProductCode> {
       const reference = parse(productRef, ref);
-      const { taxCode } = parse(z.object({ taxCode: z.string() }).strict(), raw);
+      const { tax_code: taxCode } = parse(z.object({ tax_code: z.string() }).strict(), raw);
       if (!isKnownTaxCode(taxCode)) throw new TaxError('invalid_tax_code', taxCode);
       const [row] = await db
         .insert(taxProductCodes)
@@ -465,12 +493,7 @@ export function createTaxService(options: TaxServiceOptions) {
         })
         .returning();
       if (!row) throw new Error('product code upsert returned nothing');
-      return {
-        object: 'tax.product',
-        product_ref: row.productRef,
-        tax_code: row.taxCode,
-        updated_at: row.updatedAt.toISOString(),
-      };
+      return productCodeDto(row);
     },
     /**
      * The owner's approval: activates the settings and every pending
@@ -505,10 +528,7 @@ export function createTaxService(options: TaxServiceOptions) {
       const account = approval.officialApplication && provider ? 'platform' : 'none';
       const calculating = providerFor(merchant, { ...current, calculationAccount: account });
       if ((pending.length || live.length) && !calculating)
-        throw new TaxError(
-          'approval_requires_provider',
-          'registered sales need a tax provider; this application has none',
-        );
+        throw new TaxError('approval_requires_provider');
       const mirrored = new Map<string, string>();
       if (calculating) {
         for (const row of pending)
@@ -587,7 +607,7 @@ export function createTaxService(options: TaxServiceOptions) {
         .values({
           publicId: newId('taxloc'),
           merchantId: merchant.id,
-          customerRef: input.customerRef,
+          customerRef: input.customer_ref,
           status: judged.status,
           rule: judged.rule,
           country: judged.country,
@@ -634,7 +654,7 @@ export function createTaxService(options: TaxServiceOptions) {
         .where(
           and(
             eq(taxLocationEvidence.merchantId, merchant.id),
-            eq(taxLocationEvidence.publicId, input.customerLocationEvidenceId),
+            eq(taxLocationEvidence.publicId, input.customer_location_evidence_id),
           ),
         );
       if (!evidence) throw new TaxError('not_found');
@@ -652,13 +672,13 @@ export function createTaxService(options: TaxServiceOptions) {
             eq(taxProductCodes.merchantId, merchant.id),
             inArray(
               taxProductCodes.productRef,
-              input.lineItems.map((line) => line.reference),
+              input.line_items.map((line) => line.reference),
             ),
           ),
         );
-      const lines = input.lineItems.map((line) => {
+      const lines = input.line_items.map((line) => {
         const taxCode =
-          line.taxCode ??
+          line.tax_code ??
           products.find((product) => product.productRef === line.reference)?.taxCode ??
           settings?.defaultTaxCode ??
           'txcd_10000000';
@@ -668,7 +688,7 @@ export function createTaxService(options: TaxServiceOptions) {
           amount: line.amount,
           quantity: line.quantity ?? 1,
           taxCode,
-          taxBehavior: (line.taxBehavior ??
+          taxBehavior: (line.tax_behavior ??
             settings?.defaultTaxBehavior ??
             'exclusive') as TaxBehavior,
         };
@@ -683,8 +703,16 @@ export function createTaxService(options: TaxServiceOptions) {
       let providerRef: string | null = null;
       let providerExpiry: Date | null = null;
       let computed: TaxCalculationLineItem[];
+      /** The wire line for an internal one, before its tax is known. */
+      const wireLine = (line: (typeof lines)[number]) => ({
+        reference: line.reference,
+        quantity: line.quantity,
+        tax_code: line.taxCode,
+        tax_behavior: line.taxBehavior,
+        amount: line.amount,
+      });
       const untaxed = (line: (typeof lines)[number], reason: string): TaxCalculationLineItem => ({
-        ...line,
+        ...wireLine(line),
         amount_tax: 0,
         amount_net: line.amount,
         breakdown: [
@@ -760,9 +788,10 @@ export function createTaxService(options: TaxServiceOptions) {
           )
             throw new TaxError('tax_calculation_unavailable', 'inconsistent_answer');
           return {
-            ...line,
-            amountTax: got.amountTax,
-            amountNet: line.taxBehavior === 'inclusive' ? line.amount - got.amountTax : line.amount,
+            ...wireLine(line),
+            amount_tax: got.amountTax,
+            amount_net:
+              line.taxBehavior === 'inclusive' ? line.amount - got.amountTax : line.amount,
             breakdown: got.breakdown,
           };
         });
@@ -812,9 +841,9 @@ export function createTaxService(options: TaxServiceOptions) {
         tax_amount_exclusive: taxAmountExclusive,
         tax_amount_inclusive: taxAmountInclusive,
         line_items: computed,
-        tax_date: at.toISOString(),
-        created: at.toISOString(),
-        expires_at: expiresAt.toISOString(),
+        tax_date: toUnix(at),
+        created: toUnix(at),
+        expires_at: toUnix(expiresAt),
         livemode: merchant.livemode,
       };
       await db.insert(taxCalculations).values({
@@ -896,7 +925,7 @@ export function createTaxService(options: TaxServiceOptions) {
      * return (an OSS return, a state filing) is prepared from. */
     async report(merchant: MerchantRow, raw: unknown): Promise<TaxReport> {
       const input = parse(
-        listTaxTransactionsSchema.omit({ limit: true, startingAfter: true }),
+        listTaxTransactionsSchema.omit({ limit: true, starting_after: true }),
         raw,
       );
       const schemes = new Map(
@@ -913,7 +942,7 @@ export function createTaxService(options: TaxServiceOptions) {
         const page = await transactionsBetween(
           db,
           merchant.id,
-          { ...input, startingAfter: cursor },
+          { ...input, starting_after: cursor },
           1000,
         );
         for (const row of page) {
@@ -997,19 +1026,19 @@ export type TaxService = ReturnType<typeof createTaxService>;
 async function transactionsBetween(
   db: Database,
   merchantId: string,
-  input: { from: string; to: string; startingAfter?: string },
+  input: { from: number; to: number; starting_after?: string },
   limit: number,
 ) {
   let after: Date | undefined;
   let afterId: string | undefined;
-  if (input.startingAfter) {
+  if (input.starting_after) {
     const [anchor] = await db
       .select({ committedAt: taxTransactions.committedAt, id: taxTransactions.id })
       .from(taxTransactions)
       .where(
         and(
           eq(taxTransactions.merchantId, merchantId),
-          eq(taxTransactions.publicId, input.startingAfter),
+          eq(taxTransactions.publicId, input.starting_after),
         ),
       );
     if (!anchor) throw new TaxError('not_found');
@@ -1029,8 +1058,8 @@ async function transactionsBetween(
     .where(
       and(
         eq(taxTransactions.merchantId, merchantId),
-        gte(taxTransactions.committedAt, new Date(input.from)),
-        lt(taxTransactions.committedAt, new Date(input.to)),
+        gte(taxTransactions.committedAt, fromUnix(input.from)),
+        lt(taxTransactions.committedAt, fromUnix(input.to)),
         after && afterId
           ? or(
               gt(taxTransactions.committedAt, after),
@@ -1041,6 +1070,15 @@ async function transactionsBetween(
     )
     .orderBy(asc(taxTransactions.committedAt), asc(taxTransactions.id))
     .limit(limit);
+}
+
+function productCodeDto(row: typeof taxProductCodes.$inferSelect): TaxProductCode {
+  return {
+    object: 'tax.product',
+    product_ref: row.productRef,
+    tax_code: row.taxCode,
+    updated_at: toUnix(row.updatedAt),
+  };
 }
 
 function transactionDto(row: {
@@ -1055,7 +1093,7 @@ function transactionDto(row: {
     calculation_id: row.calculation.publicId,
     reference: row.transaction.reference,
     rail: row.transaction.rail,
-    committed_at: row.transaction.committedAt.toISOString(),
+    committed_at: toUnix(row.transaction.committedAt),
     reversal_of: row.originalPublicId ?? null,
     reversal: row.transaction.reversal ?? null,
     calculation: row.calculation.result,
@@ -1114,7 +1152,7 @@ function cumulativeLines(calculation: TaxCalculation, reversed: number) {
   return calculation.line_items.map((line) => {
     const breakdown = line.breakdown.map((entry) => ({
       ...entry,
-      taxableAmount: scaled(entry.taxable_amount, reversed, total),
+      taxable_amount: scaled(entry.taxable_amount, reversed, total),
       amount: scaled(entry.amount, reversed, total),
     }));
     const amountTax = breakdown.reduce((sum, entry) => sum + entry.amount, 0);
@@ -1182,7 +1220,7 @@ export async function reverseTaxTransaction(
     const before = cumulativeLines(calculation.result, reversed);
     const after = cumulativeLines(calculation.result, target);
     // Negative: what this reversal gives back (positive when it reinstates).
-    const lineItems = after.map((now, index) => {
+    const lineItems: TaxCalculationLineItem[] = after.map((now, index) => {
       const was = before[index];
       if (!was) throw new Error('reversal lines diverged');
       const amountTax = was.amountTax - now.amountTax;
@@ -1190,21 +1228,21 @@ export async function reverseTaxTransaction(
       return {
         ...now.line,
         amount: gross - (now.line.tax_behavior === 'exclusive' ? amountTax : 0),
-        amountTax,
-        amountNet: gross - amountTax,
+        amount_tax: amountTax,
+        amount_net: gross - amountTax,
         breakdown: now.breakdown.map((entry, at) => {
           const prior = was.breakdown[at];
           if (!prior) throw new Error('reversal breakdown diverged');
           return {
             ...entry,
-            taxableAmount: prior.taxableAmount - entry.taxableAmount,
+            taxable_amount: prior.taxable_amount - entry.taxable_amount,
             amount: prior.amount - entry.amount,
           };
         }),
       };
     });
-    const taxAmount = lineItems.reduce((sum, line) => sum + line.amountTax, 0);
-    const amountNet = lineItems.reduce((sum, line) => sum + line.amountNet, 0);
+    const taxAmount = lineItems.reduce((sum, line) => sum + line.amount_tax, 0);
+    const amountNet = lineItems.reduce((sum, line) => sum + line.amount_net, 0);
     const reversal: TaxTransactionReversal = {
       amount_total: amountNet + taxAmount,
       amount_net: amountNet,

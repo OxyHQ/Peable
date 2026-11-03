@@ -53,9 +53,9 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     confirmations: 0,
     client_secret: 'pi_live123_secret',
     metadata: {},
-    expires_at: new Date(Date.now() + 60_000).toISOString(),
-    created: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 60_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -122,13 +122,13 @@ test('an expired frozen subscription quote shows canonical amounts and no paymen
   const quote = {
     id: 'fx_expired',
     currency: 'USD' as const,
-    grossMinorUnits: 100,
-    amountBaseUnits: '333333334',
-    usdPerFair: '0.3',
+    gross_minor_units: 100,
+    amount_base_units: '333333334',
+    usd_per_fair: '0.3',
     source: 'official',
-    observedAt: new Date(Date.now() - 120000).toISOString(),
-    quotedAt: new Date(Date.now() - 120000).toISOString(),
-    expiresAt: new Date(Date.now() - 1000).toISOString(),
+    observed_at: Math.floor((Date.now() - 120_000) / 1000),
+    quoted_at: Math.floor((Date.now() - 120_000) / 1000),
+    expires_at: Math.floor((Date.now() - 1_000) / 1000),
     rounding: 'ceil_to_base_unit' as const,
   };
   render(

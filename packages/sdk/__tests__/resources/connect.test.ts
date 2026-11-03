@@ -52,8 +52,8 @@ const SELLER: ConnectedAccount = {
   requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
   disabled_reason_codes: [],
   last_synced_at: null,
-  created: '2026-10-16T00:00:00.000Z',
-  updated_at: '2026-10-16T00:00:00.000Z',
+  created: 1792108800,
+  updated_at: 1792108800,
 };
 
 const ON_BEHALF: PaymentIntent = {
@@ -71,10 +71,10 @@ const ON_BEHALF: PaymentIntent = {
   confirmations: 0,
   client_secret: 'pi_onbehalf_secret_x',
   metadata: { order: 'o_1' },
-  expires_at: '2026-10-16T00:15:00.000Z',
+  expires_at: 1792109700,
   can_expire: true,
-  created: '2026-10-16T00:00:00.000Z',
-  updated_at: '2026-10-16T00:00:00.000Z',
+  created: 1792108800,
+  updated_at: 1792108800,
 };
 
 function gateway(body: unknown, status = 200) {
@@ -108,8 +108,8 @@ describe('accounts', () => {
     const accounts = new ConnectedAccountsResource(buildTestClient(fetchImpl));
 
     const account = await accounts.create({
-      externalRef: 'store_42',
-      faircoin: { network: 'testnet', oxyUserId: 'user_seller' },
+      external_ref: 'store_42',
+      faircoin: { network: 'testnet', oxy_user_id: 'user_seller' },
     });
 
     expect(account.faircoin?.status).toBe('pending');
@@ -117,8 +117,8 @@ describe('accounts', () => {
     expect(request.method).toBe('POST');
     expect(request.url).toBe(`${TEST_GATEWAY_URL}/v1/connected_accounts`);
     expect(bodyOf(request)).toEqual({
-      externalRef: 'store_42',
-      faircoin: { network: 'testnet', oxyUserId: 'user_seller' },
+      external_ref: 'store_42',
+      faircoin: { network: 'testnet', oxy_user_id: 'user_seller' },
     });
   });
 
@@ -141,7 +141,7 @@ describe('accountLinks', () => {
     const link = {
       object: 'account_link',
       url: 'https://peable.to/connect/tok',
-      expiresAt: '2026-10-16T01:00:00.000Z',
+      expires_at: 1792112400,
     };
     const { fetch: fetchImpl, requests } = gateway(link, 201);
     const links = new AccountLinksResource(
@@ -151,8 +151,8 @@ describe('accountLinks', () => {
     const created = await links.create({
       account: 'ca_seller',
       rail: 'faircoin',
-      returnUrl: 'https://mercaria.co/sell/payments/done',
-      refreshUrl: 'https://mercaria.co/sell/payments/refresh',
+      return_url: 'https://mercaria.co/sell/payments/done',
+      refresh_url: 'https://mercaria.co/sell/payments/refresh',
     });
 
     expect(created.url).toBe('https://peable.to/connect/tok');
@@ -161,14 +161,14 @@ describe('accountLinks', () => {
     // The account goes in the PATH; it is not repeated in the body.
     expect(bodyOf(request)).toEqual({
       rail: 'faircoin',
-      returnUrl: 'https://mercaria.co/sell/payments/done',
-      refreshUrl: 'https://mercaria.co/sell/payments/refresh',
+      return_url: 'https://mercaria.co/sell/payments/done',
+      refresh_url: 'https://mercaria.co/sell/payments/refresh',
     });
   });
 });
 
 describe('payments on behalf of a seller', () => {
-  test('paymentIntents.create sends connectedAccount and an explicit FairCoin rail', async () => {
+  test('paymentIntents.create sends connected_account and an explicit FairCoin rail', async () => {
     const { fetch: fetchImpl, requests } = gateway(ON_BEHALF, 201);
     const intents = new PaymentIntentsResource(buildTestClient(fetchImpl));
 
@@ -186,7 +186,7 @@ describe('payments on behalf of a seller', () => {
     expect(intent.connected_account_id).toBe('ca_seller');
     const request = callOf(requests);
     expect(request.headers.get('Idempotency-Key')).toBe('order_o_1');
-    expect(bodyOf(request)).toMatchObject({ rail: 'faircoin', connectedAccount: 'ca_seller' });
+    expect(bodyOf(request)).toMatchObject({ rail: 'faircoin', connected_account: 'ca_seller' });
   });
 
   test("lists one seller's payments", async () => {
@@ -199,9 +199,9 @@ describe('payments on behalf of a seller', () => {
     );
   });
 
-  test('checkout.sessions.create sends connectedAccount', async () => {
+  test('checkout.sessions.create sends connected_account', async () => {
     const { fetch: fetchImpl, requests } = gateway(
-      { id: 'cs_1', connectedAccountId: 'ca_seller' },
+      { id: 'cs_1', connected_account_id: 'ca_seller' },
       201,
     );
     await new CheckoutSessionsResource(buildTestClient(fetchImpl)).create({
@@ -209,7 +209,7 @@ describe('payments on behalf of a seller', () => {
       network: 'testnet',
       connected_account: 'ca_seller',
     });
-    expect(bodyOf(callOf(requests))).toMatchObject({ connectedAccount: 'ca_seller' });
+    expect(bodyOf(callOf(requests))).toMatchObject({ connected_account: 'ca_seller' });
   });
 
   test("an unready seller surfaces the gateway's code, so a platform can branch on it", async () => {
@@ -242,7 +242,7 @@ describe('the platform webhook for an on-behalf payment', () => {
       id: 'evt_1',
       object: 'event',
       type: 'payment_intent.confirming',
-      created: '2026-10-16T00:05:00.000Z',
+      created: 1792109100,
       account: 'ca_seller',
       data: { object: { ...ON_BEHALF, status: 'confirming', can_expire: false } },
     };

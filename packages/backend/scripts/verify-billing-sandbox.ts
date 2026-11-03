@@ -426,12 +426,12 @@ try {
       evidenceRef: runId,
     });
     const checkoutInput = {
-      providerCustomerId: customer.provider_customer_id,
-      providerPriceId: price.id,
-      trialDays: 0,
-      returnUrl: 'https://example.invalid/i08',
-      storeId: runId,
-      planId: `${runId}:plan`,
+      provider_customer_id: customer.provider_customer_id,
+      provider_price_id: price.id,
+      trial_days: 0,
+      return_url: 'https://example.invalid/i08',
+      store_id: runId,
+      plan_id: `${runId}:plan`,
     };
     let lostResponse = false;
     let initialCheckoutCallResolved = false;
@@ -484,7 +484,10 @@ try {
     assert(owned.some((value) => value.kind === 'checkout' && value.id === session.id));
     const portalSession = await mutate('sdk-portal', () =>
       sdk.billing.createPortalSession(
-        { provider_customer_id: customer.provider_customer_id, return_url: checkoutInput.returnUrl },
+        {
+          provider_customer_id: customer.provider_customer_id,
+          return_url: checkoutInput.return_url,
+        },
         { idempotencyKey: `${runId}:portal` },
       ),
     );

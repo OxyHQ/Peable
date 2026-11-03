@@ -52,9 +52,9 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     confirmations: 0,
     client_secret: 'session_secret_abc',
     metadata: {},
-    expires_at: new Date(Date.now() + 60_000).toISOString(),
-    created: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 60_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }

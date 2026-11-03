@@ -39,6 +39,7 @@ import type { StripeBillingClient } from './stripeBillingProvider';
 import { billingTaxCheckoutSnapshotSchema, type BillingTaxCheckoutSnapshot } from './tax-checkout';
 import { createVerifiedBillingTaxQuote, type BillingTaxQuoteCalculator } from './tax-quote';
 import type { VerifiedBillingBindings } from './verifiedBindings';
+import { fromUnix } from '../../lib/time';
 
 /** The Stripe events Peable Tax on the card rail acts on. The rail's webhook
  * endpoint must deliver every one of them; boot refuses an endpoint that does
@@ -103,7 +104,7 @@ function billingAddress(address: z.infer<typeof stripeAddress>) {
     // A subdivision Peable Tax cannot read is left out rather than guessed;
     // the jurisdiction's rule then decides whether the rest is enough.
     ...(state && /^[A-Z0-9]{1,3}$/.test(state) ? { state } : {}),
-    ...(text(address.postal_code, 20) ? { postalCode: text(address.postal_code, 20) } : {}),
+    ...(text(address.postal_code, 20) ? { postal_code: text(address.postal_code, 20) } : {}),
     ...(text(address.city, 200) ? { city: text(address.city, 200) } : {}),
     ...(text(address.line1, 200) ? { line1: text(address.line1, 200) } : {}),
     ...(text(address.line2, 200) ? { line2: text(address.line2, 200) } : {}),
@@ -199,16 +200,16 @@ export function createStripeInvoiceTaxRecorder(options: {
     const quote = snapshot.taxQuote.quote;
     if (
       paid.currency !== quote.currency ||
-      paid.amount_paid !== String(quote.grossMinorUnits) ||
-      paid.net_amount !== String(quote.netMinorUnits) ||
-      paid.tax_amount !== String(quote.taxMinorUnits)
+      paid.amount_paid !== String(quote.gross_minor_units) ||
+      paid.net_amount !== String(quote.net_minor_units) ||
+      paid.tax_amount !== String(quote.tax_minor_units)
     )
       throw new BillingError('invalid_provider_response', 502);
     await commitTaxTransaction(db, {
-      calculationPublicId: quote.taxRateEvidenceId,
+      calculationPublicId: quote.tax_rate_evidence_id,
       reference: invoiceRef,
       rail: 'stripe',
-      committedAt: new Date(paid.paid_at),
+      committedAt: fromUnix(paid.paid_at),
       providerPaymentRef: paid.payment_intent_id,
     });
   }
@@ -232,8 +233,8 @@ export function createStripeInvoiceTaxRecorder(options: {
         id: z.literal(invoiceRef),
         status: z.literal('draft'),
         currency: z.literal(quote.currency.toLowerCase()),
-        total: z.literal(quote.grossMinorUnits),
-        total_excluding_tax: z.literal(quote.netMinorUnits),
+        total: z.literal(quote.gross_minor_units),
+        total_excluding_tax: z.literal(quote.net_minor_units),
         automatic_tax: z.object({ enabled: z.literal(false) }),
       })
       .safeParse(await client.retrieveInvoice(invoiceRef)).success;
@@ -307,7 +308,7 @@ export function createStripeInvoiceTaxRecorder(options: {
       if (
         checkout.status !== 'complete' ||
         checkout.subscription?.provider_subscription_id !== subscriptionRef ||
-        checkout.initialInvoiceId !== invoiceRef
+        checkout.initial_invoice_id !== invoiceRef
       )
         throw new BillingError('reconciliation_required');
       await commitPaid(owner, subscriptionRef, invoiceRef, snapshot);
@@ -340,10 +341,10 @@ export function createStripeInvoiceTaxRecorder(options: {
         if (draft.auto_advance !== false) await hold(invoiceRef);
         const merchant = await findMerchantById(db, owner.merchantId);
         if (!merchant) throw new BillingError('not_found', 404);
-        const storeId = checkoutSnapshot.taxQuote.source.storeId;
+        const storeId = checkoutSnapshot.taxQuote.source.store_id;
         const offer = checkoutSnapshot.offer;
         const evidence = await tax.recordEvidence(merchant, {
-          customerRef: storeId,
+          customer_ref: storeId,
           evidence: await renewalEvidence(draft.customer, subscriptionRef),
         });
         if (evidence.status !== 'sufficient')
@@ -443,7 +444,7 @@ export function createStripeInvoiceTaxRecorder(options: {
       await client.updateInvoice(
         invoiceRef,
         { auto_advance: true },
-        `peable-tax:${invoiceRef}:${priced.snapshot.taxQuote.quote.taxRateEvidenceId}:release`,
+        `peable-tax:${invoiceRef}:${priced.snapshot.taxQuote.quote.tax_rate_evidence_id}:release`,
       );
       return 'priced';
     },

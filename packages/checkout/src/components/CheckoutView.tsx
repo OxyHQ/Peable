@@ -60,8 +60,8 @@ export function CheckoutView({
   }, [billingQuote]);
   const quoteExpired =
     billingQuote &&
-    (!Number.isFinite(Date.parse(billingQuote.expires_at)) ||
-      Date.parse(billingQuote.expires_at) <= now ||
+    (!Number.isSafeInteger(billingQuote.expires_at) ||
+      billingQuote.expires_at * 1000 <= now ||
       billingQuote.amount_base_units !== initialIntent.amount);
   const [intent, setIntent] = useState(initialIntent);
   /**
@@ -176,7 +176,7 @@ export function CheckoutView({
             Payment quote: {formatDisplayUnits(BigInt(billingQuote.amount_base_units), 8, 'FAIR')}
           </p>
           <p>Quoted rate: 1 FAIR = {billingQuote.usd_per_fair} USD</p>
-          <p>Quote expires: {new Date(billingQuote.expires_at).toLocaleString()}</p>
+          <p>Quote expires: {new Date(billingQuote.expires_at * 1000).toLocaleString()}</p>
         </div>
       )}
       {awaitingPayment && quoteExpired ? (

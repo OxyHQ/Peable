@@ -211,9 +211,11 @@ export default function TaxScreen() {
                   ? t('tax.provider', { provider: settings.provider })
                   : t('tax.noProvider')}
               </Text>
-              {settings.approvedAt ? (
+              {settings.approved_at ? (
                 <Text className="text-muted-foreground">
-                  {t('tax.approvedAt', { at: settings.approvedAt })}
+                  {t('tax.approvedAt', {
+                    at: new Date(settings.approved_at * 1000).toLocaleString(),
+                  })}
                 </Text>
               ) : null}
             </View>
@@ -267,9 +269,9 @@ export default function TaxScreen() {
                   {row.state ? `-${row.state}` : ''} · {t(`tax.scheme.${row.scheme}`)} ·{' '}
                   {t(`tax.registration.${row.status}`)}
                 </Text>
-                {row.registrationNumber ? (
+                {row.registration_number ? (
                   <Text selectable className="text-muted-foreground">
-                    {row.registrationNumber}
+                    {row.registration_number}
                   </Text>
                 ) : null}
                 {row.status === 'pending_approval' &&
@@ -286,7 +288,11 @@ export default function TaxScreen() {
                     t('tax.end'),
                     () =>
                       void run(async () => {
-                        await taxDashboard.endRegistration(scope, row.id, new Date().toISOString());
+                        await taxDashboard.endRegistration(
+                          scope,
+                          row.id,
+                          Math.floor(Date.now() / 1000),
+                        );
                         await load();
                       }),
                   )}
@@ -372,15 +378,10 @@ export default function TaxScreen() {
               t('tax.runReport'),
               () =>
                 void run(async () => {
-                  const end = new Date(`${reportTo}T00:00:00Z`);
-                  end.setUTCDate(end.getUTCDate() + 1);
-                  setReport(
-                    await taxDashboard.report(
-                      scope,
-                      new Date(`${reportFrom}T00:00:00Z`).toISOString(),
-                      end.toISOString(),
-                    ),
-                  );
+                  // The last day is included: the range ends at the next UTC midnight.
+                  const from = Date.parse(`${reportFrom}T00:00:00Z`) / 1000;
+                  const to = Date.parse(`${reportTo}T00:00:00Z`) / 1000 + 86_400;
+                  setReport(await taxDashboard.report(scope, from, to));
                 }),
             )}
             {report && !report.rows.length ? (
@@ -388,18 +389,18 @@ export default function TaxScreen() {
             ) : null}
             {report?.rows.map((row) => (
               <View
-                key={`${row.country}-${row.state}-${row.registrationId}-${row.ratePercentage}-${row.currency}-${row.collection}`}
+                key={`${row.country}-${row.state}-${row.registration_id}-${row.rate_percentage}-${row.currency}-${row.collection}`}
                 className="border border-border rounded-xl p-3"
               >
                 <Text selectable className="text-foreground">
                   {row.country}
                   {row.state ? `-${row.state}` : ''} · {row.collection}
-                  {row.ratePercentage ? ` · ${row.ratePercentage}%` : ''} · {row.transactions}
+                  {row.rate_percentage ? ` · ${row.rate_percentage}%` : ''} · {row.transactions}
                 </Text>
                 <Text selectable className="text-muted-foreground">
                   {t('tax.reportAmounts', {
-                    taxable: (row.taxableAmount / 100).toFixed(2),
-                    tax: (row.taxAmount / 100).toFixed(2),
+                    taxable: (row.taxable_amount / 100).toFixed(2),
+                    tax: (row.tax_amount / 100).toFixed(2),
                     currency: row.currency,
                   })}
                 </Text>

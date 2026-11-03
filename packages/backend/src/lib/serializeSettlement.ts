@@ -29,6 +29,7 @@ import {
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
+import { toUnix, toUnixOrNull } from './time';
 
 /** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
 export type ConnectedAccountDTO = ConnectedAccount;
@@ -68,9 +69,9 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
       pending_verification: row.requirementsPendingVerification,
     },
     disabled_reason_codes: row.disabledReasonCodes,
-    last_synced_at: row.lastSyncedAt?.toISOString() ?? null,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    last_synced_at: toUnixOrNull(row.lastSyncedAt),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -82,7 +83,7 @@ function toFaircoinHalf(row: ConnectedAccountRow): ConnectedAccountFaircoin | nu
     network: row.network,
     status,
     oxy_user_id: row.faircoinOxyUserId,
-    registered_at: row.faircoinRegisteredAt?.toISOString() ?? null,
+    registered_at: toUnixOrNull(row.faircoinRegisteredAt),
   };
 }
 
@@ -114,7 +115,7 @@ export function toTransferDTO(
     amount_reversed: row.amountReversed,
     status: row.status,
     failure_message: row.failureMessage,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }

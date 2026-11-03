@@ -36,22 +36,24 @@ export const billingReturnUrl = z
     const url = new URL(value);
     return url.protocol === 'https:' && !url.username && !url.password;
   }, 'An HTTPS return URL without credentials is required');
+/** An instant on the wire: integer Unix seconds (ADR 0014 D1). */
+export const unixSeconds = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 export const ensureCustomerSchema = z
   .object({
-    storeId: billingReference,
-    storeName: z.string().min(1).max(200),
+    store_id: billingReference,
+    store_name: z.string().min(1).max(200),
     rail: billingRailId.optional(),
   })
   .strict();
 export const billingTaxQuoteSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schema_version: z.literal(2),
     source: z
       .object({
-        merchantId: billingReference,
-        appId: billingReference,
-        storeId: billingReference,
-        planId: billingReference,
+        merchant_id: billingReference,
+        app_id: billingReference,
+        store_id: billingReference,
+        plan_id: billingReference,
         mode: z.enum(['test', 'live']),
         environment: z.enum(['development', 'staging', 'production']),
       })
@@ -60,26 +62,26 @@ export const billingTaxQuoteSchema = z
       .object({
         id: billingReference,
         currency: z.string().regex(/^[A-Z]{3}$/),
-        grossMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        netMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        taxMinorUnits: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        taxTreatment: z.enum(['inclusive', 'exclusive']),
-        sellerId: billingReference,
-        invoiceIssuerId: billingReference,
-        taxRemitterId: billingReference,
-        taxServiceRef: billingReference,
+        gross_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        net_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        tax_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+        tax_treatment: z.enum(['inclusive', 'exclusive']),
+        seller_id: billingReference,
+        invoice_issuer_id: billingReference,
+        tax_remitter_id: billingReference,
+        tax_service_ref: billingReference,
         country: z.string().regex(/^[A-Z]{2}$/),
-        coverageEvidenceId: billingReference,
-        taxRateEvidenceId: billingReference,
-        customerLocationEvidenceId: billingReference,
-        quotedAt: z.string().datetime(),
-        expiresAt: z.string().datetime(),
+        coverage_evidence_id: billingReference,
+        tax_rate_evidence_id: billingReference,
+        customer_location_evidence_id: billingReference,
+        quoted_at: unixSeconds,
+        expires_at: unixSeconds,
       })
       .strict(),
     signature: z
       .object({
         algorithm: z.literal('Ed25519'),
-        keyId: billingReference,
+        key_id: billingReference,
         value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
       })
       .strict(),
@@ -88,21 +90,21 @@ export const billingTaxQuoteSchema = z
 export const checkoutSchema = z
   .object({
     rail: billingRailId.optional(),
-    providerCustomerId: customerRef,
-    providerPriceId: priceRef,
-    trialDays: z.number().int().min(0).max(730),
-    taxQuote: billingTaxQuoteSchema.optional(),
-    returnUrl: billingReturnUrl,
-    storeId: billingReference,
-    planId: billingReference,
+    provider_customer_id: customerRef,
+    provider_price_id: priceRef,
+    trial_days: z.number().int().min(0).max(730),
+    tax_quote: billingTaxQuoteSchema.optional(),
+    return_url: billingReturnUrl,
+    store_id: billingReference,
+    plan_id: billingReference,
   })
   .strict();
 export const portalSchema = z
-  .object({ providerCustomerId: customerRef, returnUrl: billingReturnUrl })
+  .object({ provider_customer_id: customerRef, return_url: billingReturnUrl })
   .strict();
-export const billingCustomerSchema = z.object({ providerCustomerId: customerRef }).strict();
+export const billingCustomerSchema = z.object({ provider_customer_id: customerRef }).strict();
 export const billingHostedSessionSchema = z
-  .object({ url: billingReturnUrl, expiresAt: z.string().datetime() })
+  .object({ url: billingReturnUrl, expires_at: unixSeconds })
   .strict();
 export const billingCheckoutSessionSchema = billingHostedSessionSchema
   .extend({
@@ -114,29 +116,29 @@ export const billingCheckoutSessionSchema = billingHostedSessionSchema
   .strict();
 export const billingSubscriptionSchema = z
   .object({
-    providerSubscriptionId: subscriptionRef,
-    latestInvoiceId: z
+    provider_subscription_id: subscriptionRef,
+    latest_invoice_id: z
       .string()
       .regex(/^in_[A-Za-z0-9]+$/)
       .nullable()
       .optional(),
-    providerCustomerId: customerRef,
-    providerPriceId: priceRef,
-    storeId: billingReference,
-    planId: billingReference,
+    provider_customer_id: customerRef,
+    provider_price_id: priceRef,
+    store_id: billingReference,
+    plan_id: billingReference,
     livemode: z.boolean(),
     status: z.enum(BILLING_SUBSCRIPTION_STATUSES),
     interval: z.enum(['month', 'year']),
-    cancelAtPeriodEnd: z.boolean(),
-    currentPeriodStart: z.string().datetime(),
-    currentPeriodEnd: z.string().datetime(),
-    trialEndsAt: z.string().datetime().nullable(),
-    cancelAt: z.string().datetime().nullable(),
-    cancelledAt: z.string().datetime().nullable(),
+    cancel_at_period_end: z.boolean(),
+    current_period_start: unixSeconds,
+    current_period_end: unixSeconds,
+    trial_ends_at: unixSeconds.nullable(),
+    cancel_at: unixSeconds.nullable(),
+    cancelled_at: unixSeconds.nullable(),
   })
   .strict()
   .refine(
-    (value) => Date.parse(value.currentPeriodEnd) > Date.parse(value.currentPeriodStart),
+    (value) => value.current_period_end > value.current_period_start,
     'Invalid subscription period',
   );
 
@@ -183,20 +185,36 @@ export function parseBillingResult(
   if (operation === 'cancel_at_period_end') return billingSubscriptionSchema.parse(result);
   return billingHostedSessionSchema.parse(result);
 }
+export type BillingErrorCode =
+  | 'not_found'
+  | 'rail_unavailable'
+  | 'identity_conflict'
+  | 'idempotency_conflict'
+  | 'in_progress'
+  | 'reconciliation_required'
+  | 'result_expired'
+  | 'provider_unavailable'
+  | 'invalid_provider_response';
+/** The human `message` beside each machine `code` on the wire. Deliberately
+ * generic: no provider text, identifier or URL reaches a caller. */
+export const BILLING_ERROR_MESSAGES: Readonly<Record<BillingErrorCode, string>> = {
+  not_found: 'No such billing object for this merchant.',
+  rail_unavailable: 'That billing rail is not available for this merchant.',
+  identity_conflict: 'The request does not match the billing objects it names.',
+  idempotency_conflict: 'This Idempotency-Key was already used for a different request.',
+  in_progress: 'A request with this Idempotency-Key is still in progress.',
+  reconciliation_required: 'The billing state must be reconciled before this can proceed.',
+  result_expired: 'The result of this operation has expired.',
+  provider_unavailable: 'The billing provider is unavailable. Try again later.',
+  invalid_provider_response: 'The billing provider answered something Peable cannot accept.',
+};
 export class BillingError extends Error {
   constructor(
-    readonly code:
-      | 'not_found'
-      | 'rail_unavailable'
-      | 'identity_conflict'
-      | 'idempotency_conflict'
-      | 'in_progress'
-      | 'reconciliation_required'
-      | 'result_expired'
-      | 'provider_unavailable'
-      | 'invalid_provider_response',
+    readonly code: BillingErrorCode,
     readonly status = 409,
   ) {
+    // Internally the message is the code; the wire pairs the code with
+    // `BILLING_ERROR_MESSAGES` (routes/billing.ts).
     super(code);
     this.name = 'BillingError';
   }
@@ -204,10 +222,10 @@ export class BillingError extends Error {
 
 export const checkoutOperationRequestSchema = z
   .object({
-    idempotencyKey: billingIdempotencyKey,
-    providerCustomerId: billingReference,
-    providerPriceId: billingReference,
-    storeId: billingReference,
-    planId: billingReference,
+    idempotency_key: billingIdempotencyKey,
+    provider_customer_id: billingReference,
+    provider_price_id: billingReference,
+    store_id: billingReference,
+    plan_id: billingReference,
   })
   .strict();

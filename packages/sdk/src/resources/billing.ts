@@ -19,13 +19,20 @@ import type {
   EnsureBillingCustomerParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+/** Signed instants are integer Unix seconds (ADR 0014 D1, schema version 2). */
+function isUnixSeconds(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+function nowSeconds(): number {
+  return Math.floor(Date.now() / 1000);
+}
 export interface BillingRequestOptions {
   idempotencyKey: string;
 }
 export interface RetrieveFinalInvoiceAuthorityOptions {
   /** `tax_lines`: include the frozen Peable Tax lines, covered by the signature
    * (FairCoin and other Peable-signed rails). Omitted: the authority is exactly
-   * the 0.3.x shape. */
+   * the shape without lines. */
   include?: readonly 'tax_lines'[];
 }
 /** Recurring billing is separate from one-off checkout and marketplace transfers. */
@@ -51,7 +58,7 @@ export class BillingResource {
       idempotencyKey: options.idempotencyKey,
     });
   }
-  /** Pass the complete signed taxQuote to opt into fiscal checkout. Peable validates
+  /** Pass the complete signed `tax_quote` to opt into fiscal checkout. Peable validates
    * its pinned authority and retains immutable evidence before creating a session.
    * Existing callers without a quote remain on their explicitly enabled legacy path. */
   createCheckoutSession(
@@ -112,16 +119,16 @@ export class BillingResource {
       const pinned = this.taxQuoteAuthorityKeys[result.signature.key_id];
       if (
         !pinned ||
-        result.schema_version !== 1 ||
+        result.schema_version !== 2 ||
         result.signature.algorithm !== 'Ed25519' ||
         !/^[A-Za-z0-9_-]{86}$/.test(result.signature.value) ||
         result.source.store_id !== params.store_id ||
         result.source.plan_id !== params.plan_id ||
         result.quote.customer_location_evidence_id !== params.customer_location_evidence_id ||
-        !Number.isFinite(Date.parse(result.quote.quoted_at)) ||
-        Date.parse(result.quote.quoted_at) > Date.now() ||
-        !Number.isFinite(Date.parse(result.quote.expires_at)) ||
-        Date.parse(result.quote.expires_at) <= Date.now()
+        !isUnixSeconds(result.quote.quoted_at) ||
+        result.quote.quoted_at > nowSeconds() ||
+        !isUnixSeconds(result.quote.expires_at) ||
+        result.quote.expires_at <= nowSeconds()
       )
         throw new Error('Invalid quote');
       const key = createPublicKey(pinned);
@@ -156,7 +163,7 @@ export class BillingResource {
     try {
       const pinnedKey = this.invoiceAuthorityKeys[authority.signature.key_id];
       if (
-        authority.schema_version !== 1 ||
+        authority.schema_version !== 2 ||
         !pinnedKey ||
         authority.signature.algorithm !== 'Ed25519' ||
         !/^[A-Za-z0-9_-]{86}$/.test(authority.signature.value) ||
@@ -164,10 +171,10 @@ export class BillingResource {
         authority.source.subscription_id !== subscriptionRef ||
         authority.invoice.context.provider_subscription_id !== subscriptionRef ||
         !['card', 'faircoin'].includes(authority.method) ||
-        !Number.isFinite(Date.parse(authority.invoice.issued_at)) ||
-        Date.parse(authority.invoice.issued_at) > Date.now() ||
-        !Number.isFinite(Date.parse(authority.invoice.expires_at)) ||
-        Date.parse(authority.invoice.expires_at) <= Date.now() ||
+        !isUnixSeconds(authority.invoice.issued_at) ||
+        authority.invoice.issued_at > nowSeconds() ||
+        !isUnixSeconds(authority.invoice.expires_at) ||
+        authority.invoice.expires_at <= nowSeconds() ||
         // Lines are present exactly when asked for, and add up to the tax.
         withTaxLines !== Array.isArray(authority.invoice.tax_lines) ||
         (authority.invoice.tax_lines !== undefined &&
@@ -180,11 +187,11 @@ export class BillingResource {
         if (
           !quote ||
           !/^[1-9][0-9]*$/.test(quote.amount_base_units) ||
-          !Number.isFinite(Date.parse(quote.quoted_at)) ||
-          Date.parse(quote.quoted_at) > Date.now() ||
-          !Number.isFinite(Date.parse(quote.expires_at)) ||
-          Date.parse(quote.expires_at) <= Date.parse(quote.quoted_at) ||
-          Date.parse(quote.expires_at) > Date.parse(authority.invoice.expires_at)
+          !isUnixSeconds(quote.quoted_at) ||
+          quote.quoted_at > nowSeconds() ||
+          !isUnixSeconds(quote.expires_at) ||
+          quote.expires_at <= quote.quoted_at ||
+          quote.expires_at > authority.invoice.expires_at
         )
           throw new Error('Invalid quote');
       }
@@ -205,7 +212,7 @@ export class BillingResource {
         const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
         // biome-ignore lint/style/noNonNullAssertion: FairCoin quote presence and bounds were verified above before signature verification.
         const quote = authority.invoice.faircoin_quote!;
-        const paidAt = Date.parse(paid.paid_at);
+        const paidAt = paid.paid_at;
         if (
           paid.invoice_id !== invoiceRef ||
           paid.provider_subscription_id !== subscriptionRef ||
@@ -213,10 +220,10 @@ export class BillingResource {
           paid.provider_customer_id !== authority.source.customer_id ||
           paid.provider_price_id !== authority.source.price_id ||
           paid.store_id !== authority.invoice.context.payer_account_id ||
-          !Number.isFinite(paidAt) ||
-          paidAt > Date.now() ||
-          paidAt < Date.parse(quote.quoted_at) ||
-          paidAt >= Date.parse(quote.expires_at)
+          !isUnixSeconds(paidAt) ||
+          paidAt > nowSeconds() ||
+          paidAt < quote.quoted_at ||
+          paidAt >= quote.expires_at
         )
           throw new Error('Payment outside signed quote');
       }

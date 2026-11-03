@@ -25,7 +25,7 @@ import type { RestClient } from '../core/client';
  */
 export type CreateConnectedAccountParams = {
   /** The merchant's own id for this seller. The idempotency, and durable. */
-  externalRef: string;
+  external_ref: string;
   /**
    * The FairCoin half: the chain the seller is paid on and the seller's Oxy
    * user id — the ONLY person the onboarding page lets register the key.
@@ -33,14 +33,14 @@ export type CreateConnectedAccountParams = {
    * their own Oxy session, through `accountLinks.create({ rail: 'faircoin' })`.
    * A non-production credential can only open `testnet`.
    */
-  faircoin?: { network: NetworkType; oxyUserId: string };
+  faircoin?: { network: NetworkType; oxy_user_id: string };
 } & (
   | {
       /** ISO 3166-1 alpha-2. Case-insensitive; the gateway upper-cases it. Opens the CARD half. */
       country: string;
-      businessType: 'individual' | 'company';
+      business_type: 'individual' | 'company';
     }
-  | { country?: undefined; businessType?: undefined }
+  | { country?: undefined; business_type?: undefined }
 );
 
 export interface ConnectedAccountListParams {
@@ -57,13 +57,13 @@ export interface ConnectedAccountList {
 
 export interface AccountLinkParams {
   /** Where an EXPIRED link sends the seller, to ask you for a fresh one. */
-  refreshUrl: string;
+  refresh_url: string;
   /** Where the seller lands when onboarding is done. Proves nothing — read the account. */
-  returnUrl: string;
+  return_url: string;
   /**
    * Which half to onboard. `card` (the default) is the provider's hosted KYC;
    * `faircoin` is Peable's page in the wallet, where the seller — signed in
-   * with Oxy as the account's `oxyUserId` — registers their watch-only key
+   * with Oxy as the account's `oxy_user_id` — registers their watch-only key
    * (ADR 0012 D3). The FairCoin link works for an hour and only for that user.
    */
   rail?: 'card' | 'faircoin';
@@ -136,7 +136,7 @@ export class ConnectedAccountsResource {
    * one that has already expired by the time anyone follows it, and the failure
    * looks like the seller's fault.
    *
-   * A visit to `returnUrl` proves NOTHING about verification. Read the account
+   * A visit to `return_url` proves NOTHING about verification. Read the account
    * back, or wait for the readiness event.
    */
   createAccountLink(accountId: string, params: AccountLinkParams): Promise<AccountLink> {

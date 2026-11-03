@@ -11,7 +11,7 @@ describe('customer location evidence', () => {
   it('places an EU customer on two agreeing kinds of evidence, never one', () => {
     expect(evaluateEvidence([billing('DE')], undefined).status).toBe('insufficient');
     const two = evaluateEvidence(
-      [billing('DE'), { type: 'ip_address', ipAddress: '203.0.113.7', country: 'DE' }],
+      [billing('DE'), { type: 'ip_address', ip_address: '203.0.113.7', country: 'DE' }],
       'salt',
     );
     expect(two).toMatchObject({
@@ -23,7 +23,7 @@ describe('customer location evidence', () => {
     expect(JSON.stringify(two.items)).not.toContain('203.0.113.7');
     expect(
       evaluateEvidence(
-        [billing('DE'), { type: 'ip_address', ipAddress: '203.0.113.7', country: 'FR' }],
+        [billing('DE'), { type: 'ip_address', ip_address: '203.0.113.7', country: 'FR' }],
         undefined,
       ).status,
     ).toBe('conflicting');
@@ -33,7 +33,7 @@ describe('customer location evidence', () => {
         [
           billing('FR'),
           { type: 'bank_country', country: 'FR' },
-          { type: 'ip_address', ipAddress: '203.0.113.7', country: 'ES' },
+          { type: 'ip_address', ip_address: '203.0.113.7', country: 'ES' },
         ],
         undefined,
       ),
@@ -43,7 +43,7 @@ describe('customer location evidence', () => {
   it('places a US customer only by a billing address with state and postal code', () => {
     expect(
       evaluateEvidence(
-        [{ type: 'ip_address', ipAddress: '198.51.100.1', country: 'US' }],
+        [{ type: 'ip_address', ip_address: '198.51.100.1', country: 'US' }],
         undefined,
       ).status,
     ).toBe('insufficient');
@@ -51,15 +51,22 @@ describe('customer location evidence', () => {
       'insufficient',
     );
     expect(
-      evaluateEvidence([billing('US', { state: 'CA', postalCode: '94103' })], undefined),
+      evaluateEvidence([billing('US', { state: 'CA', postal_code: '94103' })], undefined),
     ).toMatchObject({ status: 'sufficient', country: 'US', state: 'CA' });
   });
 
   it('refuses language, currency or timezone as evidence', () => {
+    // The same request with a real kind of evidence is accepted, so the type is what is refused.
+    expect(
+      createTaxLocationEvidenceSchema.safeParse({
+        customer_ref: 'acct_1',
+        evidence: [{ type: 'bank_country', country: 'DE' }],
+      }).success,
+    ).toBe(true);
     for (const type of ['language', 'currency', 'timezone', 'locale'])
       expect(
         createTaxLocationEvidenceSchema.safeParse({
-          customerRef: 'acct_1',
+          customer_ref: 'acct_1',
           evidence: [{ type, country: 'DE' }],
         }).success,
       ).toBe(false);

@@ -40,7 +40,7 @@ export type RealtimeConnectionState = 'live' | 'lost';
  * hands one out, bounded to a single payment the caller has proven they may
  * pay.
  *
- * `value` is opaque and provider-specific; `publishableKey` is the provider's
+ * `value` is opaque and provider-specific; `publishable_key` is the provider's
  * public key, served here rather than compiled into a checkout bundle — that
  * page is deployed once and serves whichever gateway it is pointed at, so a
  * baked-in key would be the wrong mode the first time a test deployment used
@@ -50,7 +50,7 @@ export interface PeableClientAction {
   readonly object: 'client_action';
   readonly kind: 'client_secret' | 'redirect';
   readonly value: string;
-  readonly publishableKey?: string;
+  readonly publishable_key?: string;
 }
 
 export interface PeableCheckoutClient {
@@ -103,7 +103,7 @@ interface ServerToClientEvents {
 
 interface ClientToServerEvents {
   subscribe: (
-    payload: { intentId: string; clientSecret: string },
+    payload: { intent_id: string; client_secret: string },
     ack: (result: { ok: boolean }) => void,
   ) => void;
 }
@@ -138,7 +138,8 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
       );
     }
     const body = await readJsonBody(response);
-    if (!response.ok) throw errorFromResponse(response.status, body);
+    if (!response.ok)
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     return body as PaymentIntent;
   }
 
@@ -158,7 +159,8 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
       );
     }
     const body = await readJsonBody(response);
-    if (!response.ok) throw errorFromResponse(response.status, body);
+    if (!response.ok)
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     return body as PaymentIntent;
   }
 
@@ -183,7 +185,8 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
       );
     }
     const body = await readJsonBody(response);
-    if (!response.ok) throw errorFromResponse(response.status, body);
+    if (!response.ok)
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     return body as PeableClientAction;
   }
 
@@ -208,7 +211,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
 
     let ack: { ok: boolean };
     try {
-      ack = await socket.emitWithAck('subscribe', { intentId: id, clientSecret });
+      ack = await socket.emitWithAck('subscribe', { intent_id: id, client_secret: clientSecret });
     } catch (cause) {
       socket.disconnect();
       throw new PeableApiError(
@@ -267,7 +270,7 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
     // (`socket.io`, not `socket` itself) in socket.io-client.
     const onReconnect = (): void => {
       void socket
-        .emitWithAck('subscribe', { intentId: id, clientSecret })
+        .emitWithAck('subscribe', { intent_id: id, client_secret: clientSecret })
         .then((ack) => {
           // `'live'` only once the ROOM is rejoined, never on the transport
           // alone: a socket that is connected and in no room delivers nothing,

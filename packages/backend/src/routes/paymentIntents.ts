@@ -42,6 +42,7 @@ import {
   wrap,
   requireServiceApp,
   requireAuthenticated,
+  sendValidationError,
 } from '../lib/http';
 import { railBodyFields } from '../lib/railSchema';
 
@@ -104,11 +105,11 @@ export const listQuerySchema = z.object({
 });
 
 /**
- * The `connectedAccount` a create body may carry (ADR 0012 D5). Shared by the
+ * The `connected_account` a create body may carry (ADR 0012 D5). Shared by the
  * intent and checkout-session bodies so the two cannot disagree on its shape.
  */
 export const connectedAccountBodyField = {
-  connectedAccount: z.string().min(1).max(255).optional(),
+  connected_account: z.string().min(1).max(255).optional(),
 } as const;
 
 /**
@@ -131,22 +132,27 @@ export function sendConnectedAccountRefusal(res: Response, err: unknown): boolea
   return false;
 }
 
-// Zod schema for the create body. Its inferred output is asserted assignable to
-// `CreatePaymentIntentParams` (see `params` below) so the wire contract and the
-// shared type can never silently drift apart.
-const createBodySchema = z.object({
-  ...railBodyFields,
-  ...connectedAccountBodyField,
-  metadata: z.record(z.string(), z.string()).optional(),
-  expiresInSeconds: z.number().int().positive().optional(),
-});
+// Zod schema for the create body. Its shape must name every key of
+// `CreatePaymentIntentParams` (the `satisfies` below) and `.strict()` refuses any
+// other, so the wire contract and the shared type can never silently drift
+// apart — and a field spelled the old way is a 400, never quietly dropped.
+const createBodySchema = z
+  .object({
+    ...railBodyFields,
+    ...connectedAccountBodyField,
+    metadata: z.record(z.string(), z.string()).optional(),
+    expires_in_seconds: z.number().int().positive().optional(),
+  } satisfies Record<keyof CreatePaymentIntentParams, z.ZodType>)
+  .strict();
 
 // The payer proves possession of the intent with its `client_secret`; the
 // reported broadcast txid is what the settlement watcher then verifies on-chain.
-const submitTxBodySchema = z.object({
-  client_secret: z.string().min(1),
-  txid: z.string().min(1),
-});
+const submitTxBodySchema = z
+  .object({
+    client_secret: z.string().min(1),
+    txid: z.string().min(1),
+  })
+  .strict();
 
 /**
  * Single query owner for "find a Merchant by (oxyAppId, environment)" — no
@@ -240,7 +246,7 @@ export async function listPaymentIntentsForMerchant(
 
   // The cursor arrives as a PUBLIC `pi_…` and the keyset walk runs on the
   // primary key, so it is resolved here — ownership-scoped, so a cursor
-  // naming another merchant's intent is a 422 exactly like an unknown one and
+  // naming another merchant's intent is a 400 exactly like an unknown one and
   // never confirms that the intent exists.
   let after: string | undefined;
   if (starting_after) {
@@ -248,7 +254,7 @@ export async function listPaymentIntentsForMerchant(
     if (!cursor) {
       return {
         ok: false,
-        status: 422,
+        status: 400,
         message: 'starting_after references an unknown payment intent',
       };
     }
@@ -256,7 +262,7 @@ export async function listPaymentIntentsForMerchant(
   }
 
   // The seller filter arrives as a PUBLIC `ca_…` and is resolved the way the
-  // cursor is: scoped to the merchant, so another platform's seller is a 422
+  // cursor is: scoped to the merchant, so another platform's seller is a 400
   // exactly like an unknown one.
   let connectedAccountId: string | undefined;
   if (query.connected_account !== undefined) {
@@ -264,7 +270,7 @@ export async function listPaymentIntentsForMerchant(
     if (!account) {
       return {
         ok: false,
-        status: 422,
+        status: 400,
         message: 'connected_account references an unknown connected account',
       };
     }
@@ -317,12 +323,7 @@ export function createPaymentIntentsRouter(deps: {
 
       const parsed = createBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const params: CreatePaymentIntentParams = parsed.data as CreatePaymentIntentParams;
@@ -360,7 +361,7 @@ export function createPaymentIntentsRouter(deps: {
         // describing a payment this gateway cannot make, and neither is a
         // server fault. Which mistake they made is in the message.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message);
           return;
         }
         if (sendConnectedAccountRefusal(res, err)) return;
@@ -378,7 +379,7 @@ export function createPaymentIntentsRouter(deps: {
           sendError(res, 409, 'invalid_request_error', err.message);
           return;
         }
-        // 503, not 422: the caller cannot fix this by sending different fields.
+        // 503, not 400: the caller cannot fix this by sending different fields.
         // The rail they asked for is not configured on this deployment, and
         // telling them their request was invalid would send them off editing it.
         if (err instanceof RailUnavailableError) {
@@ -401,12 +402,7 @@ export function createPaymentIntentsRouter(deps: {
 
       const parsed = listQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -432,7 +428,7 @@ export function createPaymentIntentsRouter(deps: {
       // payer path below need it.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -553,7 +549,7 @@ export function createPaymentIntentsRouter(deps: {
     wrap(async (req, res) => {
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -603,11 +599,11 @@ export function createPaymentIntentsRouter(deps: {
       }
       if (outcome.kind === 'not_applicable') {
         // The FairCoin rail. The next step is "send coins to `address`", which
-        // the intent already says — a 422 rather than an empty 200, so a client
+        // the intent already says — a 400 rather than an empty 200, so a client
         // that asked the wrong question learns that rather than waiting.
         sendError(
           res,
-          422,
+          400,
           'invalid_request_error',
           'this payment needs no client action; its address is on the intent',
         );
@@ -641,7 +637,7 @@ export function createPaymentIntentsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -752,12 +748,7 @@ export function createPaymentIntentsRouter(deps: {
     wrap(async (req, res) => {
       const parsed = submitTxBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -767,7 +758,7 @@ export function createPaymentIntentsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 

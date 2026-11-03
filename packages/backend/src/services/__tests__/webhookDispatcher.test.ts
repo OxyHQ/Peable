@@ -31,9 +31,9 @@ const INTENT: PaymentIntent = {
   confirmations: 2,
   client_secret: 'pi_0000000000000000000000a1_secret_x',
   metadata: {},
-  expires_at: '2026-07-18T00:00:00.000Z',
-  created: '2026-07-18T00:00:00.000Z',
-  updated_at: '2026-07-18T00:00:00.000Z',
+  expires_at: 1_784_332_800,
+  created: 1_784_332_800,
+  updated_at: 1_784_332_800,
 };
 
 // Build a SafeFetchResult backed by a REAL IncomingMessage so `response`

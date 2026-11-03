@@ -37,26 +37,30 @@ import {
   sendEnvironmentMismatch,
   sendError,
   sendProviderError,
+  sendValidationError,
   wrap,
 } from '../lib/http';
+import { toUnix, toUnixOrNull } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
 
-const createRefundBodySchema = z.object({
-  /** The `pi_…` being refunded. */
-  paymentIntentId: z.string().min(1),
-  /** The merchant's own id for this refund. The idempotency. */
-  externalRef: z.string().min(1).max(255),
-  /**
-   * Validated with the SAME predicate the CHECK is rendered from, then
-   * separately refused if zero: `'0'` is a canonical integer string and would
-   * pass, while a zero refund consumes the merchant's `externalRef` so the REAL
-   * refund for that order could never be created afterwards.
-   */
-  amount: z
-    .string()
-    .refine(isBaseUnitString, 'amount must be a canonical integer string in minor units')
-    .refine((value) => value !== '0', 'a refund of 0 is not a refund'),
-});
+const createRefundBodySchema = z
+  .object({
+    /** The `pi_…` being refunded. */
+    payment_intent_id: z.string().min(1),
+    /** The merchant's own id for this refund. The idempotency. */
+    external_ref: z.string().min(1).max(255),
+    /**
+     * Validated with the SAME predicate the CHECK is rendered from, then
+     * separately refused if zero: `'0'` is a canonical integer string and would
+     * pass, while a zero refund consumes the merchant's `external_ref` so the REAL
+     * refund for that order could never be created afterwards.
+     */
+    amount: z
+      .string()
+      .refine(isBaseUnitString, 'amount must be a canonical integer string in minor units')
+      .refine((value) => value !== '0', 'a refund of 0 is not a refund'),
+  })
+  .strict();
 
 /**
  * The wire shape, published in `@peable.to/shared-types` — the provider's own
@@ -79,8 +83,8 @@ function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatu
     status: row.status,
     payment_status: paymentStatus,
     failure_code: row.failureCode,
-    created: row.createdAt.toISOString(),
-    updated_at: row.updatedAt.toISOString(),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -102,18 +106,13 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
 
       const parsed = createRefundBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const body = parsed.data;
       const db = getDb();
 
-      const intent = await findIntentByPublicId(db, body.paymentIntentId);
+      const intent = await findIntentByPublicId(db, body.payment_intent_id);
       if (!intent || intent.merchantId !== merchant.id) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
@@ -127,7 +126,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
        * no longer accommodates it — which it will not, since this very refund
        * consumed it.
        */
-      const existing = await findRefundByExternalRef(db, merchant.id, body.externalRef);
+      const existing = await findRefundByExternalRef(db, merchant.id, body.external_ref);
       /**
        * A FINISHED refund is history and is answered as such. One that never
        * reached the provider falls THROUGH to `createRefund`, which resumes it
@@ -149,7 +148,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
           merchantId: merchant.id,
           environment: merchant.environment,
           intent,
-          externalRef: body.externalRef,
+          externalRef: body.external_ref,
           amount: body.amount,
         });
         res.status(created ? 201 : 200).json(toRefundDTO(refund, intent.publicId, paymentStatus));
@@ -158,7 +157,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
           error instanceof PaymentNotRefundableError ||
           error instanceof RefundExceedsRemainingError
         ) {
-          sendError(res, 422, 'invalid_request_error', error.message);
+          sendError(res, 400, 'invalid_request_error', error.message);
           return;
         }
         if (error instanceof RefundsUnavailableError) {
@@ -197,7 +196,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
 
       const { intentId } = req.params;
       if (!intentId) {
-        sendError(res, 422, 'invalid_request_error', 'intentId is required');
+        sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
 
@@ -212,7 +211,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       res.status(200).json({
         object: 'list',
         data: rows.map((row) => toRefundDTO(row, intent.publicId, intent.status)),
-        remainingRefundable: await remainingRefundable(intent),
+        remaining_refundable: await remainingRefundable(intent),
       });
     }),
   );
@@ -243,7 +242,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
 
       const { intentId } = req.params;
       if (!intentId) {
-        sendError(res, 422, 'invalid_request_error', 'intentId is required');
+        sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
 
@@ -260,7 +259,13 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       const body: Settlement = {
         object: 'settlement',
         payment_intent_id: intent.publicId,
-        ...settlement,
+        status: settlement.status,
+        gross: settlement.gross,
+        fee: settlement.fee,
+        net: settlement.net,
+        currency: settlement.currency,
+        available_on: toUnixOrNull(settlement.availableOn),
+        exchange_rate: settlement.exchangeRate,
       };
       res.status(200).json(body);
     }),

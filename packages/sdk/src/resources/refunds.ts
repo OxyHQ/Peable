@@ -6,15 +6,15 @@ import type { RestClient } from '../core/client';
  *
  * The one operation on this API whose duplicate is unrecoverable: a payer sent
  * their money twice has no reason to report it, and nothing reverses the second
- * automatically. `externalRef` — your own refund id — is what every path here
+ * automatically. `external_ref` — your own refund id — is what every path here
  * converges on, and unlike a header key you cannot lose it.
  */
 
 export interface CreateRefundParams {
   /** The `pi_…` being refunded. */
-  paymentIntentId: string;
+  payment_intent_id: string;
   /** YOUR id for this refund. The idempotency. */
-  externalRef: string;
+  external_ref: string;
   /** Minor units, as a canonical integer string. Zero is refused. */
   amount: string;
 }
@@ -31,7 +31,7 @@ export interface RefundList {
    * It reserves PENDING refunds, which is what stops two concurrent ones
    * between them exceeding the payment.
    */
-  remainingRefundable: string;
+  remaining_refundable: string;
 }
 
 export class RefundsResource {
@@ -46,7 +46,7 @@ export class RefundsResource {
    * `failed`. Treating the creation as completion is how a merchant's books
    * come to say money went back that is still with them.
    *
-   * `paymentStatus` on the response is where the PAYMENT stands after it, so a
+   * `payment_status` on the response is where the PAYMENT stands after it, so a
    * caller does not need a second read whose answer can move on before it
    * arrives.
    */
@@ -85,7 +85,7 @@ export class RefundsResource {
    *
    * A refund issued from the acquirer's dashboard, or created by the network
    * resolving a dispute, is imported with `origin: 'provider'` and no
-   * `externalRef` — the merchant did not make it and has no id for it.
+   * `external_ref` — the merchant did not make it and has no id for it.
    */
   listForPaymentIntent(paymentIntentId: string): Promise<RefundList> {
     return this.client.request<RefundList>(

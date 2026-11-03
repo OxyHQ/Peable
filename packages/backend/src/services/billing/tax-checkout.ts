@@ -63,14 +63,17 @@ export async function prepareBillingTaxCheckout(
   adapter: BillingTaxCheckoutAdapter,
   owner: BillingOwner,
   merchantPublicId: string,
-  input: CreateBillingCheckoutParams & { taxQuote: BillingTaxQuote },
+  input: CreateBillingCheckoutParams & { tax_quote: BillingTaxQuote },
   now: () => Date,
 ): Promise<BillingTaxCheckoutSnapshot> {
   const product = billingTaxProductSchema.parse(
     await calculator.resolveProduct(owner, input.plan_id, input.provider_price_id),
   );
   const location = billingCustomerLocationSchema.parse(
-    await calculator.readCustomerLocation(owner, input.tax_quote.quote.customer_location_evidence_id),
+    await calculator.readCustomerLocation(
+      owner,
+      input.tax_quote.quote.customer_location_evidence_id,
+    ),
   );
   const offer = billingTaxOfferSchema.parse(
     await adapter.resolveOffer(owner, input.provider_price_id),
@@ -131,14 +134,14 @@ export function verifyBillingInvoiceTaxCheckout(
   if (
     invoice.tax_quote_id !== quote.id ||
     invoice.currency !== quote.currency ||
-    invoice.gross_minor_units !== quote.grossMinorUnits ||
-    invoice.net_minor_units !== quote.netMinorUnits ||
-    invoice.tax_minor_units !== quote.taxMinorUnits ||
-    invoice.tax_treatment !== quote.taxTreatment ||
-    invoice.seller_id !== quote.sellerId ||
-    invoice.invoice_issuer_id !== quote.invoiceIssuerId ||
-    invoice.customer_location_evidence_id !== quote.customerLocationEvidenceId ||
-    invoice.tax_rate_evidence_id !== quote.taxRateEvidenceId ||
+    invoice.gross_minor_units !== quote.gross_minor_units ||
+    invoice.net_minor_units !== quote.net_minor_units ||
+    invoice.tax_minor_units !== quote.tax_minor_units ||
+    invoice.tax_treatment !== quote.tax_treatment ||
+    invoice.seller_id !== quote.seller_id ||
+    invoice.invoice_issuer_id !== quote.invoice_issuer_id ||
+    invoice.customer_location_evidence_id !== quote.customer_location_evidence_id ||
+    invoice.tax_rate_evidence_id !== quote.tax_rate_evidence_id ||
     invoice.context.offer_id !== snapshot.offer.offerId ||
     invoice.context.offer_version !== snapshot.offer.offerVersion
   )

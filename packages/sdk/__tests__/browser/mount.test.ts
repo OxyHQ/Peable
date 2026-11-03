@@ -46,9 +46,9 @@ const INTENT: PaymentIntent = {
   confirmations: 0,
   client_secret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',
   metadata: {},
-  expires_at: '2026-07-20T00:00:00.000Z',
-  created: '2026-07-19T00:00:00.000Z',
-  updated_at: '2026-07-19T00:00:00.000Z',
+  expires_at: 1784505600,
+  created: 1784419200,
+  updated_at: 1784419200,
 };
 
 describe('deriveIntentId', () => {

@@ -30,6 +30,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
       verifyRevocation: async () => true,
       now: () => now,
     });
+  /** The consent's actor fields, as the wire spells them. */
+  const consentActor = (actor: FaircoinRenewalActor) => ({
+    payer_account_id: actor.payerAccountId,
+    merchant_id: actor.merchantId,
+    app_id: actor.appId,
+    mode: actor.mode,
+    environment: actor.environment,
+  });
   async function fixture() {
     const merchant = await seedMerchant({ publicId: 'merch_fixture', oxyAppId: 'app_fixture' });
     const actor: FaircoinRenewalActor = {
@@ -40,25 +48,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
       environment: 'development',
     };
     const consent = {
-      ...actor,
-      authorizationId: 'authorization_fixture',
-      subscriptionId: 'subscription_fixture',
-      planId: 'plan_fixture',
-      explicitConsent: true as const,
-      consentEvidenceId: 'consent_fixture',
-      maximumAmountBaseUnits: '10000',
+      ...consentActor(actor),
+      authorization_id: 'authorization_fixture',
+      subscription_id: 'subscription_fixture',
+      plan_id: 'plan_fixture',
+      explicit_consent: true as const,
+      consent_evidence_id: 'consent_fixture',
+      maximum_amount_base_units: '10000',
       interval: 'month' as const,
-      intervalCount: 1 as const,
-      startsAt: '2026-10-01T00:00:00.000Z',
-      expiresAt: '2027-10-01T00:00:00.000Z',
-      acceptedAt: '2026-09-30T12:00:00.000Z',
+      interval_count: 1 as const,
+      starts_at: Date.parse('2026-10-01T00:00:00.000Z') / 1000,
+      expires_at: Date.parse('2027-10-01T00:00:00.000Z') / 1000,
+      accepted_at: Date.parse('2026-09-30T12:00:00.000Z') / 1000,
     };
     const instruction = {
-      authorizationId: consent.authorizationId,
-      subscriptionId: consent.subscriptionId,
-      planId: consent.planId,
+      authorizationId: consent.authorization_id,
+      subscriptionId: consent.subscription_id,
+      planId: consent.plan_id,
       amountBaseUnits: '9999',
-      periodStart: consent.startsAt,
+      periodStart: '2026-10-01T00:00:00.000Z',
       periodEnd: '2026-11-01T00:00:00.000Z',
       idempotencyKey: 'renewal_fixture',
     };
@@ -93,9 +101,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const { actor, consent, instruction } = await fixture();
     await service().accept(actor, consent);
     const revocation = {
-      authorizationId: consent.authorizationId,
-      revokedAt: now.toISOString(),
-      revocationEvidenceId: 'revoke_fixture',
+      authorization_id: consent.authorization_id,
+      revoked_at: Math.floor(+now / 1000),
+      revocation_evidence_id: 'revoke_fixture',
     };
     const results = await Promise.allSettled([
       service().prepareAutomaticRenewal(actor, instruction),
@@ -117,7 +125,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await expect(
       repository.transaction(
         faircoinRenewalNamespace(actor),
-        consent.authorizationId,
+        consent.authorization_id,
         async (record) => {
           if (!record) throw new Error('Expected record');
           return { record: { ...record, revocation: null }, result: 'remove-revocation' };
@@ -137,13 +145,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await expect(
       service().accept(
         { ...actor, merchantId: 'merch_unknown' },
-        { ...consent, merchantId: 'merch_unknown' },
+        { ...consent, merchant_id: 'merch_unknown' },
       ),
     ).rejects.toThrow('not_found');
     expect(await gatewayDb().select().from(faircoinRenewalAuthorizations)).toHaveLength(1);
     await seedMerchant({ publicId: 'merch_other', oxyAppId: 'app_other' });
     const anotherActor = { ...actor, merchantId: 'merch_other', appId: 'app_other' };
-    await service().accept(anotherActor, { ...consent, ...anotherActor });
+    await service().accept(anotherActor, { ...consent, ...consentActor(anotherActor) });
     expect(await gatewayDb().select().from(faircoinRenewalAuthorizations)).toHaveLength(2);
   });
   it('rolls back thrown callbacks and refuses mutation of verified consent or recorded instructions', async () => {
@@ -154,7 +162,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await expect(
       repository.transaction(
         faircoinRenewalNamespace(actor),
-        consent.authorizationId,
+        consent.authorization_id,
         async (record) => {
           if (!record) throw new Error('Expected record');
           record.consent.maximum_amount_base_units = '999999';
@@ -165,7 +173,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await expect(
       repository.transaction(
         faircoinRenewalNamespace(actor),
-        consent.authorizationId,
+        consent.authorization_id,
         async (record) => {
           if (!record) throw new Error('Expected record');
           return { record: { ...record, instructions: [] }, result: 'remove-instruction' };
@@ -219,9 +227,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await started;
     const revocation = service()
       .revokeWithDispatchAcknowledgement(actor, {
-        authorizationId: consent.authorizationId,
-        revokedAt: now.toISOString(),
-        revocationEvidenceId: 'revoke_fixture',
+        authorization_id: consent.authorization_id,
+        revoked_at: Math.floor(+now / 1000),
+        revocation_evidence_id: 'revoke_fixture',
       })
       .then(() => {
         revoked = true;
@@ -311,9 +319,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     expect(stored?.status).toBe('authorized');
     expect(stored?.permitRef).toBeDefined();
     await service().revoke(actor, {
-      authorizationId: consent.authorizationId,
-      revokedAt: now.toISOString(),
-      revocationEvidenceId: 'revoke_fixture',
+      authorization_id: consent.authorization_id,
+      revoked_at: Math.floor(+now / 1000),
+      revocation_evidence_id: 'revoke_fixture',
     });
     expect((await consumer().consume(actor, instruction)).status).toBe('accepted');
     expect(executions).toBe(1);
@@ -347,9 +355,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
       ).status,
     ).toBe('indeterminate');
     await service().revoke(actor, {
-      authorizationId: consent.authorizationId,
-      revokedAt: now.toISOString(),
-      revocationEvidenceId: 'revoke_fixture',
+      authorization_id: consent.authorization_id,
+      revoked_at: Math.floor(+now / 1000),
+      revocation_evidence_id: 'revoke_fixture',
     });
     executor.recover = async () => {
       throw new Error('still unknown');
@@ -427,13 +435,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     await service().prepareAutomaticRenewal(actor, instruction);
     const nextConsent = {
       ...consent,
-      authorizationId: 'authorization_second',
-      subscriptionId: 'subscription_second',
+      authorization_id: 'authorization_second',
+      subscription_id: 'subscription_second',
     };
     const nextInstruction = {
       ...instruction,
-      authorizationId: nextConsent.authorizationId,
-      subscriptionId: nextConsent.subscriptionId,
+      authorizationId: nextConsent.authorization_id,
+      subscriptionId: nextConsent.subscription_id,
       idempotencyKey: 'renewal_second',
     };
     await service().accept(actor, nextConsent);
@@ -442,7 +450,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     const executor = {
       domain: 'fixture-provider-v1',
       recover: async (input: { instruction: { authorizationId: string } }) =>
-        input.instruction.authorizationId === consent.authorizationId
+        input.instruction.authorizationId === consent.authorization_id
           ? { kind: 'indeterminate' as const }
           : { kind: 'not_found' as const },
       execute: async () => {
@@ -516,9 +524,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
           );
           expect(terminated?.terminated).toBe(true);
           await service().revoke(actor, {
-            authorizationId: consent.authorizationId,
-            revokedAt: now.toISOString(),
-            revocationEvidenceId: 'revoke_session',
+            authorization_id: consent.authorization_id,
+            revoked_at: Math.floor(+now / 1000),
+            revocation_evidence_id: 'revoke_session',
           });
           recovered = true;
           return { kind: 'not_found' as const };
@@ -593,9 +601,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     }).consume(actor, instruction);
     await issued;
     const acknowledgement = await service().revokeWithDispatchAcknowledgement(actor, {
-      authorizationId: consent.authorizationId,
-      revokedAt: now.toISOString(),
-      revocationEvidenceId: 'revoke_delayed',
+      authorization_id: consent.authorization_id,
+      revoked_at: Math.floor(+now / 1000),
+      revocation_evidence_id: 'revoke_delayed',
     });
     expect(acknowledgement.alreadyAuthorized).toHaveLength(1);
     const restarted = createFaircoinRenewalConsumer({

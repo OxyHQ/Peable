@@ -145,7 +145,7 @@ export function createMultiRailBillingService(rails: readonly BillingRail[]): Bi
           rail: rail.id,
           settlement: rail.settlement,
           default: index === 0,
-          taxQuotes: rail.taxQuotes(owner),
+          tax_quotes: rail.taxQuotes(owner),
           renewal: rail.renewal,
           offers: rail.offers(owner),
         })),

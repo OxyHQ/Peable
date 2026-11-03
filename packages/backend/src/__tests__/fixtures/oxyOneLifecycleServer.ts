@@ -1,3 +1,4 @@
+import { toUnix } from '../../lib/time';
 import { createMerchantsRouter } from '../../routes/merchants';
 import { must } from '../helpers/must';
 /** Local-only cross-repository fixture. Synthetic Oxy auth and downstream; actual
@@ -358,7 +359,7 @@ async function initialize(input: {
     },
     async calculate({ source }) {
       const quote: BillingTaxQuote = {
-        schema_version: 1,
+        schema_version: 2,
         source,
         quote: {
           id: `quote_${randomUUID()}`,
@@ -375,8 +376,8 @@ async function initialize(input: {
           coverage_evidence_id: 'synthetic-coverage',
           tax_rate_evidence_id: 'synthetic-rate',
           customer_location_evidence_id: 'synthetic-location',
-          quoted_at: observedClock().toISOString(),
-          expires_at: new Date(observedClock().getTime() + 240000).toISOString(),
+          quoted_at: toUnix(observedClock()),
+          expires_at: toUnix(new Date(observedClock().getTime() + 240000)),
         },
         signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
       };
@@ -417,7 +418,7 @@ async function initialize(input: {
         providerCustomerId: 'cus_fixture',
         livemode: true,
         url: 'https://example.invalid/synthetic-quoted-checkout',
-        expiresAt: value.snapshot.taxQuote.quote.expiresAt,
+        expiresAt: value.snapshot.taxQuote.quote.expires_at,
       };
     },
   };
@@ -435,7 +436,7 @@ async function initialize(input: {
           throw new Error('Fiscal fixture requires persisted signed quote');
         const clock = observedClock();
         const authority: BillingFinalInvoiceAuthority = {
-          schema_version: 1,
+          schema_version: 2,
           source: {
             invoice_id: paid.invoice_id,
             payment_intent_id: paid.payment_intent_id,
@@ -472,10 +473,8 @@ async function initialize(input: {
               mode: 'live',
               environment: 'production',
             },
-            issued_at: clock.toISOString(),
-            expires_at: new Date(
-              Math.min(clock.getTime() + 300000, Date.parse(paid.period_end)),
-            ).toISOString(),
+            issued_at: toUnix(clock),
+            expires_at: Math.min(toUnix(clock) + 300, paid.period_end),
           },
           method: 'card',
           signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },

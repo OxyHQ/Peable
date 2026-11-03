@@ -38,25 +38,26 @@ export const taxDashboard = {
     gateway.client.post<TaxRegistration>(path(scope, '/registrations'), body),
   deleteRegistration: (scope: TaxScope, id: string) =>
     gateway.client.delete<void>(path(scope, `/registrations/${encodeURIComponent(id)}`)),
-  endRegistration: (scope: TaxScope, id: string, expiresAt: string) =>
+  /** `expiresAt` is Unix seconds. */
+  endRegistration: (scope: TaxScope, id: string, expiresAt: number) =>
     gateway.client.post<TaxRegistration>(
       path(scope, `/registrations/${encodeURIComponent(id)}/end`),
-      { expiresAt },
+      { expires_at: expiresAt },
     ),
   products: (scope: TaxScope) =>
     readTaxList<TaxProductCode>(gateway.client, path(scope, '/products')),
   setProductCode: (scope: TaxScope, productRef: string, taxCode: string) =>
     gateway.client.put<TaxProductCode>(path(scope, `/products/${encodeURIComponent(productRef)}`), {
-      taxCode,
+      tax_code: taxCode,
     }),
   approve: (scope: TaxScope) =>
     gateway.client.post<{ settings: TaxSettings; registrations: TaxRegistration[] }>(
       path(scope, '/approve'),
       {},
     ),
-  report: (scope: TaxScope, from: string, to: string) =>
-    gateway.client.get<TaxReport>(
-      path(scope, `/reports/summary?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`),
-      { cache: false },
-    ),
+  /** `from` inclusive, `to` exclusive, both Unix seconds. */
+  report: (scope: TaxScope, from: number, to: number) =>
+    gateway.client.get<TaxReport>(path(scope, `/reports/summary?from=${from}&to=${to}`), {
+      cache: false,
+    }),
 };

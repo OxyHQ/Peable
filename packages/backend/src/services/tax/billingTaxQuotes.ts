@@ -12,6 +12,7 @@ import { taxCalculations, taxLocationEvidence, taxSettings } from '../../db/sche
 import { BillingError, type BillingOwner } from '../billing/contracts';
 import type { BillingTaxQuoteCalculator } from '../billing/tax-quote';
 import { TaxError, type TaxService } from './taxService';
+import { toUnix } from '../../lib/time';
 
 /** What a rail sells: the price it charges for a plan and how tax relates to it. */
 export interface TaxableOffer {
@@ -37,10 +38,10 @@ export const CARD_QUOTE_LIFETIME_MS = 2 * 3600_000;
  * quote is signed with the pinned billing key so a consumer verifies it the
  * way it verifies the invoice it later becomes.
  *
- * The quote's evidence fields name Peable Tax objects: `taxRateEvidenceId` is
- * the calculation (`taxcalc_…`), `coverageEvidenceId` the registration that
+ * The quote's evidence fields name Peable Tax objects: `tax_rate_evidence_id` is
+ * the calculation (`taxcalc_…`), `coverage_evidence_id` the registration that
  * covered the sale (`taxreg_…`) or `not_registered` / `nontaxable`, and
- * `customerLocationEvidenceId` the evidence (`taxloc_…`).
+ * `customer_location_evidence_id` the evidence (`taxloc_…`).
  */
 export function createPeableTaxQuoteCalculator(options: {
   db: DatabaseOrTransaction;
@@ -137,12 +138,12 @@ export function createPeableTaxQuoteCalculator(options: {
           merchant,
           {
             currency: product.currency,
-            customerLocationEvidenceId: location.id,
-            lineItems: [
+            customer_location_evidence_id: location.id,
+            line_items: [
               {
                 reference: product.planId,
                 amount: product.grossMinorUnits,
-                taxBehavior: product.taxTreatment,
+                tax_behavior: product.taxTreatment,
               },
             ],
           },
@@ -157,32 +158,30 @@ export function createPeableTaxQuoteCalculator(options: {
         throw error;
       }
       const at = now();
-      const expiresAt = new Date(
-        Math.min(
-          +at + (options.quoteLifetimeMs ?? QUOTE_LIFETIME_MS),
-          Date.parse(calculation.expires_at),
-          Date.parse(location.expiresAt),
-        ),
+      const expiresAt = Math.min(
+        toUnix(new Date(+at + (options.quoteLifetimeMs ?? QUOTE_LIFETIME_MS))),
+        calculation.expires_at,
+        toUnix(new Date(location.expiresAt)),
       );
       const quote = {
         currency: calculation.currency,
-        grossMinorUnits: calculation.amount_total,
-        netMinorUnits: calculation.amount_net,
-        taxMinorUnits: calculation.amount_total - calculation.amount_net,
-        taxTreatment: product.taxTreatment,
-        sellerId: product.sellerId,
-        invoiceIssuerId: product.invoiceIssuerId,
-        taxRemitterId: product.taxRemitterId,
-        taxServiceRef: product.taxServiceRef,
+        gross_minor_units: calculation.amount_total,
+        net_minor_units: calculation.amount_net,
+        tax_minor_units: calculation.amount_total - calculation.amount_net,
+        tax_treatment: product.taxTreatment,
+        seller_id: product.sellerId,
+        invoice_issuer_id: product.invoiceIssuerId,
+        tax_remitter_id: product.taxRemitterId,
+        tax_service_ref: product.taxServiceRef,
         country: calculation.country,
-        coverageEvidenceId: calculation.registration_id ?? calculation.collection,
-        taxRateEvidenceId: calculation.id,
-        customerLocationEvidenceId: location.id,
-        quotedAt: at.toISOString(),
-        expiresAt: expiresAt.toISOString(),
+        coverage_evidence_id: calculation.registration_id ?? calculation.collection,
+        tax_rate_evidence_id: calculation.id,
+        customer_location_evidence_id: location.id,
+        quoted_at: toUnix(at),
+        expires_at: expiresAt,
       };
       const result: BillingTaxQuote = {
-        schema_version: 1,
+        schema_version: 2,
         source,
         quote: {
           id: `tax_${createHash('sha256').update(JSON.stringify({ source, quote })).digest('hex')}`,
@@ -226,15 +225,15 @@ export async function invoiceTaxLines(
   if (!row) return null;
   return row.result.line_items.flatMap((line) =>
     line.breakdown.map((entry) => ({
-      calculationId: calculationPublicId,
+      calculation_id: calculationPublicId,
       country: entry.country,
       state: entry.state,
-      taxType: entry.tax_type,
-      ratePercentage: entry.rate_percentage,
-      taxableMinorUnits: entry.taxable_amount,
-      taxMinorUnits: entry.amount,
+      tax_type: entry.tax_type,
+      rate_percentage: entry.rate_percentage,
+      taxable_minor_units: entry.taxable_amount,
+      tax_minor_units: entry.amount,
       inclusive: entry.inclusive,
-      taxabilityReason: entry.taxability_reason,
+      taxability_reason: entry.taxability_reason,
     })),
   );
 }

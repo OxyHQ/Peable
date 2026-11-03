@@ -78,7 +78,7 @@ async function make(amountMode: 'fixed' | 'free' = 'fixed') {
     {
       purpose: 'Community kitchen',
       currency: 'FAIR',
-      amountMode,
+      amount_mode: amountMode,
       ...(amountMode === 'fixed' ? { amount: '500' } : {}),
     },
     crypto.randomUUID(),
@@ -88,7 +88,7 @@ async function make(amountMode: 'fixed' | 'free' = 'fixed') {
 }
 test('concurrent creation and lost-response replay return one immutable link', async () => {
   const key = crypto.randomUUID(),
-    body = { purpose: 'Garden', currency: 'FAIR', amountMode: 'fixed', amount: '1000' };
+    body = { purpose: 'Garden', currency: 'FAIR', amount_mode: 'fixed', amount: '1000' };
   const results = await Promise.all(
     Array.from({ length: 6 }, () => request(`${root}?environment=development`, 'POST', body, key)),
   );
@@ -147,7 +147,7 @@ test('anonymous fixed amount cannot be overridden and purpose is public without 
         false,
       )
     ).status,
-  ).toBe(422);
+  ).toBe(400);
 });
 test('free amount canonical bounds and missing operation keys fail before money is created', async () => {
   const link = await make('free');
@@ -162,7 +162,7 @@ test('free amount canonical bounds and missing operation keys fail before money 
           false,
         )
       ).status,
-    ).toBe(422);
+    ).toBe(400);
   expect(
     (
       await request(
@@ -173,7 +173,7 @@ test('free amount canonical bounds and missing operation keys fail before money 
         false,
       )
     ).status,
-  ).toBe(422);
+  ).toBe(400);
 });
 test('lost HTTP reply and concurrent retries converge on one FairCoin intent/address', async () => {
   const link = await make('free'),
@@ -200,9 +200,11 @@ test('lost HTTP reply and concurrent retries converge on one FairCoin intent/add
   const body = contributionCollectionListSchema.parse(
     await (await request(`${root}/${link.id}/collections?environment=development`)).json(),
   );
-  expect(body.items).toHaveLength(1);
-  expect(body.items[0]?.id).toBe(values[0]?.id);
-  expect(body.items[0]?.refundCapability).toBe('unsupported_non_custodial');
+  expect(body.object).toBe('list');
+  expect(body.data).toHaveLength(1);
+  expect(body.data[0]?.id).toBe(values[0]?.id);
+  expect(body.data[0]?.object).toBe('payment_intent');
+  expect(body.data[0]?.refund_capability).toBe('unsupported_non_custodial');
   expect(
     (
       await request(
@@ -227,7 +229,7 @@ test('expired or disabled links refuse new contributions', async () => {
         false,
       )
     ).status,
-  ).toBe(422);
+  ).toBe(400);
   await gatewayDb()
     .update(paymentLinks)
     .set({
@@ -250,7 +252,7 @@ test('expired or disabled links refuse new contributions', async () => {
         false,
       )
     ).status,
-  ).toBe(422);
+  ).toBe(400);
   expect(
     (
       (await (
@@ -259,22 +261,31 @@ test('expired or disabled links refuse new contributions', async () => {
     ).active,
   ).toBe(false);
 });
-test('pagination cursor is bound to organization, environment and list', async () => {
+test('starting_after is resolved inside the organization, application and list', async () => {
+  await make();
   await make();
   const page = contributionListSchema.parse(
     await (await request(`${root}?environment=development&limit=1`)).json(),
   );
-  expect(page.nextCursor).toBeString();
-  expect(
-    (
-      await request(
-        root.replace('contrib-app', 'other-app') +
-          `?environment=development&cursor=${page.nextCursor}`,
-      )
-    ).status,
-  ).toBe(400);
-  expect((await request(`${root}?environment=development&cursor=${page.nextCursor}`)).status).toBe(
-    200,
+  expect(page.object).toBe('list');
+  expect(page.has_more).toBe(true);
+  const last = page.data.at(-1)?.id;
+  if (!last) throw new Error('expected one link on the first page');
+  // Another application's list cannot page from this application's link.
+  const foreign = await request(
+    `${root.replace('contrib-app', 'other-app')}?environment=development&starting_after=${last}`,
+  );
+  expect(foreign.status).toBe(400);
+  expect(((await foreign.json()) as { error: { param?: string } }).error.param).toBe(
+    'starting_after',
+  );
+  const next = contributionListSchema.parse(
+    await (await request(`${root}?environment=development&limit=1&starting_after=${last}`)).json(),
+  );
+  expect(next.data[0]?.id).not.toBe(last);
+  // A collection id is not a link id: the lists do not share cursors.
+  expect((await request(`${root}?environment=development&starting_after=pi_unknown`)).status).toBe(
+    400,
   );
 });
 test('contribution confirmations use the existing non-custodial watcher and CAS outbox path', async () => {
@@ -322,8 +333,8 @@ test('contribution confirmations use the existing non-custodial watcher and CAS 
   const report = contributionCollectionListSchema.parse(
     await (await request(`${root}/${link.id}/collections?environment=development`)).json(),
   );
-  expect(report.items[0]?.status).toBe('settled');
-  expect(report.items[0]?.refunds).toEqual([]);
+  expect(report.data[0]?.status).toBe('settled');
+  expect(report.data[0]?.refunds).toEqual([]);
 });
 test('disabled links recover a previously minted attempt but refuse a new operation', async () => {
   const link = await make(),
@@ -337,5 +348,5 @@ test('disabled links recover a previously minted attempt but refuse a new operat
   const replay = await request(path, 'POST', {}, key, false);
   expect(replay.status).toBe(201);
   expect(((await replay.json()) as { id: string }).id).toBe(first.id);
-  expect((await request(path, 'POST', {}, crypto.randomUUID(), false)).status).toBe(422);
+  expect((await request(path, 'POST', {}, crypto.randomUUID(), false)).status).toBe(400);
 });

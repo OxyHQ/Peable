@@ -45,12 +45,12 @@ function rail(
   return { value, calls };
 }
 const checkout = (providerCustomerId: string, extra: Record<string, unknown> = {}) => ({
-  providerCustomerId,
-  providerPriceId: 'price_one',
-  trialDays: 0,
-  returnUrl: 'https://example.test/return',
-  storeId: 'store',
-  planId: 'plan',
+  provider_customer_id: providerCustomerId,
+  provider_price_id: 'price_one',
+  trial_days: 0,
+  return_url: 'https://example.test/return',
+  store_id: 'store',
+  plan_id: 'plan',
   ...extra,
 });
 
@@ -72,8 +72,8 @@ describe('several billing rails behind one subscription contract', () => {
       'retrieveCheckout',
     ]);
     expect(faircoin.calls).toHaveLength(0);
-    // The rail field never reaches a rail, so legacy idempotency digests are unchanged.
-    expect(stripe.calls[0]?.args[1]).toEqual({ storeId: 's', storeName: 'S' });
+    // The rail field never reaches a rail, so a rail's idempotency digest never depends on it.
+    expect(stripe.calls[0]?.args[1]).toEqual({ store_id: 's', store_name: 'S' });
   });
 
   it('lets the payer choose a rail and routes its objects back to it', async () => {

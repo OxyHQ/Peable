@@ -84,11 +84,23 @@ export function paramFromPath(path: readonly PropertyKey[]): string | undefined 
  */
 export function sendValidationError(
   res: Response,
-  error: { issues: readonly { path: readonly PropertyKey[]; message: string }[] },
+  error: {
+    issues: readonly {
+      path: readonly PropertyKey[];
+      message: string;
+      /** Set on an `unrecognized_keys` issue: the fields the schema does not accept. */
+      keys?: readonly string[];
+    }[];
+  },
   fallback = 'invalid request',
 ): void {
   const issue = error.issues[0];
-  const param = issue ? paramFromPath(issue.path) : undefined;
+  // An unknown field is named by the field itself, not by the object holding
+  // it: `param` points at what the caller must remove.
+  const unknownKey = issue?.keys?.[0];
+  const param = issue
+    ? paramFromPath(unknownKey === undefined ? issue.path : [...issue.path, unknownKey])
+    : undefined;
   sendError(
     res,
     400,
@@ -148,7 +160,7 @@ export const requireAuthenticated: RequestHandler = (req, res, next) => {
  * The service layer checks this too, and that is defence in depth rather than
  * duplication — but the SERVICE is reached after the route has already resolved
  * the payment, the seller and the merchant's own refund history, and each of
- * those lookups answers 404 or 422 on its own. A wrong-mode credential could
+ * those lookups answers 404 or 400 on its own. A wrong-mode credential could
  * therefore enumerate which `pi_…`, `ca_…` and `externalRef` values exist by
  * reading which refusal came back, without ever reaching the guard.
  *

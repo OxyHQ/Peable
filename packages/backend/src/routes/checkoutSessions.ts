@@ -26,7 +26,13 @@ import { EnvironmentModeMismatchError } from '../services/providers/environmentG
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { newId } from '../lib/ids';
 import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from '../lib/serialize';
-import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from '../lib/http';
+import {
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+  requireAuthenticated,
+  sendValidationError,
+} from '../lib/http';
 import {
   connectedAccountBodyField,
   resolveMerchant,
@@ -34,13 +40,15 @@ import {
 } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
 
-const createBodySchema = z.object({
-  ...railBodyFields,
-  ...connectedAccountBodyField,
-  metadata: z.record(z.string(), z.string()).optional(),
-  successUrl: z.string().url().optional(),
-  cancelUrl: z.string().url().optional(),
-});
+const createBodySchema = z
+  .object({
+    ...railBodyFields,
+    ...connectedAccountBodyField,
+    metadata: z.record(z.string(), z.string()).optional(),
+    success_url: z.string().url().optional(),
+    cancel_url: z.string().url().optional(),
+  } satisfies Record<keyof CreateCheckoutSessionParams, z.ZodType>)
+  .strict();
 
 /**
  * Build the checkout-session REST router (F2.2). `POST`/merchant `GET` follow
@@ -67,12 +75,7 @@ export function createCheckoutSessionsRouter(deps: {
 
       const parsed = createBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const params: CreateCheckoutSessionParams = parsed.data as CreateCheckoutSessionParams;
@@ -179,7 +182,7 @@ export function createCheckoutSessionsRouter(deps: {
         res.status(201).json(toCheckoutSessionDTO(session, intent));
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message);
           return;
         }
         if (sendConnectedAccountRefusal(res, err)) return;
@@ -191,7 +194,7 @@ export function createCheckoutSessionsRouter(deps: {
           sendError(res, 409, 'invalid_request_error', err.message);
           return;
         }
-        // 503, not 422: the rail is not configured on this deployment, which is
+        // 503, not 400: the rail is not configured on this deployment, which is
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
           sendError(res, 503, 'api_error', err.message);
@@ -217,7 +220,7 @@ export function createCheckoutSessionsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -242,7 +245,7 @@ export function createCheckoutSessionsRouter(deps: {
   // Public payer path — UNAUTHENTICATED, rate-limited, authorized by
   // possession of the wrapped intent's `client_secret` (query param or
   // `X-Peable-Client-Secret` header — mirrors `GET /v1/payment_intents/:id`).
-  // Never leaks `merchant`/`paymentIntent` without a proven secret.
+  // Never leaks `merchant`/`payment_intent` without a proven secret.
   router.get(
     '/v1/checkout_sessions/:id/public',
     publicRateLimit,
@@ -253,7 +256,7 @@ export function createCheckoutSessionsRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -298,7 +301,7 @@ export function createCheckoutSessionsRouter(deps: {
       res.setHeader('Cache-Control', 'no-store');
       res.status(200).json({
         ...toCheckoutSessionPublicDTO(session, merchantDisplay, intent),
-        ...(billing ? { billingQuote: billing.fxQuote } : {}),
+        ...(billing ? { billing_quote: billing.fxQuote } : {}),
       });
     }),
   );

@@ -23,9 +23,9 @@ const SAMPLE_INTENT: PaymentIntent = {
   confirmations: 0,
   client_secret: 'pi_1_secret_x',
   metadata: {},
-  expires_at: '2026-07-19T00:15:00.000Z',
-  created: '2026-07-19T00:00:00.000Z',
-  updated_at: '2026-07-19T00:00:00.000Z',
+  expires_at: 1784420100,
+  created: 1784419200,
+  updated_at: 1784419200,
 };
 
 describe('PaymentIntentsResource', () => {

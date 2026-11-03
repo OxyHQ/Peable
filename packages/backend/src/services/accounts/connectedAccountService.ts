@@ -75,7 +75,7 @@ export class AccountConflictError extends Error {
 
 /**
  * A non-production platform asked for a mainnet FairCoin half — the merchants'
- * test/live firewall, applied to sellers (ADR 0012 D8). 422.
+ * test/live firewall, applied to sellers (ADR 0012 D8). 400.
  */
 export class FaircoinNetworkRefusedError extends Error {
   constructor(environment: MerchantEnvironment) {

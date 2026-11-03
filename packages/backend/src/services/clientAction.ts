@@ -33,6 +33,7 @@ import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { ProviderClientAction, ProviderPaymentResult } from './providers/provider';
 import { resolveProvider } from './providers/registry';
 
+/** The `client_action` object on the wire (snake_case, ADR 0014 D1). */
 export interface ClientActionResult {
   readonly kind: ProviderClientAction['kind'];
   readonly value: string;
@@ -44,7 +45,7 @@ export interface ClientActionResult {
    * it is pointed at, so a compiled-in key would be the wrong mode the first
    * time a test deployment used the same page.
    */
-  readonly publishableKey?: string;
+  readonly publishable_key?: string;
 }
 
 export type ClientActionOutcome =
@@ -129,7 +130,7 @@ export async function resolveClientAction(intent: PaymentIntentRow): Promise<Cli
       value: result.clientAction.value,
       ...(config.stripe.publishableKey === undefined
         ? {}
-        : { publishableKey: config.stripe.publishableKey }),
+        : { publishable_key: config.stripe.publishableKey }),
     },
   };
 }

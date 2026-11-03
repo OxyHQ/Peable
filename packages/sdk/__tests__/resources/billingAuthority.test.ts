@@ -8,6 +8,7 @@ import {
 import { BillingResource } from '../../src/resources/billing';
 import type { RestClient } from '../../src/core/client';
 const keys = generateKeyPairSync('ed25519');
+const unix = (ms: number) => Math.floor(ms / 1000);
 const pinned = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
 function fixture() {
   const now = new Date();
@@ -30,13 +31,13 @@ function fixture() {
     amount_paid: '2999',
     net_amount: '2499',
     tax_amount: '500',
-    period_start: '2026-10-01T00:00:00.000Z',
-    period_end: '2026-11-01T00:00:00.000Z',
-    paid_at: now.toISOString(),
-    observed_at: now.toISOString(),
+    period_start: 1790812800,
+    period_end: 1793491200,
+    paid_at: unix(+now),
+    observed_at: unix(+now),
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schema_version: 1,
+    schema_version: 2,
     source: {
       invoice_id: paid.invoice_id,
       payment_intent_id: paid.payment_intent_id,
@@ -73,8 +74,8 @@ function fixture() {
         mode: 'test',
         environment: owner.environment,
       },
-      issued_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + 60_000).toISOString(),
+      issued_at: unix(+now),
+      expires_at: unix(+now + 60_000),
     },
     method: 'card',
     signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
@@ -138,8 +139,8 @@ describe('pinned SDK invoice authority', () => {
     authority.invoice.faircoin_quote = {
       id: 'quote_fixture',
       amount_base_units: '1234',
-      quoted_at: new Date(Date.now() - 60_000).toISOString(),
-      expires_at: new Date(Date.now() - 1).toISOString(),
+      quoted_at: unix(Date.now() - 60_000),
+      expires_at: unix(Date.now() - 1_000),
       rounding_evidence_id: 'round_fixture',
     };
     resign(authority);
@@ -149,7 +150,7 @@ describe('pinned SDK invoice authority', () => {
         'in_fixture',
       ),
     ).rejects.toThrow('verification failed');
-    authority.invoice.faircoin_quote.expires_at = new Date(Date.now() + 20_000).toISOString();
+    authority.invoice.faircoin_quote.expires_at = unix(Date.now() + 20_000);
     resign(authority);
     expect(
       (
@@ -159,7 +160,9 @@ describe('pinned SDK invoice authority', () => {
         ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')
       ).method,
     ).toBe('faircoin');
-    const unsupported = { ...authority, schemaVersion: 2 };
+    // The ISO-instant schema (version 1) is refused, even when signed.
+    const unsupported = { ...authority, schema_version: 1 as unknown as 2 };
+    resign(unsupported);
     await expect(
       new BillingResource(client(unsupported, requests), pinned).retrieveFinalInvoiceAuthority(
         'sub_fixture',
@@ -175,11 +178,11 @@ it('recovers a payment inside its original quote after quote expiry', async () =
   authority.invoice.faircoin_quote = {
     id: 'quote_old',
     amount_base_units: '1234',
-    quoted_at: new Date(+now - 120_000).toISOString(),
-    expires_at: new Date(+now - 60_000).toISOString(),
+    quoted_at: unix(+now - 120_000),
+    expires_at: unix(+now - 60_000),
     rounding_evidence_id: 'round_old',
   };
-  expected.invoice.paid_at = new Date(+now - 90_000).toISOString();
+  expected.invoice.paid_at = unix(+now - 90_000);
   resign(authority);
   const resource = new BillingResource(client(authority, [], expected.invoice), pinned);
   expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe(
@@ -207,7 +210,7 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
       return value as T;
     },
   });
-  // A 0.3.x-shaped authority still verifies, and no query is sent.
+  // Without the option, an authority without lines verifies and no query is sent.
   await new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
     'sub_fixture',
     'in_fixture',

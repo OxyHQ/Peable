@@ -15,7 +15,7 @@ import { CURRENCY_CODES, PAYMENT_INTENT_RAILS, isBaseUnitString } from '@peable.
  * `network` have to agree with each other and with the merchant, and that is
  * `createIntent`'s `assertRailCurrency` and network firewall — a service-level
  * rule with one owner, not a zod refinement copied per route. Routes translate
- * its `RailMismatchError` into a 422.
+ * its `RailMismatchError` into a 400.
  */
 export const railBodyFields = {
   amount: z.string().refine(isBaseUnitString, 'amount must be a minor-unit integer string'),
@@ -31,7 +31,7 @@ export const railBodyFields = {
    * Optional NOW, and it was required before.
    *
    * This is the one backwards-compatibility risk in the fragment: a caller that
-   * previously got a 422 for omitting `network` now reaches the service. It
+   * previously got a 400 for omitting `network` now reaches the service. It
    * still fails — `createIntent` refuses a faircoin intent with no network —
    * but with a different message. Making it conditionally required in zod would
    * need a refinement that duplicates the rail rules the service owns.

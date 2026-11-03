@@ -45,7 +45,7 @@ export interface AvatarActor {
 
 export type AvatarAcceptance =
   | { readonly ok: true }
-  | { readonly ok: false; readonly status: 422 | 503; readonly message: string };
+  | { readonly ok: false; readonly status: 400 | 503; readonly message: string };
 
 const NOT_YOURS =
   'avatarFileId must name an active Oxy file owned by you, by this application, or by the account that owns it';
@@ -78,7 +78,7 @@ export async function acceptMerchantAvatar(
 
   const file = metadata.find((entry) => entry.id === fileId);
   if (file?.status !== 'active') {
-    return { ok: false, status: 422, message: NOT_YOURS };
+    return { ok: false, status: 400, message: NOT_YOURS };
   }
   if (!('ownerUserId' in file) && file.ownerApplicationId === undefined) {
     // Oxy left the owner out: verified first-party workload authority is
@@ -92,7 +92,7 @@ export async function acceptMerchantAvatar(
   const owned =
     file.ownerApplicationId === actor.applicationId ||
     (typeof file.ownerUserId === 'string' && accounts.has(file.ownerUserId));
-  if (!owned) return { ok: false, status: 422, message: NOT_YOURS };
+  if (!owned) return { ok: false, status: 400, message: NOT_YOURS };
 
   let result: string | undefined;
   try {
@@ -105,7 +105,7 @@ export async function acceptMerchantAvatar(
     return { ok: false, status: 503, message: UNVERIFIABLE };
   }
   if (result === 'created' || result === 'exists') return { ok: true };
-  return { ok: false, status: 422, message: NOT_DISPLAYABLE };
+  return { ok: false, status: 400, message: NOT_DISPLAYABLE };
 }
 
 function describe(error: unknown): string {

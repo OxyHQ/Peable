@@ -17,7 +17,7 @@ const EVENT: WebhookEvent = {
   id: 'evt_1',
   object: 'event',
   type: 'payment_intent.settled',
-  created: new Date(TIMESTAMP * 1000).toISOString(),
+  created: TIMESTAMP,
   data: {
     object: {
       id: 'pi_1',
@@ -33,9 +33,9 @@ const EVENT: WebhookEvent = {
       confirmations: 6,
       client_secret: 'pi_1_secret_x',
       metadata: {},
-      expires_at: new Date(TIMESTAMP * 1000).toISOString(),
-      created: new Date(TIMESTAMP * 1000).toISOString(),
-      updated_at: new Date(TIMESTAMP * 1000).toISOString(),
+      expires_at: TIMESTAMP,
+      created: TIMESTAMP,
+      updated_at: TIMESTAMP,
     },
   },
 };
@@ -225,10 +225,12 @@ test('rejects signed malformed recurring wake-ups rather than treating them as p
   for (const mutation of [
     { revision: 0 },
     { revision: 1.5 },
-    { resourceKind: 'payer' },
-    { resourceId: '' },
-    { observedAt: 'invalid' },
-    { amountPaid: '2999' },
+    { resource_kind: 'payer' },
+    { resource_id: '' },
+    { observed_at: '2026-10-01T00:00:00Z' },
+    { observed_at: 1.5 },
+    { amount_paid: '2999' },
+    { resourceKind: 'invoice' },
   ]) {
     const raw = JSON.stringify({
       id: 'evt_fixture',

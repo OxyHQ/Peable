@@ -138,8 +138,8 @@ export function createFaircoinRenewalConsumer(options: {
           const time = now().getTime();
           const active =
             !record.revocation &&
-            Date.parse(record.consent.starts_at) <= time &&
-            Date.parse(record.consent.expires_at) > time &&
+            record.consent.starts_at * 1000 <= time &&
+            record.consent.expires_at * 1000 > time &&
             Date.parse(instruction.periodStart) <= time &&
             Date.parse(instruction.periodEnd) > time &&
             BigInt(instruction.amountBaseUnits) <= BigInt(record.consent.maximum_amount_base_units);

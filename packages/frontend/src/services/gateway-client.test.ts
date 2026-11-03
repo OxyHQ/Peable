@@ -90,7 +90,7 @@ describe('getSocialReceiveCursor', () => {
     // The real Gateway route sends the cursor with no `data` envelope, so the
     // mock returns the NAKED shape (the post-unwrap shape) — otherwise this
     // test can't catch a re-introduced `.data` unwrap.
-    const cursor = { reservedThrough: 7, identityPublicKey: `02${'ab'.repeat(32)}` };
+    const cursor = { reserved_through: 7, identity_public_key: `02${'ab'.repeat(32)}` };
     getMock.mockImplementationOnce(async () => cursor);
 
     const result = await getSocialReceiveCursor('testnet');
@@ -105,18 +105,24 @@ describe('getSocialReceiveCursor', () => {
   // has to survive the client untouched rather than being dropped on the way.
   test('carries the identity key the backend derived those addresses from', async () => {
     const identityPublicKey = `02${'cd'.repeat(32)}`;
-    getMock.mockImplementationOnce(async () => ({ reservedThrough: 3, identityPublicKey }));
+    getMock.mockImplementationOnce(async () => ({
+      reserved_through: 3,
+      identity_public_key: identityPublicKey,
+    }));
 
     const result = await getSocialReceiveCursor('testnet');
 
     expect(result.identity_public_key).toBe(identityPublicKey);
   });
 
-  test('returns reservedThrough: 0 and no key for a caller with no reservation cursor yet', async () => {
-    getMock.mockImplementationOnce(async () => ({ reservedThrough: 0, identityPublicKey: null }));
+  test('returns reserved_through: 0 and no key for a caller with no reservation cursor yet', async () => {
+    getMock.mockImplementationOnce(async () => ({
+      reserved_through: 0,
+      identity_public_key: null,
+    }));
 
     const result = await getSocialReceiveCursor('mainnet');
 
-    expect(result).toEqual({ reservedThrough: 0, identityPublicKey: null });
+    expect(result).toEqual({ reserved_through: 0, identity_public_key: null });
   });
 });

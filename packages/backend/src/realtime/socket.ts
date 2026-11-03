@@ -58,9 +58,10 @@ interface SubscribeRequest {
   clientSecret: string;
 }
 
+/** The `subscribe` frame on the wire: `{ intent_id, client_secret }` (ADR 0014 D1). */
 function parseSubscribe(payload: unknown): SubscribeRequest | null {
   if (typeof payload !== 'object' || payload === null) return null;
-  const { intentId, clientSecret } = payload as Record<string, unknown>;
+  const { intent_id: intentId, client_secret: clientSecret } = payload as Record<string, unknown>;
   if (typeof intentId !== 'string' || typeof clientSecret !== 'string') {
     return null;
   }

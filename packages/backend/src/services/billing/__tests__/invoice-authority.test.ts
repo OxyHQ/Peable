@@ -6,11 +6,13 @@ import {
   type BillingPaidInvoice,
 } from '@peable.to/shared-types';
 import { verifyFinalInvoiceAuthority } from '../invoice-authority';
+import { toUnix } from '../../../lib/time';
 
 const keys = generateKeyPairSync('ed25519');
 const pinned = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
 function fixture() {
   const now = new Date();
+  const t = toUnix(now);
   const owner = {
     merchantId: 'internal_merchant',
     oxyAppId: 'app_fixture',
@@ -30,13 +32,13 @@ function fixture() {
     amount_paid: '2999',
     net_amount: '2499',
     tax_amount: '500',
-    period_start: '2026-10-01T00:00:00.000Z',
-    period_end: '2026-11-01T00:00:00.000Z',
-    paid_at: now.toISOString(),
-    observed_at: now.toISOString(),
+    period_start: toUnix(new Date('2026-10-01T00:00:00.000Z')),
+    period_end: toUnix(new Date('2026-11-01T00:00:00.000Z')),
+    paid_at: t,
+    observed_at: t,
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schema_version: 1,
+    schema_version: 2,
     source: {
       invoice_id: paid.invoice_id,
       payment_intent_id: paid.payment_intent_id,
@@ -73,14 +75,19 @@ function fixture() {
         mode: 'test',
         environment: owner.environment,
       },
-      issued_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + 60_000).toISOString(),
+      issued_at: t,
+      expires_at: t + 60,
     },
     method: 'card',
     signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
   };
   resign(authority);
-  return { authority, expected: { owner, merchantPublicId: 'merch_fixture', invoice: paid }, now };
+  return {
+    authority,
+    expected: { owner, merchantPublicId: 'merch_fixture', invoice: paid },
+    now,
+    t,
+  };
 }
 function resign(authority: BillingFinalInvoiceAuthority) {
   authority.signature.value = sign(
@@ -94,7 +101,7 @@ describe('signed final invoice authority', () => {
     const { authority, expected, now } = fixture();
     expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toEqual(authority);
     const reordered = {
-      schemaVersion: authority.schema_version,
+      schema_version: authority.schema_version,
       method: authority.method,
       invoice: authority.invoice,
       source: authority.source,
@@ -123,7 +130,7 @@ describe('signed final invoice authority', () => {
     ).toThrow('invalid_provider_response');
   });
   it('rejects signed totals differing from paid tax observations and unsafe Faircoin quotes', () => {
-    const { authority, expected, now } = fixture();
+    const { authority, expected, now, t } = fixture();
     authority.invoice.net_minor_units++;
     authority.invoice.tax_minor_units--;
     resign(authority);
@@ -140,37 +147,34 @@ describe('signed final invoice authority', () => {
     authority.invoice.faircoin_quote = {
       id: 'quote_fixture',
       amount_base_units: '1234',
-      quoted_at: now.toISOString(),
-      expires_at: new Date(now.getTime() + 120_000).toISOString(),
+      quoted_at: t,
+      expires_at: t + 120,
       rounding_evidence_id: 'round_fixture',
     };
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.faircoin_quote.expires_at = new Date(now.getTime() + 30_000).toISOString();
+    authority.invoice.faircoin_quote.expires_at = t + 30;
     resign(authority);
     expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now).method).toBe('faircoin');
   });
 });
 
 it('keeps a settled historical FX quote verifiable while rejecting late or early payment', () => {
-  const { authority, expected, now } = fixture();
+  const { authority, expected, now, t } = fixture();
   authority.method = 'faircoin';
   authority.invoice.faircoin_quote = {
     id: 'quote_old',
     amount_base_units: '1234',
-    quoted_at: new Date(+now - 120_000).toISOString(),
-    expires_at: new Date(+now - 60_000).toISOString(),
+    quoted_at: t - 120,
+    expires_at: t - 60,
     rounding_evidence_id: 'round_old',
   };
-  expected.invoice.paid_at = new Date(+now - 90_000).toISOString();
+  expected.invoice.paid_at = t - 90;
   resign(authority);
   expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now).method).toBe('faircoin');
-  for (const paidAt of [
-    authority.invoice.faircoin_quote.expires_at,
-    new Date(+now - 120_001).toISOString(),
-  ]) {
+  for (const paidAt of [authority.invoice.faircoin_quote.expires_at, t - 121]) {
     expected.invoice.paid_at = paidAt;
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',

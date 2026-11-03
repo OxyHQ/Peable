@@ -58,6 +58,7 @@ import {
   type SettlingPaymentProvider,
 } from '../provider';
 import { mapPaymentIntentStatus, toProviderEventEnvelope } from './verify';
+import { fromUnix } from '../../../lib/time';
 
 /** Which endpoint a delivery arrived on. The two carry different secrets. */
 export type StripeWebhookScope = 'platform' | 'connect';
@@ -103,9 +104,10 @@ function readChargeId(latestCharge: Stripe.PaymentIntent['latest_charge']): stri
 /**
  * The gateway's evidence field names in Stripe's spelling.
  *
- * Written out rather than derived by case conversion, so a field the gateway
- * names differently from Stripe (or one Stripe renames) is a compile-time edit
- * here instead of a silently dropped piece of a merchant's defence.
+ * The wire spells them as Stripe does today, and they are still written out
+ * rather than passed through: a field Stripe renames (or one the gateway names
+ * differently) is a compile-time edit here instead of a silently dropped piece
+ * of a merchant's defence.
  *
  * TOTAL over `DisputeEvidence` — that is what makes it safe. A field added to
  * the wire contract and not to this map is a field a merchant sends, the
@@ -116,23 +118,23 @@ const STRIPE_EVIDENCE_FIELDS: Record<
   keyof DisputeEvidence,
   keyof Stripe.DisputeUpdateParams.Evidence
 > = {
-  productDescription: 'product_description',
-  customerName: 'customer_name',
-  customerEmailAddress: 'customer_email_address',
-  customerPurchaseIp: 'customer_purchase_ip',
-  billingAddress: 'billing_address',
-  shippingAddress: 'shipping_address',
-  shippingCarrier: 'shipping_carrier',
-  shippingDate: 'shipping_date',
-  shippingTrackingNumber: 'shipping_tracking_number',
-  serviceDate: 'service_date',
-  accessActivityLog: 'access_activity_log',
-  cancellationPolicyDisclosure: 'cancellation_policy_disclosure',
-  cancellationRebuttal: 'cancellation_rebuttal',
-  duplicateChargeExplanation: 'duplicate_charge_explanation',
-  refundPolicyDisclosure: 'refund_policy_disclosure',
-  refundRefusalExplanation: 'refund_refusal_explanation',
-  uncategorizedText: 'uncategorized_text',
+  product_description: 'product_description',
+  customer_name: 'customer_name',
+  customer_email_address: 'customer_email_address',
+  customer_purchase_ip: 'customer_purchase_ip',
+  billing_address: 'billing_address',
+  shipping_address: 'shipping_address',
+  shipping_carrier: 'shipping_carrier',
+  shipping_date: 'shipping_date',
+  shipping_tracking_number: 'shipping_tracking_number',
+  service_date: 'service_date',
+  access_activity_log: 'access_activity_log',
+  cancellation_policy_disclosure: 'cancellation_policy_disclosure',
+  cancellation_rebuttal: 'cancellation_rebuttal',
+  duplicate_charge_explanation: 'duplicate_charge_explanation',
+  refund_policy_disclosure: 'refund_policy_disclosure',
+  refund_refusal_explanation: 'refund_refusal_explanation',
+  uncategorized_text: 'uncategorized_text',
 };
 
 /**
@@ -462,7 +464,7 @@ export class StripePaymentProvider
       net: String(balance.net),
       currency: balance.currency.toUpperCase() as CurrencyCode,
       // Seconds since the epoch, like every Stripe timestamp.
-      availableOn: new Date(balance.available_on * 1000).toISOString(),
+      availableOn: fromUnix(balance.available_on),
       // Only when the settlement currency differs from the charge's. `null`
       // rather than `1` for a same-currency settlement: a rate of one is a
       // conversion that happened, and none happened.

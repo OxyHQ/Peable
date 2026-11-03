@@ -59,7 +59,7 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
           : t('readOnly.history.received', { name })}
       </Text>
       <Text className="text-muted-foreground text-xs mt-1">
-        {new Date(payment.created).toLocaleDateString()}
+        {new Date(payment.created * 1000).toLocaleDateString()}
       </Text>
       {/* Shown only when the address still holds something. A swept address
           reads 0, and printing "0 FAIR" against a real past payment would say

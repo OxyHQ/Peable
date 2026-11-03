@@ -9,7 +9,9 @@ import {
   faircoinRenewalConsentSchema,
   faircoinRenewalInstructionSchema,
   faircoinRenewalExecutionSchema,
+  faircoinRenewalActorOf,
   faircoinRenewalNamespace,
+  faircoinRenewalRevocationSchema,
   type FaircoinRenewalRepository,
   type FaircoinRenewalRecord,
 } from '../../services/billing/faircoin-renewal';
@@ -17,14 +19,7 @@ import {
 const recordSchema = z
   .object({
     consent: faircoinRenewalConsentSchema,
-    revocation: z
-      .object({
-        authorizationId: billingReference,
-        revokedAt: z.string().datetime(),
-        revocationEvidenceId: billingReference,
-      })
-      .strict()
-      .nullable(),
+    revocation: faircoinRenewalRevocationSchema.nullable(),
     instructions: z.array(faircoinRenewalInstructionSchema),
     executions: z.array(faircoinRenewalExecutionSchema),
   })
@@ -72,14 +67,14 @@ export function createPostgresFaircoinRenewalRepository(db: Database): FaircoinR
         const outcome = await action(previous ? structuredClone(previous) : null);
         const record = recordSchema.parse(outcome.record);
         if (
-          record.consent.authorizationId !== parsedId ||
-          faircoinRenewalNamespace(record.consent) !== parsedNamespace ||
-          (record.revocation && record.revocation.authorizationId !== parsedId) ||
+          record.consent.authorization_id !== parsedId ||
+          faircoinRenewalNamespace(faircoinRenewalActorOf(record.consent)) !== parsedNamespace ||
+          (record.revocation && record.revocation.authorization_id !== parsedId) ||
           record.instructions.some(
             (instruction) =>
               instruction.authorizationId !== parsedId ||
-              instruction.subscriptionId !== record.consent.subscriptionId ||
-              instruction.planId !== record.consent.planId,
+              instruction.subscriptionId !== record.consent.subscription_id ||
+              instruction.planId !== record.consent.plan_id,
           ) ||
           record.executions.some(
             (execution) =>
@@ -125,10 +120,10 @@ export function createPostgresFaircoinRenewalRepository(db: Database): FaircoinR
           throw new BillingError('identity_conflict');
         const merchant = await findMerchantByAppEnvironment(
           transaction,
-          record.consent.appId,
+          record.consent.app_id,
           record.consent.environment,
         );
-        if (!merchant || merchant.publicId !== record.consent.merchantId)
+        if (!merchant || merchant.publicId !== record.consent.merchant_id)
           throw new BillingError('not_found', 404);
         if (row) {
           if (
@@ -193,7 +188,10 @@ export async function listPendingFaircoinRenewals(
         instruction: faircoinRenewalInstructionSchema,
       })
       .parse(row);
-    if (faircoinRenewalNamespace(parsed.consent) !== faircoinRenewalNamespace(actor))
+    if (
+      faircoinRenewalNamespace(faircoinRenewalActorOf(parsed.consent)) !==
+      faircoinRenewalNamespace(actor)
+    )
       throw new BillingError('identity_conflict');
     return parsed.instruction;
   });

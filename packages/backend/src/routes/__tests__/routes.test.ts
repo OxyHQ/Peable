@@ -68,10 +68,9 @@ interface IntentResponse {
   currency: string;
   network: string;
   address: string;
-  merchantId: string;
+  merchant_id: string;
   txid: string | null;
   confirmations: number;
-  clientSecret: string;
   metadata: Record<string, string>;
   client_secret?: string;
   error?: { type: string; message: string };
@@ -179,7 +178,6 @@ describe('POST /v1/payment_intents', () => {
     expect(body.txid).toBeNull();
     expect(typeof body.client_secret).toBe('string');
     expect(body.client_secret?.startsWith(`${body.id}_secret_`)).toBe(true);
-    expect(body.client_secret).toBe(body.clientSecret);
   });
 
   test('replaying the same Idempotency-Key returns the SAME intent, not a new one', async () => {
@@ -206,7 +204,7 @@ describe('POST /v1/payment_intents', () => {
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test('a non-integer amount → 422', async () => {
+  test('a non-integer amount → 400', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents`, {
       method: 'POST',
       headers: {
@@ -215,10 +213,34 @@ describe('POST /v1/payment_intents', () => {
       },
       body: JSON.stringify({ amount: '1.5', network: 'testnet' }),
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
   });
 
-  test("network mismatched against the merchant's own network -> 422, no address ever derived", async () => {
+  /**
+   * One wire, and no second spelling: a field the contract does not name is
+   * refused, never dropped. Dropping `connectedAccount` would have created the
+   * payment for the PLATFORM instead of its seller.
+   */
+  test('a field the contract does not name is refused with its name as param', async () => {
+    const res = await fetch(`${baseUrl}/v1/payment_intents`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': 'idem-unknown-field',
+      },
+      body: JSON.stringify({ amount: '1000', network: 'testnet', expiresInSeconds: 60 }),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as {
+      error: { type: string; code?: string; param?: string; request_id: string | null };
+    };
+    expect(body.error.type).toBe('invalid_request_error');
+    expect(body.error.code).toBe('parameter_invalid');
+    expect(body.error.param).toBe('expiresInSeconds');
+    expect('request_id' in body.error).toBe(true);
+  });
+
+  test("network mismatched against the merchant's own network -> 400, no address ever derived", async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents`, {
       method: 'POST',
       headers: {
@@ -227,7 +249,7 @@ describe('POST /v1/payment_intents', () => {
       },
       body: JSON.stringify({ amount: '150000000', network: 'mainnet' }),
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     const body = await readJson(res);
     expect(body.error?.type).toBe('invalid_request_error');
 
@@ -566,9 +588,9 @@ describe('GET /v1/payment_intents (list)', () => {
     expect(page2Body.data[0]?.id).toBe(first.body.id);
   });
 
-  test('an unknown starting_after -> 422', async () => {
+  test('an unknown starting_after -> 400', async () => {
     const res = await fetch(`${baseUrl}/v1/payment_intents?starting_after=pi_does_not_exist`);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
   });
 
   test('no service app credentials at all -> 401', async () => {

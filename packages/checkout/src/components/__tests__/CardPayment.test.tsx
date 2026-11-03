@@ -20,14 +20,14 @@ interface ClientActionResponse {
   object: 'client_action';
   kind: 'client_secret' | 'redirect';
   value: string;
-  publishableKey?: string;
+  publishable_key?: string;
 }
 
 let clientAction: ClientActionResponse | Error = {
   object: 'client_action',
   kind: 'client_secret',
   value: 'pi_stripe_1_secret_live',
-  publishableKey: 'pk_test_abc',
+  publishable_key: 'pk_test_abc',
 };
 const getClientActionMock = mock(async () => {
   if (clientAction instanceof Error) throw clientAction;
@@ -94,9 +94,9 @@ function cardIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     confirmations: 0,
     client_secret: 'pi_card_1_secret',
     metadata: {},
-    expires_at: new Date(Date.now() + 900_000).toISOString(),
-    created: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 900_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -106,7 +106,7 @@ beforeEach(() => {
     object: 'client_action',
     kind: 'client_secret',
     value: 'pi_stripe_1_secret_live',
-    publishableKey: 'pk_test_abc',
+    publishable_key: 'pk_test_abc',
   };
   confirmResult = {};
   mounted.length = 0;

@@ -38,6 +38,7 @@ import { enqueueConnectedAccountWebhook } from '../intentTransition';
 import { resolveMerchantDisplay } from '../merchantDisplay';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { AccountRailMissingError } from './connectedAccountService';
+import { toUnix } from '../../lib/time';
 
 /**
  * How long a link works. An hour, not Stripe's minutes, because the token alone
@@ -60,7 +61,7 @@ export type OnboardingRefusalCode =
 
 const STATUS_FOR: Record<OnboardingRefusalCode, number> = {
   link_not_found: 404,
-  // Gone, and the body carries the platform's `refreshUrl` — Stripe's
+  // Gone, and the body carries the platform's `refresh_url` — Stripe's
   // `refresh_url` semantics: send the seller back to ask for a fresh link.
   link_expired: 410,
   // The link is real, the session is someone else's. Not consumed: the seller
@@ -195,7 +196,7 @@ export async function describeOnboarding(input: {
     platform: await resolveMerchantDisplay(platform),
     // Narrowed by `resolveLink`, which refuses an account with no network.
     network: account.network as NonNullable<ConnectedAccountRow['network']>,
-    expires_at: link.expiresAt.toISOString(),
+    expires_at: toUnix(link.expiresAt),
     return_url: link.returnUrl,
   };
 }

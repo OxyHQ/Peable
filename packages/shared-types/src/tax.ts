@@ -293,7 +293,7 @@ export interface TaxReportRow {
   rate_percentage: string | null;
   currency: string;
   transactions: number;
-  /** Reversals netted into this row; `taxableAmount` and `taxAmount` are net. */
+  /** Reversals netted into this row; `taxable_amount` and `tax_amount` are net. */
   reversals: number;
   taxable_amount: number;
   tax_amount: number;
@@ -301,8 +301,10 @@ export interface TaxReportRow {
 
 export interface TaxReport {
   object: 'tax.report';
-  from: string;
-  to: string;
+  /** Inclusive, Unix seconds. */
+  from: number;
+  /** Exclusive, Unix seconds. */
+  to: number;
   rows: TaxReportRow[];
 }
 

@@ -96,8 +96,8 @@ test("a merchant PaymentIntent address resolves to kind: merchant with the Merch
   const result = await enrichAddresses(['TMerchantAddr1'], 'user_viewer');
   expect(result.TMerchantAddr1).toEqual({
     kind: 'merchant',
-    displayName: 'Mercaria',
-    avatarFileId: 'file_mercaria',
+    display_name: 'Mercaria',
+    avatar_file_id: 'file_mercaria',
     description: 'Marketplace',
   });
 });
@@ -114,8 +114,8 @@ test("an outgoing social send resolves to kind: user with the RECIPIENT's identi
   const result = await enrichAddresses(['TSocialAddr1'], 'user_viewer');
   expect(result.TSocialAddr1).toEqual({
     kind: 'user',
-    displayName: 'Alice',
-    avatarFileId: 'file_user_alice',
+    display_name: 'Alice',
+    avatar_file_id: 'file_user_alice',
     username: 'alice',
   });
 });
@@ -132,8 +132,8 @@ test("an incoming social receive resolves to kind: user with the SENDER's identi
   const result = await enrichAddresses(['TSocialAddr2'], 'user_viewer');
   expect(result.TSocialAddr2).toEqual({
     kind: 'user',
-    displayName: 'Bob',
-    avatarFileId: 'file_user_bob',
+    display_name: 'Bob',
+    avatar_file_id: 'file_user_bob',
     username: 'bob',
   });
 });
@@ -234,8 +234,8 @@ test('a display name falls back to the normalized handle when the profile has no
   const result = await enrichAddresses(['TSocialNoDisplay'], 'user_viewer');
   expect(result.TSocialNoDisplay).toEqual({
     kind: 'user',
-    displayName: 'nodisplay',
-    avatarFileId: 'file_user_nodisplay',
+    display_name: 'nodisplay',
+    avatar_file_id: 'file_user_nodisplay',
     username: 'nodisplay',
   });
 });

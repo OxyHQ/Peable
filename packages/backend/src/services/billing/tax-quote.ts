@@ -12,6 +12,7 @@ import {
   BillingError,
   type BillingOwner,
 } from './contracts';
+import { toUnix } from '../../lib/time';
 
 const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
 const timestamp = z.string().datetime();
@@ -21,10 +22,10 @@ const country = z.string().regex(/^[A-Z]{2}$/);
 export const billingTaxQuoteRequestSchema = z
   .object({
     rail: billingRailId.optional(),
-    storeId: billingReference,
-    planId: billingReference,
-    providerPriceId: billingReference.optional(),
-    customerLocationEvidenceId: billingReference,
+    store_id: billingReference,
+    plan_id: billingReference,
+    provider_price_id: billingReference.optional(),
+    customer_location_evidence_id: billingReference,
   })
   .strict();
 export const billingTaxProductSchema = z
@@ -90,16 +91,16 @@ export async function createVerifiedBillingTaxQuote(
 ): Promise<BillingTaxQuote> {
   const request = billingTaxQuoteRequestSchema.parse(raw);
   const product = billingTaxProductSchema.parse(
-    await calculator.resolveProduct(owner, request.planId, request.providerPriceId),
+    await calculator.resolveProduct(owner, request.plan_id, request.provider_price_id),
   );
   const location = billingCustomerLocationSchema.parse(
-    await calculator.readCustomerLocation(owner, request.customerLocationEvidenceId),
+    await calculator.readCustomerLocation(owner, request.customer_location_evidence_id),
   );
   const clock = now();
   if (
-    product.planId !== request.planId ||
-    location.id !== request.customerLocationEvidenceId ||
-    location.storeId !== request.storeId ||
+    product.planId !== request.plan_id ||
+    location.id !== request.customer_location_evidence_id ||
+    location.storeId !== request.store_id ||
     location.appId !== owner.oxyAppId ||
     location.environment !== owner.environment ||
     (location.mode === 'live') !== (owner.environment === 'production') ||
@@ -111,10 +112,10 @@ export async function createVerifiedBillingTaxQuote(
   )
     throw new BillingError('not_found', 404);
   const source = {
-    merchantId: merchantPublicId,
-    appId: owner.oxyAppId,
-    storeId: request.storeId,
-    planId: request.planId,
+    merchant_id: merchantPublicId,
+    app_id: owner.oxyAppId,
+    store_id: request.store_id,
+    plan_id: request.plan_id,
     mode: location.mode,
     environment: owner.environment,
   };
@@ -152,27 +153,27 @@ export function verifyBillingTaxQuote(
     // The product's price is what the payer pays when tax is included, and
     // what tax is added to when it is not.
     (product.taxTreatment === 'inclusive'
-      ? quote.grossMinorUnits !== product.grossMinorUnits
-      : quote.netMinorUnits !== product.grossMinorUnits) ||
-    quote.taxTreatment !== product.taxTreatment ||
-    quote.sellerId !== product.sellerId ||
-    quote.invoiceIssuerId !== product.invoiceIssuerId ||
-    quote.taxRemitterId !== product.taxRemitterId ||
-    quote.taxServiceRef !== product.taxServiceRef ||
+      ? quote.gross_minor_units !== product.grossMinorUnits
+      : quote.net_minor_units !== product.grossMinorUnits) ||
+    quote.tax_treatment !== product.taxTreatment ||
+    quote.seller_id !== product.sellerId ||
+    quote.invoice_issuer_id !== product.invoiceIssuerId ||
+    quote.tax_remitter_id !== product.taxRemitterId ||
+    quote.tax_service_ref !== product.taxServiceRef ||
     quote.country !== location.country ||
     (product.coverageEvidenceId !== undefined &&
-      quote.coverageEvidenceId !== product.coverageEvidenceId) ||
-    quote.customerLocationEvidenceId !== location.id ||
-    !Number.isSafeInteger(quote.netMinorUnits + quote.taxMinorUnits) ||
-    quote.netMinorUnits + quote.taxMinorUnits !== quote.grossMinorUnits ||
-    Date.parse(quote.quotedAt) > completion.getTime() ||
-    Date.parse(quote.expiresAt) <= completion.getTime() ||
-    Date.parse(quote.expiresAt) > Date.parse(location.expiresAt) ||
-    Date.parse(quote.expiresAt) <= Date.parse(quote.quotedAt)
+      quote.coverage_evidence_id !== product.coverageEvidenceId) ||
+    quote.customer_location_evidence_id !== location.id ||
+    !Number.isSafeInteger(quote.net_minor_units + quote.tax_minor_units) ||
+    quote.net_minor_units + quote.tax_minor_units !== quote.gross_minor_units ||
+    quote.quoted_at > toUnix(completion) ||
+    quote.expires_at <= toUnix(completion) ||
+    quote.expires_at > toUnix(new Date(location.expiresAt)) ||
+    quote.expires_at <= quote.quoted_at
   )
     throw new BillingError('invalid_provider_response', 502);
-  const pinned = Object.hasOwn(keys, authority.signature.keyId)
-    ? keys[authority.signature.keyId]
+  const pinned = Object.hasOwn(keys, authority.signature.key_id)
+    ? keys[authority.signature.key_id]
     : undefined;
   if (!pinned) throw new BillingError('invalid_provider_response', 502);
   try {

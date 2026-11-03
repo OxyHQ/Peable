@@ -34,6 +34,7 @@ import { enqueueWebhook, recordDeliveryAttempt } from '../../db/webhooks/webhook
 import { toPaymentIntentDTO } from '../../lib/serialize';
 import * as schema from '../../db/schema';
 import type { Database } from '../../db/postgres';
+import { toUnix } from '../../lib/time';
 import {
   createSuiteDatabase,
   dropSuiteDatabase,
@@ -419,7 +420,7 @@ export async function seedDelivery(
       id: eventId,
       object: 'event',
       type: eventType,
-      created: new Date().toISOString(),
+      created: toUnix(new Date()),
       data: { object: toPaymentIntentDTO(intent) },
     },
     url,

@@ -1,3 +1,30 @@
+### The wire: snake_case, Unix seconds, one error envelope
+
+Request parameters and returned objects are exactly the gateway's wire
+(ADR 0014): `snake_case` field names, every instant an integer of **Unix
+seconds**, amounts as base-unit strings. Only SDK options stay camelCase
+JavaScript — constructor config, `{ idempotencyKey }` request options and
+`toleranceSec`:
+
+```ts
+const intent = await peable.paymentIntents.create(
+  { amount: '1999', rail: 'card', currency: 'EUR', metadata: { order_id: order.id } },
+  { idempotencyKey: `order:${order.id}` },
+);
+new Date(intent.created * 1000); // Unix seconds, not an ISO string
+```
+
+Every failure is a typed `PeableError` built from
+`{ error: { type, code?, param?, message, request_id } }`: `err.code` is the
+specific reason (`account_not_ready`, `parameter_invalid`, …), `err.param` the
+offending field in bracket notation (`metadata[order_id]`), and `err.requestId`
+the response's `Request-Id` — quote it to Peable support. A request that is
+well-formed JSON but invalid is a 400, never a 422.
+
+Signed billing documents (tax quotes and final invoice authorities) carry
+`schema_version: 2`, whose instants are Unix seconds; the verifiers accept no
+other version.
+
 ### Own Oxy applications: shared workload transport
 
 ```ts
@@ -36,7 +63,7 @@ The remote outcome may be unknown: recover explicitly with the same durable key.
 
 `paymentIntents.reject`, `refunds.create`, and `transfers.create` now accept an
 optional second `{ idempotencyKey }` argument, forwarding the existing header.
-Refund/transfer `externalRef` remains their durable business identity; the option
+Refund/transfer `external_ref` remains their durable business identity; the option
 neither replaces it nor changes gateway financial semantics.
 
 ### Connect for FairCoin (0.4.0)
@@ -46,23 +73,23 @@ Pay a marketplace's sellers in FairCoin straight to their own wallets
 
 ```ts
 const seller = await peable.accounts.create({
-  externalRef: store.id,
-  faircoin: { network: 'testnet', oxyUserId: store.ownerOxyUserId },
+  external_ref: store.id,
+  faircoin: { network: 'testnet', oxy_user_id: store.ownerOxyUserId },
 });
 const link = await peable.accountLinks.create({
-  account: seller.id, rail: 'faircoin', returnUrl, refreshUrl,
+  account: seller.id, rail: 'faircoin', return_url: returnUrl, refresh_url: refreshUrl,
 });
 // the seller registers their key at link.url, signed in with Oxy;
 // you receive connected_account.updated with faircoin.status === 'active'
 const intent = await peable.paymentIntents.create(
-  { amount: '250000000', rail: 'faircoin', network: 'testnet', connectedAccount: seller.id },
+  { amount: '250000000', rail: 'faircoin', network: 'testnet', connected_account: seller.id },
   { idempotencyKey: `order:${order.id}` },
 );
 ```
 
 `peable.accounts` is `peable.connectedAccounts` under its Stripe name. Events for
-an on-behalf payment carry `event.account`; `intent.canExpire` is `false` once a
-payer has broadcast, so never cancel an order on `expiresAt` alone. A seller
+an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
+payer has broadcast, so never cancel an order on `expires_at` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
 
 ### Optional checkout presentation (local development)

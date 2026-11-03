@@ -187,7 +187,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
     new Promise<{ ok: boolean }>((resolve) => {
       client.emit(
         'subscribe',
-        { intentId: created.id, clientSecret: created.client_secret },
+        { intent_id: created.id, client_secret: created.client_secret },
         resolve,
       );
     }),
@@ -215,7 +215,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
     new Promise<{ ok: boolean }>((resolve) => {
       authedClient.emit(
         'subscribe',
-        { intentId: created.id, clientSecret: created.client_secret },
+        { intent_id: created.id, client_secret: created.client_secret },
         resolve,
       );
     }),
@@ -381,7 +381,11 @@ test('subscribe is capability-scoped by client_secret — a wrong secret joins n
 
   const anonAck = await withTimeout(
     new Promise<{ ok: boolean }>((resolve) => {
-      anon.emit('subscribe', { intentId: intent.publicId, clientSecret: 'wrong-secret' }, resolve);
+      anon.emit(
+        'subscribe',
+        { intent_id: intent.publicId, client_secret: 'wrong-secret' },
+        resolve,
+      );
     }),
     5000,
     'anon wrong-secret subscribe ack',
@@ -392,7 +396,7 @@ test('subscribe is capability-scoped by client_secret — a wrong secret joins n
     new Promise<{ ok: boolean }>((resolve) => {
       authed.emit(
         'subscribe',
-        { intentId: intent.publicId, clientSecret: 'wrong-secret' },
+        { intent_id: intent.publicId, client_secret: 'wrong-secret' },
         resolve,
       );
     }),

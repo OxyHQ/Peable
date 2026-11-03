@@ -7,7 +7,7 @@ interface ServerEvents {
 }
 interface ClientEvents {
   subscribe: (
-    payload: { intentId: string; clientSecret: string },
+    payload: { intent_id: string; client_secret: string },
     ack: (result: { ok: boolean }) => void,
   ) => void;
 }
@@ -77,7 +77,7 @@ export function openIntentSubscription(
       const attempt = ++generation;
       void socket
         .timeout(10_000)
-        .emitWithAck('subscribe', { intentId, clientSecret })
+        .emitWithAck('subscribe', { intent_id: intentId, client_secret: clientSecret })
         .then(
           (ack) => {
             if (!current() || attempt !== generation || !socket.connected) return;

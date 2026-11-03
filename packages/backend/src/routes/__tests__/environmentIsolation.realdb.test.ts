@@ -231,9 +231,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a development credential on a live dep
     // a real Express account behind, emailing a real person about
     // requirements, forever.
     const { status } = await post('/v1/connected_accounts', {
-      externalRef: 'seller-1',
+      external_ref: 'seller-1',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     expect(status).toBe(403);
     expect(providerCalls).toEqual([]);
@@ -241,8 +241,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a development credential on a live dep
 
   test('cannot refund', async () => {
     const { status } = await post('/v1/refunds', {
-      paymentIntentId: 'pi_env_isolation',
-      externalRef: 'refund-1',
+      payment_intent_id: 'pi_env_isolation',
+      external_ref: 'refund-1',
       amount: '100',
     });
     expect(status).toBe(403);
@@ -251,9 +251,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('a development credential on a live dep
 
   test('cannot settle a seller out of a payment', async () => {
     const { status } = await post('/v1/transfers', {
-      paymentIntentId: 'pi_env_isolation',
-      connectedAccountRef: 'seller-1',
-      externalRef: 'order-1',
+      payment_intent_id: 'pi_env_isolation',
+      connected_account_ref: 'seller-1',
+      external_ref: 'order-1',
       amount: '100',
     });
     expect(status).toBe(403);

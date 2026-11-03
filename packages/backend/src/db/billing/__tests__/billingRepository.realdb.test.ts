@@ -16,6 +16,7 @@ import {
 } from '../billingRepository';
 import { billingObjectBindings, billingOperations } from '../../schema';
 import type { BillingOwner } from '../../../services/billing/contracts';
+import { toUnix } from '../../../lib/time';
 const deployment = {
   provider: 'stripe' as const,
   platformAccountId: 'acct_platform',
@@ -49,7 +50,7 @@ function claimed(value: BillingClaim) {
 }
 const hosted = {
   url: 'https://checkout.stripe.com/c/pay/synthetic',
-  expiresAt: '2026-10-03T13:00:00Z',
+  expires_at: toUnix(new Date('2026-10-03T13:00:00Z')),
 };
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)(
@@ -247,7 +248,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             tx,
             first.operation,
             first.leaseToken,
-            { providerCustomerId: 'cus_one' },
+            { provider_customer_id: 'cus_one' },
             'cus_one',
             now,
           );
