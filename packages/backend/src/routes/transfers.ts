@@ -10,7 +10,7 @@
  * This router does not know what a marketplace fee is and must not learn.
  */
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
 import { isBaseUnitString, type TransferWithReversal } from '@peable.to/shared-types';
@@ -40,7 +40,9 @@ import {
   TransfersUnavailableError,
 } from '../services/transfers/transferService';
 import { ProviderError } from '../services/providers/provider';
-import { toTransferDTO, type TransferDTO } from '../lib/serializeSettlement';
+import { listReversalsForTransfer } from '../db/transfers/transferReversalRepository';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { toTransferDTO, toTransferReversalDTO, type TransferDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
   sendError,
@@ -49,25 +51,29 @@ import {
   wrap,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
-import { toUnix } from '../lib/time';
 import { expandObjects, parseExpand } from '../lib/expand';
 import {
   answerList,
+  completeList,
   listQuerySchema,
   parseQuery,
+  type QuerySurface,
   resolveListReference,
-  retrieveQuerySchema,
+  surfaceListQuery,
+  surfaceRetrieveQuery,
 } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
 /** `GET /v1/transfers`: every settlement, or those of one payment and/or one seller. */
-const listTransfersQuery = listQuerySchema({
+const listTransfersQuery = surfaceListQuery({
   payment_intent: z.string().min(1).max(255).optional(),
   connected_account: z.string().min(1).max(255).optional(),
 });
 /** The per-payment sub-list: the payment is in the path. */
 const listIntentTransfersQuery = listQuerySchema({});
-const retrieveTransferQuery = retrieveQuerySchema({});
+const retrieveTransferQuery = surfaceRetrieveQuery();
+/** A settlement's reversals are a complete, bounded set: no paging parameters. */
+const listReversalsQuery = surfaceRetrieveQuery();
 
 /**
  * A canonical base-unit integer string, validated with the SAME predicate the
@@ -171,9 +177,194 @@ function transferReplayConflict(
   return null;
 }
 
+/** The `:transferId` of a matched route, or the 400 when Express somehow lacks it. */
+function transferIdParam(req: Request, res: Response): string | null {
+  const { transferId } = req.params;
+  if (!transferId) {
+    sendError(res, 400, 'invalid_request_error', 'transferId is required');
+    return null;
+  }
+  return transferId;
+}
+
+/**
+ * Every settlement of the merchant, newest first — narrowed by
+ * `payment_intent=pi_…` and/or `connected_account=ca_…`. Shared by
+ * `GET /v1/transfers` and Orbit's Connect screen.
+ */
+export async function answerTransferList(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+): Promise<void> {
+  const query = parseQuery(req, res, listTransfersQuery[surface]);
+  if (!query) return;
+
+  const db = getDb();
+  const intent = await resolveListReference(
+    res,
+    'payment_intent',
+    query.payment_intent,
+    async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+  );
+  if (!intent.ok) return;
+  const account = await resolveListReference(
+    res,
+    'connected_account',
+    query.connected_account,
+    async (publicId) => (await findAccountByPublicId(db, merchant.id, publicId))?.id ?? null,
+  );
+  if (!account.ok) return;
+
+  await answerList(req, res, {
+    query,
+    type: 'transfer',
+    merchantId: merchant.id,
+    cursor: async (publicId) =>
+      (await findTransferByPublicId(db, merchant.id, publicId))?.id ?? null,
+    fetch: (page) =>
+      listTransfersForMerchant(db, {
+        merchantId: merchant.id,
+        paymentIntentId: intent.id,
+        connectedAccountId: account.id,
+        page,
+      }),
+    serialize: (row) => toTransferDTO(row, row.connectedAccountPublicId, row.paymentIntentPublicId),
+  });
+}
+
+/** One settlement, by `tr_…`, scoped to the merchant in the predicate. */
+export async function retrieveTransferCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+): Promise<void> {
+  const transferId = transferIdParam(req, res);
+  if (!transferId) return;
+  const query = parseQuery(req, res, retrieveTransferQuery[surface]);
+  if (!query) return;
+  const expand = parseExpand(res, 'transfer', query.expand, { list: false });
+  if (!expand) return;
+
+  const db = getDb();
+  const transfer = await findTransferByPublicId(db, merchant.id, transferId);
+  if (!transfer) {
+    sendError(res, 404, 'invalid_request_error', 'transfer not found');
+    return;
+  }
+  const intent = await findIntentByPublicIdForTransfer(db, transfer);
+  const dto = await serializeTransfer(merchant.id, transfer, intent);
+  await expandObjects([dto], 'transfer', expand, merchant.id);
+  res.status(200).json(dto);
+}
+
+/**
+ * `GET /v1/transfers/:transferId/reversals`: every reversal of one settlement,
+ * newest first. A complete set (`has_more: false`): a settlement can only be
+ * reversed down to zero, so its reversals are bounded by its own amount.
+ */
+export async function answerTransferReversalList(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+): Promise<void> {
+  const transferId = transferIdParam(req, res);
+  if (!transferId) return;
+  if (!parseQuery(req, res, listReversalsQuery[surface])) return;
+  const db = getDb();
+  const transfer = await findTransferByPublicId(db, merchant.id, transferId);
+  if (!transfer) {
+    sendError(res, 404, 'invalid_request_error', 'transfer not found');
+    return;
+  }
+  const reversals = await listReversalsForTransfer(db, transfer.id);
+  res.status(200).json(completeList(req, reversals.map(toTransferReversalDTO)));
+}
+
+/** `POST /v1/transfers/:transferId/reversals`: take some or all of a settlement back. */
+export async function reverseTransferCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const parsed = reverseTransferBodySchema.safeParse(req.body);
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const transferId = transferIdParam(req, res);
+  if (!transferId) return;
+
+  const db = getDb();
+  const transfer = await findTransferByPublicId(db, merchant.id, transferId);
+  if (!transfer) {
+    sendError(res, 404, 'invalid_request_error', 'transfer not found');
+    return;
+  }
+
+  try {
+    const {
+      transfer: updated,
+      reversal,
+      created,
+    } = await reverseTransfer({
+      merchantId: merchant.id,
+      transfer,
+      externalRef: parsed.data.external_ref,
+      amount: parsed.data.amount,
+    });
+    const intent = await findIntentByPublicIdForTransfer(db, updated);
+    // 201 for a reversal just made, 200 for one that had already been made.
+    // The distinction is the merchant's to act on for the same reason it is
+    // on the settlement route: "did I just take another 500 off this
+    // seller" is a question they will ask.
+    const response: TransferWithReversal = {
+      ...(await serializeTransfer(merchant.id, updated, intent)),
+      reversal: toTransferReversalDTO(reversal),
+    };
+    res.status(created ? 201 : 200).json(response);
+  } catch (error) {
+    if (error instanceof TransferReversalTooLargeError) {
+      sendError(res, 400, 'invalid_request_error', error.message);
+      return;
+    }
+    if (error instanceof TransfersUnavailableError) {
+      sendError(res, 503, 'api_error', error.message);
+      return;
+    }
+    if (error instanceof ProviderError) {
+      sendProviderError(res, error);
+      return;
+    }
+    throw error;
+  }
+}
+
+type TransferCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
+
 export function createTransfersRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
+  const read = [
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+  ];
+  const write = [
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+  ];
+  const api = (core: TransferCore) =>
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      await core(req, res, merchant);
+    });
 
   /**
    * Settle one seller out of a funded payment.
@@ -185,10 +376,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
    */
   router.post(
     '/v1/transfers',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
+    ...write,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -324,81 +512,12 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
   );
 
   /** Take some or all of a settlement back. */
-  router.post(
+  router.post('/v1/transfers/:transferId/reversals', ...write, api(reverseTransferCore));
+  /** A settlement's reversals, newest first. */
+  router.get(
     '/v1/transfers/:transferId/reversals',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const parsed = reverseTransferBodySchema.safeParse(req.body);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-
-      const db = getDb();
-      const { transferId } = req.params;
-      if (!transferId) {
-        sendError(res, 400, 'invalid_request_error', 'transferId is required');
-        return;
-      }
-
-      const transfer = await findTransferByPublicId(db, merchant.id, transferId);
-      if (!transfer) {
-        sendError(res, 404, 'invalid_request_error', 'transfer not found');
-        return;
-      }
-
-      try {
-        const {
-          transfer: updated,
-          reversal,
-          created,
-        } = await reverseTransfer({
-          merchantId: merchant.id,
-          transfer,
-          externalRef: parsed.data.external_ref,
-          amount: parsed.data.amount,
-        });
-        const intent = await findIntentByPublicIdForTransfer(db, updated);
-        // 201 for a reversal just made, 200 for one that had already been made.
-        // The distinction is the merchant's to act on for the same reason it is
-        // on the settlement route: "did I just take another 500 off this
-        // seller" is a question they will ask.
-        const response: TransferWithReversal = {
-          ...(await serializeTransfer(merchant.id, updated, intent)),
-          reversal: {
-            id: reversal.publicId,
-            object: 'transfer_reversal',
-            livemode: reversal.livemode,
-            external_ref: reversal.externalRef,
-            amount: reversal.amount,
-            currency: reversal.currency,
-            status: reversal.status,
-            failure_message: reversal.failureMessage,
-            created: toUnix(reversal.createdAt),
-          },
-        };
-        res.status(created ? 201 : 200).json(response);
-      } catch (error) {
-        if (error instanceof TransferReversalTooLargeError) {
-          sendError(res, 400, 'invalid_request_error', error.message);
-          return;
-        }
-        if (error instanceof TransfersUnavailableError) {
-          sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof ProviderError) {
-          sendProviderError(res, error);
-          return;
-        }
-        throw error;
-      }
-    }),
+    ...read,
+    api((req, res, merchant) => answerTransferReversalList(req, res, merchant, 'api')),
   );
 
   /**
@@ -407,88 +526,21 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
    */
   router.get(
     '/v1/transfers',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const query = parseQuery(req, res, listTransfersQuery);
-      if (!query) return;
-
-      const db = getDb();
-      const intent = await resolveListReference(
-        res,
-        'payment_intent',
-        query.payment_intent,
-        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
-      );
-      if (!intent.ok) return;
-      const account = await resolveListReference(
-        res,
-        'connected_account',
-        query.connected_account,
-        async (publicId) => (await findAccountByPublicId(db, merchant.id, publicId))?.id ?? null,
-      );
-      if (!account.ok) return;
-
-      await answerList(req, res, {
-        query,
-        type: 'transfer',
-        merchantId: merchant.id,
-        cursor: async (publicId) =>
-          (await findTransferByPublicId(db, merchant.id, publicId))?.id ?? null,
-        fetch: (page) =>
-          listTransfersForMerchant(db, {
-            merchantId: merchant.id,
-            paymentIntentId: intent.id,
-            connectedAccountId: account.id,
-            page,
-          }),
-        serialize: (row) =>
-          toTransferDTO(row, row.connectedAccountPublicId, row.paymentIntentPublicId),
-      });
-    }),
+    ...read,
+    api((req, res, merchant) => answerTransferList(req, res, merchant, 'api')),
   );
 
   /** One settlement, by `tr_…`, scoped to the merchant in the predicate. */
   router.get(
     '/v1/transfers/:transferId',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const { transferId } = req.params;
-      if (!transferId) {
-        sendError(res, 400, 'invalid_request_error', 'transferId is required');
-        return;
-      }
-      const query = parseQuery(req, res, retrieveTransferQuery);
-      if (!query) return;
-      const expand = parseExpand(res, 'transfer', query.expand, { list: false });
-      if (!expand) return;
-
-      const db = getDb();
-      const transfer = await findTransferByPublicId(db, merchant.id, transferId);
-      if (!transfer) {
-        sendError(res, 404, 'invalid_request_error', 'transfer not found');
-        return;
-      }
-      const intent = await findIntentByPublicIdForTransfer(db, transfer);
-      const dto = await serializeTransfer(merchant.id, transfer, intent);
-      await expandObjects([dto], 'transfer', expand, merchant.id);
-      res.status(200).json(dto);
-    }),
+    ...read,
+    api((req, res, merchant) => retrieveTransferCore(req, res, merchant, 'api')),
   );
 
   /** What one payment settled. The reconciliation read. */
   router.get(
     '/v1/payment_intents/:intentId/transfers',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    ...read,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

@@ -560,6 +560,62 @@ describe('payment links', () => {
   });
 });
 
+describe('connect', () => {
+  it('lists, opens and onboards sellers on the dashboard routes', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.connectedAccounts.list(scope, { limit: 25, starting_after: 'ca_1' });
+    answer = () => ({ id: 'ca_2' });
+    await api.connectedAccounts.create(
+      scope,
+      { external_ref: 'store-1', country: 'ES', business_type: 'company' },
+      'key-1',
+    );
+    await api.connectedAccounts.refresh(scope, 'ca_2');
+    await api.connectedAccounts.createLink(scope, 'ca_2', {
+      refresh_url: 'https://orbit.peable.to/connect/ca_2',
+      return_url: 'https://orbit.peable.to/connect/ca_2',
+      rail: 'faircoin',
+    });
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      [
+        'GET',
+        '/v1/dashboard/applications/app%201/connected_accounts?environment=development&limit=25&starting_after=ca_1',
+      ],
+      ['POST', '/v1/dashboard/applications/app%201/connected_accounts?environment=development'],
+      [
+        'POST',
+        '/v1/dashboard/applications/app%201/connected_accounts/ca_2/refresh?environment=development',
+      ],
+      [
+        'POST',
+        '/v1/dashboard/applications/app%201/connected_accounts/ca_2/account_links?environment=development',
+      ],
+    ]);
+    expect(calls[1]?.options).toEqual({
+      body: { external_ref: 'store-1', country: 'ES', business_type: 'company' },
+      idempotencyKey: 'key-1',
+    });
+    expect(calls[3]?.options?.body).toMatchObject({ rail: 'faircoin' });
+  });
+
+  it('lists transfers by seller, their reversals, and reverses under a kept key', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.transfers.list(scope, { connected_account: 'ca_2' });
+    await api.transfers.reversals(scope, 'tr_1');
+    answer = () => ({ id: 'tr_1', reversal: { id: 'trr_1' } });
+    await api.transfers.reverse(scope, 'tr_1', { amount: '100', external_ref: 'rev-1' }, 'rev-1');
+    expect(calls.map((call) => call.path)).toEqual([
+      '/v1/dashboard/applications/app%201/transfers?environment=development&connected_account=ca_2',
+      '/v1/dashboard/applications/app%201/transfers/tr_1/reversals?environment=development',
+      '/v1/dashboard/applications/app%201/transfers/tr_1/reversals?environment=development',
+    ]);
+    expect(calls[2]?.options).toEqual({
+      body: { amount: '100', external_ref: 'rev-1' },
+      idempotencyKey: 'rev-1',
+    });
+  });
+});
+
 describe('branding and email settings', () => {
   it('reads and writes both on their own paths', async () => {
     answer = () => ({});
@@ -665,5 +721,43 @@ describe('the billing engine (ADR 0018)', () => {
       ],
       ['DELETE', `${base}/products/prod_1/features/prodft_1?environment=development`, undefined],
     ]);
+  });
+});
+describe('developers', () => {
+  it('filters request logs by status class, method and created', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.requestLogs.list(scope, { status: '4xx', method: 'POST', created: { gte: 10 } });
+    await api.requestLogs.retrieve(scope, 'req_1');
+    expect(calls.map((call) => decodeURIComponent(call.path))).toEqual([
+      '/v1/dashboard/applications/app 1/request_logs?environment=development&status=4xx&method=POST&created[gte]=10',
+      '/v1/dashboard/applications/app 1/request_logs/req_1?environment=development',
+    ]);
+  });
+
+  it('reads one event and the events of one payment', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false });
+    await api.events.list(scope, { payment_intent: 'pi_1', limit: 100 });
+    await api.events.retrieve(scope, 'evt_1');
+    expect(calls.map((call) => call.path)).toEqual([
+      '/v1/dashboard/applications/app%201/events?environment=development&payment_intent=pi_1&limit=100',
+      '/v1/dashboard/applications/app%201/events/evt_1?environment=development',
+    ]);
+  });
+});
+
+describe('report downloads', () => {
+  it('streams the same report a run would store, as a blob', async () => {
+    answer = () => new Blob(['id\r\n'], { type: 'text/csv' });
+    await api.reporting.download(live, {
+      report_type: 'balance_transactions.itemized.1',
+      parameters: { interval_start: 100, interval_end: 200, columns: ['amount', 'fee'] },
+    });
+    expect(calls.map((call) => [call.method, decodeURIComponent(call.path)])).toEqual([
+      [
+        'GET',
+        '/v1/dashboard/applications/app_live/reporting/report_types/balance_transactions.itemized.1/csv?environment=production&interval_start=100&interval_end=200&columns[]=amount&columns[]=fee',
+      ],
+    ]);
+    expect(calls[0]?.options).toEqual({ responseType: 'blob' });
   });
 });

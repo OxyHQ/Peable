@@ -27,6 +27,7 @@ import {
 import { PaymentMethodsSettings } from '@/paymentMethods/PaymentMethodsSettings';
 import { modeForEnvironment } from '@/scope/scope';
 import { FormField } from '@/ui/FormField';
+import { LanguageSettings } from '@/ui/LanguageSettings';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const merchantKey = (scope: DashboardScope) => [
@@ -242,12 +243,33 @@ function MerchantLoader({ scope }: { scope: DashboardScope }) {
   return <MerchantSettings scope={scope} merchant={query.data} />;
 }
 
+/** Business details and Team are pages of their own under Settings. */
+function MoreSettings() {
+  const router = useRouter();
+  return (
+    <Section title={t('settings.more')}>
+      <View className="flex-row flex-wrap gap-2">
+        <Button appearance="outline" size="sm" onPress={() => router.push('/settings/business')}>
+          {t('settings.business.open')}
+        </Button>
+        <Button appearance="outline" size="sm" onPress={() => router.push('/settings/team')}>
+          {t('settings.team.open')}
+        </Button>
+      </View>
+    </Section>
+  );
+}
+
 export default function SettingsScreen() {
   return (
     <OrbitScreen title={t('settings.title')}>
       {({ scope }) => (
-        // Keyed by scope so a mode or application switch starts from that merchant's values.
-        <MerchantLoader key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
+        <View className="gap-6">
+          <MoreSettings />
+          {/* Keyed by scope so a mode or application switch starts from that merchant's values. */}
+          <MerchantLoader key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
+          <LanguageSettings />
+        </View>
       )}
     </OrbitScreen>
   );

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import type { ReportRun } from '@peable.to/shared-types';
+import type { CreateReportRunParams, ReportRun } from '@peable.to/shared-types';
 import { Platform } from 'react-native';
 import { dashboardApi } from '../api/client';
 import type { DashboardScope, ListPage } from '../api/dashboard';
@@ -34,24 +34,23 @@ export function useReportRuns(scope: DashboardScope) {
   });
 }
 
+/** Whether this runtime can hand a file to the person: a browser can; a native build cannot here. */
+export function canSaveFiles(): boolean {
+  return Platform.OS === 'web' && typeof document !== 'undefined';
+}
+
 /**
- * Save a report's CSV. On the web: the bytes, fetched with the signed-in
- * user's bearer, handed to the browser as a download. Elsewhere there is no
- * file system Orbit writes to; the caller says so.
+ * Hand bytes to the browser as a download named `filename`.
  *
  * @returns `false` when this platform cannot save a file.
  */
-export async function downloadReportFile(
-  scope: DashboardScope,
-  file: { id: string; filename: string },
-): Promise<boolean> {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return false;
-  const blob = await dashboardApi.files.contents(scope, file.id);
+export function saveBlob(blob: Blob, filename: string): boolean {
+  if (!canSaveFiles()) return false;
   const url = URL.createObjectURL(blob);
   try {
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = file.filename;
+    anchor.download = filename;
     anchor.rel = 'noopener';
     document.body.appendChild(anchor);
     anchor.click();
@@ -61,4 +60,34 @@ export async function downloadReportFile(
     setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
   return true;
+}
+
+/**
+ * Save a run's stored CSV: the bytes, fetched with the signed-in user's
+ * bearer, handed to the browser. Elsewhere there is no file system Orbit
+ * writes to; the caller says so.
+ *
+ * @returns `false` when this platform cannot save a file.
+ */
+export async function downloadReportFile(
+  scope: DashboardScope,
+  file: { id: string; filename: string },
+): Promise<boolean> {
+  if (!canSaveFiles()) return false;
+  return saveBlob(await dashboardApi.files.contents(scope, file.id), file.filename);
+}
+
+/**
+ * Download a report NOW — the same request a run takes, streamed by the
+ * gateway instead of stored.
+ *
+ * @returns `false` when this platform cannot save a file.
+ */
+export async function downloadReportNow(
+  scope: DashboardScope,
+  body: CreateReportRunParams,
+  filename: string,
+): Promise<boolean> {
+  if (!canSaveFiles()) return false;
+  return saveBlob(await dashboardApi.reporting.download(scope, body), filename);
 }

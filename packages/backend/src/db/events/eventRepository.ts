@@ -163,6 +163,8 @@ export interface ListEventsParams {
    * still pending or that failed.
    */
   readonly deliverySuccess?: boolean | undefined;
+  /** Only the events about this payment — its INTERNAL key, resolved scoped by the route. */
+  readonly paymentIntentId?: string | undefined;
 }
 
 /** `%` and `_` are LIKE wildcards; a prefix matches them literally. */
@@ -184,6 +186,9 @@ export async function listEventsForMerchant(
   if (params.type?.kind === 'exact') conditions.push(eq(events.type, params.type.type));
   if (params.type?.kind === 'prefix') {
     conditions.push(like(events.type, `${likeLiteral(params.type.prefix)}%`));
+  }
+  if (params.paymentIntentId !== undefined) {
+    conditions.push(eq(events.paymentIntentId, params.paymentIntentId));
   }
   if (params.deliverySuccess !== undefined) {
     const undelivered = db

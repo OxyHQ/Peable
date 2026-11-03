@@ -20,12 +20,24 @@ import { ToastOutlet } from '@oxy.so/bloom/toast';
 import { ImageResolverProvider } from '@oxy.so/bloom/image-resolver';
 import { oxyServices } from '@/api/client';
 import { OXY_AUTH_REDIRECT_URI, OXY_CLIENT_ID } from '@/config';
-import { FALLBACK_LOCALE, SUPPORTED_LOCALES } from '@/i18n';
+import { FALLBACK_LOCALE, setLocale, SUPPORTED_LOCALES, useLocale } from '@/i18n';
 import { queryClient } from '@/query';
 import { OrbitScopeProvider } from '@/scope/ScopeProvider';
 
-// English is the only catalog Orbit ships, so there is nothing to switch to.
-const ignoreLanguage = () => undefined;
+/** Oxy tells Orbit which language to render (`OxyProvider`'s `language.onChange`, Oxy ADR 0022). */
+const followOxyLanguage = (locale: string) => {
+  setLocale(locale);
+};
+
+/**
+ * The screens, keyed by the active language: `t` is a plain function, so a
+ * language change re-renders the whole tree under its new catalog — memoised
+ * screens and navigators included — instead of leaving stale words behind.
+ */
+function LocalizedSlot() {
+  const locale = useLocale();
+  return <Slot key={locale} />;
+}
 
 export default function RootLayout() {
   return (
@@ -42,7 +54,7 @@ export default function RootLayout() {
             language={{
               supportedLocales: SUPPORTED_LOCALES,
               fallbackLocale: FALLBACK_LOCALE,
-              onChange: ignoreLanguage,
+              onChange: followOxyLanguage,
             }}
           >
             <ImageResolverProvider
@@ -51,7 +63,7 @@ export default function RootLayout() {
               <PortalProvider>
                 <OverlayInertBoundary>
                   <OrbitScopeProvider>
-                    <Slot />
+                    <LocalizedSlot />
                   </OrbitScopeProvider>
                 </OverlayInertBoundary>
                 <PortalOutlet />

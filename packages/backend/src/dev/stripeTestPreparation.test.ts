@@ -1,5 +1,47 @@
 import { expect, test } from 'bun:test';
-import { createPreparationReader, assertLocalPreparationPrice } from './stripeTestPreparation';
+import {
+  createPreparationReader,
+  assertLocalPreparationPrice,
+  localCheckoutConfiguration,
+} from './stripeTestPreparation';
+test('public configuration speaks the Orbit wire: snake_case, base-unit strings, Unix seconds', () => {
+  const configuration = localCheckoutConfiguration({
+    publishableKey: 'pk_test_public',
+    merchant: 'merch_local',
+    month: 599,
+    year: 5750,
+    expiresAt: new Date(1_800_000_060_900),
+  });
+  expect(configuration).toEqual({
+    object: 'local_checkout_configuration',
+    livemode: false,
+    publishable_key: 'pk_test_public',
+    merchant: 'merch_local',
+    product: 'peable_local_mention_plus',
+    currency: 'USD',
+    prices: {
+      month: { unit_amount: '599', interval: 'month' },
+      year: { unit_amount: '5750', interval: 'year' },
+    },
+    payment_methods: configuration.payment_methods,
+    expires_at: 1_800_000_060,
+  });
+  expect(configuration.payment_methods.map((method) => method.type)).toEqual([
+    'card',
+    'bank',
+    'installments',
+    'faircoin',
+  ]);
+  expect(() =>
+    localCheckoutConfiguration({
+      publishableKey: 'pk_test_public',
+      merchant: 'merch_local',
+      month: null,
+      year: 5750,
+      expiresAt: new Date(),
+    }),
+  ).toThrow('Unapproved');
+});
 test('public configuration coalesces warmup reads, expires and revalidates before cached reads', async () => {
   let time = 0;
   let calls = 0;

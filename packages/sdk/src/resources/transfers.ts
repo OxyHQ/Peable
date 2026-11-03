@@ -3,6 +3,7 @@ import type {
   List,
   ListParams,
   Transfer,
+  TransferReversal,
   TransferWithReversal,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
@@ -102,6 +103,17 @@ export class TransfersResource {
         body: params,
         ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
       },
+    );
+  }
+
+  /**
+   * Every reversal of one settlement, newest first. A complete list
+   * (`has_more: false`): a settlement can only be reversed down to zero.
+   */
+  listReversals(transferId: string): Promise<List<TransferReversal>> {
+    return this.client.request<List<TransferReversal>>(
+      'GET',
+      `/v1/transfers/${encodeURIComponent(transferId)}/reversals`,
     );
   }
 

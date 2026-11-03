@@ -13,18 +13,20 @@ import {
 } from './productForm';
 
 const CURRENCY_OPTIONS = ORBIT_CATALOG_CURRENCIES.map((code) => ({ value: code, label: code }));
-const TYPE_OPTIONS = [
+const typeOptions = () => [
   { value: 'recurring', label: t('price.type.recurring') },
   { value: 'one_time', label: t('price.type.one_time') },
 ];
-const INTERVAL_OPTIONS = ORBIT_RECURRING_INTERVALS.map((interval) => ({
-  value: interval,
-  label: t(`price.interval.${interval}`),
-}));
-const TAX_OPTIONS = ORBIT_TAX_BEHAVIORS.map((behavior) => ({
-  value: behavior,
-  label: t(`price.tax.${behavior}`),
-}));
+const intervalOptions = () =>
+  ORBIT_RECURRING_INTERVALS.map((interval) => ({
+    value: interval,
+    label: t(`price.interval.${interval}`),
+  }));
+const taxOptions = () =>
+  ORBIT_TAX_BEHAVIORS.map((behavior) => ({
+    value: behavior,
+    label: t(`price.tax.${behavior}`),
+  }));
 
 /** The fields of one per-unit price — a product's first price, or another one. */
 export function PriceFields({
@@ -79,7 +81,7 @@ export function PriceFields({
           <Choice
             label={t('price.field.type')}
             value={form.type}
-            options={TYPE_OPTIONS}
+            options={typeOptions()}
             onChange={(value) => set('type')(value as PriceForm['type'])}
             disabled={disabled}
           />
@@ -90,7 +92,7 @@ export function PriceFields({
               <Choice
                 label={t('price.field.interval')}
                 value={form.interval}
-                options={INTERVAL_OPTIONS}
+                options={intervalOptions()}
                 onChange={(value) => set('interval')(value as RecurringInterval)}
                 disabled={disabled}
               />
@@ -116,7 +118,7 @@ export function PriceFields({
           <Choice
             label={t('price.field.taxBehavior')}
             value={form.taxBehavior}
-            options={TAX_OPTIONS}
+            options={taxOptions()}
             onChange={(value) => set('taxBehavior')(value as PriceTaxBehavior)}
             disabled={disabled}
           />

@@ -10,6 +10,7 @@ import type {
   FileType,
   FileUploadPurpose,
 } from '@peable.to/shared-types';
+import { labelFor, t } from '../i18n';
 import type { StatusTone } from '../payments/status';
 
 /**
@@ -67,37 +68,8 @@ export function isLongTextField(field: DisputeTextEvidenceField): boolean {
   return LONG_TEXT_FIELDS.has(field);
 }
 
-const FIELD_LABELS: Record<DisputeEvidenceField, string> = {
-  product_description: 'Product or service description',
-  customer_name: 'Customer name',
-  customer_email_address: 'Customer email',
-  customer_purchase_ip: 'Customer IP address at purchase',
-  billing_address: 'Billing address',
-  shipping_address: 'Shipping address',
-  shipping_carrier: 'Shipping carrier',
-  shipping_date: 'Shipping date',
-  shipping_tracking_number: 'Tracking number',
-  service_date: 'Service date',
-  access_activity_log: 'Access or usage log',
-  cancellation_policy_disclosure: 'How the cancellation policy was shown',
-  cancellation_rebuttal: 'Why the cancellation claim is wrong',
-  duplicate_charge_explanation: 'Why this is not a duplicate charge',
-  refund_policy_disclosure: 'How the refund policy was shown',
-  refund_refusal_explanation: 'Why no refund is owed',
-  uncategorized_text: 'Other information',
-  receipt: 'Receipt',
-  customer_communication: 'Customer communication',
-  customer_signature: 'Customer signature',
-  shipping_documentation: 'Shipping documentation',
-  service_documentation: 'Service documentation',
-  refund_policy: 'Refund policy',
-  cancellation_policy: 'Cancellation policy',
-  duplicate_charge_documentation: 'Duplicate charge documentation',
-  uncategorized_file: 'Other file',
-};
-
 export function evidenceFieldLabel(field: DisputeEvidenceField): string {
-  return FIELD_LABELS[field] ?? field;
+  return labelFor('evidence.field', field);
 }
 
 export const ORBIT_DISPUTE_STATUSES: readonly DisputeStatus[] = [
@@ -107,13 +79,6 @@ export const ORBIT_DISPUTE_STATUSES: readonly DisputeStatus[] = [
   'lost',
 ];
 
-const STATUS_LABELS: Record<DisputeStatus, string> = {
-  needs_response: 'Needs response',
-  under_review: 'Under review',
-  won: 'Won',
-  lost: 'Lost',
-};
-
 const STATUS_TONES: Record<DisputeStatus, StatusTone> = {
   needs_response: 'warning',
   under_review: 'info',
@@ -122,36 +87,34 @@ const STATUS_TONES: Record<DisputeStatus, StatusTone> = {
 };
 
 export function disputeStatusLabel(status: DisputeStatus): string {
-  return STATUS_LABELS[status] ?? status;
+  return labelFor('dispute.status', status);
 }
 
 export function disputeStatusTone(status: DisputeStatus): StatusTone {
   return STATUS_TONES[status] ?? 'neutral';
 }
 
-const REASON_LABELS: Record<DisputeReason, string> = {
-  bank_cannot_process: 'Bank cannot process',
-  check_returned: 'Check returned',
-  credit_not_processed: 'Credit not processed',
-  customer_initiated: 'Customer initiated',
-  debit_not_authorized: 'Debit not authorized',
-  duplicate: 'Duplicate',
-  fraudulent: 'Fraudulent',
-  general: 'General',
-  incorrect_account_details: 'Incorrect account details',
-  insufficient_funds: 'Insufficient funds',
-  noncompliant: 'Noncompliant',
-  product_not_received: 'Product not received',
-  product_unacceptable: 'Product unacceptable',
-  subscription_canceled: 'Subscription canceled',
-  unrecognized: 'Unrecognized',
-};
-
-/** Every reason Orbit can word; pinned to `DISPUTE_REASONS`. */
-export const ORBIT_DISPUTE_REASONS = Object.keys(REASON_LABELS) as DisputeReason[];
+/** Every reason Orbit can word (`dispute.reason.*`); pinned to `DISPUTE_REASONS`. */
+export const ORBIT_DISPUTE_REASONS: readonly DisputeReason[] = [
+  'bank_cannot_process',
+  'check_returned',
+  'credit_not_processed',
+  'customer_initiated',
+  'debit_not_authorized',
+  'duplicate',
+  'fraudulent',
+  'general',
+  'incorrect_account_details',
+  'insufficient_funds',
+  'noncompliant',
+  'product_not_received',
+  'product_unacceptable',
+  'subscription_canceled',
+  'unrecognized',
+];
 
 export function disputeReasonLabel(reason: DisputeReason): string {
-  return REASON_LABELS[reason] ?? reason;
+  return labelFor('dispute.reason', reason);
 }
 
 /** Restated `FILE_PURPOSE_POLICIES`, pinned by test: the gateway stays the authority. */
@@ -185,12 +148,14 @@ export function fileRefusal(
   const policy = ORBIT_FILE_POLICIES[purpose];
   const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : undefined;
   if (!extension || !allowedExtensions(purpose).includes(extension)) {
-    return `Only ${policy.types.map((type) => type.toUpperCase()).join(', ')} files can be used here.`;
+    return t('files.refusal.type', {
+      types: policy.types.map((type) => type.toUpperCase()).join(', '),
+    });
   }
   if (file.size > policy.max_bytes) {
-    return `That file is larger than ${formatBytes(policy.max_bytes)}.`;
+    return t('files.refusal.size', { size: formatBytes(policy.max_bytes) });
   }
-  if (file.size === 0) return 'That file is empty.';
+  if (file.size === 0) return t('files.refusal.empty');
   return null;
 }
 
@@ -250,8 +215,8 @@ export function evidenceLocked(dispute: Dispute, now: number): boolean {
 /** Why the form is read-only, in the merchant's words. */
 export function lockedReason(dispute: Dispute, now: number): string | null {
   if (!evidenceLocked(dispute, now)) return null;
-  if (dispute.evidence_details.submission_count >= 1) return 'Your response was submitted.';
-  if (dispute.status === 'won' || dispute.status === 'lost') return 'This dispute is closed.';
-  if (dispute.status === 'under_review') return 'The card network is reviewing this dispute.';
-  return 'The deadline to respond has passed.';
+  if (dispute.evidence_details.submission_count >= 1) return t('dispute.locked.submitted');
+  if (dispute.status === 'won' || dispute.status === 'lost') return t('dispute.locked.closed');
+  if (dispute.status === 'under_review') return t('dispute.locked.review');
+  return t('dispute.locked.pastDue');
 }

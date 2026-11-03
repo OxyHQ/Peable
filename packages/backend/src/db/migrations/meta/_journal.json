@@ -470,6 +470,20 @@
       "when": 1793734358159,
       "tag": "0066_billing_engine_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1793735255514,
+      "tag": "0067_report_types_itemized",
+      "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1793735256762,
+      "tag": "0068_report_types_itemized_validate",
+      "breakpoints": true
     }
   ]
 }

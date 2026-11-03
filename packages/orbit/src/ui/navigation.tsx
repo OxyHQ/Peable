@@ -19,6 +19,7 @@ import { RiAlarmWarningLine } from '@oxy.so/bloom/icons/RiAlarmWarningLine';
 import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
 import { RiBankLine } from '@oxy.so/bloom/icons/RiBankLine';
 import { RiBarChartBoxLine } from '@oxy.so/bloom/icons/RiBarChartBoxLine';
+import { RiCommunityLine } from '@oxy.so/bloom/icons/RiCommunityLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
 import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
@@ -46,6 +47,7 @@ export type OrbitTab =
   | 'payouts'
   | 'reports'
   | 'account'
+  | 'connect'
   | 'links'
   | 'customers'
   | 'subscriptions'
@@ -72,6 +74,7 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
   payouts: { labelKey: 'nav.payouts', icon: RiBankLine, activeIcon: RiBankLine },
   reports: { labelKey: 'nav.reports', icon: RiBarChartBoxLine, activeIcon: RiBarChartBoxLine },
   account: { labelKey: 'nav.account', icon: RiStore2Line, activeIcon: RiStore2Line },
+  connect: { labelKey: 'nav.connect', icon: RiCommunityLine, activeIcon: RiCommunityLine },
   links: { labelKey: 'nav.links', icon: RiLinksLine, activeIcon: RiLinksLine },
   customers: { labelKey: 'nav.customers', icon: RiUserLine, activeIcon: RiUserLine },
   subscriptions: { labelKey: 'nav.subscriptions', icon: RiRepeatLine, activeIcon: RiRepeatLine },
@@ -106,6 +109,7 @@ export const ORBIT_TABS: readonly OrbitTab[] = [
   'payouts',
   'reports',
   'account',
+  'connect',
   'links',
   'customers',
   'subscriptions',

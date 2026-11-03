@@ -28,7 +28,7 @@ import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
-const FILTER_OPTIONS = [
+const filterOptions = () => [
   { value: 'active', label: t('products.filter.active') },
   { value: 'archived', label: t('products.filter.archived') },
   { value: 'all', label: t('products.filter.all') },
@@ -51,7 +51,7 @@ function ActiveFilter({
         size="sm"
         label={t('products.filter')}
         value={filterValue(value)}
-        options={FILTER_OPTIONS}
+        options={filterOptions()}
         onChange={(next) => onChange(next === 'all' ? null : next === 'active')}
       />
     </View>

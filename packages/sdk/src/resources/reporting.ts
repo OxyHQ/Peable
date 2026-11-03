@@ -4,10 +4,11 @@ import type {
   ListParams,
   ListReportRunsParams,
   ReportRun,
+  ReportRunParameters,
   ReportType,
   ReportTypeId,
 } from '@peable.to/shared-types';
-import type { PeableRequestOptions, RestClient } from '../core/client';
+import type { GatewayClient, PeableRequestOptions, RestClient } from '../core/client';
 import { requestOptionsOf } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
@@ -18,11 +19,44 @@ export interface ReportRunListParams extends ListParams, ListReportRunsParams {}
 
 /**
  * What can be run (`payments.itemized.1`, `balance.summary.1`,
- * `payouts.itemized.1`) and over which interval data exists. A complete set:
+ * `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`,
+ * `disputes.itemized.1`) and over which interval data exists. A complete set:
  * one page, `has_more: false`.
  */
 export class ReportTypesResource {
-  constructor(private readonly client: RestClient) {}
+  constructor(private readonly client: GatewayClient) {}
+
+  /**
+   * The report's CSV at once, streamed (`GET /v1/reporting/report_types/:id/csv`)
+   * — the same report, with the same `parameters`, a run would store. Answers
+   * the `Response`, whose body is the file as the gateway writes it, so a long
+   * interval never has to fit in memory:
+   *
+   *   const csv = await peable.reporting.reportTypes.download('payments.itemized.1', {
+   *     interval_start, interval_end,
+   *   });
+   *   await pipeline(Readable.fromWeb(csv.body), createWriteStream('payments.csv'));
+   *
+   * A refusal (an interval in the future, an unknown column, no account for a
+   * ledger report) is thrown as the typed error before any byte; a download
+   * that fails midway errors the body stream rather than ending it.
+   */
+  download(
+    id: ReportTypeId,
+    parameters: ReportRunParameters,
+    options: { signal?: AbortSignal } = {},
+  ): Promise<Response> {
+    return this.client.stream(`/v1/reporting/report_types/${encodeURIComponent(id)}/csv`, {
+      query: {
+        interval_start: parameters.interval_start,
+        interval_end: parameters.interval_end,
+        columns: parameters.columns,
+        currency: parameters.currency,
+      },
+      headers: { Accept: 'text/csv' },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+  }
 
   list(): Promise<ReportTypeList> {
     return this.client.request<ReportTypeList>('GET', '/v1/reporting/report_types');
@@ -83,7 +117,7 @@ export class ReportingResource {
   readonly reportTypes: ReportTypesResource;
   readonly reportRuns: ReportRunsResource;
 
-  constructor(client: RestClient) {
+  constructor(client: GatewayClient) {
     this.reportTypes = new ReportTypesResource(client);
     this.reportRuns = new ReportRunsResource(client);
   }

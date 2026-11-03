@@ -1,19 +1,22 @@
 import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useQuery } from '@tanstack/react-query';
 import type { PaymentIntent } from '@peable.to/shared-types';
-import { Button } from '@oxy.so/bloom/button';
+import { Button, LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
+import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
+import { eventPath, requestLogPath } from '@/developers/requestLogs';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { cancellationReasonLabel } from '@/payments/status';
 import { paymentTimeline, type TimelineStep } from '@/payments/timeline';
-import { usePayment } from '@/payments/usePayments';
+import { paymentKeys, usePayment } from '@/payments/usePayments';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { PaymentStatusBadge } from '@/ui/StatusBadge';
 
@@ -57,12 +60,72 @@ function Timeline({ steps }: { steps: TimelineStep[] }) {
   );
 }
 
+/**
+ * What happened to this payment, as its events recorded it (the last 30 days),
+ * each linked to the API request that caused it when one did — the step from a
+ * payment to the exact call that moved it.
+ */
+function PaymentEvents({ scope, payment }: { scope: DashboardScope; payment: PaymentIntent }) {
+  const router = useRouter();
+  const query = useQuery({
+    queryKey: [...paymentKeys.detail(scope, payment.id), 'events'],
+    queryFn: () => dashboardApi.events.list(scope, { payment_intent: payment.id, limit: 100 }),
+  });
+  let body: React.ReactNode;
+  if (query.isPending) body = <Loading accessibilityLabel={t('payment.events')} />;
+  else if (query.isError) {
+    body = <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
+  } else if (!query.data.data.length) {
+    body = (
+      <Text variant="body-2-regular" className="text-muted-foreground">
+        {t('payment.events.none')}
+      </Text>
+    );
+  } else {
+    body = query.data.data.map((event) => (
+      <View
+        key={event.id}
+        className="flex-row flex-wrap items-center gap-x-3 gap-y-1 py-2 border-b border-border"
+      >
+        <LinkButton
+          size="sm"
+          accessibilityLabel={`${t('developers.event')} ${event.id}`}
+          onPress={() => router.push(eventPath(event.id))}
+        >
+          {event.type}
+        </LinkButton>
+        <Text variant="caption-1-regular" className="text-muted-foreground">
+          {formatInstant(event.created)}
+        </Text>
+        {event.request.id ? (
+          <LinkButton
+            size="sm"
+            accessibilityLabel={t('developers.event.request', { id: event.request.id })}
+            onPress={() => router.push(requestLogPath(event.request.id ?? ''))}
+          >
+            {t('developers.event.request', { id: event.request.id })}
+          </LinkButton>
+        ) : (
+          <Text variant="caption-1-regular" className="text-muted-foreground">
+            {t('payment.events.noRequest')}
+          </Text>
+        )}
+      </View>
+    ));
+  }
+  return (
+    <Section title={t('payment.events')} description={t('payment.eventsNote')}>
+      {body}
+    </Section>
+  );
+}
+
 /** A reference as its id, whether or not the read expanded it. */
 function idOf(reference: string | { id: string }): string {
   return typeof reference === 'string' ? reference : reference.id;
 }
 
-function PaymentDetail({ payment }: { payment: PaymentIntent }) {
+function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: PaymentIntent }) {
   const metadata = Object.entries(payment.metadata ?? {});
   return (
     <View className="gap-6">
@@ -182,6 +245,7 @@ function PaymentDetail({ payment }: { payment: PaymentIntent }) {
           </Section>
         </View>
       </View>
+      <PaymentEvents scope={scope} payment={payment} />
       <Section title={t('payment.metadata')}>
         {metadata.length ? (
           metadata.map(([key, value]) => <Field key={key} label={key} value={value} mono />)
@@ -211,7 +275,7 @@ function PaymentLoader({ scope, id }: { scope: DashboardScope; id: string }) {
     }
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
-  return <PaymentDetail payment={query.data} />;
+  return <PaymentDetail scope={scope} payment={query.data} />;
 }
 
 export default function PaymentScreen() {

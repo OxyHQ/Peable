@@ -262,22 +262,33 @@ export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
   }
 }
 
+/**
+ * The harness's subscription readback (ADR 0014 wire): snake_case, amounts as
+ * base-unit strings, instants as Unix seconds, `null` for what is not known.
+ */
 export interface LocalSubscriptionSnapshot {
-  kind: 'subscription';
-  environment: 'test';
-  intentId: string;
-  subscriptionId: string;
+  object: 'local_test_subscription';
+  livemode: false;
+  /** The Peable `pi_…` of the first invoice's payment. */
+  payment_intent: string;
+  /** The provider subscription id. */
+  subscription: string;
   interval: 'month' | 'year';
-  amountMinorUnits: number;
+  amount: string;
   currency: 'USD';
-  subscriptionStatus: string;
-  invoiceStatus: string | null;
-  paymentStatus: string;
+  subscription_status: string;
+  invoice_status: string | null;
+  payment_status: string;
   ready: boolean;
-  tax?: LocalInvoiceQuote;
-  paymentMethods: LocalPaymentMethodCapability[];
-  currentPeriodStart?: string;
-  currentPeriodEnd?: string;
+  tax: LocalInvoiceQuote | null;
+  payment_methods: LocalPaymentMethodCapability[];
+  current_period_start: number | null;
+  current_period_end: number | null;
+}
+
+/** `POST /__local/checkout-test`: the snapshot plus the payer capability. */
+export interface LocalSubscriptionBootstrap extends LocalSubscriptionSnapshot {
+  client_secret: string;
 }
 export async function readLocalSubscription(
   intentId: string,
@@ -319,22 +330,23 @@ export async function readLocalSubscription(
       paid.currency === 'USD';
   }
   return {
-    kind: 'subscription' as const,
-    environment: 'test' as const,
-    intentId: intent.publicId,
-    subscriptionId: verified.subscription.id,
+    object: 'local_test_subscription',
+    livemode: false,
+    payment_intent: intent.publicId,
+    subscription: verified.subscription.id,
     interval: verified.interval,
-    amountMinorUnits: verified.selected.amount,
-    currency: 'USD' as const,
-    paymentMethods: localSubscriptionPaymentMethods(
+    amount: String(verified.selected.amount),
+    currency: 'USD',
+    subscription_status: verified.subscription.status,
+    invoice_status: verified.invoice.status,
+    payment_status: intent.status,
+    ready,
+    tax: localInvoiceQuote(verified.invoice, item?.price.tax_behavior ?? 'unspecified'),
+    payment_methods: localSubscriptionPaymentMethods(
       verified.pi.payment_method_types.includes('card'),
     ),
-    tax: localInvoiceQuote(verified.invoice, item?.price.tax_behavior ?? 'unspecified'),
-    subscriptionStatus: verified.subscription.status,
-    invoiceStatus: verified.invoice.status,
-    paymentStatus: intent.status,
-    ready,
-    currentPeriodStart: item ? new Date(item.current_period_start * 1000).toISOString() : undefined,
-    currentPeriodEnd: item ? new Date(item.current_period_end * 1000).toISOString() : undefined,
+    // The provider already reports these as Unix seconds.
+    current_period_start: item?.current_period_start ?? null,
+    current_period_end: item?.current_period_end ?? null,
   };
 }

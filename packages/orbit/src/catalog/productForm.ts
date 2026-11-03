@@ -10,6 +10,7 @@ import type {
   UpdateProductParams,
 } from '@peable.to/shared-types';
 import { formatAmount, ORBIT_CURRENCY_DECIMALS } from '../format/money';
+import { labelFor, t } from '../i18n';
 
 /**
  * What Orbit's product and price forms turn into gateway bodies (ADR 0018).
@@ -181,13 +182,23 @@ type PriceLabelSource = Pick<
  * How a price reads in a list: `19.99 EUR / month`, `12.50 EUR every 3
  * months`, `1.00 FAIR`, or `Tiered (graduated) · EUR / month`.
  */
-export function formatPriceLabel(price: PriceLabelSource, tieredLabel = 'Tiered'): string {
+export function formatPriceLabel(price: PriceLabelSource): string {
+  const tiers = price.tiers_mode ? ` (${labelFor('price.tiersMode', price.tiers_mode)})` : '';
   const amount =
     price.billing_scheme === 'tiered' || price.unit_amount === null
-      ? `${tieredLabel}${price.tiers_mode ? ` (${price.tiers_mode})` : ''} · ${price.currency}`
+      ? `${t('product.price.tiered')}${tiers} · ${price.currency}`
       : formatAmount(price.unit_amount, price.currency);
   const recurring = price.recurring;
   if (!recurring) return amount;
-  if (recurring.interval_count === 1) return `${amount} / ${recurring.interval}`;
-  return `${amount} every ${recurring.interval_count} ${recurring.interval}s`;
+  if (recurring.interval_count === 1) {
+    return t('price.label.per', {
+      amount,
+      interval: labelFor('price.unit.one', recurring.interval),
+    });
+  }
+  return t('price.label.every', {
+    amount,
+    count: recurring.interval_count,
+    intervals: labelFor('price.unit.other', recurring.interval),
+  });
 }

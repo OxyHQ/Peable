@@ -12,7 +12,8 @@ import { Choice } from '@/ui/Choice';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
-const OPTIONS = [
+// Built at render: the language can change while Orbit is open.
+const options = () => [
   { value: ALL, label: t('invoices.filter.all') },
   ...ORBIT_INVOICE_STATUSES.map((status) => ({ value: status, label: invoiceStatusLabel(status) })),
 ];
@@ -57,7 +58,7 @@ export default function InvoicesScreen() {
             size="sm"
             label={t('invoices.filter')}
             value={status ?? ALL}
-            options={OPTIONS}
+            options={options()}
             onChange={(next) => setStatus(next === ALL ? null : (next as InvoiceStatus))}
           />
         </View>

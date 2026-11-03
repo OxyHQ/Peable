@@ -69,9 +69,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/deploy-scope.sh gate
-      # The wallet bundles shared-types, `@peable.to/pay`, `@peable.to/contracts`
-      # and `@peable.to/sdk/contributions` (all built below) and resolves through
-      # the root manifests. `pay` was missing from the old `push.paths` list.
+      # The wallet bundles shared-types, `@peable.to/pay`, and `@peable.to/sdk`
+      # with the `@peable.to/contracts` it compiles against (through
+      # `@oxy.so/services`' `@peable.to/sdk/display`), all built below, and
+      # resolves through the root manifests. `pay` was missing from the old `push.paths` list.
       - name: Decide whether anything the wallet's web export builds from changed
         id: frontend
         if: steps.gate.outputs.current == 'true'
@@ -126,7 +127,7 @@ jobs:
       # reason: a job should not depend on a side effect of installing.
       - run: bun run build:pay
 
-      # `@peable.to/sdk/contributions` (the wallet's contribution screen) is
+      # `@peable.to/sdk` (`/display`, imported by `@oxy.so/services`) is
       # consumed from its `dist`, which nothing else builds: without it Metro
       # fails to resolve the package's `exports`. contracts first, since the
       # SDK compiles against its output.

@@ -1,6 +1,10 @@
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
 import { LOCAL_TEST_APP, LOCAL_TEST_PRICES, LOCAL_TEST_PRODUCT } from './stripeTestBilling';
-import { localSubscriptionPaymentMethods } from './stripeTestPaymentMethods';
+import {
+  localSubscriptionPaymentMethods,
+  type LocalPaymentMethodCapability,
+} from './stripeTestPaymentMethods';
+import { toUnix } from '../lib/time';
 import { LOCAL_TEST_CARD_CONFIGURATION } from './stripeTestCardPolicy';
 
 /** Public field initialization only. No customer, intent or subscription is created. */
@@ -41,17 +45,55 @@ export async function readLocalCheckoutPreparation() {
   }
   const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY_TEST;
   if (!publishableKey?.startsWith('pk_test_')) throw new Error('Missing test publishable key');
-  return {
-    environment: 'test' as const,
+  return localCheckoutConfiguration({
     publishableKey,
-    scope: { merchantId: merchant.publicId, productId: LOCAL_TEST_PRODUCT },
-    currency: 'USD' as const,
+    merchant: merchant.publicId,
+    month: month.unit_amount,
+    year: year.unit_amount,
+    expiresAt: new Date(Date.now() + 60_000),
+  });
+}
+
+/**
+ * `GET /__local/checkout-test/config` (ADR 0014 wire): public collection
+ * configuration, never payer or merchant authorization.
+ */
+export interface LocalCheckoutConfiguration {
+  object: 'local_checkout_configuration';
+  livemode: false;
+  publishable_key: string;
+  /** The local test merchant's public `merch_…`. */
+  merchant: string;
+  product: typeof LOCAL_TEST_PRODUCT;
+  currency: 'USD';
+  prices: Record<'month' | 'year', { unit_amount: string; interval: 'month' | 'year' }>;
+  payment_methods: LocalPaymentMethodCapability[];
+  /** Unix seconds; the configuration is stale after it. */
+  expires_at: number;
+}
+
+/** Shape the preparation answer from values already verified against the catalogue. */
+export function localCheckoutConfiguration(input: {
+  publishableKey: string;
+  merchant: string;
+  month: number | null;
+  year: number | null;
+  expiresAt: Date;
+}): LocalCheckoutConfiguration {
+  if (input.month === null || input.year === null) throw new Error('Unapproved local catalogue');
+  return {
+    object: 'local_checkout_configuration',
+    livemode: false,
+    publishable_key: input.publishableKey,
+    merchant: input.merchant,
+    product: LOCAL_TEST_PRODUCT,
+    currency: 'USD',
     prices: {
-      month: { amountMinorUnits: month.unit_amount, interval: 'month' as const },
-      year: { amountMinorUnits: year.unit_amount, interval: 'year' as const },
+      month: { unit_amount: String(input.month), interval: 'month' },
+      year: { unit_amount: String(input.year), interval: 'year' },
     },
-    paymentMethods: localSubscriptionPaymentMethods(true),
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    payment_methods: localSubscriptionPaymentMethods(true),
+    expires_at: toUnix(input.expiresAt),
   };
 }
 

@@ -14,7 +14,6 @@ import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
-import { OXY_AUTH_REDIRECT_URI } from '@/config';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import {
@@ -22,7 +21,6 @@ import {
   type CreateAccountForm,
   EMPTY_CREATE_ACCOUNT_FORM,
   onboardingLinkBody,
-  originOf,
 } from '@/money/forms';
 import {
   disabledReasonLabel,
@@ -34,19 +32,12 @@ import {
 import { moneyKeys, useAccount } from '@/money/useMoney';
 import { modeForEnvironment } from '@/scope/scope';
 import { FormField } from '@/ui/FormField';
+import { orbitOrigin } from '@/ui/origin';
 import { ErrorNotice, Field, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
-
-/** Where the provider sends the merchant back to: this page, on the origin Orbit runs at. */
-function orbitOrigin(): string {
-  if (Platform.OS === 'web' && typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin;
-  }
-  return originOf(OXY_AUTH_REDIRECT_URI);
-}
 
 /** The hosted page replaces Orbit in a browser; elsewhere it opens in the system browser. */
 async function openOnboarding(url: string): Promise<void> {

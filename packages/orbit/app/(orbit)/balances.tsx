@@ -38,7 +38,7 @@ import {
 } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
-const TYPE_OPTIONS = [
+const typeOptions = () => [
   { value: ALL, label: t('balances.allTypes') },
   ...ORBIT_BALANCE_TRANSACTION_TYPES.map((type) => ({
     value: type,
@@ -184,7 +184,7 @@ function Transactions({ scope }: { scope: DashboardScope }) {
             size="sm"
             label={t('balances.filter')}
             value={type ?? ALL}
-            options={TYPE_OPTIONS}
+            options={typeOptions()}
             onChange={(next) => setType(next === ALL ? null : (next as BalanceTransactionType))}
           />
         </View>

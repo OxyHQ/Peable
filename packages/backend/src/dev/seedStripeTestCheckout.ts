@@ -24,13 +24,22 @@ async function run() {
     await writeFile(
       output,
       JSON.stringify({
-        apiUrl: 'http://127.0.0.1:4310',
-        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY_TEST,
-        intent: {
+        object: 'local_test_checkout',
+        livemode: false,
+        api_url: 'http://127.0.0.1:4310',
+        // Exactly what `POST /v1/payment_intents` answers the payer's client.
+        payment_intent: {
           ...toPaymentIntentDTO(created.intent),
           client_secret: created.intent.clientSecret,
+          ...(created.clientAction
+            ? {
+                client_action: {
+                  ...created.clientAction,
+                  publishable_key: process.env.STRIPE_PUBLISHABLE_KEY_TEST,
+                },
+              }
+            : {}),
         },
-        client_action: created.clientAction,
       }),
       { mode: 0o600 },
     );
@@ -38,7 +47,7 @@ async function run() {
       JSON.stringify({
         account,
         merchant: merchant.publicId,
-        intent: created.intent.publicId,
+        payment_intent: created.intent.publicId,
         reused: created.reused,
         artifact: output,
       }),

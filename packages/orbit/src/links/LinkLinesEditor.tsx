@@ -28,7 +28,7 @@ export function priceChoiceOf(price: Price, product: Pick<Product, 'name'>): Lin
     currency: price.currency,
     type: price.type,
     active: price.active,
-    label: formatPriceLabel(price, t('product.price.tiered')),
+    label: formatPriceLabel(price),
     productName: product.name,
   };
 }
@@ -92,7 +92,7 @@ function PricePicker({
               value={priceId}
               options={priceList.map((price) => ({
                 value: price.id,
-                label: `${formatPriceLabel(price, t('product.price.tiered'))}${
+                label: `${formatPriceLabel(price)}${
                   price.type === 'recurring' ? ` · ${t('links.recurringPrice')}` : ''
                 }`,
               }))}

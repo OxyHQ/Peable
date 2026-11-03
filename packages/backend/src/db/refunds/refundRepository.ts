@@ -6,7 +6,7 @@
  * total is a second place the same fact lives and the two disagree the first
  * time a write is lost.
  */
-import { and, count, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gt, gte, isNull, lt, type SQL, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { paymentIntents, refunds } from '../schema';
@@ -504,4 +504,40 @@ export async function countRefundsForMerchant(
 ): Promise<number> {
   const [row] = await db.select({ n: count() }).from(refunds).where(refundListWhere(params));
   return row?.n ?? 0;
+}
+
+/**
+ * Every refund of the merchant created in `[start, end)`, OLDEST first, a page at a time — what
+ * the `refunds.itemized.1` report reads (`services/reporting/reports.ts`). A keyset
+ * walk on the primary key, so a busy interval never holds more than one page
+ * beside the CSV being written. Scoped in the predicate, like its list.
+ */
+export async function* refundsForReport(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  interval: { readonly start: Date; readonly end: Date; readonly currency: string | null },
+  pageSize = 1000,
+): AsyncGenerator<RefundWithIntentRow> {
+  let after: string | null = null;
+  for (;;) {
+    const rows = await db
+      .select({ ...REFUND_COLUMNS, paymentIntentPublicId: paymentIntents.publicId })
+      .from(refunds)
+      .innerJoin(paymentIntents, eq(paymentIntents.id, refunds.paymentIntentId))
+      .where(
+        and(
+          eq(refunds.merchantId, merchantId),
+          gte(refunds.createdAt, interval.start),
+          lt(refunds.createdAt, interval.end),
+          interval.currency === null ? undefined : eq(refunds.currency, interval.currency),
+          after === null ? undefined : gt(refunds.id, after),
+        ),
+      )
+      .orderBy(asc(refunds.id))
+      .limit(pageSize);
+    yield* rows.map((row) => row as unknown as RefundWithIntentRow);
+    const last = rows.at(-1);
+    if (!last || rows.length < pageSize) return;
+    after = last.id;
+  }
 }

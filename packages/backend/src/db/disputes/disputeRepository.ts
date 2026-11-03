@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, inArray, isNull, lt, sql } from 'drizzle-orm';
 import type { DisputeFileEvidenceField } from '@peable.to/shared-types';
 import { newId } from '../../lib/ids';
 import type { DisputeStatus } from '../schema/valueSets';
@@ -391,5 +391,41 @@ export async function setDisputeEvidenceFiles(
         target: [disputeEvidenceFiles.disputeId, disputeEvidenceFiles.field],
         set: { fileId: change.fileId },
       });
+  }
+}
+
+/**
+ * Every dispute of the merchant opened in `[start, end)`, OLDEST first, a page at a time — what
+ * the `disputes.itemized.1` report reads (`services/reporting/reports.ts`). A keyset
+ * walk on the primary key, so a busy interval never holds more than one page
+ * beside the CSV being written. Scoped in the predicate, like its list.
+ */
+export async function* disputesForReport(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  interval: { readonly start: Date; readonly end: Date; readonly currency: string | null },
+  pageSize = 1000,
+): AsyncGenerator<DisputeWithIntentRow> {
+  let after: string | null = null;
+  for (;;) {
+    const rows = await db
+      .select({ ...DISPUTE_COLUMNS, paymentIntentPublicId: paymentIntents.publicId })
+      .from(disputes)
+      .innerJoin(paymentIntents, eq(paymentIntents.id, disputes.paymentIntentId))
+      .where(
+        and(
+          eq(disputes.merchantId, merchantId),
+          gte(disputes.createdAt, interval.start),
+          lt(disputes.createdAt, interval.end),
+          interval.currency === null ? undefined : eq(disputes.currency, interval.currency),
+          after === null ? undefined : gt(disputes.id, after),
+        ),
+      )
+      .orderBy(asc(disputes.id))
+      .limit(pageSize);
+    yield* rows.map((row) => ({ ...toRow(row), paymentIntentPublicId: row.paymentIntentPublicId }));
+    const last = rows.at(-1);
+    if (!last || rows.length < pageSize) return;
+    after = last.id;
   }
 }

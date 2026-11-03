@@ -1,22 +1,45 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
 import { View } from 'react-native';
-import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import type { WebhookDelivery, WebhookEndpoint, WebhookEvent } from '@peable.to/shared-types';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useRouter } from 'expo-router';
+import type {
+  RequestLog,
+  RequestLogMethod,
+  WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEvent,
+} from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { Button } from '@oxy.so/bloom/button';
+import { Button, LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
+import {
+  SegmentedControl,
+  SegmentedControlItem,
+  SegmentedControlItemText,
+} from '@oxy.so/bloom/segmented-control';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope, type ListPage } from '@/api/dashboard';
+import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { formatInstant, formatRelative, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
 import { deliveryStatusLabel } from '@/payments/status';
+import {
+  eventPath,
+  formatDuration,
+  ORBIT_REQUEST_LOG_METHODS,
+  ORBIT_STATUS_CLASSES,
+  parseEventTypeFilter,
+  requestLogPath,
+  requestStatusTone,
+} from '@/developers/requestLogs';
+import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
+import { LoadMore, usePagedList } from '@/ui/paging';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { DeliveryStatusBadge } from '@/ui/StatusBadge';
+import { DeliveryStatusBadge, ToneBadge } from '@/ui/StatusBadge';
 import {
   buildEndpointBody,
   describeEnabledEvents,
@@ -32,39 +55,7 @@ const webhooksKey = (scope: DashboardScope) => ['orbit', scope.applicationId, sc
 const endpointKeys = (scope: DashboardScope) => [...webhooksKey(scope), 'webhook_endpoints'];
 const eventKeys = (scope: DashboardScope) => [...webhooksKey(scope), 'events'];
 const deliveryKeys = (scope: DashboardScope) => [...webhooksKey(scope), 'webhook_deliveries'];
-
-/** A page walked with `starting_after`, as every Peable list is. */
-function usePagedList<T extends { id: string }>(
-  queryKey: readonly unknown[],
-  fetchPage: (startingAfter: string | undefined) => Promise<ListPage<T>>,
-) {
-  return useInfiniteQuery({
-    queryKey,
-    initialPageParam: undefined as string | undefined,
-    queryFn: ({ pageParam }) => fetchPage(pageParam),
-    getNextPageParam: (last: ListPage<T>) =>
-      last.has_more ? last.data[last.data.length - 1]?.id : undefined,
-  });
-}
-
-function LoadMore({
-  pages,
-}: {
-  pages: { hasNextPage: boolean; isFetchingNextPage: boolean; fetchNextPage: () => unknown };
-}) {
-  if (!pages.hasNextPage) return null;
-  return (
-    <View className="items-center pt-2">
-      <Button
-        appearance="outline"
-        loading={pages.isFetchingNextPage}
-        onPress={() => void pages.fetchNextPage()}
-      >
-        {t('action.loadMore')}
-      </Button>
-    </View>
-  );
-}
+const requestLogKeys = (scope: DashboardScope) => [...webhooksKey(scope), 'request_logs'];
 
 /** The one moment a signing secret is visible: right after a create or a roll. */
 function RevealedSecret({
@@ -326,24 +317,33 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
 }
 
 function EventRow({ event }: { event: WebhookEvent }) {
+  const router = useRouter();
   return (
     <View className="gap-1 py-3 border-b border-border">
       <View className="flex-row flex-wrap items-center gap-2">
-        <Text variant="body-2-semibold" selectable className="font-mono">
+        <LinkButton
+          size="sm"
+          accessibilityLabel={`${t('developers.event')} ${event.id}`}
+          onPress={() => router.push(eventPath(event.id))}
+        >
           {event.type}
-        </Text>
+        </LinkButton>
         <Text variant="caption-1-regular" className="text-muted-foreground">
           {formatInstant(event.created)}
         </Text>
       </View>
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1">
+      <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
         <Text variant="caption-1-regular" selectable className="text-muted-foreground font-mono">
           {event.id}
         </Text>
         {event.request.id ? (
-          <Text variant="caption-1-regular" selectable className="text-muted-foreground font-mono">
+          <LinkButton
+            size="sm"
+            accessibilityLabel={t('developers.event.request', { id: event.request.id })}
+            onPress={() => router.push(requestLogPath(event.request.id ?? ''))}
+          >
             {t('developers.event.request', { id: event.request.id })}
-          </Text>
+          </LinkButton>
         ) : null}
       </View>
     </View>
@@ -351,30 +351,159 @@ function EventRow({ event }: { event: WebhookEvent }) {
 }
 
 function Events({ scope }: { scope: DashboardScope }) {
-  const pages = usePagedList(eventKeys(scope), (startingAfter) =>
+  const [typeText, setTypeText] = useState('');
+  const [type, setType] = useState<string | undefined>(undefined);
+  const [invalid, setInvalid] = useState(false);
+  const pages = usePagedList([...eventKeys(scope), type ?? '*'], (startingAfter) =>
     dashboardApi.events.list(scope, {
       limit: PAGE_SIZE,
+      ...(type ? { type } : {}),
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     }),
   );
-  if (pages.isPending) return <Loading accessibilityLabel={t('developers.events')} />;
-  if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return null;
-    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  const apply = () => {
+    const parsed = parseEventTypeFilter(typeText);
+    setInvalid(!parsed.ok);
+    if (parsed.ok) setType(parsed.type);
+  };
+  let body: ReactNode;
+  if (pages.isPending) body = <Loading accessibilityLabel={t('developers.events')} />;
+  else if (pages.isError) {
+    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  } else {
+    const events = pages.data.pages.flatMap((page) => page.data);
+    body = (
+      <>
+        {events.length ? (
+          events.map((event) => <EventRow key={event.id} event={event} />)
+        ) : (
+          <EmptyState
+            variant="compact"
+            title={t('developers.events.empty.title')}
+            description={t('developers.events.empty.body')}
+          />
+        )}
+        <LoadMore pages={pages} />
+      </>
+    );
   }
-  const events = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('developers.events')} description={t('developers.eventsIntro')}>
-      {events.length ? (
-        events.map((event) => <EventRow key={event.id} event={event} />)
-      ) : (
-        <EmptyState
-          variant="compact"
-          title={t('developers.events.empty.title')}
-          description={t('developers.events.empty.body')}
-        />
-      )}
-      <LoadMore pages={pages} />
+      <View className="flex-row flex-wrap items-end gap-3">
+        <View className="flex-1 min-w-64">
+          <FormField
+            label={t('developers.events.type')}
+            value={typeText}
+            onChange={setTypeText}
+            placeholder="payment_intent.*"
+            invalid={invalid}
+            hint={invalid ? t('developers.events.typeInvalid') : t('developers.events.typeHelp')}
+          />
+        </View>
+        <Button appearance="outline" size="sm" onPress={apply}>
+          {t('developers.filter')}
+        </Button>
+      </View>
+      {body}
+    </Section>
+  );
+}
+
+const ALL = 'all';
+const statusOptions = () => [
+  { value: ALL, label: t('developers.logs.allStatuses') },
+  ...ORBIT_STATUS_CLASSES.map((status) => ({ value: status, label: status })),
+];
+const methodOptions = () => [
+  { value: ALL, label: t('developers.logs.allMethods') },
+  ...ORBIT_REQUEST_LOG_METHODS.map((method) => ({ value: method, label: method })),
+];
+
+function RequestLogRow({ log }: { log: RequestLog }) {
+  const router = useRouter();
+  return (
+    <View className="flex-row flex-wrap items-center gap-x-3 gap-y-1 py-3 border-b border-border">
+      <ToneBadge tone={requestStatusTone(log.status)} label={String(log.status)} />
+      <Text variant="body-2-semibold" className="font-mono">
+        {log.method}
+      </Text>
+      <Text variant="body-2-regular" selectable className="font-mono flex-1 min-w-48">
+        {log.path}
+      </Text>
+      <Text variant="caption-1-regular" className="text-muted-foreground">
+        {formatDuration(log.duration_ms)}
+      </Text>
+      <Text variant="caption-1-regular" className="text-muted-foreground">
+        {formatInstant(log.created)}
+      </Text>
+      <LinkButton
+        size="sm"
+        accessibilityLabel={`${t('developers.logs.request')} ${log.id}`}
+        onPress={() => router.push(requestLogPath(log.id))}
+      >
+        {log.id}
+      </LinkButton>
+    </View>
+  );
+}
+
+function RequestLogs({ scope }: { scope: DashboardScope }) {
+  const [status, setStatus] = useState<string>(ALL);
+  const [method, setMethod] = useState<string>(ALL);
+  const pages = usePagedList([...requestLogKeys(scope), status, method], (startingAfter) =>
+    dashboardApi.requestLogs.list(scope, {
+      limit: PAGE_SIZE,
+      ...(status !== ALL ? { status: status as (typeof ORBIT_STATUS_CLASSES)[number] } : {}),
+      ...(method !== ALL ? { method: method as RequestLogMethod } : {}),
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    }),
+  );
+  let body: ReactNode;
+  if (pages.isPending) body = <Loading accessibilityLabel={t('developers.logs')} />;
+  else if (pages.isError) {
+    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
+    body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  } else {
+    const logs = pages.data.pages.flatMap((page) => page.data);
+    body = (
+      <>
+        {logs.length ? (
+          logs.map((log) => <RequestLogRow key={log.id} log={log} />)
+        ) : (
+          <EmptyState
+            variant="compact"
+            title={t('developers.logs.empty.title')}
+            description={t('developers.logs.empty.body')}
+          />
+        )}
+        <LoadMore pages={pages} />
+      </>
+    );
+  }
+  return (
+    <Section title={t('developers.logs')} description={t('developers.logsIntro')}>
+      <View className="flex-row flex-wrap gap-4">
+        <View className="w-48">
+          <Choice
+            label={t('developers.logs.status')}
+            value={status}
+            options={statusOptions()}
+            onChange={setStatus}
+            size="sm"
+          />
+        </View>
+        <View className="w-48">
+          <Choice
+            label={t('developers.logs.method')}
+            value={method}
+            options={methodOptions()}
+            onChange={setMethod}
+            size="sm"
+          />
+        </View>
+      </View>
+      {body}
     </Section>
   );
 }
@@ -486,14 +615,36 @@ function Deliveries({ scope }: { scope: DashboardScope }) {
   );
 }
 
+type DevelopersView = 'webhooks' | 'events' | 'logs';
+const VIEWS: readonly DevelopersView[] = ['webhooks', 'events', 'logs'];
+
 export default function DevelopersScreen() {
+  const [view, setView] = useState<DevelopersView>('webhooks');
   return (
     <OrbitScreen title={t('developers.title')}>
       {({ scope }) => (
-        <View className="gap-6">
-          <Endpoints scope={scope} />
-          <Events scope={scope} />
-          <Deliveries scope={scope} />
+        <View key={`${scope.applicationId}:${scope.environment}`} className="gap-6">
+          <SegmentedControl<DevelopersView>
+            label={t('developers.title')}
+            type="radio"
+            size="sm"
+            value={view}
+            onValueChange={setView}
+          >
+            {VIEWS.map((value) => (
+              <SegmentedControlItem key={value} value={value}>
+                <SegmentedControlItemText>{t(`developers.view.${value}`)}</SegmentedControlItemText>
+              </SegmentedControlItem>
+            ))}
+          </SegmentedControl>
+          {view === 'webhooks' ? (
+            <>
+              <Endpoints scope={scope} />
+              <Deliveries scope={scope} />
+            </>
+          ) : null}
+          {view === 'events' ? <Events scope={scope} /> : null}
+          {view === 'logs' ? <RequestLogs scope={scope} /> : null}
         </View>
       )}
     </OrbitScreen>

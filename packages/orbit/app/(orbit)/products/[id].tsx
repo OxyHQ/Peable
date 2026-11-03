@@ -219,7 +219,7 @@ function PriceRow({
           />
         ) : null}
         <Text variant="body-2-semibold" selectable>
-          {formatPriceLabel(price, t('product.price.tiered'))}
+          {formatPriceLabel(price)}
         </Text>
       </View>
       <View className="flex-row flex-wrap gap-x-4 gap-y-1">
