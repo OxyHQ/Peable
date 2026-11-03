@@ -127,7 +127,7 @@ interface NextAddressResponse {
 }
 
 interface CursorResponse {
-  reservedThrough?: number;
+  reserved_through?: number;
   error?: { type: string; message: string };
 }
 
@@ -229,9 +229,9 @@ describe('POST /v1/social/:username/next_address', () => {
     expect(body.error?.message).toContain('mainnet');
   });
 
-  test('422s on a malformed network field', async () => {
+  test('400s on a malformed network field', async () => {
     const { status, body } = await postNextAddress('alice', { network: 'regtest' });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
@@ -312,35 +312,35 @@ describe('POST /v1/social/:username/next_address', () => {
     expect(sourced.body.address).not.toBe(plain.body.address);
   });
 
-  test('422s on a source.ref longer than the published bound', async () => {
+  test('400s on a source.ref longer than the published bound', async () => {
     const { status, body } = await postNextAddress('alice', {
       network: 'testnet',
       source: { app: 'mention', ref: 'p'.repeat(SOCIAL_SOURCE_REF_MAX_LENGTH + 1) },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(body.error?.type).toBe('invalid_request_error');
   });
 
-  test('422s on a source.app longer than the published bound', async () => {
+  test('400s on a source.app longer than the published bound', async () => {
     const { status } = await postNextAddress('alice', {
       network: 'testnet',
       source: { app: 'm'.repeat(SOCIAL_SOURCE_APP_MAX_LENGTH + 1) },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   /**
    * A ref means something only inside the app that minted it, so a ref with no
    * app names nothing anybody could resolve. Refused here as well as by
-   * `social_send_attributions_source_ref_needs_app_check`, because a 422 is a
+   * `social_send_attributions_source_ref_needs_app_check`, because a 400 is a
    * better answer to a caller than a 500 from a constraint.
    */
-  test('422s on a source that names a ref but no app', async () => {
+  test('400s on a source that names a ref but no app', async () => {
     const { status } = await postNextAddress('alice', {
       network: 'testnet',
       source: { ref: 'post_abc123' },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   /**
@@ -349,12 +349,12 @@ describe('POST /v1/social/:username/next_address', () => {
    * misspelling of `ref` — would reserve an address, record a context missing
    * the only part the recipient cares about, and answer 200.
    */
-  test('422s on an unknown key inside source rather than silently dropping it', async () => {
+  test('400s on an unknown key inside source rather than silently dropping it', async () => {
     const { status } = await postNextAddress('alice', {
       network: 'testnet',
       source: { app: 'mention', postId: 'post_abc123' },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   /**
@@ -362,12 +362,12 @@ describe('POST /v1/social/:username/next_address', () => {
    * reads is exactly where a free-text memo about two users would end up
    * unnoticed.
    */
-  test('422s on a source.ref carrying whitespace-separated prose', async () => {
+  test('400s on a source.ref carrying whitespace-separated prose', async () => {
     const { status } = await postNextAddress('alice', {
       network: 'testnet',
       source: { app: 'mention', ref: 'thanks for the coffee yesterday' },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   test('502s with type api_error (not 404) when the profile lookup fails upstream', async () => {
@@ -408,10 +408,10 @@ describe('POST /v1/social/:username/next_address — per-(sender,recipient) anti
 });
 
 describe('GET /v1/social/me/cursor', () => {
-  test('returns reservedThrough: 0 for a caller with no cursor yet', async () => {
+  test('returns reserved_through: 0 for a caller with no cursor yet', async () => {
     const { status, body } = await getCursor('testnet', 'user_cursor_fresh');
     expect(status).toBe(200);
-    expect(body.reservedThrough).toBe(0);
+    expect(body.reserved_through).toBe(0);
   });
 
   test('returns the highest index ever reserved for the authenticated caller (recipient), not the sender', async () => {
@@ -421,7 +421,7 @@ describe('GET /v1/social/me/cursor', () => {
 
     const { status, body } = await getCursor('testnet', 'user_alice');
     expect(status).toBe(200);
-    expect(body.reservedThrough).toBe(2);
+    expect(body.reserved_through).toBe(2);
   });
 
   test('is scoped per network — a testnet reservation does not surface under mainnet', async () => {
@@ -430,12 +430,12 @@ describe('GET /v1/social/me/cursor', () => {
 
     const { status, body } = await getCursor('mainnet', 'user_alice');
     expect(status).toBe(200);
-    expect(body.reservedThrough).toBe(0);
+    expect(body.reserved_through).toBe(0);
   });
 
-  test('422s on a missing network query param', async () => {
+  test('400s on a missing network query param', async () => {
     const { status, body } = await getCursor(undefined, 'user_alice');
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(body.error?.type).toBe('invalid_request_error');
   });
 });
@@ -447,10 +447,10 @@ interface PaymentsResponse {
     address: string;
     direction: 'sent' | 'received';
     // `EnrichmentResult`: never null, degrades to `{ kind: 'unknown' }`.
-    counterparty: { kind: string; username?: string; displayName?: string };
+    counterparty: { kind: string; username?: string; display_name?: string };
     // Optional and ABSENT (not null) for a payment nobody gave a context to.
     source?: { app: string; ref?: string };
-    createdAt: string;
+    created: number;
   }[];
   error?: { type: string; message: string };
 }
@@ -521,7 +521,7 @@ describe('GET /v1/social/me/payments', () => {
 
   test('rejects an unknown network rather than guessing one', async () => {
     const { status } = await getPayments('dogenet', testProfile('alice').id);
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   /**

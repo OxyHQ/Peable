@@ -98,7 +98,7 @@ export function createServiceTokenProvider(
       deadline?.dispose();
     }
     if (!response.ok) {
-      throw errorFromResponse(response.status, body);
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     }
     if (!isServiceTokenMintEnvelope(body)) {
       throw new PeableApiError(

@@ -60,9 +60,9 @@ export function CheckoutView({
   }, [billingQuote]);
   const quoteExpired =
     billingQuote &&
-    (!Number.isFinite(Date.parse(billingQuote.expiresAt)) ||
-      Date.parse(billingQuote.expiresAt) <= now ||
-      billingQuote.amountBaseUnits !== initialIntent.amount);
+    (!Number.isSafeInteger(billingQuote.expires_at) ||
+      billingQuote.expires_at * 1000 <= now ||
+      billingQuote.amount_base_units !== initialIntent.amount);
   const [intent, setIntent] = useState(initialIntent);
   /**
    * Set when `subscribe` rejects. Until this existed the failure was swallowed
@@ -90,7 +90,7 @@ export function CheckoutView({
 
     subscribe(
       initialIntent.id,
-      initialIntent.clientSecret,
+      initialIntent.client_secret,
       (updated) => {
         if (!cancelled) setIntent(updated);
       },
@@ -107,7 +107,7 @@ export function CheckoutView({
         // replays nothing, so every update emitted during the outage is gone;
         // clearing the flag first would turn the poll off and leave the page on
         // a snapshot that is already stale, with nothing left to correct it.
-        getPaymentIntent(initialIntent.id, initialIntent.clientSecret)
+        getPaymentIntent(initialIntent.id, initialIntent.client_secret)
           .then((updated) => {
             if (cancelled) return;
             setIntent(updated);
@@ -136,7 +136,7 @@ export function CheckoutView({
       cancelled = true;
       unsubscribe?.();
     };
-  }, [initialIntent.id, initialIntent.clientSecret]);
+  }, [initialIntent.id, initialIntent.client_secret]);
 
   // Degraded path only. Depends on `intent.status` so the interval is torn
   // down as soon as the intent reaches a state nothing can follow.
@@ -146,7 +146,7 @@ export function CheckoutView({
 
     let cancelled = false;
     const timer = setInterval(() => {
-      getPaymentIntent(initialIntent.id, initialIntent.clientSecret)
+      getPaymentIntent(initialIntent.id, initialIntent.client_secret)
         .then((updated) => {
           if (!cancelled) setIntent(updated);
         })
@@ -160,7 +160,7 @@ export function CheckoutView({
       cancelled = true;
       clearInterval(timer);
     };
-  }, [realtimeUnavailable, intent.status, initialIntent.id, initialIntent.clientSecret]);
+  }, [realtimeUnavailable, intent.status, initialIntent.id, initialIntent.client_secret]);
 
   const awaitingPayment = AWAITING_PAYMENT_STATUSES.has(intent.status);
 
@@ -170,13 +170,13 @@ export function CheckoutView({
       {billingQuote && (
         <div>
           <p>
-            Catalogue total: {formatDisplayUnits(BigInt(billingQuote.grossMinorUnits), 2, 'USD')}
+            Catalogue total: {formatDisplayUnits(BigInt(billingQuote.gross_minor_units), 2, 'USD')}
           </p>
           <p>
-            Payment quote: {formatDisplayUnits(BigInt(billingQuote.amountBaseUnits), 8, 'FAIR')}
+            Payment quote: {formatDisplayUnits(BigInt(billingQuote.amount_base_units), 8, 'FAIR')}
           </p>
-          <p>Quoted rate: 1 FAIR = {billingQuote.usdPerFair} USD</p>
-          <p>Quote expires: {new Date(billingQuote.expiresAt).toLocaleString()}</p>
+          <p>Quoted rate: 1 FAIR = {billingQuote.usd_per_fair} USD</p>
+          <p>Quote expires: {new Date(billingQuote.expires_at * 1000).toLocaleString()}</p>
         </div>
       )}
       {awaitingPayment && quoteExpired ? (

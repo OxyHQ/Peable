@@ -41,20 +41,21 @@ import { createBillingService, type BillingCohort } from '../billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from '../stripeBillingProvider';
 import { STRIPE_API_VERSION } from '../../providers/stripe/client';
 import type { BillingOwner } from '../contracts';
+import { toUnix } from '../../../lib/time';
 const deployment = {
   provider: 'stripe' as const,
   platformAccountId: 'acct_platform',
   livemode: false,
 };
 const now = new Date('2026-10-03T12:00:00Z');
-const customerInput = { storeId: 'store:one', storeName: 'Synthetic Store' };
+const customerInput = { store_id: 'store:one', store_name: 'Synthetic Store' };
 const checkout = {
-  providerCustomerId: 'cus_one',
-  providerPriceId: 'price_one',
-  trialDays: 0,
-  returnUrl: 'https://example.invalid/billing?from=plans',
-  storeId: 'store:one',
-  planId: 'plan:one',
+  provider_customer_id: 'cus_one',
+  provider_price_id: 'price_one',
+  trial_days: 0,
+  return_url: 'https://example.invalid/billing?from=plans',
+  store_id: 'store:one',
+  plan_id: 'plan:one',
 };
 function stripeSubscription(cancel = false) {
   const item = {
@@ -442,8 +443,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:quoted' });
       await bindBillingObject(gatewayDb(), deployment, owner, {
         kind: 'price',
-        providerRef: checkout.providerPriceId,
-        planRef: checkout.planId,
+        providerRef: checkout.provider_price_id,
+        planRef: checkout.plan_id,
         bindingEvidenceRef: 'fixture:quoted-price',
       });
       const keys = generateKeyPairSync('ed25519');
@@ -452,7 +453,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       };
       const product = {
         configurationApproved: true,
-        planId: checkout.planId,
+        planId: checkout.plan_id,
         currency: 'USD',
         grossMinorUnits: 2999,
         taxTreatment: 'inclusive',
@@ -465,7 +466,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       };
       const location = {
         id: 'location_fixture',
-        storeId: checkout.storeId,
+        storeId: checkout.store_id,
         appId: owner.oxyAppId,
         mode: 'test',
         environment: owner.environment,
@@ -474,8 +475,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         expiresAt: new Date(time.getTime() + 300_000).toISOString(),
       };
       const offer = {
-        providerPriceId: checkout.providerPriceId,
-        planId: checkout.planId,
+        providerPriceId: checkout.provider_price_id,
+        planId: checkout.plan_id,
         offerId: 'offer_fixture',
         offerVersion: 1,
         interval: 'month' as const,
@@ -502,27 +503,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         },
         async calculate({ source }) {
           return resign({
-            schemaVersion: 1,
+            schema_version: 2,
             source,
             quote: {
               id: 'quote_fixture',
               currency: 'USD',
-              grossMinorUnits: 2999,
-              netMinorUnits: 2500,
-              taxMinorUnits: 499,
-              taxTreatment: 'inclusive',
-              sellerId: 'seller_fixture',
-              invoiceIssuerId: 'issuer_fixture',
-              taxRemitterId: 'remitter_fixture',
-              taxServiceRef: 'tax_fixture',
+              gross_minor_units: 2999,
+              net_minor_units: 2500,
+              tax_minor_units: 499,
+              tax_treatment: 'inclusive',
+              seller_id: 'seller_fixture',
+              invoice_issuer_id: 'issuer_fixture',
+              tax_remitter_id: 'remitter_fixture',
+              tax_service_ref: 'tax_fixture',
               country: 'RO',
-              coverageEvidenceId: 'coverage_fixture',
-              taxRateEvidenceId: 'rate_fixture',
-              customerLocationEvidenceId: location.id,
-              quotedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + quoteLifetimeMs).toISOString(),
+              coverage_evidence_id: 'coverage_fixture',
+              tax_rate_evidence_id: 'rate_fixture',
+              customer_location_evidence_id: location.id,
+              quoted_at: toUnix(time),
+              expires_at: toUnix(new Date(time.getTime() + quoteLifetimeMs)),
             },
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           });
         },
       };
@@ -533,48 +534,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           if (!taxCheckoutSnapshot) throw new Error('Missing persisted checkout quote');
           const quote = taxCheckoutSnapshot.taxQuote.quote;
           const authority: BillingFinalInvoiceAuthority = {
-            schemaVersion: 1,
+            schema_version: 2,
             source: {
-              invoiceId: paid.invoiceId,
-              paymentIntentId: paid.paymentIntentId,
-              customerId: paid.providerCustomerId,
-              subscriptionId: paid.providerSubscriptionId,
-              priceId: paid.providerPriceId,
-              planId: paid.planId,
-              merchantId: merchantPublicId,
-              appId: actor.oxyAppId,
+              invoice_id: paid.invoice_id,
+              payment_intent_id: paid.payment_intent_id,
+              customer_id: paid.provider_customer_id,
+              subscription_id: paid.provider_subscription_id,
+              price_id: paid.provider_price_id,
+              plan_id: paid.plan_id,
+              merchant_id: merchantPublicId,
+              app_id: actor.oxyAppId,
               mode: 'test',
               environment: actor.environment,
             },
             invoice: {
               platform: 'peable',
               currency: quote.currency,
-              grossMinorUnits: quote.grossMinorUnits,
-              netMinorUnits: quote.netMinorUnits,
-              taxMinorUnits: quote.taxMinorUnits,
-              merchantFeeMinorUnits: 0,
-              taxTreatment: quote.taxTreatment,
-              sellerId: quote.sellerId,
-              invoiceIssuerId: quote.invoiceIssuerId,
-              taxQuoteId: quote.id,
-              customerLocationEvidenceId: quote.customerLocationEvidenceId,
-              taxRateEvidenceId: quote.taxRateEvidenceId,
+              gross_minor_units: quote.gross_minor_units,
+              net_minor_units: quote.net_minor_units,
+              tax_minor_units: quote.tax_minor_units,
+              merchant_fee_minor_units: 0,
+              tax_treatment: quote.tax_treatment,
+              seller_id: quote.seller_id,
+              invoice_issuer_id: quote.invoice_issuer_id,
+              tax_quote_id: quote.id,
+              customer_location_evidence_id: quote.customer_location_evidence_id,
+              tax_rate_evidence_id: quote.tax_rate_evidence_id,
               context: {
-                payerAccountId: paid.storeId,
-                beneficiaryAccountId: paid.storeId,
-                providerSubscriptionId: paid.providerSubscriptionId,
-                offerId: taxCheckoutSnapshot.offer.offerId,
-                offerVersion: taxCheckoutSnapshot.offer.offerVersion,
-                periodStart: paid.periodStart,
-                periodEnd: paid.periodEnd,
+                payer_account_id: paid.store_id,
+                beneficiary_account_id: paid.store_id,
+                provider_subscription_id: paid.provider_subscription_id,
+                offer_id: taxCheckoutSnapshot.offer.offerId,
+                offer_version: taxCheckoutSnapshot.offer.offerVersion,
+                period_start: paid.period_start,
+                period_end: paid.period_end,
                 mode: 'test',
                 environment: actor.environment,
               },
-              issuedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              issued_at: toUnix(time),
+              expires_at: toUnix(time) + 60,
             },
             method: 'card',
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           };
           invoiceMutation(authority);
           authority.signature.value = sign(
@@ -593,10 +594,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           calls.push({ method: 'quotedCheckout', params: input, key });
           return {
             providerObjectRef: 'cs_test_a11fixture',
-            providerCustomerId: checkout.providerCustomerId,
+            providerCustomerId: checkout.provider_customer_id,
             livemode: false,
             url: 'https://example.invalid/quoted-checkout',
-            expiresAt: input.snapshot.taxQuote.quote.expiresAt,
+            expiresAt: input.snapshot.taxQuote.quote.expires_at,
           };
         },
       };
@@ -609,9 +610,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         invoiceAuthorityKeys: verificationKeys,
       }).billing;
       const quote = await fiscalSdk.createTaxQuote({
-        storeId: checkout.storeId,
-        planId: checkout.planId,
-        customerLocationEvidenceId: location.id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
+        customer_location_evidence_id: location.id,
       });
       return {
         quote,
@@ -627,7 +628,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     }
     it('persists the signed inclusive quote through the real HTTP SDK boundary and rejects reuse under another key', async () => {
       const fixture = await fiscalFixture();
-      const input = { ...checkout, taxQuote: fixture.quote };
+      const input = { ...checkout, tax_quote: fixture.quote };
       const first = await fixture.fiscalSdk.createCheckoutSession(input, {
         idempotencyKey: 'quoted:one',
       });
@@ -643,14 +644,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(row?.taxCheckoutSnapshot?.taxQuote).toEqual(fixture.quote);
       expect(row?.taxCheckoutSnapshot?.offer).toEqual(fixture.offer);
       const replacementQuote = structuredClone(fixture.quote);
-      replacementQuote.quote.taxRateEvidenceId = 'rate_replacement';
+      replacementQuote.quote.tax_rate_evidence_id = 'rate_replacement';
       fixture.resign(replacementQuote);
       expect(
         (
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: replacementQuote },
+            { ...checkout, tax_quote: replacementQuote },
             'quoted:one',
           )
         ).status,
@@ -666,29 +667,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const fixture = await fiscalFixture();
       const mutations = [
         (quote: BillingTaxQuote) => {
-          quote.source.merchantId = 'merch_other';
+          quote.source.merchant_id = 'merch_other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.appId = 'app_other';
+          quote.source.app_id = 'app_other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.storeId = 'store:other';
+          quote.source.store_id = 'store:other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.planId = 'plan:other';
+          quote.source.plan_id = 'plan:other';
         },
         (quote: BillingTaxQuote) => {
           quote.source.environment = 'production';
           quote.source.mode = 'live';
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.expiresAt = time.toISOString();
+          quote.quote.expires_at = toUnix(time);
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.netMinorUnits++;
+          quote.quote.net_minor_units++;
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.sellerId = 'seller_other';
+          quote.quote.seller_id = 'seller_other';
         },
       ];
       for (const mutate of mutations) {
@@ -700,20 +701,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             await request(
               '/v1/billing/checkout_sessions',
               'owner',
-              { ...checkout, taxQuote: quote },
+              { ...checkout, tax_quote: quote },
               'quoted:bad',
             )
           ).status,
         ).not.toBe(200);
       }
       const tampered = structuredClone(fixture.quote);
-      tampered.quote.taxRateEvidenceId = 'rate_other';
+      tampered.quote.tax_rate_evidence_id = 'rate_other';
       expect(
         (
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: tampered },
+            { ...checkout, tax_quote: tampered },
             'quoted:tampered',
           )
         ).status,
@@ -724,7 +725,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: fixture.quote },
+            { ...checkout, tax_quote: fixture.quote },
             'quoted:price',
           )
         ).status,
@@ -736,7 +737,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: fixture.quote },
+            { ...checkout, tax_quote: fixture.quote },
             'quoted:offer',
           )
         ).status,
@@ -753,7 +754,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: fixture.quote },
+            { ...checkout, tax_quote: fixture.quote },
             'quoted:disabled',
           )
         ).status,
@@ -774,12 +775,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('verifies final invoice fiscal fields against the persisted checkout even after quote expiry', async () => {
       const fixture = await fiscalFixture(1000);
       await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'quoted:invoice' },
       );
       hasCheckout = true;
       expect(await sdk().retrieveCheckout('cs_test_a11fixture')).toMatchObject({
-        subscription: { providerSubscriptionId: 'sub_one' },
+        subscription: { provider_subscription_id: 'sub_one' },
       });
       const providerInvoice = configurePaidEvidence();
       await new Promise((resolve) => setTimeout(resolve, 1100));
@@ -789,26 +790,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         await fixture.fiscalSdk.retrieveFinalInvoiceAuthority('sub_one', 'in_one'),
       ).toMatchObject({
         invoice: {
-          taxQuoteId: fixture.quote.quote.id,
-          invoiceIssuerId: 'issuer_fixture',
-          context: { offerVersion: 1 },
+          tax_quote_id: fixture.quote.quote.id,
+          invoice_issuer_id: 'issuer_fixture',
+          context: { offer_version: 1 },
         },
       });
       for (const mutation of [
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.taxQuoteId = 'quote_other';
+          authority.invoice.tax_quote_id = 'quote_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.customerLocationEvidenceId = 'location_other';
+          authority.invoice.customer_location_evidence_id = 'location_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.sellerId = 'seller_other';
+          authority.invoice.seller_id = 'seller_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.taxRateEvidenceId = 'rate_other';
+          authority.invoice.tax_rate_evidence_id = 'rate_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.context.offerVersion++;
+          authority.invoice.context.offer_version++;
         },
       ]) {
         fixture.setInvoiceMutation(mutation);
@@ -846,7 +847,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           return originalAdapter.createCheckout(input, key);
         },
       };
-      const input = { ...checkout, taxQuote: fixture.quote };
+      const input = { ...checkout, tax_quote: fixture.quote };
       const first = request(
         '/v1/billing/checkout_sessions',
         'owner',
@@ -881,7 +882,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/checkout_sessions',
             'owner',
-            { ...checkout, taxQuote: fixture.quote },
+            { ...checkout, tax_quote: fixture.quote },
             'quoted:expired-before-dispatch',
           )
         ).status,
@@ -915,7 +916,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     });
     it('executes five SDK methods with store/receipt references and no Connect or financial decisions', async () => {
       expect(await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' })).toEqual(
-        { providerCustomerId: 'cus_one' },
+        { provider_customer_id: 'cus_one' },
       );
       const c = (await gatewayDb().select().from(billingObjectBindings))[0];
       if (!c) throw new Error('Missing customer');
@@ -935,25 +936,28 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         bindingEvidenceRef: 'fixture:verified-import',
       });
       expect(
-        (await sdk().createCheckoutSession(checkout, { idempotencyKey: 'checkout:one' })).expiresAt,
-      ).toBe('2026-10-03T13:00:00.000Z');
+        (await sdk().createCheckoutSession(checkout, { idempotencyKey: 'checkout:one' }))
+          .expires_at,
+      ).toBe(1791032400);
       expect(
         (
           await sdk().createPortalSession(
-            { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+            { provider_customer_id: 'cus_one', return_url: checkout.return_url },
             { idempotencyKey: 'portal:one' },
           )
-        ).expiresAt,
-      ).toBe('2026-10-03T12:01:00.000Z');
+        ).expires_at,
+      ).toBe(1791028860);
       expect(await sdk().retrieveSubscription('sub_one')).toMatchObject({
-        storeId: 'store:one',
-        planId: 'plan:one',
-        providerCustomerId: 'cus_one',
-        cancelAtPeriodEnd: false,
+        store_id: 'store:one',
+        plan_id: 'plan:one',
+        provider_customer_id: 'cus_one',
+        cancel_at_period_end: false,
+        current_period_start: 1791028800,
+        current_period_end: 1793707200,
       });
       expect(
         await sdk().cancelAtPeriodEnd('sub_one', { idempotencyKey: 'cancel:one' }),
-      ).toMatchObject({ cancelAtPeriodEnd: true, storeId: 'store:one' });
+      ).toMatchObject({ cancel_at_period_end: true, store_id: 'store:one', cancel_at: 1793707200 });
       expect(calls.find((c) => c.method === 'cancel')?.params).toEqual({
         ref: 'sub_one',
         cancel_at_period_end: true,
@@ -972,16 +976,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' });
       expect(
         await sdk().ensureCustomer(
-          { ...customerInput, storeName: 'Renamed' },
+          { ...customerInput, store_name: 'Renamed' },
           { idempotencyKey: 'customer:one' },
         ),
-      ).toEqual({ providerCustomerId: 'cus_one' });
+      ).toEqual({ provider_customer_id: 'cus_one' });
       expect(
         await sdk().ensureCustomer(
-          { ...customerInput, storeName: 'Renamed' },
+          { ...customerInput, store_name: 'Renamed' },
           { idempotencyKey: 'customer:two' },
         ),
-      ).toEqual({ providerCustomerId: 'cus_one' });
+      ).toEqual({ provider_customer_id: 'cus_one' });
       expect(calls.filter((c) => c.method === 'customer')).toHaveLength(1);
     });
     it('denies other cohort, missing scopes and missing auth before provider effects', async () => {
@@ -998,10 +1002,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('rejects unknown price, foreign store and invented owner/payer fields before checkout', async () => {
       await bindSubscription();
       for (const body of [
-        { ...checkout, providerPriceId: 'price_unknown' },
-        { ...checkout, storeId: 'store:other' },
-        { ...checkout, subjectAccountId: 'invented' },
-        { ...checkout, merchantId: other.merchantId },
+        { ...checkout, provider_price_id: 'price_unknown' },
+        { ...checkout, store_id: 'store:other' },
+        { ...checkout, subject_account_id: 'invented' },
+        { ...checkout, merchant_id: other.merchantId },
       ])
         expect(
           (await request('/v1/billing/checkout_sessions', 'owner', body, 'checkout:one')).status,
@@ -1030,7 +1034,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses portal configuration drift on the next call and immediate cancellation', async () => {
       await bindSubscription();
       await sdk().createPortalSession(
-        { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+        { provider_customer_id: 'cus_one', return_url: checkout.return_url },
         { idempotencyKey: 'portal:one' },
       );
       portalUpdate = true;
@@ -1039,7 +1043,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/portal_sessions',
             'owner',
-            { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+            { provider_customer_id: 'cus_one', return_url: checkout.return_url },
             'portal:one',
           )
         ).status,
@@ -1049,7 +1053,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/portal_sessions',
             'owner',
-            { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+            { provider_customer_id: 'cus_one', return_url: checkout.return_url },
             'portal:two',
           )
         ).status,
@@ -1061,7 +1065,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           await request(
             '/v1/billing/portal_sessions',
             'owner',
-            { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+            { provider_customer_id: 'cus_one', return_url: checkout.return_url },
             'portal:three',
           )
         ).status,
@@ -1098,13 +1102,39 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         sdk().retrieveSubscription('sub_one'),
       ]);
       expect(result[0]).toEqual(result[1]);
-      expect(result[0]).toMatchObject({ storeId: 'store:one', planId: 'plan:one' });
+      expect(result[0]).toMatchObject({ store_id: 'store:one', plan_id: 'plan:one' });
       expect(
         (await gatewayDb().select().from(billingObjectBindings)).filter(
           (value) => value.kind === 'subscription',
         ),
       ).toHaveLength(1);
       expect(await gatewayDb().select().from(recurringMirrors)).toHaveLength(1);
+    });
+    it('refuses a malformed request with 400, naming the field, and accepts no legacy spelling', async () => {
+      const legacy = await request(
+        '/v1/billing/customers',
+        'owner',
+        { storeId: 'store:one', storeName: 'Store' },
+        'customer:legacy',
+      );
+      expect(legacy.status).toBe(400);
+      expect(await legacy.json()).toMatchObject({
+        error: { type: 'invalid_request_error', code: 'parameter_invalid', param: 'store_id' },
+      });
+      const keyless = await request('/v1/billing/customers', 'owner', {
+        store_id: 'store:one',
+        store_name: 'Store',
+      });
+      expect(keyless.status).toBe(400);
+      expect(await keyless.json()).toMatchObject({
+        error: {
+          type: 'invalid_request_error',
+          code: 'parameter_invalid',
+          message: 'A valid Idempotency-Key header is required.',
+        },
+      });
+      // Refused before any durable claim or provider call.
+      expect(await gatewayDb().select().from(billingOperations)).toHaveLength(0);
     });
     it('uniformly refuses unknown, ambiguous, incomplete or mismatched checkout correlation', async () => {
       expect((await request('/v1/billing/subscriptions/sub_one')).status).toBe(404);
@@ -1123,7 +1153,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           });
         const response = await request('/v1/billing/subscriptions/sub_one');
         expect(response.status).toBe(404);
-        expect(await response.json()).toMatchObject({ error: { message: 'not_found' } });
+        expect(await response.json()).toMatchObject({
+          error: {
+            type: 'invalid_request_error',
+            code: 'not_found',
+            message: 'No such billing object for this merchant.',
+          },
+        });
       }
       expect(
         (await gatewayDb().select().from(billingObjectBindings)).filter(
@@ -1163,7 +1199,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           tx,
           claim.operation,
           claim.leaseToken,
-          { url: 'https://checkout.stripe.com/synthetic', expiresAt: '2026-10-03T13:00:00Z' },
+          { url: 'https://checkout.stripe.com/synthetic', expires_at: 1791032400 },
           'cs_test_a11fixture',
           now,
         ),
@@ -1363,7 +1399,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       // A caller that names no rail keeps reaching Stripe, as before FairCoin was added.
       const { service } = await runtime(both);
       expect(await service.ensureCustomer(owner, customerInput, 'customer:one')).toEqual({
-        providerCustomerId: 'cus_one',
+        provider_customer_id: 'cus_one',
       });
       expect(calls.filter((call) => call.method === 'customer')).toHaveLength(1);
       // Choosing FairCoin mints its own namespaced customer and touches no provider.
@@ -1372,7 +1408,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         { ...customerInput, rail: 'faircoin' },
         'customer:fair',
       );
-      expect(native.providerCustomerId).toMatch(/^cus_fair[0-9a-f]{64}$/);
+      expect(native.provider_customer_id).toMatch(/^cus_fair[0-9a-f]{64}$/);
       expect(calls.filter((call) => call.method === 'customer')).toHaveLength(1);
       for (const raw of [
         { rails: [faircoin, faircoin] },
@@ -1486,7 +1522,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('SDK refreshes once after 401 and preserves the mutation key', async () => {
       retry401 = true;
       expect(await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' })).toEqual(
-        { providerCustomerId: 'cus_one' },
+        { provider_customer_id: 'cus_one' },
       );
       expect(calls.filter((value) => value.method === 'customer')).toHaveLength(1);
       expect((await gatewayDb().select().from(billingOperations))[0]?.idempotencyKey).toBe(
@@ -1510,9 +1546,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(observed).toMatchObject({
         id: hosted.id,
         status: 'complete',
-        storeId: 'store:one',
-        planId: 'plan:one',
-        subscription: { providerSubscriptionId: 'sub_one' },
+        store_id: 'store:one',
+        plan_id: 'plan:one',
+        subscription: { provider_subscription_id: 'sub_one' },
       });
       expect((await request(`/v1/billing/checkout_sessions/${hosted.id}`, 'other')).status).toBe(
         404,
@@ -1544,12 +1580,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await bindSubscription();
       const invoice = configurePaidEvidence();
       expect(await sdk().retrievePaidInvoice('sub_one', 'in_one')).toMatchObject({
-        invoiceId: 'in_one',
-        storeId: 'store:one',
-        planId: 'plan:one',
-        amountPaid: '2999',
-        netAmount: '2500',
-        taxAmount: '499',
+        invoice_id: 'in_one',
+        store_id: 'store:one',
+        plan_id: 'plan:one',
+        amount_paid: '2999',
+        net_amount: '2500',
+        tax_amount: '499',
+        period_start: 1791028800,
+        period_end: 1793707200,
+        paid_at: 1791028800,
       });
       expect(
         (await request('/v1/billing/subscriptions/sub_one/paid_invoices/in_one', 'other')).status,
@@ -1559,7 +1598,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       ).toBe(403);
       expect(await sdk().retrieveInvoiceState('sub_one', 'in_one')).toMatchObject({
         state: 'paid',
-        amountRefunded: '0',
+        amount_refunded: '0',
       });
       expect(
         (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one')).status,
@@ -1567,18 +1606,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(
         (
           await request('/v1/billing/tax_quotes', 'owner', {
-            storeId: 'store:one',
-            planId: 'plan:one',
-            customerLocationEvidenceId: 'location_fixture',
+            store_id: 'store:one',
+            plan_id: 'plan:one',
+            customer_location_evidence_id: 'location_fixture',
           })
         ).status,
       ).toBe(404);
       expect(
         (
           await request('/v1/billing/tax_quotes', 'noScope', {
-            storeId: 'store:one',
-            planId: 'plan:one',
-            customerLocationEvidenceId: 'location_fixture',
+            store_id: 'store:one',
+            plan_id: 'plan:one',
+            customer_location_evidence_id: 'location_fixture',
           })
         ).status,
       ).toBe(403);
@@ -1591,48 +1630,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         verificationKeys,
         async read({ owner: invoiceOwner, merchantPublicId, invoice: paid }) {
           const authority: BillingFinalInvoiceAuthority = {
-            schemaVersion: 1,
+            schema_version: 2,
             source: {
-              invoiceId: paid.invoiceId,
-              paymentIntentId: paid.paymentIntentId,
-              customerId: paid.providerCustomerId,
-              subscriptionId: paid.providerSubscriptionId,
-              priceId: paid.providerPriceId,
-              planId: paid.planId,
-              merchantId: merchantPublicId,
-              appId: invoiceOwner.oxyAppId,
+              invoice_id: paid.invoice_id,
+              payment_intent_id: paid.payment_intent_id,
+              customer_id: paid.provider_customer_id,
+              subscription_id: paid.provider_subscription_id,
+              price_id: paid.provider_price_id,
+              plan_id: paid.plan_id,
+              merchant_id: merchantPublicId,
+              app_id: invoiceOwner.oxyAppId,
               mode: 'test',
               environment: invoiceOwner.environment,
             },
             invoice: {
               platform: 'peable',
               currency: paid.currency,
-              grossMinorUnits: 2999,
-              netMinorUnits: 2500,
-              taxMinorUnits: 499,
-              merchantFeeMinorUnits: 0,
-              taxTreatment: 'inclusive',
-              sellerId: 'seller_fixture',
-              invoiceIssuerId: 'issuer_fixture',
-              taxQuoteId: 'quote_fixture',
-              customerLocationEvidenceId: 'location_fixture',
-              taxRateEvidenceId: 'rate_fixture',
+              gross_minor_units: 2999,
+              net_minor_units: 2500,
+              tax_minor_units: 499,
+              merchant_fee_minor_units: 0,
+              tax_treatment: 'inclusive',
+              seller_id: 'seller_fixture',
+              invoice_issuer_id: 'issuer_fixture',
+              tax_quote_id: 'quote_fixture',
+              customer_location_evidence_id: 'location_fixture',
+              tax_rate_evidence_id: 'rate_fixture',
               context: {
-                payerAccountId: paid.storeId,
-                beneficiaryAccountId: paid.storeId,
-                providerSubscriptionId: paid.providerSubscriptionId,
-                offerId: 'offer_fixture',
-                offerVersion: 1,
-                periodStart: paid.periodStart,
-                periodEnd: paid.periodEnd,
+                payer_account_id: paid.store_id,
+                beneficiary_account_id: paid.store_id,
+                provider_subscription_id: paid.provider_subscription_id,
+                offer_id: 'offer_fixture',
+                offer_version: 1,
+                period_start: paid.period_start,
+                period_end: paid.period_end,
                 mode: 'test',
                 environment: invoiceOwner.environment,
               },
-              issuedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              issued_at: toUnix(time),
+              expires_at: toUnix(time) + 60,
             },
             method: 'card',
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           };
           authority.signature.value = sign(
             null,
@@ -1652,8 +1691,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(
         await verifiedSdk.billing.retrieveFinalInvoiceAuthority('sub_one', 'in_one'),
       ).toMatchObject({
-        source: { invoiceId: 'in_one', appId: owner.oxyAppId },
-        invoice: { grossMinorUnits: 2999 },
+        source: { invoice_id: 'in_one', app_id: owner.oxyAppId },
+        invoice: { gross_minor_units: 2999 },
       });
       expect(
         (await request('/v1/billing/subscriptions/sub_one/invoice_authorities/in_one', 'other'))
@@ -1681,23 +1720,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const fixture = await fiscalFixture();
       const key = 'recovery:key:encoded';
       const original = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: key },
       );
-      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      time = new Date(fixture.quote.quote.expires_at * 1000 + 1);
       const before = calls.length;
       const params = {
-        idempotencyKey: key,
-        providerCustomerId: checkout.providerCustomerId,
-        providerPriceId: checkout.providerPriceId,
-        storeId: checkout.storeId,
-        planId: checkout.planId,
+        idempotency_key: key,
+        provider_customer_id: checkout.provider_customer_id,
+        provider_price_id: checkout.provider_price_id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
       };
       const recovered = await sdk().retrieveCheckoutOperation(params);
       expect(recovered).toMatchObject({
         state: 'succeeded',
-        source: { ...params, taxQuoteId: fixture.quote.quote.id },
-        checkout: { id: original.id, expiresAt: original.expiresAt },
+        source: { ...params, tax_quote_id: fixture.quote.quote.id },
+        checkout: { id: original.id, expires_at: original.expires_at },
       });
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.url).toBeUndefined();
@@ -1733,17 +1772,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         .select()
         .from(billingOperations)
         .where(eq(billingOperations.idempotencyKey, key));
-      if (!operation?.result || !('url' in operation.result) || !('expiresAt' in operation.result))
+      if (!operation?.result || !('url' in operation.result) || !('expires_at' in operation.result))
         throw new Error('Expected stored checkout result');
       await gatewayDb()
         .update(billingOperations)
-        .set({ result: { url: operation.result.url, expiresAt: operation.result.expiresAt } })
+        .set({ result: { url: operation.result.url, expires_at: operation.result.expires_at } })
         .where(eq(billingOperations.id, operation.id));
       expect(await restarted.retrieveCheckoutOperation(owner, params)).toEqual(recovered);
       const contradictory = {
         id: 'cs_test_conflict',
         url: operation.result.url,
-        expiresAt: operation.result.expiresAt,
+        expires_at: operation.result.expires_at,
       };
       await gatewayDb()
         .update(billingOperations)
@@ -1757,10 +1796,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         .set({ result: operation.result })
         .where(eq(billingOperations.id, operation.id));
       const query = new URLSearchParams({
-        providerCustomerId: checkout.providerCustomerId,
-        providerPriceId: checkout.providerPriceId,
-        storeId: checkout.storeId,
-        planId: checkout.planId,
+        provider_customer_id: checkout.provider_customer_id,
+        provider_price_id: checkout.provider_price_id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
       });
       const path = `/v1/billing/checkout_operations/${encodeURIComponent(key)}?${query}`;
       expect((await request(path, 'other')).status).toBe(404);
@@ -1776,8 +1815,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await expect(
         sdk().retrieveCheckoutOperation({
           ...params,
-          providerCustomerId: 'cus_second',
-          storeId: 'store:second',
+          provider_customer_id: 'cus_second',
+          store_id: 'store:second',
         }),
       ).rejects.toThrow();
       expect(calls).toHaveLength(before);
@@ -1785,11 +1824,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('keeps absence and uncertain provider acceptance nonterminal and validates read-only recovery proof', async () => {
       const fixture = await fiscalFixture();
       const params = {
-        idempotencyKey: 'recover:pending',
-        providerCustomerId: checkout.providerCustomerId,
-        providerPriceId: checkout.providerPriceId,
-        storeId: checkout.storeId,
-        planId: checkout.planId,
+        idempotency_key: 'recover:pending',
+        provider_customer_id: checkout.provider_customer_id,
+        provider_price_id: checkout.provider_price_id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
       };
       const missing = await sdk().retrieveCheckoutOperation(params);
       expect(missing.state).toBe('not_found');
@@ -1798,14 +1837,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         deployment,
         owner,
         'customer',
-        params.providerCustomerId,
+        params.provider_customer_id,
       );
       const price = await requireBillingBinding(
         gatewayDb(),
         deployment,
         owner,
         'price',
-        params.providerPriceId,
+        params.provider_price_id,
       );
       const claim = await claimBillingOperation(
         gatewayDb(),
@@ -1813,7 +1852,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         owner,
         {
           operation: 'checkout',
-          idempotencyKey: params.idempotencyKey,
+          idempotencyKey: params.idempotency_key,
           requestDigest: 'a'.repeat(64),
           customerBindingId: customer.id,
           priceBindingId: price.id,
@@ -1842,7 +1881,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: time.toISOString(),
+              expires_at: toUnix(time),
             },
           };
         },
@@ -1865,7 +1904,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: new Date(time.getTime() - 1).toISOString(),
+              expires_at: toUnix(time) - 1,
             },
           };
         },
@@ -1891,7 +1930,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('discovers and pins the original invoice on first checkout read after renewal through all pages', async () => {
       const fixture = await fiscalFixture();
       const hosted = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'initial:late' },
       );
       configurePaidEvidence();
@@ -1918,8 +1957,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             };
       };
       const observed = await sdk().retrieveCheckout(hosted.id);
-      expect(observed.initialInvoiceId).toBe('in_one');
-      expect(observed.subscription?.latestInvoiceId).toBe('in_renewal');
+      expect(observed.initial_invoice_id).toBe('in_one');
+      expect(observed.subscription?.latest_invoice_id).toBe('in_renewal');
       expect(cursors).toEqual([undefined, 'in_renewal']);
       client.listSubscriptionInvoices = async () => {
         throw new Error('Initial pin must survive restart/provider outage');
@@ -1931,12 +1970,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         cohorts: [{ ...owner, ...deployment, evidenceRef: 'fixture:approved-cohort' }],
         now: () => time,
       });
-      expect((await reloaded.retrieveCheckout(owner, hosted.id)).initialInvoiceId).toBe('in_one');
+      expect((await reloaded.retrieveCheckout(owner, hosted.id)).initial_invoice_id).toBe('in_one');
     });
     it('does not pin ambiguous, foreign, wrong-price or incomplete initial invoice evidence', async () => {
       const fixture = await fiscalFixture();
       const hosted = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'initial:invalid' },
       );
       configurePaidEvidence();
@@ -1951,7 +1990,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         has_more: false,
         data: [initial, { ...initial, id: 'in_duplicate' }],
       });
-      expect((await sdk().retrieveCheckout(hosted.id)).initialInvoiceId).toBeNull();
+      expect((await sdk().retrieveCheckout(hosted.id)).initial_invoice_id).toBeNull();
       client.listSubscriptionInvoices = async () => ({
         has_more: false,
         data: [{ ...initial, customer: 'cus_foreign' }],
@@ -1998,18 +2037,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       };
       await expect(
         fixture.fiscalSdk.createCheckoutSession(
-          { ...checkout, taxQuote: fixture.quote },
+          { ...checkout, tax_quote: fixture.quote },
           { idempotencyKey: 'recover:quote-ceiling' },
         ),
       ).rejects.toThrow();
       const params = {
-        idempotencyKey: 'recover:quote-ceiling',
-        providerCustomerId: checkout.providerCustomerId,
-        providerPriceId: checkout.providerPriceId,
-        storeId: checkout.storeId,
-        planId: checkout.planId,
+        idempotency_key: 'recover:quote-ceiling',
+        provider_customer_id: checkout.provider_customer_id,
+        provider_price_id: checkout.provider_price_id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
       };
-      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      time = new Date(fixture.quote.quote.expires_at * 1000 + 1);
       checkoutOperationReader = {
         async read(input) {
           return {
@@ -2018,7 +2057,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: new Date(Date.parse(fixture.quote.quote.expiresAt) + 1).toISOString(),
+              expires_at: fixture.quote.quote.expires_at + 1,
             },
           };
         },
@@ -2027,7 +2066,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const [operation] = await gatewayDb()
         .select()
         .from(billingOperations)
-        .where(eq(billingOperations.idempotencyKey, params.idempotencyKey));
+        .where(eq(billingOperations.idempotencyKey, params.idempotency_key));
       expect(operation?.state).toBe('indeterminate');
       expect(operation?.providerObjectRef).toBeNull();
       checkoutOperationReader = {
@@ -2038,14 +2077,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: fixture.quote.quote.expiresAt,
+              expires_at: fixture.quote.quote.expires_at,
             },
           };
         },
       };
       const recovered = await sdk().retrieveCheckoutOperation(params);
       expect(recovered.state).toBe('succeeded');
-      expect(recovered.source.taxQuoteId).toBe(fixture.quote.quote.id);
+      expect(recovered.source.tax_quote_id).toBe(fixture.quote.quote.id);
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.url).toBeUndefined();
     });
@@ -2057,25 +2096,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         deployment,
         owner,
         'customer',
-        checkout.providerCustomerId,
+        checkout.provider_customer_id,
       );
       const price = await requireBillingBinding(
         gatewayDb(),
         deployment,
         owner,
         'price',
-        checkout.providerPriceId,
+        checkout.provider_price_id,
       );
       const params = {
-        idempotencyKey: 'recover:race',
-        providerCustomerId: checkout.providerCustomerId,
-        providerPriceId: checkout.providerPriceId,
-        storeId: checkout.storeId,
-        planId: checkout.planId,
+        idempotency_key: 'recover:race',
+        provider_customer_id: checkout.provider_customer_id,
+        provider_price_id: checkout.provider_price_id,
+        store_id: checkout.store_id,
+        plan_id: checkout.plan_id,
       };
       const input = {
         operation: 'checkout' as const,
-        idempotencyKey: params.idempotencyKey,
+        idempotencyKey: params.idempotency_key,
         requestDigest: 'a'.repeat(64),
         customerBindingId: customer.id,
         priceBindingId: price.id,
@@ -2095,7 +2134,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_discovered',
               url: 'https://example.invalid/discovered',
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              expires_at: toUnix(time) + 60,
             },
           };
         },
@@ -2119,7 +2158,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
               {
                 id: 'cs_test_original',
                 url: 'https://example.invalid/original',
-                expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+                expires_at: toUnix(time) + 60,
               },
               'cs_test_original',
               time,
@@ -2131,7 +2170,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_discovered',
               url: 'https://example.invalid/discovered',
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              expires_at: toUnix(time) + 60,
             },
           };
         },

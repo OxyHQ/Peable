@@ -250,7 +250,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('settlement events and the sync sweep',
     // Scoped to THIS seller: the cases above also change readiness, and every
     // one of them rightly enqueues its own notification.
     const rows = (await accountDeliveries()).filter(
-      (row) => row.event.data.object.externalRef === 'store_evt_notify',
+      (row) => row.event.data.object.external_ref === 'store_evt_notify',
     );
 
     expect(rows).toHaveLength(1);

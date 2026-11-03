@@ -22,6 +22,7 @@ import type {
   EnsureBillingCustomerParams,
 } from '@peable.to/shared-types';
 import { z } from 'zod';
+import { toUnix } from '../../lib/time';
 import type { Database, Transaction } from '../../db/postgres';
 import {
   findBillingCustomerForStore,
@@ -222,25 +223,25 @@ export function createBillingService(options: BillingServiceOptions) {
       throw new BillingError('identity_conflict');
     const parsed = billingSubscriptionSchema.parse({
       ...snapshot,
-      storeId: binding.externalSubjectRef,
-      planId: binding.planRef,
+      store_id: binding.externalSubjectRef,
+      plan_id: binding.planRef,
     });
     const customer = await requireBillingBinding(
       db,
       deployment,
       owner,
       'customer',
-      parsed.providerCustomerId,
+      parsed.provider_customer_id,
     );
     const price = await requireBillingBinding(
       db,
       deployment,
       owner,
       'price',
-      parsed.providerPriceId,
+      parsed.provider_price_id,
     );
     if (
-      parsed.providerSubscriptionId !== binding.providerRef ||
+      parsed.provider_subscription_id !== binding.providerRef ||
       parsed.livemode !== deployment.livemode ||
       binding.customerBindingId !== customer.id ||
       binding.priceBindingId !== price.id ||
@@ -263,34 +264,34 @@ export function createBillingService(options: BillingServiceOptions) {
         idempotencyKey,
         input,
         async (key) => {
-          const existing = await findBillingCustomerForStore(db, deployment, owner, input.storeId);
+          const existing = await findBillingCustomerForStore(db, deployment, owner, input.store_id);
           if (existing)
             return {
-              result: { providerCustomerId: existing.providerRef },
+              result: { provider_customer_id: existing.providerRef },
               objectRef: existing.providerRef,
             };
           const value = await provider.ensureCustomer(input, key);
           if (value.livemode !== deployment.livemode) throw new BillingError('identity_conflict');
           const result = billingCustomerSchema.parse({
-            providerCustomerId: value.providerCustomerId,
+            provider_customer_id: value.providerCustomerId,
           });
-          return { result, objectRef: result.providerCustomerId };
+          return { result, objectRef: result.provider_customer_id };
         },
         async (tx, op, value) => {
-          const existing = await findBillingCustomerForStore(tx, deployment, owner, input.storeId);
+          const existing = await findBillingCustomerForStore(tx, deployment, owner, input.store_id);
           if (existing) {
-            if (existing.providerRef !== value.providerCustomerId)
+            if (existing.providerRef !== value.provider_customer_id)
               throw new BillingError('identity_conflict');
             return;
           }
           await bindBillingObject(tx, deployment, owner, {
             kind: 'customer',
-            providerRef: value.providerCustomerId,
-            externalSubjectRef: input.storeId,
+            providerRef: value.provider_customer_id,
+            externalSubjectRef: input.store_id,
             bindingEvidenceRef: op.id,
           });
         },
-        input.storeId,
+        input.store_id,
       );
     },
     async createCheckoutSession(
@@ -301,7 +302,7 @@ export function createBillingService(options: BillingServiceOptions) {
       authorize(owner);
       const input = checkoutSchema.parse(params);
       if (
-        !input.taxQuote &&
+        !input.tax_quote &&
         cohorts.some(
           (cohort) =>
             cohort.merchantId === owner.merchantId &&
@@ -316,19 +317,19 @@ export function createBillingService(options: BillingServiceOptions) {
         deployment,
         owner,
         'customer',
-        input.providerCustomerId,
+        input.provider_customer_id,
       );
       const price = await requireBillingBinding(
         db,
         deployment,
         owner,
         'price',
-        input.providerPriceId,
+        input.provider_price_id,
       );
-      if (customer.externalSubjectRef !== input.storeId || price.planRef !== input.planId)
+      if (customer.externalSubjectRef !== input.store_id || price.planRef !== input.plan_id)
         throw new BillingError('identity_conflict');
       let snapshot: BillingTaxCheckoutSnapshot | undefined;
-      if (input.taxQuote) {
+      if (input.tax_quote) {
         if (
           !options.taxQuoteCalculator ||
           !options.taxCheckoutAdapter ||
@@ -347,7 +348,7 @@ export function createBillingService(options: BillingServiceOptions) {
           options.taxCheckoutAdapter,
           owner,
           merchant.publicId,
-          { ...input, taxQuote: input.taxQuote },
+          { ...input, tax_quote: input.tax_quote },
           now,
         );
       }
@@ -360,10 +361,7 @@ export function createBillingService(options: BillingServiceOptions) {
         input,
         async (key) => {
           // Recheck expiry after deployment verification and durable claim, before effects.
-          if (
-            immutableSnapshot &&
-            Date.parse(immutableSnapshot.taxQuote.quote.expiresAt) <= now().getTime()
-          )
+          if (immutableSnapshot && immutableSnapshot.taxQuote.quote.expires_at <= toUnix(now()))
             throw new BillingError('result_expired');
           if (immutableSnapshot && !taxCheckoutAdapter) throw new BillingError('not_found', 404);
           const value =
@@ -383,14 +381,14 @@ export function createBillingService(options: BillingServiceOptions) {
             value.providerObjectRef.startsWith('cs_live_') !== deployment.livemode ||
             value.providerCustomerId !== customer.providerRef ||
             (immutableSnapshot !== undefined &&
-              Date.parse(value.expiresAt) > Date.parse(immutableSnapshot.taxQuote.quote.expiresAt))
+              value.expiresAt > immutableSnapshot.taxQuote.quote.expires_at)
           )
             throw new BillingError('identity_conflict');
           return {
             result: billingCheckoutSessionSchema.parse({
               id: value.providerObjectRef,
               url: value.url,
-              expiresAt: value.expiresAt,
+              expires_at: value.expiresAt,
             }),
             objectRef: value.providerObjectRef,
           };
@@ -411,7 +409,7 @@ export function createBillingService(options: BillingServiceOptions) {
     ): Promise<BillingHostedSession> {
       authorize(owner);
       const input = portalSchema.parse(params);
-      await requireBillingBinding(db, deployment, owner, 'customer', input.providerCustomerId);
+      await requireBillingBinding(db, deployment, owner, 'customer', input.provider_customer_id);
       // Replay also needs the current safe Portal configuration.
       await provider.verifyDeployment();
       await provider.verifyPortalConfiguration();
@@ -419,11 +417,11 @@ export function createBillingService(options: BillingServiceOptions) {
         const value = await provider.createPortalSession(input, key);
         if (
           value.livemode !== deployment.livemode ||
-          value.providerCustomerId !== input.providerCustomerId
+          value.providerCustomerId !== input.provider_customer_id
         )
           throw new BillingError('identity_conflict');
         return {
-          result: billingHostedSessionSchema.parse({ url: value.url, expiresAt: value.expiresAt }),
+          result: billingHostedSessionSchema.parse({ url: value.url, expires_at: value.expiresAt }),
           objectRef: value.providerObjectRef,
         };
       });
@@ -439,16 +437,16 @@ export function createBillingService(options: BillingServiceOptions) {
         deployment,
         owner,
         'customer',
-        input.providerCustomerId,
+        input.provider_customer_id,
       );
       const price = await requireBillingBinding(
         db,
         deployment,
         owner,
         'price',
-        input.providerPriceId,
+        input.provider_price_id,
       );
-      if (customer.externalSubjectRef !== input.storeId || price.planRef !== input.planId)
+      if (customer.externalSubjectRef !== input.store_id || price.planRef !== input.plan_id)
         throw new BillingError('not_found', 404);
       const merchant = await findMerchantById(db, owner.merchantId);
       if (
@@ -459,9 +457,9 @@ export function createBillingService(options: BillingServiceOptions) {
         throw new BillingError('not_found', 404);
       const source = {
         ...input,
-        taxQuoteId: null as string | null,
-        merchantId: merchant.publicId,
-        appId: owner.oxyAppId,
+        tax_quote_id: null as string | null,
+        merchant_id: merchant.publicId,
+        app_id: owner.oxyAppId,
         mode: deployment.livemode ? ('live' as const) : ('test' as const),
         environment: owner.environment,
       };
@@ -469,12 +467,12 @@ export function createBillingService(options: BillingServiceOptions) {
         db,
         deployment,
         owner,
-        input.idempotencyKey,
+        input.idempotency_key,
       );
       if (!operation) return { state: 'not_found', source };
       if (operation.customerBindingId !== customer.id || operation.priceBindingId !== price.id)
         throw new BillingError('not_found', 404);
-      source.taxQuoteId = operation.taxQuoteRef;
+      source.tax_quote_id = operation.taxQuoteRef;
       if (operation.state !== 'succeeded' && options.checkoutOperationReader) {
         const expected = {
           taxQuoteId: operation.taxQuoteRef,
@@ -506,8 +504,7 @@ export function createBillingService(options: BillingServiceOptions) {
           throw new BillingError('identity_conflict');
         if (
           operation.taxCheckoutSnapshot &&
-          Date.parse(recovered.checkout.expiresAt) >
-            Date.parse(operation.taxCheckoutSnapshot.taxQuote.quote.expiresAt)
+          recovered.checkout.expires_at > operation.taxCheckoutSnapshot.taxQuote.quote.expires_at
         )
           throw new BillingError('identity_conflict');
         await completeRecoveredBillingCheckout(db, operation, recovered.checkout, now());
@@ -515,7 +512,7 @@ export function createBillingService(options: BillingServiceOptions) {
           db,
           deployment,
           owner,
-          input.idempotencyKey,
+          input.idempotency_key,
         );
         if (
           !operation ||
@@ -535,8 +532,8 @@ export function createBillingService(options: BillingServiceOptions) {
         source,
         checkout: {
           id: result.id,
-          expiresAt: result.expiresAt,
-          ...(Date.parse(result.expiresAt) > now().getTime() ? { url: result.url } : {}),
+          expires_at: result.expires_at,
+          ...(result.expires_at > toUnix(now()) ? { url: result.url } : {}),
         },
       };
     },
@@ -560,7 +557,7 @@ export function createBillingService(options: BillingServiceOptions) {
     async createTaxQuote(owner: BillingOwner, params: CreateBillingTaxQuoteParams) {
       authorize(owner);
       if (!options.taxQuoteCalculator) throw new BillingError('not_found', 404);
-      const customer = await findBillingCustomerForStore(db, deployment, owner, params.storeId);
+      const customer = await findBillingCustomerForStore(db, deployment, owner, params.store_id);
       const merchant = await findMerchantById(db, owner.merchantId);
       if (
         !customer ||
@@ -642,7 +639,7 @@ export function createBillingService(options: BillingServiceOptions) {
       );
       if (taxCheckoutSnapshot) verifyBillingInvoiceTaxCheckout(authority, taxCheckoutSnapshot);
       // Lines are present exactly when asked for.
-      if ((authority.invoice.taxLines !== undefined) !== (include?.taxLines === true))
+      if ((authority.invoice.tax_lines !== undefined) !== (include?.taxLines === true))
         throw new BillingError('invalid_provider_response', 502);
       return authority;
     },
@@ -664,13 +661,13 @@ export function createBillingService(options: BillingServiceOptions) {
         { ref },
         async (key) => {
           const current = await project(owner, binding, await provider.retrieveSubscription(ref));
-          const result = current.cancelAtPeriodEnd
+          const result = current.cancel_at_period_end
             ? current
             : await project(owner, binding, await provider.cancelAtPeriodEnd(ref, key));
           if (
-            !result.cancelAtPeriodEnd ||
-            result.currentPeriodStart !== current.currentPeriodStart ||
-            result.currentPeriodEnd !== current.currentPeriodEnd
+            !result.cancel_at_period_end ||
+            result.current_period_start !== current.current_period_start ||
+            result.current_period_end !== current.current_period_end
           )
             throw new BillingError('invalid_provider_response', 502);
           return { result, objectRef: ref };
@@ -680,9 +677,9 @@ export function createBillingService(options: BillingServiceOptions) {
       // make it stale: same-action retry must reconcile, never report cached success.
       const fresh = await project(owner, binding, await provider.retrieveSubscription(ref));
       if (
-        !fresh.cancelAtPeriodEnd ||
-        fresh.currentPeriodStart !== result.currentPeriodStart ||
-        fresh.currentPeriodEnd !== result.currentPeriodEnd
+        !fresh.cancel_at_period_end ||
+        fresh.current_period_start !== result.current_period_start ||
+        fresh.current_period_end !== result.current_period_end
       )
         throw new BillingError('reconciliation_required');
       return fresh;

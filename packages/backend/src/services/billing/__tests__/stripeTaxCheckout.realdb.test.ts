@@ -40,13 +40,13 @@ const provider: TaxProvider = {
             country: input.customer.country,
             state: null,
             level: 'country',
-            displayName: 'VAT',
-            taxType: 'vat',
-            ratePercentage: `${vatRate}.0`,
-            taxableAmount: line.amount,
+            display_name: 'VAT',
+            tax_type: 'vat',
+            rate_percentage: `${vatRate}.0`,
+            taxable_amount: line.amount,
             amount: amountTax,
             inclusive: false,
-            taxabilityReason: 'standard_rated',
+            taxability_reason: 'standard_rated',
           },
         ],
       };
@@ -67,13 +67,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
     };
     const tax = createTaxService({ db: gatewayDb(), provider });
     await tax.updateSettings(merchant, {
-      legalName: 'Seller, Inc.',
-      headOffice: { country: 'US' },
+      legal_name: 'Seller, Inc.',
+      head_office: { country: 'US' },
     });
     await tax.createRegistration(merchant, { country: 'IE', scheme: 'eu_oss_non_union' });
     await tax.approve(merchant, { userId: 'owner', officialApplication: true });
     const evidence = await tax.recordEvidence(merchant, {
-      customerRef: 'store:one',
+      customer_ref: 'store:one',
       evidence: [
         { type: 'billing_address', address: { country: 'DE' } },
         { type: 'payment_method_country', country: 'DE' },
@@ -348,7 +348,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
 
     const customer = await service.ensureCustomer(
       owner,
-      { storeId: 'store:one', storeName: 'Store' },
+      { store_id: 'store:one', store_name: 'Store' },
       'customer:one',
     );
     await bindBillingObject(
@@ -359,35 +359,36 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
     );
     const quote = await service.createTaxQuote(owner, {
       rail: 'stripe',
-      storeId: 'store:one',
-      planId: 'one',
-      providerPriceId: 'price_one',
-      customerLocationEvidenceId: evidence.id,
+      store_id: 'store:one',
+      plan_id: 'one',
+      provider_price_id: 'price_one',
+      customer_location_evidence_id: evidence.id,
     });
+    expect(quote).toMatchObject({ schema_version: 2, signature: { key_id: 'peable-test' } });
     expect(quote.quote).toMatchObject({
-      grossMinorUnits: 3599,
-      netMinorUnits: 2999,
-      taxMinorUnits: 600,
-      taxServiceRef: 'peable_tax',
-      customerLocationEvidenceId: evidence.id,
+      gross_minor_units: 3599,
+      net_minor_units: 2999,
+      tax_minor_units: 600,
+      tax_service_ref: 'peable_tax',
+      customer_location_evidence_id: evidence.id,
     });
-    expect(quote.quote.taxRateEvidenceId).toStartWith('taxcalc_');
+    expect(quote.quote.tax_rate_evidence_id).toStartWith('taxcalc_');
 
     const session = await service.createCheckoutSession(
       owner,
       {
         ...customer,
-        providerPriceId: 'price_one',
-        trialDays: 0,
-        returnUrl: 'https://example.invalid/billing',
-        storeId: 'store:one',
-        planId: 'one',
-        taxQuote: quote,
+        provider_price_id: 'price_one',
+        trial_days: 0,
+        return_url: 'https://example.invalid/billing',
+        store_id: 'store:one',
+        plan_id: 'one',
+        tax_quote: quote,
       },
       'checkout:one',
     );
     expect(session.id).toBe('cs_live_one');
-    expect(Date.parse(session.expiresAt)).toBeLessThanOrEqual(Date.parse(quote.quote.expiresAt));
+    expect(session.expires_at).toBe(quote.quote.expires_at);
     expect(calls.taxRate).toEqual([
       expect.objectContaining({ percentage: 20, inclusive: false, display_name: 'VAT' }),
     ]);
@@ -410,13 +411,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       taxLines: true,
     });
     expect(authority).toMatchObject({
+      schema_version: 2,
       method: 'card',
-      signature: { keyId: 'peable-test' },
-      invoice: { grossMinorUnits: 3599, taxMinorUnits: 600, taxQuoteId: quote.quote.id },
+      signature: { key_id: 'peable-test' },
+      invoice: { gross_minor_units: 3599, tax_minor_units: 600, tax_quote_id: quote.quote.id },
     });
-    expect(authority.invoice.taxLines?.reduce((sum, entry) => sum + entry.taxMinorUnits, 0)).toBe(
-      600,
-    );
+    expect(
+      authority.invoice.tax_lines?.reduce((sum, entry) => sum + entry.tax_minor_units, 0),
+    ).toBe(600);
 
     // The renewal: the rate changed, so the draft is held, repriced from fresh
     // evidence at 19% and released only once Stripe's totals are the quote.
@@ -443,29 +445,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
     const renewal = await service.retrieveFinalInvoiceAuthority(owner, 'sub_one', 'in_two', {
       taxLines: true,
     });
-    expect(renewal.invoice).toMatchObject({ grossMinorUnits: 3569, taxMinorUnits: 570 });
-    expect(renewal.invoice.taxQuoteId).not.toBe(quote.quote.id);
+    expect(renewal.invoice).toMatchObject({ gross_minor_units: 3569, tax_minor_units: 570 });
+    expect(renewal.invoice.tax_quote_id).not.toBe(quote.quote.id);
 
     // Half refunded: the renewal's transaction is reversed by half, once.
     refunds.ch_two = [{ id: 're_one', amount: 1785, status: 'succeeded' }];
     expect(await invoiceTax.reconcileReversals({ paymentRef: 'pi_two' })).toBe('reversed');
     expect(await invoiceTax.reconcileReversals({ paymentRef: 'pi_two' })).toBe('unchanged');
     const window = {
-      from: new Date(Date.now() - 3600_000).toISOString(),
-      to: new Date(Date.now() + 3600_000).toISOString(),
+      from: Math.floor(Date.now() / 1000) - 3600,
+      to: Math.floor(Date.now() / 1000) + 3600,
     };
     const listed = await tax.listTransactions(merchant, window);
     const reversal = listed.data.find((row) => row.type === 'reversal');
     expect(reversal).toMatchObject({
       reference: 'in_two:reversal:1',
-      reversal: { amountTotal: -1785, taxAmount: -285 },
+      reversal: { amount_total: -1785, tax_amount: -285 },
     });
-    expect(reversal?.reversalOf).toBe(listed.data.find((row) => row.reference === 'in_two')?.id);
+    expect(reversal?.reversal_of).toBe(listed.data.find((row) => row.reference === 'in_two')?.id);
     const report = await tax.report(merchant, window);
-    expect(report.rows.find((row) => row.ratePercentage === '19.0')).toMatchObject({
+    expect(report.rows.find((row) => row.rate_percentage === '19.0')).toMatchObject({
       transactions: 1,
       reversals: 1,
-      taxAmount: 285,
+      tax_amount: 285,
     });
   });
 });

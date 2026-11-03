@@ -27,51 +27,51 @@ import {
 const ACCOUNT: ConnectedAccount = {
   id: 'ca_1',
   object: 'connected_account',
-  externalRef: 'store_1',
+  external_ref: 'store_1',
   rails: ['card'],
   faircoin: null,
   country: 'ES',
-  defaultCurrency: 'EUR',
+  default_currency: 'EUR',
   payable: true,
-  payoutsEnabled: true,
-  chargesEnabled: true,
-  transfersCapability: 'active',
-  cardPaymentsCapability: 'active',
-  requirements: { currentlyDue: 0, eventuallyDue: 0, pastDue: 0, pendingVerification: 0 },
-  disabledReasonCodes: [],
-  lastSyncedAt: '2026-09-19T00:00:00.000Z',
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  payouts_enabled: true,
+  charges_enabled: true,
+  transfers_capability: 'active',
+  card_payments_capability: 'active',
+  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
+  disabled_reason_codes: [],
+  last_synced_at: 1789776000,
+  created: 1789776000,
+  updated_at: 1789776000,
 };
 
 const TRANSFER: Transfer = {
   id: 'tr_1',
   object: 'transfer',
-  externalRef: 'order_1',
-  connectedAccountId: 'ca_1',
-  paymentIntentId: 'pi_1',
+  external_ref: 'order_1',
+  connected_account_id: 'ca_1',
+  payment_intent_id: 'pi_1',
   amount: '5000',
   currency: 'EUR',
-  amountReversed: '0',
+  amount_reversed: '0',
   status: 'paid',
-  failureMessage: null,
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  failure_message: null,
+  created: 1789776000,
+  updated_at: 1789776000,
 };
 
 const REFUND: Refund = {
   id: 're_1',
   object: 'refund',
-  externalRef: 'refund_1',
+  external_ref: 'refund_1',
   origin: 'merchant',
-  paymentIntentId: 'pi_1',
+  payment_intent_id: 'pi_1',
   amount: '2500',
   currency: 'EUR',
   status: 'succeeded',
-  paymentStatus: 'partially_refunded',
-  failureCode: null,
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  payment_status: 'partially_refunded',
+  failure_code: null,
+  created: 1789776000,
+  updated_at: 1789776000,
 };
 
 function gateway(body: unknown, status = 200) {
@@ -92,13 +92,18 @@ describe('ConnectedAccountsResource', () => {
     const resource = new ConnectedAccountsResource(buildTestClient(fetchImpl));
 
     const account = await resource.create({
-      externalRef: 'store_1',
+      external_ref: 'store_1',
       country: 'es',
-      businessType: 'individual',
+      business_type: 'individual',
     });
 
     expect(account).toEqual(ACCOUNT);
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/connected_accounts`);
+    expect(JSON.parse(callOf(requests)?.body ?? '{}')).toEqual({
+      external_ref: 'store_1',
+      country: 'es',
+      business_type: 'individual',
+    });
     // The provider's own account id is on NO shape this SDK publishes — ADR
     // 0001 D3, and a reviewer should be able to check it by what is absent.
     expect(JSON.stringify(account)).not.toContain('acct_');
@@ -144,13 +149,19 @@ describe('TransfersResource', () => {
     const resource = new TransfersResource(buildTestClient(fetchImpl));
 
     const transfer = await resource.create({
-      paymentIntentId: 'pi_1',
-      connectedAccountId: 'ca_1',
-      externalRef: 'order_1',
+      payment_intent_id: 'pi_1',
+      connected_account_id: 'ca_1',
+      external_ref: 'order_1',
       amount: '5000',
     });
 
     expect(transfer).toEqual(TRANSFER);
+    expect(JSON.parse(callOf(requests)?.body ?? '{}')).toEqual({
+      payment_intent_id: 'pi_1',
+      connected_account_id: 'ca_1',
+      external_ref: 'order_1',
+      amount: '5000',
+    });
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/transfers`);
   });
 
@@ -185,7 +196,7 @@ describe('TransfersResource', () => {
     const withRef = gateway({ ...TRANSFER, reversal: {} }, 201);
     await new TransfersResource(buildTestClient(withRef.fetch)).reverse('tr_1', {
       amount: '500',
-      externalRef: 'leg_b',
+      external_ref: 'leg_b',
     });
     expect(callOf(withRef.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/transfers/tr_1/reversals`);
   });
@@ -197,16 +208,21 @@ describe('RefundsResource', () => {
     const resource = new RefundsResource(buildTestClient(fetchImpl));
 
     const refund = await resource.create({
-      paymentIntentId: 'pi_1',
-      externalRef: 'refund_1',
+      payment_intent_id: 'pi_1',
+      external_ref: 'refund_1',
+      amount: '2500',
+    });
+    expect(JSON.parse(callOf(requests)?.body ?? '{}')).toEqual({
+      payment_intent_id: 'pi_1',
+      external_ref: 'refund_1',
       amount: '2500',
     });
 
-    // `status` is the REFUND's lifecycle and `paymentStatus` is the payment's.
+    // `status` is the REFUND's lifecycle and `payment_status` is the payment's.
     // Two different questions on one response, so a caller needs no second read
     // whose answer can move on before it arrives.
     expect(refund.status).toBe('succeeded');
-    expect(refund.paymentStatus).toBe('partially_refunded');
+    expect(refund.payment_status).toBe('partially_refunded');
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/refunds`);
   });
 
@@ -214,13 +230,13 @@ describe('RefundsResource', () => {
     const { fetch: fetchImpl, requests } = gateway({
       object: 'list',
       data: [REFUND],
-      remainingRefundable: '7500',
+      remaining_refundable: '7500',
     });
     const resource = new RefundsResource(buildTestClient(fetchImpl));
 
     const list = await resource.listForPaymentIntent('pi_1');
 
-    expect(list.remainingRefundable).toBe('7500');
+    expect(list.remaining_refundable).toBe('7500');
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_intents/pi_1/refunds`);
   });
 });
@@ -236,14 +252,14 @@ describe('settlement reporting', () => {
   test('carries nulls with a status rather than zeros', async () => {
     const { fetch: fetchImpl, requests } = gateway({
       object: 'settlement',
-      paymentIntentId: 'pi_1',
+      payment_intent_id: 'pi_1',
       status: 'unknown',
       gross: null,
       fee: null,
       net: null,
       currency: null,
-      availableOn: null,
-      exchangeRate: null,
+      available_on: null,
+      exchange_rate: null,
     });
     const resource = new RefundsResource(buildTestClient(fetchImpl));
 
@@ -266,16 +282,16 @@ describe('MerchantsResource and DisputesResource', () => {
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 
     await resource.submitEvidence('dp_1', {
-      uncategorizedText: 'Collected in person.',
-      shippingTrackingNumber: 'TRACK-1',
+      uncategorized_text: 'Collected in person.',
+      shipping_tracking_number: 'TRACK-1',
     });
 
     const call = callOf(requests);
     expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/evidence`);
     expect(JSON.parse(call?.body ?? '{}')).toEqual({
-      uncategorizedText: 'Collected in person.',
-      shippingTrackingNumber: 'TRACK-1',
+      uncategorized_text: 'Collected in person.',
+      shipping_tracking_number: 'TRACK-1',
     });
   });
 

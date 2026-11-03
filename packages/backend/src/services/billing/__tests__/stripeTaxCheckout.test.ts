@@ -22,10 +22,10 @@ describe('exactTaxRatePercentage', () => {
     ];
     for (const { net, tax, gross, taxTreatment } of cases) {
       const quote = {
-        netMinorUnits: net,
-        taxMinorUnits: tax,
-        grossMinorUnits: gross,
-        taxTreatment,
+        net_minor_units: net,
+        tax_minor_units: tax,
+        gross_minor_units: gross,
+        tax_treatment: taxTreatment,
       };
       const percentage = exactTaxRatePercentage(quote);
       if (percentage === null) throw new Error(`no rate for ${JSON.stringify(quote)}`);
@@ -35,18 +35,18 @@ describe('exactTaxRatePercentage', () => {
     }
     expect(
       exactTaxRatePercentage({
-        netMinorUnits: 2999,
-        taxMinorUnits: 600,
-        grossMinorUnits: 3599,
-        taxTreatment: 'exclusive',
+        net_minor_units: 2999,
+        tax_minor_units: 600,
+        gross_minor_units: 3599,
+        tax_treatment: 'exclusive',
       }),
     ).toBe(20);
     expect(
       exactTaxRatePercentage({
-        netMinorUnits: 0,
-        taxMinorUnits: 0,
-        grossMinorUnits: 0,
-        taxTreatment: 'exclusive',
+        net_minor_units: 0,
+        tax_minor_units: 0,
+        gross_minor_units: 0,
+        tax_treatment: 'exclusive',
       }),
     ).toBeNull();
   });

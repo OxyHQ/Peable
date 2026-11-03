@@ -45,7 +45,7 @@ export interface TaxAddress {
   country: string;
   /** ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). */
   state?: string | null;
-  postalCode?: string | null;
+  postal_code?: string | null;
   city?: string | null;
   line1?: string | null;
   line2?: string | null;
@@ -65,26 +65,26 @@ export type TaxCalculationAccount = 'platform' | 'none';
 
 export interface TaxSettings {
   object: 'tax.settings';
-  merchantId: string;
+  merchant_id: string;
   /** `active` once the owner approved; any edit returns it to `draft`. */
   status: 'draft' | 'active';
-  legalName: string | null;
-  headOffice: TaxAddress | null;
-  defaultTaxCode: string;
-  defaultTaxBehavior: TaxBehavior;
-  calculationAccount: TaxCalculationAccount;
+  legal_name: string | null;
+  head_office: TaxAddress | null;
+  default_tax_code: string;
+  default_tax_behavior: TaxBehavior;
+  calculation_account: TaxCalculationAccount;
   /** The provider that calculates registered sales, when one is reachable. */
   provider: string | null;
-  approvedAt: string | null;
-  approvedBy: string | null;
-  updatedAt: string | null;
+  approved_at: number | null;
+  approved_by: string | null;
+  updated_at: number | null;
 }
 
 export interface UpdateTaxSettingsParams {
-  legalName?: string | null;
-  headOffice?: TaxAddress | null;
-  defaultTaxCode?: string;
-  defaultTaxBehavior?: TaxBehavior;
+  legal_name?: string | null;
+  head_office?: TaxAddress | null;
+  default_tax_code?: string;
+  default_tax_behavior?: TaxBehavior;
 }
 
 export interface TaxRegistration {
@@ -94,38 +94,38 @@ export interface TaxRegistration {
   state: string | null;
   scheme: TaxRegistrationScheme;
   /** The government-issued number (VAT id, state permit), when there is one. */
-  registrationNumber: string | null;
-  activeFrom: string;
-  expiresAt: string | null;
+  registration_number: string | null;
+  active_from: number;
+  expires_at: number | null;
   /** `pending_approval` until the owner approves; `scheduled` before activeFrom. */
   status: 'pending_approval' | 'scheduled' | 'active' | 'expired';
-  approvedAt: string | null;
+  approved_at: number | null;
   /** The mirrored registration at the calculating provider, once synced. */
-  providerRegistrationRef: string | null;
-  createdAt: string;
+  provider_registration_ref: string | null;
+  created: number;
 }
 
 export interface CreateTaxRegistrationParams {
   country: string;
   state?: string | null;
   scheme: TaxRegistrationScheme;
-  registrationNumber?: string | null;
-  /** ISO timestamp; omitted means immediately on approval. */
-  activeFrom?: string;
-  expiresAt?: string | null;
+  registration_number?: string | null;
+  /** Unix seconds; omitted means immediately on approval. */
+  active_from?: number;
+  expires_at?: number | null;
 }
 
 export interface TaxProductCode {
   object: 'tax.product';
   /** The merchant's product or plan reference (a billing `planId`). */
-  productRef: string;
-  taxCode: string;
-  updatedAt: string;
+  product_ref: string;
+  tax_code: string;
+  updated_at: number;
 }
 
 export type TaxLocationEvidenceItem =
   | { type: 'billing_address'; address: TaxAddress }
-  | { type: 'ip_address'; ipAddress: string; country: string; state?: string | null }
+  | { type: 'ip_address'; ip_address: string; country: string; state?: string | null }
   | {
       type: 'payment_method_country' | 'bank_country' | 'sim_country' | 'landline_country';
       country: string;
@@ -133,14 +133,14 @@ export type TaxLocationEvidenceItem =
 
 export interface CreateTaxLocationEvidenceParams {
   /** The customer this evidence is about; for billing, the `storeId`. */
-  customerRef: string;
+  customer_ref: string;
   evidence: TaxLocationEvidenceItem[];
 }
 
 export interface TaxLocationEvidence {
   object: 'tax.location_evidence';
   id: string;
-  customerRef: string;
+  customer_ref: string;
   /** Only `sufficient` evidence can be calculated against. */
   status: 'sufficient' | 'insufficient' | 'conflicting';
   /** The jurisdiction rule applied, e.g. `eu_digital_two_items`. */
@@ -148,8 +148,8 @@ export interface TaxLocationEvidence {
   country: string | null;
   state: string | null;
   items: { type: TaxLocationEvidenceType; country: string; state: string | null }[];
-  observedAt: string;
-  expiresAt: string;
+  observed_at: number;
+  expires_at: number;
   livemode: boolean;
 }
 
@@ -159,42 +159,42 @@ export interface TaxLineItemParams {
   amount: number;
   quantity?: number;
   /** Defaults to the product's tax code, then the merchant's default. */
-  taxCode?: string;
+  tax_code?: string;
   /** Defaults to the merchant's default tax behavior. */
-  taxBehavior?: TaxBehavior;
+  tax_behavior?: TaxBehavior;
 }
 
 export interface CreateTaxCalculationParams {
   currency: string;
-  customerLocationEvidenceId: string;
-  lineItems: TaxLineItemParams[];
+  customer_location_evidence_id: string;
+  line_items: TaxLineItemParams[];
 }
 
 export interface TaxBreakdownEntry {
   country: string;
   state: string | null;
   level: string | null;
-  displayName: string | null;
-  taxType: string | null;
+  display_name: string | null;
+  tax_type: string | null;
   /** Decimal string, e.g. `"20.0"`; null when no tax is imposed. */
-  ratePercentage: string | null;
-  taxableAmount: number;
+  rate_percentage: string | null;
+  taxable_amount: number;
   amount: number;
   inclusive: boolean;
   /** Provider reason, or Peable's own `not_registered` / `product_nontaxable`. */
-  taxabilityReason: string;
+  taxability_reason: string;
 }
 
 export interface TaxCalculationLineItem {
   reference: string;
   quantity: number;
-  taxCode: string;
-  taxBehavior: TaxBehavior;
+  tax_code: string;
+  tax_behavior: TaxBehavior;
   /** As given: includes tax when inclusive. */
   amount: number;
-  amountTax: number;
+  amount_tax: number;
   /** Excluding tax. */
-  amountNet: number;
+  amount_net: number;
   breakdown: TaxBreakdownEntry[];
 }
 
@@ -207,21 +207,21 @@ export interface TaxCalculation {
   id: string;
   currency: string;
   collection: 'collect' | 'not_registered' | 'nontaxable';
-  registrationId: string | null;
+  registration_id: string | null;
   provider: string | null;
-  providerCalculationRef: string | null;
-  customerLocationEvidenceId: string;
+  provider_calculation_ref: string | null;
+  customer_location_evidence_id: string;
   country: string;
   state: string | null;
   /** What the customer pays. */
-  amountTotal: number;
-  amountNet: number;
-  taxAmountExclusive: number;
-  taxAmountInclusive: number;
-  lineItems: TaxCalculationLineItem[];
-  taxDate: string;
-  createdAt: string;
-  expiresAt: string;
+  amount_total: number;
+  amount_net: number;
+  tax_amount_exclusive: number;
+  tax_amount_inclusive: number;
+  line_items: TaxCalculationLineItem[];
+  tax_date: number;
+  created: number;
+  expires_at: number;
   livemode: boolean;
 }
 
@@ -229,10 +229,10 @@ export interface TaxCalculation {
  * the refunded share and NEGATIVE (positive only when it reinstates an earlier
  * reversal, e.g. a refund the bank later failed). */
 export interface TaxTransactionReversal {
-  amountTotal: number;
-  amountNet: number;
-  taxAmount: number;
-  lineItems: TaxCalculationLineItem[];
+  amount_total: number;
+  amount_net: number;
+  tax_amount: number;
+  line_items: TaxCalculationLineItem[];
 }
 
 /** A calculation that was paid. Created by Peable when the payment it priced
@@ -245,13 +245,13 @@ export interface TaxTransaction {
   object: 'tax.transaction';
   id: string;
   type: 'transaction' | 'reversal';
-  calculationId: string;
+  calculation_id: string;
   /** The rail's own object, e.g. the invoice id. */
   reference: string;
   rail: string;
-  committedAt: string;
+  committed_at: number;
   /** The original transaction's id, for a reversal. */
-  reversalOf: string | null;
+  reversal_of: string | null;
   reversal: TaxTransactionReversal | null;
   calculation: TaxCalculation;
 }
@@ -270,51 +270,53 @@ export interface CreateTaxReversalParams {
 export interface TaxTransactionList {
   object: 'list';
   data: TaxTransaction[];
-  hasMore: boolean;
+  has_more: boolean;
 }
 
 export interface ListTaxTransactionsParams {
-  /** Inclusive ISO timestamp. */
-  from: string;
-  /** Exclusive ISO timestamp. */
-  to: string;
+  /** Inclusive, Unix seconds. */
+  from: number;
+  /** Exclusive, Unix seconds. */
+  to: number;
   limit?: number;
-  startingAfter?: string;
+  starting_after?: string;
 }
 
 /** One filing line: totals per jurisdiction, registration, tax type and rate. */
 export interface TaxReportRow {
   country: string;
   state: string | null;
-  registrationId: string | null;
+  registration_id: string | null;
   scheme: TaxRegistrationScheme | null;
   collection: TaxCalculation['collection'];
-  taxType: string | null;
-  ratePercentage: string | null;
+  tax_type: string | null;
+  rate_percentage: string | null;
   currency: string;
   transactions: number;
-  /** Reversals netted into this row; `taxableAmount` and `taxAmount` are net. */
+  /** Reversals netted into this row; `taxable_amount` and `tax_amount` are net. */
   reversals: number;
-  taxableAmount: number;
-  taxAmount: number;
+  taxable_amount: number;
+  tax_amount: number;
 }
 
 export interface TaxReport {
   object: 'tax.report';
-  from: string;
-  to: string;
+  /** Inclusive, Unix seconds. */
+  from: number;
+  /** Exclusive, Unix seconds. */
+  to: number;
   rows: TaxReportRow[];
 }
 
 /** One tax line on a signed final invoice (`include: ['tax_lines']`). */
 export interface BillingInvoiceTaxLine {
-  calculationId: string;
+  calculation_id: string;
   country: string;
   state: string | null;
-  taxType: string | null;
-  ratePercentage: string | null;
-  taxableMinorUnits: number;
-  taxMinorUnits: number;
+  tax_type: string | null;
+  rate_percentage: string | null;
+  taxable_minor_units: number;
+  tax_minor_units: number;
   inclusive: boolean;
-  taxabilityReason: string;
+  taxability_reason: string;
 }

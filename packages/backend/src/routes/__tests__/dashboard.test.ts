@@ -203,16 +203,16 @@ describe('GET /v1/dashboard/applications/:applicationId/merchant', () => {
     expect(res.status).toBe(403);
   });
 
-  test('missing environment query param -> 422', async () => {
+  test('missing environment query param -> 400', async () => {
     const res = await authedFetch(`/v1/dashboard/applications/${APP_ID}/merchant`);
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
   });
 
-  test('an invalid environment value -> 422', async () => {
+  test('an invalid environment value -> 400', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=regtest`,
     );
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
   });
 });
 
@@ -224,13 +224,13 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
   // outcomes depend on execution order (`bun test --randomize`). Never share
   // a registration target across tests in this block.
 
-  test('a development session cannot register a mainnet merchant (422) — test/live firewall', async () => {
+  test('a development session cannot register a mainnet merchant (400) — test/live firewall', async () => {
     const appId = 'app_dash_post_firewall';
     const res = await authedFetch(
       `/v1/dashboard/applications/${appId}/merchant?environment=development`,
       { method: 'POST', body: JSON.stringify({ network: 'mainnet', xpub: MAINNET_XPUB }) },
     );
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     const count = await countMerchantsForApp(appId);
     expect(count).toBe(0);
   });
@@ -279,34 +279,34 @@ describe('POST /v1/dashboard/applications/:applicationId/merchant', () => {
 });
 
 describe('PATCH /v1/dashboard/applications/:applicationId/merchant', () => {
-  test('updates webhookUrl and requiredConfirmations, never xpub', async () => {
+  test('updates webhook_url and required_confirmations, never xpub', async () => {
     const res = await authedFetch(
       `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
       {
         method: 'PATCH',
         body: JSON.stringify({
-          webhookUrl: 'https://merchant.example/rotated-hook',
-          requiredConfirmations: 4,
+          webhook_url: 'https://merchant.example/rotated-hook',
+          required_confirmations: 4,
         }),
       },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
-      webhookUrl: string;
-      requiredConfirmations: number;
+      webhook_url: string;
+      required_confirmations: number;
       xpub: string;
     };
-    expect(body.webhookUrl).toBe('https://merchant.example/rotated-hook');
-    expect(body.requiredConfirmations).toBe(4);
+    expect(body.webhook_url).toBe('https://merchant.example/rotated-hook');
+    expect(body.required_confirmations).toBe(4);
     expect(body.xpub).toBe(XPUB);
   });
 });
 
 describe('avatar ownership through the dashboard (ADR 0043)', () => {
-  async function patchAvatar(avatarFileId: string): Promise<Response> {
+  async function patchAvatar(fileId: string): Promise<Response> {
     return authedFetch(`/v1/dashboard/applications/${APP_ID}/merchant?environment=development`, {
       method: 'PATCH',
-      body: JSON.stringify({ avatarFileId }),
+      body: JSON.stringify({ avatar_file_id: fileId }),
     });
   }
 
@@ -314,13 +314,13 @@ describe('avatar ownership through the dashboard (ADR 0043)', () => {
     for (const fileId of ['file_member', 'file_owner_account', 'file_application']) {
       const res = await patchAvatar(fileId);
       expect(res.status).toBe(200);
-      expect(((await res.json()) as { avatarFileId?: string }).avatarFileId).toBe(fileId);
+      expect(((await res.json()) as { avatar_file_id?: string }).avatar_file_id).toBe(fileId);
     }
   });
 
   test("a member may NOT use somebody else's file or another application's", async () => {
     for (const fileId of ['file_stranger', 'file_other_application']) {
-      expect((await patchAvatar(fileId)).status).toBe(422);
+      expect((await patchAvatar(fileId)).status).toBe(400);
     }
   });
 });

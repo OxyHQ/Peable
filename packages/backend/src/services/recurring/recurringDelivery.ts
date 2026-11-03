@@ -3,6 +3,7 @@ import type { Database } from '../../db/postgres';
 import { merchants, recurringMirrors, recurringObservationOutbox } from '../../db/schema';
 import { enqueueWebhook } from '../../db/webhooks/webhookOutboxRepository';
 import { buildEvent } from '../webhookDispatcher';
+import { toUnix } from '../../lib/time';
 import type { BillingCohort } from '../billing/billingService';
 /** Disabled returns before schema access. Requires pre migration.
  * Relay pointer + public delivery commit together; the private promise already
@@ -50,10 +51,10 @@ export async function relayRecurringObservations(options: {
         if (!merchant.webhookUrl || !merchant.webhookSecret) continue;
         const event = buildEvent('billing.observation.updated', {
           object: 'billing_observation',
-          resourceKind: mirror.kind as 'subscription' | 'invoice',
-          resourceId: mirror.objectRef,
+          resource_kind: mirror.kind as 'subscription' | 'invoice',
+          resource_id: mirror.objectRef,
           revision: observation.revision,
-          observedAt: observation.observedAt.toISOString(),
+          observed_at: toUnix(observation.observedAt),
         });
         const deliveryId = await enqueueWebhook(tx, {
           merchantId: merchant.id,

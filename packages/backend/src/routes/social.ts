@@ -19,8 +19,9 @@ import { reserveNextSocialAddress, getReservedThrough } from '../services/social
 import { getDb } from '../db/postgres';
 import { insertSendAttribution, listAttributionsForViewer } from '../db/social/sendAttribution';
 import { ENRICH_MAX_ADDRESSES, enrichAddresses } from '../services/enrichment';
-import { sendError, wrap } from '../lib/http';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 import { toSocialPaymentSource } from '../lib/serialize';
+import { toUnix } from '../lib/time';
 
 /**
  * Optional, display-only context for one social payment: which app the payer
@@ -60,10 +61,12 @@ const paymentSourceSchema = z
   })
   .strict();
 
-const nextAddressBodySchema = z.object({
-  network: z.enum(['mainnet', 'testnet']),
-  source: paymentSourceSchema.optional(),
-});
+const nextAddressBodySchema = z
+  .object({
+    network: z.enum(['mainnet', 'testnet']),
+    source: paymentSourceSchema.optional(),
+  })
+  .strict();
 
 /** True only when `A` and `B` are the SAME type, not merely assignable to each other. */
 type Exact<A, B> =
@@ -162,12 +165,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const parsed = nextAddressBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const { network, source } = parsed.data;
@@ -188,7 +186,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const { username } = req.params;
       if (!username) {
-        sendError(res, 422, 'invalid_request_error', 'username is required');
+        sendError(res, 400, 'invalid_request_error', 'username is required');
         return;
       }
 
@@ -213,7 +211,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
       }
 
       if (recipient.id === senderUserId) {
-        sendError(res, 422, 'invalid_request_error', 'cannot pay yourself');
+        sendError(res, 400, 'invalid_request_error', 'cannot pay yourself');
         return;
       }
 
@@ -268,12 +266,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const parsed = cursorQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -283,7 +276,10 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         oxyUserId,
         parsed.data.network,
       );
-      const body: SocialReceiveCursorResponse = { reservedThrough, identityPublicKey };
+      const body: SocialReceiveCursorResponse = {
+        reserved_through: reservedThrough,
+        identity_public_key: identityPublicKey,
+      };
       res.status(200).json(body);
     }),
   );
@@ -314,12 +310,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
 
       const parsed = paymentsQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -343,7 +334,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         // and reads into neither. Omitted entirely for a payment nobody gave
         // a context to.
         source: toSocialPaymentSource(row),
-        createdAt: row.createdAt.toISOString(),
+        created: toUnix(row.createdAt),
       }));
 
       const body: SocialPaymentsResponse = { payments };

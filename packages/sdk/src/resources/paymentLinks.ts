@@ -20,7 +20,8 @@ export interface PaymentLinkList {
 export interface UpdatePaymentLinkParams {
   active?: boolean;
   metadata?: Record<string, string>;
-  successUrl?: string;
+  /** `null` removes it. */
+  success_url?: string | null;
 }
 
 export class PaymentLinksResource {

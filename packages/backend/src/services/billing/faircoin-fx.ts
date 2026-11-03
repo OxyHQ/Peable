@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { EXPLORER_BASE_URL } from '@fairco.in/core';
 import { BillingError } from './contracts';
+import { toUnix } from '../../lib/time';
 
 import type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
 export type FaircoinFxQuote = BillingFaircoinFxQuote;
@@ -65,13 +66,13 @@ export async function createExplorerFaircoinQuote(
   const rate = String(price);
   const quote = {
     currency: 'USD' as const,
-    grossMinorUnits,
-    amountBaseUnits: faircoinBaseUnitsForUsd(grossMinorUnits, rate),
-    usdPerFair: rate,
+    gross_minor_units: grossMinorUnits,
+    amount_base_units: faircoinBaseUnitsForUsd(grossMinorUnits, rate),
+    usd_per_fair: rate,
     source,
-    observedAt: new Date(observedAt).toISOString(),
-    quotedAt: now.toISOString(),
-    expiresAt: new Date(+now + lifetimeMs).toISOString(),
+    observed_at: toUnix(new Date(observedAt)),
+    quoted_at: toUnix(now),
+    expires_at: toUnix(new Date(+now + lifetimeMs)),
     rounding: 'ceil_to_base_unit' as const,
   };
   return { id: `fx_${createHash('sha256').update(JSON.stringify(quote)).digest('hex')}`, ...quote };

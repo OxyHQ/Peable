@@ -123,7 +123,7 @@ export function createRestClient(
       deadline?.dispose();
     }
     if (!response.ok) {
-      throw errorFromResponse(response.status, body);
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     }
     // Only explicit No Content can satisfy a void response. A missing or
     // malformed JSON success is indeterminate, not a typed resource. Do not

@@ -29,18 +29,18 @@ export interface RegisterMerchantParams {
   network?: 'mainnet' | 'testnet';
   /** A WATCH-ONLY account extended public key. An `xprv` is refused. */
   xpub?: string;
-  webhookUrl?: string;
-  webhookSecret?: string;
-  requiredConfirmations?: number;
-  displayName?: string;
+  webhook_url?: string;
+  webhook_secret?: string;
+  required_confirmations?: number;
+  display_name?: string;
   /**
    * A bare Oxy file id, never a URL. It must name an active, public or unlisted
    * file owned by your application, by the account that owns it, or by the
-   * user your token acts for — anything else is refused with a 422 (a 503 when
+   * user your token acts for — anything else is refused with a 400 (a 503 when
    * Oxy cannot be asked). If the file is later deleted or taken down, Peable
    * clears it.
    */
-  avatarFileId?: string;
+  avatar_file_id?: string;
   description?: string;
 }
 
@@ -51,12 +51,12 @@ export interface RegisterMerchantParams {
  * can be removed rather than only replaced.
  */
 export interface UpdateMerchantParams {
-  webhookUrl?: string | null;
-  webhookSecret?: string | null;
-  requiredConfirmations?: number;
-  displayName?: string | null;
-  /** Same rule as {@link RegisterMerchantParams.avatarFileId}; `null` removes it. */
-  avatarFileId?: string | null;
+  webhook_url?: string | null;
+  webhook_secret?: string | null;
+  required_confirmations?: number;
+  display_name?: string | null;
+  /** Same rule as {@link RegisterMerchantParams.avatar_file_id}; `null` removes it. */
+  avatar_file_id?: string | null;
   description?: string | null;
 }
 
@@ -93,7 +93,7 @@ export class MerchantsResource {
  * policy for the bytes on the way through; offering half of it would let you
  * submit — finally — a defence missing the receipt it rests on.
  *
- * An unknown key is REFUSED rather than dropped, so a misspelled field is a 422
+ * An unknown key is REFUSED rather than dropped, so a misspelled field is a 400
  * now instead of a missing argument discovered when the dispute is decided.
  */
 /**
@@ -133,7 +133,7 @@ export class DisputesResource {
    * dispute as it stands. Send everything you have the first time.
    *
    * Refused (409) when the dispute is already answered, already decided, or
-   * past `evidenceDueAt`. That last one is checked by the gateway rather than
+   * past `evidence_due_at`. That last one is checked by the gateway rather than
    * by the acquirer, so you learn it was the clock and not your request — a
    * late response is the one failure here that no retry fixes.
    */

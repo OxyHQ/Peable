@@ -6,8 +6,8 @@ import type { MerchantDisplay } from '@peable.to/shared-types';
 export function MerchantIdentity({ merchant }: { merchant: MerchantDisplay }) {
   return (
     <div className="merchant-identity">
-      {merchant.avatarUrl && (
-        <img className="merchant-identity__avatar" src={merchant.avatarUrl} alt="" />
+      {merchant.avatar_url && (
+        <img className="merchant-identity__avatar" src={merchant.avatar_url} alt="" />
       )}
       <div>
         <p className="merchant-identity__name">{merchant.name}</p>

@@ -142,7 +142,7 @@ export interface WebhookDeliveryWithIntentRow extends WebhookDeliveryRow {
  *
  * There is deliberately no id-format guard on the cursor: the ownership-scoped
  * lookup the caller already performs answers the question correctly for any
- * input — an unknown cursor is a 422 whatever shape it had.
+ * input — an unknown cursor is a 400 whatever shape it had.
  */
 export async function listDeliveriesForMerchant(
   db: DatabaseOrTransaction,

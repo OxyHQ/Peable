@@ -9,10 +9,10 @@ test('PaymentLink is assignable from a representative literal', () => {
     network: 'testnet',
     active: true,
     metadata: { orderId: 'o1' },
-    successUrl: 'https://merchant.example/thank-you',
+    success_url: 'https://merchant.example/thank-you',
     url: 'https://checkout.peable.to/l/link_abc',
-    createdAt: '2026-07-19T00:00:00.000Z',
-    updatedAt: '2026-07-19T00:00:00.000Z',
+    created: '2026-07-19T00:00:00.000Z',
+    updated_at: '2026-07-19T00:00:00.000Z',
   };
   expect(link.object).toBe('payment_link');
 });
@@ -24,7 +24,7 @@ test('PublicPaymentLink carries only display-safe fields', () => {
     amount: '150000000',
     network: 'testnet',
     active: true,
-    merchant: { name: 'Acme', avatarUrl: null, description: null },
+    merchant: { name: 'Acme', avatar_url: null, description: null },
   };
   expect(publicLink.merchant.name).toBe('Acme');
 });

@@ -4,40 +4,50 @@ import type {
   BillingFaircoinRenewalConsent,
   BillingFaircoinRenewalRevocation,
 } from '@peable.to/shared-types';
-import { billingIdempotencyKey, billingReference, BillingError } from './contracts';
+import { billingIdempotencyKey, billingReference, BillingError, unixSeconds } from './contracts';
+import { toUnix } from '../../lib/time';
 
 const timestamp = z.string().datetime();
 const positiveBaseUnits = z
   .string()
   .regex(/^[1-9][0-9]*$/)
   .max(80);
+/** The wire consent (`BillingFaircoinRenewalConsent`): snake_case, Unix seconds. */
 export const faircoinRenewalConsentSchema = z
   .object({
-    authorizationId: billingReference,
-    payerAccountId: billingReference,
-    merchantId: billingReference,
-    appId: billingReference,
-    subscriptionId: billingReference,
-    planId: billingReference,
+    authorization_id: billingReference,
+    payer_account_id: billingReference,
+    merchant_id: billingReference,
+    app_id: billingReference,
+    subscription_id: billingReference,
+    plan_id: billingReference,
     mode: z.enum(['test', 'live']),
     environment: z.enum(['development', 'staging', 'production']),
-    explicitConsent: z.literal(true),
-    consentEvidenceId: billingReference,
-    maximumAmountBaseUnits: positiveBaseUnits,
+    explicit_consent: z.literal(true),
+    consent_evidence_id: billingReference,
+    maximum_amount_base_units: positiveBaseUnits,
     interval: z.literal('month'),
-    intervalCount: z.literal(1),
-    startsAt: timestamp,
-    expiresAt: timestamp,
-    acceptedAt: timestamp,
+    interval_count: z.literal(1),
+    starts_at: unixSeconds,
+    expires_at: unixSeconds,
+    accepted_at: unixSeconds,
   })
   .strict()
   .refine(
     (value) =>
-      Date.parse(value.expiresAt) > Date.parse(value.startsAt) &&
-      Date.parse(value.acceptedAt) <= Date.parse(value.startsAt) &&
+      value.expires_at > value.starts_at &&
+      value.accepted_at <= value.starts_at &&
       (value.mode === 'live') === (value.environment === 'production'),
     'Invalid consent period or environment',
   );
+/** The wire revocation (`BillingFaircoinRenewalRevocation`). */
+export const faircoinRenewalRevocationSchema = z
+  .object({
+    authorization_id: billingReference,
+    revoked_at: unixSeconds,
+    revocation_evidence_id: billingReference,
+  })
+  .strict();
 export interface FaircoinRenewalActor {
   payerAccountId: string;
   merchantId: string;
@@ -100,6 +110,18 @@ export interface FaircoinRenewalRepository {
     ) => Promise<{ record: FaircoinRenewalRecord; result: T }>,
   ): Promise<T>;
 }
+/** The actor a consent was given by, for namespacing and ownership checks. */
+export function faircoinRenewalActorOf(
+  consent: BillingFaircoinRenewalConsent,
+): FaircoinRenewalActor {
+  return {
+    payerAccountId: consent.payer_account_id,
+    merchantId: consent.merchant_id,
+    appId: consent.app_id,
+    mode: consent.mode,
+    environment: consent.environment,
+  };
+}
 export function faircoinRenewalNamespace(actor: FaircoinRenewalActor): string {
   return createHash('sha256')
     .update(
@@ -118,9 +140,9 @@ export function assertFaircoinRenewalActor(
   actor: FaircoinRenewalActor,
 ): void {
   if (
-    consent.payerAccountId !== actor.payerAccountId ||
-    consent.merchantId !== actor.merchantId ||
-    consent.appId !== actor.appId ||
+    consent.payer_account_id !== actor.payerAccountId ||
+    consent.merchant_id !== actor.merchantId ||
+    consent.app_id !== actor.appId ||
     consent.mode !== actor.mode ||
     consent.environment !== actor.environment
   )
@@ -131,11 +153,7 @@ export function assertFaircoinRenewalActive(
   revocation: BillingFaircoinRenewalRevocation | null,
   now: Date,
 ): void {
-  if (
-    revocation ||
-    Date.parse(consent.startsAt) > now.getTime() ||
-    Date.parse(consent.expiresAt) <= now.getTime()
-  )
+  if (revocation || consent.starts_at > toUnix(now) || consent.expires_at <= toUnix(now))
     throw new BillingError('identity_conflict');
 }
 export const faircoinRenewalInstructionSchema = z
@@ -163,22 +181,15 @@ export function createFaircoinRenewalAuthorization(options: {
 }) {
   const now = options.now ?? (() => new Date());
   async function revokeWithDispatchAcknowledgement(actor: FaircoinRenewalActor, raw: unknown) {
-    const revocation = z
-      .object({
-        authorizationId: billingReference,
-        revokedAt: timestamp,
-        revocationEvidenceId: billingReference,
-      })
-      .strict()
-      .parse(raw);
+    const revocation = faircoinRenewalRevocationSchema.parse(raw);
     if (
-      Date.parse(revocation.revokedAt) > now().getTime() ||
+      revocation.revoked_at > toUnix(now()) ||
       !(await options.verifyRevocation(revocation, actor))
     )
       throw new BillingError('identity_conflict');
     return options.repository.transaction(
       faircoinRenewalNamespace(actor),
-      revocation.authorizationId,
+      revocation.authorization_id,
       async (record) => {
         if (!record) throw new BillingError('not_found', 404);
         assertFaircoinRenewalActor(record.consent, actor);
@@ -203,14 +214,14 @@ export function createFaircoinRenewalAuthorization(options: {
       const consent = faircoinRenewalConsentSchema.parse(raw);
       assertFaircoinRenewalActor(consent, actor);
       if (
-        Date.parse(consent.acceptedAt) > now().getTime() ||
-        Date.parse(consent.expiresAt) <= now().getTime() ||
+        consent.accepted_at > toUnix(now()) ||
+        consent.expires_at <= toUnix(now()) ||
         !(await options.verifyConsent(consent))
       )
         throw new BillingError('identity_conflict');
       return options.repository.transaction(
         faircoinRenewalNamespace(actor),
-        consent.authorizationId,
+        consent.authorization_id,
         async (record) => {
           if (record) {
             if (
@@ -250,13 +261,14 @@ export function createFaircoinRenewalAuthorization(options: {
           ).getUTCDate();
           nextMonth.setUTCDate(Math.min(start.getUTCDate(), daysInMonth));
           if (
-            instruction.subscriptionId !== record.consent.subscriptionId ||
-            instruction.planId !== record.consent.planId ||
-            BigInt(instruction.amountBaseUnits) > BigInt(record.consent.maximumAmountBaseUnits) ||
-            start.getTime() < Date.parse(record.consent.startsAt) ||
+            instruction.subscriptionId !== record.consent.subscription_id ||
+            instruction.planId !== record.consent.plan_id ||
+            BigInt(instruction.amountBaseUnits) >
+              BigInt(record.consent.maximum_amount_base_units) ||
+            start.getTime() < record.consent.starts_at * 1000 ||
             start.getTime() > now().getTime() ||
             end.getTime() <= now().getTime() ||
-            end.getTime() > Date.parse(record.consent.expiresAt) ||
+            end.getTime() > record.consent.expires_at * 1000 ||
             end.getTime() !== nextMonth.getTime()
           )
             throw new BillingError('identity_conflict');

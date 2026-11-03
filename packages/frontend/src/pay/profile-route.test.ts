@@ -57,7 +57,7 @@ test('web never reaches the send action, signed in or not', () => {
   ).toEqual({ kind: 'web' });
 });
 
-test('never offers to pay yourself — the gateway rejects it with a 422', () => {
+test('never offers to pay yourself — the gateway rejects it with a 400', () => {
   expect(decideProfilePayAction({ ...READY, isSelf: true })).toEqual({ kind: 'self' });
   // True in a browser too, where no wallet could exist.
   expect(decideProfilePayAction({ ...READY, isSelf: true, isWeb: true })).toEqual({

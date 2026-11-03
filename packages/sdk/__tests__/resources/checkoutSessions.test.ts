@@ -21,8 +21,8 @@ describe('CheckoutResource.sessions', () => {
         json: {
           id: 'cs_1',
           object: 'checkout_session',
-          paymentIntentId: 'pi_1',
-          clientSecret: 'pi_1_secret_x',
+          payment_intent_id: 'pi_1',
+          client_secret: 'pi_1_secret_x',
           amount: '100000',
           network: 'testnet',
           metadata: {},
@@ -35,7 +35,7 @@ describe('CheckoutResource.sessions', () => {
     const session = await checkout.sessions.create({ amount: '100000', network: 'testnet' });
 
     expect(session.id).toBe('cs_1');
-    expect(session.clientSecret).toBe('pi_1_secret_x');
+    expect(session.client_secret).toBe('pi_1_secret_x');
     const call = gatewayCallOf(requests);
     expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/checkout_sessions`);

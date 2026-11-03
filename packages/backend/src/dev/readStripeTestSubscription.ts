@@ -37,18 +37,18 @@ async function run() {
     const { evidenceRef: _evidenceRef, ...owner } = cohort;
     const state = await runtime.service.retrieveCheckout(owner, artifact.session.id);
     const invoice =
-      state.subscription && state.initialInvoiceId
+      state.subscription && state.initial_invoice_id
         ? await runtime.service.retrieveInvoiceState(
             owner,
-            state.subscription.providerSubscriptionId,
-            state.initialInvoiceId,
+            state.subscription.provider_subscription_id,
+            state.initial_invoice_id,
           )
         : null;
     console.info(
       JSON.stringify({
         checkout: state.id,
         status: state.status,
-        subscription: state.subscription?.providerSubscriptionId ?? null,
+        subscription: state.subscription?.provider_subscription_id ?? null,
         subscriptionStatus: state.subscription?.status ?? null,
         invoice,
       }),

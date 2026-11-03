@@ -83,7 +83,7 @@ async function run() {
     stage = 'Customers create/read';
     const customer = await runtime.service.ensureCustomer(
       owner,
-      { storeId, storeName: 'Local subscription test', rail: 'stripe' },
+      { store_id: storeId, store_name: 'Local subscription test', rail: 'stripe' },
       `customer-${process.env.PEABLE_TEST_RUN_ID}`,
     );
     stage = 'Checkout Sessions create/read';
@@ -91,12 +91,12 @@ async function run() {
       owner,
       {
         rail: 'stripe',
-        storeId,
-        planId: selected.plan,
-        providerCustomerId: customer.providerCustomerId,
-        providerPriceId: selected.id,
-        trialDays: 0,
-        returnUrl,
+        store_id: storeId,
+        plan_id: selected.plan,
+        provider_customer_id: customer.provider_customer_id,
+        provider_price_id: selected.id,
+        trial_days: 0,
+        return_url: returnUrl,
       },
       `subscription-${interval}-${process.env.PEABLE_TEST_RUN_ID}`,
     );

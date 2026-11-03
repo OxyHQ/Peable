@@ -4,19 +4,19 @@ import { createRestClient } from '../../src/core/client';
 import type { BillingCheckoutOperationRecovery } from '@peable.to/shared-types';
 
 const params = {
-  idempotencyKey: 'checkout:fixture',
-  providerCustomerId: 'cus_fixture',
-  providerPriceId: 'price_fixture',
-  storeId: 'store:fixture',
-  planId: 'plan:fixture',
+  idempotency_key: 'checkout:fixture',
+  provider_customer_id: 'cus_fixture',
+  provider_price_id: 'price_fixture',
+  store_id: 'store:fixture',
+  plan_id: 'plan:fixture',
 };
 const source = {
   ...params,
-  merchantId: 'merch_fixture',
-  appId: 'app_fixture',
+  merchant_id: 'merch_fixture',
+  app_id: 'app_fixture',
   mode: 'test' as const,
   environment: 'development' as const,
-  taxQuoteId: 'quote_fixture',
+  tax_quote_id: 'quote_fixture',
 };
 function resource(reply: unknown, status = 200) {
   const calls: Array<{ url: URL; init: RequestInit }> = [];
@@ -44,7 +44,7 @@ describe('checkout operation recovery official SDK transport', () => {
     const expected: BillingCheckoutOperationRecovery = {
       state: 'succeeded',
       source,
-      checkout: { id: 'cs_test_fixture', expiresAt: '2026-10-01T00:00:00Z' },
+      checkout: { id: 'cs_test_fixture', expires_at: 1790812800 },
     };
     const fixture = resource(expected);
     expect(await fixture.billing.retrieveCheckoutOperation(params)).toEqual(expected);
@@ -53,10 +53,10 @@ describe('checkout operation recovery official SDK transport', () => {
     if (!request) throw new Error('Expected request');
     expect(request.url.pathname).toBe('/v1/billing/checkout_operations/checkout%3Afixture');
     expect(Object.fromEntries(request.url.searchParams)).toEqual({
-      providerCustomerId: params.providerCustomerId,
-      providerPriceId: params.providerPriceId,
-      storeId: params.storeId,
-      planId: params.planId,
+      provider_customer_id: params.provider_customer_id,
+      provider_price_id: params.provider_price_id,
+      store_id: params.store_id,
+      plan_id: params.plan_id,
     });
     expect(request.init.method).toBe('GET');
     expect(request.init.body).toBeUndefined();

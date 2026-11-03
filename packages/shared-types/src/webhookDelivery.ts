@@ -24,7 +24,7 @@ export type WebhookDeliveryStatus = 'pending' | 'delivered' | 'failed' | 'dead';
 export interface WebhookDelivery {
   id: string;
   object: 'webhook_delivery';
-  merchantId: string;
+  merchant_id: string;
   /**
    * The `pi_…` this delivery is about — `null` when the event is not about a
    * payment.
@@ -34,20 +34,20 @@ export interface WebhookDelivery {
    * which is worse than a null: a consumer correlating on it would attach a
    * seller's readiness change to a payment that has nothing to do with it.
    */
-  intentId: string | null;
-  eventId: string;
-  eventType: WebhookEventType;
+  intent_id: string | null;
+  event_id: string;
+  event_type: WebhookEventType;
   url: string;
   attempts: number;
   delivered: boolean;
-  lastStatus: WebhookDeliveryStatus;
+  last_status: WebhookDeliveryStatus;
   /**
    * Why the last attempt did not succeed — operator-facing, never a secret.
    * Absent while pending with no attempts, and after a success.
    */
-  lastError?: string;
-  /** When the next attempt is due, ISO-8601. Absent once the delivery is terminal. */
-  nextAttemptAt?: string;
-  createdAt: string;
-  updatedAt: string;
+  last_error?: string;
+  /** When the next attempt is due, Unix seconds. Absent once the delivery is terminal. */
+  next_attempt_at?: number;
+  created: number;
+  updated_at: number;
 }

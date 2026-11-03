@@ -39,6 +39,7 @@ import type { StripeBillingClient } from './stripeBillingProvider';
 import { billingTaxCheckoutSnapshotSchema, type BillingTaxCheckoutSnapshot } from './tax-checkout';
 import { createVerifiedBillingTaxQuote, type BillingTaxQuoteCalculator } from './tax-quote';
 import type { VerifiedBillingBindings } from './verifiedBindings';
+import { fromUnix } from '../../lib/time';
 
 /** The Stripe events Peable Tax on the card rail acts on. The rail's webhook
  * endpoint must deliver every one of them; boot refuses an endpoint that does
@@ -103,7 +104,7 @@ function billingAddress(address: z.infer<typeof stripeAddress>) {
     // A subdivision Peable Tax cannot read is left out rather than guessed;
     // the jurisdiction's rule then decides whether the rest is enough.
     ...(state && /^[A-Z0-9]{1,3}$/.test(state) ? { state } : {}),
-    ...(text(address.postal_code, 20) ? { postalCode: text(address.postal_code, 20) } : {}),
+    ...(text(address.postal_code, 20) ? { postal_code: text(address.postal_code, 20) } : {}),
     ...(text(address.city, 200) ? { city: text(address.city, 200) } : {}),
     ...(text(address.line1, 200) ? { line1: text(address.line1, 200) } : {}),
     ...(text(address.line2, 200) ? { line2: text(address.line2, 200) } : {}),
@@ -199,17 +200,17 @@ export function createStripeInvoiceTaxRecorder(options: {
     const quote = snapshot.taxQuote.quote;
     if (
       paid.currency !== quote.currency ||
-      paid.amountPaid !== String(quote.grossMinorUnits) ||
-      paid.netAmount !== String(quote.netMinorUnits) ||
-      paid.taxAmount !== String(quote.taxMinorUnits)
+      paid.amount_paid !== String(quote.gross_minor_units) ||
+      paid.net_amount !== String(quote.net_minor_units) ||
+      paid.tax_amount !== String(quote.tax_minor_units)
     )
       throw new BillingError('invalid_provider_response', 502);
     await commitTaxTransaction(db, {
-      calculationPublicId: quote.taxRateEvidenceId,
+      calculationPublicId: quote.tax_rate_evidence_id,
       reference: invoiceRef,
       rail: 'stripe',
-      committedAt: new Date(paid.paidAt),
-      providerPaymentRef: paid.paymentIntentId,
+      committedAt: fromUnix(paid.paid_at),
+      providerPaymentRef: paid.payment_intent_id,
     });
   }
 
@@ -232,8 +233,8 @@ export function createStripeInvoiceTaxRecorder(options: {
         id: z.literal(invoiceRef),
         status: z.literal('draft'),
         currency: z.literal(quote.currency.toLowerCase()),
-        total: z.literal(quote.grossMinorUnits),
-        total_excluding_tax: z.literal(quote.netMinorUnits),
+        total: z.literal(quote.gross_minor_units),
+        total_excluding_tax: z.literal(quote.net_minor_units),
         automatic_tax: z.object({ enabled: z.literal(false) }),
       })
       .safeParse(await client.retrieveInvoice(invoiceRef)).success;
@@ -306,8 +307,8 @@ export function createStripeInvoiceTaxRecorder(options: {
       const checkout = await bindings.retrieveCheckout(owner, operation.providerObjectRef);
       if (
         checkout.status !== 'complete' ||
-        checkout.subscription?.providerSubscriptionId !== subscriptionRef ||
-        checkout.initialInvoiceId !== invoiceRef
+        checkout.subscription?.provider_subscription_id !== subscriptionRef ||
+        checkout.initial_invoice_id !== invoiceRef
       )
         throw new BillingError('reconciliation_required');
       await commitPaid(owner, subscriptionRef, invoiceRef, snapshot);
@@ -340,10 +341,10 @@ export function createStripeInvoiceTaxRecorder(options: {
         if (draft.auto_advance !== false) await hold(invoiceRef);
         const merchant = await findMerchantById(db, owner.merchantId);
         if (!merchant) throw new BillingError('not_found', 404);
-        const storeId = checkoutSnapshot.taxQuote.source.storeId;
+        const storeId = checkoutSnapshot.taxQuote.source.store_id;
         const offer = checkoutSnapshot.offer;
         const evidence = await tax.recordEvidence(merchant, {
-          customerRef: storeId,
+          customer_ref: storeId,
           evidence: await renewalEvidence(draft.customer, subscriptionRef),
         });
         if (evidence.status !== 'sufficient')
@@ -353,10 +354,10 @@ export function createStripeInvoiceTaxRecorder(options: {
           owner,
           merchant.publicId,
           {
-            storeId,
-            planId: offer.planId,
-            providerPriceId: offer.providerPriceId,
-            customerLocationEvidenceId: evidence.id,
+            store_id: storeId,
+            plan_id: offer.planId,
+            provider_price_id: offer.providerPriceId,
+            customer_location_evidence_id: evidence.id,
           },
           now,
         );
@@ -364,8 +365,8 @@ export function createStripeInvoiceTaxRecorder(options: {
         // The renewal sells what the checkout sold, at the same listed price.
         if (
           quote.currency !== offer.currency ||
-          quote.taxTreatment !== offer.taxTreatment ||
-          (offer.taxTreatment === 'inclusive' ? quote.grossMinorUnits : quote.netMinorUnits) !==
+          quote.tax_treatment !== offer.taxTreatment ||
+          (offer.taxTreatment === 'inclusive' ? quote.gross_minor_units : quote.net_minor_units) !==
             offer.grossMinorUnits
         )
           throw new BillingError('identity_conflict');
@@ -402,7 +403,7 @@ export function createStripeInvoiceTaxRecorder(options: {
           })
           .parse(await client.listInvoiceLines(invoiceRef)).data[0];
         if (!line) throw new BillingError('invalid_provider_response', 502);
-        const key = `peable-tax:${invoiceRef}:${quote.taxRateEvidenceId}`;
+        const key = `peable-tax:${invoiceRef}:${quote.tax_rate_evidence_id}`;
         const taxRate = await createFrozenTaxRate(
           { db, client, owner, livemode: deployment.livemode, quote },
           `${key}:tax_rate`,
@@ -421,7 +422,7 @@ export function createStripeInvoiceTaxRecorder(options: {
           .where(
             and(
               eq(taxCalculations.merchantId, owner.merchantId),
-              eq(taxCalculations.publicId, quote.taxRateEvidenceId),
+              eq(taxCalculations.publicId, quote.tax_rate_evidence_id),
             ),
           );
         if (!calculation) throw new BillingError('not_found', 404);
@@ -443,7 +444,7 @@ export function createStripeInvoiceTaxRecorder(options: {
       await client.updateInvoice(
         invoiceRef,
         { auto_advance: true },
-        `peable-tax:${invoiceRef}:${priced.snapshot.taxQuote.quote.taxRateEvidenceId}:release`,
+        `peable-tax:${invoiceRef}:${priced.snapshot.taxQuote.quote.tax_rate_evidence_id}:release`,
       );
       return 'priced';
     },

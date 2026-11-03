@@ -8,6 +8,7 @@ import {
 import { BillingResource } from '../../src/resources/billing';
 import type { RestClient } from '../../src/core/client';
 const keys = generateKeyPairSync('ed25519');
+const unix = (ms: number) => Math.floor(ms / 1000);
 const pinned = { fixture: keys.publicKey.export({ type: 'spki', format: 'pem' }).toString() };
 function fixture() {
   const now = new Date();
@@ -17,67 +18,67 @@ function fixture() {
     environment: 'development' as const,
   };
   const paid: BillingPaidInvoice = {
-    invoiceId: 'in_fixture',
-    lineId: 'il_fixture',
-    paymentIntentId: 'pi_fixture',
-    providerSubscriptionId: 'sub_fixture',
-    providerCustomerId: 'cus_fixture',
-    providerPriceId: 'price_fixture',
-    storeId: 'payer_fixture',
-    planId: 'plan_fixture',
+    invoice_id: 'in_fixture',
+    line_id: 'il_fixture',
+    payment_intent_id: 'pi_fixture',
+    provider_subscription_id: 'sub_fixture',
+    provider_customer_id: 'cus_fixture',
+    provider_price_id: 'price_fixture',
+    store_id: 'payer_fixture',
+    plan_id: 'plan_fixture',
     livemode: false,
     currency: 'USD',
-    amountPaid: '2999',
-    netAmount: '2499',
-    taxAmount: '500',
-    periodStart: '2026-10-01T00:00:00.000Z',
-    periodEnd: '2026-11-01T00:00:00.000Z',
-    paidAt: now.toISOString(),
-    observedAt: now.toISOString(),
+    amount_paid: '2999',
+    net_amount: '2499',
+    tax_amount: '500',
+    period_start: 1790812800,
+    period_end: 1793491200,
+    paid_at: unix(+now),
+    observed_at: unix(+now),
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schemaVersion: 1,
+    schema_version: 2,
     source: {
-      invoiceId: paid.invoiceId,
-      paymentIntentId: paid.paymentIntentId,
-      customerId: paid.providerCustomerId,
-      subscriptionId: paid.providerSubscriptionId,
-      priceId: paid.providerPriceId,
-      planId: paid.planId,
-      merchantId: 'merch_fixture',
-      appId: owner.oxyAppId,
+      invoice_id: paid.invoice_id,
+      payment_intent_id: paid.payment_intent_id,
+      customer_id: paid.provider_customer_id,
+      subscription_id: paid.provider_subscription_id,
+      price_id: paid.provider_price_id,
+      plan_id: paid.plan_id,
+      merchant_id: 'merch_fixture',
+      app_id: owner.oxyAppId,
       mode: 'test',
       environment: owner.environment,
     },
     invoice: {
       platform: 'peable',
       currency: 'USD',
-      grossMinorUnits: 2999,
-      netMinorUnits: 2499,
-      taxMinorUnits: 500,
-      merchantFeeMinorUnits: 0,
-      taxTreatment: 'inclusive',
-      sellerId: 'seller_fixture',
-      invoiceIssuerId: 'issuer_fixture',
-      taxQuoteId: 'tax_quote_fixture',
-      customerLocationEvidenceId: 'location_fixture',
-      taxRateEvidenceId: 'rate_fixture',
+      gross_minor_units: 2999,
+      net_minor_units: 2499,
+      tax_minor_units: 500,
+      merchant_fee_minor_units: 0,
+      tax_treatment: 'inclusive',
+      seller_id: 'seller_fixture',
+      invoice_issuer_id: 'issuer_fixture',
+      tax_quote_id: 'tax_quote_fixture',
+      customer_location_evidence_id: 'location_fixture',
+      tax_rate_evidence_id: 'rate_fixture',
       context: {
-        payerAccountId: paid.storeId,
-        beneficiaryAccountId: paid.storeId,
-        providerSubscriptionId: paid.providerSubscriptionId,
-        offerId: 'offer_fixture',
-        offerVersion: 1,
-        periodStart: paid.periodStart,
-        periodEnd: paid.periodEnd,
+        payer_account_id: paid.store_id,
+        beneficiary_account_id: paid.store_id,
+        provider_subscription_id: paid.provider_subscription_id,
+        offer_id: 'offer_fixture',
+        offer_version: 1,
+        period_start: paid.period_start,
+        period_end: paid.period_end,
         mode: 'test',
         environment: owner.environment,
       },
-      issuedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      issued_at: unix(+now),
+      expires_at: unix(+now + 60_000),
     },
     method: 'card',
-    signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+    signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
   };
   resign(authority);
   return { authority, expected: { owner, merchantPublicId: 'merch_fixture', invoice: paid }, now };
@@ -116,7 +117,7 @@ describe('pinned SDK invoice authority', () => {
     await expect(
       resource.retrieveFinalInvoiceAuthority('sub_another', 'in_fixture'),
     ).rejects.toThrow('verification failed');
-    authority.invoice.grossMinorUnits++;
+    authority.invoice.gross_minor_units++;
     await expect(
       resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture'),
     ).rejects.toThrow('verification failed');
@@ -135,12 +136,12 @@ describe('pinned SDK invoice authority', () => {
       resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture'),
     ).rejects.toThrow('verification failed');
     authority.method = 'faircoin';
-    authority.invoice.faircoinQuote = {
+    authority.invoice.faircoin_quote = {
       id: 'quote_fixture',
-      amountBaseUnits: '1234',
-      quotedAt: new Date(Date.now() - 60_000).toISOString(),
-      expiresAt: new Date(Date.now() - 1).toISOString(),
-      roundingEvidenceId: 'round_fixture',
+      amount_base_units: '1234',
+      quoted_at: unix(Date.now() - 60_000),
+      expires_at: unix(Date.now() - 1_000),
+      rounding_evidence_id: 'round_fixture',
     };
     resign(authority);
     await expect(
@@ -149,7 +150,7 @@ describe('pinned SDK invoice authority', () => {
         'in_fixture',
       ),
     ).rejects.toThrow('verification failed');
-    authority.invoice.faircoinQuote.expiresAt = new Date(Date.now() + 20_000).toISOString();
+    authority.invoice.faircoin_quote.expires_at = unix(Date.now() + 20_000);
     resign(authority);
     expect(
       (
@@ -159,7 +160,9 @@ describe('pinned SDK invoice authority', () => {
         ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')
       ).method,
     ).toBe('faircoin');
-    const unsupported = { ...authority, schemaVersion: 2 };
+    // The ISO-instant schema (version 1) is refused, even when signed.
+    const unsupported = { ...authority, schema_version: 1 as unknown as 2 };
+    resign(unsupported);
     await expect(
       new BillingResource(client(unsupported, requests), pinned).retrieveFinalInvoiceAuthority(
         'sub_fixture',
@@ -172,25 +175,25 @@ describe('pinned SDK invoice authority', () => {
 it('recovers a payment inside its original quote after quote expiry', async () => {
   const { authority, expected, now } = fixture();
   authority.method = 'faircoin';
-  authority.invoice.faircoinQuote = {
+  authority.invoice.faircoin_quote = {
     id: 'quote_old',
-    amountBaseUnits: '1234',
-    quotedAt: new Date(+now - 120_000).toISOString(),
-    expiresAt: new Date(+now - 60_000).toISOString(),
-    roundingEvidenceId: 'round_old',
+    amount_base_units: '1234',
+    quoted_at: unix(+now - 120_000),
+    expires_at: unix(+now - 60_000),
+    rounding_evidence_id: 'round_old',
   };
-  expected.invoice.paidAt = new Date(+now - 90_000).toISOString();
+  expected.invoice.paid_at = unix(+now - 90_000);
   resign(authority);
   const resource = new BillingResource(client(authority, [], expected.invoice), pinned);
   expect((await resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).method).toBe(
     'faircoin',
   );
-  expected.invoice.paidAt = authority.invoice.faircoinQuote.expiresAt;
+  expected.invoice.paid_at = authority.invoice.faircoin_quote.expires_at;
   await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow(
     'verification failed',
   );
-  expected.invoice.paidAt = authority.invoice.faircoinQuote.quotedAt;
-  expected.invoice.paymentIntentId = 'pi_other';
+  expected.invoice.paid_at = authority.invoice.faircoin_quote.quoted_at;
+  expected.invoice.payment_intent_id = 'pi_other';
   await expect(resource.retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture')).rejects.toThrow(
     'verification failed',
   );
@@ -207,7 +210,7 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
       return value as T;
     },
   });
-  // A 0.3.x-shaped authority still verifies, and no query is sent.
+  // Without the option, an authority without lines verifies and no query is sent.
   await new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(
     'sub_fixture',
     'in_fixture',
@@ -221,17 +224,17 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
       { include: ['tax_lines'] },
     ),
   ).rejects.toThrow('verification failed');
-  authority.invoice.taxLines = [
+  authority.invoice.tax_lines = [
     {
-      calculationId: 'taxcalc_fixture',
+      calculation_id: 'taxcalc_fixture',
       country: 'DE',
       state: null,
-      taxType: 'vat',
-      ratePercentage: '19.0',
-      taxableMinorUnits: 2499,
-      taxMinorUnits: 500,
+      tax_type: 'vat',
+      rate_percentage: '19.0',
+      taxable_minor_units: 2499,
+      tax_minor_units: 500,
       inclusive: true,
-      taxabilityReason: 'standard_rated',
+      taxability_reason: 'standard_rated',
     },
   ];
   resign(authority);
@@ -240,10 +243,10 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
     pinned,
   ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture', { include: ['tax_lines'] });
   expect(queries.at(-1)).toEqual({ include: 'tax_lines' });
-  expect(withLines.invoice.taxLines?.[0]?.taxMinorUnits).toBe(500);
+  expect(withLines.invoice.tax_lines?.[0]?.tax_minor_units).toBe(500);
   // Lines that do not add up to the tax are refused even when signed.
-  const line = authority.invoice.taxLines[0];
-  if (line) line.taxMinorUnits = 400;
+  const line = authority.invoice.tax_lines[0];
+  if (line) line.tax_minor_units = 400;
   resign(authority);
   await expect(
     new BillingResource(recording(authority), pinned).retrieveFinalInvoiceAuthority(

@@ -49,7 +49,7 @@ const LINK: PublicPaymentLink = {
   rail: 'faircoin',
   network: 'testnet',
   active: true,
-  merchant: { name: 'Test Merchant', avatarUrl: null, description: null },
+  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
 };
 
 function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
@@ -62,14 +62,14 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     currency: 'FAIR',
     network: 'testnet',
     address: 'TAddressExample1111111111111111111',
-    merchantId: 'merch_1',
+    merchant_id: 'merch_1',
     txid: null,
     confirmations: 0,
-    clientSecret: 'pi_open789_secret',
+    client_secret: 'pi_open789_secret',
     metadata: {},
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 60_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -131,7 +131,7 @@ test('mints a fresh intent once the remembered one is terminal', async () => {
   );
   const terminalIntent = makeIntent({ id: 'pi_settled999', status: 'settled' });
   getPaymentIntentMock.mockImplementation(async () => terminalIntent);
-  const freshIntent = makeIntent({ id: 'pi_fresh456', clientSecret: 'pi_fresh456_secret' });
+  const freshIntent = makeIntent({ id: 'pi_fresh456', client_secret: 'pi_fresh456_secret' });
 
   fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
@@ -164,10 +164,10 @@ test('free FAIR contribution locks the amount and reuses its operation after a l
           ...LINK,
           amount: '0',
           contribution: {
-            organizationId: 'organization',
+            organization_id: 'organization',
             purpose: 'Community garden',
-            amountMode: 'free',
-            expiresAt: null,
+            amount_mode: 'free',
+            expires_at: null,
           },
         });
       if (url.endsWith('/payment_intent')) {
@@ -215,10 +215,10 @@ test('FAIR contribution refuses more than eight decimal places without minting',
         ...LINK,
         amount: '0',
         contribution: {
-          organizationId: 'organization',
+          organization_id: 'organization',
           purpose: 'Garden',
-          amountMode: 'free',
-          expiresAt: null,
+          amount_mode: 'free',
+          expires_at: null,
         },
       }),
     ),

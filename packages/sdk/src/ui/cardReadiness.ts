@@ -8,7 +8,7 @@ export function matchingCardAction(
   return action?.kind === 'client_secret' &&
     action.value &&
     publishableKey &&
-    action.publishableKey === publishableKey
+    action.publishable_key === publishableKey
     ? action
     : undefined;
 }

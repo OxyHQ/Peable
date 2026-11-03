@@ -58,7 +58,7 @@ describe('resolveRail', () => {
   /**
    * Not pedantry: a card intent carrying a network makes the composite
    * reference to `merchants (id, network)` BIND, which ties a card charge to a
-   * chain. Refusing here is a 422; letting it through is a constraint violation
+   * chain. Refusing here is a 400; letting it through is a constraint violation
    * surfacing as a 500.
    */
   test('the card rail refuses a network rather than ignoring it', () => {

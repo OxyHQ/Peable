@@ -3,5 +3,5 @@ import type { CreateBillingCheckoutParams } from '@peable.to/shared-types';
 declare const sdk: Peable;
 declare const base: CreateBillingCheckoutParams;
 declare const quote: BillingTaxQuote;
-const exact: CreateBillingCheckoutParams = { ...base, taxQuote: quote };
+const exact: CreateBillingCheckoutParams = { ...base, tax_quote: quote };
 void sdk.billing.createCheckoutSession(exact, { idempotencyKey: 'personal-checkout:fixture' });

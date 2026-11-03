@@ -97,18 +97,22 @@ function fixture() {
 it('projects exact full paid line with actual provider net/tax and no PII', async () => {
   const f = fixture();
   expect(await readOwnedPaidInvoice(f.client, expected)).toMatchObject({
-    invoiceId: 'in_one',
-    lineId: 'il_one',
-    amountPaid: '2999',
-    netAmount: '2500',
-    taxAmount: '499',
-    storeId: 'payer',
-    planId: 'one@1',
+    invoice_id: 'in_one',
+    line_id: 'il_one',
+    amount_paid: '2999',
+    net_amount: '2500',
+    tax_amount: '499',
+    store_id: 'payer',
+    plan_id: 'one@1',
+    // Stripe's own Unix seconds, carried unchanged.
+    period_start: 1791028800,
+    period_end: 1793707200,
+    paid_at: 1791028800,
   });
   f.invoice.total_excluding_tax = null as unknown as number;
   expect(await readOwnedPaidInvoice(f.client, expected)).toMatchObject({
-    netAmount: null,
-    taxAmount: null,
+    net_amount: null,
+    tax_amount: null,
   });
 });
 it('rejects unrelated customer/subscription/price, partial/prorated/refunded/disputed/unpaid evidence and incomplete pages', async () => {
@@ -154,8 +158,8 @@ it('reads exact captured cash refund totals and keeps the paid-only surface clos
   ];
   expect(await readOwnedInvoiceState(f.client, expected)).toMatchObject({
     state: 'partially_refunded',
-    amountRefunded: '100',
-    chargeId: 'ch_one',
+    amount_refunded: '100',
+    charge_id: 'ch_one',
   });
   await expect(readOwnedPaidInvoice(f.client, expected)).rejects.toThrow();
   must(f.refunds.data[0]).amount = 2999;
@@ -163,7 +167,7 @@ it('reads exact captured cash refund totals and keeps the paid-only surface clos
   f.intent.latest_charge.refunded = true;
   expect(await readOwnedInvoiceState(f.client, expected)).toMatchObject({
     state: 'fully_refunded',
-    amountRefunded: '2999',
+    amount_refunded: '2999',
   });
   f.intent.latest_charge.amount_refunded = 3000;
   await expect(readOwnedInvoiceState(f.client, expected)).rejects.toThrow();

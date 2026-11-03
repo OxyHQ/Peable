@@ -29,7 +29,7 @@ interface List<T> {
  * At checkout: `locationEvidence.create` with what you know of the customer
  * (billing address, payment-method or bank country, the IP address and the
  * country you resolved it to). Language, currency or timezone are not
- * evidence and are refused. Pass the returned id as `customerLocationEvidenceId`
+ * evidence and are refused. Pass the returned id as `customer_location_evidence_id`
  * to `billing.createTaxQuote` or `tax.calculations.create`.
  */
 export class TaxResource {
@@ -55,8 +55,9 @@ export class TaxResource {
     createReversal(id: string, params: CreateTaxReversalParams): Promise<TaxTransaction>;
   };
   readonly reports: {
-    /** Totals per jurisdiction, registration, tax type and rate, for filings. */
-    summary(params: { from: string; to: string }): Promise<TaxReport>;
+    /** Totals per jurisdiction, registration, tax type and rate, for filings.
+     * `from` is inclusive and `to` exclusive, both Unix seconds. */
+    summary(params: { from: number; to: number }): Promise<TaxReport>;
   };
 
   constructor(private readonly client: RestClient) {
@@ -73,7 +74,7 @@ export class TaxResource {
       list: () => client.request('GET', '/v1/tax/products'),
       setTaxCode: (productRef, taxCode) =>
         client.request('PUT', `/v1/tax/products/${encodeURIComponent(productRef)}`, {
-          body: { taxCode },
+          body: { tax_code: taxCode },
         }),
     };
     this.transactions = {
@@ -83,7 +84,7 @@ export class TaxResource {
             from: params.from,
             to: params.to,
             limit: params.limit,
-            startingAfter: params.startingAfter,
+            starting_after: params.starting_after,
           },
         }),
       createReversal: (id, params) =>

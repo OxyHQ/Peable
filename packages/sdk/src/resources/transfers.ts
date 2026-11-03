@@ -10,19 +10,19 @@ import type { RestClient } from '../core/client';
  *    split and must never learn its fee schedule; it records that a stated
  *    amount was moved. A gateway that computed the split would be a second
  *    definition of it.
- * 2. **Your own id is the idempotency.** `externalRef` is your order id, and
+ * 2. **Your own id is the idempotency.** `external_ref` is your order id, and
  *    unlike a header key you cannot lose it — a retried settlement converges on
  *    it rather than paying a seller twice.
  */
 
 export interface CreateTransferParams {
   /** The `pi_…` this settles out of. Must be a SETTLED payment. */
-  paymentIntentId: string;
-  /** Name the seller by exactly one of these. */
-  connectedAccountId?: string;
-  connectedAccountRef?: string;
+  payment_intent_id: string;
+  /** Name the seller by exactly one of these: the `ca_…`, or your own reference. */
+  connected_account_id?: string;
+  connected_account_ref?: string;
   /** YOUR id for what this settles. The idempotency, and it is durable. */
-  externalRef: string;
+  external_ref: string;
   /** Minor units, as a canonical integer string. In the payment's currency. */
   amount: string;
 }
@@ -39,7 +39,7 @@ export interface ReverseTransferParams {
    * the first one to the second request — leaving a seller holding money that
    * had been taken back, with nothing recording that it was asked for.
    */
-  externalRef?: string;
+  external_ref?: string;
 }
 
 export interface TransferList {
@@ -76,7 +76,7 @@ export class TransfersResource {
    * Take some or all of a settlement back.
    *
    * The response carries the transfer AND the reversal leg, so a caller can
-   * tell which operation it is reading: `amountReversed` on the transfer is the
+   * tell which operation it is reading: `amount_reversed` on the transfer is the
    * provider's CUMULATIVE figure, while `reversal` is this one.
    */
   reverse(
@@ -84,12 +84,12 @@ export class TransfersResource {
     params: ReverseTransferParams,
     options: { idempotencyKey?: string } = {},
   ): Promise<TransferWithReversal> {
-    if (params.externalRef === undefined && options.idempotencyKey === undefined) {
+    if (params.external_ref === undefined && options.idempotencyKey === undefined) {
       // Refused HERE rather than at the gateway, because the failure it
       // prevents is silent: without an identity a retry is a second reversal,
       // and a seller loses the amount twice with nothing saying so.
       throw new TypeError(
-        'a reversal needs an identity: pass externalRef, or options.idempotencyKey',
+        'a reversal needs an identity: pass external_ref, or options.idempotencyKey',
       );
     }
     return this.client.request<TransferWithReversal>(

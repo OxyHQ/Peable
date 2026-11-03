@@ -13,6 +13,21 @@ the merchant's **watch-only** xpub. Your server never sees a private key.
 
 ---
 
+## The wire, in one paragraph
+
+Every request and response field is `snake_case`; every instant (`created`,
+`expires_at`, `available_on`, …) is an integer of **Unix seconds**; every amount
+is a base-unit **string**. Lists are `{ object: 'list', data, has_more }` and page
+with `limit` and `starting_after` (the last id you saw). Every response carries a
+`Request-Id` header, and every error is
+`{ error: { type, code?, param?, message, request_id } }` — a well-formed but
+invalid request is a `400`, never a `422`. The SDK passes your params and returns
+objects exactly in that shape; only its own options stay camelCase JavaScript
+(`new Peable({ publicKey, secret })`, `{ idempotencyKey }`, `toleranceSec`).
+The conventions are [ADR 0014](adr/0014-orbit-api-conventions-and-versioning.md).
+
+---
+
 ## 0. Prerequisites (one-time, owner/Console)
 
 For an external customer integration:
@@ -74,13 +89,13 @@ const peable = new Peable({
 const session = await peable.checkout.sessions.create({
   amount:  '250000000',          // 2.5 FAIR
   network: 'testnet',            // 'testnet' | 'mainnet' — start on testnet
-  metadata: { orderId: 'MERCARIA-ORDER-123' },
-  successUrl: 'https://mercaria.example/checkout/success?order=123',
-  cancelUrl:  'https://mercaria.example/cart',
+  metadata: { order_id: 'MERCARIA-ORDER-123' },
+  success_url: 'https://mercaria.example/checkout/success?order=123',
+  cancel_url:  'https://mercaria.example/cart',
 });
 
 // session.url  → redirect the buyer here (checkout.peable.to/c/<id>#cs=…)
-// session.id, session.paymentIntentId, session.clientSecret also returned
+// session.id, session.payment_intent_id, session.client_secret also returned
 return redirect(session.url);
 ```
 
@@ -112,17 +127,18 @@ factory bypasses app permission configuration, never merchant/resource rules.
 
 That's the whole happy path: create → redirect → the hosted page shows amount +
 your merchant identity + a "Pay with Peable" deep link/QR + live status, and
-sends the buyer to `successUrl` on settlement. You confirm fulfillment from the
+sends the buyer to `success_url` on settlement. You confirm fulfillment from the
 **webhook** (§4), never from the redirect alone.
 
 ### Alternative: a raw PaymentIntent (build your own UI)
 
 ```ts
 const intent = await peable.paymentIntents.create(
-  { amount: '250000000', network: 'testnet', metadata: { orderId: '123' } },
+  { amount: '250000000', network: 'testnet', metadata: { order_id: '123' } },
   { idempotencyKey: 'order-123' },   // REQUIRED — safe retries, no double-charge
 );
-// intent.id, intent.clientSecret, intent.address, intent.status, intent.expiresAt
+// intent.id, intent.client_secret, intent.address, intent.status, intent.expires_at
+new Date(intent.expires_at * 1000);              // instants are Unix seconds
 await peable.paymentIntents.retrieve(intent.id);
 await peable.paymentIntents.list({ status: 'settled', limit: 20 });
 await peable.paymentIntents.reject(intent.id);   // cancel an unpaid intent
@@ -145,7 +161,7 @@ Just `redirect(session.url)` (above). Nothing to build.
 
 ### (B) Embed the pay button inline — `@peable.to/sdk/checkout`
 
-Pass the session's/intent's **public `clientSecret`** to the browser (never the
+Pass the session's/intent's **public `client_secret`** to the browser (never the
 service secret):
 
 ```html
@@ -154,7 +170,7 @@ service secret):
   import { PeableCheckout } from '@peable.to/sdk/checkout';
 
   const checkout = PeableCheckout.mount('#peable-button', {
-    clientSecret: 'pi_…_secret_…',   // from the session/intent, safe to expose
+    clientSecret: 'pi_…_secret_…',   // session.client_secret / intent.client_secret
   });
   checkout.on('confirming', () => showSpinner());
   checkout.on('settled',    () => (window.location.href = '/thank-you'));
@@ -165,8 +181,9 @@ service secret):
 
 The button opens `peable://pay?…` on mobile (the buyer's Peable app) or shows a
 QR on desktop, and streams live status over the Gateway socket — **anonymously**,
-no Oxy login required for the buyer. The `clientSecret` is a read + `submit_tx`
-capability only; it can never move funds.
+no Oxy login required for the buyer. The `client_secret` is a read + `submit_tx`
+capability only; it can never move funds. (`clientSecret` is the name of the
+`mount` OPTION, a JavaScript argument; on the wire it is `client_secret`.)
 
 ---
 
@@ -191,7 +208,7 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
   }
 
   switch (event.type) {
-    case 'payment_intent.settled':    fulfillOrder(event.data.object.metadata.orderId); break;
+    case 'payment_intent.settled':    fulfillOrder(event.data.object.metadata.order_id); break;
     case 'payment_intent.confirming': markPending(event.data.object); break;
     case 'payment_intent.failed':
     case 'payment_intent.expired':
@@ -203,7 +220,7 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
 
 `event.data.object` is the full `PaymentIntent` — except for
 `payment_intent.disputed` and `payment_intent.dispute_closed`, which carry a
-`Dispute`. `WebhookEventPayload` in `@peable.to/shared-types` is the total map
+`Dispute`. `event.created` is Unix seconds. `WebhookEventPayload` in `@peable.to/shared-types` is the total map
 of event type to resource, so a handler written against it cannot read the
 wrong shape.
 
@@ -224,8 +241,8 @@ intent, so a handler can tell them apart.
 
 ### `connected_account.updated` — the one event that is not about a payment
 
-Its `data.object` is a `ConnectedAccount`, and its `intentId` on the delivery
-log is `null`. It fires when something a marketplace ACTS on changes about a
+Its `data.object` is a `ConnectedAccount`, and its `payment_intent_id` on the
+delivery log is `null`. It fires when something a marketplace ACTS on changes about a
 seller — payability, either capability, the requirement counts, the disabled
 reasons — and not on every refresh, because a periodic sweep re-reads every
 account whether or not anything moved.
@@ -237,7 +254,7 @@ refusal.
 ```ts
 if (event.type === 'connected_account.updated') {
   const seller = event.data.object;          // ConnectedAccount, not PaymentIntent
-  if (seller.payable) enableCheckoutFor(seller.externalRef);
+  if (seller.payable) enableCheckoutFor(seller.external_ref);
 }
 ```
 
@@ -268,8 +285,8 @@ expires — two prices they can be shown and two payments they can make.
 - **Network** is `'testnet'` or `'mainnet'`. The intent's network must match the
   merchant's registered network (the Gateway rejects a mismatch) — or, for a
   payment on behalf of a seller, the SELLER's network.
-- **`expiresAt` applies only while the payer has not paid.** A FairCoin intent
-  that is `broadcast` or `confirming` never expires; `canExpire` on the intent
+- **`expires_at` applies only while the payer has not paid.** A FairCoin intent
+  that is `broadcast` or `confirming` never expires; `can_expire` on the intent
   says which. Release stock on `payment_intent.expired`, never on the clock.
 
 ## Test vs live
@@ -299,7 +316,23 @@ import {
   PeableError, PeableAuthenticationError, PeableInvalidRequestError,
   PeablePermissionError, PeableApiError, PeableSignatureVerificationError,
 } from '@peable.to/sdk';
+
+try {
+  await peable.refunds.create({ payment_intent_id, external_ref, amount: '0' });
+} catch (err) {
+  if (err instanceof PeableInvalidRequestError) {
+    err.statusCode; // 400
+    err.code;       // 'parameter_invalid' — the specific reason, else the broad type
+    err.param;      // 'amount' — the offending field, in bracket notation
+    err.requestId;  // the response's Request-Id; quote it to Peable support
+  }
+}
 ```
+
+The gateway answers
+`{ "error": { "type": "invalid_request_error", "code": "parameter_invalid", "param": "amount", "message": "…", "request_id": "req_…" } }`;
+`err.requestId` falls back to the `Request-Id` header when a refusal comes from
+the Oxy auth layer, whose body has no `request_id`.
 
 ---
 
@@ -310,33 +343,33 @@ provider's sandbox** — see the roadmap's four-state table before depending on
 them in production.
 
 ```ts
-await peable.connectedAccounts.create({ externalRef, country, businessType });
-await peable.transfers.create({ paymentIntentId, connectedAccountRef, externalRef, amount });
-await peable.transfers.reverse(transferId, { amount, externalRef });   // identity required
-await peable.refunds.create({ paymentIntentId, externalRef, amount });
+await peable.connectedAccounts.create({ external_ref, country, business_type });
+await peable.transfers.create({ payment_intent_id, connected_account_ref, external_ref, amount });
+await peable.transfers.reverse(transferId, { amount, external_ref });   // identity required
+await peable.refunds.create({ payment_intent_id, external_ref, amount });
 await peable.disputes.listForPaymentIntent(paymentIntentId);
 ```
 
 Three things that are easy to get wrong and expensive:
 
-- **`externalRef` is YOUR id and it is the idempotency**, on all three. Unlike a
+- **`external_ref` is YOUR id and it is the idempotency**, on all three. Unlike a
   header key you cannot lose it, so a retry after a timeout converges rather
   than paying a seller — or a payer — twice. A reversal needs one too: two
   reversals of one settlement for the same amount are two operations, and an
   amount is not an identity.
 - **A refund's `status` is not always `succeeded`.** A provider can report one
   `pending`, and a bank can reject it days later. Read `status`, and expect a
-  later event to move it. `remainingRefundable` on the list already reserves
+  later event to move it. `remaining_refundable` on the list already reserves
   pending refunds for you.
-- **A transfer's `amountReversed` is CUMULATIVE**, from the provider — not the
+- **A transfer's `amount_reversed` is CUMULATIVE**, from the provider — not the
   sum of the reversals you made, which may not be all of them.
 
-### Responder a una disputa
+### Answering a dispute
 
 ```ts
 await peable.disputes.submitEvidence(disputeId, {
-  uncategorizedText: 'Collected in person on the 3rd.',
-  shippingTrackingNumber: 'TRACK-1',
+  uncategorized_text: 'Collected in person on the 3rd.',
+  shipping_tracking_number: 'TRACK-1',
 });
 ```
 
@@ -345,20 +378,20 @@ revised and a second call answers 200 with the dispute as it stands rather than
 sending a second response. Send everything you have the first time.
 
 Text only — **file attachments are not supported**. An unknown field name is
-refused (422) rather than dropped, so a misspelling is an error now instead of a
-missing argument discovered when the dispute is decided. A response after
-`evidenceDueAt` is refused by the gateway (409), so you learn it was the clock
-and not your request.
+refused (400, with `param` naming it) rather than dropped, so a misspelling is an
+error now instead of a missing argument discovered when the dispute is decided.
+A response after `evidence_due_at` is refused by the gateway (409), so you learn
+it was the clock and not your request.
 
 Peable stores **none** of the evidence. It is forwarded to the acquirer and
-forgotten; `evidenceSubmittedAt` on the dispute records that you responded and
+forgotten; `evidence_submitted_at` on the dispute records that you responded and
 when.
 
-### Cuánto quedó realmente — `settlement`
+### What you actually kept — `settlement`
 
 ```ts
 const s = await peable.refunds.settlement(paymentIntentId);
-// { status: 'available' | 'pending' | 'unknown', gross, fee, net, currency, availableOn, exchangeRate }
+// { status: 'available' | 'pending' | 'unknown', gross, fee, net, currency, available_on, exchange_rate }
 ```
 
 **A missing figure is `null` with a `status`, never `0`.** `unknown` means there
@@ -383,18 +416,19 @@ At checkout, record where the customer is and calculate:
 
 ```ts
 const evidence = await peable.tax.locationEvidence.create({
-  customerRef: storeId, // the billing storeId
+  customer_ref: storeId, // the billing store_id
   evidence: [
-    { type: 'billing_address', address: { country: 'DE', postalCode: '10115' } },
-    { type: 'ip_address', ipAddress: clientIp, country: geoCountry },
+    { type: 'billing_address', address: { country: 'DE', postal_code: '10115' } },
+    { type: 'ip_address', ip_address: clientIp, country: geoCountry },
   ],
 });
 // evidence.status: 'sufficient' | 'insufficient' | 'conflicting'
 const quote = await peable.billing.createTaxQuote({
-  storeId,
-  planId,
-  customerLocationEvidenceId: evidence.id,
+  store_id: storeId,
+  plan_id: planId,
+  customer_location_evidence_id: evidence.id,
 });
+// quote.schema_version === 2; quote.quote.expires_at is Unix seconds
 ```
 
 - EU and UK customers need two agreeing kinds of evidence; US and Canadian
@@ -403,8 +437,8 @@ const quote = await peable.billing.createTaxQuote({
 - Not registered where the customer is: zero tax, `collection:
   "not_registered"`, recorded. Registered but the provider cannot answer: the
   request fails (`tax_calculation_unavailable`) — never zero.
-- `peable.tax.calculations.create({ currency, customerLocationEvidenceId,
-  lineItems })` prices anything else (inclusive or exclusive); the answer is
+- `peable.tax.calculations.create({ currency, customer_location_evidence_id,
+  line_items })` prices anything else (inclusive or exclusive); the answer is
   frozen and retrievable by id.
 - `peable.tax.products.setTaxCode(planId, 'txcd_10103000')` sets a product tax
   code (codes: `peable.tax.listCodes()`).
@@ -412,7 +446,7 @@ const quote = await peable.billing.createTaxQuote({
   returns the signed invoice with its tax lines inside the signature.
 - On the card rail (`rail: 'stripe'`, configured with
   `taxQuoteAdapterRef: "peable_tax"`) pass the quote to
-  `billing.createCheckoutSession({ …, taxQuote })`: Stripe Checkout charges
+  `billing.createCheckoutSession({ …, tax_quote })`: Stripe Checkout charges
   exactly the quoted total, Stripe Tax stays off, and the paid invoice is
   recorded as a tax transaction (ADR 0012). A card quote stands two hours; the
   Checkout needs at least 31 minutes of it left. Each renewal is repriced by
@@ -425,8 +459,9 @@ const quote = await peable.billing.createTaxQuote({
   amount? })` (`amount` = gross refunded; omitted = the rest). Reversals list as
   `type: 'reversal'` transactions naming the sale they reverse.
 - `peable.tax.transactions.list({ from, to })` and
-  `peable.tax.reports.summary({ from, to })` (or `GET
-  /v1/tax/reports/summary?format=csv`) are the filing export; report rows are
+  `peable.tax.reports.summary({ from, to })` (`from` inclusive, `to` exclusive,
+  both Unix seconds; or `GET /v1/tax/reports/summary?format=csv`) are the filing
+  export; report rows are
   net of reversals and count them in `reversals`.
 
 ## Connect for FairCoin — paying sellers in their own wallets
@@ -436,22 +471,22 @@ The walkthrough is [Connect for FairCoin](connect-faircoin.md); the decisions ar
 
 | Method + path | Auth | What |
 |---|---|---|
-| `POST /v1/connected_accounts` | service, `payments:write` | Open a seller. Body: `externalRef`; card half `country` + `businessType`; FairCoin half `faircoin: { network, oxyUserId }`. At least one half. Converges on `externalRef` (201 new / 200 existing) and adds a missing half. **No `xpub`** — a 422 |
-| `GET /v1/connected_accounts`, `/:id`, `/by_ref/:externalRef` | service, `payments:read` | Read sellers. `rails`, `faircoin: { network, status: 'pending'\|'active', oxyUserId, registeredAt }`; the seller's `xpub` is never returned |
-| `POST /v1/connected_accounts/:id/account_links` | service, `payments:write` | `{ rail: 'faircoin', returnUrl, refreshUrl }` → `{ url, expiresAt }`: Peable's own onboarding page, one use, one hour. `rail` defaults to `card` (the provider's KYC) |
-| `GET /v1/connect/onboarding/:token` | **Oxy user** (the seller) | What the link asks: platform display, network, `expiresAt`, `returnUrl`. 403 for any user but the account's `oxyUserId`; 410 (with `refreshUrl`) once expired or used |
-| `POST /v1/connect/onboarding/:token/faircoin` | **Oxy user** (the seller) | `{ xpub }` — the seller's watch-only ACCOUNT key. Refuses a private key / wrong network (422), a key already in use or an already-registered seller (409). Emits `connected_account.updated` |
-| `POST /v1/payment_intents`, `POST /v1/checkout_sessions` | service, `payments:write` | `connectedAccount: 'ca_…'` pays that seller: FairCoin only, address from the seller's key, 409 `account_not_ready` until they register |
+| `POST /v1/connected_accounts` | service, `payments:write` | Open a seller. Body: `external_ref`; card half `country` + `business_type`; FairCoin half `faircoin: { network, oxy_user_id }`. At least one half. Converges on `external_ref` (201 new / 200 existing) and adds a missing half. **No `xpub`** — a 400 |
+| `GET /v1/connected_accounts`, `/:id`, `/by_ref/:external_ref` | service, `payments:read` | Read sellers. `rails`, `faircoin: { network, status: 'pending'\|'active', oxy_user_id, registered_at }`; the seller's `xpub` is never returned |
+| `POST /v1/connected_accounts/:id/account_links` | service, `payments:write` | `{ rail: 'faircoin', return_url, refresh_url }` → `{ object: 'account_link', url, expires_at }`: Peable's own onboarding page, one use, one hour. `rail` defaults to `card` (the provider's KYC) |
+| `GET /v1/connect/onboarding/:token` | **Oxy user** (the seller) | What the link asks: platform display, network, `expires_at`, `return_url`. 403 for any user but the account's `oxy_user_id`; 410 (with `error.refresh_url`) once expired or used |
+| `POST /v1/connect/onboarding/:token/faircoin` | **Oxy user** (the seller) | `{ xpub }` — the seller's watch-only ACCOUNT key. Refuses a private key / wrong network (400 `watch_only_violation`), a key already in use or an already-registered seller (409). Emits `connected_account.updated` |
+| `POST /v1/payment_intents`, `POST /v1/checkout_sessions` | service, `payments:write` | `connected_account: 'ca_…'` pays that seller: FairCoin only, address from the seller's key, 409 `account_not_ready` until they register |
 | `GET /v1/payment_intents?connected_account=ca_…` | service, `payments:read` | One seller's payments |
 
-On the wire, additive and optional in the published types: `PaymentIntent.connectedAccountId`,
-`PaymentIntent.canExpire`, `CheckoutSession.connectedAccountId`, `WebhookEvent.account`.
+On the wire, optional in the published types: `PaymentIntent.connected_account_id`,
+`PaymentIntent.can_expire`, `CheckoutSession.connected_account_id`, `WebhookEvent.account`.
 `ConnectedAccount.country` is now `string | null` (a FairCoin-only seller has
 none) and `ConnectedAccount.rails` / `.faircoin` are new.
 
 SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ account, rail, … })`,
-`paymentIntents.create({ …, connectedAccount })`, `checkout.sessions.create({ …, connectedAccount })`,
-`paymentIntents.list({ connected_account })`, and `canExpire` / `EXPIRABLE_STATUSES`.
+`paymentIntents.create({ …, connected_account })`, `checkout.sessions.create({ …, connected_account })`,
+`paymentIntents.list({ connected_account })`, and `can_expire` / `EXPIRABLE_STATUSES`.
 
 ## Mercaria integration checklist
 
@@ -476,12 +511,14 @@ and the active application must belong to that organization. Peable stores no
 membership copy. Register the application's existing watch-only FairCoin merchant
 first. The merchant fixes the network; the contribution amount is always FAIR.
 
-`create(scope, { purpose, amountMode: 'fixed', amount: '100000000', currency:
-'FAIR' }, operationUuid)` creates a one-FAIR link. For `amountMode: 'free'`, omit
+`create(scope, { purpose, amount_mode: 'fixed', amount: '100000000', currency:
+'FAIR' }, operationUuid)` creates a one-FAIR link. For `amount_mode: 'free'`, omit
 `amount`. Amounts are canonical positive integers in 10^-8 FAIR units. Optional
-`expiresAt` is UTC. Purpose, amount policy and organization are immutable; use
-`setActive` to withdraw a link. `list` / `iterate` and `collections` return only
-that organization's contribution records, with bounded, scope-bound cursors.
+`expires_at` is Unix seconds. Purpose, amount policy and organization are
+immutable; use `setActive` to withdraw a link. `list` and `collections` return
+only that organization's contribution records as `{ object: 'list', data,
+has_more }`, paged with `{ limit, starting_after }` (the last id of the previous
+page; default 10, at most 100); `iterate` walks every page.
 The app's Settings → Organization contributions screen uses this SDK.
 
 Payers open the existing anonymous `https://checkout.peable.to/l/<id>` page.
@@ -493,7 +530,7 @@ checkout; signing remains in the payer's existing wallet. The gateway only
 reserves public receive addresses and observes reported transactions through the
 existing Explorer/settlement watcher. It never obtains spending keys.
 
-Collections report payment states and a `refundCapability` of
+Collections report payment states and a `refund_capability` of
 `unsupported_non_custodial`. The existing gateway cannot sign or verify FairCoin
 refunds; an empty refund list does **not** mean no independent wallet transfer
 occurred. This phase adds no refund-signing protocol, recurring contributions,

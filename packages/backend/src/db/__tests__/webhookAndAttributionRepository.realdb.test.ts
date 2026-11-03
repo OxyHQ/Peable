@@ -437,7 +437,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
     /**
      * A ref means something only inside the app that minted it. The route refuses
-     * the pair with a 422, but the CHECK is what makes the state unreachable for
+     * the pair with a 400, but the CHECK is what makes the state unreachable for
      * a writer that is not the route — which is the only guarantee a reader of
      * this table can rely on.
      */

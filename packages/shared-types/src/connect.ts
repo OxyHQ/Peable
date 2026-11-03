@@ -11,15 +11,15 @@ import type { NetworkType } from './network';
 export interface ConnectOnboarding {
   object: 'connect_onboarding';
   /** The `ca_…` being onboarded. */
-  accountId: string;
+  account_id: string;
   /** Who is asking — the PLATFORM's public display, as a payer would see it. */
   platform: MerchantDisplay;
   /** The chain the seller will be paid on. Their key must be for this network. */
   network: NetworkType;
   /** When this link stops working. */
-  expiresAt: string;
+  expires_at: number;
   /** Where to send the seller once the key is registered. */
-  returnUrl: string;
+  return_url: string;
 }
 
 /** `POST /v1/connect/onboarding/:token/faircoin` — the seller's watch-only ACCOUNT xpub. */
@@ -31,9 +31,9 @@ export interface RegisterFaircoinKeyParams {
 /** The answer to a successful registration. */
 export interface ConnectOnboardingComplete {
   object: 'connect_onboarding';
-  accountId: string;
+  account_id: string;
   status: 'active';
-  returnUrl: string;
+  return_url: string;
 }
 
 /**
@@ -45,5 +45,5 @@ export interface ConnectOnboardingComplete {
 export interface AccountLink {
   object: 'account_link';
   url: string;
-  expiresAt: string;
+  expires_at: number;
 }

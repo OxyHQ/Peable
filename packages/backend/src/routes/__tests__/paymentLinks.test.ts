@@ -44,7 +44,7 @@ interface PaymentLinkResponse {
   network: string;
   active: boolean;
   metadata: Record<string, string>;
-  successUrl?: string;
+  success_url?: string;
   url: string;
   error?: { type: string; message: string };
 }
@@ -57,7 +57,7 @@ interface PublicPaymentLinkResponse {
   rail: string;
   network: string;
   active: boolean;
-  merchant: { name: string; avatarUrl: string | null; description: string | null };
+  merchant: { name: string; avatar_url: string | null; description: string | null };
   error?: { type: string; message: string };
 }
 
@@ -67,7 +67,7 @@ interface IntentResponse {
   amount: string;
   network: string;
   address: string;
-  merchantId: string;
+  merchant_id: string;
   metadata: Record<string, string>;
   client_secret?: string;
   error?: { type: string; message: string };
@@ -142,7 +142,7 @@ describe('POST /v1/payment_links', () => {
         amount: '200000000',
         network: 'testnet',
         metadata: { sku: 'sku_1' },
-        successUrl: 'https://merchant.example/thanks',
+        success_url: 'https://merchant.example/thanks',
       }),
     });
     expect(res.status).toBe(201);
@@ -152,17 +152,17 @@ describe('POST /v1/payment_links', () => {
     expect(body.amount).toBe('200000000');
     expect(body.active).toBe(true);
     expect(body.metadata).toEqual({ sku: 'sku_1' });
-    expect(body.successUrl).toBe('https://merchant.example/thanks');
+    expect(body.success_url).toBe('https://merchant.example/thanks');
     expect(body.url).toBe(`https://checkout.peable.to/l/${body.id}`);
   });
 
-  test("a network that doesn't match the merchant's configured network -> 422", async () => {
+  test("a network that doesn't match the merchant's configured network -> 400", async () => {
     const res = await fetch(`${baseUrl}/v1/payment_links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: '100000000', network: 'mainnet' }),
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     const body = await readJson<PaymentLinkResponse>(res);
     expect(body.error?.type).toBe('invalid_request_error');
   });
@@ -263,7 +263,7 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
     expect(patched.amount).toBe(created.amount);
   });
 
-  test('PATCH ignores amount/network even if sent (whitelist, not just unvalidated passthrough)', async () => {
+  test('PATCH refuses amount/network (a whitelist, never a passthrough) and changes nothing', async () => {
     const createRes = await fetch(`${baseUrl}/v1/payment_links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -276,8 +276,11 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: '999999999', network: 'mainnet' }),
     });
-    expect(patchRes.status).toBe(200);
-    const patched = await readJson<PaymentLinkResponse>(patchRes);
+    expect(patchRes.status).toBe(400);
+    expect(((await patchRes.json()) as { error: { param?: string } }).error.param).toBe('amount');
+    const patched = await readJson<PaymentLinkResponse>(
+      await fetch(`${baseUrl}/v1/payment_links/${created.id}`),
+    );
     expect(patched.amount).toBe('77000000');
     expect(patched.network).toBe('testnet');
   });
@@ -307,7 +310,7 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
 });
 
 describe('GET /v1/payment_links/:id/public', () => {
-  test('returns merchant display, never metadata/successUrl/internal ids', async () => {
+  test('returns merchant display, never metadata/success_url/internal ids', async () => {
     const link = await seedLink(merchant, {
       publicId: 'link_public_display',
       amount: '300000000',
@@ -333,12 +336,12 @@ describe('GET /v1/payment_links/:id/public', () => {
       active: true,
       merchant: {
         name: 'Paylinks Co',
-        avatarUrl: null,
+        avatar_url: null,
         description: null,
       },
     });
     expect(body).not.toHaveProperty('metadata');
-    expect(body).not.toHaveProperty('successUrl');
+    expect(body).not.toHaveProperty('success_url');
   });
 
   test('an inactive link still resolves (200, active:false) so the page can show a disabled state', async () => {
@@ -379,13 +382,13 @@ describe('POST /v1/payment_links/:id/payment_intent', () => {
       headers: { 'Content-Type': 'application/json' },
       // A public caller may never override amount/network/merchant — these
       // must be silently ignored, not merely rejected.
-      body: JSON.stringify({ amount: '1', network: 'mainnet', merchantId: 'merch_other' }),
+      body: JSON.stringify({ amount: '1', network: 'mainnet', merchant_id: 'merch_other' }),
     });
     expect(res.status).toBe(201);
     const body = await readJson<IntentResponse>(res);
     expect(body.amount).toBe('123000000');
     expect(body.network).toBe('testnet');
-    expect(body.merchantId).toBe(merchantId);
+    expect(body.merchant_id).toBe(merchantId);
     expect(body.metadata).toEqual({ orderId: 'o_mint' });
     expect(body.status).toBe('created');
     expect(typeof body.address).toBe('string');
@@ -413,7 +416,7 @@ describe('POST /v1/payment_links/:id/payment_intent', () => {
     expect(first.id).not.toBe(second.id);
   });
 
-  test('an inactive link -> 422, mints nothing', async () => {
+  test('an inactive link -> 400, mints nothing', async () => {
     const link = await seedLink(merchant, {
       publicId: 'link_mint_inactive',
       amount: '5000000',
@@ -428,7 +431,7 @@ describe('POST /v1/payment_links/:id/payment_intent', () => {
     const res = await fetch(`${baseUrl}/v1/payment_links/${link.publicId}/payment_intent`, {
       method: 'POST',
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     const after = await countIntentsForMerchant(merchantId);
     expect(after).toBe(before);
   });

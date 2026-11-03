@@ -52,12 +52,12 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
     void (async () => {
       try {
         const [action, factory] = await Promise.all([
-          getClientAction(intent.id, intent.clientSecret),
+          getClientAction(intent.id, intent.client_secret),
           loadProviderSdk(),
         ]);
         if (cancelled) return;
 
-        if (action.kind !== 'client_secret' || !action.publishableKey) {
+        if (action.kind !== 'client_secret' || !action.publishable_key) {
           // A redirect-style action, or a deployment with no publishable key
           // configured. Neither is something this component can render, and
           // saying so beats mounting an empty box.
@@ -66,7 +66,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
           return;
         }
 
-        const sdk = factory(action.publishableKey);
+        const sdk = factory(action.publishable_key);
         const elements = sdk.elements({ clientSecret: action.value });
         const element = elements.create('payment');
         if (!mountRef.current) return;
@@ -95,7 +95,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
       elementsRef.current = null;
       sdkRef.current = null;
     };
-  }, [intent.id, intent.clientSecret]);
+  }, [intent.id, intent.client_secret]);
 
   async function confirm(): Promise<void> {
     const sdk = sdkRef.current;

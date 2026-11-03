@@ -5,6 +5,6 @@ export interface MerchantDisplay {
   /** `Merchant.displayName`, or a neutral fallback when unset. */
   name: string;
   /** Resolved server-side via the canonical media chokepoint; `null` when the merchant has no avatar. */
-  avatarUrl: string | null;
+  avatar_url: string | null;
   description: string | null;
 }

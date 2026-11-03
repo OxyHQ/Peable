@@ -156,7 +156,7 @@ export async function getMyPayments(network: NetworkType): Promise<SocialPayment
  * Why a seller's FairCoin onboarding was refused (ADR 0012 D3), by the
  * Gateway's status: 404 unknown link, 410 expired or already used, 403 signed
  * in as someone other than the seller the link names, 409 already registered
- * or the key is in use elsewhere, 422 not a watch-only key for this network.
+ * or the key is in use elsewhere, 400 not a watch-only key for this network.
  */
 export class ConnectOnboardingError extends Error {
   constructor(readonly status: number) {

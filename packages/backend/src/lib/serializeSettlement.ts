@@ -29,6 +29,7 @@ import {
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
+import { toUnix, toUnixOrNull } from './time';
 
 /** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
 export type ConnectedAccountDTO = ConnectedAccount;
@@ -48,29 +49,29 @@ export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccoun
   return {
     id: row.publicId,
     object: 'connected_account',
-    externalRef: row.externalRef,
+    external_ref: row.externalRef,
     rails,
     faircoin: toFaircoinHalf(row),
     country: row.country,
-    defaultCurrency: row.defaultCurrency,
+    default_currency: row.defaultCurrency,
     // Both halves, and `transfers` is the one that actually gates a settlement:
     // an account with payouts enabled but no transfers capability cannot
     // receive one, and the reverse cannot pay it out.
     payable: row.payoutsEnabled && row.transfersCapability === 'active',
-    payoutsEnabled: row.payoutsEnabled,
-    chargesEnabled: row.chargesEnabled,
-    transfersCapability: row.transfersCapability,
-    cardPaymentsCapability: row.cardPaymentsCapability,
+    payouts_enabled: row.payoutsEnabled,
+    charges_enabled: row.chargesEnabled,
+    transfers_capability: row.transfersCapability,
+    card_payments_capability: row.cardPaymentsCapability,
     requirements: {
-      currentlyDue: row.requirementsCurrentlyDue,
-      eventuallyDue: row.requirementsEventuallyDue,
-      pastDue: row.requirementsPastDue,
-      pendingVerification: row.requirementsPendingVerification,
+      currently_due: row.requirementsCurrentlyDue,
+      eventually_due: row.requirementsEventuallyDue,
+      past_due: row.requirementsPastDue,
+      pending_verification: row.requirementsPendingVerification,
     },
-    disabledReasonCodes: row.disabledReasonCodes,
-    lastSyncedAt: row.lastSyncedAt?.toISOString() ?? null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    disabled_reason_codes: row.disabledReasonCodes,
+    last_synced_at: toUnixOrNull(row.lastSyncedAt),
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }
 
@@ -81,8 +82,8 @@ function toFaircoinHalf(row: ConnectedAccountRow): ConnectedAccountFaircoin | nu
   return {
     network: row.network,
     status,
-    oxyUserId: row.faircoinOxyUserId,
-    registeredAt: row.faircoinRegisteredAt?.toISOString() ?? null,
+    oxy_user_id: row.faircoinOxyUserId,
+    registered_at: toUnixOrNull(row.faircoinRegisteredAt),
   };
 }
 
@@ -106,15 +107,15 @@ export function toTransferDTO(
   return {
     id: row.publicId,
     object: 'transfer',
-    externalRef: row.externalRef,
-    connectedAccountId: connectedAccountPublicId,
-    paymentIntentId: paymentIntentPublicId,
+    external_ref: row.externalRef,
+    connected_account_id: connectedAccountPublicId,
+    payment_intent_id: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
-    amountReversed: row.amountReversed,
+    amount_reversed: row.amountReversed,
     status: row.status,
-    failureMessage: row.failureMessage,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    failure_message: row.failureMessage,
+    created: toUnix(row.createdAt),
+    updated_at: toUnix(row.updatedAt),
   };
 }

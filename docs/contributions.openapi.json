@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Peable organization contributions",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "description": "One-off links. Human Oxy session for management; existing /v1/payment_links/{id}/public and /payment_intent remain anonymous. Fixed/free amounts use FAIR base units (8 decimals); the registered merchant determines the network. Refunds cannot be created by the watch-only gateway. No recurring billing."
   },
   "servers": [
@@ -76,7 +76,7 @@
                     "minLength": 1,
                     "maxLength": 500
                   },
-                  "amountMode": {
+                  "amount_mode": {
                     "type": "string",
                     "enum": ["fixed", "free"]
                   },
@@ -88,12 +88,12 @@
                     "type": "string",
                     "const": "FAIR"
                   },
-                  "expiresAt": {
+                  "expires_at": {
                     "anyOf": [
                       {
-                        "type": "string",
-                        "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 9007199254740991
                       },
                       {
                         "type": "null"
@@ -101,7 +101,7 @@
                     ]
                   }
                 },
-                "required": ["purpose", "amountMode", "currency"],
+                "required": ["purpose", "amount_mode", "currency"],
                 "additionalProperties": false
               }
             }
@@ -110,6 +110,14 @@
         "responses": {
           "201": {
             "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -118,6 +126,10 @@
                   "properties": {
                     "id": {
                       "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "payment_link"
                     },
                     "amount": {
                       "type": "string"
@@ -140,7 +152,7 @@
                     "contribution": {
                       "type": "object",
                       "properties": {
-                        "organizationId": {
+                        "organization_id": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
@@ -150,16 +162,16 @@
                           "minLength": 1,
                           "maxLength": 500
                         },
-                        "amountMode": {
+                        "amount_mode": {
                           "type": "string",
                           "enum": ["fixed", "free"]
                         },
-                        "expiresAt": {
+                        "expires_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             },
                             {
                               "type": "null"
@@ -167,24 +179,25 @@
                           ]
                         }
                       },
-                      "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
+                      "required": ["organization_id", "purpose", "amount_mode", "expires_at"],
                       "additionalProperties": false
                     },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    "created": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
                     "id",
+                    "object",
                     "amount",
                     "currency",
                     "network",
                     "active",
                     "url",
                     "contribution",
-                    "createdAt"
+                    "created"
                   ],
                   "additionalProperties": false
                 }
@@ -193,6 +206,14 @@
           },
           "default": {
             "description": "Peable error envelope; HTTP status identifies failure",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -201,13 +222,22 @@
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": ["type", "message"],
+                      "required": ["type", "message", "request_id"],
                       "properties": {
                         "type": {
                           "type": "string"
                         },
+                        "code": {
+                          "type": "string"
+                        },
+                        "param": {
+                          "type": "string"
+                        },
                         "message": {
                           "type": "string"
+                        },
+                        "request_id": {
+                          "type": ["string", "null"]
                         }
                       }
                     }
@@ -258,12 +288,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
-              "default": 20
+              "default": 10
             }
           },
           {
             "in": "query",
-            "name": "cursor",
+            "name": "starting_after",
+            "description": "The id of the last object on the previous page.",
             "schema": {
               "type": "string"
             }
@@ -272,19 +303,35 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "items": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "const": "payment_link"
                           },
                           "amount": {
                             "type": "string"
@@ -307,7 +354,7 @@
                           "contribution": {
                             "type": "object",
                             "properties": {
-                              "organizationId": {
+                              "organization_id": {
                                 "type": "string",
                                 "minLength": 1,
                                 "maxLength": 200
@@ -317,16 +364,16 @@
                                 "minLength": 1,
                                 "maxLength": 500
                               },
-                              "amountMode": {
+                              "amount_mode": {
                                 "type": "string",
                                 "enum": ["fixed", "free"]
                               },
-                              "expiresAt": {
+                              "expires_at": {
                                 "anyOf": [
                                   {
-                                    "type": "string",
-                                    "format": "date-time",
-                                    "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
                                   },
                                   {
                                     "type": "null"
@@ -334,33 +381,34 @@
                                 ]
                               }
                             },
-                            "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
+                            "required": ["organization_id", "purpose", "amount_mode", "expires_at"],
                             "additionalProperties": false
                           },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          "created": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
                           "id",
+                          "object",
                           "amount",
                           "currency",
                           "network",
                           "active",
                           "url",
                           "contribution",
-                          "createdAt"
+                          "created"
                         ],
                         "additionalProperties": false
                       }
                     },
-                    "nextCursor": {
-                      "type": ["string", "null"]
+                    "has_more": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["items", "nextCursor"],
+                  "required": ["object", "data", "has_more"],
                   "additionalProperties": false
                 }
               }
@@ -368,6 +416,14 @@
           },
           "default": {
             "description": "Peable error envelope; HTTP status identifies failure",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -376,13 +432,22 @@
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": ["type", "message"],
+                      "required": ["type", "message", "request_id"],
                       "properties": {
                         "type": {
                           "type": "string"
                         },
+                        "code": {
+                          "type": "string"
+                        },
+                        "param": {
+                          "type": "string"
+                        },
                         "message": {
                           "type": "string"
+                        },
+                        "request_id": {
+                          "type": ["string", "null"]
                         }
                       }
                     }
@@ -458,6 +523,14 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -466,6 +539,10 @@
                   "properties": {
                     "id": {
                       "type": "string"
+                    },
+                    "object": {
+                      "type": "string",
+                      "const": "payment_link"
                     },
                     "amount": {
                       "type": "string"
@@ -488,7 +565,7 @@
                     "contribution": {
                       "type": "object",
                       "properties": {
-                        "organizationId": {
+                        "organization_id": {
                           "type": "string",
                           "minLength": 1,
                           "maxLength": 200
@@ -498,16 +575,16 @@
                           "minLength": 1,
                           "maxLength": 500
                         },
-                        "amountMode": {
+                        "amount_mode": {
                           "type": "string",
                           "enum": ["fixed", "free"]
                         },
-                        "expiresAt": {
+                        "expires_at": {
                           "anyOf": [
                             {
-                              "type": "string",
-                              "format": "date-time",
-                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
                             },
                             {
                               "type": "null"
@@ -515,24 +592,25 @@
                           ]
                         }
                       },
-                      "required": ["organizationId", "purpose", "amountMode", "expiresAt"],
+                      "required": ["organization_id", "purpose", "amount_mode", "expires_at"],
                       "additionalProperties": false
                     },
-                    "createdAt": {
-                      "type": "string",
-                      "format": "date-time",
-                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    "created": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
                     "id",
+                    "object",
                     "amount",
                     "currency",
                     "network",
                     "active",
                     "url",
                     "contribution",
-                    "createdAt"
+                    "created"
                   ],
                   "additionalProperties": false
                 }
@@ -541,6 +619,14 @@
           },
           "default": {
             "description": "Peable error envelope; HTTP status identifies failure",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -549,13 +635,22 @@
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": ["type", "message"],
+                      "required": ["type", "message", "request_id"],
                       "properties": {
                         "type": {
                           "type": "string"
                         },
+                        "code": {
+                          "type": "string"
+                        },
+                        "param": {
+                          "type": "string"
+                        },
                         "message": {
                           "type": "string"
+                        },
+                        "request_id": {
+                          "type": ["string", "null"]
                         }
                       }
                     }
@@ -616,12 +711,13 @@
               "type": "integer",
               "minimum": 1,
               "maximum": 100,
-              "default": 20
+              "default": 10
             }
           },
           {
             "in": "query",
-            "name": "cursor",
+            "name": "starting_after",
+            "description": "The id of the last object on the previous page.",
             "schema": {
               "type": "string"
             }
@@ -630,19 +726,35 @@
         "responses": {
           "200": {
             "description": "Success",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
                   "$schema": "https://json-schema.org/draft/2020-12/schema",
                   "type": "object",
                   "properties": {
-                    "items": {
+                    "object": {
+                      "type": "string",
+                      "const": "list"
+                    },
+                    "data": {
                       "type": "array",
                       "items": {
                         "type": "object",
                         "properties": {
                           "id": {
                             "type": "string"
+                          },
+                          "object": {
+                            "type": "string",
+                            "const": "payment_intent"
                           },
                           "amount": {
                             "type": "string"
@@ -654,12 +766,12 @@
                           "status": {
                             "type": "string"
                           },
-                          "createdAt": {
-                            "type": "string",
-                            "format": "date-time",
-                            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                          "created": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           },
-                          "refundCapability": {
+                          "refund_capability": {
                             "type": "string",
                             "const": "unsupported_non_custodial"
                           },
@@ -671,40 +783,45 @@
                                 "id": {
                                   "type": "string"
                                 },
+                                "object": {
+                                  "type": "string",
+                                  "const": "refund"
+                                },
                                 "amount": {
                                   "type": "string"
                                 },
                                 "status": {
                                   "type": "string"
                                 },
-                                "createdAt": {
-                                  "type": "string",
-                                  "format": "date-time",
-                                  "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                                "created": {
+                                  "type": "integer",
+                                  "minimum": 0,
+                                  "maximum": 9007199254740991
                                 }
                               },
-                              "required": ["id", "amount", "status", "createdAt"],
+                              "required": ["id", "object", "amount", "status", "created"],
                               "additionalProperties": false
                             }
                           }
                         },
                         "required": [
                           "id",
+                          "object",
                           "amount",
                           "currency",
                           "status",
-                          "createdAt",
-                          "refundCapability",
+                          "created",
+                          "refund_capability",
                           "refunds"
                         ],
                         "additionalProperties": false
                       }
                     },
-                    "nextCursor": {
-                      "type": ["string", "null"]
+                    "has_more": {
+                      "type": "boolean"
                     }
                   },
-                  "required": ["items", "nextCursor"],
+                  "required": ["object", "data", "has_more"],
                   "additionalProperties": false
                 }
               }
@@ -712,6 +829,14 @@
           },
           "default": {
             "description": "Peable error envelope; HTTP status identifies failure",
+            "headers": {
+              "Request-Id": {
+                "description": "Identifies this request to Peable support.",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -720,13 +845,22 @@
                   "properties": {
                     "error": {
                       "type": "object",
-                      "required": ["type", "message"],
+                      "required": ["type", "message", "request_id"],
                       "properties": {
                         "type": {
                           "type": "string"
                         },
+                        "code": {
+                          "type": "string"
+                        },
+                        "param": {
+                          "type": "string"
+                        },
                         "message": {
                           "type": "string"
+                        },
+                        "request_id": {
+                          "type": ["string", "null"]
                         }
                       }
                     }

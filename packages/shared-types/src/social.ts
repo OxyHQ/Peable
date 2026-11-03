@@ -88,7 +88,7 @@ export interface SocialReceiveCursorResponse {
    * `SOCIAL_RECEIVE_FIRST_FRESH_INDEX - 1`, since index 0 itself is the
    * caller's stable default address and is never reserved through this flow.
    */
-  reservedThrough: number;
+  reserved_through: number;
   /**
    * The identity public key (hex) those addresses were derived from, as the
    * backend saw it. A device compares it with the key it derives from itself:
@@ -98,7 +98,7 @@ export interface SocialReceiveCursorResponse {
    * `null` means exactly one thing: this caller has no cursor, so no address
    * has ever been reserved for them. Every cursor that exists names its key.
    */
-  identityPublicKey: string | null;
+  identity_public_key: string | null;
 }
 
 /** Where a transaction's counterparty identity came from (spec §4.8). */
@@ -112,9 +112,9 @@ export type EnrichmentKind = 'merchant' | 'user' | 'unknown';
 export interface EnrichmentResult {
   kind: EnrichmentKind;
   /** Merchant name or user's `name.displayName ?? handle`. */
-  displayName?: string;
+  display_name?: string;
   /** Bare Oxy file id — render via the canonical media chokepoint, never a URL. */
-  avatarFileId?: string;
+  avatar_file_id?: string;
   /** Present for `kind: 'user'` only. */
   username?: string;
   /** Present for `kind: 'merchant'` only. */
@@ -167,8 +167,8 @@ export interface SocialPayment {
    * than dropping the payment.
    */
   source?: SocialPaymentSource;
-  /** ISO-8601. When the address was minted, which is when the payment was set up. */
-  createdAt: string;
+  /** Unix seconds. When the address was minted, which is when the payment was set up. */
+  created: number;
 }
 
 /** Response of `GET /v1/social/me/payments`, newest first. */

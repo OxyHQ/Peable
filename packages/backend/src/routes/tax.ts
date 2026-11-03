@@ -3,6 +3,7 @@ import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import type { TaxReport } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { fromUnix } from '../lib/time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
 import { resolveDashboardAccess, type DashboardAccess } from './dashboard';
@@ -22,13 +23,14 @@ async function answer(res: Response, action: () => Promise<unknown>, status = 20
     else res.status(status).json(result);
   } catch (error) {
     if (error instanceof TaxError) {
-      res.status(error.status).json({
-        error: {
-          type: error.status >= 500 ? 'api_error' : 'invalid_request_error',
-          code: error.code,
-          message: error.message,
-        },
-      });
+      sendError(
+        res,
+        error.status,
+        error.status >= 500 ? 'api_error' : 'invalid_request_error',
+        error.message,
+        error.code,
+        error.param,
+      );
       return;
     }
     throw error;
@@ -61,22 +63,25 @@ function reportCsv(report: TaxReport): string {
       [
         row.country,
         row.state,
-        row.registrationId,
+        row.registration_id,
         row.scheme,
         row.collection,
-        row.taxType,
-        row.ratePercentage,
+        row.tax_type,
+        row.rate_percentage,
         row.currency,
         row.transactions,
         row.reversals,
-        row.taxableAmount,
-        row.taxAmount,
+        row.taxable_amount,
+        row.tax_amount,
       ]
         .map(cell)
         .join(','),
     ),
   ].join('\n');
 }
+
+/** A Unix-seconds instant as its UTC calendar day, for a file name. */
+const day = (seconds: number) => fromUnix(seconds).toISOString().slice(0, 10);
 
 async function sendReport(req: Request, res: Response, tax: TaxService, merchant: MerchantRow) {
   const { format, ...query } = req.query as Record<string, string | undefined>;
@@ -88,7 +93,7 @@ async function sendReport(req: Request, res: Response, tax: TaxService, merchant
       .type('text/csv')
       .setHeader(
         'Content-Disposition',
-        `attachment; filename="peable-tax-${report.from.slice(0, 10)}-${report.to.slice(0, 10)}.csv"`,
+        `attachment; filename="peable-tax-${day(report.from)}-${day(report.to)}.csv"`,
       )
       .send(reportCsv(report));
     return null;
@@ -129,7 +134,13 @@ export function createTaxRouter(deps: {
       if (!merchant) return;
       const tax = deps.tax;
       if (!tax) {
-        sendError(res, 404, 'invalid_request_error', 'tax_not_enabled');
+        sendError(
+          res,
+          404,
+          'invalid_request_error',
+          'Peable Tax is not enabled on this deployment.',
+          'tax_not_enabled',
+        );
         return;
       }
       if (status === -1) {
@@ -254,7 +265,13 @@ export function createDashboardTaxRouter(deps: {
       if (!merchant) return;
       const tax = deps.tax;
       if (!tax) {
-        sendError(res, 404, 'invalid_request_error', 'tax_not_enabled');
+        sendError(
+          res,
+          404,
+          'invalid_request_error',
+          'Peable Tax is not enabled on this deployment.',
+          'tax_not_enabled',
+        );
         return;
       }
       if (status === -1) {

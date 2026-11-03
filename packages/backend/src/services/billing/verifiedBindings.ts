@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import type { BillingCheckoutObservation } from '@peable.to/shared-types';
 import { readOwnedInvoiceState } from './paidInvoice';
 import type { Database } from '../../db/postgres';
 import {
@@ -65,9 +66,9 @@ export function createVerifiedBillingBindings(options: {
   ) {
     const snapshot = normalizeBillingSubscription(await client.retrieveSubscription(subRef));
     if (
-      snapshot.providerSubscriptionId !== subRef ||
-      snapshot.providerCustomerId !== customerRef ||
-      snapshot.providerPriceId !== priceRef ||
+      snapshot.provider_subscription_id !== subRef ||
+      snapshot.provider_customer_id !== customerRef ||
+      snapshot.provider_price_id !== priceRef ||
       snapshot.livemode !== deployment.livemode
     )
       throw new BillingError('identity_conflict');
@@ -162,7 +163,10 @@ export function createVerifiedBillingBindings(options: {
     }
     throw new BillingError('reconciliation_required');
   }
-  async function retrieveCheckout(owner: BillingOwner, checkoutRef: string) {
+  async function retrieveCheckout(
+    owner: BillingOwner,
+    checkoutRef: string,
+  ): Promise<BillingCheckoutObservation> {
     await authorize(owner);
     z.string()
       .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
@@ -225,29 +229,29 @@ export function createVerifiedBillingBindings(options: {
       : null;
     if (
       snapshot &&
-      (snapshot.providerSubscriptionId !== binding?.providerRef ||
-        snapshot.providerCustomerId !== customer.providerRef ||
-        snapshot.providerPriceId !== price.providerRef ||
+      (snapshot.provider_subscription_id !== binding?.providerRef ||
+        snapshot.provider_customer_id !== customer.providerRef ||
+        snapshot.provider_price_id !== price.providerRef ||
         snapshot.livemode !== deployment.livemode)
     )
       throw new BillingError('identity_conflict');
     return {
       id: checkoutRef,
       status: value.status,
-      storeId: customer.externalSubjectRef,
-      planId: price.planRef,
-      providerCustomerId: customer.providerRef,
-      providerPriceId: price.providerRef,
-      initialInvoiceId: snapshot
+      store_id: customer.externalSubjectRef,
+      plan_id: price.planRef,
+      provider_customer_id: customer.providerRef,
+      provider_price_id: price.providerRef,
+      initial_invoice_id: snapshot
         ? await discoverInitialInvoice(
             operation,
-            snapshot.providerSubscriptionId,
+            snapshot.provider_subscription_id,
             customer.providerRef,
             price.providerRef,
           )
         : null,
       subscription: snapshot
-        ? { ...snapshot, storeId: customer.externalSubjectRef, planId: price.planRef }
+        ? { ...snapshot, store_id: customer.externalSubjectRef, plan_id: price.planRef }
         : null,
     };
   }
@@ -368,11 +372,12 @@ export function createVerifiedBillingBindings(options: {
         throw new BillingError('reconciliation_required');
     },
     async retrievePaidInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
-      const { state, chargeId, amountRefunded, ...paid } = await this.retrieveInvoiceState(
-        owner,
-        subscriptionRef,
-        invoiceRef,
-      );
+      const {
+        state,
+        charge_id: chargeId,
+        amount_refunded: amountRefunded,
+        ...paid
+      } = await this.retrieveInvoiceState(owner, subscriptionRef, invoiceRef);
       if (state !== 'paid') throw new BillingError('reconciliation_required');
       return paid;
     },

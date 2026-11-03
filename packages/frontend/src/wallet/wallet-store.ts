@@ -578,8 +578,8 @@ async function setUpSocialReceive(
     // offering `@username` as a way to be paid (below) rather than collecting
     // payments nobody can reach.
     if (
-      cursor.identityPublicKey !== null &&
-      compressedPublicKeyHex(cursor.identityPublicKey) !== identityPublicKey
+      cursor.identity_public_key !== null &&
+      compressedPublicKeyHex(cursor.identity_public_key) !== identityPublicKey
     ) {
       console.warn(
         '[social-receive] this account publishes a different identity key than this device holds; social receive is off',
@@ -587,7 +587,7 @@ async function setUpSocialReceive(
       set({ socialReceiveDefaultAddress: null });
       return;
     }
-    reservedThrough = cursor.reservedThrough;
+    reservedThrough = cursor.reserved_through;
   } catch (error) {
     // Offline / Gateway error: degrade to the local-only window derived
     // above rather than blocking wallet bring-up on a network round-trip.

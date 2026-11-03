@@ -15,7 +15,7 @@ export const taxAddressSchema = z
   .object({
     country,
     state: subdivision,
-    postalCode: z.string().trim().min(1).max(20).nullish(),
+    postal_code: z.string().trim().min(1).max(20).nullish(),
     city: shortText,
     line1: shortText,
     line2: shortText,
@@ -29,7 +29,7 @@ const evidenceItemSchema = z.discriminatedUnion('type', [
   z
     .object({
       type: z.literal('ip_address'),
-      ipAddress: z.string().refine((value) => isIP(value) !== 0, 'Not an IP address'),
+      ip_address: z.string().refine((value) => isIP(value) !== 0, 'Not an IP address'),
       country,
       state: subdivision,
     })
@@ -43,7 +43,7 @@ const evidenceItemSchema = z.discriminatedUnion('type', [
 ]);
 export const createTaxLocationEvidenceSchema = z
   .object({
-    customerRef: z
+    customer_ref: z
       .string()
       .min(1)
       .max(128)
@@ -78,7 +78,7 @@ export function evaluateEvidence(
         type: item.type,
         country: item.address.country,
         state: item.address.state ?? null,
-        postalCode: item.address.postalCode ?? null,
+        postalCode: item.address.postal_code ?? null,
         city: item.address.city ?? null,
         line1: item.address.line1 ?? null,
         line2: item.address.line2 ?? null,
@@ -90,7 +90,7 @@ export function evaluateEvidence(
         state: item.state ?? null,
         // The address itself is never stored; without a salt not even its hash.
         ...(ipHashSalt
-          ? { ipHash: createHmac('sha256', ipHashSalt).update(item.ipAddress).digest('hex') }
+          ? { ipHash: createHmac('sha256', ipHashSalt).update(item.ip_address).digest('hex') }
           : {}),
       };
     return { type: item.type, country: item.country, state: null };

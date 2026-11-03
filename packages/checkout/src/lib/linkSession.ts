@@ -46,12 +46,12 @@ export function forgetIntentForLink(linkId: string): void {
 }
 
 function isExpired(intent: PaymentIntent): boolean {
-  return Date.parse(intent.expiresAt) <= Date.now();
+  return intent.expires_at * 1000 <= Date.now();
 }
 
 /**
  * True when a remembered intent is still safe to reuse as-is: the payer can
- * still complete a payment against it, and it is not past its own `expiresAt`.
+ * still complete a payment against it, and it is not past its own `expires_at`.
  *
  * This used to ask whether the status was a LEAF of the transition table, which
  * meant `settled` right up until `settled` gained the refund edges — after

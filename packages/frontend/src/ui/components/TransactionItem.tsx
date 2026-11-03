@@ -120,10 +120,10 @@ function truncateAddress(address: string): string {
 function describeIdentityLabel(type: TransactionType, identity: EnrichmentResult): string {
   if (identity.kind === 'merchant') {
     return t('transaction.item.paidAt', {
-      name: identity.displayName ?? t('transaction.item.merchant'),
+      name: identity.display_name ?? t('transaction.item.merchant'),
     });
   }
-  const name = identity.displayName ?? identity.username ?? '';
+  const name = identity.display_name ?? identity.username ?? '';
   return type === 'send'
     ? t('transaction.item.sentToUser', { name })
     : t('transaction.item.receivedFromUser', { name });
@@ -171,8 +171,8 @@ export function TransactionItem({
         <ConfirmationRing progress={confirmProgress} color={theme.colors.warning} size={44}>
           {identity ? (
             <UserAvatar
-              avatarFileId={identity.avatarFileId}
-              displayName={identity.displayName}
+              avatarFileId={identity.avatar_file_id}
+              displayName={identity.display_name}
               username={identity.username}
               size={settled ? 44 : 36}
             />

@@ -47,14 +47,14 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     currency: 'FAIR',
     network: 'testnet',
     address: 'TAddressExample1111111111111111111',
-    merchantId: 'merch_1',
+    merchant_id: 'merch_1',
     txid: null,
     confirmations: 0,
-    clientSecret: 'session_secret_abc',
+    client_secret: 'session_secret_abc',
     metadata: {},
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 60_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -62,9 +62,9 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
 const SESSION: CheckoutSessionPublic = {
   id: 'cs_test123',
   object: 'checkout_session',
-  successUrl: 'https://merchant.example/thanks',
-  merchant: { name: 'Test Merchant', avatarUrl: null, description: null },
-  paymentIntent: makeIntent(),
+  success_url: 'https://merchant.example/thanks',
+  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
+  payment_intent: makeIntent(),
 };
 
 const originalFetch = globalThis.fetch;

@@ -9,6 +9,7 @@
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
+import type { AccountLink } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
@@ -39,8 +40,10 @@ import {
   sendEnvironmentMismatch,
   sendError,
   sendProviderError,
+  sendValidationError,
   wrap,
 } from '../lib/http';
+import { toUnix } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
 
 /** How many accounts one list call returns when the caller does not say. */
@@ -57,7 +60,7 @@ const listQuerySchema = z.object({
   starting_after: z.string().optional(),
 });
 
-/** Bounded for the reason `externalRef` is: it is stored, and it is compared. */
+/** Bounded for the reason `external_ref` is: it is stored, and it is compared. */
 const OXY_USER_ID_MAX = 128;
 
 const createAccountBodySchema = z
@@ -67,14 +70,14 @@ const createAccountBodySchema = z
      * unbounded string here is an unbounded index entry and an unbounded response
      * field.
      */
-    externalRef: z.string().min(1).max(255),
+    external_ref: z.string().min(1).max(255),
     /**
      * The CARD half: ISO-3166-1 alpha-2 (case-insensitive in; upper-cased
      * before storage) and the business type, both or neither. Required before
      * ADR 0012, and still exactly what opens the card half.
      */
     country: z.string().length(2).optional(),
-    businessType: z.enum(['individual', 'company']).optional(),
+    business_type: z.enum(['individual', 'company']).optional(),
     /**
      * The FAIRCOIN half (ADR 0012 D2): the chain the seller is paid on and the
      * seller's Oxy user id — the only person who may register the key. There is
@@ -84,28 +87,31 @@ const createAccountBodySchema = z
     faircoin: z
       .object({
         network: z.enum(['mainnet', 'testnet']),
-        oxyUserId: z.string().min(1).max(OXY_USER_ID_MAX),
+        oxy_user_id: z.string().min(1).max(OXY_USER_ID_MAX),
       })
       .strict()
       .optional(),
   })
-  .refine((body) => (body.country === undefined) === (body.businessType === undefined), {
-    message: 'a card account needs both country and businessType, or neither',
+  .strict()
+  .refine((body) => (body.country === undefined) === (body.business_type === undefined), {
+    message: 'a card account needs both country and business_type, or neither',
   })
   .refine((body) => body.country !== undefined || body.faircoin !== undefined, {
-    message: 'open at least one rail: country and businessType for cards, faircoin for FairCoin',
+    message: 'open at least one rail: country and business_type for cards, faircoin for FairCoin',
   });
 
-const accountLinkBodySchema = z.object({
-  refreshUrl: z.string().url(),
-  returnUrl: z.string().url(),
-  /**
-   * Which half to onboard. `card` (the default, and the only answer before
-   * ADR 0012) is the provider's hosted onboarding; `faircoin` is Peable's own
-   * page where the SELLER registers their watch-only key.
-   */
-  rail: z.enum(['card', 'faircoin']).optional(),
-});
+const accountLinkBodySchema = z
+  .object({
+    refresh_url: z.string().url(),
+    return_url: z.string().url(),
+    /**
+     * Which half to onboard. `card` (the default, and the only answer before
+     * ADR 0012) is the provider's hosted onboarding; `faircoin` is Peable's own
+     * page where the SELLER registers their watch-only key.
+     */
+    rail: z.enum(['card', 'faircoin']).optional(),
+  })
+  .strict();
 
 export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
@@ -130,18 +136,16 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
 
       const parsed = createAccountBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
-      const { country, businessType, faircoin } = parsed.data;
+      const { country, business_type: businessType } = parsed.data;
       const card =
         country !== undefined && businessType !== undefined ? { country, businessType } : undefined;
+      const faircoin = parsed.data.faircoin
+        ? { network: parsed.data.faircoin.network, oxyUserId: parsed.data.faircoin.oxy_user_id }
+        : undefined;
       // Only the CARD half reaches a provider, so only it is held to the key
       // mode. A FairCoin-only seller can be opened on a deployment with no
       // card rail at all.
@@ -150,7 +154,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       const base = {
         merchantId: merchant.id,
         environment: merchant.environment,
-        externalRef: parsed.data.externalRef,
+        externalRef: parsed.data.external_ref,
       };
       // The schema already refuses a body with neither half; this is that same
       // fact said to the type checker, rather than asserted past it.
@@ -160,7 +164,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
           ? { ...base, faircoin }
           : null;
       if (!input) {
-        sendError(res, 422, 'invalid_request_error', 'open at least one rail');
+        sendError(res, 400, 'invalid_request_error', 'open at least one rail');
         return;
       }
 
@@ -169,7 +173,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         res.status(created ? 201 : 200).json(toConnectedAccountDTO(account));
       } catch (error) {
         if (error instanceof FaircoinNetworkRefusedError) {
-          sendError(res, 422, 'invalid_request_error', error.message);
+          sendError(res, 400, 'invalid_request_error', error.message);
           return;
         }
         if (error instanceof AccountConflictError) {
@@ -205,12 +209,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
 
       const parsed = listQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -218,7 +217,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       /**
        * The cursor arrives as a PUBLIC `ca_…` and the keyset walk runs on the
        * primary key, so it is resolved here — ownership-scoped, so a cursor
-       * naming ANOTHER merchant's seller is a 422 exactly like an unknown one
+       * naming ANOTHER merchant's seller is a 400 exactly like an unknown one
        * and never confirms that the account exists.
        */
       let after: string | undefined;
@@ -227,7 +226,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         if (!cursor) {
           sendError(
             res,
-            422,
+            400,
             'invalid_request_error',
             'starting_after references an unknown connected account',
           );
@@ -274,7 +273,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       // even though Express guarantees it is present on a matched route.
       const { externalRef } = req.params;
       if (!externalRef) {
-        sendError(res, 422, 'invalid_request_error', 'externalRef is required');
+        sendError(res, 400, 'invalid_request_error', 'external_ref is required');
         return;
       }
 
@@ -298,7 +297,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, 'invalid_request_error', 'accountId is required');
+        sendError(res, 400, 'invalid_request_error', 'account id is required');
         return;
       }
 
@@ -330,7 +329,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, 'invalid_request_error', 'accountId is required');
+        sendError(res, 400, 'invalid_request_error', 'account id is required');
         return;
       }
 
@@ -385,18 +384,13 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
 
       const parsed = accountLinkBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
       const { accountId } = req.params;
       if (!accountId) {
-        sendError(res, 422, 'invalid_request_error', 'accountId is required');
+        sendError(res, 400, 'invalid_request_error', 'account id is required');
         return;
       }
 
@@ -416,20 +410,21 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
           rail === 'faircoin'
             ? await createFaircoinAccountLink({
                 account,
-                refreshUrl: parsed.data.refreshUrl,
-                returnUrl: parsed.data.returnUrl,
+                refreshUrl: parsed.data.refresh_url,
+                returnUrl: parsed.data.return_url,
               })
             : await createAccountLink({
                 environment: merchant.environment,
                 account,
-                refreshUrl: parsed.data.refreshUrl,
-                returnUrl: parsed.data.returnUrl,
+                refreshUrl: parsed.data.refresh_url,
+                returnUrl: parsed.data.return_url,
               });
-        res.status(201).json({
+        const body: AccountLink = {
           object: 'account_link',
           url: link.url,
-          expiresAt: link.expiresAt.toISOString(),
-        });
+          expires_at: toUnix(link.expiresAt),
+        };
+        res.status(201).json(body);
       } catch (error) {
         if (error instanceof AccountRailMissingError) {
           sendError(res, 409, 'invalid_request_error', error.message);

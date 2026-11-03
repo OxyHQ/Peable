@@ -13,7 +13,13 @@ import {
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { newId } from '../lib/ids';
 import { toMerchantDTO } from '../lib/serialize';
-import { sendError, wrap, requireServiceApp, requireAuthenticated } from '../lib/http';
+import {
+  sendError,
+  wrap,
+  requireServiceApp,
+  requireAuthenticated,
+  sendValidationError,
+} from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import { enqueueReferenceSync } from '../db/oxyFiles/referenceSyncRepository';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
@@ -22,7 +28,7 @@ import { kickReferenceSync } from '../services/oxyFiles/referenceSync';
 
 /** Exported: `routes/dashboard.ts` parses the SAME registration body for its dashboard-authed register route (F2.5) so the two never drift. */
 // The branding columns are bare `text()` with no CHECK, so these bounds are
-// the ONLY thing between a merchant and an unbounded write. `displayName` is
+// the ONLY thing between a merchant and an unbounded write. `display_name` is
 // rendered in a payer's transaction history and on the checkout chip, so it is
 // held to a chip-sized length rather than a paragraph.
 const DISPLAY_NAME_MAX = 64;
@@ -30,8 +36,8 @@ const AVATAR_FILE_ID_MAX = 128;
 const DESCRIPTION_MAX = 512;
 
 const brandingFields = {
-  displayName: z.string().min(1).max(DISPLAY_NAME_MAX).optional(),
-  avatarFileId: z.string().min(1).max(AVATAR_FILE_ID_MAX).optional(),
+  display_name: z.string().min(1).max(DISPLAY_NAME_MAX).optional(),
+  avatar_file_id: z.string().min(1).max(AVATAR_FILE_ID_MAX).optional(),
   description: z.string().min(1).max(DESCRIPTION_MAX).optional(),
 };
 
@@ -48,11 +54,12 @@ export const createMerchantBodySchema = z
      */
     network: z.enum(['mainnet', 'testnet']).optional(),
     xpub: z.string().min(1).optional(),
-    webhookUrl: z.string().url().optional(),
-    webhookSecret: z.string().min(1).optional(),
-    requiredConfirmations: z.number().int().positive().optional(),
+    webhook_url: z.string().url().optional(),
+    webhook_secret: z.string().min(1).optional(),
+    required_confirmations: z.number().int().positive().optional(),
     ...brandingFields,
   })
+  .strict()
   .refine((body) => (body.network === undefined) === (body.xpub === undefined), {
     message:
       'accepting FairCoin needs both a network and a watch-only xpub, or neither — ' +
@@ -60,15 +67,17 @@ export const createMerchantBodySchema = z
   });
 
 /** Exported: `routes/dashboard.ts` reuses the SAME patch body for its dashboard-authed PATCH route (F2.5). */
-export const patchMerchantBodySchema = z.object({
-  webhookUrl: z.string().url().nullable().optional(),
-  webhookSecret: z.string().min(1).nullable().optional(),
-  requiredConfirmations: z.number().int().positive().optional(),
-  // `.nullable()` on top of the create bounds: `null` clears the field.
-  displayName: brandingFields.displayName.unwrap().nullable().optional(),
-  avatarFileId: brandingFields.avatarFileId.unwrap().nullable().optional(),
-  description: brandingFields.description.unwrap().nullable().optional(),
-});
+export const patchMerchantBodySchema = z
+  .object({
+    webhook_url: z.string().url().nullable().optional(),
+    webhook_secret: z.string().min(1).nullable().optional(),
+    required_confirmations: z.number().int().positive().optional(),
+    // `.nullable()` on top of the create bounds: `null` clears the field.
+    display_name: brandingFields.display_name.unwrap().nullable().optional(),
+    avatar_file_id: brandingFields.avatar_file_id.unwrap().nullable().optional(),
+    description: brandingFields.description.unwrap().nullable().optional(),
+  })
+  .strict();
 
 export type RegisterMerchantResult =
   | { ok: true; merchant: MerchantRow }
@@ -131,11 +140,11 @@ export async function registerMerchant(
   params: {
     network?: 'mainnet' | 'testnet';
     xpub?: string;
-    webhookUrl?: string;
-    webhookSecret?: string;
-    requiredConfirmations?: number;
-    displayName?: string;
-    avatarFileId?: string;
+    webhook_url?: string;
+    webhook_secret?: string;
+    required_confirmations?: number;
+    display_name?: string;
+    avatar_file_id?: string;
     description?: string;
   },
   avatar: AvatarAuthority,
@@ -147,7 +156,7 @@ export async function registerMerchant(
   if (environment !== 'production' && params.network === 'mainnet') {
     return {
       ok: false,
-      status: 422,
+      status: 400,
       message: `a '${environment}' environment cannot register a mainnet merchant`,
     };
   }
@@ -160,10 +169,10 @@ export async function registerMerchant(
   // reference names it, and that reference is registered first: Oxy's answer
   // decides whether the avatar is accepted at all.
   const publicId = newId('merch');
-  if (params.avatarFileId !== undefined) {
+  if (params.avatar_file_id !== undefined) {
     const accepted = await acceptMerchantAvatar(
       avatar.files,
-      params.avatarFileId,
+      params.avatar_file_id,
       publicId,
       avatar.actor,
     );
@@ -181,25 +190,26 @@ export async function registerMerchant(
       environment,
       network: params.network,
       xpub: params.xpub,
-      webhookUrl: params.webhookUrl,
-      webhookSecret: params.webhookSecret,
-      requiredConfirmations: params.requiredConfirmations,
-      displayName: params.displayName,
-      avatarFileId: params.avatarFileId,
+      webhookUrl: params.webhook_url,
+      webhookSecret: params.webhook_secret,
+      requiredConfirmations: params.required_confirmations,
+      displayName: params.display_name,
+      avatarFileId: params.avatar_file_id,
       description: params.description,
     });
   } catch (err) {
-    if (params.avatarFileId !== undefined) await releaseUnusedAvatar(params.avatarFileId, publicId);
+    if (params.avatar_file_id !== undefined)
+      await releaseUnusedAvatar(params.avatar_file_id, publicId);
     // The non-custody firewall refusing a key the caller sent is a bad
-    // REQUEST, not a server fault. Surfacing it as a 422 says which field is
+    // REQUEST, not a server fault. Surfacing it as a 400 says which field is
     // wrong; letting it escape would answer a spend-capable key with a 500 and
     // no indication that the key itself was the problem.
     if (err instanceof WatchOnlyViolationError || err instanceof ChainRegistrationError) {
       // Both are the caller describing a FairCoin account this gateway will not
-      // accept — a key that can spend, or half a registration. 422 with the
+      // accept — a key that can spend, or half a registration. 400 with the
       // message says which; letting either escape would answer a spend-capable
       // key with a 500 and no indication the key was the problem.
-      return { ok: false, status: 422, message: err.message };
+      return { ok: false, status: 400, message: err.message };
     }
     throw err;
   }
@@ -208,7 +218,8 @@ export async function registerMerchant(
   // application and environment — converged on rather than read first, so two
   // concurrent registrations cannot both win.
   if (!merchant) {
-    if (params.avatarFileId !== undefined) await releaseUnusedAvatar(params.avatarFileId, publicId);
+    if (params.avatar_file_id !== undefined)
+      await releaseUnusedAvatar(params.avatar_file_id, publicId);
     return {
       ok: false,
       status: 409,
@@ -248,11 +259,11 @@ export function sendMerchantWriteError(
 export async function applyMerchantPatch(
   merchant: MerchantRow,
   params: {
-    webhookUrl?: string | null;
-    webhookSecret?: string | null;
-    requiredConfirmations?: number;
-    displayName?: string | null;
-    avatarFileId?: string | null;
+    webhook_url?: string | null;
+    webhook_secret?: string | null;
+    required_confirmations?: number;
+    display_name?: string | null;
+    avatar_file_id?: string | null;
     description?: string | null;
   },
   avatar: AvatarAuthority,
@@ -260,8 +271,8 @@ export async function applyMerchantPatch(
   // A NEW avatar is verified and its Oxy reference registered first; clearing
   // it, or re-sending the one already set, needs nothing from Oxy.
   const newAvatar =
-    typeof params.avatarFileId === 'string' && params.avatarFileId !== merchant.avatarFileId
-      ? params.avatarFileId
+    typeof params.avatar_file_id === 'string' && params.avatar_file_id !== merchant.avatarFileId
+      ? params.avatar_file_id
       : undefined;
   if (newAvatar !== undefined) {
     const accepted = await acceptMerchantAvatar(
@@ -281,11 +292,11 @@ export async function applyMerchantPatch(
   let updated: MerchantRow | null;
   try {
     updated = await updateMerchantSettings(getDb(), merchant.id, {
-      webhookUrl: params.webhookUrl,
-      webhookSecret: params.webhookSecret,
-      requiredConfirmations: params.requiredConfirmations,
-      displayName: params.displayName,
-      avatarFileId: params.avatarFileId,
+      webhookUrl: params.webhook_url,
+      webhookSecret: params.webhook_secret,
+      requiredConfirmations: params.required_confirmations,
+      displayName: params.display_name,
+      avatarFileId: params.avatar_file_id,
       description: params.description,
     });
   } catch (error) {
@@ -298,7 +309,7 @@ export async function applyMerchantPatch(
   }
   // The write queued the old file's release and the new one's reference in its
   // own transaction; this only runs that sync now instead of at the next tick.
-  if (params.avatarFileId !== undefined) kickReferenceSync();
+  if (params.avatar_file_id !== undefined) kickReferenceSync();
   return { ok: true, merchant: updated };
 }
 
@@ -330,12 +341,7 @@ export function createMerchantsRouter(deps: {
 
       const parsed = createMerchantBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const result = await registerMerchant(serviceApp.appId, serviceApp.environment, parsed.data, {
@@ -373,12 +379,7 @@ export function createMerchantsRouter(deps: {
 
       const parsed = patchMerchantBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const result = await applyMerchantPatch(merchant, parsed.data, {

@@ -6,72 +6,86 @@ export const contributionAmountSchema = z
     (v) => /^[1-9][0-9]{0,15}$/.test(v) && BigInt(v) <= 9007199254740991n,
     'Enter a positive FairCoin base-unit amount within the supported range',
   );
+/** Every instant on the wire is integer Unix seconds (ADR 0014 D1). */
+const unixSecondsSchema = z.number().int().nonnegative();
 export const contributionDetailsSchema = z
   .object({
-    organizationId: z.string().min(1).max(200),
+    organization_id: z.string().min(1).max(200),
     purpose: z.string().trim().min(1).max(500),
-    amountMode: z.enum(['fixed', 'free']),
-    expiresAt: z.iso.datetime().nullable(),
+    amount_mode: z.enum(['fixed', 'free']),
+    expires_at: unixSecondsSchema.nullable(),
   })
   .strict();
 export type ContributionDetails = z.infer<typeof contributionDetailsSchema>;
 export const createContributionSchema = z
   .object({
     purpose: contributionDetailsSchema.shape.purpose,
-    amountMode: contributionDetailsSchema.shape.amountMode,
+    amount_mode: contributionDetailsSchema.shape.amount_mode,
     amount: contributionAmountSchema.optional(),
     currency: z.literal('FAIR'),
-    expiresAt: z.iso.datetime().nullable().optional(),
+    expires_at: unixSecondsSchema.nullable().optional(),
   })
   .strict()
   .refine(
-    (v) => (v.amountMode === 'free' ? v.amount === undefined : v.amount !== undefined),
+    (v) => (v.amount_mode === 'free' ? v.amount === undefined : v.amount !== undefined),
     'Fixed contributions require an amount; free contributions omit it',
   );
 export type CreateContribution = z.infer<typeof createContributionSchema>;
 export const contributionLinkSchema = z
   .object({
     id: z.string(),
+    object: z.literal('payment_link'),
     amount: z.string(),
     currency: z.literal('FAIR'),
     network: z.enum(['mainnet', 'testnet']),
     active: z.boolean(),
     url: z.url(),
     contribution: contributionDetailsSchema,
-    createdAt: z.iso.datetime(),
+    created: unixSecondsSchema,
   })
   .strict();
 export type ContributionLink = z.infer<typeof contributionLinkSchema>;
-export const contributionListSchema = z
-  .object({ items: z.array(contributionLinkSchema), nextCursor: z.string().nullable() })
-  .strict();
+/** The one list envelope (ADR 0014 D1). */
+function listSchema<T extends z.ZodType>(item: T) {
+  return z
+    .object({ object: z.literal('list'), data: z.array(item), has_more: z.boolean() })
+    .strict();
+}
+export const contributionListSchema = listSchema(contributionLinkSchema);
+export type ContributionList = z.infer<typeof contributionListSchema>;
 export const contributionCollectionSchema = z
   .object({
     id: z.string(),
+    object: z.literal('payment_intent'),
     amount: z.string(),
     currency: z.literal('FAIR'),
     status: z.string(),
-    createdAt: z.iso.datetime(),
-    refundCapability: z.literal('unsupported_non_custodial'),
+    created: unixSecondsSchema,
+    refund_capability: z.literal('unsupported_non_custodial'),
     refunds: z.array(
       z
         .object({
           id: z.string(),
+          object: z.literal('refund'),
           amount: z.string(),
           status: z.string(),
-          createdAt: z.iso.datetime(),
+          created: unixSecondsSchema,
         })
         .strict(),
     ),
   })
   .strict();
-export const contributionCollectionListSchema = z
-  .object({ items: z.array(contributionCollectionSchema), nextCursor: z.string().nullable() })
-  .strict();
+export type ContributionCollection = z.infer<typeof contributionCollectionSchema>;
+export const contributionCollectionListSchema = listSchema(contributionCollectionSchema);
+/**
+ * Paging: `starting_after` is the public id of the last object of the previous
+ * page (`link_…` for links, `pi_…` for collections), resolved by the gateway
+ * inside the caller's organization, application and environment.
+ */
 export const contributionPageQuerySchema = z
   .object({
-    limit: z.coerce.number().int().min(1).max(100).default(20),
-    cursor: z.string().max(1000).optional(),
+    limit: z.coerce.number().int().min(1).max(100).default(10),
+    starting_after: z.string().min(1).max(200).optional(),
     environment: z.enum(['development', 'staging', 'production']),
   })
   .strict();

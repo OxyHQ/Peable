@@ -16,6 +16,9 @@ import { transitionIntent } from '../../intentTransition';
 import { createFaircoinBillingService } from '../faircoinBillingService';
 import type { BillingTaxQuoteCalculator } from '../tax-quote';
 
+/** Integer Unix seconds, the wire's unit for every instant. */
+const unix = (ms: number) => Math.floor(ms / 1000);
+
 function must<T>(value: T | null | undefined): T {
   if (value === null || value === undefined) throw new Error('Missing fixture value');
   return value;
@@ -68,27 +71,27 @@ async function fixture() {
     }),
     calculate: async ({ source }) => {
       const quote: BillingTaxQuote = {
-        schemaVersion: 1,
+        schema_version: 2,
         source,
         quote: {
           id: `tax_${randomUUID()}`,
           currency: 'USD',
-          grossMinorUnits: 2999,
-          netMinorUnits: 2500,
-          taxMinorUnits: 499,
-          taxTreatment: 'inclusive',
-          sellerId: 'seller',
-          invoiceIssuerId: 'issuer',
-          taxRemitterId: 'remitter',
-          taxServiceRef: 'fixture',
+          gross_minor_units: 2999,
+          net_minor_units: 2500,
+          tax_minor_units: 499,
+          tax_treatment: 'inclusive',
+          seller_id: 'seller',
+          invoice_issuer_id: 'issuer',
+          tax_remitter_id: 'remitter',
+          tax_service_ref: 'fixture',
           country: 'RO',
-          coverageEvidenceId: 'coverage',
-          taxRateEvidenceId: 'rate',
-          customerLocationEvidenceId: 'location',
-          quotedAt: new Date(+clock - 1000).toISOString(),
-          expiresAt: new Date(+clock + 600_000).toISOString(),
+          coverage_evidence_id: 'coverage',
+          tax_rate_evidence_id: 'rate',
+          customer_location_evidence_id: 'location',
+          quoted_at: unix(+clock - 1000),
+          expires_at: unix(+clock + 600_000),
         },
-        signature: { algorithm: 'Ed25519', keyId: 'fiscal', value: '' },
+        signature: { algorithm: 'Ed25519', key_id: 'fiscal', value: '' },
       };
       quote.signature.value = sign(
         null,
@@ -112,33 +115,33 @@ async function fixture() {
     quote: async () => ({
       id: `fx_${randomUUID()}`,
       currency: 'USD',
-      grossMinorUnits: 2999,
-      amountBaseUnits: '2999000000',
-      usdPerFair: '1',
+      gross_minor_units: 2999,
+      amount_base_units: '2999000000',
+      usd_per_fair: '1',
       source: 'synthetic_test_quote',
-      observedAt: clock.toISOString(),
-      quotedAt: new Date(+clock - 1000).toISOString(),
-      expiresAt: new Date(+clock + 300_000).toISOString(),
+      observed_at: unix(+clock),
+      quoted_at: unix(+clock - 1000),
+      expires_at: unix(+clock + 300_000),
       rounding: 'ceil_to_base_unit',
     }),
   });
   const customer = await service.ensureCustomer(
     owner,
-    { storeId: 'payer', storeName: 'payer' },
+    { store_id: 'payer', store_name: 'payer' },
     'customer',
   );
   async function input() {
     return {
       ...customer,
-      providerPriceId: 'price_fairone',
-      trialDays: 0,
-      returnUrl: 'https://example.invalid/return',
-      storeId: 'payer',
-      planId: 'one',
-      taxQuote: await service.createTaxQuote(owner, {
-        storeId: 'payer',
-        planId: 'one',
-        customerLocationEvidenceId: 'location',
+      provider_price_id: 'price_fairone',
+      trial_days: 0,
+      return_url: 'https://example.invalid/return',
+      store_id: 'payer',
+      plan_id: 'one',
+      tax_quote: await service.createTaxQuote(owner, {
+        store_id: 'payer',
+        plan_id: 'one',
+        customer_location_evidence_id: 'location',
       }),
     };
   }
@@ -195,6 +198,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     ]);
     expect(a).toEqual(b);
     const row = await f.invoice(a);
+    // The checkout deadline is the frozen FX quote's, in Unix seconds.
+    expect(a.expires_at).toBe(row.fxQuote.expires_at);
     expect((await f.service.retrieveCheckout(f.owner, a.id)).status).toBe('open');
     await expect(
       f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id),
@@ -208,10 +213,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     await f.confirm(row);
     f.advance(600_000);
     const paid = await f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id);
-    expect(paid.amountPaid).toBe('2999');
+    expect(paid.amount_paid).toBe('2999');
     expect(
       (await f.service.retrieveFinalInvoiceAuthority(f.owner, row.subscriptionId, row.id)).invoice
-        .faircoinQuote?.amountBaseUnits,
+        .faircoin_quote?.amount_base_units,
     ).toBe('2999000000');
     expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
       'active',
@@ -219,7 +224,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     await expect(
       f.service.createCheckoutSession(
         f.owner,
-        { ...input, returnUrl: 'https://other.invalid' },
+        { ...input, return_url: 'https://other.invalid' },
         'first',
       ),
     ).rejects.toThrow('idempotency_conflict');
@@ -232,7 +237,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     // Simulate the trusted first node observation after the quote, not a caller timestamp.
     await gatewayDb()
       .update(faircoinBillingInvoices)
-      .set({ fxQuote: { ...row.fxQuote, expiresAt: new Date(Date.now() - 1).toISOString() } })
+      .set({ fxQuote: { ...row.fxQuote, expires_at: unix(Date.now()) - 1 } })
       .where(eq(faircoinBillingInvoices.id, row.id));
     await f.confirm(row);
     await expect(
@@ -363,7 +368,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     await f.submit(row);
     await f.confirm(row);
     expect(
-      (await f.service.cancelAtPeriodEnd(f.owner, row.subscriptionId, 'cancel')).cancelAtPeriodEnd,
+      (await f.service.cancelAtPeriodEnd(f.owner, row.subscriptionId, 'cancel'))
+        .cancel_at_period_end,
     ).toBe(true);
     expect((await f.service.retrieveSubscription(f.owner, row.subscriptionId)).status).toBe(
       'active',
@@ -376,7 +382,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
       f.service.renew(f.owner, row.subscriptionId, await f.input(), 'renew'),
     ).rejects.toThrow('identity_conflict');
     expect(
-      (await f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id)).invoiceId,
+      (await f.service.retrievePaidInvoice(f.owner, row.subscriptionId, row.id)).invoice_id,
     ).toBe(row.id);
   });
   it('renews one explicit paid period without suspending today or duplicating a lost reply', async () => {
@@ -398,21 +404,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('native FairCoin billing / real Postgre
     const nextRow = await f.invoice(next);
     expect(nextRow.periodStart.toISOString()).toBe(end.toISOString());
     const intent = await findIntentById(gatewayDb(), must(nextRow.paymentIntentId));
-    expect(+must(intent).expiresAt).toBeLessThanOrEqual(Date.parse(nextRow.fxQuote.expiresAt));
+    expect(+must(intent).expiresAt).toBeLessThanOrEqual(nextRow.fxQuote.expires_at * 1000);
     await f.submit(nextRow);
     await f.confirm(nextRow);
     const current = await f.service.retrieveSubscription(f.owner, row.subscriptionId);
     expect(current.status).toBe('active');
-    expect(current.currentPeriodStart).toBe(start.toISOString());
-    expect(current.currentPeriodEnd).toBe(nextRow.periodEnd.toISOString());
-    expect((await f.service.retrieveCheckout(f.owner, first.id)).initialInvoiceId).toBe(row.id);
-    expect((await f.service.retrieveCheckout(f.owner, next.id)).initialInvoiceId).toBe(nextRow.id);
+    expect(current.current_period_start).toBe(unix(+start));
+    expect(current.current_period_end).toBe(unix(+nextRow.periodEnd));
+    expect((await f.service.retrieveCheckout(f.owner, first.id)).initial_invoice_id).toBe(row.id);
+    expect((await f.service.retrieveCheckout(f.owner, next.id)).initial_invoice_id).toBe(
+      nextRow.id,
+    );
     const recovered = await f.service.retrieveCheckoutOperation(f.owner, {
-      idempotencyKey: 'next',
-      providerCustomerId: request.providerCustomerId,
-      providerPriceId: request.providerPriceId,
-      storeId: request.storeId,
-      planId: request.planId,
+      idempotency_key: 'next',
+      provider_customer_id: request.provider_customer_id,
+      provider_price_id: request.provider_price_id,
+      store_id: request.store_id,
+      plan_id: request.plan_id,
     });
     expect(recovered.state).toBe('succeeded');
     expect(await gatewayDb().select().from(paymentIntents)).toHaveLength(2);

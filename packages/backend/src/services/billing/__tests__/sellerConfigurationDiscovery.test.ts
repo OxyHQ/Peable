@@ -93,11 +93,11 @@ it('reports exact owned invoice issuer/tax-account configuration separately from
   f.client.retrieveInvoice = async () => invoice;
   const bindings = {
     retrieveInvoiceState: async () => ({
-      invoiceId: 'in_fixture',
-      paymentIntentId: 'pi_fixture',
-      providerCustomerId: 'cus_fixture',
-      providerSubscriptionId: 'sub_fixture',
-      providerPriceId: 'price_fixture',
+      invoice_id: 'in_fixture',
+      payment_intent_id: 'pi_fixture',
+      provider_customer_id: 'cus_fixture',
+      provider_subscription_id: 'sub_fixture',
+      provider_price_id: 'price_fixture',
       livemode: false,
     }),
   } as unknown as import('../verifiedBindings').VerifiedBillingBindings;

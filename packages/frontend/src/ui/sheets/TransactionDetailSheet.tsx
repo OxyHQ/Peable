@@ -283,8 +283,8 @@ export function TransactionDetailSheet({ txid }: { txid: string }): React.JSX.El
               label={t('transaction.with')}
               value={
                 identity.kind === 'merchant'
-                  ? (identity.displayName ?? t('transaction.item.merchant'))
-                  : `${identity.displayName ?? identity.username ?? ''}${
+                  ? (identity.display_name ?? t('transaction.item.merchant'))
+                  : `${identity.display_name ?? identity.username ?? ''}${
                       identity.username ? ` (@${identity.username})` : ''
                     }`
               }

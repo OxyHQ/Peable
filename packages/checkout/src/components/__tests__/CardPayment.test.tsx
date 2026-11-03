@@ -20,14 +20,14 @@ interface ClientActionResponse {
   object: 'client_action';
   kind: 'client_secret' | 'redirect';
   value: string;
-  publishableKey?: string;
+  publishable_key?: string;
 }
 
 let clientAction: ClientActionResponse | Error = {
   object: 'client_action',
   kind: 'client_secret',
   value: 'pi_stripe_1_secret_live',
-  publishableKey: 'pk_test_abc',
+  publishable_key: 'pk_test_abc',
 };
 const getClientActionMock = mock(async () => {
   if (clientAction instanceof Error) throw clientAction;
@@ -89,14 +89,14 @@ function cardIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     currency: 'EUR',
     network: null,
     address: null,
-    merchantId: 'merch_1',
+    merchant_id: 'merch_1',
     txid: null,
     confirmations: 0,
-    clientSecret: 'pi_card_1_secret',
+    client_secret: 'pi_card_1_secret',
     metadata: {},
-    expiresAt: new Date(Date.now() + 900_000).toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 900_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -106,7 +106,7 @@ beforeEach(() => {
     object: 'client_action',
     kind: 'client_secret',
     value: 'pi_stripe_1_secret_live',
-    publishableKey: 'pk_test_abc',
+    publishable_key: 'pk_test_abc',
   };
   confirmResult = {};
   mounted.length = 0;
@@ -132,7 +132,7 @@ test('fetches the credential from the resume operation and mounts the provider f
   // The credential comes from `POST …/client_action`, authorized by the
   // intent's own client secret — never from a field on the intent, which is
   // the whole reason the DTO carries none.
-  expect(getClientActionMock).toHaveBeenCalledWith(intent.id, intent.clientSecret);
+  expect(getClientActionMock).toHaveBeenCalledWith(intent.id, intent.client_secret);
   // ...and the PUBLISHABLE key came with it, rather than being compiled into
   // this bundle: the checkout is deployed once and serves whichever gateway it
   // is pointed at.

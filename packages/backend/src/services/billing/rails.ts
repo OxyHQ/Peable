@@ -100,24 +100,24 @@ export function createMultiRailBillingService(rails: readonly BillingRail[]): Bi
       owning(
         owner,
         'customer',
-        params.providerCustomerId,
+        params.provider_customer_id,
         params.rail,
       ).service.createCheckoutSession(owner, strip(params), key),
     async renew(owner, ref, params, key) {
       const rail = owning(owner, 'subscription', ref, params.rail);
-      if (owning(owner, 'customer', params.providerCustomerId).id !== rail.id)
+      if (owning(owner, 'customer', params.provider_customer_id).id !== rail.id)
         throw new BillingError('identity_conflict');
       if (!rail.service.renew) throw new BillingError('not_found', 404);
       return rail.service.renew(owner, ref, strip(params), key);
     },
     createPortalSession: async (owner, params, key) =>
-      owning(owner, 'customer', params.providerCustomerId).service.createPortalSession(
+      owning(owner, 'customer', params.provider_customer_id).service.createPortalSession(
         owner,
         params,
         key,
       ),
     retrieveCheckoutOperation: async (owner, params) =>
-      owning(owner, 'customer', params.providerCustomerId).service.retrieveCheckoutOperation(
+      owning(owner, 'customer', params.provider_customer_id).service.retrieveCheckoutOperation(
         owner,
         params,
       ),
@@ -145,7 +145,7 @@ export function createMultiRailBillingService(rails: readonly BillingRail[]): Bi
           rail: rail.id,
           settlement: rail.settlement,
           default: index === 0,
-          taxQuotes: rail.taxQuotes(owner),
+          tax_quotes: rail.taxQuotes(owner),
           renewal: rail.renewal,
           offers: rail.offers(owner),
         })),

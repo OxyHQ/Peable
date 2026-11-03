@@ -509,8 +509,8 @@ export interface ProviderSettlement {
   readonly net: string | null;
   /** The currency the figures above are in — the SETTLEMENT currency. */
   readonly currency: CurrencyCode | null;
-  /** When the funds become available, ISO-8601. */
-  readonly availableOn: string | null;
+  /** When the funds become available. */
+  readonly availableOn: Date | null;
   /** Present only when the settlement currency differs from the charge's. */
   readonly exchangeRate: number | null;
 }

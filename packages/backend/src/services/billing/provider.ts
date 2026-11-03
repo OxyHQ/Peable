@@ -5,13 +5,14 @@ import type {
   EnsureBillingCustomerParams,
 } from '@peable.to/shared-types';
 import type { BillingDeployment } from './contracts';
-export type ProviderBillingSubscription = Omit<BillingSubscription, 'storeId' | 'planId'>;
+export type ProviderBillingSubscription = Omit<BillingSubscription, 'store_id' | 'plan_id'>;
 export interface ProviderHostedSession {
   providerObjectRef: string;
   providerCustomerId: string;
   livemode: boolean;
   url: string;
-  expiresAt: string;
+  /** Unix seconds, the unit the wire carries it in. */
+  expiresAt: number;
 }
 /** Platform scope only. No Connect option or merchant-supplied credential. */
 export interface BillingProvider {

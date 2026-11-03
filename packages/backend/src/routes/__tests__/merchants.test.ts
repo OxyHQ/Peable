@@ -62,14 +62,14 @@ function stubRequireMerchant(appId: string, environment: string): RequestHandler
 interface MerchantResponse {
   id: string;
   object: string;
-  oxyAppId: string;
+  oxy_app_id: string;
   environment: string;
   network: string;
   xpub: string;
-  webhookUrl?: string;
-  requiredConfirmations: number;
-  displayName?: string;
-  avatarFileId?: string;
+  webhook_url?: string;
+  required_confirmations: number;
+  display_name?: string;
+  avatar_file_id?: string;
   description?: string;
   error?: { type: string; message: string };
 }
@@ -139,13 +139,13 @@ describe('POST /v1/merchants', () => {
       expect(body.object).toBe('merchant');
       expect(body.environment).toBe('production');
       expect(body.network).toBe('mainnet');
-      expect(body.requiredConfirmations).toBe(1);
+      expect(body.required_confirmations).toBe(1);
     } finally {
       s.close();
     }
   });
 
-  test('a development credential CANNOT register a mainnet merchant (422) — test/live firewall', async () => {
+  test('a development credential CANNOT register a mainnet merchant (400) — test/live firewall', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -154,7 +154,7 @@ describe('POST /v1/merchants', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ network: 'mainnet', xpub: XPUB }),
       });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
       const body = await readJson(res);
       expect(body.error?.type).toBe('invalid_request_error');
       const count = await countMerchants(DEV_APP_ID);
@@ -182,7 +182,7 @@ describe('POST /v1/merchants', () => {
     }
   });
 
-  test('a private xprv is rejected by the same non-custody firewall the model enforces (422 or 500-free rejection)', async () => {
+  test('a private xprv is rejected by the same non-custody firewall the model enforces (400 or 500-free rejection)', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -322,7 +322,7 @@ describe('GET /v1/merchants/me', () => {
 });
 
 describe('PATCH /v1/merchants/me', () => {
-  test('updates webhookUrl and requiredConfirmations', async () => {
+  test('updates webhook_url and required_confirmations', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -336,14 +336,14 @@ describe('PATCH /v1/merchants/me', () => {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          webhookUrl: 'https://merchant.example/new-hook',
-          requiredConfirmations: 3,
+          webhook_url: 'https://merchant.example/new-hook',
+          required_confirmations: 3,
         }),
       });
       expect(res.status).toBe(200);
       const body = await readJson(res);
-      expect(body.webhookUrl).toBe('https://merchant.example/new-hook');
-      expect(body.requiredConfirmations).toBe(3);
+      expect(body.webhook_url).toBe('https://merchant.example/new-hook');
+      expect(body.required_confirmations).toBe(3);
       // xpub/network/environment are immutable via this route.
       expect(body.network).toBe('testnet');
     } finally {
@@ -351,7 +351,7 @@ describe('PATCH /v1/merchants/me', () => {
     }
   });
 
-  test('xpub is not a field this route accepts — an attempted xpub change is silently ignored', async () => {
+  test('xpub is not a field this route accepts — an attempted xpub change is refused and changes nothing', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -364,11 +364,15 @@ describe('PATCH /v1/merchants/me', () => {
       const res = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requiredConfirmations: 2, xpub: 'attempted-change' }),
+        body: JSON.stringify({ required_confirmations: 2, xpub: 'attempted-change' }),
       });
-      expect(res.status).toBe(200);
-      const body = await readJson(res);
-      expect(body.xpub).toBe(XPUB);
+      expect(res.status).toBe(400);
+      expect((await res.json()) as unknown).toMatchObject({
+        error: { type: 'invalid_request_error', param: 'xpub' },
+      });
+      const after = await readJson(await fetch(`${url}/v1/merchants/me`));
+      expect(after.xpub).toBe(XPUB);
+      expect(after.required_confirmations).toBe(1);
     } finally {
       s.close();
     }
@@ -383,7 +387,7 @@ describe('PATCH /v1/merchants/me', () => {
       const res = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requiredConfirmations: 2 }),
+        body: JSON.stringify({ required_confirmations: 2 }),
       });
       expect(res.status).toBe(401);
     } finally {
@@ -407,15 +411,15 @@ describe('merchant branding', () => {
         body: JSON.stringify({
           network: 'testnet',
           xpub: XPUB,
-          displayName: 'Mercaria',
-          avatarFileId: 'file_mercaria_logo',
+          display_name: 'Mercaria',
+          avatar_file_id: 'file_mercaria_logo',
           description: 'Fair goods, fairly paid for.',
         }),
       });
       expect(res.status).toBe(201);
       const body = await readJson(res);
-      expect(body.displayName).toBe('Mercaria');
-      expect(body.avatarFileId).toBe('file_mercaria_logo');
+      expect(body.display_name).toBe('Mercaria');
+      expect(body.avatar_file_id).toBe('file_mercaria_logo');
       expect(body.description).toBe('Fair goods, fairly paid for.');
     } finally {
       s.close();
@@ -432,7 +436,7 @@ describe('merchant branding', () => {
         body: JSON.stringify({
           network: 'testnet',
           xpub: XPUB,
-          displayName: 'Mercaria',
+          display_name: 'Mercaria',
         }),
       });
 
@@ -454,17 +458,17 @@ describe('merchant branding', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, displayName: 'Old' }),
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, display_name: 'Old' }),
       });
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: 'New', description: null }),
+        body: JSON.stringify({ display_name: 'New', description: null }),
       });
       expect(patched.status).toBe(200);
       const body = await readJson(patched);
-      expect(body.displayName).toBe('New');
+      expect(body.display_name).toBe('New');
       expect(body.description).toBeUndefined();
     } finally {
       s.close();
@@ -478,25 +482,25 @@ describe('merchant branding', () => {
       await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, displayName: 'Kept' }),
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, display_name: 'Kept' }),
       });
 
       // Patching an unrelated field must not blank the name — `null` clears,
-      // absent means "leave alone", the same contract webhookUrl already has.
+      // absent means "leave alone", the same contract webhook_url already has.
       const patched = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ requiredConfirmations: 3 }),
+        body: JSON.stringify({ required_confirmations: 3 }),
       });
       const body = await readJson(patched);
-      expect(body.displayName).toBe('Kept');
-      expect(body.requiredConfirmations).toBe(3);
+      expect(body.display_name).toBe('Kept');
+      expect(body.required_confirmations).toBe(3);
     } finally {
       s.close();
     }
   });
 
-  test('an over-long displayName is refused (422)', async () => {
+  test('an over-long display_name is refused (400)', async () => {
     const { app } = createApp(DEV_APP_ID, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -508,10 +512,10 @@ describe('merchant branding', () => {
         body: JSON.stringify({
           network: 'testnet',
           xpub: XPUB,
-          displayName: 'x'.repeat(200),
+          display_name: 'x'.repeat(200),
         }),
       });
-      expect(res.status).toBe(422);
+      expect(res.status).toBe(400);
     } finally {
       s.close();
     }
@@ -535,7 +539,7 @@ describe('card-only registration', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ displayName: 'Cards Only Ltd' }),
+        body: JSON.stringify({ display_name: 'Cards Only Ltd' }),
       });
 
       expect(res.status).toBe(201);
@@ -544,7 +548,7 @@ describe('card-only registration', () => {
       // fabricated one would be a claim about a key nobody holds.
       expect(body.network).toBeNull();
       expect(body.xpub).toBeNull();
-      expect(body.displayName).toBe('Cards Only Ltd');
+      expect(body.display_name).toBe('Cards Only Ltd');
     } finally {
       s.close();
     }
@@ -557,7 +561,7 @@ describe('card-only registration', () => {
    * network-specific. The failure of a half-registered merchant is a payer
    * shown an address on the wrong chain, which is unrecoverable.
    */
-  test('refuses a network with no xpub, and an xpub with no network (422)', async () => {
+  test('refuses a network with no xpub, and an xpub with no network (400)', async () => {
     const { app } = createApp(`${DEV_APP_ID}_halfchain`, 'development');
     const { server: s, baseUrl: url } = await listen(app);
     try {
@@ -572,8 +576,8 @@ describe('card-only registration', () => {
         body: JSON.stringify({ xpub: XPUB }),
       });
 
-      expect(networkOnly.status).toBe(422);
-      expect(xpubOnly.status).toBe(422);
+      expect(networkOnly.status).toBe(400);
+      expect(xpubOnly.status).toBe(400);
     } finally {
       s.close();
     }
@@ -606,7 +610,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const res = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatarFileId }),
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatar_file_id: avatarFileId }),
       });
       return { status: res.status, body: await readJson(res) };
     } finally {
@@ -623,7 +627,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
     const files = createFakeOxyFiles([{ id: 'file_app', ownerApplicationId: DEV_APP_ID }]);
     const { status, body } = await register(files, 'file_app');
     expect(status).toBe(201);
-    expect(body.avatarFileId).toBe('file_app');
+    expect(body.avatar_file_id).toBe('file_app');
     expect([...files.held]).toEqual([`file_app|merchant_avatar|${body.id}`]);
     expect(await queuedSyncs()).toEqual([`file_app|merchant_avatar|${body.id}`]);
   });
@@ -649,7 +653,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
     ]);
     for (const fileId of ['file_stranger', 'file_other_app', 'file_platform', 'file_missing']) {
       const { status, body } = await register(files, fileId);
-      expect(status).toBe(422);
+      expect(status).toBe(400);
       expect(body.error?.type).toBe('invalid_request_error');
     }
     expect(files.added).toEqual([]);
@@ -660,7 +664,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
     const files = createFakeOxyFiles([
       { id: 'file_trashed', ownerApplicationId: DEV_APP_ID, status: 'trash' },
     ]);
-    expect((await register(files, 'file_trashed')).status).toBe(422);
+    expect((await register(files, 'file_trashed')).status).toBe(400);
   });
 
   test('refuses a file Oxy will not let Peable reference (private): no payer could load it', async () => {
@@ -668,7 +672,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       { id: 'file_private', ownerApplicationId: DEV_APP_ID, referenceable: false },
     ]);
     const { status, body } = await register(files, 'file_private');
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(body.error?.message).toContain('public or unlisted');
     expect(await countMerchants(DEV_APP_ID)).toBe(0);
   });
@@ -712,7 +716,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const created = await fetch(`${url}/v1/merchants`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatarFileId: 'file_a' }),
+        body: JSON.stringify({ network: 'testnet', xpub: XPUB, avatar_file_id: 'file_a' }),
       });
       const merchant = await readJson(created);
       await gatewayDb().delete(oxyFileReferenceSyncs);
@@ -720,18 +724,18 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const refused = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatarFileId: 'file_stranger' }),
+        body: JSON.stringify({ avatar_file_id: 'file_stranger' }),
       });
-      expect(refused.status).toBe(422);
+      expect(refused.status).toBe(400);
       expect(await queuedSyncs()).toEqual([]);
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatarFileId: 'file_b' }),
+        body: JSON.stringify({ avatar_file_id: 'file_b' }),
       });
       expect(patched.status).toBe(200);
-      expect((await readJson(patched)).avatarFileId).toBe('file_b');
+      expect((await readJson(patched)).avatar_file_id).toBe('file_b');
       expect(await queuedSyncs()).toEqual([
         `file_a|merchant_avatar|${merchant.id}`,
         `file_b|merchant_avatar|${merchant.id}`,
@@ -743,7 +747,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const cleared = await fetch(`${url}/v1/merchants/me`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ avatarFileId: null }),
+        body: JSON.stringify({ avatar_file_id: null }),
       });
       expect(cleared.status).toBe(200);
       expect(files.added.length).toBe(lookupsBefore);

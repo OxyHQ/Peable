@@ -558,8 +558,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
       signature = signWebhook('synthetic-only', raw, timestamp);
     expect(sdk.webhooks.constructEvent(raw, signature, 'synthetic-only')).toMatchObject({
       type: 'billing.observation.updated',
-      data: { object: { resourceKind: 'subscription', resourceId: 'sub_1', revision: 1 } },
+      data: {
+        object: {
+          object: 'billing_observation',
+          resource_kind: 'subscription',
+          resource_id: 'sub_1',
+          revision: 1,
+        },
+      },
     });
+    const observedAt = (must(delivery).payload as { data: { object: { observed_at: unknown } } })
+      .data.object.observed_at;
+    expect(Number.isSafeInteger(observedAt)).toBe(true);
     expect(() => sdk.webhooks.constructEvent(raw, signature, 'other-secret')).toThrow();
   });
   it.each(['historical-v0', null])(

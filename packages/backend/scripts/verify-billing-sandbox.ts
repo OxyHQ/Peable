@@ -407,14 +407,14 @@ try {
     const sdk = new Peable({ publicKey: runId, secret, baseURL, oxyApiUrl: baseURL });
     const customer = await mutate('sdk-ensure-customer', () =>
       sdk.billing.ensureCustomer(
-        { storeId: runId, storeName: 'Synthetic I08 Store' },
+        { store_id: runId, store_name: 'Synthetic I08 Store' },
         { idempotencyKey: `${runId}:customer` },
       ),
     );
-    await record('customer', customer.providerCustomerId);
+    await record('customer', customer.provider_customer_id);
     assert.deepEqual(
       await sdk.billing.ensureCustomer(
-        { storeId: runId, storeName: 'Renamed Synthetic I08 Store' },
+        { store_id: runId, store_name: 'Renamed Synthetic I08 Store' },
         { idempotencyKey: `${runId}:customer-reuse` },
       ),
       customer,
@@ -426,12 +426,12 @@ try {
       evidenceRef: runId,
     });
     const checkoutInput = {
-      providerCustomerId: customer.providerCustomerId,
-      providerPriceId: price.id,
-      trialDays: 0,
-      returnUrl: 'https://example.invalid/i08',
-      storeId: runId,
-      planId: `${runId}:plan`,
+      provider_customer_id: customer.provider_customer_id,
+      provider_price_id: price.id,
+      trial_days: 0,
+      return_url: 'https://example.invalid/i08',
+      store_id: runId,
+      plan_id: `${runId}:plan`,
     };
     let lostResponse = false;
     let initialCheckoutCallResolved = false;
@@ -472,7 +472,7 @@ try {
     );
     // URL is retained only in memory. Do not print it or browser diagnostics.
     const sessions = await stripe.checkout.sessions.list(
-      { customer: customer.providerCustomerId, limit: 2 },
+      { customer: customer.provider_customer_id, limit: 2 },
       requestOptions,
     );
     assert.equal(sessions.has_more, false);
@@ -484,7 +484,10 @@ try {
     assert(owned.some((value) => value.kind === 'checkout' && value.id === session.id));
     const portalSession = await mutate('sdk-portal', () =>
       sdk.billing.createPortalSession(
-        { providerCustomerId: customer.providerCustomerId, returnUrl: checkoutInput.returnUrl },
+        {
+          provider_customer_id: customer.provider_customer_id,
+          return_url: checkoutInput.return_url,
+        },
         { idempotencyKey: `${runId}:portal` },
       ),
     );
@@ -576,7 +579,7 @@ try {
     for (let attempt = 0; attempt < 30; attempt++) {
       const value = await stripe.checkout.sessions.retrieve(session.id, {}, requestOptions);
       assert.equal(value.livemode, false);
-      assert.equal(value.customer, customer.providerCustomerId);
+      assert.equal(value.customer, customer.provider_customer_id);
       if (value.status === 'complete' && typeof value.subscription === 'string') {
         subscriptionId = value.subscription;
         break;
@@ -586,10 +589,10 @@ try {
     assert(subscriptionId, 'Checkout did not complete within the bounded observation window');
     await record('subscription', subscriptionId);
     const snapshot = await sdk.billing.retrieveSubscription(subscriptionId);
-    assert.equal(snapshot.storeId, runId);
-    assert.equal(snapshot.planId, `${runId}:plan`);
-    assert.equal(snapshot.providerCustomerId, customer.providerCustomerId);
-    assert.equal(snapshot.providerPriceId, price.id);
+    assert.equal(snapshot.store_id, runId);
+    assert.equal(snapshot.plan_id, `${runId}:plan`);
+    assert.equal(snapshot.provider_customer_id, customer.provider_customer_id);
+    assert.equal(snapshot.provider_price_id, price.id);
     assert.equal(snapshot.livemode, false);
     await passed('real-hosted-checkout-to-verified-local-binding');
     const observedSubscriptionId = subscriptionId;
@@ -598,7 +601,7 @@ try {
         idempotencyKey: `${runId}:cancel`,
       }),
     );
-    assert.equal(cancelled.cancelAtPeriodEnd, true);
+    assert.equal(cancelled.cancel_at_period_end, true);
     await passed('real-cancel-at-period-end');
   } catch (error) {
     diagnostics.push({ stage, ...safeError(error) });

@@ -97,8 +97,8 @@ async function seedCardOnlyPlatform(
 /** Open a FairCoin seller, mint a link, and have the seller register `xpub`. */
 async function onboardSeller(externalRef: string, account: number): Promise<Json> {
   const created = await call('POST', '/v1/connected_accounts', {
-    externalRef,
-    faircoin: { network: 'testnet', oxyUserId: SELLER },
+    external_ref: externalRef,
+    faircoin: { network: 'testnet', oxy_user_id: SELLER },
   });
   expect(created.status).toBe(201);
   const link = await call(
@@ -106,8 +106,8 @@ async function onboardSeller(externalRef: string, account: number): Promise<Json
     `/v1/connected_accounts/${String(created.json.id)}/account_links`,
     {
       rail: 'faircoin',
-      returnUrl: 'https://platform.example/sell/done',
-      refreshUrl: 'https://platform.example/sell/refresh',
+      return_url: 'https://platform.example/sell/done',
+      refresh_url: 'https://platform.example/sell/refresh',
     },
   );
   expect(link.status).toBe(201);
@@ -208,8 +208,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
 
   test('opens a FairCoin-only seller: no card half, no key, pending', async () => {
     const { status, json } = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_open',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_open',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     expect(status).toBe(201);
     expect(json.rails).toEqual(['faircoin']);
@@ -218,15 +218,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(json.faircoin).toEqual({
       network: 'testnet',
       status: 'pending',
-      oxyUserId: SELLER,
-      registeredAt: null,
+      oxy_user_id: SELLER,
+      registered_at: null,
     });
   });
 
   test('converges on a repeat, and refuses one that changes the network or the seller', async () => {
     const body = {
-      externalRef: 'store_repeat',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_repeat',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     };
     const first = await call('POST', '/v1/connected_accounts', body);
     const again = await call('POST', '/v1/connected_accounts', body);
@@ -235,31 +235,31 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(again.json.id).toBe(first.json.id);
 
     const otherUser = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_repeat',
-      faircoin: { network: 'testnet', oxyUserId: STRANGER },
+      external_ref: 'store_repeat',
+      faircoin: { network: 'testnet', oxy_user_id: STRANGER },
     });
     expect(otherUser.status).toBe(409);
   });
 
   test('refuses a body that opens no rail, half a card, or carries a key', async () => {
-    expect((await call('POST', '/v1/connected_accounts', { externalRef: 'x1' })).status).toBe(422);
+    expect((await call('POST', '/v1/connected_accounts', { external_ref: 'x1' })).status).toBe(400);
     expect(
-      (await call('POST', '/v1/connected_accounts', { externalRef: 'x2', country: 'ES' })).status,
-    ).toBe(422);
+      (await call('POST', '/v1/connected_accounts', { external_ref: 'x2', country: 'ES' })).status,
+    ).toBe(400);
     // The platform can NEVER supply the seller's key (ADR 0012 D3).
     const withKey = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'x3',
-      faircoin: { network: 'testnet', oxyUserId: SELLER, xpub: testXpubFor('testnet', 20) },
+      external_ref: 'x3',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER, xpub: testXpubFor('testnet', 20) },
     });
-    expect(withKey.status).toBe(422);
+    expect(withKey.status).toBe(400);
   });
 
   test('a non-production platform cannot open a mainnet seller', async () => {
     const { status } = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_mainnet',
-      faircoin: { network: 'mainnet', oxyUserId: SELLER },
+      external_ref: 'store_mainnet',
+      faircoin: { network: 'mainnet', oxy_user_id: SELLER },
     });
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   test('a production platform opens a mainnet seller without touching the card key mode', async () => {
@@ -267,8 +267,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     actingApp = prod.oxyAppId;
     actingEnvironment = 'production';
     const { status, json } = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_prod',
-      faircoin: { network: 'mainnet', oxyUserId: SELLER },
+      external_ref: 'store_prod',
+      faircoin: { network: 'mainnet', oxy_user_id: SELLER },
     });
     // The deployment's card key is test mode; a FairCoin-only seller never
     // reaches the provider, so the key-mode guard does not apply.
@@ -278,15 +278,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
 
   test('a card onboarding link for a FairCoin-only seller is a 409', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_cardlink',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_cardlink',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     const link = await call(
       'POST',
       `/v1/connected_accounts/${String(created.json.id)}/account_links`,
       {
-        returnUrl: 'https://platform.example/r',
-        refreshUrl: 'https://platform.example/f',
+        return_url: 'https://platform.example/r',
+        refresh_url: 'https://platform.example/f',
       },
     );
     expect(link.status).toBe(409);
@@ -296,14 +296,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
 
   test('onboards a seller in their own Oxy session, once', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_onboard',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_onboard',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     const accountId = String(created.json.id);
     const link = await call('POST', `/v1/connected_accounts/${accountId}/account_links`, {
       rail: 'faircoin',
-      returnUrl: 'https://platform.example/sell/done',
-      refreshUrl: 'https://platform.example/sell/refresh',
+      return_url: 'https://platform.example/sell/done',
+      refresh_url: 'https://platform.example/sell/refresh',
     });
     expect(link.status).toBe(201);
     expect(String(link.json.url).startsWith(`${config.connectOnboardingBaseUrl}/`)).toBe(true);
@@ -335,9 +335,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       asUser(SELLER),
     );
     expect(described.status).toBe(200);
-    expect(described.json.accountId).toBe(accountId);
+    expect(described.json.account_id).toBe(accountId);
     expect(described.json.network).toBe('testnet');
-    expect(described.json.returnUrl).toBe('https://platform.example/sell/done');
+    expect(described.json.return_url).toBe('https://platform.example/sell/done');
     expect(typeof (described.json.platform as Json).name).toBe('string');
 
     // A private key is refused and nothing is stored or consumed.
@@ -347,7 +347,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { xpub: testXprvFor('testnet', 31) },
       asUser(SELLER),
     );
-    expect(xprv.status).toBe(422);
+    expect(xprv.status).toBe(400);
     expect((xprv.json.error as Json).code).toBe('watch_only_violation');
 
     const key = testXpubFor('testnet', 32);
@@ -360,9 +360,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(done.status).toBe(200);
     expect(done.json).toEqual({
       object: 'connect_onboarding',
-      accountId,
+      account_id: accountId,
       status: 'active',
-      returnUrl: 'https://platform.example/sell/done',
+      return_url: 'https://platform.example/sell/done',
     });
 
     // Single-use: the same link is now gone, with the platform's refresh URL.
@@ -373,7 +373,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       asUser(SELLER),
     );
     expect(replay.status).toBe(410);
-    expect((replay.json.error as Json).refreshUrl).toBe('https://platform.example/sell/refresh');
+    expect((replay.json.error as Json).refresh_url).toBe('https://platform.example/sell/refresh');
 
     // The platform sees the seller active — and never the key.
     const read = await call('GET', `/v1/connected_accounts/${accountId}`);
@@ -395,24 +395,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     // A fresh link for an active seller has nothing to onboard.
     const again = await call('POST', `/v1/connected_accounts/${accountId}/account_links`, {
       rail: 'faircoin',
-      returnUrl: 'https://platform.example/r',
-      refreshUrl: 'https://platform.example/f',
+      return_url: 'https://platform.example/r',
+      refresh_url: 'https://platform.example/f',
     });
     expect(again.status).toBe(409);
   });
 
   test('stores only the hash of a token, and an unknown token is a 404', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_hash',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_hash',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     const link = await call(
       'POST',
       `/v1/connected_accounts/${String(created.json.id)}/account_links`,
       {
         rail: 'faircoin',
-        returnUrl: 'https://platform.example/r',
-        refreshUrl: 'https://platform.example/f',
+        return_url: 'https://platform.example/r',
+        refresh_url: 'https://platform.example/f',
       },
     );
     const token = tokenOf(String(link.json.url));
@@ -438,8 +438,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
 
   test('an expired link answers 410 with where to get a fresh one', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_expired',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_expired',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     const account = must(
       await findAccountByPublicId(gatewayDb(), platform.id, String(created.json.id)),
@@ -458,15 +458,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       asUser(SELLER),
     );
     expect(res.status).toBe(410);
-    expect((res.json.error as Json).refreshUrl).toBe('https://platform.example/refresh-me');
+    expect((res.json.error as Json).refresh_url).toBe('https://platform.example/refresh-me');
   });
 
   // ── payments on behalf ──────────────────────────────────────────────────
 
   test('refuses a payment for a seller who has not registered yet', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_pending_pay',
-      faircoin: { network: 'testnet', oxyUserId: SELLER },
+      external_ref: 'store_pending_pay',
+      faircoin: { network: 'testnet', oxy_user_id: SELLER },
     });
     const res = await call(
       'POST',
@@ -475,7 +475,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
         amount: '100000000',
         rail: 'faircoin',
         network: 'testnet',
-        connectedAccount: created.json.id,
+        connected_account: created.json.id,
       },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
@@ -491,20 +491,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const first = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '250000000', rail: 'faircoin', network: 'testnet', connectedAccount: seller.id },
+      { amount: '250000000', rail: 'faircoin', network: 'testnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(first.status).toBe(201);
     expect(first.json.address).toBe(deriveIntentAddress(key, 0, 0, network));
-    expect(first.json.connectedAccountId).toBe(seller.id);
+    expect(first.json.connected_account_id).toBe(seller.id);
     expect(first.json.network).toBe('testnet');
-    expect(first.json.canExpire).toBe(true);
+    expect(first.json.can_expire).toBe(true);
 
     // `rail` omitted: still FairCoin, and the next index on the SAME key.
     const second = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '1', network: 'testnet', connectedAccount: seller.id },
+      { amount: '1', network: 'testnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(second.status).toBe(201);
@@ -522,18 +522,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const card = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '1000', rail: 'card', currency: 'EUR', connectedAccount: seller.id },
+      { amount: '1000', rail: 'card', currency: 'EUR', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
-    expect(card.status).toBe(422);
+    expect(card.status).toBe(400);
 
     const wrongNetwork = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '1000', network: 'mainnet', connectedAccount: seller.id },
+      { amount: '1000', network: 'mainnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
-    expect(wrongNetwork.status).toBe(422);
+    expect(wrongNetwork.status).toBe(400);
 
     // Another platform's seller is indistinguishable from no seller at all.
     const other = await seedMerchant();
@@ -541,7 +541,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const foreign = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '1000', network: 'testnet', connectedAccount: seller.id },
+      { amount: '1000', network: 'testnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(foreign.status).toBe(404);
@@ -554,14 +554,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const first = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '5000', network: 'testnet', connectedAccount: a.id },
+      { amount: '5000', network: 'testnet', connected_account: a.id },
       { 'Idempotency-Key': key },
     );
     expect(first.status).toBe(201);
     const replay = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '5000', network: 'testnet', connectedAccount: a.id },
+      { amount: '5000', network: 'testnet', connected_account: a.id },
       { 'Idempotency-Key': key },
     );
     expect(replay.status).toBe(200);
@@ -569,7 +569,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const other = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '5000', network: 'testnet', connectedAccount: b.id },
+      { amount: '5000', network: 'testnet', connected_account: b.id },
       { 'Idempotency-Key': key },
     );
     expect(other.status).toBe(409);
@@ -581,13 +581,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       amount: '300000000',
       rail: 'faircoin',
       network: 'testnet',
-      connectedAccount: seller.id,
-      successUrl: 'https://platform.example/ok',
+      connected_account: seller.id,
+      success_url: 'https://platform.example/ok',
     });
     expect(res.status).toBe(201);
-    expect(res.json.connectedAccountId).toBe(seller.id);
+    expect(res.json.connected_account_id).toBe(seller.id);
+    expect(res.json.success_url).toBe('https://platform.example/ok');
     expect(res.json.network).toBe('testnet');
-    const intent = must(await findIntentByPublicId(gatewayDb(), String(res.json.paymentIntentId)));
+    const intent = must(
+      await findIntentByPublicId(gatewayDb(), String(res.json.payment_intent_id)),
+    );
     expect(intent.address).toBe(
       deriveIntentAddress(testXpubFor('testnet', 44), 0, 0, getNetwork('testnet')),
     );
@@ -598,7 +601,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const created = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '7000', network: 'testnet', connectedAccount: seller.id },
+      { amount: '7000', network: 'testnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
@@ -609,8 +612,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const event = must(events.find((row) => row.intentId === intent.id));
     expect(event.payload.account).toBe(seller.id);
     const object = (event.payload.data as Json).object as Json;
-    expect(object.connectedAccountId).toBe(seller.id);
-    expect(object.canExpire).toBe(false);
+    expect(object.connected_account_id).toBe(seller.id);
+    expect(object.can_expire).toBe(false);
   });
 
   test('a broadcast payment can no longer expire, and says so', async () => {
@@ -618,7 +621,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const created = await call(
       'POST',
       '/v1/payment_intents',
-      { amount: '7000', network: 'testnet', connectedAccount: seller.id },
+      { amount: '7000', network: 'testnet', connected_account: seller.id },
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
@@ -629,7 +632,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     });
     const read = await call('GET', `/v1/payment_intents/${String(created.json.id)}`);
     expect(read.json.status).toBe('broadcast');
-    expect(read.json.canExpire).toBe(false);
+    expect(read.json.can_expire).toBe(false);
   });
 
   test("the seller's key is stored once and never on the platform's own merchant row", async () => {

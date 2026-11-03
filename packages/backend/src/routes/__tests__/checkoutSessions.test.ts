@@ -38,13 +38,13 @@ const passthroughRateLimit: RequestHandler = (_req, _res, next) => next();
 interface CheckoutSessionResponse {
   id: string;
   object: string;
-  paymentIntentId: string;
-  clientSecret: string;
+  payment_intent_id: string;
+  client_secret: string;
   amount: string;
   network: string;
   metadata: Record<string, string>;
-  successUrl?: string;
-  cancelUrl?: string;
+  success_url?: string;
+  cancel_url?: string;
   url: string;
   error?: { type: string; message: string };
 }
@@ -52,10 +52,10 @@ interface CheckoutSessionResponse {
 interface CheckoutSessionPublicResponse {
   id: string;
   object: string;
-  successUrl?: string;
-  cancelUrl?: string;
-  merchant: { name: string; avatarUrl: string | null; description: string | null };
-  paymentIntent: { id: string; clientSecret: string; amount: string };
+  success_url?: string;
+  cancel_url?: string;
+  merchant: { name: string; avatar_url: string | null; description: string | null };
+  payment_intent: { id: string; client_secret: string; amount: string };
   error?: { type: string; message: string };
 }
 
@@ -127,33 +127,33 @@ describe('POST /v1/checkout_sessions', () => {
         amount: '400000000',
         network: 'testnet',
         metadata: { orderId: 'o_cs_1' },
-        successUrl: 'https://merchant.example/success',
-        cancelUrl: 'https://merchant.example/cancel',
+        success_url: 'https://merchant.example/success',
+        cancel_url: 'https://merchant.example/cancel',
       }),
     });
     expect(res.status).toBe(201);
     const body = await readJson<CheckoutSessionResponse>(res);
     expect(body.id).toMatch(/^cs_[0-9a-f]+$/);
     expect(body.object).toBe('checkout_session');
-    expect(body.paymentIntentId).toMatch(/^pi_[0-9a-f]+$/);
-    expect(body.clientSecret).toStartWith(`${body.paymentIntentId}_secret_`);
+    expect(body.payment_intent_id).toMatch(/^pi_[0-9a-f]+$/);
+    expect(body.client_secret).toStartWith(`${body.payment_intent_id}_secret_`);
     expect(body.amount).toBe('400000000');
     expect(body.metadata).toEqual({ orderId: 'o_cs_1' });
     expect(body.url).toBe(`https://checkout.peable.to/c/${body.id}`);
 
-    const intent = await findIntentByPublicId(gatewayDb(), body.paymentIntentId);
+    const intent = await findIntentByPublicId(gatewayDb(), body.payment_intent_id);
     expect(intent).not.toBeNull();
-    expect(intent?.clientSecret).toBe(body.clientSecret);
+    expect(intent?.clientSecret).toBe(body.client_secret);
   });
 
-  test("a network that doesn't match the merchant's configured network -> 422, no intent minted", async () => {
+  test("a network that doesn't match the merchant's configured network -> 400, no intent minted", async () => {
     const before = await countIntentsForMerchant(merchantId);
     const res = await fetch(`${baseUrl}/v1/checkout_sessions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: '100000000', network: 'mainnet' }),
     });
-    expect(res.status).toBe(422);
+    expect(res.status).toBe(400);
     const body = await readJson<CheckoutSessionResponse>(res);
     expect(body.error?.type).toBe('invalid_request_error');
     const after = await countIntentsForMerchant(merchantId);
@@ -199,7 +199,7 @@ describe('GET /v1/checkout_sessions/:id (merchant retrieve)', () => {
     expect(getRes.status).toBe(200);
     const fetched = await readJson<CheckoutSessionResponse>(getRes);
     expect(fetched.id).toBe(created.id);
-    expect(fetched.clientSecret).toBe(created.clientSecret);
+    expect(fetched.client_secret).toBe(created.client_secret);
   });
 
   test('unknown id -> 404', async () => {
@@ -269,22 +269,22 @@ describe('GET /v1/checkout_sessions/:id/public', () => {
       body: JSON.stringify({
         amount: '88000000',
         network: 'testnet',
-        successUrl: 'https://merchant.example/success',
+        success_url: 'https://merchant.example/success',
       }),
     });
     const created = await readJson<CheckoutSessionResponse>(createRes);
 
     const res = await fetch(
-      `${baseUrl}/v1/checkout_sessions/${created.id}/public?client_secret=${created.clientSecret}`,
+      `${baseUrl}/v1/checkout_sessions/${created.id}/public?client_secret=${created.client_secret}`,
     );
     expect(res.status).toBe(200);
     const body = await readJson<CheckoutSessionPublicResponse>(res);
     expect(body.id).toBe(created.id);
-    expect(body.successUrl).toBe('https://merchant.example/success');
+    expect(body.success_url).toBe('https://merchant.example/success');
     expect(body.merchant.name).toBe('Sessions Co');
-    expect(body.paymentIntent.id).toBe(created.paymentIntentId);
-    expect(body.paymentIntent.clientSecret).toBe(created.clientSecret);
-    expect(body.paymentIntent.amount).toBe('88000000');
+    expect(body.payment_intent.id).toBe(created.payment_intent_id);
+    expect(body.payment_intent.client_secret).toBe(created.client_secret);
+    expect(body.payment_intent.amount).toBe('88000000');
   });
 
   test('accepts the client_secret via the X-Peable-Client-Secret header too', async () => {
@@ -296,7 +296,7 @@ describe('GET /v1/checkout_sessions/:id/public', () => {
     const created = await readJson<CheckoutSessionResponse>(createRes);
 
     const res = await fetch(`${baseUrl}/v1/checkout_sessions/${created.id}/public`, {
-      headers: { 'X-Peable-Client-Secret': created.clientSecret },
+      headers: { 'X-Peable-Client-Secret': created.client_secret },
     });
     expect(res.status).toBe(200);
   });
@@ -349,7 +349,7 @@ describe('POST /v1/checkout_sessions with an Idempotency-Key', () => {
     const a = await readJson<CheckoutSessionResponse>(first);
     const b = await readJson<CheckoutSessionResponse>(second);
     expect(b.id).toBe(a.id);
-    expect(b.paymentIntentId).toBe(a.paymentIntentId);
+    expect(b.payment_intent_id).toBe(a.payment_intent_id);
     expect(await countIntentsForMerchant(merchantId)).toBe(before + 1);
   });
 

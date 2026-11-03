@@ -70,11 +70,33 @@ test('an unmapped error answers 500 without its message, naming the request inst
     const requestId = res.headers.get('Request-Id');
     const text = await res.text();
     expect(text).not.toContain('merchants_secret_idx');
-    const body = JSON.parse(text) as { error: { type: string; message: string } };
+    const body = JSON.parse(text) as { error: { type: string; request_id: string } };
     expect(body.error.type).toBe('api_error');
-    expect(body.error.message).toContain(String(requestId));
+    expect(body.error.request_id).toBe(String(requestId));
     expect(logged).toHaveLength(1);
     expect(logged[0]?.requestId).toBe(String(requestId));
     expect(String(logged[0]?.err)).toContain('merchants_secret_idx');
+  });
+});
+
+test('a body the JSON parser refuses is a 400 request error, not a 500', async () => {
+  const app = express();
+  app.use(requestIdMiddleware);
+  app.use(express.json());
+  app.post('/echo', (_req, res) => {
+    res.json({ ok: true });
+  });
+  app.use(createInternalErrorHandler(() => {}));
+
+  await withServer(app, async (base) => {
+    const res = await fetch(`${base}/echo`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{"amount": ',
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: { type: string; request_id: string } };
+    expect(body.error.type).toBe('invalid_request_error');
+    expect(body.error.request_id).toBe(String(res.headers.get('Request-Id')));
   });
 });

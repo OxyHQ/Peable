@@ -15,8 +15,8 @@ import { configuredTaxProvider } from './configuredTax';
 import { TaxProviderUnavailableError } from './provider';
 
 const PROBES = [
-  { name: 'us_de', customer: { country: 'US', state: 'DE', postalCode: '19901' } },
-  { name: 'de', customer: { country: 'DE', postalCode: '10115' } },
+  { name: 'us_de', customer: { country: 'US', state: 'DE', postal_code: '19901' } },
+  { name: 'de', customer: { country: 'DE', postal_code: '10115' } },
 ] as const;
 
 export async function probeTaxProvider() {
@@ -69,8 +69,8 @@ export async function probeTaxProvider() {
       calculations[probe.name] = {
         livemode: result.livemode,
         amountTax: result.lineItems[0]?.amountTax,
-        reasons: result.lineItems[0]?.breakdown.map((entry) => entry.taxabilityReason),
-        rates: result.lineItems[0]?.breakdown.map((entry) => entry.ratePercentage),
+        reasons: result.lineItems[0]?.breakdown.map((entry) => entry.taxability_reason),
+        rates: result.lineItems[0]?.breakdown.map((entry) => entry.rate_percentage),
       };
     } catch (error) {
       calculations[probe.name] = { error: reason(error) };

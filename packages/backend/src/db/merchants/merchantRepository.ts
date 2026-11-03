@@ -70,7 +70,7 @@ const MERCHANT_COLUMNS = {
  *
  * Separate from the watch-only violation because it is a different mistake:
  * that one is a merchant handing over a key that can spend, this one is a
- * merchant naming a chain with no key or a key with no chain. Both are 422s and
+ * merchant naming a chain with no key or a key with no chain. Both are 400s and
  * the message is what tells the integrator which they made.
  */
 export class ChainRegistrationError extends Error {

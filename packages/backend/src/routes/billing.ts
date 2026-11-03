@@ -2,9 +2,10 @@ import { billingTaxQuoteRequestSchema } from '../services/billing/tax-quote';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import {
+  BILLING_ERROR_MESSAGES,
   BillingError,
   billingIdempotencyKey,
   checkoutSchema,
@@ -14,6 +15,20 @@ import {
   type BillingOwner,
 } from '../services/billing/contracts';
 import type { BillingService } from '../services/billing/billingService';
+
+/** A request the route itself refused, as opposed to a schema failure deeper down. */
+class BillingRequestError extends Error {
+  constructor(readonly issues: readonly { path: readonly PropertyKey[]; message: string }[]) {
+    super('invalid billing request');
+    this.name = 'BillingRequestError';
+  }
+}
+/** Parse what the caller sent; a failure names the offending field. */
+function input<T extends z.ZodType>(schema: T, value: unknown): z.infer<T> {
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new BillingRequestError(parsed.error.issues);
+  return parsed.data;
+}
 
 /** Absent service/cohort is closed. OxyServer verifies own authority or bounded external scopes. */
 export function createBillingRouter(deps: {
@@ -29,7 +44,13 @@ export function createBillingRouter(deps: {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
       if (!deps.service) {
-        sendError(res, 404, 'invalid_request_error', 'billing_not_enabled');
+        sendError(
+          res,
+          404,
+          'invalid_request_error',
+          'Billing is not enabled for this merchant.',
+          'billing_not_enabled',
+        );
         return;
       }
       try {
@@ -45,18 +66,50 @@ export function createBillingRouter(deps: {
         res.json(result);
       } catch (error) {
         if (error instanceof BillingError) {
-          sendError(res, error.status, 'invalid_request_error', error.code);
+          sendError(
+            res,
+            error.status,
+            error.status >= 500 ? 'api_error' : 'invalid_request_error',
+            BILLING_ERROR_MESSAGES[error.code],
+            error.code,
+          );
+          return;
+        }
+        if (error instanceof BillingRequestError) {
+          sendValidationError(res, error);
           return;
         }
         if (error instanceof z.ZodError) {
-          sendError(res, 422, 'invalid_request_error', 'invalid_billing_request');
+          sendError(
+            res,
+            400,
+            'invalid_request_error',
+            'The billing request is invalid.',
+            'invalid_billing_request',
+          );
           return;
         }
         // Raw provider errors can contain customer details or hosted URLs.
-        sendError(res, 503, 'api_error', 'billing_provider_unavailable');
+        sendError(
+          res,
+          503,
+          'api_error',
+          'The billing provider is unavailable. Try again later.',
+          'billing_provider_unavailable',
+        );
       }
     });
-  const key = (req: Request) => billingIdempotencyKey.parse(req.header('Idempotency-Key'));
+  const key = (req: Request) => {
+    const parsed = billingIdempotencyKey.safeParse(req.header('Idempotency-Key'));
+    if (!parsed.success)
+      throw new BillingRequestError([
+        {
+          path: [],
+          message: 'A valid Idempotency-Key header is required.',
+        },
+      ]);
+    return parsed.data;
+  };
   const write = [
     deps.requireMerchant,
     requireAuthenticated,
@@ -80,28 +133,28 @@ export function createBillingRouter(deps: {
     '/v1/billing/tax_quotes',
     ...read,
     handle((service, owner, req) =>
-      service.createTaxQuote(owner, billingTaxQuoteRequestSchema.parse(req.body)),
+      service.createTaxQuote(owner, input(billingTaxQuoteRequestSchema, req.body)),
     ),
   );
   router.post(
     '/v1/billing/customers',
     ...write,
     handle((service, owner, req) =>
-      service.ensureCustomer(owner, ensureCustomerSchema.parse(req.body), key(req)),
+      service.ensureCustomer(owner, input(ensureCustomerSchema, req.body), key(req)),
     ),
   );
   router.post(
     '/v1/billing/checkout_sessions',
     ...write,
     handle((service, owner, req) =>
-      service.createCheckoutSession(owner, checkoutSchema.parse(req.body), key(req)),
+      service.createCheckoutSession(owner, input(checkoutSchema, req.body), key(req)),
     ),
   );
   router.post(
     '/v1/billing/portal_sessions',
     ...write,
     handle((service, owner, req) =>
-      service.createPortalSession(owner, portalSchema.parse(req.body), key(req)),
+      service.createPortalSession(owner, input(portalSchema, req.body), key(req)),
     ),
   );
   router.get(
@@ -110,7 +163,7 @@ export function createBillingRouter(deps: {
     handle((service, owner, req) =>
       service.retrieveCheckoutOperation(
         owner,
-        checkoutOperationRequestSchema.parse({ ...req.query, idempotencyKey: req.params.key }),
+        input(checkoutOperationRequestSchema, { ...req.query, idempotency_key: req.params.key }),
       ),
     ),
   );
@@ -124,9 +177,9 @@ export function createBillingRouter(deps: {
     ...read,
     handle((service, owner, req) => {
       // `?include=tax_lines`: the frozen Peable Tax lines, inside the signature.
-      const { include } = z
-        .object({ include: z.literal('tax_lines').optional() })
-        .parse({ include: req.query.include });
+      const { include } = input(z.object({ include: z.literal('tax_lines').optional() }), {
+        include: req.query.include,
+      });
       return service.retrieveFinalInvoiceAuthority(
         owner,
         req.params.id ?? '',
@@ -159,14 +212,14 @@ export function createBillingRouter(deps: {
     ...write,
     handle((service, owner, req) => {
       if (!service.renew) throw new BillingError('not_found', 404);
-      return service.renew(owner, req.params.id ?? '', checkoutSchema.parse(req.body), key(req));
+      return service.renew(owner, req.params.id ?? '', input(checkoutSchema, req.body), key(req));
     }),
   );
   router.post(
     '/v1/billing/subscriptions/:id/cancel_at_period_end',
     ...write,
     handle((service, owner, req) => {
-      z.object({}).strict().parse(req.body);
+      input(z.object({}).strict(), req.body);
       return service.cancelAtPeriodEnd(owner, req.params.id ?? '', key(req));
     }),
   );

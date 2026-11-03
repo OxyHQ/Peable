@@ -53,26 +53,31 @@ function fixture() {
     mode: 'test',
     environment: 'development',
   };
+  const unix = (iso: string) => Date.parse(iso) / 1000;
   const consent = {
-    ...actor,
-    authorizationId: 'authorization_fixture',
-    subscriptionId: 'subscription_fixture',
-    planId: 'plan_fixture',
-    explicitConsent: true as const,
-    consentEvidenceId: 'consent_fixture',
-    maximumAmountBaseUnits: '10000',
+    payer_account_id: actor.payerAccountId,
+    merchant_id: actor.merchantId,
+    app_id: actor.appId,
+    mode: actor.mode,
+    environment: actor.environment,
+    authorization_id: 'authorization_fixture',
+    subscription_id: 'subscription_fixture',
+    plan_id: 'plan_fixture',
+    explicit_consent: true as const,
+    consent_evidence_id: 'consent_fixture',
+    maximum_amount_base_units: '10000',
     interval: 'month' as const,
-    intervalCount: 1 as const,
-    startsAt: '2026-10-01T00:00:00.000Z',
-    expiresAt: '2027-10-01T00:00:00.000Z',
-    acceptedAt: '2026-09-30T12:00:00.000Z',
+    interval_count: 1 as const,
+    starts_at: unix('2026-10-01T00:00:00.000Z'),
+    expires_at: unix('2027-10-01T00:00:00.000Z'),
+    accepted_at: unix('2026-09-30T12:00:00.000Z'),
   };
   const instruction = {
-    authorizationId: consent.authorizationId,
-    subscriptionId: consent.subscriptionId,
-    planId: consent.planId,
+    authorizationId: consent.authorization_id,
+    subscriptionId: consent.subscription_id,
+    planId: consent.plan_id,
     amountBaseUnits: '9999',
-    periodStart: consent.startsAt,
+    periodStart: '2026-10-01T00:00:00.000Z',
     periodEnd: '2026-11-01T00:00:00.000Z',
     idempotencyKey: 'renewal_fixture',
   };
@@ -100,14 +105,18 @@ describe('Faircoin renewal scheduling authorization', () => {
   it('requires verified explicit consent, bounded positive amount and monthly cadence', async () => {
     const { service, actor, consent, repository } = fixture();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, explicitConsent: false }),
+      faircoinRenewalConsentSchema.parse({ ...consent, explicit_consent: false }),
     ).toThrow();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, maximumAmountBaseUnits: '0' }),
+      faircoinRenewalConsentSchema.parse({ ...consent, maximum_amount_base_units: '0' }),
     ).toThrow();
-    expect(() => faircoinRenewalConsentSchema.parse({ ...consent, intervalCount: 2 })).toThrow();
+    expect(() => faircoinRenewalConsentSchema.parse({ ...consent, interval_count: 2 })).toThrow();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, expiresAt: consent.startsAt }),
+      faircoinRenewalConsentSchema.parse({ ...consent, expires_at: consent.starts_at }),
+    ).toThrow();
+    // The wire's instants are Unix seconds; an ISO string is refused.
+    expect(() =>
+      faircoinRenewalConsentSchema.parse({ ...consent, starts_at: '2026-10-01T00:00:00.000Z' }),
     ).toThrow();
     expect(() => faircoinRenewalConsentSchema.parse({ ...consent, mode: 'live' })).toThrow();
     const denied = createFaircoinRenewalAuthorization({
@@ -174,9 +183,9 @@ describe('Faircoin renewal scheduling authorization', () => {
     await service.accept(actor, consent);
     await service.prepareAutomaticRenewal(actor, instruction);
     const revocation = {
-      authorizationId: consent.authorizationId,
-      revokedAt: '2026-10-07T11:00:00.000Z',
-      revocationEvidenceId: 'revoke_fixture',
+      authorization_id: consent.authorization_id,
+      revoked_at: Date.parse('2026-10-07T11:00:00.000Z') / 1000,
+      revocation_evidence_id: 'revoke_fixture',
     };
     const denied = createFaircoinRenewalAuthorization({
       repository,
@@ -209,7 +218,7 @@ describe('Faircoin renewal scheduling authorization', () => {
     await expect(service.prepareAutomaticRenewal(actor, instruction)).rejects.toThrow(
       'identity_conflict',
     );
-    setNow(consent.expiresAt);
+    setNow(new Date(consent.expires_at * 1000).toISOString());
     await expect(service.assertExecutionAuthorized(actor, instruction)).rejects.toThrow(
       'identity_conflict',
     );

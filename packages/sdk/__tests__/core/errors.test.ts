@@ -10,10 +10,11 @@ import {
 
 describe('errorFromResponse', () => {
   test('maps a nested Gateway envelope (sendError shape) using error.type/message', () => {
-    const err = errorFromResponse(422, {
+    const err = errorFromResponse(400, {
       error: {
         type: 'invalid_request_error',
         message: 'amount must be a base-unit integer string',
+        request_id: 'req_1',
       },
     });
     expect(err).toBeInstanceOf(PeableInvalidRequestError);
@@ -21,7 +22,47 @@ describe('errorFromResponse', () => {
     expect(err.message).toBe('amount must be a base-unit integer string');
     expect(err.type).toBe('invalid_request_error');
     expect(err.code).toBe('invalid_request_error');
-    expect(err.statusCode).toBe(422);
+    expect(err.statusCode).toBe(400);
+    expect(err.param).toBeUndefined();
+    expect(err.requestId).toBe('req_1');
+  });
+
+  test('exposes the offending param, the specific code and the request id', () => {
+    const err = errorFromResponse(
+      400,
+      {
+        error: {
+          type: 'invalid_request_error',
+          code: 'parameter_invalid',
+          param: 'metadata[order_id]',
+          message: 'too long',
+          request_id: 'req_body',
+        },
+      },
+      'req_header',
+    );
+    expect(err).toBeInstanceOf(PeableInvalidRequestError);
+    expect(err.code).toBe('parameter_invalid');
+    expect(err.param).toBe('metadata[order_id]');
+    // The body's id wins; it is the same id as the header on a gateway answer.
+    expect(err.requestId).toBe('req_body');
+  });
+
+  test('falls back to the Request-Id header when the body carries no request_id', () => {
+    const nested = errorFromResponse(
+      500,
+      { error: { type: 'api_error', message: 'internal error', request_id: null } },
+      'req_header',
+    );
+    expect(nested.requestId).toBe('req_header');
+    const flat = errorFromResponse(
+      401,
+      { error: 'TOKEN_EXPIRED', message: 'Service token expired' },
+      'req_flat',
+    );
+    expect(flat).toBeInstanceOf(PeableAuthenticationError);
+    expect(flat.requestId).toBe('req_flat');
+    expect(errorFromResponse(500, undefined).requestId).toBeUndefined();
   });
 
   test('401 nested envelope maps to PeableAuthenticationError', () => {

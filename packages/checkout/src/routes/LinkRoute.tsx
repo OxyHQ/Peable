@@ -68,7 +68,7 @@ export function LinkRoute() {
     try {
       if (linkState.data.contribution) {
         const requested =
-          linkState.data.contribution.amountMode === 'fixed'
+          linkState.data.contribution.amount_mode === 'fixed'
             ? linkState.data.amount
             : decimalContributionAmount(amount);
         const operation = beginContribution(linkId, requested);
@@ -89,7 +89,7 @@ export function LinkRoute() {
         return;
       }
       const minted = await gatewayPost<PaymentIntent>(`/v1/payment_links/${linkId}/payment_intent`);
-      rememberIntentForLink(linkId, { id: minted.id, clientSecret: minted.clientSecret });
+      rememberIntentForLink(linkId, { id: minted.id, clientSecret: minted.client_secret });
       if (generation === requestGeneration.current) setPayState({ status: 'ready', data: minted });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start payment.';
@@ -135,7 +135,7 @@ export function LinkRoute() {
     <main className="checkout-page">
       <MerchantIdentity merchant={link.merchant} />
       {link.contribution && <p>{link.contribution.purpose}</p>}
-      {link.contribution?.amountMode === 'free' ? (
+      {link.contribution?.amount_mode === 'free' ? (
         <label>
           Contribution amount ({link.currency})
           <input
@@ -155,7 +155,7 @@ export function LinkRoute() {
           {link.currency}
         </p>
       )}
-      {link.currency === 'FAIR' && link.contribution?.amountMode !== 'free' && (
+      {link.currency === 'FAIR' && link.contribution?.amount_mode !== 'free' && (
         <DisplayCurrency amount={link.amount} />
       )}
       {locked && (

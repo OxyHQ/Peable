@@ -15,6 +15,8 @@ export interface MockResponseSpec {
   json?: unknown;
   /** Raw text body — mutually exclusive with `json`. Used to test malformed/empty bodies. */
   text?: string;
+  /** Extra response headers (`Request-Id`, …). */
+  headers?: Record<string, string>;
 }
 
 export type MockFetchHandler = (
@@ -47,7 +49,7 @@ export function createMockFetch(handler: MockFetchHandler): MockFetch {
     const body = spec.json !== undefined ? JSON.stringify(spec.json) : (spec.text ?? '');
     return new Response(body, {
       status: spec.status,
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', ...spec.headers },
     });
   }) as typeof fetch;
 

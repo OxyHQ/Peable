@@ -53,13 +53,13 @@ function fakeProvider(answer: 'standard_rated' | 'not_collecting' | 'down' = 'st
                 country: input.customer.country,
                 state: null,
                 level: 'country',
-                displayName: 'VAT',
-                taxType: 'vat',
-                ratePercentage: answer === 'not_collecting' ? null : '20.0',
-                taxableAmount: line.amount - (line.taxBehavior === 'inclusive' ? amountTax : 0),
+                display_name: 'VAT',
+                tax_type: 'vat',
+                rate_percentage: answer === 'not_collecting' ? null : '20.0',
+                taxable_amount: line.amount - (line.taxBehavior === 'inclusive' ? amountTax : 0),
                 amount: amountTax,
                 inclusive: line.taxBehavior === 'inclusive',
-                taxabilityReason: answer,
+                taxability_reason: answer,
               },
             ],
           };
@@ -74,16 +74,16 @@ async function approvedMerchant(provider: TaxProvider) {
   const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
   const tax = createTaxService({ db: gatewayDb(), provider });
   await tax.updateSettings(merchant, {
-    legalName: 'Example Seller, Inc.',
-    headOffice: { country: 'US', state: 'DE' },
-    defaultTaxCode: 'txcd_10103000',
+    legal_name: 'Example Seller, Inc.',
+    head_office: { country: 'US', state: 'DE' },
+    default_tax_code: 'txcd_10103000',
   });
   await tax.createRegistration(merchant, { country: 'IE', scheme: 'eu_oss_non_union' });
   const approved = await tax.approve(merchant, { userId: 'owner_1', officialApplication: true });
   return { merchant, tax, approved };
 }
 const euEvidence = (country: string) => ({
-  customerRef: 'acct_payer',
+  customer_ref: 'acct_payer',
   evidence: [
     { type: 'billing_address', address: { country } },
     { type: 'payment_method_country', country },
@@ -94,10 +94,10 @@ describe('Peable Tax', () => {
   it('approval activates settings and mirrors registrations to the provider', async () => {
     const { provider, synced } = fakeProvider();
     const { approved } = await approvedMerchant(provider);
-    expect(approved.settings).toMatchObject({ status: 'active', calculationAccount: 'platform' });
+    expect(approved.settings).toMatchObject({ status: 'active', calculation_account: 'platform' });
     expect(approved.registrations[0]).toMatchObject({
       status: 'active',
-      providerRegistrationRef: 'taxreg_provider_1',
+      provider_registration_ref: 'taxreg_provider_1',
     });
     expect(synced).toEqual(['IE:eu_oss_non_union']);
   });
@@ -105,7 +105,7 @@ describe('Peable Tax', () => {
   it('a registration needs a provider: a third-party app cannot approve one', async () => {
     const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
     const tax = createTaxService({ db: gatewayDb(), provider: fakeProvider().provider });
-    await tax.updateSettings(merchant, { legalName: 'X', headOffice: { country: 'US' } });
+    await tax.updateSettings(merchant, { legal_name: 'X', head_office: { country: 'US' } });
     await tax.createRegistration(merchant, { country: 'GB', scheme: 'standard' });
     await expect(
       tax.approve(merchant, { userId: 'owner', officialApplication: false }),
@@ -120,17 +120,26 @@ describe('Peable Tax', () => {
       merchant,
       {
         currency: 'usd',
-        customerLocationEvidenceId: de.id,
-        lineItems: [{ reference: 'one_monthly', amount: 2999, taxBehavior: 'inclusive' }],
+        customer_location_evidence_id: de.id,
+        line_items: [{ reference: 'one_monthly', amount: 2999, tax_behavior: 'inclusive' }],
       },
       { requireActive: true },
     );
     expect(inclusive).toMatchObject({
       collection: 'collect',
-      amountTotal: 2999,
-      taxAmountInclusive: 2999 - 2499,
-      amountNet: 2499,
+      amount_total: 2999,
+      tax_amount_inclusive: 2999 - 2499,
+      amount_net: 2499,
     });
+    expect(inclusive.line_items[0]).toMatchObject({
+      tax_code: 'txcd_10103000',
+      tax_behavior: 'inclusive',
+      amount_tax: 500,
+      amount_net: 2499,
+    });
+    expect(inclusive.line_items[0]).not.toHaveProperty('taxCode');
+    expect(typeof inclusive.created).toBe('number');
+    expect(typeof inclusive.expires_at).toBe('number');
     expect(calls[0]?.lineItems[0]?.taxCode).toBe('txcd_10103000');
     expect(await tax.retrieveCalculation(merchant, inclusive.id)).toEqual(inclusive);
 
@@ -138,19 +147,19 @@ describe('Peable Tax', () => {
       merchant,
       {
         currency: 'USD',
-        customerLocationEvidenceId: de.id,
-        lineItems: [{ reference: 'seat', amount: 1000, taxBehavior: 'exclusive' }],
+        customer_location_evidence_id: de.id,
+        line_items: [{ reference: 'seat', amount: 1000, tax_behavior: 'exclusive' }],
       },
       { requireActive: true },
     );
     expect(exclusive).toMatchObject({
-      amountTotal: 1200,
-      amountNet: 1000,
-      taxAmountExclusive: 200,
+      amount_total: 1200,
+      amount_net: 1000,
+      tax_amount_exclusive: 200,
     });
 
     const jp = await tax.recordEvidence(merchant, {
-      customerRef: 'acct_payer',
+      customer_ref: 'acct_payer',
       evidence: [{ type: 'billing_address', address: { country: 'JP' } }],
     });
     const before = calls.length;
@@ -158,19 +167,19 @@ describe('Peable Tax', () => {
       merchant,
       {
         currency: 'USD',
-        customerLocationEvidenceId: jp.id,
-        lineItems: [{ reference: 'one_monthly', amount: 2999, taxBehavior: 'inclusive' }],
+        customer_location_evidence_id: jp.id,
+        line_items: [{ reference: 'one_monthly', amount: 2999, tax_behavior: 'inclusive' }],
       },
       { requireActive: true },
     );
     expect(calls.length).toBe(before);
     expect(unregistered).toMatchObject({
       collection: 'not_registered',
-      amountTotal: 2999,
-      amountNet: 2999,
-      registrationId: null,
+      amount_total: 2999,
+      amount_net: 2999,
+      registration_id: null,
     });
-    expect(unregistered.lineItems[0]?.breakdown[0]?.taxabilityReason).toBe('not_registered');
+    expect(unregistered.line_items[0]?.breakdown[0]?.taxability_reason).toBe('not_registered');
   });
 
   it('fails closed when the provider is down or disagrees about the registration', async () => {
@@ -185,8 +194,8 @@ describe('Peable Tax', () => {
           merchant,
           {
             currency: 'USD',
-            customerLocationEvidenceId: evidence.id,
-            lineItems: [{ reference: 'p', amount: 500 }],
+            customer_location_evidence_id: evidence.id,
+            line_items: [{ reference: 'p', amount: 500 }],
           },
           { requireActive: true },
         ),
@@ -198,13 +207,13 @@ describe('Peable Tax', () => {
     const merchant = await seedMerchant({ environment: 'production', network: 'mainnet' });
     const tax = createTaxService({ db: gatewayDb(), provider: fakeProvider().provider });
     const one = await tax.recordEvidence(merchant, {
-      customerRef: 'c',
+      customer_ref: 'c',
       evidence: [{ type: 'billing_address', address: { country: 'DE' } }],
     });
     const request = {
       currency: 'USD',
-      customerLocationEvidenceId: one.id,
-      lineItems: [{ reference: 'p', amount: 500 }],
+      customer_location_evidence_id: one.id,
+      line_items: [{ reference: 'p', amount: 500 }],
     };
     await expect(tax.calculate(merchant, request, { requireActive: true })).rejects.toMatchObject({
       code: 'tax_settings_not_active',
@@ -240,24 +249,26 @@ describe('Peable Tax', () => {
     });
     const evidence = await tax.recordEvidence(merchant, {
       ...euEvidence('NL'),
-      customerRef: 'store_1',
+      customer_ref: 'store_1',
     });
     const quote = await createVerifiedBillingTaxQuote(calculator, owner, merchant.publicId, {
-      storeId: 'store_1',
-      planId: 'one_monthly',
-      customerLocationEvidenceId: evidence.id,
+      store_id: 'store_1',
+      plan_id: 'one_monthly',
+      customer_location_evidence_id: evidence.id,
     });
     // Exclusive: the listed price is the net; the payer pays price plus tax.
+    expect(quote.schema_version).toBe(2);
     expect(quote.quote).toMatchObject({
-      netMinorUnits: 1000,
-      taxMinorUnits: 200,
-      grossMinorUnits: 1200,
-      taxTreatment: 'exclusive',
+      net_minor_units: 1000,
+      tax_minor_units: 200,
+      gross_minor_units: 1200,
+      tax_treatment: 'exclusive',
       country: 'NL',
-      taxServiceRef: 'peable_tax',
+      tax_service_ref: 'peable_tax',
     });
-    expect(quote.quote.taxRateEvidenceId).toMatch(/^taxcalc_/);
-    expect(quote.quote.coverageEvidenceId).toMatch(/^taxreg_/);
+    expect(quote.quote.expires_at).toBeGreaterThan(quote.quote.quoted_at);
+    expect(quote.quote.tax_rate_evidence_id).toMatch(/^taxcalc_/);
+    expect(quote.quote.coverage_evidence_id).toMatch(/^taxreg_/);
     // A tampered amount does not verify.
     const product = must(
       (await calculator.resolveProduct(owner, 'one_monthly')) as Parameters<
@@ -268,8 +279,8 @@ describe('Peable Tax', () => {
       typeof verifyBillingTaxQuote
     >[1]['location'];
     const tampered = structuredClone(quote);
-    tampered.quote.taxMinorUnits = 100;
-    tampered.quote.grossMinorUnits = 1100;
+    tampered.quote.tax_minor_units = 100;
+    tampered.quote.gross_minor_units = 1100;
     expect(() =>
       verifyBillingTaxQuote(
         tampered,
@@ -280,21 +291,22 @@ describe('Peable Tax', () => {
     ).toThrow();
 
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.taxRateEvidenceId,
+      calculationPublicId: quote.quote.tax_rate_evidence_id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
     });
     // Idempotent: the same payment observed twice is one transaction.
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.taxRateEvidenceId,
+      calculationPublicId: quote.quote.tax_rate_evidence_id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
     });
+    // Unix seconds, as a query string carries them.
     const window = {
-      from: new Date(Date.now() - 3600_000).toISOString(),
-      to: new Date(Date.now() + 3600_000).toISOString(),
+      from: String(Math.floor(Date.now() / 1000) - 3600),
+      to: String(Math.floor(Date.now() / 1000) + 3600),
     };
     const list = await tax.listTransactions(merchant, window);
     expect(list.data).toHaveLength(1);
@@ -304,16 +316,16 @@ describe('Peable Tax', () => {
         country: 'NL',
         scheme: 'eu_oss_non_union',
         collection: 'collect',
-        ratePercentage: '20.0',
+        rate_percentage: '20.0',
         transactions: 1,
-        taxableAmount: 1000,
-        taxAmount: 200,
+        taxable_amount: 1000,
+        tax_amount: 200,
       }),
     ]);
     const lines = must(
-      await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.taxRateEvidenceId),
+      await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.tax_rate_evidence_id),
     );
-    expect(lines.reduce((sum, line) => sum + line.taxMinorUnits, 0)).toBe(200);
+    expect(lines.reduce((sum, line) => sum + line.tax_minor_units, 0)).toBe(200);
 
     // A FairCoin refund from the seller's wallet: reversed in part, by its
     // reference once, then the rest; the report nets both.
@@ -324,15 +336,22 @@ describe('Peable Tax', () => {
     });
     expect(half).toMatchObject({
       type: 'reversal',
-      reversalOf: sale.id,
-      reversal: { amountTotal: -600, taxAmount: -100 },
+      reversal_of: sale.id,
+      reversal: { amount_total: -600, tax_amount: -100 },
     });
+    // The reversal's lines are the wire's own shape, scaled: no unscaled
+    // original amounts and no second spelling beside them.
+    const reversedLine = must(half.reversal?.line_items[0]);
+    expect(reversedLine).toMatchObject({ amount_tax: -100, amount_net: -500 });
+    expect(reversedLine).not.toHaveProperty('amountTax');
+    expect(reversedLine.breakdown[0]).toMatchObject({ taxable_amount: -500, amount: -100 });
+    expect(reversedLine.breakdown[0]).not.toHaveProperty('taxableAmount');
     expect(
       await tax.createReversal(merchant, sale.id, { reference: 'refund_1', amount: 600 }),
     ).toMatchObject({ id: half.id });
     await tax.createReversal(merchant, sale.id, { reference: 'refund_2' });
     expect((await tax.report(merchant, window)).rows).toEqual([
-      expect.objectContaining({ transactions: 1, reversals: 2, taxableAmount: 0, taxAmount: 0 }),
+      expect.objectContaining({ transactions: 1, reversals: 2, taxable_amount: 0, tax_amount: 0 }),
     ]);
   });
 });
@@ -383,7 +402,7 @@ describe('Stripe Tax provider', () => {
     const provider = createStripeTaxProvider(api, false);
     const result = await provider.calculate({
       currency: 'USD',
-      customer: { country: 'US', state: 'NY', postalCode: '10001' },
+      customer: { country: 'US', state: 'NY', postal_code: '10001' },
       shipFrom: null,
       lineItems: [
         {
@@ -406,7 +425,7 @@ describe('Stripe Tax provider', () => {
     });
     expect(result.lineItems[0]).toMatchObject({
       amountTax: 89,
-      breakdown: [{ state: 'NY', ratePercentage: '8.875', taxabilityReason: 'standard_rated' }],
+      breakdown: [{ state: 'NY', rate_percentage: '8.875', taxability_reason: 'standard_rated' }],
     });
   });
 });

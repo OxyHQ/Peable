@@ -6,6 +6,12 @@ import {
   contributionCollectionListSchema,
   contributionPatchSchema,
 } from './index';
+const requestIdHeader = {
+  'Request-Id': {
+    description: 'Identifies this request to Peable support.',
+    schema: { type: 'string' },
+  },
+} as const;
 const path = '/v1/organizations/{organizationId}/applications/{applicationId}/contributions';
 export const contributionRoutes = [
   {
@@ -60,9 +66,14 @@ export function contributionOpenApi() {
         {
           in: 'query',
           name: 'limit',
-          schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 },
+          schema: { type: 'integer', minimum: 1, maximum: 100, default: 10 },
         },
-        { in: 'query', name: 'cursor', schema: { type: 'string' } },
+        {
+          in: 'query',
+          name: 'starting_after',
+          description: 'The id of the last object on the previous page.',
+          schema: { type: 'string' },
+        },
       );
     if (route.method === 'post')
       parameters.push({
@@ -86,10 +97,12 @@ export function contributionOpenApi() {
       responses: {
         [route.status]: {
           description: 'Success',
+          headers: requestIdHeader,
           content: { 'application/json': { schema: z.toJSONSchema(route.response) } },
         },
         default: {
           description: 'Peable error envelope; HTTP status identifies failure',
+          headers: requestIdHeader,
           content: {
             'application/json': {
               schema: {
@@ -98,8 +111,14 @@ export function contributionOpenApi() {
                 properties: {
                   error: {
                     type: 'object',
-                    required: ['type', 'message'],
-                    properties: { type: { type: 'string' }, message: { type: 'string' } },
+                    required: ['type', 'message', 'request_id'],
+                    properties: {
+                      type: { type: 'string' },
+                      code: { type: 'string' },
+                      param: { type: 'string' },
+                      message: { type: 'string' },
+                      request_id: { type: ['string', 'null'] },
+                    },
                   },
                 },
               },
@@ -113,7 +132,7 @@ export function contributionOpenApi() {
     openapi: '3.1.0',
     info: {
       title: 'Peable organization contributions',
-      version: '0.1.0',
+      version: '0.2.0',
       description:
         'One-off links. Human Oxy session for management; existing /v1/payment_links/{id}/public and /payment_intent remain anonymous. Fixed/free amounts use FAIR base units (8 decimals); the registered merchant determines the network. Refunds cannot be created by the watch-only gateway. No recurring billing.',
     },

@@ -29,7 +29,13 @@ import { EnvironmentModeMismatchError } from '../services/providers/environmentG
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { newId } from '../lib/ids';
 import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from '../lib/serialize';
-import { sendEnvironmentMismatch, sendError, wrap, requireAuthenticated } from '../lib/http';
+import {
+  sendEnvironmentMismatch,
+  sendError,
+  wrap,
+  requireAuthenticated,
+  sendValidationError,
+} from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
 
@@ -41,19 +47,23 @@ const listQuerySchema = z.object({
   starting_after: z.string().optional(),
 });
 
-const createBodySchema = z.object({
-  ...railBodyFields,
-  metadata: z.record(z.string(), z.string()).optional(),
-  successUrl: z.string().url().optional(),
-});
+const createBodySchema = z
+  .object({
+    ...railBodyFields,
+    metadata: z.record(z.string(), z.string()).optional(),
+    success_url: z.string().url().optional(),
+  } satisfies Record<keyof CreatePaymentLinkParams, z.ZodType>)
+  .strict();
 
-// Only `active`/`metadata`/`successUrl` are mutable — a link's price must be
+// Only `active`/`metadata`/`success_url` are mutable — a link's price must be
 // immutable once shared, so `amount`/`network` are deliberately absent here.
-const patchBodySchema = z.object({
-  active: z.boolean().optional(),
-  metadata: z.record(z.string(), z.string()).optional(),
-  successUrl: z.string().url().nullable().optional(),
-});
+const patchBodySchema = z
+  .object({
+    active: z.boolean().optional(),
+    metadata: z.record(z.string(), z.string()).optional(),
+    success_url: z.string().url().nullable().optional(),
+  })
+  .strict();
 
 /**
  * Build the payment-link REST router (F2.3). Merchant CRUD routes follow the
@@ -80,12 +90,7 @@ export function createPaymentLinksRouter(deps: {
 
       const parsed = createBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const params: CreatePaymentLinkParams = parsed.data as CreatePaymentLinkParams;
@@ -109,7 +114,7 @@ export function createPaymentLinksRouter(deps: {
         assertRailAvailable(resolved.rail);
       } catch (err) {
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message);
           return;
         }
         if (err instanceof RailUnavailableError) {
@@ -132,7 +137,7 @@ export function createPaymentLinksRouter(deps: {
         rail: resolved.rail,
         network: resolved.network,
         metadata: params.metadata ?? {},
-        successUrl: params.successUrl,
+        successUrl: params.success_url,
       });
 
       res.status(201).json(toPaymentLinkDTO(link));
@@ -150,12 +155,7 @@ export function createPaymentLinksRouter(deps: {
 
       const parsed = listQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const { starting_after } = parsed.data;
@@ -165,14 +165,14 @@ export function createPaymentLinksRouter(deps: {
 
       // The cursor arrives as a public `link_…`; the keyset walk runs on the
       // primary key, so it is resolved here, ownership-scoped — a cursor
-      // naming another merchant's link is a 422 exactly like an unknown one.
+      // naming another merchant's link is a 400 exactly like an unknown one.
       let after: string | undefined;
       if (starting_after) {
         const cursor = await findLinkForMerchant(db, starting_after, merchant.id);
         if (!cursor) {
           sendError(
             res,
-            422,
+            400,
             'invalid_request_error',
             'starting_after references an unknown payment link',
           );
@@ -203,7 +203,7 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -227,12 +227,7 @@ export function createPaymentLinksRouter(deps: {
 
       const parsed = patchBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const params = parsed.data;
@@ -247,11 +242,15 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
-      const link = await updatePaymentLink(getDb(), id, merchant.id, params);
+      const link = await updatePaymentLink(getDb(), id, merchant.id, {
+        active: params.active,
+        metadata: params.metadata,
+        successUrl: params.success_url,
+      });
       if (!link) {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
@@ -261,7 +260,7 @@ export function createPaymentLinksRouter(deps: {
   );
 
   // Public payer path — UNAUTHENTICATED, rate-limited. Returns only
-  // payer-safe fields (no metadata/successUrl/internal ids). Still returns
+  // payer-safe fields (no metadata/success_url/internal ids). Still returns
   // `active: false` links (never 404s an inactive link) so the checkout page
   // can render a "link disabled" state instead of a generic not-found.
   router.get(
@@ -274,7 +273,7 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -308,7 +307,7 @@ export function createPaymentLinksRouter(deps: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -329,30 +328,33 @@ export function createPaymentLinksRouter(deps: {
       if (link.contribution) {
         const body = contributionMintSchema.safeParse(req.body ?? {});
         const key = contributionOperationKeySchema.safeParse(req.header('Idempotency-Key'));
-        if (!body.success || !key.success) {
+        if (!body.success) {
+          sendValidationError(res, body.error);
+          return;
+        }
+        if (!key.success) {
           sendError(
             res,
-            422,
+            400,
             'invalid_request_error',
-            'A valid amount and UUID Idempotency-Key are required',
+            'A UUID Idempotency-Key header is required',
+            'idempotency_key_invalid',
           );
           return;
         }
         if (link.contribution.amountMode === 'free') {
           if (!body.data.amount) {
-            sendError(res, 422, 'invalid_request_error', 'Choose a contribution amount');
+            sendError(res, 400, 'invalid_request_error', 'Choose a contribution amount');
             return;
           }
           amount = body.data.amount;
         } else if (body.data.amount !== undefined && body.data.amount !== link.amount) {
-          sendError(res, 422, 'invalid_request_error', 'This contribution has a fixed amount');
+          sendError(res, 400, 'invalid_request_error', 'This contribution has a fixed amount');
           return;
         }
-        idempotencyKey =
-          'contribution:' +
-          createHash('sha256')
-            .update(link.publicId + ':' + key.data)
-            .digest('hex');
+        idempotencyKey = `contribution:${createHash('sha256')
+          .update(`${link.publicId}:${key.data}`)
+          .digest('hex')}`;
       }
       // Disabling/expiry prevents new attempts, but a lost response can still
       // recover the already-created payment using its unguessable operation key.
@@ -364,7 +366,7 @@ export function createPaymentLinksRouter(deps: {
         (!link.active ||
           (link.contribution?.expiresAt && Date.parse(link.contribution.expiresAt) <= Date.now()))
       ) {
-        sendError(res, 422, 'invalid_request_error', 'payment link is no longer active');
+        sendError(res, 400, 'invalid_request_error', 'payment link is no longer active');
         return;
       }
       try {
@@ -400,10 +402,10 @@ export function createPaymentLinksRouter(deps: {
         // other `createIntent` caller, rather than letting it fall through
         // to a bare 500 if that invariant is ever loosened.
         if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 422, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message);
           return;
         }
-        // 503, not 422: the rail is not configured on this deployment, which is
+        // 503, not 400: the rail is not configured on this deployment, which is
         // not something the caller can fix by sending different fields.
         if (err instanceof RailUnavailableError) {
           sendError(res, 503, 'api_error', err.message);

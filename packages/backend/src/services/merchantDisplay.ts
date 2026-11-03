@@ -26,7 +26,7 @@ export async function resolveMerchantDisplay(merchant: MerchantRow): Promise<Mer
     // A withheld avatar is one Oxy has said it will not serve right now (its
     // owner trashed it or made it private — `services/oxyFiles/fileEvents.ts`).
     // A URL to it would be a broken image on the checkout page.
-    avatarUrl:
+    avatar_url:
       merchant.avatarFileId && merchant.avatarWithheld === null
         ? oxy.assets.publicUrl(merchant.avatarFileId, 'thumb')
         : null,

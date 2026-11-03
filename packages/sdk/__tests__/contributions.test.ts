@@ -8,17 +8,18 @@ const scope = {
 };
 const link = {
   id: 'link_one',
+  object: 'payment_link',
   amount: '100000000',
   currency: 'FAIR',
   network: 'testnet',
   active: true,
   url: 'https://checkout.peable.to/l/link_one',
-  createdAt: new Date().toISOString(),
+  created: Math.floor(Date.now() / 1000),
   contribution: {
-    organizationId: scope.organizationId,
+    organization_id: scope.organizationId,
     purpose: 'Garden',
-    amountMode: 'fixed',
-    expiresAt: null,
+    amount_mode: 'fixed',
+    expires_at: null,
   },
 };
 test('owning SDK validates and scopes organization operations with caller operation keys', async () => {
@@ -32,7 +33,7 @@ test('owning SDK validates and scopes organization operations with caller operat
   const key = crypto.randomUUID();
   await client.create(
     scope,
-    { purpose: 'Garden', amountMode: 'fixed', amount: '100000000', currency: 'FAIR' },
+    { purpose: 'Garden', amount_mode: 'fixed', amount: '100000000', currency: 'FAIR' },
     key,
   );
   expect(calls[0]?.path).toContain('/org%2Fone/');
@@ -45,9 +46,31 @@ test('SDK refuses a provider response that changes rail currency', async () => {
   });
   await expect(client.setActive(scope, 'link_one', false)).rejects.toThrow();
 });
-test('iterator rejects a repeated cursor instead of looping', async () => {
+test('iterator pages by starting_after until has_more is false', async () => {
+  const second = { ...link, id: 'link_two' };
+  const queries: unknown[] = [];
   const client = new ContributionsResource({
-    request: async <T>() => ({ items: [link], nextCursor: 'same' }) as T,
+    request: async <T>(_method: string, _path: string, options?: RestClientRequestOptions) => {
+      queries.push(options?.query);
+      const after = options?.query?.starting_after;
+      return (
+        after === undefined
+          ? { object: 'list', data: [link], has_more: true }
+          : { object: 'list', data: [second], has_more: false }
+      ) as T;
+    },
+  });
+  const ids: string[] = [];
+  for await (const row of client.iterate(scope)) ids.push(row.id);
+  expect(ids).toEqual(['link_one', 'link_two']);
+  expect(queries).toEqual([
+    { environment: 'development' },
+    { environment: 'development', starting_after: 'link_one' },
+  ]);
+});
+test('iterator rejects a repeated page instead of looping', async () => {
+  const client = new ContributionsResource({
+    request: async <T>() => ({ object: 'list', data: [link], has_more: true }) as T,
   });
   await expect(
     (async () => {
@@ -55,5 +78,5 @@ test('iterator rejects a repeated cursor instead of looping', async () => {
         /* drain */
       }
     })(),
-  ).rejects.toThrow('Repeated contribution cursor');
+  ).rejects.toThrow('Repeated contribution page');
 });

@@ -283,18 +283,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   test('opens an account for a seller and returns 201', async () => {
     const { status, json } = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_1',
+      external_ref: 'store_1',
       country: 'es',
-      businessType: 'individual',
+      business_type: 'individual',
     });
 
     expect(status).toBe(201);
     expect(json.object).toBe('connected_account');
-    expect(json.externalRef).toBe('store_1');
+    expect(json.external_ref).toBe('store_1');
     // Upper-cased on the way in, which is the form the CHECK insists on.
     expect(json.country).toBe('ES');
     expect(json.payable).toBe(false);
-    expect((json.requirements as Record<string, number>).currentlyDue).toBe(1);
+    expect((json.requirements as Record<string, number>).currently_due).toBe(1);
   });
 
   /**
@@ -305,9 +305,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
    */
   test("never puts the provider's account id or name on the wire", async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_secret',
+      external_ref: 'store_secret',
       country: 'ES',
-      businessType: 'company',
+      business_type: 'company',
     });
     const listed = await call('GET', '/v1/connected_accounts');
     const fetched = await call('GET', '/v1/connected_accounts/by_ref/store_secret');
@@ -327,15 +327,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
    */
   test('a repeated create converges on the same account and answers 200', async () => {
     const first = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_repeat',
+      external_ref: 'store_repeat',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     providerCalls.length = 0;
     const second = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_repeat',
+      external_ref: 'store_repeat',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
 
     expect(first.status).toBe(201);
@@ -349,14 +349,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   test('a card seller gains a FairCoin half under the SAME ca_, with no provider call', async () => {
     const card = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_both_a',
+      external_ref: 'store_both_a',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     providerCalls.length = 0;
     const both = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_both_a',
-      faircoin: { network: 'testnet', oxyUserId: 'user_both_a' },
+      external_ref: 'store_both_a',
+      faircoin: { network: 'testnet', oxy_user_id: 'user_both_a' },
     });
     expect(both.status).toBe(200);
     expect(both.json.id).toBe(card.json.id);
@@ -367,16 +367,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   test('a FairCoin seller gains a card half under the SAME ca_, opened at the provider once', async () => {
     const fair = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_both_b',
-      faircoin: { network: 'testnet', oxyUserId: 'user_both_b' },
+      external_ref: 'store_both_b',
+      faircoin: { network: 'testnet', oxy_user_id: 'user_both_b' },
     });
     expect(fair.status).toBe(201);
     expect(providerCalls).toEqual([]);
 
     const both = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_both_b',
+      external_ref: 'store_both_b',
       country: 'pt',
-      businessType: 'company',
+      business_type: 'company',
     });
     expect(both.status).toBe(200);
     expect(both.json.id).toBe(fair.json.id);
@@ -386,25 +386,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     // Converging again opens nothing more.
     await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_both_b',
+      external_ref: 'store_both_b',
       country: 'PT',
-      businessType: 'company',
+      business_type: 'company',
     });
     expect(providerCalls.filter((c) => c.fn === 'createAccount')).toHaveLength(1);
   });
 
   test('a FairCoin-only seller cannot be settled to by transfer', async () => {
     const fair = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_fair_transfer',
-      faircoin: { network: 'testnet', oxyUserId: 'user_fair_transfer' },
+      external_ref: 'store_fair_transfer',
+      faircoin: { network: 'testnet', oxy_user_id: 'user_fair_transfer' },
     });
     const transfer = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: fair.json.id,
-      externalRef: 'order_to_fair_seller',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: fair.json.id,
+      external_ref: 'order_to_fair_seller',
       amount: '1000',
     });
-    expect(transfer.status).toBe(422);
+    expect(transfer.status).toBe(400);
     expect(providerCalls.filter((c) => c.fn === 'createTransfer')).toHaveLength(0);
 
     const refreshed = await call('POST', `/v1/connected_accounts/${String(fair.json.id)}/refresh`);
@@ -420,9 +420,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
    */
   test('derives the provider idempotency key from the merchant and the seller ref', async () => {
     await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_key',
+      external_ref: 'store_key',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     const call0 = providerCalls.find((entry) => entry.fn === 'createAccount');
     expect(call0?.request.idempotencyKey).toBe(`acct:${merchant.id}:store_key`);
@@ -430,9 +430,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   test('refreshing an account stores what the provider now says', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_refresh',
+      external_ref: 'store_refresh',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     const refreshed = await call(
       'POST',
@@ -441,20 +441,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     expect(refreshed.status).toBe(200);
     expect(refreshed.json.payable).toBe(true);
-    expect((refreshed.json.requirements as Record<string, number>).currentlyDue).toBe(0);
-    expect(refreshed.json.defaultCurrency).toBe('EUR');
+    expect((refreshed.json.requirements as Record<string, number>).currently_due).toBe(0);
+    expect(refreshed.json.default_currency).toBe('EUR');
   });
 
   test('mints a short-lived onboarding link and never stores it', async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_link',
+      external_ref: 'store_link',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     const link = await call(
       'POST',
       `/v1/connected_accounts/${String(created.json.id)}/account_links`,
-      { refreshUrl: 'https://shop.example/refresh', returnUrl: 'https://shop.example/done' },
+      { refresh_url: 'https://shop.example/refresh', return_url: 'https://shop.example/done' },
     );
 
     expect(link.status).toBe(201);
@@ -467,9 +467,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   /** One merchant must never read another's seller. */
   test("does not return another merchant's account", async () => {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_private',
+      external_ref: 'store_private',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
 
     actingApp = otherMerchant.oxyAppId;
@@ -517,9 +517,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   async function payableAccount(ref: string): Promise<string> {
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: ref,
+      external_ref: ref,
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     await call('POST', `/v1/connected_accounts/${String(created.json.id)}/refresh`);
     return String(created.json.id);
@@ -547,8 +547,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     await call('POST', `/v1/connected_accounts/${accountId}/refresh`);
     await call('POST', `/v1/connected_accounts/${accountId}/account_links`, {
-      refreshUrl: 'https://merchant.example/refresh',
-      returnUrl: 'https://merchant.example/return',
+      refresh_url: 'https://merchant.example/refresh',
+      return_url: 'https://merchant.example/return',
     });
 
     const account = await findAccountByPublicId(gatewayDb(), merchant.id, accountId);
@@ -578,9 +578,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('pages through sellers with a cursor and says when there are more', async () => {
     for (const ref of ['page_a', 'page_b', 'page_c']) {
       await call('POST', '/v1/connected_accounts', {
-        externalRef: ref,
+        external_ref: ref,
         country: 'ES',
-        businessType: 'individual',
+        business_type: 'individual',
       });
     }
 
@@ -607,9 +607,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
    */
   test('refuses a cursor from another merchant without confirming it', async () => {
     const mine = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'cursor_owner',
+      external_ref: 'cursor_owner',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
 
     actingApp = otherMerchant.oxyAppId;
@@ -619,24 +619,24 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     );
     const unknown = await call('GET', '/v1/connected_accounts?starting_after=ca_nope');
 
-    expect(foreign.status).toBe(422);
-    expect(unknown.status).toBe(422);
+    expect(foreign.status).toBe(400);
+    expect(unknown.status).toBe(400);
     expect(JSON.stringify(foreign.json)).toEqual(JSON.stringify(unknown.json));
   });
 
   test('settles a seller and reports the public ids only', async () => {
     const accountId = await payableAccount('store_t_a');
     const { status, json } = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_1',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_1',
       amount: '5000',
     });
 
     expect(status).toBe(201);
     expect(json.object).toBe('transfer');
-    expect(json.connectedAccountId).toBe(accountId);
-    expect(json.paymentIntentId).toBe('pi_settled_for_transfers');
+    expect(json.connected_account_id).toBe(accountId);
+    expect(json.payment_intent_id).toBe('pi_settled_for_transfers');
     expect(json.status).toBe('paid');
     const text = JSON.stringify(json);
     expect(text).not.toContain('acct_fake');
@@ -659,9 +659,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test("names the source CHARGE, not the payment, and the payment's own group", async () => {
     const accountId = await payableAccount('store_t_b');
     await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_group',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_group',
       amount: '5000',
     });
 
@@ -686,17 +686,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     providerCalls.length = 0;
 
     await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_cart_two_sellers',
-      connectedAccountId: first,
-      externalRef: 'order_charge_1',
+      payment_intent_id: 'pi_cart_two_sellers',
+      connected_account_id: first,
+      external_ref: 'order_charge_1',
       amount: '1000',
     });
     const readsAfterFirst = providerCalls.filter((entry) => entry.fn === 'getStatus').length;
 
     await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_cart_two_sellers',
-      connectedAccountId: second,
-      externalRef: 'order_charge_2',
+      payment_intent_id: 'pi_cart_two_sellers',
+      connected_account_id: second,
+      external_ref: 'order_charge_2',
       amount: '1000',
     });
     const readsAfterSecond = providerCalls.filter((entry) => entry.fn === 'getStatus').length;
@@ -723,29 +723,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const other = await payableAccount('store_budget_b');
 
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_budget',
-      connectedAccountId: seller,
-      externalRef: 'budget_1',
+      payment_intent_id: 'pi_budget',
+      connected_account_id: seller,
+      external_ref: 'budget_1',
       amount: '9000',
     });
     expect(first.status).toBe(201);
 
     const second = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_budget',
-      connectedAccountId: other,
-      externalRef: 'budget_2',
+      payment_intent_id: 'pi_budget',
+      connected_account_id: other,
+      external_ref: 'budget_2',
       amount: '2000',
     });
-    expect(second.status).toBe(422);
+    expect(second.status).toBe(400);
     // The message says how much is LEFT, because that is the number the
     // merchant has to correct their split against.
     expect(String((second.json.error as Record<string, string>).message)).toContain('1000');
 
     // ...and the remaining 1000 still settles.
     const third = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_budget',
-      connectedAccountId: other,
-      externalRef: 'budget_3',
+      payment_intent_id: 'pi_budget',
+      connected_account_id: other,
+      external_ref: 'budget_3',
       amount: '1000',
     });
     expect(third.status).toBe(201);
@@ -770,9 +770,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     });
 
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_resume',
-      connectedAccountId: seller,
-      externalRef: 'order_resume',
+      payment_intent_id: 'pi_resume',
+      connected_account_id: seller,
+      external_ref: 'order_resume',
       amount: '1000',
     });
     // A retryable provider failure surfaces as a 502 and leaves the row pending.
@@ -781,9 +781,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     createTransferThrows = null;
     providerCalls.length = 0;
     const retry = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_resume',
-      connectedAccountId: seller,
-      externalRef: 'order_resume',
+      payment_intent_id: 'pi_resume',
+      connected_account_id: seller,
+      external_ref: 'order_resume',
       amount: '1000',
     });
 
@@ -810,9 +810,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await settledCardIntent('pi_history', '50000');
     const seller = await payableAccount('store_history');
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_history',
-      connectedAccountId: seller,
-      externalRef: 'order_history',
+      payment_intent_id: 'pi_history',
+      connected_account_id: seller,
+      external_ref: 'order_history',
       amount: '1000',
     });
     expect(first.status).toBe(201);
@@ -821,9 +821,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     createTransferThrows = new Error('the acquirer could not be reached');
 
     const replay = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_history',
-      connectedAccountId: seller,
-      externalRef: 'order_history',
+      payment_intent_id: 'pi_history',
+      connected_account_id: seller,
+      external_ref: 'order_history',
       amount: '1000',
     });
 
@@ -845,26 +845,26 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const seller = await payableAccount('store_conflict');
 
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_conflict',
-      connectedAccountId: seller,
-      externalRef: 'conflict_ref',
+      payment_intent_id: 'pi_conflict',
+      connected_account_id: seller,
+      external_ref: 'conflict_ref',
       amount: '1000',
     });
     expect(first.status).toBe(201);
 
     const reused = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_conflict',
-      connectedAccountId: seller,
-      externalRef: 'conflict_ref',
+      payment_intent_id: 'pi_conflict',
+      connected_account_id: seller,
+      external_ref: 'conflict_ref',
       amount: '2000',
     });
     expect(reused.status).toBe(409);
 
     // The same reference with the SAME content is still an ordinary replay.
     const replay = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_conflict',
-      connectedAccountId: seller,
-      externalRef: 'conflict_ref',
+      payment_intent_id: 'pi_conflict',
+      connected_account_id: seller,
+      external_ref: 'conflict_ref',
       amount: '1000',
     });
     expect(replay.status).toBe(200);
@@ -886,9 +886,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     getStatusStatus = 'processing';
 
     const { status } = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_no_charge',
-      connectedAccountId: accountId,
-      externalRef: 'order_no_charge',
+      payment_intent_id: 'pi_no_charge',
+      connected_account_id: accountId,
+      external_ref: 'order_no_charge',
       amount: '1000',
     });
 
@@ -904,16 +904,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('a repeated settlement of one order converges and does not pay twice', async () => {
     const accountId = await payableAccount('store_t_c');
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_dup',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_dup',
       amount: '5000',
     });
     providerCalls.length = 0;
     const second = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_dup',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_dup',
       amount: '5000',
     });
 
@@ -925,15 +925,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   /**
    * The retry of a settled order must answer from HISTORY. Checking the
-   * seller's readiness first would turn a successful settlement into a 422 on
+   * seller's readiness first would turn a successful settlement into a 400 on
    * its own retry, because an account can be restricted after being paid.
    */
   test('answers a retry even after the seller stops being payable', async () => {
     const accountId = await payableAccount('store_t_restricted');
     const first = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_restricted',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_restricted',
       amount: '5000',
     });
     expect(first.status).toBe(201);
@@ -947,9 +947,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await call('POST', `/v1/connected_accounts/${accountId}/refresh`);
 
     const retry = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_restricted',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_restricted',
       amount: '5000',
     });
     expect(retry.status).toBe(200);
@@ -959,48 +959,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('refuses to settle to a seller who cannot receive one', async () => {
     // Created and never refreshed, so `transfers` is still `pending`.
     const created = await call('POST', '/v1/connected_accounts', {
-      externalRef: 'store_t_unready',
+      external_ref: 'store_t_unready',
       country: 'ES',
-      businessType: 'individual',
+      business_type: 'individual',
     });
     const { status, json } = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: String(created.json.id),
-      externalRef: 'order_unready',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: String(created.json.id),
+      external_ref: 'order_unready',
       amount: '5000',
     });
 
-    expect(status).toBe(422);
+    expect(status).toBe(400);
     expect(String((json.error as Record<string, string>).message)).toContain('cannot receive');
   });
 
   test("names the seller by the merchant's own ref as well as by ca_…", async () => {
     await payableAccount('store_t_byref');
     const { status, json } = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountRef: 'store_t_byref',
-      externalRef: 'order_byref',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_ref: 'store_t_byref',
+      external_ref: 'order_byref',
       amount: '1000',
     });
     expect(status).toBe(201);
-    expect(json.externalRef).toBe('order_byref');
+    expect(json.external_ref).toBe('order_byref');
   });
 
   test('refuses a body naming the seller twice or not at all', async () => {
     const both = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: 'ca_x',
-      connectedAccountRef: 'store_x',
-      externalRef: 'order_both',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: 'ca_x',
+      connected_account_ref: 'store_x',
+      external_ref: 'order_both',
       amount: '1000',
     });
     const neither = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      externalRef: 'order_neither',
+      payment_intent_id: 'pi_settled_for_transfers',
+      external_ref: 'order_neither',
       amount: '1000',
     });
-    expect(both.status).toBe(422);
-    expect(neither.status).toBe(422);
+    expect(both.status).toBe(400);
+    expect(neither.status).toBe(400);
   });
 
   /**
@@ -1011,21 +1011,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const accountId = await payableAccount('store_t_amount');
     for (const amount of ['10.50', '-1', '01', '1e3', '']) {
       const { status } = await call('POST', '/v1/transfers', {
-        paymentIntentId: 'pi_settled_for_transfers',
-        connectedAccountId: accountId,
-        externalRef: `order_amount_${amount || 'empty'}`,
+        payment_intent_id: 'pi_settled_for_transfers',
+        connected_account_id: accountId,
+        external_ref: `order_amount_${amount || 'empty'}`,
         amount,
       });
-      expect([amount, status]).toEqual([amount, 422]);
+      expect([amount, status]).toEqual([amount, 400]);
     }
   });
 
   test('reverses a settlement and reports the cumulative total', async () => {
     const accountId = await payableAccount('store_t_rev');
     const created = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_rev',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_rev',
       amount: '5000',
     });
 
@@ -1036,7 +1036,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       { 'Idempotency-Key': 'rev_op_1' },
     );
     expect(reversed.status).toBe(201);
-    expect(reversed.json.amountReversed).toBe('2000');
+    expect(reversed.json.amount_reversed).toBe('2000');
     expect(reversed.json.status).toBe('partially_reversed');
 
     /**
@@ -1053,7 +1053,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       .idempotencyKey;
     const reversal = reversed.json.reversal as Record<string, string>;
     expect(String(key)).toBe(`trr:${reversal.id ?? ''}`);
-    expect(reversal.externalRef).toBe('rev_op_1');
+    expect(reversal.external_ref).toBe('rev_op_1');
     expect(reversal.status).toBe('succeeded');
   });
 
@@ -1070,9 +1070,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await settledCardIntent('pi_two_reversals', '100000');
     const accountId = await payableAccount('store_two_rev');
     const created = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_two_reversals',
-      connectedAccountId: accountId,
-      externalRef: 'order_two_rev',
+      payment_intent_id: 'pi_two_reversals',
+      connected_account_id: accountId,
+      external_ref: 'order_two_rev',
       amount: '2000',
     });
     const transferId = String(created.json.id);
@@ -1080,11 +1080,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     const a = await call('POST', reversalPath, { amount: '500' }, { 'Idempotency-Key': 'leg_a' });
     expect(a.status).toBe(201);
-    expect(a.json.amountReversed).toBe('500');
+    expect(a.json.amount_reversed).toBe('500');
 
     const b = await call('POST', reversalPath, { amount: '500' }, { 'Idempotency-Key': 'leg_b' });
     expect(b.status).toBe(201);
-    expect(b.json.amountReversed).toBe('1000');
+    expect(b.json.amount_reversed).toBe('1000');
 
     // Repeating A adds nothing, at the provider or here. 200, not 201.
     const replay = await call(
@@ -1099,7 +1099,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     );
 
     const c = await call('POST', reversalPath, { amount: '300' }, { 'Idempotency-Key': 'leg_c' });
-    expect(c.json.amountReversed).toBe('1300');
+    expect(c.json.amount_reversed).toBe('1300');
 
     // Three operations reached the provider, not four: the replay never did.
     const calls = providerCalls.filter(
@@ -1119,9 +1119,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('refuses a reversal that carries no operation identity', async () => {
     const accountId = await payableAccount('store_no_key');
     const created = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_no_key',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_no_key',
       amount: '1000',
     });
 
@@ -1137,9 +1137,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('refuses a reversal larger than the transfer', async () => {
     const accountId = await payableAccount('store_t_over');
     const created = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_over',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_over',
       amount: '5000',
     });
     const { status } = await call(
@@ -1148,15 +1148,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       { amount: '5001' },
       { 'Idempotency-Key': 'rev_over' },
     );
-    expect(status).toBe(422);
+    expect(status).toBe(400);
   });
 
   test('does not settle, read or reverse across merchants', async () => {
     const accountId = await payableAccount('store_t_cross');
     const created = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_cross',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_cross',
       amount: '1000',
     });
 
@@ -1164,9 +1164,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     // The other merchant cannot see the payment at all, so it is a 404 rather
     // than a 403: distinguishing them would tell them the `pi_…` is real.
     const settle = await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountRef: 'store_t_cross',
-      externalRef: 'order_cross_2',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_ref: 'store_t_cross',
+      external_ref: 'order_cross_2',
       amount: '1000',
     });
     const reverse = await call('POST', `/v1/transfers/${String(created.json.id)}/reversals`, {
@@ -1182,9 +1182,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('lists what one payment settled', async () => {
     const accountId = await payableAccount('store_t_list');
     await call('POST', '/v1/transfers', {
-      paymentIntentId: 'pi_settled_for_transfers',
-      connectedAccountId: accountId,
-      externalRef: 'order_list_1',
+      payment_intent_id: 'pi_settled_for_transfers',
+      connected_account_id: accountId,
+      external_ref: 'order_list_1',
       amount: '1000',
     });
 
@@ -1193,7 +1193,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       '/v1/payment_intents/pi_settled_for_transfers/transfers',
     );
     expect(status).toBe(200);
-    const refs = (json.data as { externalRef: string }[]).map((row) => row.externalRef);
+    const refs = (json.data as { external_ref: string }[]).map((row) => row.external_ref);
     expect(refs).toContain('order_list_1');
     expect(JSON.stringify(json)).not.toContain('acct_fake');
   });

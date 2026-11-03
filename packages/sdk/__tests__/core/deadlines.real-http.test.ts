@@ -135,20 +135,20 @@ describe('HTTP deadline and existing intent propagation', () => {
     const client = sdk(url);
     await client.paymentIntents.reject('pi_owned', { idempotencyKey: 'reject-intent' });
     await client.refunds.create(
-      { paymentIntentId: 'pi_owned', externalRef: 'refund-owned', amount: '10' },
+      { payment_intent_id: 'pi_owned', external_ref: 'refund-owned', amount: '10' },
       { idempotencyKey: 'refund-intent' },
     );
     await client.transfers.create(
       {
-        paymentIntentId: 'pi_owned',
-        connectedAccountId: 'ca_owned',
-        externalRef: 'order-owned',
+        payment_intent_id: 'pi_owned',
+        connected_account_id: 'ca_owned',
+        external_ref: 'order-owned',
         amount: '90',
       },
       { idempotencyKey: 'transfer-intent' },
     );
     expect(seen.map((x) => x.key)).toEqual(['reject-intent', 'refund-intent', 'transfer-intent']);
-    expect(seen[1]?.body).toMatchObject({ externalRef: 'refund-owned', amount: '10' });
-    expect(seen[2]?.body).toMatchObject({ externalRef: 'order-owned', amount: '90' });
+    expect(seen[1]?.body).toMatchObject({ external_ref: 'refund-owned', amount: '10' });
+    expect(seen[2]?.body).toMatchObject({ external_ref: 'order-owned', amount: '90' });
   });
 });

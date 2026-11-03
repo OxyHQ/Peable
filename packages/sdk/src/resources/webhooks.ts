@@ -44,7 +44,7 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     typeof candidate.type === 'string' &&
     // biome-ignore lint/suspicious/noPrototypeBuiltins: the published SDK targets ES2020, and Object.hasOwn is ES2022
     Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
-    typeof candidate.created === 'string' &&
+    Number.isSafeInteger(candidate.created) &&
     typeof candidate.data === 'object' &&
     candidate.data !== null &&
     'object' in candidate.data;
@@ -55,16 +55,15 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     const v = data as unknown as Record<string, unknown>;
     return (
       v.object === 'billing_observation' &&
-      (v.resourceKind === 'subscription' || v.resourceKind === 'invoice') &&
-      typeof v.resourceId === 'string' &&
-      v.resourceId.length > 0 &&
+      (v.resource_kind === 'subscription' || v.resource_kind === 'invoice') &&
+      typeof v.resource_id === 'string' &&
+      v.resource_id.length > 0 &&
       typeof v.revision === 'number' &&
       Number.isSafeInteger(v.revision) &&
       v.revision > 0 &&
-      typeof v.observedAt === 'string' &&
-      Number.isFinite(Date.parse(v.observedAt)) &&
+      Number.isSafeInteger(v.observed_at) &&
       Object.keys(v).every((k) =>
-        ['object', 'resourceKind', 'resourceId', 'revision', 'observedAt'].includes(k),
+        ['object', 'resource_kind', 'resource_id', 'revision', 'observed_at'].includes(k),
       )
     );
   }

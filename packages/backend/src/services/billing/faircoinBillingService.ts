@@ -4,6 +4,7 @@ import { z } from 'zod';
 import {
   canonicalBillingAuthority,
   type BillingCheckoutObservation,
+  type BillingCheckoutSession,
   type BillingFinalInvoiceAuthority,
   type BillingInvoiceState,
   type BillingPaidInvoice,
@@ -40,6 +41,7 @@ import { verifyFinalInvoiceAuthority } from './invoice-authority';
 import { createExplorerFaircoinQuote, type FaircoinFxQuote } from './faircoin-fx';
 import type { BillingService } from './billingService';
 import { invoiceTaxLines } from '../tax/billingTaxQuotes';
+import { fromUnix, toUnix, toUnixOrNull } from '../../lib/time';
 
 const offerSchema = z
   .object({
@@ -107,7 +109,7 @@ export function createFaircoinBillingService(options: {
     subscriptionId: string,
     input: CreateBillingCheckoutParams,
     key: string,
-  ): Promise<{ id: string; url: string; expiresAt: string }>;
+  ): Promise<BillingCheckoutSession>;
 } {
   const { db } = options;
   const configuration = faircoinBillingConfigurationSchema.parse(options.configuration);
@@ -187,10 +189,10 @@ export function createFaircoinBillingService(options: {
       (row) =>
         row.intent?.status === 'settled' &&
         row.intent.rail === 'faircoin' &&
-        row.intent.amount === row.invoice.fxQuote.amountBaseUnits &&
+        row.intent.amount === row.invoice.fxQuote.amount_base_units &&
         row.invoice.acceptedAt &&
-        +row.invoice.acceptedAt >= Date.parse(row.invoice.fxQuote.quotedAt) &&
-        +row.invoice.acceptedAt < Date.parse(row.invoice.fxQuote.expiresAt),
+        +row.invoice.acceptedAt >= fromUnix(row.invoice.fxQuote.quoted_at).getTime() &&
+        +row.invoice.acceptedAt < fromUnix(row.invoice.fxQuote.expires_at).getTime(),
     );
     const activePeriods = paid.filter(
       (row) => +row.invoice.periodStart <= +now() && +row.invoice.periodEnd > +now(),
@@ -212,12 +214,12 @@ export function createFaircoinBillingService(options: {
       (row) => +row.invoice.periodStart <= +now() && +row.invoice.periodEnd > +now(),
     );
     return {
-      providerSubscriptionId: subscription.id,
-      latestInvoiceId: periods[0]?.invoice.id ?? null,
-      providerCustomerId: subscription.customerRef,
-      providerPriceId: subscription.priceRef,
-      storeId: subscription.subjectRef,
-      planId: subscription.planRef,
+      provider_subscription_id: subscription.id,
+      latest_invoice_id: periods[0]?.invoice.id ?? null,
+      provider_customer_id: subscription.customerRef,
+      provider_price_id: subscription.priceRef,
+      store_id: subscription.subjectRef,
+      plan_id: subscription.planRef,
       livemode: subscription.environment === 'production',
       status: active
         ? 'active'
@@ -227,14 +229,12 @@ export function createFaircoinBillingService(options: {
             ? 'past_due'
             : 'incomplete',
       interval: subscription.billingInterval,
-      cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
-      currentPeriodStart: current.periodStart.toISOString(),
-      currentPeriodEnd: (paidThrough ?? current.periodEnd).toISOString(),
-      trialEndsAt: null,
-      cancelAt: subscription.cancelAtPeriodEnd
-        ? (paidThrough ?? current.periodEnd).toISOString()
-        : null,
-      cancelledAt: subscription.cancelledAt?.toISOString() ?? null,
+      cancel_at_period_end: subscription.cancelAtPeriodEnd,
+      current_period_start: toUnix(current.periodStart),
+      current_period_end: toUnix(paidThrough ?? current.periodEnd),
+      trial_ends_at: null,
+      cancel_at: subscription.cancelAtPeriodEnd ? toUnix(paidThrough ?? current.periodEnd) : null,
+      cancelled_at: toUnixOrNull(subscription.cancelledAt),
     };
   }
   async function paidInvoice(
@@ -252,31 +252,31 @@ export function createFaircoinBillingService(options: {
       intent.rail !== 'faircoin' ||
       !intent.txid ||
       !invoice.acceptedAt ||
-      intent.amount !== invoice.fxQuote.amountBaseUnits ||
+      intent.amount !== invoice.fxQuote.amount_base_units ||
       intent.merchantId !== owner.merchantId ||
-      +invoice.acceptedAt < Date.parse(invoice.fxQuote.quotedAt) ||
-      +invoice.acceptedAt >= Date.parse(invoice.fxQuote.expiresAt)
+      +invoice.acceptedAt < fromUnix(invoice.fxQuote.quoted_at).getTime() ||
+      +invoice.acceptedAt >= fromUnix(invoice.fxQuote.expires_at).getTime()
     )
       throw new BillingError('not_found', 404);
     const tax = invoice.taxSnapshot.taxQuote.quote;
     return {
-      invoiceId: invoice.id,
-      lineId: `${invoice.id}_line`,
-      paymentIntentId: intent.publicId,
-      providerSubscriptionId: subscription.id,
-      providerCustomerId: subscription.customerRef,
-      providerPriceId: subscription.priceRef,
-      storeId: subscription.subjectRef,
-      planId: subscription.planRef,
+      invoice_id: invoice.id,
+      line_id: `${invoice.id}_line`,
+      payment_intent_id: intent.publicId,
+      provider_subscription_id: subscription.id,
+      provider_customer_id: subscription.customerRef,
+      provider_price_id: subscription.priceRef,
+      store_id: subscription.subjectRef,
+      plan_id: subscription.planRef,
       livemode: subscription.environment === 'production',
       currency: 'USD',
-      amountPaid: String(tax.grossMinorUnits),
-      netAmount: String(tax.netMinorUnits),
-      taxAmount: String(tax.taxMinorUnits),
-      periodStart: invoice.periodStart.toISOString(),
-      periodEnd: invoice.periodEnd.toISOString(),
-      paidAt: invoice.acceptedAt.toISOString(),
-      observedAt: now().toISOString(),
+      amount_paid: String(tax.gross_minor_units),
+      net_amount: String(tax.net_minor_units),
+      tax_amount: String(tax.tax_minor_units),
+      period_start: toUnix(invoice.periodStart),
+      period_end: toUnix(invoice.periodEnd),
+      paid_at: toUnix(invoice.acceptedAt),
+      observed_at: toUnix(now()),
     };
   }
   /** The frozen Peable Tax lines behind an invoice's tax amount. */
@@ -289,9 +289,9 @@ export function createFaircoinBillingService(options: {
     owner: BillingOwner,
     invoice: Invoice,
     input: CreateBillingCheckoutParams,
-  ) {
+  ): Promise<BillingCheckoutSession> {
     const m = await merchant(owner);
-    const expires = new Date(invoice.fxQuote.expiresAt);
+    const expires = fromUnix(invoice.fxQuote.expires_at);
     let intent = invoice.paymentIntentId
       ? await findIntentById(db, invoice.paymentIntentId)
       : await findIntentByIdempotencyKey(db, owner.merchantId, `faircoin-period:${invoice.id}`);
@@ -301,7 +301,7 @@ export function createFaircoinBillingService(options: {
       intent = (
         await createIntent({
           merchant: m,
-          amount: invoice.fxQuote.amountBaseUnits,
+          amount: invoice.fxQuote.amount_base_units,
           rail: 'faircoin',
           currency: 'FAIR',
           network: m.network ?? undefined,
@@ -339,8 +339,8 @@ export function createFaircoinBillingService(options: {
         rail: 'faircoin',
         network: intent.network,
         metadata: {},
-        successUrl: input.returnUrl,
-        cancelUrl: input.returnUrl,
+        successUrl: input.return_url,
+        cancelUrl: input.return_url,
       });
       session ??= await findSessionByIntentId(db, intent.id);
     }
@@ -348,7 +348,7 @@ export function createFaircoinBillingService(options: {
     return {
       id: session.publicId,
       url: `${config.checkoutBaseUrl}/c/${session.publicId}#cs=${encodeURIComponent(intent.clientSecret)}`,
-      expiresAt: expires.toISOString(),
+      expires_at: toUnix(expires),
     };
   }
   async function checkout(
@@ -362,14 +362,15 @@ export function createFaircoinBillingService(options: {
     const cohort = authorize(owner);
     const m = await merchant(owner);
     const offers = cohort.offers.filter(
-      (o) => o.providerPriceId === input.providerPriceId && o.planId === input.planId,
+      (o) => o.providerPriceId === input.provider_price_id && o.planId === input.plan_id,
     );
+    const taxQuote = input.tax_quote;
     if (
       offers.length !== 1 ||
       !offers[0] ||
-      !input.taxQuote ||
-      input.trialDays !== 0 ||
-      input.providerCustomerId !== customerRef(owner, input.storeId)
+      !taxQuote ||
+      input.trial_days !== 0 ||
+      input.provider_customer_id !== customerRef(owner, input.store_id)
     )
       throw new BillingError('identity_conflict');
     const offer = offers[0];
@@ -393,28 +394,26 @@ export function createFaircoinBillingService(options: {
       adapter,
       owner,
       m.publicId,
-      { ...input, taxQuote: input.taxQuote },
+      { ...input, tax_quote: taxQuote },
       now,
     );
     // The payer pays the quote's total: the price, plus tax when it is added.
-    const payable = snapshot.taxQuote.quote.grossMinorUnits;
+    const payable = snapshot.taxQuote.quote.gross_minor_units;
     const fx = await (
       options.quote ?? ((gross) => createExplorerFaircoinQuote(gross, { now: now() }))
     )(payable);
     if (
       fx.currency !== 'USD' ||
-      fx.grossMinorUnits !== payable ||
-      Date.parse(fx.quotedAt) > +now() ||
-      Date.parse(fx.expiresAt) <= +now()
+      fx.gross_minor_units !== payable ||
+      fx.quoted_at > toUnix(now()) ||
+      fx.expires_at <= toUnix(now())
     )
       throw new BillingError('invalid_provider_response', 502);
     // No quote may outlive its fiscal authority.
-    fx.expiresAt = new Date(
-      Math.min(Date.parse(fx.expiresAt), Date.parse(snapshot.taxQuote.quote.expiresAt)),
-    ).toISOString();
+    fx.expires_at = Math.min(fx.expires_at, snapshot.taxQuote.quote.expires_at);
     const invoice = await db.transaction(async (tx) => {
       await tx.execute(
-        sql`select pg_advisory_xact_lock(hashtextextended(${[owner.merchantId, input.storeId, input.planId].join(':')}, 0))`,
+        sql`select pg_advisory_xact_lock(hashtextextended(${[owner.merchantId, input.store_id, input.plan_id].join(':')}, 0))`,
       );
       if (!renewal) {
         const [live] = await tx
@@ -423,8 +422,8 @@ export function createFaircoinBillingService(options: {
           .where(
             and(
               eq(subscriptions.merchantId, owner.merchantId),
-              eq(subscriptions.subjectRef, input.storeId),
-              eq(subscriptions.planRef, input.planId),
+              eq(subscriptions.subjectRef, input.store_id),
+              eq(subscriptions.planRef, input.plan_id),
               eq(subscriptions.cancelAtPeriodEnd, false),
             ),
           )
@@ -473,11 +472,11 @@ export function createFaircoinBillingService(options: {
             merchantId: owner.merchantId,
             oxyAppId: owner.oxyAppId,
             environment: owner.environment,
-            subjectRef: input.storeId,
-            planRef: input.planId,
-            priceRef: input.providerPriceId,
+            subjectRef: input.store_id,
+            planRef: input.plan_id,
+            priceRef: input.provider_price_id,
             billingInterval: offer.interval,
-            customerRef: input.providerCustomerId,
+            customerRef: input.provider_customer_id,
             initialKey: key,
           })
           .onConflictDoNothing();
@@ -490,11 +489,11 @@ export function createFaircoinBillingService(options: {
       if (
         !sub ||
         sub.merchantId !== owner.merchantId ||
-        sub.subjectRef !== input.storeId ||
-        sub.planRef !== input.planId ||
-        sub.priceRef !== input.providerPriceId ||
+        sub.subjectRef !== input.store_id ||
+        sub.planRef !== input.plan_id ||
+        sub.priceRef !== input.provider_price_id ||
         sub.billingInterval !== offer.interval ||
-        sub.customerRef !== input.providerCustomerId
+        sub.customerRef !== input.provider_customer_id
       )
         throw new BillingError('not_found', 404);
       const [replay] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId));
@@ -527,10 +526,10 @@ export function createFaircoinBillingService(options: {
         (p) =>
           p.intent?.status === 'settled' &&
           p.intent.rail === 'faircoin' &&
-          p.intent.amount === p.invoice.fxQuote.amountBaseUnits &&
+          p.intent.amount === p.invoice.fxQuote.amount_base_units &&
           p.invoice.acceptedAt &&
-          +p.invoice.acceptedAt >= Date.parse(p.invoice.fxQuote.quotedAt) &&
-          +p.invoice.acceptedAt < Date.parse(p.invoice.fxQuote.expiresAt),
+          +p.invoice.acceptedAt >= fromUnix(p.invoice.fxQuote.quoted_at).getTime() &&
+          +p.invoice.acceptedAt < fromUnix(p.invoice.fxQuote.expires_at).getTime(),
       );
       // One explicit period at a time; renew during the final week or after expiry.
       if (lastPaid && +lastPaid.invoice.periodEnd - +now() > 7 * 86_400_000)
@@ -561,13 +560,13 @@ export function createFaircoinBillingService(options: {
       ref: string,
       input: CreateBillingCheckoutParams,
       key: string,
-    ) => Promise<{ id: string; url: string; expiresAt: string }>;
+    ) => Promise<BillingCheckoutSession>;
   } = {
     async ensureCustomer(owner, input, _key) {
       authorize(owner);
       const parsed = ensureCustomerSchema.parse(input);
       await merchant(owner);
-      return { providerCustomerId: customerRef(owner, parsed.storeId) };
+      return { provider_customer_id: customerRef(owner, parsed.store_id) };
     },
     async createTaxQuote(owner, input) {
       const m = await merchant(owner);
@@ -595,10 +594,10 @@ export function createFaircoinBillingService(options: {
       if (
         intent?.status === 'failed' ||
         (invoice.acceptedAt &&
-          (+invoice.acceptedAt < Date.parse(invoice.fxQuote.quotedAt) ||
-            +invoice.acceptedAt >= Date.parse(invoice.fxQuote.expiresAt))) ||
+          (+invoice.acceptedAt < fromUnix(invoice.fxQuote.quoted_at).getTime() ||
+            +invoice.acceptedAt >= fromUnix(invoice.fxQuote.expires_at).getTime())) ||
         (!invoice.acceptedAt &&
-          Date.parse(invoice.fxQuote.expiresAt) <= +now() &&
+          invoice.fxQuote.expires_at <= toUnix(now()) &&
           ['approved', 'broadcast', 'confirming'].includes(intent?.status ?? ''))
       )
         throw new BillingError('reconciliation_required');
@@ -615,16 +614,16 @@ export function createFaircoinBillingService(options: {
       }
       return {
         id: ref,
-        initialInvoiceId: settled ? invoice.id : null,
+        initial_invoice_id: settled ? invoice.id : null,
         status: settled
           ? 'complete'
           : ['expired', 'rejected'].includes(intent?.status ?? '')
             ? 'expired'
             : 'open',
-        storeId: sub.subjectRef,
-        planId: sub.planRef,
-        providerCustomerId: sub.customerRef,
-        providerPriceId: sub.priceRef,
+        store_id: sub.subjectRef,
+        plan_id: sub.planRef,
+        provider_customer_id: sub.customerRef,
+        provider_price_id: sub.priceRef,
         subscription: settled ? await project(sub) : null,
       };
     },
@@ -632,13 +631,13 @@ export function createFaircoinBillingService(options: {
       const m = await merchant(owner);
       const source = {
         ...input,
-        taxQuoteId: null as string | null,
-        merchantId: m.publicId,
-        appId: owner.oxyAppId,
+        tax_quote_id: null as string | null,
+        merchant_id: m.publicId,
+        app_id: owner.oxyAppId,
         mode: owner.environment === 'production' ? ('live' as const) : ('test' as const),
         environment: owner.environment,
       };
-      if (input.providerCustomerId !== customerRef(owner, input.storeId))
+      if (input.provider_customer_id !== customerRef(owner, input.store_id))
         throw new BillingError('not_found', 404);
       const found = await db
         .select({ invoice: invoices, sub: subscriptions })
@@ -647,16 +646,16 @@ export function createFaircoinBillingService(options: {
         .where(
           and(
             eq(subscriptions.merchantId, owner.merchantId),
-            eq(invoices.operationKey, input.idempotencyKey),
-            eq(subscriptions.subjectRef, input.storeId),
-            eq(subscriptions.planRef, input.planId),
-            eq(subscriptions.priceRef, input.providerPriceId),
+            eq(invoices.operationKey, input.idempotency_key),
+            eq(subscriptions.subjectRef, input.store_id),
+            eq(subscriptions.planRef, input.plan_id),
+            eq(subscriptions.priceRef, input.provider_price_id),
           ),
         );
       if (!found.length) return { state: 'not_found', source };
       if (found.length !== 1 || !found[0]) throw new BillingError('identity_conflict');
       const row = found[0].invoice;
-      source.taxQuoteId = row.taxSnapshot.taxQuote.quote.id;
+      source.tax_quote_id = row.taxSnapshot.taxQuote.quote.id;
       const intent = row.paymentIntentId ? await findIntentById(db, row.paymentIntentId) : null;
       if (!intent) return { state: 'pending', source };
       const session = await findSessionByIntentId(db, intent.id);
@@ -666,8 +665,8 @@ export function createFaircoinBillingService(options: {
         source,
         checkout: {
           id: row.checkoutRef,
-          expiresAt: row.fxQuote.expiresAt,
-          ...(Date.parse(row.fxQuote.expiresAt) > +now()
+          expires_at: row.fxQuote.expires_at,
+          ...(row.fxQuote.expires_at > toUnix(now())
             ? {
                 url: `${config.checkoutBaseUrl}/c/${session.publicId}#cs=${encodeURIComponent(intent.clientSecret)}`,
               }
@@ -679,7 +678,7 @@ export function createFaircoinBillingService(options: {
     retrievePaidInvoice: paidInvoice,
     async retrieveInvoiceState(owner, ref, invoiceId): Promise<BillingInvoiceState> {
       const paid = await paidInvoice(owner, ref, invoiceId);
-      return { ...paid, chargeId: paid.paymentIntentId, amountRefunded: '0', state: 'paid' };
+      return { ...paid, charge_id: paid.payment_intent_id, amount_refunded: '0', state: 'paid' };
     },
     async retrieveFinalInvoiceAuthority(owner, ref, invoiceId, include) {
       const paid = await paidInvoice(owner, ref, invoiceId);
@@ -688,58 +687,58 @@ export function createFaircoinBillingService(options: {
       const tax = invoice.taxSnapshot.taxQuote.quote;
       const fx = invoice.fxQuote;
       const authority: BillingFinalInvoiceAuthority = {
-        schemaVersion: 1,
+        schema_version: 2,
         method: 'faircoin',
         source: {
-          invoiceId,
-          paymentIntentId: paid.paymentIntentId,
-          customerId: paid.providerCustomerId,
-          subscriptionId: ref,
-          priceId: paid.providerPriceId,
-          planId: paid.planId,
-          merchantId: m.publicId,
-          appId: owner.oxyAppId,
+          invoice_id: invoiceId,
+          payment_intent_id: paid.payment_intent_id,
+          customer_id: paid.provider_customer_id,
+          subscription_id: ref,
+          price_id: paid.provider_price_id,
+          plan_id: paid.plan_id,
+          merchant_id: m.publicId,
+          app_id: owner.oxyAppId,
           mode: paid.livemode ? 'live' : 'test',
           environment: owner.environment,
         },
         invoice: {
           platform: 'peable',
           currency: 'USD',
-          grossMinorUnits: tax.grossMinorUnits,
-          netMinorUnits: tax.netMinorUnits,
-          taxMinorUnits: tax.taxMinorUnits,
-          merchantFeeMinorUnits: 0,
-          taxTreatment: tax.taxTreatment,
-          sellerId: tax.sellerId,
-          invoiceIssuerId: tax.invoiceIssuerId,
-          taxQuoteId: tax.id,
-          customerLocationEvidenceId: tax.customerLocationEvidenceId,
-          taxRateEvidenceId: tax.taxRateEvidenceId,
+          gross_minor_units: tax.gross_minor_units,
+          net_minor_units: tax.net_minor_units,
+          tax_minor_units: tax.tax_minor_units,
+          merchant_fee_minor_units: 0,
+          tax_treatment: tax.tax_treatment,
+          seller_id: tax.seller_id,
+          invoice_issuer_id: tax.invoice_issuer_id,
+          tax_quote_id: tax.id,
+          customer_location_evidence_id: tax.customer_location_evidence_id,
+          tax_rate_evidence_id: tax.tax_rate_evidence_id,
           context: {
-            payerAccountId: paid.storeId,
-            beneficiaryAccountId: paid.storeId,
-            providerSubscriptionId: ref,
-            offerId: invoice.taxSnapshot.offer.offerId,
-            offerVersion: invoice.taxSnapshot.offer.offerVersion,
-            periodStart: paid.periodStart,
-            periodEnd: paid.periodEnd,
+            payer_account_id: paid.store_id,
+            beneficiary_account_id: paid.store_id,
+            provider_subscription_id: ref,
+            offer_id: invoice.taxSnapshot.offer.offerId,
+            offer_version: invoice.taxSnapshot.offer.offerVersion,
+            period_start: paid.period_start,
+            period_end: paid.period_end,
             mode: paid.livemode ? 'live' : 'test',
             environment: owner.environment,
           },
-          issuedAt: now().toISOString(),
-          expiresAt: new Date(Math.max(+now() + 60_000, Date.parse(fx.expiresAt))).toISOString(),
-          faircoinQuote: {
+          issued_at: toUnix(now()),
+          expires_at: Math.max(toUnix(now()) + 60, fx.expires_at),
+          faircoin_quote: {
             id: fx.id,
-            amountBaseUnits: fx.amountBaseUnits,
-            quotedAt: fx.quotedAt,
-            expiresAt: fx.expiresAt,
-            roundingEvidenceId: fx.id,
+            amount_base_units: fx.amount_base_units,
+            quoted_at: fx.quoted_at,
+            expires_at: fx.expires_at,
+            rounding_evidence_id: fx.id,
           },
           ...(include?.taxLines
-            ? { taxLines: await requireTaxLines(owner, tax.taxRateEvidenceId) }
+            ? { tax_lines: await requireTaxLines(owner, tax.tax_rate_evidence_id) }
             : {}),
         },
-        signature: { algorithm: 'Ed25519', keyId: configuration.invoiceSigningKeyId, value: '' },
+        signature: { algorithm: 'Ed25519', key_id: configuration.invoiceSigningKeyId, value: '' },
       };
       authority.signature.value = sign(
         null,

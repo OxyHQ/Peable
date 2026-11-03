@@ -34,9 +34,9 @@ async function fixture(accept = true) {
   server.on('connection', (socket) => {
     sockets.push(socket);
     handshakes.push(socket.handshake.auth.token);
-    socket.on('subscribe', ({ intentId, clientSecret }, ack) => {
-      expect(intentId).toBe('pi_test');
-      expect(clientSecret).toBe('pi_test_secret_capability');
+    socket.on('subscribe', ({ intent_id, client_secret }, ack) => {
+      expect(intent_id).toBe('pi_test');
+      expect(client_secret).toBe('pi_test_secret_capability');
       subscriptions++;
       acknowledge = () => ack({ ok: true });
       if (accept) acknowledge();

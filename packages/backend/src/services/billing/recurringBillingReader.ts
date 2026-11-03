@@ -63,7 +63,7 @@ export function createOwnedBillingRecurringReader(options: {
           await options.client.retrieveSubscription(request.objectRef),
         );
         if (
-          sub.providerSubscriptionId !== request.objectRef ||
+          sub.provider_subscription_id !== request.objectRef ||
           sub.livemode !== request.deployment.livemode
         )
           throw new Error('Subscription identity differs');
@@ -72,14 +72,14 @@ export function createOwnedBillingRecurringReader(options: {
           billingDeployment,
           owner,
           'customer',
-          sub.providerCustomerId,
+          sub.provider_customer_id,
         );
         const price = await requireBillingBinding(
           options.db,
           billingDeployment,
           owner,
           'price',
-          sub.providerPriceId,
+          sub.provider_price_id,
         );
         if (
           customer.id !== binding.customerBindingId ||
@@ -92,12 +92,12 @@ export function createOwnedBillingRecurringReader(options: {
           ...identity,
           kind: 'subscription',
           status: sub.status,
-          cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+          cancelAtPeriodEnd: sub.cancel_at_period_end,
           periods: [
             {
               itemRef: 'owned_subscription',
-              start: sub.currentPeriodStart,
-              end: sub.currentPeriodEnd,
+              start: sub.current_period_start,
+              end: sub.current_period_end,
             },
           ],
           hasMorePeriods: false,
@@ -121,16 +121,16 @@ export function createOwnedBillingRecurringReader(options: {
       return {
         ...identity,
         kind: 'invoice',
-        subscriptionRef: value.providerSubscriptionId,
+        subscriptionRef: value.provider_subscription_id,
         status: 'paid',
         currency: value.currency,
-        amountDue: value.amountPaid,
-        amountPaid: value.amountPaid,
+        amountDue: value.amount_paid,
+        amountPaid: value.amount_paid,
         amountRemaining: '0',
-        amountRefunded: value.amountRefunded,
-        paymentIntentRef: value.paymentIntentId,
-        chargeRef: value.chargeId,
-        periods: [{ itemRef: value.lineId, start: value.periodStart, end: value.periodEnd }],
+        amountRefunded: value.amount_refunded,
+        paymentIntentRef: value.payment_intent_id,
+        chargeRef: value.charge_id,
+        periods: [{ itemRef: value.line_id, start: value.period_start, end: value.period_end }],
         hasMorePeriods: false,
       };
     },

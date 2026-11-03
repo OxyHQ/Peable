@@ -7,6 +7,7 @@ import * as Crypto from 'expo-crypto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { AccountNode, Application } from '@oxy.so/core';
 import {
+  createContributionSchema,
   decimalContributionAmount,
   formatContributionAmount,
   type ContributionLink,
@@ -20,6 +21,16 @@ import { SafeAreaView } from '@/ui/safe-area-view';
 
 type Collections = ContributionCollectionList;
 type Pending = { key: string; body: CreateContribution };
+const NO_COLLECTIONS: Collections = { object: 'list', data: [], has_more: false };
+/** A stored operation is replayed only when its body is still a valid request. */
+function storedPending(stored: string): Pending | null {
+  const value: unknown = JSON.parse(stored);
+  if (!value || typeof value !== 'object' || !('key' in value) || !('body' in value)) return null;
+  const body = createContributionSchema.safeParse(value.body);
+  return typeof value.key === 'string' && body.success ? { key: value.key, body: body.data } : null;
+}
+/** `YYYY-MM-DD` (UTC) of a Unix-seconds instant — the format the expiry field takes. */
+const utcDay = (seconds: number) => new Date(seconds * 1000).toISOString().slice(0, 10);
 const message = (error: unknown) =>
   error instanceof Error ? error.message : t('contributions.error');
 export default function ContributionsScreen() {
@@ -33,9 +44,9 @@ export default function ContributionsScreen() {
     [amountMode, setAmountMode] = useState<'fixed' | 'free'>('fixed');
   const [expiry, setExpiry] = useState(''),
     [links, setLinks] = useState<ContributionLink[]>([]),
-    [cursor, setCursor] = useState<string | null>(null),
+    [moreLinks, setMoreLinks] = useState(false),
     [selected, setSelected] = useState<string | null>(null),
-    [collections, setCollections] = useState<Collections>({ items: [], nextCursor: null });
+    [collections, setCollections] = useState<Collections>(NO_COLLECTIONS);
   const [loaded, setLoaded] = useState(false);
   const [pending, setPending] = useState<Pending | null>(null),
     [busy, setBusy] = useState(false),
@@ -85,8 +96,8 @@ export default function ContributionsScreen() {
     const current = ++generation.current;
     setLinks([]);
     setSelected(null);
-    setCollections({ items: [], nextCursor: null });
-    setCursor(null);
+    setCollections(NO_COLLECTIONS);
+    setMoreLinks(false);
     setPending(null);
     setLoaded(false);
     setError('');
@@ -98,16 +109,16 @@ export default function ContributionsScreen() {
       .then(([page, stored]) => {
         if (current !== generation.current) return;
         setLoaded(true);
-        setLinks(page.items);
-        setCursor(page.nextCursor);
-        if (stored) {
-          const operation: Pending = JSON.parse(stored);
+        setLinks(page.data);
+        setMoreLinks(page.has_more);
+        const operation = stored ? storedPending(stored) : null;
+        if (operation) {
           setPending(operation);
           setPurpose(operation.body.purpose);
-          setAmountMode(operation.body.amountMode);
+          setAmountMode(operation.body.amount_mode);
           setAmount(formatContributionAmount(operation.body.amount ?? '500000000'));
-          setExpiry(operation.body.expiresAt?.slice(0, 10) ?? '');
-        }
+          setExpiry(operation.body.expires_at ? utcDay(operation.body.expires_at) : '');
+        } else if (stored) void AsyncStorage.removeItem(scopeKey);
       })
       .catch((e) => {
         if (current === generation.current) setError(message(e));
@@ -130,10 +141,10 @@ export default function ContributionsScreen() {
         key: Crypto.randomUUID(),
         body: {
           purpose,
-          amountMode,
+          amount_mode: amountMode,
           currency: 'FAIR' as const,
           ...(amountMode === 'fixed' ? { amount: decimalContributionAmount(amount) } : {}),
-          expiresAt: expiry ? new Date(`${expiry}T23:59:59Z`).toISOString() : null,
+          expires_at: expiry ? Math.floor(Date.parse(`${expiry}T23:59:59Z`) / 1000) : null,
         },
       };
       await AsyncStorage.setItem(scopeKey, JSON.stringify(operation));
@@ -262,12 +273,14 @@ export default function ContributionsScreen() {
               <View key={link.id} className="border border-border rounded-xl p-3 gap-2">
                 <Text className="text-foreground">{link.contribution.purpose}</Text>
                 <Text className="text-muted-foreground">
-                  {link.contribution.amountMode === 'free'
+                  {link.contribution.amount_mode === 'free'
                     ? t('contributions.freeAmount')
                     : `${formatContributionAmount(link.amount)} ${link.currency}`}{' '}
                   · {link.network} ·{' '}
                   {link.active ? t('contributions.active') : t('contributions.disabled')}
-                  {link.contribution.expiresAt ? ` · Ends ${link.contribution.expiresAt}` : ''}
+                  {link.contribution.expires_at
+                    ? ` · Ends ${utcDay(link.contribution.expires_at)}`
+                    : ''}
                 </Text>
                 {button(
                   t('contributions.copy'),
@@ -296,14 +309,16 @@ export default function ContributionsScreen() {
                 )}
               </View>
             ))}
-            {cursor &&
+            {moreLinks &&
               button(
                 t('contributions.moreLinks'),
                 () =>
                   void run(async () => {
-                    const page = await contributions.list(scope, { cursor });
-                    setLinks((rows) => [...rows, ...page.items]);
-                    setCursor(page.nextCursor);
+                    const page = await contributions.list(scope, {
+                      starting_after: links[links.length - 1]?.id,
+                    });
+                    setLinks((rows) => [...rows, ...page.data]);
+                    setMoreLinks(page.has_more);
                   }),
               )}
             {selected && (
@@ -312,10 +327,10 @@ export default function ContributionsScreen() {
                   {t('contributions.payments')}
                 </Text>
                 <Text className="text-muted-foreground">{t('contributions.refundHelp')}</Text>
-                {!collections.items.length && (
+                {!collections.data.length && (
                   <Text className="text-muted-foreground">{t('contributions.empty')}</Text>
                 )}
-                {collections.items.map((payment) => (
+                {collections.data.map((payment) => (
                   <View key={payment.id} className="border border-border rounded-xl p-3">
                     <Text selectable className="text-foreground">
                       {payment.id} · {formatContributionAmount(payment.amount)} {payment.currency} ·{' '}
@@ -329,17 +344,17 @@ export default function ContributionsScreen() {
                     ))}
                   </View>
                 ))}
-                {collections.nextCursor &&
+                {collections.has_more &&
                   button(
                     t('contributions.morePayments'),
                     () =>
                       void run(async () => {
                         const page = await contributions.collections(scope, selected, {
-                          cursor: collections.nextCursor ?? undefined,
+                          starting_after: collections.data[collections.data.length - 1]?.id,
                         });
                         setCollections((prior) => ({
-                          items: [...prior.items, ...page.items],
-                          nextCursor: page.nextCursor,
+                          ...page,
+                          data: [...prior.data, ...page.data],
                         }));
                       }),
                   )}

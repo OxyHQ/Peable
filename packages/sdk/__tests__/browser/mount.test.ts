@@ -41,14 +41,14 @@ const INTENT: PaymentIntent = {
   currency: 'FAIR',
   network: NET,
   address: ADDR,
-  merchantId: 'merch_1',
+  merchant_id: 'merch_1',
   txid: null,
   confirmations: 0,
-  clientSecret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',
+  client_secret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',
   metadata: {},
-  expiresAt: '2026-07-20T00:00:00.000Z',
-  createdAt: '2026-07-19T00:00:00.000Z',
-  updatedAt: '2026-07-19T00:00:00.000Z',
+  expires_at: 1784505600,
+  created: 1784419200,
+  updated_at: 1784419200,
 };
 
 describe('deriveIntentId', () => {
@@ -244,7 +244,7 @@ describe('payDeepLinkFor', () => {
     expect(payDeepLinkFor(INTENT)).toBe(
       buildPayDeepLink({
         intentId: INTENT.id,
-        clientSecret: INTENT.clientSecret,
+        clientSecret: INTENT.client_secret,
         address: INTENT.address as string,
         amount: INTENT.amount,
         network: INTENT.network as NonNullable<PaymentIntent['network']>,

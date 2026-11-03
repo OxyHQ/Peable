@@ -11,6 +11,7 @@ import {
   type WebhookEventType,
 } from '@peable.to/shared-types';
 import { newId } from '../lib/ids';
+import { toUnix } from '../lib/time';
 
 /** The concrete `safeFetch` signature — injected in tests, real one in prod. */
 export type SafeFetchFn = typeof import('@oxy.so/core/server').safeFetch;
@@ -28,7 +29,7 @@ const HTTP_SERVER_ERROR_MIN = 500;
 
 /**
  * Wrap a resource in a Stripe-parity `evt_` webhook envelope. `created` is the
- * emission time in ISO-8601; the resource sits under `data.object`.
+ * emission time in Unix seconds; the resource sits under `data.object`.
  *
  * GENERIC over the event type, so `WebhookEventPayload` decides which resource
  * each one may carry. It used to take a `PaymentIntent` for every type, which
@@ -51,7 +52,7 @@ export function buildEvent<K extends WebhookEventType>(
     id: newId('evt'),
     object: 'event',
     type,
-    created: new Date(Date.now()).toISOString(),
+    created: toUnix(new Date(Date.now())),
     ...(account ? { account } : {}),
     data: { object },
   } as WebhookEvent<K>;

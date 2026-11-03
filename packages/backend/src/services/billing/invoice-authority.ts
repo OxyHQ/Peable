@@ -6,25 +6,25 @@ import {
   type BillingFinalInvoiceAuthority,
   type BillingPaidInvoice,
 } from '@peable.to/shared-types';
-import { billingReference, BillingError, type BillingOwner } from './contracts';
+import { billingReference, BillingError, unixSeconds, type BillingOwner } from './contracts';
+import { toUnix } from '../../lib/time';
 
 const amount = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-const timestamp = z.string().datetime();
 const environment = z.enum(['development', 'staging', 'production']);
 const mode = z.enum(['test', 'live']);
 export const finalInvoiceAuthoritySchema = z
   .object({
-    schemaVersion: z.literal(1),
+    schema_version: z.literal(2),
     source: z
       .object({
-        invoiceId: billingReference,
-        paymentIntentId: billingReference,
-        customerId: billingReference,
-        subscriptionId: billingReference,
-        priceId: billingReference,
-        planId: billingReference,
-        merchantId: billingReference,
-        appId: billingReference,
+        invoice_id: billingReference,
+        payment_intent_id: billingReference,
+        customer_id: billingReference,
+        subscription_id: billingReference,
+        price_id: billingReference,
+        plan_id: billingReference,
+        merchant_id: billingReference,
+        app_id: billingReference,
         mode,
         environment,
       })
@@ -33,57 +33,57 @@ export const finalInvoiceAuthoritySchema = z
       .object({
         platform: z.literal('peable'),
         currency: z.string().regex(/^[A-Z]{3}$/),
-        grossMinorUnits: amount,
-        netMinorUnits: amount,
-        taxMinorUnits: amount,
-        merchantFeeMinorUnits: amount,
-        taxTreatment: z.enum(['inclusive', 'exclusive']),
-        sellerId: billingReference,
-        invoiceIssuerId: billingReference,
-        taxQuoteId: billingReference,
-        customerLocationEvidenceId: billingReference,
-        taxRateEvidenceId: billingReference,
+        gross_minor_units: amount,
+        net_minor_units: amount,
+        tax_minor_units: amount,
+        merchant_fee_minor_units: amount,
+        tax_treatment: z.enum(['inclusive', 'exclusive']),
+        seller_id: billingReference,
+        invoice_issuer_id: billingReference,
+        tax_quote_id: billingReference,
+        customer_location_evidence_id: billingReference,
+        tax_rate_evidence_id: billingReference,
         context: z
           .object({
-            payerAccountId: billingReference,
-            beneficiaryAccountId: billingReference,
-            providerSubscriptionId: billingReference,
-            offerId: billingReference,
-            offerVersion: z.number().int().positive(),
-            periodStart: timestamp,
-            periodEnd: timestamp,
+            payer_account_id: billingReference,
+            beneficiary_account_id: billingReference,
+            provider_subscription_id: billingReference,
+            offer_id: billingReference,
+            offer_version: z.number().int().positive(),
+            period_start: unixSeconds,
+            period_end: unixSeconds,
             mode,
             environment,
           })
           .strict(),
-        issuedAt: timestamp,
-        expiresAt: timestamp,
-        faircoinQuote: z
+        issued_at: unixSeconds,
+        expires_at: unixSeconds,
+        faircoin_quote: z
           .object({
             id: billingReference,
-            amountBaseUnits: z
+            amount_base_units: z
               .string()
               .regex(/^[1-9][0-9]*$/)
               .max(80),
-            quotedAt: timestamp,
-            expiresAt: timestamp,
-            roundingEvidenceId: billingReference,
+            quoted_at: unixSeconds,
+            expires_at: unixSeconds,
+            rounding_evidence_id: billingReference,
           })
           .strict()
           .optional(),
-        taxLines: z
+        tax_lines: z
           .array(
             z
               .object({
-                calculationId: billingReference,
+                calculation_id: billingReference,
                 country: z.string().regex(/^[A-Z]{2}$/),
                 state: z.string().nullable(),
-                taxType: z.string().nullable(),
-                ratePercentage: z.string().nullable(),
-                taxableMinorUnits: amount,
-                taxMinorUnits: amount,
+                tax_type: z.string().nullable(),
+                rate_percentage: z.string().nullable(),
+                taxable_minor_units: amount,
+                tax_minor_units: amount,
                 inclusive: z.boolean(),
-                taxabilityReason: z.string().min(1),
+                taxability_reason: z.string().min(1),
               })
               .strict(),
           )
@@ -95,7 +95,7 @@ export const finalInvoiceAuthoritySchema = z
     signature: z
       .object({
         algorithm: z.literal('Ed25519'),
-        keyId: billingReference,
+        key_id: billingReference,
         value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
       })
       .strict(),
@@ -129,55 +129,57 @@ export function verifyFinalInvoiceAuthority(
   const { source, invoice, signature } = authority;
   const paid = expected.invoice;
   const context = invoice.context;
+  const clock = toUnix(now);
   if (
-    source.invoiceId !== paid.invoiceId ||
-    source.paymentIntentId !== paid.paymentIntentId ||
-    source.customerId !== paid.providerCustomerId ||
-    source.subscriptionId !== paid.providerSubscriptionId ||
-    source.priceId !== paid.providerPriceId ||
-    source.planId !== paid.planId ||
-    source.merchantId !== expected.merchantPublicId ||
-    source.appId !== expected.owner.oxyAppId ||
+    source.invoice_id !== paid.invoice_id ||
+    source.payment_intent_id !== paid.payment_intent_id ||
+    source.customer_id !== paid.provider_customer_id ||
+    source.subscription_id !== paid.provider_subscription_id ||
+    source.price_id !== paid.provider_price_id ||
+    source.plan_id !== paid.plan_id ||
+    source.merchant_id !== expected.merchantPublicId ||
+    source.app_id !== expected.owner.oxyAppId ||
     source.environment !== expected.owner.environment ||
     (source.mode === 'live') !== paid.livemode ||
     context.mode !== source.mode ||
     context.environment !== source.environment ||
-    context.providerSubscriptionId !== source.subscriptionId ||
-    context.payerAccountId !== paid.storeId ||
-    context.beneficiaryAccountId !== paid.storeId ||
-    context.periodStart !== paid.periodStart ||
-    context.periodEnd !== paid.periodEnd ||
-    Date.parse(context.periodEnd) <= Date.parse(context.periodStart) ||
+    context.provider_subscription_id !== source.subscription_id ||
+    context.payer_account_id !== paid.store_id ||
+    context.beneficiary_account_id !== paid.store_id ||
+    context.period_start !== paid.period_start ||
+    context.period_end !== paid.period_end ||
+    context.period_end <= context.period_start ||
     invoice.currency !== paid.currency ||
-    BigInt(invoice.grossMinorUnits) !== BigInt(paid.amountPaid) ||
-    paid.netAmount === null ||
-    paid.taxAmount === null ||
-    BigInt(invoice.netMinorUnits) !== BigInt(paid.netAmount) ||
-    BigInt(invoice.taxMinorUnits) !== BigInt(paid.taxAmount) ||
-    invoice.netMinorUnits + invoice.taxMinorUnits !== invoice.grossMinorUnits ||
-    (invoice.taxLines !== undefined &&
-      invoice.taxLines.reduce((sum, line) => sum + line.taxMinorUnits, 0) !==
-        invoice.taxMinorUnits) ||
-    !Number.isSafeInteger(invoice.netMinorUnits + invoice.taxMinorUnits) ||
-    Date.parse(invoice.issuedAt) > now.getTime() ||
-    Date.parse(invoice.expiresAt) <= now.getTime() ||
-    Date.parse(invoice.expiresAt) <= Date.parse(invoice.issuedAt) ||
-    Date.parse(paid.paidAt) > now.getTime() ||
-    Date.parse(paid.observedAt) > now.getTime() ||
-    now.getTime() - Date.parse(paid.observedAt) > 60_000
+    BigInt(invoice.gross_minor_units) !== BigInt(paid.amount_paid) ||
+    paid.net_amount === null ||
+    paid.tax_amount === null ||
+    BigInt(invoice.net_minor_units) !== BigInt(paid.net_amount) ||
+    BigInt(invoice.tax_minor_units) !== BigInt(paid.tax_amount) ||
+    invoice.net_minor_units + invoice.tax_minor_units !== invoice.gross_minor_units ||
+    (invoice.tax_lines !== undefined &&
+      invoice.tax_lines.reduce((sum, line) => sum + line.tax_minor_units, 0) !==
+        invoice.tax_minor_units) ||
+    !Number.isSafeInteger(invoice.net_minor_units + invoice.tax_minor_units) ||
+    invoice.issued_at > clock ||
+    invoice.expires_at <= clock ||
+    invoice.expires_at <= invoice.issued_at ||
+    paid.paid_at > clock ||
+    paid.observed_at > clock ||
+    clock - paid.observed_at > 60
   )
     throw new BillingError('invalid_provider_response', 502);
+  const fx = invoice.faircoin_quote;
   if (
     authority.method === 'faircoin' &&
-    (!invoice.faircoinQuote ||
-      Date.parse(invoice.faircoinQuote.quotedAt) > now.getTime() ||
-      Date.parse(invoice.faircoinQuote.expiresAt) > Date.parse(invoice.expiresAt) ||
-      Date.parse(paid.paidAt) < Date.parse(invoice.faircoinQuote.quotedAt) ||
-      Date.parse(paid.paidAt) >= Date.parse(invoice.faircoinQuote.expiresAt) ||
-      Date.parse(invoice.faircoinQuote.expiresAt) <= Date.parse(invoice.faircoinQuote.quotedAt))
+    (!fx ||
+      fx.quoted_at > clock ||
+      fx.expires_at > invoice.expires_at ||
+      paid.paid_at < fx.quoted_at ||
+      paid.paid_at >= fx.expires_at ||
+      fx.expires_at <= fx.quoted_at)
   )
     throw new BillingError('invalid_provider_response', 502);
-  const pinnedKey = keys[signature.keyId];
+  const pinnedKey = Object.hasOwn(keys, signature.key_id) ? keys[signature.key_id] : undefined;
   if (!pinnedKey) throw new BillingError('invalid_provider_response', 502);
   try {
     const key = createPublicKey(pinnedKey);

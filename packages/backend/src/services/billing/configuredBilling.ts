@@ -204,12 +204,12 @@ async function configureFaircoinRail({ db, body, adapters }: RailContext): Promi
       taxQuotes: (owner) => cohortOf(owner) !== undefined,
       offers: (owner) =>
         (cohortOf(owner)?.offers ?? []).map((offer) => ({
-          providerPriceId: offer.providerPriceId,
-          planId: offer.planId,
+          provider_price_id: offer.providerPriceId,
+          plan_id: offer.planId,
           interval: offer.interval,
           currency: offer.currency,
-          grossMinorUnits: offer.grossMinorUnits,
-          taxTreatment: offer.taxTreatment,
+          gross_minor_units: offer.grossMinorUnits,
+          tax_treatment: offer.taxTreatment,
         })),
     },
   };
@@ -463,12 +463,12 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
       const offers = offersOf(owner);
       return builtIn && offers.length
         ? offers.map((offer) => ({
-            providerPriceId: offer.providerPriceId,
-            planId: offer.planId,
+            provider_price_id: offer.providerPriceId,
+            plan_id: offer.planId,
             interval: offer.interval,
             currency: offer.currency,
-            grossMinorUnits: offer.grossMinorUnits,
-            taxTreatment: offer.taxTreatment,
+            gross_minor_units: offer.grossMinorUnits,
+            tax_treatment: offer.taxTreatment,
           }))
         : null;
     },

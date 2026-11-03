@@ -37,7 +37,7 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
   };
 }
 
-test('resolves displayName + avatarUrl + description when all identity fields are set', async () => {
+test('resolves name + avatar_url + description when all identity fields are set', async () => {
   const merchant = merchantRow({
     publicId: 'merch_test_display_1',
     oxyAppId: 'app_display_1',
@@ -52,7 +52,7 @@ test('resolves displayName + avatarUrl + description when all identity fields ar
     name: 'Mercaria',
     // The public-CDN builder (`oxy.assets.publicUrl`) — never a
     // hand-built `cloud.oxy.so` string — with the ecosystem's 'thumb' variant.
-    avatarUrl: 'https://cloud.oxy.so/file_mercaria_logo?variant=thumb',
+    avatar_url: 'https://cloud.oxy.so/file_mercaria_logo?variant=thumb',
     description: 'Marketplace',
   });
 });
@@ -66,7 +66,7 @@ test('falls back to a neutral name and null avatar/description when unset', asyn
   const display = await resolveMerchantDisplay(merchant);
 
   expect(display.name).toBe('Peable merchant');
-  expect(display.avatarUrl).toBeNull();
+  expect(display.avatar_url).toBeNull();
   expect(display.description).toBeNull();
 });
 
@@ -75,6 +75,6 @@ test('a withheld avatar resolves to no URL: Oxy would not serve it', async () =>
     const display = await resolveMerchantDisplay(
       merchantRow({ avatarFileId: 'file_mercaria_logo', avatarWithheld }),
     );
-    expect(display.avatarUrl).toBeNull();
+    expect(display.avatar_url).toBeNull();
   }
 });

@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { Router, type RequestHandler } from 'express';
 import { createOxyAuthMiddleware, type OxyAuthRequest } from '@oxy.so/core/server';
 import {
@@ -7,6 +6,9 @@ import {
   contributionPageQuerySchema,
   contributionPatchSchema,
   contributionLinkSchema,
+  type ContributionCollection,
+  type ContributionCollectionList,
+  type ContributionList,
 } from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
@@ -27,31 +29,33 @@ import { resolveRail } from '../services/createIntent';
 import { resolveMerchantByApp } from './paymentIntents';
 import { newId } from '../lib/ids';
 import { config } from '../config';
-import { sendError, wrap } from '../lib/http';
+import { sendError, sendValidationError, wrap } from '../lib/http';
+import { fromUnix, toUnix } from '../lib/time';
+import { toContributionDetails } from '../lib/serialize';
+import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 function dto(row: PaymentLinkRow) {
   return contributionLinkSchema.parse({
     id: row.publicId,
+    object: 'payment_link',
     amount: row.amount,
     currency: row.currency,
     network: row.network,
     active: row.active,
     url: `${config.checkoutBaseUrl}/l/${row.publicId}`,
-    contribution: row.contribution,
-    createdAt: row.createdAt.toISOString(),
+    contribution: row.contribution ? toContributionDetails(row.contribution) : null,
+    created: toUnix(row.createdAt),
   });
 }
-function fingerprint(value: string) {
-  return createHash('sha256').update(value).digest('base64url');
-}
-function cursorFor(id: string, scope: string) {
-  return Buffer.from(JSON.stringify({ id, scope: fingerprint(scope) })).toString('base64url');
-}
-function readCursor(value: string | undefined, scope: string): string | undefined {
-  if (!value) return;
-  const parsed = JSON.parse(Buffer.from(value, 'base64url').toString());
-  if (typeof parsed.id !== 'string' || parsed.scope !== fingerprint(scope))
-    throw new Error('invalid cursor');
-  return parsed.id;
+/** Answer a `starting_after` that names nothing this caller can page from. */
+function sendUnknownCursor(res: Parameters<typeof sendError>[0]): void {
+  sendError(
+    res,
+    400,
+    'invalid_request_error',
+    'starting_after does not name an object in this list',
+    'resource_missing',
+    'starting_after',
+  );
 }
 export function createContributionsRouter(
   deps: {
@@ -73,7 +77,7 @@ export function createContributionsRouter(
       const org = req.params.organizationId,
         app = req.params.applicationId;
       if (!org || !app) {
-        sendError(res, 422, 'invalid_request_error', 'Organization and application are required');
+        sendError(res, 400, 'invalid_request_error', 'Organization and application are required');
         return;
       }
       try {
@@ -92,7 +96,7 @@ export function createContributionsRouter(
       }
       const parsed = contributionPageQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(res, 422, 'invalid_request_error', 'Invalid environment or pagination');
+        sendValidationError(res, parsed.error);
         return;
       }
       const merchant = await resolveMerchantByApp(app, parsed.data.environment, res);
@@ -107,12 +111,17 @@ export function createContributionsRouter(
       const { org, merchant } = res.locals.contribution;
       const parsed = createContributionSchema.safeParse(req.body);
       const key = contributionOperationKeySchema.safeParse(req.header('Idempotency-Key'));
-      if (!parsed.success || !key.success) {
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      if (!key.success) {
         sendError(
           res,
-          422,
+          400,
           'invalid_request_error',
-          'Valid contribution fields and a UUID Idempotency-Key are required',
+          'A UUID Idempotency-Key header is required',
+          'idempotency_key_invalid',
         );
         return;
       }
@@ -120,7 +129,7 @@ export function createContributionsRouter(
       if (!merchant.network) {
         sendError(
           res,
-          422,
+          400,
           'invalid_request_error',
           'Register a watch-only FairCoin account for this application before creating contribution links',
         );
@@ -141,12 +150,17 @@ export function createContributionsRouter(
         contribution: {
           organizationId: org,
           purpose: body.purpose,
-          amountMode: body.amountMode,
-          expiresAt: body.expiresAt ?? null,
+          amountMode: body.amount_mode,
+          // Stored as ISO-8601, the shape `payment_links.contribution` has
+          // always held; the wire's Unix seconds are rendered back on the way out.
+          expiresAt:
+            body.expires_at === undefined || body.expires_at === null
+              ? null
+              : fromUnix(body.expires_at).toISOString(),
         },
       });
       if (row === 'expired') {
-        sendError(res, 422, 'invalid_request_error', 'Expiry must be in the future');
+        sendError(res, 400, 'invalid_request_error', 'Expiry must be in the future');
         return;
       }
       if (!row) {
@@ -164,29 +178,31 @@ export function createContributionsRouter(
   router.get(
     root,
     wrap(async (_req, res) => {
-      const { org, app, merchant, query } = res.locals.contribution;
-      const scope = `links:${org}:${app}:${merchant.environment}`;
-      let after: string | undefined;
-      try {
-        after = readCursor(query.cursor, scope);
-      } catch {
-        sendError(res, 400, 'invalid_request_error', 'Invalid cursor');
-        return;
+      const { org, merchant, query } = res.locals.contribution;
+      // `starting_after` is resolved INSIDE the caller's scope — the merchant is
+      // already this application and environment, and the link must be this
+      // organization's — so another organization's id pages nothing and reveals
+      // nothing: it is refused exactly like an id that does not exist.
+      const after: string | undefined = query.starting_after;
+      if (after !== undefined) {
+        const cursor = await findLinkForMerchant(getDb(), after, merchant.id);
+        if (!cursor || cursor.contribution?.organizationId !== org) {
+          sendUnknownCursor(res);
+          return;
+        }
       }
       const page = await listContributions(getDb(), merchant.id, org, query.limit, after);
       const hasMore = page.length > query.limit;
       const rows = page.slice(0, query.limit);
-      const items = await Promise.all(
+      const data = await Promise.all(
         rows.map(async (r) => {
           const row = await findLinkByPublicId(getDb(), r.publicId);
           if (!row) throw new Error('Link disappeared');
           return dto(row);
         }),
       );
-      res.json({
-        items,
-        nextCursor: hasMore ? cursorFor(rows.at(-1)?.publicId ?? '', scope) : null,
-      });
+      const body: ContributionList = { object: 'list', data, has_more: hasMore };
+      res.json(body);
     }),
   );
   router.patch(
@@ -195,7 +211,7 @@ export function createContributionsRouter(
       const { org, merchant } = res.locals.contribution;
       const body = contributionPatchSchema.safeParse(req.body);
       if (!body.success || !req.params.id) {
-        sendError(res, 422, 'invalid_request_error', 'Invalid link update');
+        sendError(res, 400, 'invalid_request_error', 'Invalid link update');
         return;
       }
       const link = await findLinkForMerchant(getDb(), req.params.id, merchant.id);
@@ -211,7 +227,7 @@ export function createContributionsRouter(
   router.get(
     `${root}/:id/collections`,
     wrap(async (req, res) => {
-      const { org, app, merchant, query } = res.locals.contribution;
+      const { org, merchant, query } = res.locals.contribution;
       if (!req.params.id) {
         sendError(res, 404, 'invalid_request_error', 'Contribution not found');
         return;
@@ -221,13 +237,14 @@ export function createContributionsRouter(
         sendError(res, 404, 'invalid_request_error', 'Contribution not found');
         return;
       }
-      const scope = `collections:${org}:${app}:${merchant.environment}:${link.publicId}`;
-      let after: string | undefined;
-      try {
-        after = readCursor(query.cursor, scope);
-      } catch {
-        sendError(res, 400, 'invalid_request_error', 'Invalid cursor');
-        return;
+      // A collection is a `pi_…` minted from THIS link; any other id is refused.
+      const after: string | undefined = query.starting_after;
+      if (after !== undefined) {
+        const cursor = await findIntentForMerchant(getDb(), after, merchant.id);
+        if (!cursor || cursor.paymentLinkId !== link.id) {
+          sendUnknownCursor(res);
+          return;
+        }
       }
       const page = await listContributionCollections(
         getDb(),
@@ -237,25 +254,35 @@ export function createContributionsRouter(
         after,
       );
       const rows = page.slice(0, query.limit);
-      const items = await Promise.all(
-        rows.map(async (row) => ({
-          id: row.publicId,
-          amount: row.amount,
-          currency: row.currency,
-          status: row.status,
-          refundCapability: 'unsupported_non_custodial',
-          createdAt: row.createdAt.toISOString(),
-          refunds: (await contributionRefunds(getDb(), row.id)).map((r) => ({
-            ...r,
-            createdAt: r.createdAt.toISOString(),
-          })),
-        })),
+      const data = await Promise.all(
+        rows.map(
+          async (row): Promise<ContributionCollection> => ({
+            id: row.publicId,
+            object: 'payment_intent',
+            amount: row.amount,
+            // Structurally FAIR: a contribution link is faircoin-only
+            // (`payment_links_contribution_shape`) and every intent it mints
+            // inherits that rail, whose currency is FAIR.
+            currency: 'FAIR',
+            status: row.status,
+            created: toUnix(row.createdAt),
+            refund_capability: 'unsupported_non_custodial',
+            refunds: (await contributionRefunds(getDb(), row.id)).map((r) => ({
+              id: r.id,
+              object: 'refund',
+              amount: r.amount,
+              status: r.status,
+              created: toUnix(r.createdAt),
+            })),
+          }),
+        ),
       );
-      res.json({
-        items,
-        nextCursor:
-          page.length > query.limit ? cursorFor(rows.at(-1)?.publicId ?? '', scope) : null,
-      });
+      const body: ContributionCollectionList = {
+        object: 'list',
+        data,
+        has_more: page.length > query.limit,
+      };
+      res.json(body);
     }),
   );
   return router;

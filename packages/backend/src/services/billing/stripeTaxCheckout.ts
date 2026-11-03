@@ -36,6 +36,7 @@ import {
 } from './tax-checkout';
 import type { FinalInvoiceAuthorityReader } from './invoice-authority';
 import type { StripeBillingClient } from './stripeBillingProvider';
+import { toUnix } from '../../lib/time';
 
 export type StripeTaxOffer = z.infer<typeof billingTaxOfferSchema>;
 
@@ -68,15 +69,15 @@ const TAX_LABELS: Readonly<Record<string, string>> = {
  * no percentage of at most four decimals reproduces the amount, and the sale
  * must not be charged.
  */
-export function exactTaxRatePercentage(quote: {
-  grossMinorUnits: number;
-  netMinorUnits: number;
-  taxMinorUnits: number;
-  taxTreatment: 'inclusive' | 'exclusive';
-}): number | null {
-  const tax = BigInt(quote.taxMinorUnits);
-  const exclusive = quote.taxTreatment === 'exclusive';
-  const base = BigInt(exclusive ? quote.netMinorUnits : quote.grossMinorUnits);
+export function exactTaxRatePercentage(
+  quote: Pick<
+    BillingTaxQuote['quote'],
+    'gross_minor_units' | 'net_minor_units' | 'tax_minor_units' | 'tax_treatment'
+  >,
+): number | null {
+  const tax = BigInt(quote.tax_minor_units);
+  const exclusive = quote.tax_treatment === 'exclusive';
+  const base = BigInt(exclusive ? quote.net_minor_units : quote.gross_minor_units);
   const denominator = exclusive ? base : base - tax;
   if (tax <= 0n || denominator <= 0n) return null;
   for (let decimals = 0; decimals <= 4; decimals++) {
@@ -112,14 +113,14 @@ export async function createFrozenTaxRate(
   key: string,
 ): Promise<string | undefined> {
   const { db, client, owner, quote } = input;
-  if (quote.taxMinorUnits <= 0) return undefined;
+  if (quote.tax_minor_units <= 0) return undefined;
   if (!client.createTaxRate) throw new BillingError('not_found', 404);
   const percentage = exactTaxRatePercentage(quote);
   if (percentage === null) throw new BillingError('invalid_provider_response', 502);
-  const lines = (await invoiceTaxLines(db, owner.merchantId, quote.taxRateEvidenceId)) ?? [];
-  const types = new Set(lines.map((line) => line.taxType));
+  const lines = (await invoiceTaxLines(db, owner.merchantId, quote.tax_rate_evidence_id)) ?? [];
+  const types = new Set(lines.map((line) => line.tax_type));
   const [only] = types;
-  const inclusive = quote.taxTreatment === 'inclusive';
+  const inclusive = quote.tax_treatment === 'inclusive';
   return z
     .object({
       id: z.string().regex(/^txr_[A-Za-z0-9]+$/),
@@ -137,7 +138,7 @@ export async function createFrozenTaxRate(
           country: quote.country,
           metadata: {
             peable_tax_quote: quote.id,
-            peable_tax_calculation: quote.taxRateEvidenceId,
+            peable_tax_calculation: quote.tax_rate_evidence_id,
           },
         },
         key,
@@ -182,26 +183,26 @@ export function createStripePeableTaxCheckout(options: {
     async createCheckout({ owner, deployment, checkout, snapshot }, key) {
       if (!client.createTaxRate || !client.expireCheckout) throw new BillingError('not_found', 404);
       const quote = snapshot.taxQuote.quote;
-      const expiresAt = Math.floor(Date.parse(quote.expiresAt) / 1000);
+      const expiresAt = quote.expires_at;
       if (expiresAt * 1000 - now().getTime() < MIN_CHECKOUT_LIFETIME_MS)
         throw new BillingError('result_expired');
       const taxRate = await createFrozenTaxRate(
         { db, client, owner, livemode: deployment.livemode, quote },
         `${key}:tax_rate`,
       );
-      const successUrl = new URL(checkout.returnUrl);
+      const successUrl = new URL(checkout.return_url);
       successUrl.searchParams.set('billing', 'complete');
-      const cancelUrl = new URL(checkout.returnUrl);
+      const cancelUrl = new URL(checkout.return_url);
       cancelUrl.searchParams.set('billing', 'cancelled');
       const raw = await client.createCheckout(
         {
           mode: 'subscription',
           // The signed quote's currency must survive hosted checkout unchanged.
           adaptive_pricing: { enabled: false },
-          customer: checkout.providerCustomerId,
+          customer: checkout.provider_customer_id,
           line_items: [
             {
-              price: checkout.providerPriceId,
+              price: checkout.provider_price_id,
               quantity: 1,
               ...(taxRate ? { tax_rates: [taxRate] } : {}),
             },
@@ -229,14 +230,14 @@ export function createStripePeableTaxCheckout(options: {
         .parse(raw).id;
       const session = z
         .object({
-          customer: z.literal(checkout.providerCustomerId),
+          customer: z.literal(checkout.provider_customer_id),
           mode: z.literal('subscription'),
           livemode: z.literal(deployment.livemode),
           url: billingReturnUrl,
           expires_at: z.literal(expiresAt),
           currency: z.literal(quote.currency.toLowerCase()),
-          amount_total: z.literal(quote.grossMinorUnits),
-          total_details: z.object({ amount_tax: z.literal(quote.taxMinorUnits) }),
+          amount_total: z.literal(quote.gross_minor_units),
+          total_details: z.object({ amount_tax: z.literal(quote.tax_minor_units) }),
           automatic_tax: z.object({ enabled: z.literal(false) }),
         })
         .safeParse(raw);
@@ -250,7 +251,7 @@ export function createStripePeableTaxCheckout(options: {
         providerCustomerId: session.data.customer,
         livemode: session.data.livemode,
         url: session.data.url,
-        expiresAt: new Date(expiresAt * 1000).toISOString(),
+        expiresAt,
       };
     },
   };
@@ -277,55 +278,55 @@ export function createPeableCardInvoiceAuthority(options: {
       const snapshot = billingTaxCheckoutSnapshotSchema.parse(taxCheckoutSnapshot);
       const tax = snapshot.taxQuote.quote;
       const lines = include?.taxLines
-        ? await invoiceTaxLines(db, owner.merchantId, tax.taxRateEvidenceId)
+        ? await invoiceTaxLines(db, owner.merchantId, tax.tax_rate_evidence_id)
         : undefined;
       if (lines === null) throw new BillingError('not_found', 404);
       const mode = paid.livemode ? ('live' as const) : ('test' as const);
       const issuedAt = now();
       const authority: BillingFinalInvoiceAuthority = {
-        schemaVersion: 1,
+        schema_version: 2,
         method: 'card',
         source: {
-          invoiceId: paid.invoiceId,
-          paymentIntentId: paid.paymentIntentId,
-          customerId: paid.providerCustomerId,
-          subscriptionId: paid.providerSubscriptionId,
-          priceId: paid.providerPriceId,
-          planId: paid.planId,
-          merchantId: merchantPublicId,
-          appId: owner.oxyAppId,
+          invoice_id: paid.invoice_id,
+          payment_intent_id: paid.payment_intent_id,
+          customer_id: paid.provider_customer_id,
+          subscription_id: paid.provider_subscription_id,
+          price_id: paid.provider_price_id,
+          plan_id: paid.plan_id,
+          merchant_id: merchantPublicId,
+          app_id: owner.oxyAppId,
           mode,
           environment: owner.environment,
         },
         invoice: {
           platform: 'peable',
           currency: tax.currency,
-          grossMinorUnits: tax.grossMinorUnits,
-          netMinorUnits: tax.netMinorUnits,
-          taxMinorUnits: tax.taxMinorUnits,
-          merchantFeeMinorUnits: 0,
-          taxTreatment: tax.taxTreatment,
-          sellerId: tax.sellerId,
-          invoiceIssuerId: tax.invoiceIssuerId,
-          taxQuoteId: tax.id,
-          customerLocationEvidenceId: tax.customerLocationEvidenceId,
-          taxRateEvidenceId: tax.taxRateEvidenceId,
+          gross_minor_units: tax.gross_minor_units,
+          net_minor_units: tax.net_minor_units,
+          tax_minor_units: tax.tax_minor_units,
+          merchant_fee_minor_units: 0,
+          tax_treatment: tax.tax_treatment,
+          seller_id: tax.seller_id,
+          invoice_issuer_id: tax.invoice_issuer_id,
+          tax_quote_id: tax.id,
+          customer_location_evidence_id: tax.customer_location_evidence_id,
+          tax_rate_evidence_id: tax.tax_rate_evidence_id,
           context: {
-            payerAccountId: paid.storeId,
-            beneficiaryAccountId: paid.storeId,
-            providerSubscriptionId: paid.providerSubscriptionId,
-            offerId: snapshot.offer.offerId,
-            offerVersion: snapshot.offer.offerVersion,
-            periodStart: paid.periodStart,
-            periodEnd: paid.periodEnd,
+            payer_account_id: paid.store_id,
+            beneficiary_account_id: paid.store_id,
+            provider_subscription_id: paid.provider_subscription_id,
+            offer_id: snapshot.offer.offerId,
+            offer_version: snapshot.offer.offerVersion,
+            period_start: paid.period_start,
+            period_end: paid.period_end,
             mode,
             environment: owner.environment,
           },
-          issuedAt: issuedAt.toISOString(),
-          expiresAt: new Date(+issuedAt + 60_000).toISOString(),
-          ...(lines ? { taxLines: lines } : {}),
+          issued_at: toUnix(issuedAt),
+          expires_at: toUnix(issuedAt) + 60,
+          ...(lines ? { tax_lines: lines } : {}),
         },
-        signature: { algorithm: 'Ed25519', keyId, value: '' },
+        signature: { algorithm: 'Ed25519', key_id: keyId, value: '' },
       };
       authority.signature.value = sign(
         null,

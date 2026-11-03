@@ -35,7 +35,7 @@ export function parseProfileHandle(segment: string | string[] | undefined): stri
  *
  * - `loading` — Oxy auth state is still resolving; don't flash a wrong CTA.
  * - `self` — the viewer is looking at their own profile. The gateway rejects
- *   this with a 422 ("cannot pay yourself"), so the page must not offer it.
+ *   this with a 400 ("cannot pay yourself"), so the page must not offer it.
  * - `web` — the wallet is native-only by design (`wallet-store.ts` returns
  *   `"web-unsupported"`): the seed derives from an on-device Oxy identity key
  *   that does not exist in a browser. A browser visitor is never asked to

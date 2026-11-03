@@ -35,7 +35,7 @@ import {
 } from './paymentIntents';
 import { redeliverWebhookDelivery } from './webhookDeliveries';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
-import { sendError, wrap } from '../lib/http';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -56,7 +56,7 @@ function resolveEnvironment(req: Request, res: Response): OxyServiceEnvironment 
   if (!parsed.success) {
     sendError(
       res,
-      422,
+      400,
       'invalid_request_error',
       'a valid environment query parameter is required (development | staging | production)',
     );
@@ -111,7 +111,7 @@ export async function resolveDashboardAccess(
   // `routes/social.ts` uses for `:username`.
   const { applicationId } = req.params;
   if (!applicationId) {
-    sendError(res, 422, 'invalid_request_error', 'applicationId is required');
+    sendError(res, 400, 'invalid_request_error', 'applicationId is required');
     return null;
   }
 
@@ -185,12 +185,7 @@ export function createDashboardRouter(deps?: {
 
       const parsed = createMerchantBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -218,12 +213,7 @@ export function createDashboardRouter(deps?: {
 
       const parsed = patchMerchantBodySchema.safeParse(req.body);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid request body',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const result = await applyMerchantPatch(merchant, parsed.data, {
@@ -250,12 +240,7 @@ export function createDashboardRouter(deps?: {
 
       const parsed = listQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
 
@@ -285,7 +270,7 @@ export function createDashboardRouter(deps?: {
       // non-null assertion.
       const { id } = req.params;
       if (!id) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 
@@ -310,12 +295,7 @@ export function createDashboardRouter(deps?: {
 
       const parsed = webhookDeliveriesListQuerySchema.safeParse(req.query);
       if (!parsed.success) {
-        sendError(
-          res,
-          422,
-          'invalid_request_error',
-          parsed.error.issues[0]?.message ?? 'invalid query',
-        );
+        sendValidationError(res, parsed.error);
         return;
       }
       const { starting_after } = parsed.data;
@@ -325,14 +305,14 @@ export function createDashboardRouter(deps?: {
 
       // The id-shape guard is gone with the ObjectId it existed for: delivery
       // ids are `text`, so a cursor of any shape simply matches no row, and
-      // the ownership-scoped lookup below produces the SAME 422 it always did.
+      // the ownership-scoped lookup below produces the SAME 400 it always did.
       let after: string | undefined;
       if (starting_after) {
         const cursor = await findDeliveryForMerchant(db, starting_after, merchant.id);
         if (!cursor) {
           sendError(
             res,
-            422,
+            400,
             'invalid_request_error',
             'starting_after references an unknown webhook delivery',
           );
@@ -369,7 +349,7 @@ export function createDashboardRouter(deps?: {
 
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 

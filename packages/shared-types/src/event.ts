@@ -83,10 +83,10 @@ export type WebhookEventType =
 /** Wake-up only. Re-read the owner-bound SDK resource; this is never paid or grant authority. */
 export interface BillingObservation {
   object: 'billing_observation';
-  resourceKind: 'subscription' | 'invoice';
-  resourceId: string;
+  resource_kind: 'subscription' | 'invoice';
+  resource_id: string;
   revision: number;
-  observedAt: string;
+  observed_at: number;
 }
 export interface WebhookEventPayload {
   'billing.observation.updated': BillingObservation;
@@ -110,7 +110,7 @@ export interface WebhookEventPayload {
  *
  * ```ts
  * if (event.type === 'payment_intent.disputed') {
- *   event.data.object.evidenceDueAt; // Dispute, not PaymentIntent
+ *   event.data.object.evidence_due_at; // Dispute, not PaymentIntent
  * }
  * ```
  *
@@ -129,7 +129,7 @@ export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
     id: string;
     object: 'event';
     type: T;
-    created: string;
+    created: number;
     /**
      * The connected account (`ca_…`) this event is about — Stripe's
      * `event.account` (ADR 0012 D7). Present on every event for an on-behalf

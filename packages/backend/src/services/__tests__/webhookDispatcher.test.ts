@@ -26,14 +26,14 @@ const INTENT: PaymentIntent = {
   currency: 'FAIR',
   network: 'testnet',
   address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3',
-  merchantId: 'merch_1',
+  merchant_id: 'merch_1',
   txid: 'tx_1',
   confirmations: 2,
-  clientSecret: 'pi_0000000000000000000000a1_secret_x',
+  client_secret: 'pi_0000000000000000000000a1_secret_x',
   metadata: {},
-  expiresAt: '2026-07-18T00:00:00.000Z',
-  createdAt: '2026-07-18T00:00:00.000Z',
-  updatedAt: '2026-07-18T00:00:00.000Z',
+  expires_at: 1_784_332_800,
+  created: 1_784_332_800,
+  updated_at: 1_784_332_800,
 };
 
 // Build a SafeFetchResult backed by a REAL IncomingMessage so `response`

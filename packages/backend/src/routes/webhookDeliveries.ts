@@ -24,7 +24,7 @@ export type RedeliverResult =
        * seller).
        *
        * Carried alongside the row because the row stores the intent's INTERNAL
-       * id while `WebhookDelivery.intentId` on the wire is the public one, and
+       * id while `WebhookDelivery.intent_id` on the wire is the public one, and
        * this path already loaded the intent when there was one.
        */
       intentPublicId: string | null;
@@ -83,7 +83,7 @@ export async function redeliverWebhookDelivery(
   // loaded explicitly and only on a delivery path.
   const target = await findWebhookTarget(db, merchant.id);
   if (!target) {
-    return { ok: false, status: 422, message: 'merchant has no webhook configured' };
+    return { ok: false, status: 400, message: 'merchant has no webhook configured' };
   }
 
   // A delivery from before this table stored envelopes cannot be replayed: the
@@ -95,7 +95,7 @@ export async function redeliverWebhookDelivery(
   if (Object.keys(delivery.payload).length === 0) {
     return {
       ok: false,
-      status: 422,
+      status: 400,
       message: 'this delivery predates stored envelopes and cannot be replayed',
     };
   }
@@ -158,7 +158,7 @@ export function createWebhookDeliveriesRouter(deps: {
       // `undefined` even though Express guarantees `:id` is present here.
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
-        sendError(res, 422, 'invalid_request_error', 'id is required');
+        sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
 

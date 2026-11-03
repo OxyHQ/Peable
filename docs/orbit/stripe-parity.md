@@ -24,12 +24,12 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | Prefixed public ids, `object` field | 🟡 | Most resources; `WebhookDelivery.id` is the internal id; social/enrich/contributions lack `object` | Every object |
-| Single field style | ❌ | camelCase bodies, snake_case lists and payer fields | snake_case everywhere |
-| Unix timestamps | ❌ | ISO strings | `created` and every instant as integer seconds |
+| Single field style | ✅ | snake_case everywhere, root change (no legacy) | |
+| Unix timestamps | ✅ | `created` and every instant as integer seconds | |
 | `livemode` on objects | 🟡 | Tax and billing DTOs only | Every object |
-| One wire, clean cut | ❌ | Mixed styles across routes | Every handler, type, SDK and app speaks ADR 0014 D1 directly; no legacy version |
-| Error envelope | 🟡 | `{type, message, code?}`; 422 validation; unmapped 500s no longer leak `err.message` | `{type, code, param, message, doc_url, request_id}`; 400; no leak |
-| `Request-Id` | 🟡 | Header on every response (`lib/requestId.ts`); not yet in error bodies | + `request_id` in every error body |
+| One wire, clean cut | ✅ | Handlers, types, SDK, checkout and app speak ADR 0014 D1; stored wire JSON migrated (`0036`) | |
+| Error envelope | 🟡 | `{type, code?, param?, message, request_id}`; 400 validation; strict bodies; no leak | + `doc_url` once docs.peable.to exists |
+| `Request-Id` | ✅ | Header on every response and `request_id` in every error | |
 | Generic idempotency | 🟡 | Required on PI create, optional on sessions, `externalRef` elsewhere; no replay | Every POST; stored response replay; 24 h |
 | List pagination | 🟡 | `starting_after`, `limit`; three envelopes; sub-lists unpaginated | + `ending_before`, `created[...]`, `url`; one envelope everywhere |
 | `expand[]` | ❌ | — | Depth 4, merchant-scoped |

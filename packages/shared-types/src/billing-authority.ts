@@ -22,20 +22,20 @@ function encode(value: unknown): string {
 }
 
 export function canonicalBillingAuthority(
-  authority: Pick<BillingFinalInvoiceAuthority, 'schemaVersion' | 'source' | 'invoice' | 'method'>,
+  authority: Pick<BillingFinalInvoiceAuthority, 'schema_version' | 'source' | 'invoice' | 'method'>,
 ): string {
   return encode({
-    schemaVersion: authority.schemaVersion,
+    schema_version: authority.schema_version,
     source: authority.source,
     invoice: authority.invoice,
     method: authority.method,
   });
 }
 export function canonicalBillingTaxQuote(
-  authority: Pick<BillingTaxQuote, 'schemaVersion' | 'source' | 'quote'>,
+  authority: Pick<BillingTaxQuote, 'schema_version' | 'source' | 'quote'>,
 ): string {
   return encode({
-    schemaVersion: authority.schemaVersion,
+    schema_version: authority.schema_version,
     source: authority.source,
     quote: authority.quote,
   });

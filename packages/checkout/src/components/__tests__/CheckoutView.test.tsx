@@ -48,14 +48,14 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     currency: 'FAIR',
     network: 'testnet',
     address: 'TAddressExample1111111111111111111',
-    merchantId: 'merch_1',
+    merchant_id: 'merch_1',
     txid: 'deadbeef',
     confirmations: 0,
-    clientSecret: 'pi_live123_secret',
+    client_secret: 'pi_live123_secret',
     metadata: {},
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    expires_at: Math.floor((Date.now() + 60_000) / 1000),
+    created: Math.floor(Date.now() / 1000),
+    updated_at: Math.floor(Date.now() / 1000),
     ...overrides,
   };
 }
@@ -79,7 +79,7 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
   await screen.findByText(/payment sent/i);
   expect(subscribeMock).toHaveBeenCalledWith(
     initialIntent.id,
-    initialIntent.clientSecret,
+    initialIntent.client_secret,
     expect.any(Function),
     // The connection-state callback. Asserted here as well as in
     // `CheckoutViewReconnect.test.tsx` because a change that dropped it would
@@ -122,13 +122,13 @@ test('an expired frozen subscription quote shows canonical amounts and no paymen
   const quote = {
     id: 'fx_expired',
     currency: 'USD' as const,
-    grossMinorUnits: 100,
-    amountBaseUnits: '333333334',
-    usdPerFair: '0.3',
+    gross_minor_units: 100,
+    amount_base_units: '333333334',
+    usd_per_fair: '0.3',
     source: 'official',
-    observedAt: new Date(Date.now() - 120000).toISOString(),
-    quotedAt: new Date(Date.now() - 120000).toISOString(),
-    expiresAt: new Date(Date.now() - 1000).toISOString(),
+    observed_at: Math.floor((Date.now() - 120_000) / 1000),
+    quoted_at: Math.floor((Date.now() - 120_000) / 1000),
+    expires_at: Math.floor((Date.now() - 1_000) / 1000),
     rounding: 'ceil_to_base_unit' as const,
   };
   render(
