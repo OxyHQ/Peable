@@ -84,11 +84,10 @@ export async function prepareCheckoutSessionCard({
     return { prepared: false, error: loaded.error.message ?? messages.failed };
   let actions: ProviderCheckoutActions | undefined = loaded.actions;
   const initial = actions.getSession();
-  if (
-    !checkoutSessionMatchesQuote(initial, authority) ||
-    !initial.canConfirm ||
-    initial.status.type !== 'open'
-  )
+  // canConfirm describes collected checkout data; the external PaymentMethod is
+  // supplied only in confirm. It cannot gate this separate tokenization step.
+  // The provider validates its required collection data in that explicit call.
+  if (!checkoutSessionMatchesQuote(initial, authority) || initial.status.type !== 'open')
     return { prepared: false, error: messages.failed };
   const result = await provider.createPaymentMethod({
     type: 'card',
@@ -126,11 +125,7 @@ export async function prepareCheckoutSessionCard({
         busy = true;
         try {
           const current = actions.getSession();
-          if (
-            !checkoutSessionMatchesQuote(current, authority) ||
-            !current.canConfirm ||
-            current.status.type !== 'open'
-          )
+          if (!checkoutSessionMatchesQuote(current, authority) || current.status.type !== 'open')
             return { accepted: false, error: messages.failed };
           const outcome = await actions.confirm({
             paymentMethod: token,

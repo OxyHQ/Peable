@@ -184,6 +184,14 @@ describe('Checkout Session secure card authority', () => {
     release?.();
     expect(await confirming).toEqual({ accepted: false, error: 'closed' });
   });
+  it('permits externally collected card preparation when no Checkout Element has supplied its method yet', async () => {
+    const f = fixture();
+    f.change({ canConfirm: false });
+    const result = await f.prepare();
+    if (!result.prepared) throw new Error('Expected preparation');
+    expect(f.confirm).not.toHaveBeenCalled();
+    expect(await result.authorization.confirm()).toEqual({ accepted: true });
+  });
   it('rejects mismatched public key and session mode', () => {
     expect(matchingCheckoutSessionAction(action, 'pk_test_other')).toBeUndefined();
     expect(

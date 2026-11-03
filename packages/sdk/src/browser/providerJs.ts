@@ -14,7 +14,7 @@
 // payment, or the reverse.
 
 /** The provider's script, pinned to the versioned URL they publish. */
-const PROVIDER_SDK_URL = 'https://js.stripe.com/v3/';
+const PROVIDER_SDK_URL = 'https://js.stripe.com/endive/stripe.js';
 
 /** Minimal shapes — only what this app calls. The SDK's own types are not a dependency. */
 export interface ProviderFieldEvent {

@@ -28,7 +28,7 @@ it('shares the provider script load, rejects a failed load, and permits a fresh 
     const same = loadProviderSdk();
     expect(first).toBe(same);
     expect(scripts).toHaveLength(1);
-    expect(scripts[0]?.src).toBe('https://js.stripe.com/v3/');
+    expect(scripts[0]?.src).toBe('https://js.stripe.com/endive/stripe.js');
     scripts[0]?.onerror?.();
     await expect(first).rejects.toThrow('could not be loaded');
     expect(removed).toBe(1);
