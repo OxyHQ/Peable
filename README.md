@@ -63,9 +63,10 @@ Opening or closing a window is never proof of payment.
 Today the browser SDK supplies an embeddable button, a QR payment window, app
 handoff and realtime status. The separate app payment sheet supports payments to
 people from Oxy apps. The local integration now composes reusable Bloom checkout UI with an optional
-Peable SDK checkout UI entry and Mention as the first consumer. Local UI scenarios
-and real provider test payments are separate modes; production acceptance and
-publication of those local package changes remain delivery work.
+Peable SDK checkout UI entry and Mention as the first consumer. The product has one checkout flow; its processing environment selects test or live
+execution. UI fixtures belong in tests and component previews, not in a second
+buyer-facing checkout. Production acceptance and publication of local package
+changes remain delivery work.
 
 ### First integration: Mention Plus
 
@@ -84,12 +85,17 @@ annually** (20% below twelve monthly payments, rounded to cents). Catalogue pric
 and purchase availability are separate: an offer can be visible while purchasing
 remains disabled. Oxy One continues to be another source of Plus access.
 
-The local Mention integration offers a clearly labelled **Test mode** for an actual
-one-time provider test payment and a separate **UI preview** for simulated buyer
-flows. A successful one-time test does **not** create a Plus subscription or grant
-access. Live standalone subscription activation, entitlement delivery, renewals,
-cancellation and fiscal readiness remain separate requirements. Closing the sheet
-or checkout window never grants Plus.
+Mention must open the same Peable checkout for test and live processing. Bloom owns
+the presentation, including the card form layout; sensitive card fields remain in
+provider-hosted secure frames. Buyers do not select between a simulated checkout
+and a real checkout, and provider forms do not replace Peable's payment window.
+
+The recorded local provider acceptance is a **one-time test payment**. It does not
+create a Plus subscription or grant access. Unifying that local test integration
+with the complete Bloom flow and verifying actual subscription creation remain
+implementation and acceptance work. Live standalone subscription activation,
+entitlement delivery, renewals, cancellation and fiscal readiness remain separate
+requirements. Closing the sheet or checkout window never grants Plus.
 
 ### FairCoin is a payment method, not an exchange product
 

@@ -38,9 +38,19 @@ credit approval or unsupported countries/currencies. Local bank, installment,
 wallet-balance, transfer and guest scenarios remain fixtures unless separately
 backed by an accepted integration.
 
-Peable-authored checkout copy uses generic **Test mode** and **UI preview** labels.
-Test mode can call a real provider's test environment. UI preview makes no payment.
-Neither label implies live money movement or subscription entitlement delivery.
+There is one buyer-facing Peable checkout. Processing configuration selects a test
+or live environment; it does not select another checkout design. An environment
+indicator can distinguish test processing, but buyers must not choose between
+"UI preview" and a separate payment flow. Fixture scenarios remain development
+stories/tests. Bloom owns the review, payment-method selection and card form layout;
+provider-hosted secure fields collect sensitive card values inside that layout.
+Provider authentication may still require its own protected challenge surface.
+
+The earlier local implementation separated a simulation from a provider form. That
+implementation is being replaced under this requirement; the historical acceptance
+below must not be read as acceptance of the new unified flow. No raw PAN or CVC may
+enter app state, storage, logs or merchant/backend request bodies. Provider-side
+secure collection and tokenization remain mandatory.
 
 ## Local verification — 2026-11-03
 

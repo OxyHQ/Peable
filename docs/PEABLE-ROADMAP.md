@@ -99,9 +99,10 @@ purchase unavailable. The earlier observation is historical, not the current
 standalone price. Visible prices do not authorize a payment or an access grant.
 
 The November 3 local implementation adds a reusable Bloom checkout, an optional
-Peable SDK UI adapter and Mention integration. UI preview scenarios use fixtures;
-local Test mode now performs an actual one-time card test payment from the normal
-Mention Plus entry. Signed settlement was verified, but that one-time test does
+Peable SDK UI adapter and Mention integration. The earlier local implementation separated fixture scenarios and actual one-time
+card test processing. The current requirement supersedes that split: one Bloom
+checkout with test/live processing selected by environment, secure provider fields
+inside Bloom's form, and fixtures confined to development stories/tests. Signed settlement was verified, but that one-time test does
 not create a subscription or grant Plus. These local changes are not a claim of
 production activation or published package availability. See the dated
 [local test record](integrations/payment-provider-boundary.md#local-verification-2026-11-03).
