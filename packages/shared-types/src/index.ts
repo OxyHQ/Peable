@@ -73,25 +73,37 @@ export {
 } from './setupIntent';
 export {
   PEABLE_API_VERSION,
-  type WebhookEventType,
+  TARGETED_WEBHOOK_EVENT_TYPES,
+  WEBHOOK_EVENT_OBJECTS,
+  WEBHOOK_EVENT_TYPES,
+  type BillingObservation,
+  type ListEventsParams,
+  type RetrieveEventParams,
+  type StreamEventsParams,
+  type TargetedWebhookEventType,
   type WebhookEvent,
+  type WebhookEventObjectType,
   type WebhookEventPayload,
   type WebhookEventRequest,
-  type BillingObservation,
+  type WebhookEventType,
 } from './event';
 export {
-  WEBHOOK_ENDPOINT_STATUSES,
+  WEBHOOK_ENABLED_EVENTS,
+  WEBHOOK_ENDPOINT_DESCRIPTION_MAX,
   WEBHOOK_ENDPOINT_DISABLED_REASONS,
+  WEBHOOK_ENDPOINT_STATUSES,
   WEBHOOK_ENDPOINTS_MAX_PER_MERCHANT,
   WEBHOOK_SECRET_ROLL_MAX_EXPIRES_IN_SECONDS,
+  type CreateWebhookEndpointParams,
+  type DeletedWebhookEndpoint,
+  type ListWebhookEndpointsParams,
+  type RollWebhookEndpointSecretParams,
+  type UpdateWebhookEndpointParams,
   type WebhookEnabledEvent,
   type WebhookEndpoint,
-  type WebhookEndpointStatus,
   type WebhookEndpointDisabledReason,
-  type DeletedWebhookEndpoint,
-  type CreateWebhookEndpointParams,
-  type UpdateWebhookEndpointParams,
-  type RollWebhookEndpointSecretParams,
+  type WebhookEndpointStatus,
+  type WebhookEndpointWithSecret,
 } from './webhookEndpoint';
 export {
   PRICE_BILLING_SCHEMES,
@@ -267,9 +279,11 @@ export type {
   TransferStatus,
   TransferWithReversal,
 } from './settlement';
-export type {
-  WebhookDelivery,
-  WebhookDeliveryStatus,
+export {
+  WEBHOOK_DELIVERY_STATUSES,
+  type ListWebhookDeliveriesParams,
+  type WebhookDelivery,
+  type WebhookDeliveryStatus,
 } from './webhookDelivery';
 export {
   REQUEST_LOG_METHODS,

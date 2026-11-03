@@ -21,7 +21,6 @@ import type {
   PaymentIntentRail,
   PaymentIntentSetupFutureUsage,
   PaymentIntentStatus,
-  WebhookEnabledEvent,
   SetupIntentStatus,
   WebhookEventType,
 } from '@peable.to/shared-types';
@@ -408,32 +407,25 @@ export const INTENT_WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_TYPES.filter(
 );
 
 /**
- * The event types never fanned out by subscription — sent only to the one
- * endpoint they name. A webhook endpoint cannot list them in `enabled_events`.
+ * Re-exported from the wire contract so the CHECK reads from the tuple the DTO is typed by.
+ *
+ * - `TARGETED_WEBHOOK_EVENT_TYPES`: the event types never fanned out by
+ *   subscription — sent only to the one endpoint they name;
+ * - `WEBHOOK_ENABLED_EVENTS`: what `webhook_endpoints.enabled_events` may hold,
+ *   every subscribable event type and `*` for all of them (including types
+ *   added later), in the order of {@link WEBHOOK_EVENT_TYPES};
+ * - `WEBHOOK_DELIVERY_STATUSES`: where one delivery stands (below).
  */
-export const TARGETED_WEBHOOK_EVENT_TYPES = [
-  'webhook_endpoint.test',
-] as const satisfies readonly WebhookEventType[];
-
-/**
- * What `webhook_endpoints.enabled_events` may hold: every subscribable event
- * type, and `*` for all of them (including types added later).
- */
-export const WEBHOOK_ENABLED_EVENTS: readonly WebhookEnabledEvent[] = [
-  '*',
-  ...WEBHOOK_EVENT_TYPES.filter(
-    (type) => !(TARGETED_WEBHOOK_EVENT_TYPES as readonly string[]).includes(type),
-  ),
-];
-
-/** Re-exported from the wire contract so the CHECK reads from the tuple the DTO is typed by. */
 export {
+  TARGETED_WEBHOOK_EVENT_TYPES,
+  WEBHOOK_DELIVERY_STATUSES,
+  WEBHOOK_ENABLED_EVENTS,
   WEBHOOK_ENDPOINT_DISABLED_REASONS,
   WEBHOOK_ENDPOINT_STATUSES,
 } from '@peable.to/shared-types';
 
 /**
- * Where one webhook delivery stands.
+ * Where one webhook delivery stands (`WEBHOOK_DELIVERY_STATUSES`, the contract's).
  *
  * Was `['delivered', 'failed']` — the two outcomes an inline, best-effort
  * `deliver()` could report once it had already finished. ADR 0001 D7 makes
@@ -451,10 +443,9 @@ export {
  *  - `dead`      — terminal EXHAUSTION. Every attempt was transient and the
  *                  budget ran out. The event is still in the row and can be
  *                  redelivered by hand.
+ *
+ * Below: the statuses from which no further attempt is made.
  */
-export const WEBHOOK_DELIVERY_STATUSES = ['pending', 'delivered', 'failed', 'dead'] as const;
-
-/** The statuses from which no further attempt is made. */
 export const TERMINAL_WEBHOOK_DELIVERY_STATUSES = ['delivered', 'failed', 'dead'] as const;
 
 /**

@@ -7,6 +7,7 @@ import type {
   RequestLogMethod,
   WebhookDelivery,
   WebhookEndpoint,
+  WebhookEndpointWithSecret,
   WebhookEvent,
 } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
@@ -62,7 +63,7 @@ function RevealedSecret({
   endpoint,
   onDismiss,
 }: {
-  endpoint: WebhookEndpoint;
+  endpoint: WebhookEndpointWithSecret;
   onDismiss: () => void;
 }) {
   return (
@@ -104,7 +105,7 @@ function EndpointRow({
 }: {
   scope: DashboardScope;
   endpoint: WebhookEndpoint;
-  onSecret: (endpoint: WebhookEndpoint) => void;
+  onSecret: (endpoint: WebhookEndpointWithSecret) => void;
 }) {
   const queryClient = useQueryClient();
   const refresh = () => void queryClient.invalidateQueries({ queryKey: webhooksKey(scope) });
@@ -215,7 +216,7 @@ function AddEndpoint({
   onCreated,
 }: {
   scope: DashboardScope;
-  onCreated: (endpoint: WebhookEndpoint) => void;
+  onCreated: (endpoint: WebhookEndpointWithSecret) => void;
 }) {
   const queryClient = useQueryClient();
   const [form, setForm] = useState<EndpointForm>(EMPTY_ENDPOINT_FORM);
@@ -281,7 +282,7 @@ function AddEndpoint({
 }
 
 function Endpoints({ scope }: { scope: DashboardScope }) {
-  const [revealed, setRevealed] = useState<WebhookEndpoint | null>(null);
+  const [revealed, setRevealed] = useState<WebhookEndpointWithSecret | null>(null);
   const pages = usePagedList(endpointKeys(scope), (startingAfter) =>
     dashboardApi.webhookEndpoints.list(scope, {
       limit: PAGE_SIZE,
@@ -296,9 +297,7 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
   const endpoints = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('developers.endpoints')} description={t('developers.endpointsIntro')}>
-      {revealed?.secret ? (
-        <RevealedSecret endpoint={revealed} onDismiss={() => setRevealed(null)} />
-      ) : null}
+      {revealed ? <RevealedSecret endpoint={revealed} onDismiss={() => setRevealed(null)} /> : null}
       <AddEndpoint scope={scope} onCreated={setRevealed} />
       {endpoints.length ? (
         endpoints.map((endpoint) => (

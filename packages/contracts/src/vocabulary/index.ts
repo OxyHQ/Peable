@@ -3,6 +3,7 @@
 // is built from. A bundle that must stay small imports this subpath, never the
 // package root, which constructs every schema at load.
 export * from './errors';
+export * from './events';
 export * from './lists';
 export * from './money';
 export * from './version';

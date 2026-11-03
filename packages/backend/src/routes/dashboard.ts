@@ -738,7 +738,7 @@ export function createDashboardRouter(deps?: {
       }
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message, result.code);
         return;
       }
       res.status(200).json(toWebhookDeliveryDTO(result.delivery));
