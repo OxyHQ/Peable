@@ -605,6 +605,11 @@ export default function SettingsScreen() {
         {/* Account — the Oxy identity this wallet derives from. */}
         <SettingsListGroup title={t('settings.account')}>
           <SettingsListItem
+            title="Orbit by Peable"
+            icon={<RowIcon name="storefront-outline" />}
+            onPress={() => router.push('/orbit')}
+          />
+          <SettingsListItem
             title={t('contributions.title')}
             icon={<RowIcon name="hand-heart" />}
             onPress={() => router.push('/contributions')}

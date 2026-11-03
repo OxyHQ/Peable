@@ -13,7 +13,11 @@ Businesses and platforms use Peable to accept and manage payments through a
 **Orbit by Peable**, the central merchant workspace, alongside APIs and services. The product covers payment requests,
 payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
 disputes, payment status and webhook notifications. The API foundation exists;
-the complete Orbit workspace remains to be built. Orbit will bring payment operations, customers, subscriptions, refunds,
+Orbit now has an initial local read-only workspace at `/orbit`: organization,
+application and environment selection, merchant details, paginated payments with
+individual details, webhook delivery status, and links to tax and contribution
+tools. It uses the signed-in user's real Oxy membership, with explicit access,
+empty and error states. The complete workspace remains in development. Orbit will bring payment operations, customers, subscriptions, refunds,
 disputes, settlement, reports and developer tools into one place. Developer tools
 include application credentials and webhook configuration/diagnostics, with the
 same authority checks as the APIs.
@@ -112,7 +116,7 @@ are separate states. This table describes source capability, not production read
 | Area | Implemented foundation | Remaining work or verification |
 |---|---|---|
 | Payments | Intents, links, sessions, idempotency, FairCoin settlement, card provider integration, signed webhooks and realtime status | End-to-end acceptance on the exact release and enabled environment |
-| Merchant operations | Administrative APIs; specific tax and contribution screens | Complete centralized merchant workspace and credential-management experience |
+| Merchant operations | Administrative APIs; tax/contribution screens; initial local Orbit read-only workspace | Customer/subscription/refund/dispute management, financial reports and credential-management UI |
 | Marketplace payments | Connected sellers, onboarding, transfers, reversals, refunds and disputes | Full provider/device acceptance; dispute attachments; bank payout tracking |
 | Billing and tax | Customers, subscription checkout, portal, invoice reads, cancellation, tax calculation/reporting and native FairCoin periods | Broad self-service billing management and activation per approved offer; FairCoin renewal requires payment authorization |
 | Personal app | Identity, wallet, activity, sending/receiving, profiles, QR, payment approval and pockets | Physical-device acceptance and recovery/rotation verification |

@@ -50,7 +50,7 @@ receipt cannot establish that today's user journey works in production.
 | Cards | Creation, confirmation, cancellation, expiry and reconciliation through the implemented provider | Full payment and marketplace lifecycle acceptance; current live enablement unverified |
 | Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
 | Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
-| Orbit by Peable | Merchant/payment/webhook APIs; tax administration and contribution screens in the app | Complete merchant dashboard, credential UI over Oxy authority, broad resource management |
+| Orbit by Peable | Local `/orbit` organization/app/environment workspace over authenticated merchant/payment/webhook reads; existing tax/contribution links | Customer/subscription/refund/dispute views, credential UI, financial reports, and authenticated end-to-end acceptance |
 | Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
 | FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
 | Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
@@ -162,3 +162,36 @@ to be recognized without billing the user twice.
   transactional webhook enqueueing, public-id routing and state compare-and-swap.
 - Keep dispute attachments, bank payouts, reserves, terminal and coordinated shared
   pockets out of available-capability claims until implemented and accepted.
+
+## Initial Orbit workspace (local source)
+
+`packages/frontend/app/orbit.tsx` is separate from the wallet tab navigator and
+anonymous payer checkout. It uses Bloom navigation, selection controls and grouped
+sections. Its read transport delegates authentication to the existing linked Oxy
+client; organization membership and application/environment authorization remain
+server-owned. Signed-out users see a real sign-in action and make no merchant
+requests. Every query identity includes the viewer and selected scope; changing
+scope resets pagination and payment details. UI view models omit payer secrets
+and merchant watch-only keys. No merchant mutation action is exposed in this first
+iteration. Tax and contribution links retain their existing scope selectors.
+
+Focused tests cover authenticated GET-only transport, encoded cursors, denied vs
+empty responses, merchant/application/environment mismatch, payment identity,
+secret omission, cache scope separation and exact minor-unit display. Real
+authenticated merchant acceptance still needs a user with appropriate membership;
+no synthetic session or invented financial data substitutes for it.
+
+The isolated authenticated React regression uses test-only Oxy/Bloom host mocks
+and the real query/client logic. It exercises organization/application changes,
+environment switching, next-page cursors, a delayed old-scope payment-detail
+response and webhook empty states. Mocks run in a separate test process and are
+not shipped or injected into the running app. The local signed-out browser check
+makes no merchant API requests. Frontend typechecking and web/edge export pass.
+
+The local Orbit server runs the actual implementation worktree with Fast Refresh
+at `http://localhost:8121/orbit`. Its public gateway configuration currently uses
+the existing `https://api.peable.to` default with real user authentication; the
+local payment test harness on port 4310 is a separate environment and is not an
+Orbit merchant authority. All Orbit transport methods are read-only. Configuring
+another gateway uses the existing `EXPO_PUBLIC_GATEWAY_API_URL` setting, never a
+fabricated session or a provider credential in the browser.

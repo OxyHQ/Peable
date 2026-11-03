@@ -2,7 +2,7 @@
   "name": "@peable.to/frontend",
   "version": "1.0.0",
   "private": true,
-  "description": "Peable — self-custodial FairCoin wallet (fork of FAIRWallet) with Oxy identity",
+  "description": "Peable \u2014 self-custodial FairCoin wallet (fork of FAIRWallet) with Oxy identity",
   "author": "FairCoin <dev@fairco.in>",
   "license": "MIT",
   "main": "expo-router/entry",
@@ -20,7 +20,8 @@
     "lint": "expo lint",
     "build:android": "eas build --platform android --profile preview",
     "build:android:local": "bunx expo prebuild --platform android --clean && cd android && ./gradlew assembleRelease",
-    "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js"
+    "build:edge": "bun build worker/index.js --target=browser --format=esm --outfile=dist/_worker.js",
+    "test:orbit": "bun test test-support/orbit-surface.test.tsx"
   },
   "dependencies": {
     "@alia.onl/sdk": "22.10.1",
@@ -118,7 +119,9 @@
     "eslint": "9.39.4",
     "eslint-plugin-expo": "1.1.0",
     "typescript": "~6.0.3",
-    "socket.io": "^4.8.1"
+    "socket.io": "^4.8.1",
+    "@happy-dom/global-registrator": "^20.11.0",
+    "@testing-library/react": "^16.3.2"
   },
   "optionalDependencies": {
     "@tailwindcss/oxide-linux-x64-gnu": "4.3.2",
