@@ -90,3 +90,23 @@ it('formats exact smallest units without losing FairCoin precision or assuming c
   expect(orbitAmount('1', 'FAIR')).toBe('0.00000001 FAIR');
   expect(orbitAmount('99999999999999999', 'FAIR')).toBe('999999999.99999999 FAIR');
 });
+
+it('reads tax through owner dashboard scope and projects only displayed settings', async () => {
+  const request = mock(async (_request: AuthenticatedResponseRequest) =>
+    Response.json({
+      object: 'tax.settings',
+      status: 'draft',
+      legalName: 'Merchant',
+      defaultTaxCode: 'general',
+      defaultTaxBehavior: 'inclusive',
+      approvedAt: null,
+      headOffice: { line1: 'private address' },
+    }),
+  );
+  const value = await createOrbitReader({ requestAuthenticatedResponse: request }).taxSettings(
+    scope,
+  );
+  expect(request.mock.calls[0]?.[0].url).toContain('/tax/settings?environment=development');
+  expect(value).not.toHaveProperty('headOffice');
+  expect(value.status).toBe('draft');
+});

@@ -52,15 +52,21 @@ const request = mock(async ({ method, url }: { method: string; url: string }) =>
     return Response.json({ object: 'list', data: [], has_more: false });
   throw new Error('Unexpected test route');
 });
-mock.module('react-native', () => ({ View: Box }));
+mock.module('react-native', () => ({
+  View: Box,
+  useWindowDimensions: () => ({ width: 390, height: 844 }),
+  Linking: { openURL() {} },
+}));
+let activeSection = 'payments';
 mock.module('expo-router', () => ({
-  Stack: Object.assign(Box, { Screen: () => null }),
+  useLocalSearchParams: () => ({ section: activeSection }),
   useRouter: () => ({ replace() {}, push() {} }),
 }));
 mock.module('@oxy.so/services/ui/client', () => ({
   useAuth: () => ({ user: { id: 'viewer-test' }, canUsePrivateApi: true, signIn() {} }),
 }));
-mock.module('@/services/oxy-services', () => ({
+mock.module('../src/services', () => ({
+  gateway: { client: { requestAuthenticatedResponse: request } },
   oxyServices: {
     accounts: {
       list: async () =>
@@ -82,10 +88,17 @@ mock.module('@/services/oxy-services', () => ({
     },
   },
 }));
-mock.module('@/services/gateway-client', () => ({
-  gateway: { client: { requestAuthenticatedResponse: request } },
+mock.module('../src/i18n', () => ({ t: (key: string) => key }));
+mock.module('@oxy.so/bloom/table', () => ({
+  Table: Box,
+  TableHeader: Box,
+  TableColumn: Box,
+  TableBody: Box,
+  TableRow: Box,
+  TableCell: Box,
 }));
-mock.module('@/i18n', () => ({ t: (key: string) => key }));
+mock.module('@oxy.so/bloom/sidebar', () => ({ Sidebar: Box }));
+mock.module('@oxy.so/bloom/icons/RiLayoutGridLine', () => ({ RiLayoutGridLine: Box }));
 mock.module('@oxy.so/bloom/screen', () => ({
   Screen: ({ children, header }: Children & { header: ReactNode }) => (
     <div>
@@ -184,12 +197,27 @@ mock.module('@oxy.so/bloom/segmented-control', () => ({
   },
   SegmentedControlItemText: Box,
 }));
-const { default: OrbitScreen } = await import('../app/orbit');
+
+mock.module('@oxy.so/bloom/icons/RiHomeLine', () => ({ RiHomeLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiBankCardLine', () => ({ RiBankCardLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiUserLine', () => ({ RiUserLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiRepeatLine', () => ({ RiRepeatLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiBankLine', () => ({ RiBankLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiShieldLine', () => ({ RiShieldLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiBarChartLine', () => ({ RiBarChartLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiHeartLine', () => ({ RiHeartLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiCodeLine', () => ({ RiCodeLine: Box }));
+mock.module('@oxy.so/bloom/icons/RiSettingsLine', () => ({ RiSettingsLine: Box }));
+
+const { default: OrbitScreen } = await import('../src/OrbitApp');
+const { ScopeProvider } = await import('../src/scope');
 it('navigates real authenticated views with isolated scope, paging and stale detail protection', async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const view = render(
     <QueryClientProvider client={client}>
-      <OrbitScreen />
+      <ScopeProvider>
+        <OrbitScreen />
+      </ScopeProvider>
     </QueryClientProvider>,
   );
   try {
@@ -220,7 +248,14 @@ it('navigates real authenticated views with isolated scope, paging and stale det
     expect(view.getByRole('button', { name: 'orbit.previous' }).hasAttribute('disabled')).toBe(
       true,
     );
-    fireEvent.click(view.getByRole('button', { name: 'orbit.webhooks' }));
+    activeSection = 'webhooks';
+    view.rerender(
+      <QueryClientProvider client={client}>
+        <ScopeProvider>
+          <OrbitScreen />
+        </ScopeProvider>
+      </QueryClientProvider>,
+    );
     await view.findByText('orbit.empty.webhooks');
     expect(
       requests

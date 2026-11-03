@@ -1,8 +1,8 @@
 import { expect, it } from 'bun:test';
 import { fileURLToPath } from 'node:url';
-/** UI module mocks must not contaminate the wallet's process-wide Bun tests. */
+/** UI module mocks must not contaminate the Orbit's process-wide Bun tests. */
 it('passes the isolated authenticated Orbit surface regression', async () => {
-  const cwd = fileURLToPath(new URL('../../..', import.meta.url));
+  const cwd = fileURLToPath(new URL('..', import.meta.url).href);
   const child = Bun.spawn(['bun', 'test', 'test-support/orbit-surface.test.tsx'], {
     cwd,
     stdout: 'pipe',

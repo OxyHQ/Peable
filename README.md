@@ -9,11 +9,12 @@ payment lifecycle.
 
 ### Peable Platform
 
-Businesses and platforms use Peable to accept and manage payments through a
+Businesses and platforms use Peable to accept and manage payments through
 **Orbit by Peable**, the central merchant workspace, alongside APIs and services. The product covers payment requests,
 payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
 disputes, payment status and webhook notifications. The API foundation exists;
-Orbit now has an initial local read-only workspace at `/orbit`: organization,
+Orbit is a standalone application in `packages/orbit`, with its own local server
+at `http://localhost:8121`: organization,
 application and environment selection, merchant details, paginated payments with
 individual details, webhook delivery status, and links to tax and contribution
 tools. It uses the signed-in user's real Oxy membership, with explicit access,
@@ -309,3 +310,20 @@ from `confirming` to `settled` without polling.
 |---|---|
 | [`OxyHQ/oxy`](https://github.com/OxyHQ/oxy) | The Oxy platform: identity, signed records, API and SDK |
 | [`OxyHQ/PeableSDK`](https://github.com/OxyHQ/PeableSDK) | Landing page for `@peable.to/sdk`. The source is here, in `packages/sdk` |
+
+
+### Standalone Orbit by Peable
+
+Orbit is a separate merchant application in `packages/orbit`, with its own
+entry point, navigation, session prefix, local server and web build. Run
+`bun run dev:orbit` and open `http://localhost:8121`. The wallet and anonymous
+payer checkout remain separate applications.
+
+Its navigation covers overview, payments, customers, subscriptions, invoices,
+settlements, disputes, reports, tax, contributions, developers, webhook delivery,
+credentials and settings. Authenticated merchant/payment/detail/webhook reads
+are connected to existing owner-authorized APIs. Other operational sections
+explicitly state their current integration limits; navigation does not mean
+that every operation is implemented. No financial statistics are invented.
+Production hosting and a dedicated registered Orbit auth redirect remain
+separate deployment work; this change is local only.

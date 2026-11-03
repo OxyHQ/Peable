@@ -2,7 +2,7 @@
   "name": "peable",
   "version": "0.1.0",
   "license": "SEE LICENSE IN LICENSE",
-  "description": "Peable monorepo — backend, mobile/web app, and shared types.",
+  "description": "Peable monorepo \u2014 backend, mobile/web app, and shared types.",
   "private": true,
   "packageManager": "bun@1.4.3",
   "workspaces": [
@@ -31,7 +31,9 @@
     "build:pay": "bun run --filter @peable.to/pay build",
     "build:contracts": "bun run --filter @peable.to/contracts build",
     "build:sdk": "bun run --filter @peable.to/sdk build",
-    "check:contribution-contracts": "bun scripts/contribution-openapi.ts --check"
+    "check:contribution-contracts": "bun scripts/contribution-openapi.ts --check",
+    "dev:orbit": "bun run --filter @peable.to/orbit dev",
+    "build:orbit": "bun run --filter @peable.to/orbit build"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

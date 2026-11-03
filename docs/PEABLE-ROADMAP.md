@@ -50,7 +50,7 @@ receipt cannot establish that today's user journey works in production.
 | Cards | Creation, confirmation, cancellation, expiry and reconciliation through the implemented provider | Full payment and marketplace lifecycle acceptance; current live enablement unverified |
 | Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
 | Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
-| Orbit by Peable | Local `/orbit` organization/app/environment workspace over authenticated merchant/payment/webhook reads; existing tax/contribution links | Customer/subscription/refund/dispute views, credential UI, financial reports, and authenticated end-to-end acceptance |
+| Orbit by Peable | Standalone `packages/orbit` organization/app/environment workspace over authenticated merchant/payment/webhook reads; existing tax/contribution links | Customer/subscription/refund/dispute views, credential UI, financial reports, and authenticated end-to-end acceptance |
 | Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
 | FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
 | Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
@@ -166,8 +166,8 @@ to be recognized without billing the user twice.
 
 ## Initial Orbit workspace (local source)
 
-`packages/frontend/app/orbit.tsx` is separate from the wallet tab navigator and
-anonymous payer checkout. It uses Bloom navigation, selection controls and grouped
+`packages/orbit` is a standalone application, separate from both the wallet and
+anonymous payer checkout. The wallet no longer contains the workspace. It uses Bloom navigation, selection controls and grouped
 sections. Its read transport delegates authentication to the existing linked Oxy
 client; organization membership and application/environment authorization remain
 server-owned. Signed-out users see a real sign-in action and make no merchant
@@ -187,12 +187,29 @@ and the real query/client logic. It exercises organization/application changes,
 environment switching, next-page cursors, a delayed old-scope payment-detail
 response and webhook empty states. Mocks run in a separate test process and are
 not shipped or injected into the running app. The local signed-out browser check
-makes no merchant API requests. Frontend typechecking and web/edge export pass.
+makes no merchant API requests. Orbit typechecking and independent web export pass.
 
 The local Orbit server runs the actual implementation worktree with Fast Refresh
-at `http://localhost:8121/orbit`. Its public gateway configuration currently uses
+at `http://localhost:8121`. Its public gateway configuration currently uses
 the existing `https://api.peable.to` default with real user authentication; the
 local payment test harness on port 4310 is a separate environment and is not an
 Orbit merchant authority. All Orbit transport methods are read-only. Configuring
 another gateway uses the existing `EXPO_PUBLIC_GATEWAY_API_URL` setting, never a
 fabricated session or a provider credential in the browser.
+
+
+### Standalone Orbit by Peable
+
+Orbit is a separate merchant application in `packages/orbit`, with its own
+entry point, navigation, session prefix, local server and web build. Run
+`bun run dev:orbit` and open `http://localhost:8121`. The wallet and anonymous
+payer checkout remain separate applications.
+
+Its navigation covers overview, payments, customers, subscriptions, invoices,
+settlements, disputes, reports, tax, contributions, developers, webhook delivery,
+credentials and settings. Authenticated merchant/payment/detail/webhook reads
+are connected to existing owner-authorized APIs. Other operational sections
+explicitly state their current integration limits; navigation does not mean
+that every operation is implemented. No financial statistics are invented.
+Production hosting and a dedicated registered Orbit auth redirect remain
+separate deployment work; this change is local only.

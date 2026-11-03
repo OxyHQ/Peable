@@ -1,5 +1,10 @@
 import type { AuthenticatedResponseRequest } from '@oxy.so/core';
-import type { Merchant, PaymentIntent, WebhookDelivery } from '@peable.to/shared-types';
+import type {
+  Merchant,
+  PaymentIntent,
+  WebhookDelivery,
+  TaxSettings,
+} from '@peable.to/shared-types';
 
 export const ORBIT_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
 export type OrbitEnvironment = (typeof ORBIT_ENVIRONMENTS)[number];
@@ -98,6 +103,12 @@ export function createOrbitReader(client: OrbitTransport) {
         throw new Error('Merchant scope mismatch');
       const { id, displayName, environment, oxyAppId, network, webhookUrl } = result;
       return { id, displayName, environment, oxyAppId, network, webhookUrl };
+    },
+    async taxSettings(scope: OrbitScope) {
+      const result = await read<TaxSettings>(scope, 'tax/settings');
+      if (result.object !== 'tax.settings') throw new Error('Invalid tax settings response');
+      const { status, legalName, defaultTaxCode, defaultTaxBehavior, approvedAt } = result;
+      return { status, legalName, defaultTaxCode, defaultTaxBehavior, approvedAt };
     },
     payments: (scope: OrbitScope, cursor?: string) =>
       page(scope, 'payment_intents', payment, cursor),

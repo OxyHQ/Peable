@@ -1,0 +1,13 @@
+{
+  "expo": {
+    "name": "Orbit by Peable",
+    "slug": "peable-orbit",
+    "scheme": "peable-orbit",
+    "version": "0.1.0",
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": ["expo-router"]
+  }
+}
