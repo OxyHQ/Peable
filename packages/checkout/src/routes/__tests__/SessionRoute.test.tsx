@@ -41,6 +41,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: 'pi_wrapped456',
     object: 'payment_intent',
+    livemode: false,
     status: 'created',
     rail: 'faircoin',
     amount: '100000000',
@@ -63,6 +64,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
 const SESSION: CheckoutSessionPublic = {
   id: 'cs_test123',
   object: 'checkout_session',
+  livemode: false,
   success_url: 'https://merchant.example/thanks',
   merchant: { name: 'Test Merchant', avatar_url: null, description: null },
   payment_intent: makeIntent(),

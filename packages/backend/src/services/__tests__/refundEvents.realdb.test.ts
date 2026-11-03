@@ -16,6 +16,7 @@
  * depends on is not on the allow-list.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../providers/provider';
 import { must } from '../../__tests__/helpers/must';
 
 const providerCalls: string[] = [];
@@ -43,16 +44,20 @@ const fakeProvider = {
   },
 };
 
+const realRegistry = await import('../providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },
@@ -81,6 +86,7 @@ const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
+const { useStripeKeys } = await import('../../__tests__/helpers/stripeModes');
 const { uuidv7 } = await import('@oxy.so/db');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
@@ -156,6 +162,7 @@ async function settledIntent(amount: string) {
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
   useGatewayDatabase();
+  useStripeKeys();
 
   beforeAll(async () => {
     useFake = true;

@@ -98,7 +98,7 @@ try {
     testKey = raw.replace(/^(['"])(.*)\1$/, '$2');
   }
   assert(testKey?.startsWith('sk_test_'), 'Only the existing sk_test_ key is allowed');
-  process.env.STRIPE_SECRET_KEY = testKey;
+  process.env.STRIPE_SECRET_KEY_TEST = testKey;
   // No STRIPE_ENABLED/publishable/webhook settings are invented or copied.
   const { getStripeClient, stripeBillingClient } = await import(
     '../src/services/providers/stripe/client'
@@ -115,7 +115,7 @@ try {
   const { createBillingRouter } = await import('../src/routes/billing');
   const { Peable } = await import('@peable.to/sdk');
   const { default: express } = await import('express');
-  const stripe = getStripeClient();
+  const stripe = getStripeClient('test');
   const requestOptions = { timeout: 10_000, maxNetworkRetries: 0 } as const;
   const runId = `i08-${randomUUID()}`;
   type Owned = {
@@ -306,7 +306,7 @@ try {
     );
     assert.equal(price.livemode, false);
     await record('price', price.id);
-    const client = stripeBillingClient();
+    const client = stripeBillingClient('test');
     const originalCheckout = client.createCheckout.bind(client);
     client.createCheckout = async (params, key) => {
       const raw = await diagnosed('provider-create-checkout', () => originalCheckout(params, key));
@@ -758,6 +758,6 @@ try {
   process.exitCode = 1;
 } finally {
   // This encloses preflight, dynamic imports, DB creation and every cleanup.
-  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.STRIPE_SECRET_KEY_TEST;
   testKey = undefined;
 }

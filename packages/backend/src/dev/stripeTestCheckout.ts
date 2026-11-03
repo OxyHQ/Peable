@@ -9,7 +9,7 @@ export async function createLocalStripeTestIntent(
   assertLocalStripeTestEnvironment(process.env);
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(operationKey)) throw new Error('Invalid local operation key');
   const { getStripeClient } = await import('../services/providers/stripe/client');
-  const account = await getStripeClient().accounts.retrieve(null);
+  const account = await getStripeClient('test').accounts.retrieve(null);
   if (
     account.id !== 'acct_1USWGhAofUef123L' ||
     account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT

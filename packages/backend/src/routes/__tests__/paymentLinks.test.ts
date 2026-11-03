@@ -52,6 +52,7 @@ interface PaymentLinkResponse {
 interface PublicPaymentLinkResponse {
   id: string;
   object: string;
+  livemode: boolean;
   amount: string;
   currency: string;
   rail: string;
@@ -333,6 +334,7 @@ describe('GET /v1/payment_links/:id/public', () => {
     expect(body).toEqual({
       id: 'link_public_display',
       object: 'payment_link',
+      livemode: false,
       amount: '300000000',
       // `currency` and `rail` are new on this DTO (ADR 0001 D4/D1) and belong
       // in an exact-shape assertion: a payer page that renders an amount

@@ -254,7 +254,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('connected accounts and transfers', () 
       new Date(Date.now() - 86_400_000),
     );
 
-    const queue = await findAccountsToSync(must(suite).db, 'stripe', 100);
+    const queue = await findAccountsToSync(must(suite).db, 'stripe', 100, [false, true]);
     const ids = queue.map((row) => row.id);
     expect(ids.indexOf(never.id)).toBeLessThan(ids.indexOf(stale.id));
   });

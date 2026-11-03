@@ -31,17 +31,10 @@ import {
   RailMismatchError,
   RailUnavailableError,
 } from '../services/createIntent';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { newId } from '../lib/ids';
 import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from '../lib/serialize';
-import {
-  sendEnvironmentMismatch,
-  sendError,
-  wrap,
-  requireAuthenticated,
-  sendValidationError,
-} from '../lib/http';
+import { sendError, wrap, requireAuthenticated, sendValidationError } from '../lib/http';
 import {
   connectedAccountBodyField,
   resolveMerchant,
@@ -215,10 +208,6 @@ export function createCheckoutSessionsRouter(deps: {
           return;
         }
         if (sendConnectedAccountRefusal(res, err)) return;
-        if (err instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, err.message);
-          return;
-        }
         if (err instanceof IdempotencyConflictError) {
           sendError(res, 400, 'invalid_request_error', err.message, 'idempotency_error');
           return;

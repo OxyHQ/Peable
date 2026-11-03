@@ -419,6 +419,7 @@ export async function seedDelivery(
     event: {
       id: eventId,
       object: 'event',
+      livemode: intent.livemode,
       type: eventType,
       created: toUnix(new Date()),
       data: { object: toPaymentIntentDTO(intent) },

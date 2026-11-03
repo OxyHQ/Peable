@@ -86,6 +86,7 @@ afterEach(() => {
 const INTENT: PaymentIntent = {
   id: 'pi_1',
   object: 'payment_intent',
+  livemode: false,
   status: 'created',
   rail: 'faircoin',
   amount: '100',

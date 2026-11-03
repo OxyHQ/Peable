@@ -23,7 +23,7 @@ async function run() {
   const { connectPostgres, disconnectPostgres } = await import('../db/postgres');
   const { findMerchantByAppEnvironment } = await import('../db/merchants/merchantRepository');
   const { configureBillingRuntime } = await import('../services/billing/configuredBilling');
-  const account = await getStripeClient().accounts.retrieve(null);
+  const account = await getStripeClient('test').accounts.retrieve(null);
   if (account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT)
     throw new Error('Unexpected test account');
   try {

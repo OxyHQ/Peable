@@ -48,7 +48,7 @@ async function context(intent: PaymentIntentRow) {
   const merchant = await findMerchantById(db, intent.merchantId);
   if (!merchant || merchant.network !== null || merchant.xpub !== null)
     throw new Error('Missing or invalid local merchant');
-  const client = getStripeClient();
+  const client = getStripeClient('test');
   const account = await client.accounts.retrieve(null);
   if (
     account.id !== 'acct_1USWGhAofUef123L' ||
@@ -61,7 +61,7 @@ async function context(intent: PaymentIntentRow) {
   const { evidenceRef, ...owner } = cohort;
   const bindings = createVerifiedBillingBindings({
     db,
-    client: stripeBillingClient(),
+    client: stripeBillingClient('test'),
     deployment: configuration.deployment,
     cohorts: [{ ...cohort, ...configuration.deployment }],
   });

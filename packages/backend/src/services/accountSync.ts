@@ -28,6 +28,7 @@ import { refreshConnectedAccount } from './accounts/connectedAccountService';
 import { AccountsUnavailableError } from './accounts/connectedAccountService';
 import { redactProviderMessage } from './providers/redact';
 import type { ProviderId } from './providers/provider';
+import { availableProviderModes } from './providers/registry';
 
 const DEFAULT_INTERVAL_MS = 5 * 60 * 1000;
 /**
@@ -58,9 +59,17 @@ export interface SyncPassResult {
  */
 export async function runAccountSyncPass(options: SyncPassOptions = {}): Promise<SyncPassResult> {
   const provider = options.provider ?? 'stripe';
+  // Only the modes whose rail is on here: each account is read with its own
+  // mode's key (ADR 0017), and a mode with none has nothing to read it with.
+  const livemodes = availableProviderModes(provider).map((mode) => mode === 'live');
   let accounts: readonly ConnectedAccountRow[];
   try {
-    accounts = await findAccountsToSync(getDb(), provider, options.batchSize ?? DEFAULT_BATCH_SIZE);
+    accounts = await findAccountsToSync(
+      getDb(),
+      provider,
+      options.batchSize ?? DEFAULT_BATCH_SIZE,
+      livemodes,
+    );
   } catch {
     return { examined: 0, refreshed: 0, failed: 0 };
   }

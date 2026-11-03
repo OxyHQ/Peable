@@ -30,14 +30,10 @@ import {
   AccountAlreadyActiveError,
   createFaircoinAccountLink,
 } from '../services/accounts/faircoinOnboarding';
-import { hasCardHalf } from '../db/accounts/connectedAccountRepository';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { ProviderError } from '../services/providers/provider';
 import { toConnectedAccountDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
-  requireProviderMode,
-  sendEnvironmentMismatch,
   sendError,
   sendProviderError,
   sendValidationError,
@@ -138,11 +134,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       const faircoin = parsed.data.faircoin
         ? { network: parsed.data.faircoin.network, oxyUserId: parsed.data.faircoin.oxy_user_id }
         : undefined;
-      // Only the CARD half reaches a provider, so only it is held to the key
-      // mode. A FairCoin-only seller can be opened on a deployment with no
-      // card rail at all.
-      if (card && !requireProviderMode(merchant.environment, res)) return;
-
       const base = {
         merchantId: merchant.id,
         environment: merchant.environment,
@@ -174,10 +165,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         }
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -305,23 +292,11 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         sendError(res, 404, 'invalid_request_error', 'connected account not found');
         return;
       }
-      // Held to the key mode only when there is a provider to read; a
-      // FairCoin-only seller is returned as it stands.
-      if (hasCardHalf(account) && !requireProviderMode(merchant.environment, res)) return;
-
       try {
-        res
-          .status(200)
-          .json(
-            toConnectedAccountDTO(await refreshConnectedAccount(account, merchant.environment)),
-          );
+        res.status(200).json(toConnectedAccountDTO(await refreshConnectedAccount(account)));
       } catch (error) {
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {
@@ -369,10 +344,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       }
 
       const rail = parsed.data.rail ?? 'card';
-      // The card link is the provider's and is held to the key mode; the
-      // FairCoin link is Peable's own page and reaches no provider.
-      if (rail === 'card' && !requireProviderMode(merchant.environment, res)) return;
-
       try {
         const link =
           rail === 'faircoin'
@@ -382,13 +353,13 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
                 returnUrl: parsed.data.return_url,
               })
             : await createAccountLink({
-                environment: merchant.environment,
                 account,
                 refreshUrl: parsed.data.refresh_url,
                 returnUrl: parsed.data.return_url,
               });
         const body: AccountLink = {
           object: 'account_link',
+          livemode: account.livemode,
           url: link.url,
           expires_at: toUnix(link.expiresAt),
         };
@@ -404,10 +375,6 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
         }
         if (error instanceof AccountsUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

@@ -12,6 +12,11 @@ import type { PaymentIntentRail } from './paymentIntent';
 export interface PaymentLink {
   id: string;
   object: 'payment_link';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   contribution?: ContributionDetails;
   /**
    * Amount in the currency's smallest unit, as a canonical integer string.
@@ -36,6 +41,11 @@ export interface PaymentLink {
 export interface PublicPaymentLink {
   id: string;
   object: 'payment_link';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   contribution?: ContributionDetails;
   amount: string;
   currency: CurrencyCode;

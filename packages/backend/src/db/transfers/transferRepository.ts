@@ -13,11 +13,18 @@ import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { connectedAccounts, paymentIntents, transfers } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
 
 export type TransferStatus = 'pending' | 'paid' | 'partially_reversed' | 'reversed' | 'failed';
 
 export interface TransferRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
@@ -37,6 +44,7 @@ export interface TransferRow {
 }
 
 const TRANSFER_COLUMNS = {
+  livemode: merchantLivemodeOf(transfers.merchantId),
   id: transfers.id,
   publicId: transfers.publicId,
   merchantId: transfers.merchantId,

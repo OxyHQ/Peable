@@ -44,6 +44,7 @@ import {
   type CreatePaymentRequest,
   type CreateTransferRequest,
   type PaymentOperationRequest,
+  type ProviderMode,
   type ProviderAccountSnapshot,
   type ProviderCapabilityStatus,
   type ProviderEventEnvelope,
@@ -172,6 +173,12 @@ function toCapabilityStatus(
 }
 
 export interface StripePaymentProviderOptions {
+  /**
+   * The mode this adapter acts in (ADR 0017), fixed for its life. Every call it
+   * makes goes through that mode's client, and every delivery it verifies is
+   * checked against that mode's endpoint secrets.
+   */
+  readonly mode: ProviderMode;
   readonly paymentMethodConfiguration?: string;
   /** An explicit integration capability; absent keeps account-configured dynamic methods. */
   readonly allowedPaymentMethodTypes?: readonly Stripe.PaymentIntentCreateParams.AllowedPaymentMethodType[];
@@ -185,10 +192,12 @@ export class StripePaymentProvider
     SettlementReportingProvider
 {
   readonly id = 'stripe' as const;
+  readonly mode: ProviderMode;
   private readonly paymentMethodConfiguration?: string;
   private readonly allowedPaymentMethodTypes?: readonly Stripe.PaymentIntentCreateParams.AllowedPaymentMethodType[];
 
-  constructor(options: StripePaymentProviderOptions = {}) {
+  constructor(options: StripePaymentProviderOptions) {
+    this.mode = options.mode;
     if (options.allowedPaymentMethodTypes && options.paymentMethodConfiguration)
       throw new Error('Choose either a payment method allowlist or a configuration');
     if (
@@ -222,7 +231,7 @@ export class StripePaymentProvider
       transfer_group: request.intentId,
       ...(request.onBehalfOf !== undefined ? { on_behalf_of: request.onBehalfOf } : {}),
     };
-    const intent = await createStripePaymentIntent(params, request.idempotencyKey);
+    const intent = await createStripePaymentIntent(this.mode, params, request.idempotencyKey);
     return this.toResult(intent);
   }
 
@@ -236,9 +245,10 @@ export class StripePaymentProvider
    * no-op, so "just call it anyway" would turn a settled payment into a failure.
    */
   async capture(request: PaymentOperationRequest): Promise<ProviderPaymentResult> {
-    const current = await retrieveStripePaymentIntent(request.providerObjectId);
+    const current = await retrieveStripePaymentIntent(this.mode, request.providerObjectId);
     if (current.status !== 'requires_capture') return this.toResult(current);
     const captured = await captureStripePaymentIntent(
+      this.mode,
       request.providerObjectId,
       request.idempotencyKey,
     );
@@ -247,6 +257,7 @@ export class StripePaymentProvider
 
   async cancel(request: PaymentOperationRequest): Promise<ProviderPaymentResult> {
     const canceled = await cancelStripePaymentIntent(
+      this.mode,
       request.providerObjectId,
       request.idempotencyKey,
     );
@@ -255,6 +266,7 @@ export class StripePaymentProvider
 
   async refund(request: RefundRequest): Promise<ProviderRefundResult> {
     const refund = await createStripeRefund(
+      this.mode,
       {
         payment_intent: request.providerObjectId,
         amount: toStripeAmount(request.amount.amount, 'refund'),
@@ -267,7 +279,7 @@ export class StripePaymentProvider
     // Stripe knows whether this refund exhausted the charge, and computing that
     // here would need the charge's total and every earlier refund — a sum this
     // adapter has no business keeping.
-    const payment = await retrieveStripePaymentIntent(request.providerObjectId);
+    const payment = await retrieveStripePaymentIntent(this.mode, request.providerObjectId);
 
     return {
       providerObjectId: refund.id,
@@ -285,7 +297,7 @@ export class StripePaymentProvider
   }
 
   async getStatus(providerObjectId: string): Promise<ProviderPaymentResult> {
-    return this.toResult(await retrieveStripePaymentIntent(providerObjectId));
+    return this.toResult(await retrieveStripePaymentIntent(this.mode, providerObjectId));
   }
 
   /**
@@ -312,23 +324,24 @@ export class StripePaymentProvider
     input: ProviderEventInput,
     scope: StripeWebhookScope,
   ): Promise<ProviderEventEnvelope> {
+    const mode = config.stripe[this.mode];
     const secrets = (
       scope === 'platform'
-        ? [config.stripe.webhookSecret, config.stripe.webhookSecretPrevious]
-        : [config.stripe.connectWebhookSecret, config.stripe.connectWebhookSecretPrevious]
+        ? [mode?.webhookSecret, mode?.webhookSecretPrevious]
+        : [mode?.connectWebhookSecret, mode?.connectWebhookSecretPrevious]
     ).filter((secret): secret is string => secret !== undefined);
 
     if (secrets.length === 0) {
       throw new ProviderError({
         provider: 'stripe',
         stage: 'verifyEvent',
-        message: `no ${scope} webhook secret is configured`,
+        message: `no ${this.mode} ${scope} webhook secret is configured`,
         retryable: false,
         code: 'webhook_secret_missing',
       });
     }
 
-    const event = await constructStripeEvent(input.payload, input.signature, secrets);
+    const event = await constructStripeEvent(this.mode, input.payload, input.signature, secrets);
     return toProviderEventEnvelope(event);
   }
 
@@ -338,6 +351,7 @@ export class StripePaymentProvider
 
   async createTransfer(request: CreateTransferRequest): Promise<ProviderTransferResult> {
     const transfer = await createStripeTransfer(
+      this.mode,
       {
         amount: toStripeAmount(request.amount.amount, 'transfer'),
         currency: toStripeCurrency(request.amount.currency),
@@ -367,6 +381,7 @@ export class StripePaymentProvider
 
   async reverseTransfer(request: ReverseTransferRequest): Promise<ProviderTransferReversalResult> {
     const reversal = await createStripeTransferReversal(
+      this.mode,
       request.transferObjectId,
       {
         amount: toStripeAmount(request.amount.amount, 'transfer'),
@@ -397,7 +412,7 @@ export class StripePaymentProvider
       return { providerObjectId: reversal.id, totalReversed: String(expanded.amount_reversed) };
     }
 
-    const transfer = await retrieveStripeTransfer(request.transferObjectId);
+    const transfer = await retrieveStripeTransfer(this.mode, request.transferObjectId);
     return {
       providerObjectId: reversal.id,
       totalReversed: String(transfer.amount_reversed),
@@ -423,6 +438,7 @@ export class StripePaymentProvider
    */
   async submitDisputeEvidence(request: SubmitDisputeEvidenceRequest): Promise<void> {
     await updateStripeDispute(
+      this.mode,
       request.providerObjectId,
       { evidence: toStripeEvidence(request.evidence), submit: true },
       request.idempotencyKey,
@@ -447,7 +463,7 @@ export class StripePaymentProvider
    * cannot explain, and zero is a number somebody will subtract.
    */
   async getSettlement(chargeObjectId: string): Promise<ProviderSettlement> {
-    const charge = await retrieveStripeChargeWithBalance(chargeObjectId);
+    const charge = await retrieveStripeChargeWithBalance(this.mode, chargeObjectId);
     const balance = charge.balance_transaction;
 
     if (typeof balance !== 'object' || balance === null) {
@@ -491,6 +507,7 @@ export class StripePaymentProvider
    */
   async createAccount(request: CreateAccountRequest): Promise<ProviderAccountSnapshot> {
     const created = (await createStripeConnectedAccountV2(
+      this.mode,
       {
         // Derived, not sent: a v2 account created this way reads back through
         // the v1 API carrying `requirement_collection: stripe` — the property
@@ -532,7 +549,7 @@ export class StripePaymentProvider
   }
 
   async accountLink(request: AccountLinkRequest): Promise<{ url: string; expiresAt: Date }> {
-    const link = await createStripeAccountLink({
+    const link = await createStripeAccountLink(this.mode, {
       account: request.providerAccountId,
       refresh_url: request.refreshUrl,
       return_url: request.returnUrl,
@@ -546,7 +563,7 @@ export class StripePaymentProvider
   }
 
   async getAccount(providerAccountId: string): Promise<ProviderAccountSnapshot> {
-    const account = await retrieveStripeAccount(providerAccountId);
+    const account = await retrieveStripeAccount(this.mode, providerAccountId);
     const requirements = account.requirements;
     const transfers = account.capabilities?.transfers;
     const cardPayments = account.capabilities?.card_payments;

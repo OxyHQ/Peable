@@ -35,6 +35,7 @@ const NET = validateAddress(ADDR, getNetwork('mainnet')) ? 'mainnet' : 'testnet'
 const INTENT: PaymentIntent = {
   id: 'pi_0123456789abcdef01234567',
   object: 'payment_intent',
+  livemode: false,
   status: 'created',
   rail: 'faircoin',
   amount: '150000000',

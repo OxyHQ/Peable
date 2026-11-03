@@ -10,9 +10,9 @@ import type { BillingService } from './services/billing/billingService';
 import { createDashboardTaxRouter, createTaxRouter } from './routes/tax';
 import type { TaxService } from './services/tax/taxService';
 import {
-  configuredTaxProvider,
+  configuredTaxProviders,
   createConfiguredTaxService,
-  reportTaxProvider,
+  reportTaxProviders,
 } from './services/tax/configuredTax';
 import {
   startEcosystemActivity,
@@ -348,9 +348,9 @@ export async function start(
   } = {},
 ): Promise<Gateway> {
   const database = await connectPostgres();
-  const taxProvider = configuredTaxProvider();
-  const taxService = createConfiguredTaxService(database, taxProvider);
-  void reportTaxProvider(taxProvider);
+  const taxProviders = configuredTaxProviders();
+  const taxService = createConfiguredTaxService(database, taxProviders);
+  void reportTaxProviders(taxProviders);
   const billingRuntime = await configureBillingRuntime(
     database,
     options.billingConfiguration ?? config.billingCohortConfig,
@@ -400,8 +400,9 @@ export async function start(
   startIdempotencySweeper();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
-  // that have to be finished, and a drain gated on `config.stripe.enabled`
-  // would leave them unprocessed with no sign that anything was wrong. With no
+  // that have to be finished, and a drain gated on a mode's card rail would
+  // leave them unprocessed with no sign that anything was wrong. (An event of a
+  // mode with no key at all is refused per event, visibly — ADR 0017.) With no
   // events the pass reads an empty partial index and does nothing.
   startProviderEventDrain({
     recurring: billingRuntime?.observations,

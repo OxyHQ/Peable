@@ -10,6 +10,11 @@ export type MerchantEnvironment = (typeof MERCHANT_ENVIRONMENTS)[number];
 export interface Merchant {
   id: string;
   object: 'merchant';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   oxy_app_id: string;
   environment: MerchantEnvironment;
   /**

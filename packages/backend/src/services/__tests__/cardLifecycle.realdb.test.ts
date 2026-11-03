@@ -17,6 +17,7 @@
  * subject and only the losing side proves it.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../providers/provider';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
@@ -85,16 +86,20 @@ const fakeProvider = {
   },
 };
 
+const realRegistry = await import('../providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },

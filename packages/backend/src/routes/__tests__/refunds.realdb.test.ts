@@ -6,6 +6,7 @@
  * merchant whether they just refunded a payer twice.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../../services/providers/provider';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
@@ -43,16 +44,20 @@ const fakeProvider = {
   },
 };
 
+const realRegistry = await import('../../services/providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../../services/providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../../services/providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },

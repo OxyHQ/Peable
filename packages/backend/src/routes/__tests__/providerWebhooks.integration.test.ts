@@ -19,6 +19,7 @@ import express from 'express';
 import { createGateway } from '../../server';
 import { createProviderWebhooksRouter } from '../providerWebhooks';
 import { config, type StripeConfig } from '../../config';
+import { stripeModeFixture } from '../../__tests__/helpers/stripeModes';
 import { resetProviders } from '../../services/providers/registry';
 import { providerEvents } from '../../db/schema';
 import { gatewayDb, useGatewayDatabase } from '../../__tests__/helpers/gatewayTestDatabase';
@@ -39,24 +40,24 @@ const CONNECT_SECRET = 'whsec_connect_test_secret';
  * `verifyEventForScope` reads the secrets), so assigning here is enough and is
  * order-independent.
  */
-const REAL_STRIPE_CONFIG: StripeConfig = config.stripe;
-const TEST_STRIPE_CONFIG: StripeConfig = {
-  enabled: true,
-  secretKey: 'sk_test_dummy_key_for_signature_tests',
-  // Absent: nothing in this file mounts a card form, and the rail does not
-  // require one — a deployment serving only server-side integrators needs none.
-  publishableKey: undefined,
-  webhookSecret: PLATFORM_SECRET,
-  connectWebhookSecret: CONNECT_SECRET,
-  webhookSecretPrevious: undefined,
-  connectWebhookSecretPrevious: undefined,
-  // FALSE, and the livemode-mismatch case below depends on it: on a real
-  // deployment this is derived from the key's own mode, which
-  // `classifyStripeKey` reads off one of four prefixes rather than off
-  // `sk_live_` alone — `rk_live_…` is a live key too.
-  livemode: false,
-  keyMode: 'test',
-};
+const REAL_STRIPE_CONFIG: StripeConfig = { test: config.stripe.test, live: config.stripe.live };
+/** The LIVE mode's endpoint secrets — different objects at Stripe, different secrets here. */
+const LIVE_PLATFORM_SECRET = 'whsec_platform_live_secret';
+const LIVE_CONNECT_SECRET = 'whsec_connect_live_secret';
+
+/** Both modes held at once (ADR 0017), each with its own two endpoint secrets. */
+function bothModes(): StripeConfig {
+  return {
+    test: stripeModeFixture('test', {
+      webhookSecret: PLATFORM_SECRET,
+      connectWebhookSecret: CONNECT_SECRET,
+    }),
+    live: stripeModeFixture('live', {
+      webhookSecret: LIVE_PLATFORM_SECRET,
+      connectWebhookSecret: LIVE_CONNECT_SECRET,
+    }),
+  };
+}
 
 /**
  * Stripe's signature scheme, reimplemented rather than mocked.
@@ -120,7 +121,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider webhook ingress, real chain',
   useGatewayDatabase();
 
   beforeAll(async () => {
-    config.stripe = TEST_STRIPE_CONFIG;
+    Object.assign(config.stripe, bothModes());
     // Another suite may have resolved the adapter while the rail was off, and
     // `resolveProvider` memoizes. Dropping the instance makes this suite's
     // answer depend on this suite's config rather than on file order.
@@ -154,7 +155,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider webhook ingress, real chain',
   afterAll(async () => {
     // Put the deployment's real answer back: a later file asserting that the
     // rail is OFF must not inherit this one's fixture.
-    config.stripe = REAL_STRIPE_CONFIG;
+    Object.assign(config.stripe, REAL_STRIPE_CONFIG);
     resetProviders();
 
     await new Promise<void>((resolve) => {
@@ -175,8 +176,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider webhook ingress, real chain',
     // Guards every assertion below: with the rail off the ingress answers
     // `not_configured` for ANY body, and a test suite full of 400s would look
     // like it was testing verification when it was testing nothing.
-    expect(config.stripe.enabled).toBe(true);
-    expect(config.stripe.livemode).toBe(false);
+    expect(config.stripe.test?.cardRail).toBe(true);
+    expect(config.stripe.live?.cardRail).toBe(true);
   });
 
   test('a correctly signed platform delivery is accepted and stored', async () => {
@@ -326,24 +327,84 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider webhook ingress, real chain',
   });
 
   /**
-   * A test event on a live deployment, or the reverse.
-   *
-   * Authentic — it really is from Stripe — and deliberately not stored. 200,
-   * because retrying it would never help: the fix is in the dashboard. Someone
-   * clicking "send test webhook" at a live endpoint produces exactly this.
+   * Both modes arrive on the SAME paths (ADR 0017). The secret that verifies a
+   * delivery decides its mode, and the stored row records it — that is what
+   * the drain routes processing by.
    */
-  test('an authentic event from the wrong livemode is ignored, not stored, and still 200', async () => {
+  test('a live event signed with the live secret is accepted and stored as live', async () => {
+    const body = eventBody({ livemode: true });
+    const parsed = JSON.parse(body) as { id: string };
+    const { status, json } = await post(gatewayUrl, '/v1/webhooks/stripe', body, {
+      'Stripe-Signature': signStripe(body, LIVE_PLATFORM_SECRET),
+    });
+    expect(status).toBe(200);
+    expect(json).toEqual({ received: true, duplicate: false });
+
+    const rows = await gatewayDb().select().from(providerEvents);
+    expect(rows.find((row) => row.providerEventId === parsed.id)?.livemode).toBe(true);
+  });
+
+  test('a live connect event verifies against the live CONNECT secret only', async () => {
+    const body = eventBody({ livemode: true, account: 'acct_seller_live' });
+    const wrong = await post(gatewayUrl, '/v1/webhooks/stripe/connect', body, {
+      'Stripe-Signature': signStripe(body, LIVE_PLATFORM_SECRET),
+    });
+    expect(wrong.status).toBe(400);
+    const right = await post(gatewayUrl, '/v1/webhooks/stripe/connect', body, {
+      'Stripe-Signature': signStripe(body, LIVE_CONNECT_SECRET),
+    });
+    expect(right.status).toBe(200);
+  });
+
+  /**
+   * A body claiming the OTHER mode than the secret that signed it.
+   *
+   * Stripe never signs a live event with a test endpoint's secret, so this is
+   * somebody holding one mode's secret forging the other mode's event — a
+   * leaked test secret must not be able to settle a live payment. Refused, 400,
+   * nothing stored.
+   */
+  test('a live event signed with the TEST secret is refused and not stored', async () => {
     const body = eventBody({ livemode: true });
     const parsed = JSON.parse(body) as { id: string };
     const { status, json } = await post(gatewayUrl, '/v1/webhooks/stripe', body, {
       'Stripe-Signature': signStripe(body, PLATFORM_SECRET),
     });
-
-    expect(status).toBe(200);
-    expect(json).toEqual({ received: false, ignored: 'livemode_mismatch' });
+    expect(status).toBe(400);
+    expect(json.error).toBe('invalid_signature');
 
     const rows = await gatewayDb().select().from(providerEvents);
     expect(rows.find((row) => row.providerEventId === parsed.id)).toBeUndefined();
+  });
+
+  test('a test event signed with the LIVE secret is refused too', async () => {
+    const body = eventBody({ livemode: false });
+    const { status } = await post(gatewayUrl, '/v1/webhooks/stripe', body, {
+      'Stripe-Signature': signStripe(body, LIVE_PLATFORM_SECRET),
+    });
+    expect(status).toBe(400);
+  });
+
+  /**
+   * An event of a mode this deployment has no key for: its secret is not held
+   * either, so nothing can verify it — refused like any bad signature.
+   */
+  test('an event of a mode with no configured key is refused with 400', async () => {
+    const before = config.stripe.live;
+    config.stripe.live = undefined;
+    try {
+      const body = eventBody({ livemode: true });
+      const parsed = JSON.parse(body) as { id: string };
+      const { status, json } = await post(gatewayUrl, '/v1/webhooks/stripe', body, {
+        'Stripe-Signature': signStripe(body, LIVE_PLATFORM_SECRET),
+      });
+      expect(status).toBe(400);
+      expect(json.error).toBe('invalid_signature');
+      const rows = await gatewayDb().select().from(providerEvents);
+      expect(rows.find((row) => row.providerEventId === parsed.id)).toBeUndefined();
+    } finally {
+      config.stripe.live = before;
+    }
   });
 
   /**

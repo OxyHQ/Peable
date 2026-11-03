@@ -50,7 +50,8 @@ Peable Tax, shaped like Stripe Tax and independent of the settlement rail.
    only applications oxy-api marks official (or first-party/internal/system)
    calculate on it (`calculationAccount: "platform"`); any other merchant's
    registrations cannot be approved until it has a provider of its own. One
-   key, one mode: a test merchant never reaches a live provider account.
+   provider per mode (ADR 0017), chosen by the merchant's environment: a test
+   merchant never reaches a live provider account.
 6. **Location evidence follows the customer's jurisdiction.** Items name a
    country (billing address, IP address with its resolved country, payment
    method, bank, SIM, landline). Language, currency, locale and timezone are not

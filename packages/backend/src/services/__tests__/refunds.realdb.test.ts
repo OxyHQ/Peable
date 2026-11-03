@@ -6,6 +6,7 @@
  * the second automatically. Most of what follows is about that.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
+import type { ProviderMode } from '../providers/provider';
 import { must } from '../../__tests__/helpers/must';
 
 const providerCalls: { fn: string; request: Record<string, unknown> }[] = [];
@@ -51,16 +52,20 @@ const fakeProvider = {
   },
 };
 
+const realRegistry = await import('../providers/registry');
 const {
   resolveProvider: realResolveProvider,
   resolveCardProvider: realResolveCardProvider,
   resetProviders: realResetProviders,
-} = await import('../providers/registry');
+} = realRegistry;
 let useFake = false;
 
 mock.module('../providers/registry', () => ({
-  resolveProvider: (id: 'stripe') => (useFake ? fakeProvider : realResolveProvider(id)),
-  resolveCardProvider: () => (useFake ? fakeProvider : realResolveCardProvider()),
+  ...realRegistry,
+  resolveProvider: (id: 'stripe', mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveProvider(id, mode),
+  resolveCardProvider: (mode: ProviderMode) =>
+    useFake ? fakeProvider : realResolveCardProvider(mode),
   resetProviders: () => {
     realResetProviders();
   },
@@ -139,7 +144,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     const { refund, created, paymentStatus } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_partial',
       amount: '3000',
@@ -157,7 +161,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_full',
       amount: '10000',
@@ -178,7 +181,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const first = await settledIntent('10000');
     await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent: first,
       externalRef: 'order_two_a',
       amount: '4000',
@@ -186,7 +188,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const reread = await findIntentByPublicId(gatewayDb(), first.publicId);
     const { paymentStatus } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent: must(reread),
       externalRef: 'order_two_b',
       amount: '6000',
@@ -205,7 +206,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     const first = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_dup',
       amount: '2500',
@@ -213,7 +213,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     providerCalls.length = 0;
     const second = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_dup',
       amount: '2500',
@@ -228,7 +227,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_left_a',
       amount: '8000',
@@ -238,7 +236,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
-        environment: merchant.environment,
         intent: must(reread),
         externalRef: 'order_left_b',
         amount: '2001',
@@ -264,7 +261,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
 
     const { refund } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_failed',
       amount: '9000',
@@ -293,7 +289,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
-        environment: merchant.environment,
         intent,
         externalRef: 'order_retryable',
         amount: '1000',
@@ -337,7 +332,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
 
     const { refund, paymentStatus } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_pending',
       amount: '4000',
@@ -369,7 +363,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
 
     const { refund, paymentStatus } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_reported_failure',
       amount: '4000',
@@ -408,7 +401,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
-        environment: merchant.environment,
         intent,
         externalRef: 'order_resume',
         amount: '3000',
@@ -425,7 +417,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     providerCalls.length = 0;
     const { refund, created } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_resume',
       amount: '3000',
@@ -451,7 +442,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     const first = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_history',
       amount: '10000',
@@ -460,7 +450,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
 
     const replay = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_history',
       amount: '10000',
@@ -491,7 +480,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
-        environment: merchant.environment,
         intent: must(intent),
         externalRef: 'order_unsettled',
         amount: '1000',
@@ -508,7 +496,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     const intent = await settledIntent('10000');
     const { refund } = await createRefund({
       merchantId: merchant.id,
-      environment: merchant.environment,
       intent,
       externalRef: 'order_key',
       amount: '1000',
@@ -532,7 +519,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refunds', () => {
     await expect(
       createRefund({
         merchantId: merchant.id,
-        environment: merchant.environment,
         intent,
         externalRef: 'order_big',
         amount: '9007199254740993',

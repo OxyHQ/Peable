@@ -12,6 +12,7 @@ import type Stripe from 'stripe';
 import { createPrivateStripeRecurringReader } from '../stripeRecurringReader';
 import { STRIPE_API_VERSION } from '../../providers/stripe/client';
 import { afterEach, beforeEach, describe, expect, it, mock, spyOn } from 'bun:test';
+import { useStripeKeys } from '../../../__tests__/helpers/stripeModes';
 import { randomUUID } from 'node:crypto';
 import { eq, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
@@ -124,6 +125,7 @@ async function rows() {
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real PostgreSQL', () => {
   useGatewayDatabase();
+  useStripeKeys();
   const readSnapshot = mock(async () => subscription() as unknown);
   const options = { deployment, reader: { readSnapshot }, timeoutMs: 1000 };
   let network: ReturnType<typeof spyOn<typeof globalThis, 'fetch'>>;

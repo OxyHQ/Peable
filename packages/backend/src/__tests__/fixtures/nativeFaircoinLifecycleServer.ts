@@ -174,7 +174,7 @@ async function initialize(input: {
   };
   const calculator = createPeableTaxQuoteCalculator({
     db: suite.db,
-    tax: createTaxService({ db: suite.db, provider: syntheticProvider, now: clock }),
+    tax: createTaxService({ db: suite.db, providers: [syntheticProvider], now: clock }),
     offers: () => offers,
     signingKey: keys.privateKey,
     keyId: 'fixture',

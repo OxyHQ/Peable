@@ -83,6 +83,8 @@ export type WebhookEventType =
 /** Wake-up only. Re-read the owner-bound SDK resource; this is never paid or grant authority. */
 export interface BillingObservation {
   object: 'billing_observation';
+  /** The mode of the billing cohort observed (ADR 0017). */
+  livemode: boolean;
   resource_kind: 'subscription' | 'invoice';
   resource_id: string;
   revision: number;
@@ -128,6 +130,8 @@ export type WebhookEvent<K extends WebhookEventType = WebhookEventType> = {
   [T in K]: {
     id: string;
     object: 'event';
+    /** The mode of the merchant it was sent to, and of the object it carries (ADR 0017). */
+    livemode: boolean;
     type: T;
     created: number;
     /**

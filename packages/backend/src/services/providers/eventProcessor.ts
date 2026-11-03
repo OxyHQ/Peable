@@ -57,7 +57,8 @@ import { upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
 import { redactProviderMessage } from './redact';
-import type { ProviderId } from './provider';
+import { providerModeOf, type ProviderId } from './provider';
+import { providerModeConfigured } from './registry';
 
 /**
  * Which provider event types move a payment, and where to.
@@ -221,6 +222,26 @@ const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
   'transfer.updated',
 ]);
 
+/**
+ * Refuse an event that names an object of the OTHER mode (ADR 0017).
+ *
+ * Provider object ids do not collide across modes, so this is not expected to
+ * fire — which is why it is a failure the drain keeps visible rather than a
+ * no-op. An event's `livemode` is a fact about the endpoint secret that
+ * verified it (`ingress.ts`), and a row's is its merchant's; if they disagree,
+ * applying the event would let one mode's key move the other mode's money.
+ */
+async function refuseCrossMode(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+  row: { readonly livemode: boolean },
+): Promise<ProcessOutcome | null> {
+  if (row.livemode === event.livemode) return null;
+  const message = `a ${providerModeOf(event.livemode)} event names a ${providerModeOf(row.livemode)} object`;
+  await markProviderEventFailed(db, event.id, message);
+  return { kind: 'failed', error: message };
+}
+
 export type ProcessOutcome =
   /** The intent moved. */
   | { readonly kind: 'applied'; readonly intentId: string; readonly status: string }
@@ -260,6 +281,17 @@ export async function processProviderEvent(
       return observation;
   }
   const db = getDb();
+
+  // Routed by the event's own mode (ADR 0017). A mode this deployment holds no
+  // key for cannot act on anything — every follow-up read would need that key —
+  // so the event is refused and left visible in the drain's set, to finish if
+  // the key is configured, rather than processed through the other mode's.
+  const mode = providerModeOf(event.livemode);
+  if (!providerModeConfigured(event.provider as ProviderId, mode)) {
+    const message = `no ${mode} ${event.provider} key is configured on this deployment`;
+    await markProviderEventFailed(db, event.id, message).catch(() => undefined);
+    return { kind: 'failed', error: message };
+  }
 
   try {
     if (ACCOUNT_REFRESH_EVENTS.has(event.type)) {
@@ -307,6 +339,8 @@ export async function processProviderEvent(
        */
       return { kind: 'unmatched' };
     }
+    const crossed = await refuseCrossMode(db, event, intent);
+    if (crossed) return crossed;
 
     // Already there. A provider redelivering a `succeeded` for a settled
     // payment is ordinary and must not look like an error.
@@ -429,6 +463,8 @@ async function handleAccountEvent(
      */
     return { kind: 'unmatched' };
   }
+  const crossed = await refuseCrossMode(db, event, account);
+  if (crossed) return crossed;
 
   await refreshConnectedAccount(account);
   await markProviderEventProcessed(db, event.id);
@@ -459,6 +495,8 @@ async function handleTransferEvent(
     transferObjectId,
   );
   if (!transfer) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, transfer);
+  if (crossed) return crossed;
 
   const total = readReversedTotal(event.payload);
   if (total === null) {
@@ -532,7 +570,11 @@ async function handleRefundEvent(
     // `refund.created`/`refund.updated`, and those are what import it.
     const chargeId = event.objectIds.charge;
     const byCharge = chargeId ? await findIntentByProviderCharge(db, provider, chargeId) : null;
-    if (byCharge) await applyRefundToIntent(byCharge);
+    if (byCharge) {
+      const crossed = await refuseCrossMode(db, event, byCharge);
+      if (crossed) return crossed;
+      await applyRefundToIntent(byCharge);
+    }
     await markProviderEventProcessed(db, event.id);
     return byCharge
       ? { kind: 'applied', intentId: byCharge.id, status: byCharge.status }
@@ -545,6 +587,7 @@ async function handleRefundEvent(
   if (!refund) {
     const imported = await importRefundFromEvent(db, event, refundObjectId, detail);
     if (!imported) return { kind: 'unmatched' };
+    if ('failed' in imported) return imported.failed;
     const status = await applyRefundToIntent(imported.intent);
     await markProviderEventProcessed(db, event.id);
     return { kind: 'applied', intentId: imported.intent.id, status };
@@ -555,6 +598,8 @@ async function handleRefundEvent(
     await markProviderEventFailed(db, event.id, 'the refund names an intent that cannot be read');
     return { kind: 'failed', error: 'the refund names an intent that cannot be read' };
   }
+  const crossedRefund = await refuseCrossMode(db, event, intent);
+  if (crossedRefund) return crossedRefund;
 
   // The row FIRST, from the provider's own word, and the payment afterwards
   // from the rows. `applyRefundState` refuses to move a row that already
@@ -621,7 +666,7 @@ async function importRefundFromEvent(
   event: ProviderEventRow,
   refundObjectId: string,
   detail: RefundDetail,
-): Promise<{ readonly intent: PaymentIntentRow } | null> {
+): Promise<{ readonly intent: PaymentIntentRow } | { readonly failed: ProcessOutcome } | null> {
   if (detail.amount === null) return null;
 
   const provider = event.provider as ProviderId;
@@ -633,6 +678,8 @@ async function importRefundFromEvent(
       ? await findIntentByProviderCharge(db, provider, chargeId)
       : null;
   if (!intent) return null;
+  const crossed = await refuseCrossMode(db, event, intent);
+  if (crossed) return { failed: crossed };
 
   await importProviderRefund(db, {
     publicId: newId('re'),
@@ -704,6 +751,8 @@ async function handleDisputeEvent(
   // The ONE place refund semantics still apply: retryable, because a dispute
   // arriving inside the two-step create's window finds no intent yet.
   if (!intent) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, intent);
+  if (crossed) return crossed;
 
   const detail = readDisputeDetail(event.payload);
   if (!detail) {
