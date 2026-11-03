@@ -35,7 +35,11 @@ import {
   listCustomerSubscriptions,
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
-import { priceDataSchema, currencySchema, amountSchema } from '../../services/catalog/params';
+import {
+  baseUnitAmountParam as amountSchema,
+  currency as currencySchema,
+  priceDataParams as priceDataSchema,
+} from '@peable.to/contracts';
 import {
   answerList,
   expandParam,

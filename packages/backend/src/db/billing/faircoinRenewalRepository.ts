@@ -1,25 +1,28 @@
+import {
+  billingFaircoinRenewalConsentSchema,
+  billingFaircoinRenewalRevocationSchema,
+  billingReference,
+} from '@peable.to/contracts';
 import { and, eq, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import { z } from 'zod';
 import type { Database } from '../postgres';
 import { faircoinRenewalAuthorizations } from '../schema';
 import { findMerchantByAppEnvironment } from '../merchants/merchantRepository';
-import { billingReference, BillingError } from '../../services/billing/contracts';
+import { BillingError } from '../../services/billing/contracts';
 import {
-  faircoinRenewalConsentSchema,
   faircoinRenewalInstructionSchema,
   faircoinRenewalExecutionSchema,
   faircoinRenewalActorOf,
   faircoinRenewalNamespace,
-  faircoinRenewalRevocationSchema,
   type FaircoinRenewalRepository,
   type FaircoinRenewalRecord,
 } from '../../services/billing/faircoin-renewal';
 
 const recordSchema = z
   .object({
-    consent: faircoinRenewalConsentSchema,
-    revocation: faircoinRenewalRevocationSchema.nullable(),
+    consent: billingFaircoinRenewalConsentSchema,
+    revocation: billingFaircoinRenewalRevocationSchema.nullable(),
     instructions: z.array(faircoinRenewalInstructionSchema),
     executions: z.array(faircoinRenewalExecutionSchema),
   })
@@ -184,7 +187,7 @@ export async function listPendingFaircoinRenewals(
   return [...rows].map((row) => {
     const parsed = z
       .object({
-        consent: faircoinRenewalConsentSchema,
+        consent: billingFaircoinRenewalConsentSchema,
         instruction: faircoinRenewalInstructionSchema,
       })
       .parse(row);

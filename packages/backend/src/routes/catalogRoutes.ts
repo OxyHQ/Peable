@@ -1,11 +1,11 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { oxy } from '../oxy';
 import { CatalogError } from '../services/catalog/catalogService';
 import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
 import { requestIdOf } from '../lib/requestId';
+import { requireScope } from '../lib/scope';
 import { BillingEngineError } from '../services/billingEngine/errors';
 import { StaleTransitionError } from '../services/billingEngine/transitions';
 import { idempotent } from '../lib/idempotency';
@@ -95,7 +95,7 @@ export function createCatalogApiRouter(
   const auth = (scope: 'payments:read' | 'payments:write') => [
     deps.requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope(scope),
+    requireScope(scope),
   ];
   for (const route of routes) {
     const handler = wrap(async (req, res) => {

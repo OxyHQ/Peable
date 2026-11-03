@@ -38,7 +38,7 @@ import {
   toCheckoutBranding,
   toPublicPaymentLinkDTO,
 } from '../lib/serializeCheckout';
-import { booleanQuery } from '../services/catalog/params';
+import { queryFlag as booleanQuery } from '@peable.to/contracts';
 import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import {
   createLinkBodySchema,

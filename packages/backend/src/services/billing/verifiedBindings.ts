@@ -1,3 +1,4 @@
+import { billingReference } from '@peable.to/contracts';
 import { z } from 'zod';
 import type { BillingCheckoutObservation } from '@peable.to/shared-types';
 import { readOwnedInvoiceState } from './paidInvoice';
@@ -13,7 +14,6 @@ import { bindRecurringObject } from '../../db/recurring/recurringMirrorRepositor
 import {
   BillingError,
   billingOwnerSchema,
-  billingReference,
   type BillingDeployment,
   type BillingOwner,
 } from './contracts';

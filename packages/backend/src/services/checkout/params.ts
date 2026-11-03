@@ -25,7 +25,10 @@ import type { StoredCheckoutCollection, StoredCustomField } from '../../db/schem
 import { expandParam } from '../../lib/list';
 import { metadataCreateSchema } from '../../lib/metadata';
 import { isKnownTaxCode } from '../tax/codes';
-import { amountSchema, currencySchema } from '../catalog/params';
+import {
+  baseUnitAmountParam as amountSchema,
+  currency as currencySchema,
+} from '@peable.to/contracts';
 
 const idSchema = z.string().min(1).max(255);
 const countryCode = z.string().regex(/^[A-Z]{2}$/, 'must be an ISO 3166-1 alpha-2 country code');

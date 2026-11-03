@@ -49,7 +49,7 @@ import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import type { MetadataPatch } from '../../db/metadata';
 import { type DatabaseOrTransaction, getDb, type Transaction } from '../../db/postgres';
 import { newId } from '../../lib/ids';
-import { METADATA_LIMIT_MESSAGE } from '../../lib/metadata';
+import { METADATA_LIMIT_MESSAGE } from '@peable.to/contracts';
 import {
   toCouponDTO,
   toPriceDTO,
@@ -58,10 +58,22 @@ import {
 } from '../../lib/serializeCatalog';
 import { recordEvent } from '../events';
 import { kickWebhookOutbox } from '../webhookOutbox';
-import { generatePromotionCode } from './params';
 import { findMeterForMerchant } from '../../db/billingEngine/meterRepository';
 import type { PricingPrice } from './pricing';
 import { pricingPriceOfShape } from './pricingRows';
+
+const GENERATED_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+/**
+ * A generated promotion code: eight characters from an alphabet without the
+ * look-alikes (0/O, 1/I), so a customer can read it off a poster.
+ */
+export function generatePromotionCode(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(8));
+  let code = '';
+  for (const byte of bytes) code += GENERATED_CODE_ALPHABET[byte % GENERATED_CODE_ALPHABET.length];
+  return code;
+}
 
 export type CatalogErrorCode =
   | 'parameter_invalid'

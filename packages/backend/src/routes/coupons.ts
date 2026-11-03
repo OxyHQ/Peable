@@ -3,8 +3,12 @@
  * delete. A coupon's id is the merchant's own or a generated `coupon_…`.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import { CATALOG_LIMITS, COUPON_DURATIONS, type CreateCouponParams } from '@peable.to/shared-types';
+import {
+  createCouponParams,
+  expandOnlyQuery,
+  listCouponsQuery,
+  updateCouponParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -19,95 +23,16 @@ import {
   notFound,
   updateCoupon,
 } from '../services/catalog/catalogService';
-import {
-  amountSchema,
-  checkAmountBound,
-  clearable,
-  couponIdSchema,
-  currencySchema,
-  percentOffSchema,
-  redemptionsSchema,
-  unixSecondsSchema,
-} from '../services/catalog/params';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError } from '../lib/http';
-import {
-  answerList,
-  expandParam,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../lib/metadata';
+import { answerList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { toCouponDTO } from '../lib/serializeCatalog';
 import { fromUnix } from '../lib/time';
 import type { CatalogRoute } from './catalogRoutes';
 
-const nameSchema = z.string().min(1).max(CATALOG_LIMITS.couponNameMax);
-
-const createBodySchema = z
-  .object({
-    id: couponIdSchema.optional(),
-    name: nameSchema.optional(),
-    percent_off: percentOffSchema.optional(),
-    amount_off: amountSchema.optional(),
-    currency: currencySchema.optional(),
-    duration: z.enum(COUPON_DURATIONS).optional(),
-    duration_in_months: z
-      .number()
-      .int()
-      .min(1)
-      .max(CATALOG_LIMITS.couponDurationInMonthsMax)
-      .optional(),
-    max_redemptions: redemptionsSchema.optional(),
-    redeem_by: unixSecondsSchema.optional(),
-    applies_to: z
-      .object({
-        products: z
-          .array(z.string().min(1).max(255))
-          .min(1)
-          .max(CATALOG_LIMITS.couponAppliesToProductsMax),
-      })
-      .strict()
-      .optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CreateCouponParams | 'expand', z.ZodTypeAny>)
-  .strict()
-  .superRefine((body, ctx) => {
-    const issue = (path: string, message: string) =>
-      ctx.addIssue({ code: 'custom', path: [path], message });
-    if ((body.percent_off === undefined) === (body.amount_off === undefined)) {
-      issue('percent_off', 'a coupon takes exactly one of percent_off and amount_off');
-    }
-    if (body.amount_off !== undefined && body.currency === undefined) {
-      issue('currency', 'amount_off needs a currency');
-    }
-    if (body.amount_off === undefined && body.currency !== undefined) {
-      issue('currency', 'currency is only for an amount_off coupon');
-    }
-    if (body.amount_off === '0') issue('amount_off', 'amount_off must be positive');
-    checkAmountBound(ctx, body.amount_off, body.currency, ['amount_off']);
-    const duration = body.duration ?? 'once';
-    if (duration === 'repeating' && body.duration_in_months === undefined) {
-      issue('duration_in_months', 'a repeating coupon needs duration_in_months');
-    }
-    if (duration !== 'repeating' && body.duration_in_months !== undefined) {
-      issue('duration_in_months', 'duration_in_months is only for a repeating coupon');
-    }
-  });
-
-const updateBodySchema = z
-  .object({
-    name: clearable(nameSchema).optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listCouponsQuery = surfaceListQuery({});
-const retrieveCouponQuery = surfaceRetrieveQuery();
+// The request schemas are the contract's (`@peable.to/contracts` `couponRoutes`).
+const listQuery = surfaceQuery(listCouponsQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -132,7 +57,7 @@ async function answerCoupon(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
-  const parsed = createBodySchema.safeParse(req.body ?? {});
+  const parsed = createCouponParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -166,7 +91,7 @@ async function retrieve(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrieveCouponQuery[surface]);
+  const query = parseQuery(req, res, retrieveQuery[surface]);
   if (!query) return;
   if (!parseExpand(res, 'coupon', query.expand, { list: false })) return;
   const coupon = await findCouponForMerchant(getDb(), id, merchant.id);
@@ -177,7 +102,7 @@ async function retrieve(
 async function update(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updateCouponParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -194,7 +119,7 @@ async function list(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, listCouponsQuery[surface]);
+  const query = parseQuery(req, res, listQuery[surface]);
   if (!query) return;
   const db = getDb();
   await answerList(req, res, {

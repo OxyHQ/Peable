@@ -1,149 +1,65 @@
 import { z } from 'zod';
 import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
-import { BILLING_SUBSCRIPTION_STATUSES } from '@peable.to/shared-types';
+import {
+  billingCheckoutSessionSchema as wireCheckoutSession,
+  billingCustomerRef,
+  billingCustomerSchema as wireCustomer,
+  billingEmbeddedCheckoutSessionSchema as wireEmbeddedCheckoutSession,
+  billingHostedSessionSchema as wireHostedSession,
+  billingInstant,
+  billingPriceRef,
+  billingReference,
+  billingReturnUrl,
+  billingSubscriptionSchema as wireSubscription,
+} from '@peable.to/contracts';
 
-export const billingReference = z
-  .string()
-  .min(1)
-  .max(128)
-  .regex(/^[A-Za-z0-9_.:-]+$/);
-export const billingIdempotencyKey = z
-  .string()
-  .min(1)
-  .max(200)
-  .regex(/^[A-Za-z0-9_.:-]+$/);
-const customerRef = z
-  .string()
-  .regex(/^cus_[A-Za-z0-9]+$/)
-  .max(128);
-const priceRef = z
-  .string()
-  .regex(/^price_[A-Za-z0-9]+$/)
-  .max(128);
+/**
+ * The recurring billing transport's INTERNAL validators. The wire — every
+ * request schema and the object each route answers — is the contract's
+ * (`@peable.to/contracts`, `billingRoutes`). What is here is stricter: a
+ * provider's answer (or a stored result being replayed) must carry the
+ * provider's id spellings before it is trusted or answered.
+ */
+
+/** An instant on the wire: integer Unix seconds (ADR 0014 D1). */
+export const unixSeconds = billingInstant;
+
 const subscriptionRef = z
   .string()
   .regex(/^sub_[A-Za-z0-9]+$/)
   .max(128);
-/** A configured settlement rail's name (`stripe`, `faircoin`, a further fiat
- * provider). Selecting one never configures it: an unconfigured rail is refused. */
-export const billingRailId = z.string().regex(/^[a-z][a-z0-9_]{1,31}$/);
-/** HTTPS destinations only; the authenticated app supplies its own return page. */
-export const billingReturnUrl = z
+const checkoutRef = z
   .string()
-  .url()
-  .max(2048)
-  .refine((value) => {
-    const url = new URL(value);
-    return url.protocol === 'https:' && !url.username && !url.password;
-  }, 'An HTTPS return URL without credentials is required');
-/** An instant on the wire: integer Unix seconds (ADR 0014 D1). */
-export const unixSeconds = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER);
-export const ensureCustomerSchema = z
-  .object({
-    store_id: billingReference,
-    store_name: z.string().min(1).max(200),
-    rail: billingRailId.optional(),
-  })
+  .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
+  .max(128);
+export const billingCustomerSchema = wireCustomer
+  .extend({ provider_customer_id: billingCustomerRef })
   .strict();
-export const billingTaxQuoteSchema = z
-  .object({
-    schema_version: z.literal(2),
-    source: z
-      .object({
-        merchant_id: billingReference,
-        app_id: billingReference,
-        store_id: billingReference,
-        plan_id: billingReference,
-        mode: z.enum(['test', 'live']),
-        environment: z.enum(['development', 'staging', 'production']),
-      })
-      .strict(),
-    quote: z
-      .object({
-        id: billingReference,
-        currency: z.string().regex(/^[A-Z]{3}$/),
-        gross_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        net_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        tax_minor_units: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
-        tax_treatment: z.enum(['inclusive', 'exclusive']),
-        seller_id: billingReference,
-        invoice_issuer_id: billingReference,
-        tax_remitter_id: billingReference,
-        tax_service_ref: billingReference,
-        country: z.string().regex(/^[A-Z]{2}$/),
-        coverage_evidence_id: billingReference,
-        tax_rate_evidence_id: billingReference,
-        customer_location_evidence_id: billingReference,
-        quoted_at: unixSeconds,
-        expires_at: unixSeconds,
-      })
-      .strict(),
-    signature: z
-      .object({
-        algorithm: z.literal('Ed25519'),
-        key_id: billingReference,
-        value: z.string().regex(/^[A-Za-z0-9_-]{86}$/),
-      })
-      .strict(),
-  })
+export const billingHostedSessionSchema = wireHostedSession
+  .extend({ url: billingReturnUrl, expires_at: unixSeconds })
   .strict();
-export const checkoutSchema = z
-  .object({
-    rail: billingRailId.optional(),
-    provider_customer_id: customerRef,
-    provider_price_id: priceRef,
-    trial_days: z.number().int().min(0).max(730),
-    tax_quote: billingTaxQuoteSchema.optional(),
-    return_url: billingReturnUrl,
-    store_id: billingReference,
-    plan_id: billingReference,
-  })
+export const billingCheckoutSessionSchema = wireCheckoutSession
+  .extend({ id: checkoutRef, url: billingReturnUrl, expires_at: unixSeconds })
   .strict();
-export const portalSchema = z
-  .object({ provider_customer_id: customerRef, return_url: billingReturnUrl })
-  .strict();
-export const billingCustomerSchema = z.object({ provider_customer_id: customerRef }).strict();
-export const billingHostedSessionSchema = z
-  .object({ url: billingReturnUrl, expires_at: unixSeconds })
-  .strict();
-export const billingCheckoutSessionSchema = billingHostedSessionSchema
-  .extend({
-    id: z
-      .string()
-      .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
-      .max(128),
-  })
-  .strict();
-export const billingEmbeddedCheckoutSessionSchema = z
-  .object({
-    id: z
-      .string()
-      .regex(/^cs_(test|live)_[A-Za-z0-9]+$/)
-      .max(128),
-    presentation: z.literal('embedded'),
-    expires_at: unixSeconds,
-  })
+export const billingEmbeddedCheckoutSessionSchema = wireEmbeddedCheckoutSession
+  .extend({ id: checkoutRef, expires_at: unixSeconds })
   .strict();
 export const billingAnyCheckoutSessionSchema = z.union([
   billingCheckoutSessionSchema,
   billingEmbeddedCheckoutSessionSchema,
 ]);
-export const billingSubscriptionSchema = z
-  .object({
+export const billingSubscriptionSchema = wireSubscription
+  .extend({
     provider_subscription_id: subscriptionRef,
     latest_invoice_id: z
       .string()
       .regex(/^in_[A-Za-z0-9]+$/)
       .nullable()
       .optional(),
-    provider_customer_id: customerRef,
-    provider_price_id: priceRef,
+    provider_customer_id: billingCustomerRef,
+    provider_price_id: billingPriceRef,
     store_id: billingReference,
     plan_id: billingReference,
-    livemode: z.boolean(),
-    status: z.enum(BILLING_SUBSCRIPTION_STATUSES),
-    interval: z.enum(['month', 'year']),
-    cancel_at_period_end: z.boolean(),
     current_period_start: unixSeconds,
     current_period_end: unixSeconds,
     trial_ends_at: unixSeconds.nullable(),
@@ -239,13 +155,3 @@ export class BillingError extends Error {
     this.name = 'BillingError';
   }
 }
-
-export const checkoutOperationRequestSchema = z
-  .object({
-    idempotency_key: billingIdempotencyKey,
-    provider_customer_id: billingReference,
-    provider_price_id: billingReference,
-    store_id: billingReference,
-    plan_id: billingReference,
-  })
-  .strict();

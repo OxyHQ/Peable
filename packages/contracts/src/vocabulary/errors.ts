@@ -173,6 +173,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   card_declined: 'The card was declined.',
   promotion_code_first_time_only: "The promotion code is for a customer's first purchase only.",
   network_mismatch: 'The FairCoin network differs from the one this object uses.',
+  scope_missing:
+    'The credential does not carry the Oxy scope this route requires; `message` names it.',
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof ERROR_CODE_DESCRIPTIONS;

@@ -1,3 +1,4 @@
+import { billingRailId, billingReference } from '@peable.to/contracts';
 import {
   createFaircoinBillingService,
   faircoinBillingConfigurationSchema,
@@ -29,16 +30,11 @@ import { config } from '../../config';
 import type { Database } from '../../db/postgres';
 import { stripeBillingClient } from '../providers/stripe/client';
 import { providerModeOf } from '../providers/provider';
-import {
-  billingDeploymentSchema,
-  billingOwnerSchema,
-  billingReference,
-  BillingError,
-} from './contracts';
+import { billingDeploymentSchema, billingOwnerSchema, BillingError } from './contracts';
 import { createBillingService, type BillingCheckoutOperationReader } from './billingService';
 import { createStripeBillingProvider, type StripeBillingClient } from './stripeBillingProvider';
 import { createVerifiedBillingBindings } from './verifiedBindings';
-import { billingRailId, type BillingOwner } from './contracts';
+import type { BillingOwner } from './contracts';
 import { createMultiRailBillingService, type BillingRail } from './rails';
 import { loadPinnedSigningKey, reportMountedSigningKey } from './signingKey';
 import {
