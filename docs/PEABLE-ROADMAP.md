@@ -9,7 +9,11 @@
 Peable has three connected surfaces: the business payments platform (dashboard,
 APIs and services), the personal payment app, and SDKs that bring payment
 management and the **Pay with Peable** experience into other websites and apps.
-The [README](../README.md) defines their purpose and relationship.
+The [README](../README.md) defines their purpose and relationship. Peable is the
+public platform for fiat and FairCoin payments; processing providers are internal
+integrations. One card provider is implemented today. Additional providers are a
+planned extension, with method availability constrained by real provider and
+merchant capabilities. See the [provider boundary](integrations/payment-provider-boundary.md).
 
 FairCoin is a payment rail for sending, receiving and paying for goods or services.
 Peable, Oxy and Oxy ecosystem applications do not buy or sell FairCoin or offer
@@ -89,9 +93,18 @@ A read-only check on 2026-11-02 of Oxy's public
 `GET https://api.oxy.so/billing/personal-plans` returned HTTP 200 with
 `state: "unconfigured"`, `purchase: "unavailable"` and an empty `plans` list.
 That observation covers the then-current personal-plan catalogue, not availability
-of a standalone Mention Plus offer. Standalone Plus price, cadence, payment methods
-and catalogue activation remain pending. An unavailable catalogue must never fall
-back to an invented price or grant Plus locally.
+of a standalone Mention Plus offer. Subsequent approved standalone catalogue
+configuration records USD 599 minor units monthly and USD 5750 annually, with
+purchase unavailable. The earlier observation is historical, not the current
+standalone price. Visible prices do not authorize a payment or an access grant.
+
+The November 3 local implementation adds a reusable Bloom checkout, an optional
+Peable SDK UI adapter and Mention integration. UI preview scenarios use fixtures;
+local Test mode now performs an actual one-time card test payment from the normal
+Mention Plus entry. Signed settlement was verified, but that one-time test does
+not create a subscription or grant Plus. These local changes are not a claim of
+production activation or published package availability. See the dated
+[local test record](integrations/payment-provider-boundary.md#local-verification-2026-11-03).
 
 ## Delivery order
 
@@ -122,9 +135,10 @@ The previous Mention source integration bound a One-only offer and rendered a
 dialog. The product requirement now explicitly supersedes that assumption:
 standalone Mention Plus checkout, presented in a Bloom detached bottom sheet,
 with One remaining an additional source of Plus access. Updating the offer binding,
-backend entitlement flow and sheet is work in progress, not a claim of live purchase
-availability. The standalone price, cadence and supported rails must be approved
-before activation; no existing One price is a substitute.
+backend entitlement flow and sheet now has local implementation and test evidence,
+but live purchase availability remains disabled. The standalone catalogue has its
+own approved prices; no existing One price is a substitute. Enabled rails, fiscal
+configuration and the complete subscription/access lifecycle still require acceptance.
 
 The payment flow must retain a scoped operation key for interrupted-request
 recovery, open only authoritative checkout destinations when a hosted authorization
