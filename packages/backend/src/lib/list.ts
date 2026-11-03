@@ -58,6 +58,13 @@ export function dashboardQuery<S extends z.ZodRawShape, C extends z.core.$ZodObj
   return apiQuery.safeExtend(dashboardQueryScope as never) as never;
 }
 
+/** A contract's query for a core shared by both surfaces: the contract's own, and its dashboard copy. */
+export function surfaceQuery<S extends z.ZodRawShape, C extends z.core.$ZodObjectConfig>(
+  apiQuery: z.ZodObject<S, C>,
+) {
+  return { api: apiQuery, dashboard: dashboardQuery(apiQuery) } as const;
+}
+
 /** One list schema per surface, for a core shared by the API and the dashboard. */
 export function surfaceListQuery<S extends z.ZodRawShape>(filters: S) {
   return {

@@ -173,6 +173,14 @@ export const ERROR_CODE_DESCRIPTIONS = {
   card_declined: 'The card was declined.',
   promotion_code_first_time_only: "The promotion code is for a customer's first purchase only.",
   network_mismatch: 'The FairCoin network differs from the one this object uses.',
+  // Connect onboarding (ADR 0012 D3): the seller-facing refusals.
+  link_expired:
+    'The onboarding link has expired or was already used; `refresh_url` is where the seller gets a fresh one.',
+  wrong_seller:
+    'The onboarding link names a different Oxy account; sign in as the seller it was minted for.',
+  already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
+  key_in_use: 'The key already receives payments for another account.',
+  no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof ERROR_CODE_DESCRIPTIONS;

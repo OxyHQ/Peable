@@ -18,25 +18,26 @@
 //   CR) is prefixed with `'`; a number cell never is.
 // - RFC 4180: `,`, `\r\n`, quoted when needed. UTF-8.
 //
-// Import-free at runtime, so a browser reads it from the
-// `@peable.to/shared-types/reporting` subpath without the root barrel.
-import type { CurrencyCode } from './money';
-import type { FileObject } from './file';
+// Zod-free at runtime: a browser reads it from the
+// `@peable.to/shared-types/reporting` subpath without the root barrel, and its
+// one runtime import is the contract's zod-free vocabulary. The wire types are
+// the contract's (`@peable.to/contracts`), re-exported here as types.
+import type { ReportTypeId } from '@peable.to/contracts/vocabulary';
 
-/**
- * Every report Peable produces, by Stripe's versioned id: the trailing `.1` is
- * the column layout's version, so a layout can change under a new id without
- * changing a report a merchant already parses.
- */
-export const REPORT_TYPE_IDS = [
-  'payments.itemized.1',
-  'balance.summary.1',
-  'balance_transactions.itemized.1',
-  'payouts.itemized.1',
-  'refunds.itemized.1',
-  'disputes.itemized.1',
-] as const;
-export type ReportTypeId = (typeof REPORT_TYPE_IDS)[number];
+export type {
+  CreateReportRunParams,
+  DownloadReportParams,
+  ListReportRunsParams,
+  ReportRun,
+  ReportRunParameters,
+  ReportType,
+} from '@peable.to/contracts';
+export {
+  REPORT_RUN_STATUSES,
+  REPORT_TYPE_IDS,
+  type ReportRunStatus,
+  type ReportTypeId,
+} from '@peable.to/contracts/vocabulary';
 
 /**
  * The layout of each report: its name, every column it can carry and the ones
@@ -249,65 +250,3 @@ export const REPORT_TYPE_LAYOUTS: Readonly<
     ledger: false,
   },
 });
-
-/** `reporting.report_type` — what can be run, and over which interval data exists. */
-export interface ReportType {
-  /** `payments.itemized.1`, … */
-  id: ReportTypeId;
-  object: 'reporting.report_type';
-  livemode: boolean;
-  name: string;
-  /** The column layout's version — the trailing number of the id. */
-  version: number;
-  /** Every column `parameters.columns` may name, in the order they are written. */
-  columns: string[];
-  default_columns: string[];
-  /** The earliest `interval_start` with data (Unix seconds). */
-  data_available_start: number;
-  /** The latest `interval_end` a run may ask for: now — the data is live. */
-  data_available_end: number;
-  /** When the layout last changed. */
-  updated: number;
-}
-
-export const REPORT_RUN_STATUSES = ['pending', 'succeeded', 'failed'] as const;
-export type ReportRunStatus = (typeof REPORT_RUN_STATUSES)[number];
-
-/** What a run was asked to cover. */
-export interface ReportRunParameters {
-  /** Inclusive, Unix seconds. */
-  interval_start: number;
-  /** Exclusive, Unix seconds. */
-  interval_end: number;
-  /** The columns, in the layout's order; the report type's `default_columns` when absent. */
-  columns?: string[];
-  /** Only this currency. */
-  currency?: CurrencyCode;
-}
-
-/** `reporting.report_run` (`frr_…`). */
-export interface ReportRun {
-  id: string;
-  object: 'reporting.report_run';
-  livemode: boolean;
-  created: number;
-  report_type: ReportTypeId;
-  parameters: ReportRunParameters;
-  status: ReportRunStatus;
-  /** Why a `failed` run failed; `null` otherwise. */
-  error: string | null;
-  /** The CSV once `succeeded` — a `file_…` of purpose `finance_report_run`. */
-  result: FileObject | null;
-  succeeded_at: number | null;
-}
-
-/** `POST /v1/reporting/report_runs`. */
-export interface CreateReportRunParams {
-  report_type: ReportTypeId;
-  parameters: ReportRunParameters;
-}
-
-/** `GET /v1/reporting/report_runs`. */
-export interface ListReportRunsParams {
-  report_type?: ReportTypeId;
-}

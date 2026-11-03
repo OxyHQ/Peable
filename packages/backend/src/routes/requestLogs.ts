@@ -1,7 +1,10 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { REQUEST_LOG_METHODS, type RequestLogStatusFilter } from '@peable.to/shared-types';
+import {
+  expandOnlyQuery,
+  listRequestLogsQuery,
+  streamRequestLogsQuery,
+} from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -12,13 +15,7 @@ import {
   requestLogMatches,
 } from '../db/requestLogs/requestLogRepository';
 import { serveLiveStream } from '../lib/liveStream';
-import {
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
 import { toRequestLogDTO } from '../lib/serialize';
 import { LIVE_TAIL_CHANNELS } from '../services/liveTail';
@@ -29,20 +26,12 @@ import { resolveMerchant } from './paymentIntents';
  * (`lib/requestLog.ts` writes them). Read-only. `id` is the `Request-Id`.
  */
 
-/** `status=404` (one code) or `status=4xx` (a class). */
-const statusFilter = z.union([
-  z.coerce.number().int().min(100).max(599),
-  z.enum(['2xx', '3xx', '4xx', '5xx']),
-]) as z.ZodType<RequestLogStatusFilter, unknown>;
-
-const requestLogFilters = {
-  status: statusFilter.optional(),
-  method: z.enum(REQUEST_LOG_METHODS).optional(),
-} as const;
-
-const listRequestLogsQuery = surfaceListQuery(requestLogFilters);
-const retrieveRequestLogQuery = surfaceRetrieveQuery();
-const streamQuery = z.object(requestLogFilters).strict();
+/**
+ * Request schemas: the contract's (`@peable.to/contracts` `requestLogRoutes`);
+ * the dashboard surface accepts the same plus its `environment` toggle.
+ */
+const listQueries = surfaceQuery(listRequestLogsQuery);
+const retrieveQueries = surfaceQuery(expandOnlyQuery);
 
 /** `GET /v1/request_logs`, newest first, filtered by `status`, `method` and `created`. */
 export async function answerRequestLogList(
@@ -51,7 +40,7 @@ export async function answerRequestLogList(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, listRequestLogsQuery[surface]);
+  const query = parseQuery(req, res, listQueries[surface]);
   if (!query) return;
   const db = getDb();
   await answerList(req, res, {
@@ -83,7 +72,7 @@ export async function retrieveRequestLog(
     sendError(res, 400, 'invalid_request_error', 'id is required');
     return;
   }
-  if (!parseQuery(req, res, retrieveRequestLogQuery[surface])) return;
+  if (!parseQuery(req, res, retrieveQueries[surface])) return;
   const row = await findRequestLogForMerchant(getDb(), id, merchant.id);
   if (!row) {
     sendError(res, 404, 'invalid_request_error', 'request log not found', 'resource_missing');
@@ -102,7 +91,7 @@ export async function streamRequestLogs(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const query = parseQuery(req, res, streamQuery);
+  const query = parseQuery(req, res, streamRequestLogsQuery);
   if (!query) return;
   const db = getDb();
   await serveLiveStream(req, res, merchant, {

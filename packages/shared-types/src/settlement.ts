@@ -21,169 +21,25 @@
 // Peable deploy and not a merchant migration. No `acct_…`, no `tr_…` of
 // theirs, no provider name. A reviewer should be able to check that by what is
 // absent from these interfaces.
-import type { AccountRequirements } from './account';
 import type { CurrencyCode } from './money';
-import type { NetworkType } from './network';
 import type { PaymentIntent } from './paymentIntent';
 
-/** How a provider reports one capability on a seller's account. */
-export type CapabilityStatus = 'active' | 'pending' | 'inactive';
-
-/** Where one settlement stands. */
-export type TransferStatus = 'pending' | 'paid' | 'partially_reversed' | 'reversed' | 'failed';
-
-/** Where one reversal of a settlement stands. */
-export type TransferReversalStatus = 'pending' | 'succeeded' | 'failed';
-
-/**
- * Which rails a seller's account was opened for (ADR 0012 D1).
- *
- * One seller is ONE `ca_…`: `card` is the provider account a marketplace
- * settles to by transfer, `faircoin` is the seller's own watch-only key that
- * on-behalf FairCoin payments derive their addresses from.
- */
-export type ConnectedAccountRail = 'card' | 'faircoin';
-
-/**
- * Where a seller's FairCoin half stands.
- *
- * `pending` — the platform opened it and the seller has not registered a key
- * yet; an on-behalf payment is refused (`account_not_ready`). `active` — the
- * seller registered their key; payments derive addresses from it.
- */
-export type ConnectedAccountFaircoinStatus = 'pending' | 'active';
-
-/**
- * The FairCoin half of a seller's account.
- *
- * The seller's xpub is deliberately ABSENT (ADR 0012 D6): an account xpub
- * reveals every address of that account, so a platform holding it would learn
- * the seller's whole history and balance. Nothing a platform does needs it —
- * each payment carries its own address.
- */
-export interface ConnectedAccountFaircoin {
-  /** The chain the seller is paid on. Fixed when the platform opened the half. */
-  network: NetworkType;
-  status: ConnectedAccountFaircoinStatus;
-  /** The Oxy user who may register the key — and, once `active`, who did. */
-  oxy_user_id: string;
-  /** When the seller registered their key. `null` while `pending`. */
-  registered_at: number | null;
-}
-
-export interface ConnectedAccount {
-  id: string;
-  object: 'connected_account';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
-  livemode: boolean;
-  /** The merchant's OWN id for this seller — how they address it. */
-  external_ref: string;
-  /** Which halves this account has. Never empty. */
-  rails: readonly ConnectedAccountRail[];
-  /**
-   * The FairCoin half, or `null` when the platform never opened one.
-   * Readiness for FairCoin is `faircoin?.status === 'active'`; `payable` below
-   * is about the CARD half's settlements and says nothing about FairCoin.
-   */
-  faircoin: ConnectedAccountFaircoin | null;
-  /**
-   * ISO 3166-1 alpha-2, upper-case. `null` on a FairCoin-only seller, which has
-   * no card half and was never asked for one (ADR 0012 D1).
-   */
-  country: string | null;
-  default_currency: string | null;
-  /**
-   * Whether this seller can receive a CARD settlement (a transfer) right now.
-   * Always `false` on a FairCoin-only seller.
-   *
-   * A CONVENIENCE, not the authority: every field it is derived from is here
-   * too, and a marketplace with its own readiness policy reads those instead.
-   * Offering only this boolean would make the gateway the authority on a
-   * question that belongs to the merchant.
-   */
-  payable: boolean;
-  payouts_enabled: boolean;
-  charges_enabled: boolean;
-  /**
-   * `null` means the capability was never REQUESTED, which is a different fact
-   * from the provider declining it (`inactive`). Collapsing the two makes "why
-   * is this seller stuck" unanswerable.
-   */
-  transfers_capability: CapabilityStatus | null;
-  card_payments_capability: CapabilityStatus | null;
-  /**
-   * What the provider is waiting on — requirement IDENTIFIERS, never their
-   * values (the gateway records that a seller owes a document; it never learns
-   * what the document says) — and the provider's own `disabled_reason`. The
-   * same shape as `Account.requirements`.
-   */
-  requirements: AccountRequirements;
-  last_synced_at: number | null;
-  created: number;
-  updated_at: number;
-}
-
-export interface Transfer {
-  id: string;
-  object: 'transfer';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
-  livemode: boolean;
-  /** The merchant's OWN id for what this settles. Their idempotency. */
-  external_ref: string;
-  /** The seller's `ca_…` — never their account id at the provider — or the object, expanded. */
-  connected_account: string | ConnectedAccount;
-  /** The `pi_…` this settlement was funded by, or the {@link PaymentIntent}, expanded. */
-  payment_intent: string | PaymentIntent;
-  amount: string;
-  currency: string;
-  /**
-   * CUMULATIVE, in the same units as `amount` — never one reversal's figure.
-   *
-   * A caller deciding whether a settlement is fully reversed must not have to
-   * add up reversals it may not have all seen, which is why this is the
-   * provider's own total rather than a sum of the reversals below.
-   */
-  amount_reversed: string;
-  status: TransferStatus;
-  failure_message: string | null;
-  created: number;
-  updated_at: number;
-}
-
-/**
- * One reversal operation, returned beside the settlement it acted on.
- *
- * It exists as an object because an AMOUNT IS NOT AN IDENTITY: two reversals of
- * one settlement for the same amount are two operations, and a caller needs to
- * be able to tell which one a response is about.
- */
-export interface TransferReversal {
-  id: string;
-  object: 'transfer_reversal';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
-  livemode: boolean;
-  /** The merchant's own id for this reversal — their `Idempotency-Key`. */
-  external_ref: string;
-  amount: string;
-  currency: string;
-  status: TransferReversalStatus;
-  failure_message: string | null;
-  created: number;
-}
-
-/** What `POST /v1/transfers/:id/reversals` answers: the transfer, and the leg. */
-export interface TransferWithReversal extends Transfer {
-  reversal: TransferReversal;
-}
+// Connected accounts, transfers and their reversals: the contract's
+// (`@peable.to/contracts`), re-exported here as types.
+export type {
+  ConnectedAccount,
+  ConnectedAccountFaircoin,
+  Transfer,
+  TransferReversal,
+  TransferWithReversal,
+} from '@peable.to/contracts';
+export type {
+  AccountCapabilityStatus as CapabilityStatus,
+  ConnectedAccountFaircoinStatus,
+  ConnectedAccountRail,
+  TransferReversalStatus,
+  TransferStatus,
+} from '@peable.to/contracts/vocabulary';
 
 /**
  * What a payment actually came to, as the PROVIDER reports it.

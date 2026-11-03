@@ -23,15 +23,18 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import {
-  CURRENCY_CODES,
+  type CurrencyCode,
+  createReportRunParams,
+  downloadReportQuery,
+  emptyQuery,
+  expandOnlyQuery,
+  listReportRunsQuery,
   REPORT_TYPE_IDS,
-  REPORT_TYPE_LAYOUTS,
   type ReportType,
   type ReportTypeId,
-} from '@peable.to/shared-types';
+} from '@peable.to/contracts';
+import { REPORT_TYPE_LAYOUTS } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -47,14 +50,7 @@ import { requireAuthenticated, sendError, sendValidationError, wrap } from '../l
 import { idempotent, runIdempotent } from '../lib/idempotency';
 import { newId } from '../lib/ids';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  completeList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, completeList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
 import { toReportRunDTO } from '../lib/serializeReporting';
 import { toUnix } from '../lib/time';
@@ -74,45 +70,14 @@ import { resolveMerchant } from './paymentIntents';
 /** When the current layouts (`.1`) were defined — `ReportType.updated`. */
 const LAYOUTS_UPDATED = Date.UTC(2026, 10, 3) / 1000;
 
-const unixSeconds = z.number().int().nonnegative();
-
-const createBodySchema = z
-  .object({
-    report_type: z.enum(REPORT_TYPE_IDS),
-    parameters: z
-      .object({
-        interval_start: unixSeconds,
-        interval_end: unixSeconds,
-        columns: z.array(z.string().min(1).max(64)).min(1).max(64).optional(),
-        currency: z.enum(CURRENCY_CODES).optional(),
-      })
-      .strict(),
-  })
-  .strict();
-
-/** A download's query: a run's `parameters`, spelled as a query string. */
-const downloadShape = {
-  interval_start: z.coerce.number().int().nonnegative(),
-  interval_end: z.coerce.number().int().nonnegative(),
-  columns: z
-    .preprocess(
-      (value) => (typeof value === 'string' ? [value] : value),
-      z.array(z.string().min(1).max(64)).min(1).max(64),
-    )
-    .optional(),
-  currency: z.enum(CURRENCY_CODES).optional(),
-};
-const downloadQuery = {
-  api: z.object(downloadShape).strict(),
-  dashboard: z.object({ ...downloadShape, environment: z.enum(OXY_SERVICE_ENVIRONMENTS) }).strict(),
-} as const;
-
-const listRunsQuery = surfaceListQuery({ report_type: z.enum(REPORT_TYPE_IDS).optional() });
-const retrieveQuery = surfaceRetrieveQuery();
-const reportTypesQuery = {
-  api: z.object({}).strict(),
-  dashboard: z.object({ environment: z.enum(OXY_SERVICE_ENVIRONMENTS) }).strict(),
-} as const;
+/**
+ * Request schemas: the contract's (`@peable.to/contracts` `reportingRoutes`);
+ * the dashboard surface accepts the same plus its `environment` toggle.
+ */
+const downloadQuery = surfaceQuery(downloadReportQuery);
+const listRunsQuery = surfaceQuery(listReportRunsQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
+const reportTypesQuery = surfaceQuery(emptyQuery);
 
 function paramId(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -204,7 +169,7 @@ async function admitReportRequest(
     readonly interval_start: number;
     readonly interval_end: number;
     readonly columns?: readonly string[] | undefined;
-    readonly currency?: (typeof CURRENCY_CODES)[number] | undefined;
+    readonly currency?: CurrencyCode | undefined;
   },
   paramPrefix: 'parameters' | null,
 ): Promise<ReportRequest | null> {
@@ -298,7 +263,7 @@ export async function createReportRun(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = createBodySchema.safeParse(req.body ?? {});
+  const parsed = createReportRunParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
