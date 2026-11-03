@@ -31,6 +31,7 @@ export type PeableMethodDetails =
       wallet?: {
         balanceLabel: string;
         remainingLabel: string;
+        amountNeededLabel?: string;
         canPay: boolean;
         onOpen(): void;
         onSelect(): void;
@@ -132,6 +133,13 @@ export function PeableMethodContent({
             value={details.wallet.remainingLabel}
             showChevron={false}
           />
+          {details.wallet.amountNeededLabel && (
+            <GroupedSectionItem
+              title={label('faircoin.amountNeeded')}
+              value={details.wallet.amountNeededLabel}
+              showChevron={false}
+            />
+          )}
           {details.wallet.topUp && (
             <GroupedSectionItem
               title={label('faircoin.addFunds')}
