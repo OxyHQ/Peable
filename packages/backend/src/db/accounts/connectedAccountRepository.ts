@@ -14,11 +14,18 @@ import { assertWatchOnly } from '../../services/watchOnly';
 import { connectedAccounts, merchants } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { ProviderId } from '../../services/providers/provider';
 
 export type CapabilityStatus = 'active' | 'pending' | 'inactive';
 
 export interface ConnectedAccountRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly publicId: string;
   readonly merchantId: string;
@@ -73,6 +80,7 @@ export function faircoinStatusOf(row: ConnectedAccountRow): FaircoinHalfStatus |
 }
 
 const ACCOUNT_COLUMNS = {
+  livemode: merchantLivemodeOf(connectedAccounts.merchantId),
   id: connectedAccounts.id,
   publicId: connectedAccounts.publicId,
   merchantId: connectedAccounts.merchantId,
@@ -505,11 +513,24 @@ export async function findAccountsToSync(
   db: DatabaseOrTransaction,
   provider: ProviderId,
   limit: number,
+  /**
+   * The modes this deployment can read accounts in (ADR 0017), as `livemode`
+   * values. An account of a mode with no key is left out rather than read and
+   * refused: at the front of the queue it would stop every pass before the
+   * accounts of the mode that IS configured were reached.
+   */
+  livemodes: readonly boolean[],
 ): Promise<readonly ConnectedAccountRow[]> {
+  if (livemodes.length === 0) return [];
   const rows = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
-    .where(eq(connectedAccounts.provider, provider))
+    .where(
+      and(
+        eq(connectedAccounts.provider, provider),
+        inArray(merchantLivemodeOf(connectedAccounts.merchantId), [...livemodes]),
+      ),
+    )
     .orderBy(
       sql`${connectedAccounts.lastSyncedAt} asc nulls first`,
       asc(connectedAccounts.createdAt),

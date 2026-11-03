@@ -44,6 +44,7 @@ const { LinkRoute } = await import('../LinkRoute');
 const LINK: PublicPaymentLink = {
   id: 'link_test123',
   object: 'payment_link',
+  livemode: false,
   amount: '100000000',
   currency: 'FAIR',
   rail: 'faircoin',
@@ -56,6 +57,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: 'pi_open789',
     object: 'payment_intent',
+    livemode: false,
     status: 'created',
     rail: 'faircoin',
     amount: '100000000',

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.10.0 — test and live in one deployment (breaking)
+
+The gateway holds a test and a live provider key side by side (ADR 0017); the
+credential's environment selects the mode (`production` → live, every other
+environment → test), and nothing the SDK sends chooses it.
+
+- `livemode: boolean` on every object: `PaymentIntent`, `PaymentLink` (and the
+  public link), `CheckoutSession` (and the public session), `Refund`,
+  `Transfer`, `TransferReversal`, `Dispute`, `ConnectedAccount`, `AccountLink`,
+  `Settlement`, `WebhookDelivery`, `Merchant` and `BillingObservation`. It is
+  the mode of the object's merchant and never changes for an object.
+- The webhook event envelope carries `livemode` too. **`webhooks.constructEvent`
+  now requires it**: a signed event without a boolean `livemode` is rejected
+  with `PeableSignatureVerificationError`, and a `billing.observation.updated`
+  whose observation names a different mode than its envelope is rejected as
+  well. Upgrade the gateway before (or with) this SDK; events from an older
+  gateway do not carry the field.
+- Card operations in a mode the deployment has no key for answer `503`
+  (`PeableApiError`), like any unavailable rail. The former `403` for a
+  credential of "the other" mode no longer exists.
+- Requires `@peable.to/shared-types` 0.8.0.
+
 ## 0.9.0 — lists, expand and metadata (breaking)
 
 - A reference to another object is named without `_id` and is expandable:

@@ -7,7 +7,7 @@ export const LOCAL_TEST_CARD_CONFIGURATION = 'pmc_1UXZRQAofUef123L4QGpwlFQ';
 export async function configureLocalStripeCardEntry() {
   assertLocalStripeTestEnvironment(process.env);
   const { getStripeClient } = await import('../services/providers/stripe/client');
-  const client = getStripeClient();
+  const client = getStripeClient('test');
   const account = await client.accounts.retrieve(null);
   if (
     account.id !== 'acct_1USWGhAofUef123L' ||
@@ -39,6 +39,7 @@ export async function configureLocalStripeCardEntry() {
   const { LocalSubscriptionStripeProvider } = await import('./stripeTestEmbeddedSubscription');
   configureStripePaymentProvider(
     {
+      mode: 'test',
       paymentMethodConfiguration: configuration.id,
     },
     (options) => new LocalSubscriptionStripeProvider(options),

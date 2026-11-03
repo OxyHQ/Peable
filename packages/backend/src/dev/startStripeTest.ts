@@ -14,7 +14,7 @@ async function run() {
     throw new Error('Configure and review test billing separately before enabling a cohort');
   const { getStripeClient } = await import('../services/providers/stripe/client');
   stage = 'Stripe Accounts read';
-  const account = await getStripeClient().accounts.retrieve(null);
+  const account = await getStripeClient('test').accounts.retrieve(null);
   if (account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT) {
     throw new Error('Stripe account does not match the explicitly approved local test account');
   }

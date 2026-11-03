@@ -65,7 +65,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       oxyAppId: merchant.oxyAppId,
       environment: merchant.environment,
     };
-    const tax = createTaxService({ db: gatewayDb(), provider });
+    const tax = createTaxService({ db: gatewayDb(), providers: [provider] });
     await tax.updateSettings(merchant, {
       legal_name: 'Seller, Inc.',
       head_office: { country: 'US' },

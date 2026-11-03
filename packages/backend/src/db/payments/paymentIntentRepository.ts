@@ -13,12 +13,19 @@ import { connectedAccounts, paymentIntents } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import type { DatabaseOrTransaction } from '../postgres';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 
 /**
  * Reads and writes for `payment_intents` — the money record.
  */
 
 export interface PaymentIntentRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly paymentLinkId?: string | null;
   readonly publicId: string;
@@ -68,6 +75,7 @@ export interface PaymentIntentRow {
  * IS here — the payer needs it, and `verifySecret` compares against it.
  */
 const INTENT_COLUMNS = {
+  livemode: merchantLivemodeOf(paymentIntents.merchantId),
   paymentLinkId: paymentIntents.paymentLinkId,
   id: paymentIntents.id,
   publicId: paymentIntents.publicId,

@@ -20,6 +20,7 @@ const TARGET: WebhookTarget = {
 const INTENT: PaymentIntent = {
   id: 'pi_0000000000000000000000a1',
   object: 'payment_intent',
+  livemode: false,
   status: 'settled',
   rail: 'faircoin',
   amount: '100000000',

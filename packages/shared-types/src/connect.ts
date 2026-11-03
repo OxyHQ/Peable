@@ -44,6 +44,11 @@ export interface ConnectOnboardingComplete {
  */
 export interface AccountLink {
   object: 'account_link';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   url: string;
   expires_at: number;
 }

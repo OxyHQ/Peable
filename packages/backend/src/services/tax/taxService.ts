@@ -197,8 +197,12 @@ type CalculationRow = typeof taxCalculations.$inferSelect;
 
 export interface TaxServiceOptions {
   db: Database;
-  /** The platform's provider account; absent when no provider is configured. */
-  provider?: TaxProvider;
+  /**
+   * The platform's provider account, once per mode it holds a key for
+   * (ADR 0017). Empty when none is configured; a merchant is only ever
+   * calculated by the one whose `livemode` matches its environment.
+   */
+  providers?: readonly TaxProvider[];
   ipHashSalt?: string;
   now?: () => Date;
 }
@@ -208,7 +212,8 @@ export interface TaxServiceOptions {
  * passed in, which the route resolved from its credential or dashboard access.
  */
 export function createTaxService(options: TaxServiceOptions) {
-  const { db, provider } = options;
+  const { db } = options;
+  const providers = options.providers ?? [];
   const now = options.now ?? (() => new Date());
 
   async function settingsRow(merchant: MerchantRow, tx: DatabaseOrTransaction = db) {
@@ -220,10 +225,13 @@ export function createTaxService(options: TaxServiceOptions) {
   }
   /** The provider this merchant's registered sales are calculated by, if any. */
   function providerFor(merchant: MerchantRow, row: SettingsRow | undefined) {
-    if (!provider || row?.calculationAccount !== 'platform') return undefined;
-    // One key, one mode: a test merchant never reaches a live provider account.
-    if (provider.livemode !== (merchant.environment === 'production')) return undefined;
-    return provider;
+    if (row?.calculationAccount !== 'platform') return undefined;
+    // Selected by the merchant's mode: a test merchant never reaches the live
+    // provider account, and a production one never the test account.
+    return providerInModeOf(merchant);
+  }
+  function providerInModeOf(merchant: MerchantRow) {
+    return providers.find((each) => each.livemode === (merchant.environment === 'production'));
   }
   function settingsDto(merchant: MerchantRow, row: SettingsRow | undefined): TaxSettings {
     return {
@@ -524,7 +532,8 @@ export function createTaxService(options: TaxServiceOptions) {
             or(isNull(taxRegistrations.expiresAt), gt(taxRegistrations.expiresAt, now())),
           ),
         );
-      const account = approval.officialApplication && provider ? 'platform' : 'none';
+      const account =
+        approval.officialApplication && providerInModeOf(merchant) ? 'platform' : 'none';
       const calculating = providerFor(merchant, { ...current, calculationAccount: account });
       if ((pending.length || live.length) && !calculating)
         throw new TaxError('approval_requires_provider');

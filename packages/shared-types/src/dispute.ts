@@ -29,6 +29,11 @@ export type DisputeStatus = 'needs_response' | 'under_review' | 'won' | 'lost';
 export interface Dispute {
   id: string;
   object: 'dispute';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The disputed payment's `pi_…`, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
   payment_intent: string | PaymentIntent;
   /**

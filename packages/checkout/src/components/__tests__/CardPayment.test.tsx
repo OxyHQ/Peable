@@ -83,6 +83,7 @@ function cardIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: 'pi_card_1',
     object: 'payment_intent',
+    livemode: false,
     status: 'created',
     rail: 'card',
     amount: '4200',

@@ -31,6 +31,16 @@
  * either secret on either path would mean a leaked platform secret could forge a
  * connected-account event.
  *
+ * ## One path per scope, both modes on each (ADR 0017)
+ *
+ * Stripe keeps test-mode and live-mode endpoints apart, each with its own
+ * secret, and both may point at these same two URLs. The path decides the
+ * SCOPE; the mode is decided by which mode's secret verifies the delivery
+ * (`services/providers/ingress.ts`), and an event whose own `livemode`
+ * disagrees with that secret, or whose mode has no key here, is refused with
+ * 400. So the operator registers four endpoints — platform and connect, in
+ * each mode — against two paths, and nothing new is routed.
+ *
  * ## No Oxy auth, and no rate limiter
  *
  * No session, no bearer, no service token: Stripe is not an Oxy principal and
@@ -66,11 +76,6 @@ function respond(res: Response, result: IngressResult): void {
     case 'duplicate':
       // 200 means STORED. Never processed — see `services/providers/ingress.ts`.
       res.status(200).json({ received: true, duplicate: result.kind === 'duplicate' });
-      return;
-    case 'ignored':
-      // Authentic and correctly refused. 200 so Stripe stops retrying something
-      // that will never be accepted; the `ignored` field says which condition.
-      res.status(200).json({ received: false, ignored: result.reason });
       return;
     case 'rejected':
       // 400 and nothing persisted. Not 401: Stripe treats any non-2xx as a

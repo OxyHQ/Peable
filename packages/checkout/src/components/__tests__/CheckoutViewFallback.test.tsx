@@ -42,6 +42,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: 'pi_fallback1',
     object: 'payment_intent',
+    livemode: false,
     // `rail` became a required discriminator on the contract (ADR 0001): it is
     // what decides whether `address`/`network` mean anything. This fixture has
     // both and a txid, so it is a chain payment.

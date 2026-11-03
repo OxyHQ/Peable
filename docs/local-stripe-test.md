@@ -14,9 +14,11 @@ test payment. No production database, live key or production NODE_ENV is accepte
 Store runtime values only in ignored `.env.local` with mode0600. Required names:
 
 - `DATABASE_URL`, `PORT=4310`, `PEABLE_ALLOWED_ORIGINS` for the local frontend.
-- `STRIPE_ENABLED=true`, `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY`.
-- `STRIPE_WEBHOOK_SECRET`, `STRIPE_CONNECT_WEBHOOK_SECRET` from the two local
-  forwarding destinations. Do not substitute placeholder signing secrets.
+- `STRIPE_ENABLED=true`, `STRIPE_SECRET_KEY_TEST`, `STRIPE_PUBLISHABLE_KEY_TEST`.
+- `STRIPE_WEBHOOK_SECRET_TEST`, `STRIPE_CONNECT_WEBHOOK_SECRET_TEST` from the two
+  local forwarding destinations. Do not substitute placeholder signing secrets.
+- No `STRIPE_*_LIVE` variable at all: the harness refuses to start with any
+  live-mode setting present (ADR 0017).
 - `PEABLE_TEST_STRIPE_ACCOUNT`, verified against the credential's own account;
   `PEABLE_TEST_RUN_ID`, a stable short identifier for this attempt.
 

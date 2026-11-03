@@ -3,6 +3,7 @@ import type { WebhookDeliveryStatus, WebhookEventType } from '@peable.to/shared-
 import { paymentIntents, webhookDeliveries } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 import { keyset, type KeysetPage } from '../keyset';
+import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 
 /**
  * READS for `webhook_deliveries` — what the merchant API and the dashboard ask
@@ -18,6 +19,12 @@ import { keyset, type KeysetPage } from '../keyset';
  */
 
 export interface WebhookDeliveryRow {
+  /**
+   * The mode this row lives in — its merchant's, read in the same statement
+   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
+   * it is sent with, and is what the wire calls `livemode`.
+   */
+  readonly livemode: boolean;
   readonly id: string;
   readonly merchantId: string;
   /** `null` when the event is not about a payment — see the table comment. */
@@ -39,6 +46,7 @@ export interface WebhookDeliveryRow {
 }
 
 const DELIVERY_COLUMNS = {
+  livemode: merchantLivemodeOf(webhookDeliveries.merchantId),
   id: webhookDeliveries.id,
   merchantId: webhookDeliveries.merchantId,
   paymentIntentId: webhookDeliveries.paymentIntentId,

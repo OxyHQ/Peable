@@ -25,7 +25,7 @@ async function run() {
       output,
       JSON.stringify({
         apiUrl: 'http://127.0.0.1:4310',
-        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY,
+        publishableKey: process.env.STRIPE_PUBLISHABLE_KEY_TEST,
         intent: {
           ...toPaymentIntentDTO(created.intent),
           client_secret: created.intent.clientSecret,

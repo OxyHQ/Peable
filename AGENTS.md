@@ -394,14 +394,29 @@ made those rows vanish from the log a merchant consults to find out whether
 they were told something. An account acts through the provider on its OWN row,
 never `resolveCardProvider()` — that is only for opening a new one.
 
-**Test/live is enforced against the KEY MODE, not by row.** A deployment holds
-ONE `STRIPE_SECRET_KEY` and therefore serves one mode;
-`services/providers/environmentGuard.ts` refuses a credential whose environment
-disagrees, at the entry of every money route AND in the service beneath it.
-Separating merchants by environment is isolation of data, not of money. Peable
-holds the provider credentials and merchants supply none — ADR 0009, which
-supersedes ADR 0001 D3 and leaves the merchant-of-record decision explicitly
-open.
+**Test and live live in ONE deployment, and the credential selects the key
+(ADR 0017).** `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE` (each with
+its own publishable key and platform/connect endpoint secrets, all `_TEST`/`_LIVE`)
+are each optional; there is no `STRIPE_SECRET_KEY` and no fallback to one, and
+the gateway refuses to BOOT on a key whose prefix contradicts its variable's
+mode. The registry is keyed by `(provider, mode)`, and
+`services/providers/environmentGuard.ts` is the SELECTOR: `production` ⟺ live,
+every other environment ⟺ test, before the first provider call of a new
+operation. An operation on a STORED object — refund, cancel, transfer,
+reversal, dispute response, settlement read, account refresh, sweeps — resolves
+by the row's `livemode` (`selectStoredProvider`), which every repository reads
+from the row's merchant in the same statement (`db/merchants/merchantLivemode.ts`),
+never by a process-wide default. A mode with no key is a card rail that is off:
+503, and nothing falls through to the other key. Inbound Stripe webhooks arrive
+on the same two paths for both modes: the mode whose secret verifies a delivery
+is its mode, an event whose `livemode` disagrees with that secret (or whose mode
+has no key) is refused 400, and the drain refuses an event of a key-less mode or
+one naming an object of the other mode. Tax holds one Stripe Tax provider per
+configured mode; a billing cohort uses the key of the mode its `deployment`
+names. Every merchant-scoped DTO and the event envelope carry `livemode`.
+Peable holds the provider credentials and merchants supply none — ADR 0009,
+which supersedes ADR 0001 D3 and leaves the merchant-of-record decision
+explicitly open.
 
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells

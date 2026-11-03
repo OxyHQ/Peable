@@ -26,14 +26,13 @@ import { getDb } from '../../db/postgres';
 import { newId } from '../../lib/ids';
 import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
 import { enqueueConnectedAccountWebhook } from '../intentTransition';
-import { assertEnvironmentMatchesProvider } from '../providers/environmentGuard';
+import { selectCardProvider, selectStoredProvider } from '../providers/environmentGuard';
 import {
   isAccountHoldingProvider,
   type AccountHoldingProvider,
   type PaymentProvider,
   type ProviderAccountSnapshot,
 } from '../providers/provider';
-import { resolveCardProvider, resolveProvider } from '../providers/registry';
 
 /** The card rail is off, or its provider cannot hold accounts. */
 export class AccountsUnavailableError extends Error {
@@ -116,7 +115,8 @@ export function toAccountSnapshot(snapshot: ProviderAccountSnapshot): AccountSna
 }
 
 /**
- * The adapter that can act on an EXISTING account — the one that opened it.
+ * The adapter that can act on an EXISTING account — the one that opened it,
+ * in the mode it was opened in (ADR 0017: the row's `livemode`, its merchant's).
  *
  * Read from the row rather than from `resolveCardProvider()`, which is what
  * this used to do everywhere. That answered correctly for as long as there was
@@ -130,19 +130,25 @@ export function toAccountSnapshot(snapshot: ProviderAccountSnapshot): AccountSna
  * existed; nothing was reading it.
  */
 function requireProviderFor(account: CardConnectedAccountRow): AccountHoldingProvider {
-  return requireAccountProvider(resolveProvider(account.provider), account.provider);
+  return requireAccountProvider(
+    selectStoredProvider(account.provider, account.livemode),
+    account.provider,
+  );
 }
 
 /**
  * The adapter for a NEW account, which has no row to read a provider off yet.
  *
- * This is the one place `resolveCardProvider()` is still right: choosing which
- * provider a new seller is onboarded at is a deployment decision, and the
- * registry is where that decision lives (it is also where a per-merchant or
- * per-country choice would go when there is a second one).
+ * This is the one place the card provider is SELECTED rather than read off a
+ * row: choosing which provider a new seller is onboarded at is a deployment
+ * decision the registry owns, and the mode is the credential's (ADR 0017) — a
+ * development credential opens a TEST account, and no path from it reaches the
+ * live key. That matters more here than anywhere: a connected account cannot be
+ * deleted, so one opened in the wrong mode is a real account left behind,
+ * mailing requirements to a real person, forever.
  */
-function requireDefaultAccountProvider(): AccountHoldingProvider {
-  return requireAccountProvider(resolveCardProvider(), 'card');
+function requireDefaultAccountProvider(environment: MerchantEnvironment): AccountHoldingProvider {
+  return requireAccountProvider(selectCardProvider(environment), 'card');
 }
 
 function requireAccountProvider(
@@ -177,7 +183,7 @@ export interface FaircoinHalfRequest {
 
 export type EnsureAccountInput = {
   readonly merchantId: string;
-  /** The asking credential's environment — checked against the provider's mode. */
+  /** The asking credential's environment — it selects the provider's mode. */
   readonly environment: MerchantEnvironment;
   /** The MERCHANT's own id for this seller. The address, and the idempotency. */
   readonly externalRef: string;
@@ -228,12 +234,6 @@ export interface EnsureAccountResult {
 export async function ensureConnectedAccount(
   input: EnsureAccountInput,
 ): Promise<EnsureAccountResult> {
-  // A connected account opened under the wrong mode is the least recoverable
-  // mistake on this surface: the object cannot be deleted, so a development
-  // credential that opened a LIVE Express account leaves a real one behind,
-  // generating real requirement emails to a real person, forever. Only the
-  // CARD half reaches a provider, so only it is checked against the key mode.
-  if (input.card) assertEnvironmentMatchesProvider(input.environment);
   // The merchants' test/live firewall, applied to sellers: a leaked test
   // credential can never point a seller's payments at mainnet.
   if (
@@ -291,14 +291,18 @@ export async function ensureConnectedAccount(
 
 /** Open the provider account for a seller. Never writes a row. */
 async function openCardHalf(
-  input: { readonly merchantId: string; readonly externalRef: string },
+  input: {
+    readonly merchantId: string;
+    readonly externalRef: string;
+    readonly environment: MerchantEnvironment;
+  },
   card: CardHalfRequest,
 ): Promise<{
   provider: AccountHoldingProvider['id'];
   country: string;
   snapshot: ProviderAccountSnapshot;
 }> {
-  const provider = requireDefaultAccountProvider();
+  const provider = requireDefaultAccountProvider(input.environment);
   const country = card.country.toUpperCase();
   // Derived from the merchant and their own seller id, never random: a retry
   // after a timeout presents the same key and the provider hands back the
@@ -349,7 +353,6 @@ async function completeHalves(
   // A card half is opened only when it was asked for and is missing — a card
   // seller converging is EXACTLY the pre-ADR-0012 path: returned unchanged.
   if (input.card && !hasCardHalf(account)) {
-    assertEnvironmentMatchesProvider(input.environment);
     const card = await openCardHalf(input, input.card);
     const attached = await attachCardHalf(db, account.id, {
       provider: card.provider,
@@ -434,19 +437,13 @@ function sameValue(before: unknown, after: unknown): boolean {
  */
 export async function refreshConnectedAccount(
   account: ConnectedAccountRow,
-  environment?: MerchantEnvironment,
 ): Promise<ConnectedAccountRow> {
-  // OPTIONAL, and that is a decision rather than an oversight. A merchant-
-  // initiated refresh passes the credential's environment and is checked; the
-  // event drain and the staleness sweep reach this with an account row and no
-  // credential at all, and refusing them would stop readiness ever arriving on
-  // a correctly-configured deployment. Reading an account moves no money, which
-  // is what makes the asymmetry safe — `ensureConnectedAccount` and
-  // `createAccountLink`, which do, both require it.
+  // No credential is needed to pick the key: the event drain and the staleness
+  // sweep reach this with an account row and no credential at all, and the row
+  // already says which mode opened it (ADR 0017).
   // A FairCoin-only seller has nothing at a provider to read: its readiness is
   // the key it registered, which is already the row. Returned as it is.
   if (!hasCardHalf(account)) return account;
-  if (environment !== undefined) assertEnvironmentMatchesProvider(environment);
   const provider = requireProviderFor(account);
   const snapshot = await provider.getAccount(account.providerAccountId);
 
@@ -470,8 +467,6 @@ export async function refreshConnectedAccount(
 }
 
 export interface AccountLinkInput {
-  /** The asking credential's environment — checked against the provider's mode. */
-  readonly environment: MerchantEnvironment;
   readonly account: ConnectedAccountRow;
   readonly refreshUrl: string;
   readonly returnUrl: string;
@@ -488,7 +483,6 @@ export async function createAccountLink(
   input: AccountLinkInput,
 ): Promise<{ url: string; expiresAt: Date }> {
   if (!hasCardHalf(input.account)) throw new AccountRailMissingError('card');
-  assertEnvironmentMatchesProvider(input.environment);
   const provider = requireProviderFor(input.account);
   return provider.accountLink({
     providerAccountId: input.account.providerAccountId,

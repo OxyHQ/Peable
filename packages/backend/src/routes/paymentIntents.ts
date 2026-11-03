@@ -30,7 +30,6 @@ import {
   RailUnavailableError,
 } from '../services/createIntent';
 import { findAccountByPublicId } from '../db/accounts/connectedAccountRepository';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { redactProviderMessage } from '../services/providers/redact';
 import { cancelCardPaymentAtProvider } from '../services/cardCancellation';
 import { reconcileIntentWithProvider } from '../services/intentReconciliation';
@@ -39,7 +38,6 @@ import { applyEvent } from '../services/intentState';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import {
-  sendEnvironmentMismatch,
   sendError,
   wrap,
   requireServiceApp,
@@ -374,12 +372,6 @@ export function createPaymentIntentsRouter(deps: {
           return;
         }
         if (sendConnectedAccountRefusal(res, err)) return;
-        // A development or staging credential asking a live deployment for a
-        // card payment. Refused before Stripe was called at all.
-        if (err instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, err.message);
-          return;
-        }
         // The key names a payment with DIFFERENT terms. Answering 200 with the
         // stored intent would tell the caller their new payment exists, and they
         // would wait for money against an amount they never asked for. The same

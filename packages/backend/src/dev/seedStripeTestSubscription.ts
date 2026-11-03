@@ -28,7 +28,7 @@ async function run() {
   const { newId } = await import('../lib/ids');
   const { configureBillingRuntime } = await import('../services/billing/configuredBilling');
   const { createVerifiedBillingBindings } = await import('../services/billing/verifiedBindings');
-  const client = getStripeClient();
+  const client = getStripeClient('test');
   stage = 'Stripe Accounts read';
   const account = await client.accounts.retrieve(null);
   if (account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT)
@@ -69,7 +69,7 @@ async function run() {
     if (!runtime) throw new Error('Local billing runtime unavailable');
     const bindings = createVerifiedBillingBindings({
       db,
-      client: stripeBillingClient(),
+      client: stripeBillingClient('test'),
       deployment: configuration.deployment,
       cohorts: [{ ...cohort, ...configuration.deployment }],
     });

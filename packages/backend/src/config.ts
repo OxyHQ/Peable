@@ -86,17 +86,15 @@ export interface AppConfig {
    */
   oxyApiUrl: string;
   /**
-   * The Stripe card rail (ADR 0001 D2/D3).
+   * The Stripe card rail (ADR 0001 D2/D3), test and live side by side
+   * (ADR 0017).
    *
-   * `enabled` is a CONJUNCTION, not a flag: it is true only when the operator
-   * asked for the rail AND every secret it cannot work without is present. A
-   * half-configured integration stays OFF and says so once at boot, rather than
-   * accepting a checkout and failing mid-request on the first missing secret —
-   * the same shape Mercaria's `resolveStripeEnabled` uses, and it is why
-   * `resolveProvider` can answer "this rail is off" instead of throwing.
-   *
-   * There is deliberately no account-id variable: the platform account is
-   * implied by the secret key, and connected-account ids live only in rows.
+   * Each mode's `cardRail` is a CONJUNCTION, not a flag: it is true only when
+   * the operator asked for the rail AND that mode holds every secret it cannot
+   * work without. A half-configured mode stays OFF and says so once at boot,
+   * rather than accepting a checkout and failing mid-request on the first
+   * missing secret — which is why `resolveProvider` can answer "this rail is
+   * off" instead of throwing.
    */
   stripe: StripeConfig;
   /** Explicit reviewed recurring cohort JSON; absent keeps all recurring routes closed. */
@@ -146,31 +144,46 @@ function readReconciliationMode(raw: string | undefined): OxyFileReconciliationM
   );
 }
 
-export interface StripeConfig {
-  /** Explicit business identity, independently checked before the card rail starts. */
+/** Which of the provider's two worlds a key, a row or an event belongs to. */
+export type StripeMode = 'test' | 'live';
+
+/**
+ * One mode's half of the Stripe configuration (ADR 0017).
+ *
+ * A deployment holds BOTH modes at once: a `production` merchant's money moves
+ * through the live key and every other environment's through the test key, and
+ * nothing a caller sends chooses between them — the credential's environment
+ * does (`services/providers/environmentGuard.ts`). A mode whose secret key is
+ * absent does not exist here at all, and its card rail answers 503 like any
+ * rail this deployment has not configured.
+ */
+export interface StripeModeConfig {
   accountId?: string | undefined;
-  /** True only when `STRIPE_ENABLED` is set AND every required secret is present. */
-  enabled: boolean;
-  secretKey: string | undefined;
+  mode: StripeMode;
+  /** `mode === 'live'`, spelled the way Stripe's own objects spell it. */
+  livemode: boolean;
+  /**
+   * `sk_<mode>_…` or `rk_<mode>_…`. Its prefix is checked against the variable
+   * it came from at load, and a contradiction refuses to boot: a live key in
+   * `STRIPE_SECRET_KEY_TEST` would charge real cards for every development
+   * credential, and no later check could tell that apart from a test charge.
+   */
+  secretKey: string;
   /**
    * The PUBLISHABLE key — public by construction, and the one Stripe value
    * that is meant to reach a browser.
    *
    * The hosted checkout needs it to mount the provider's own card fields, and
    * it must not be a build-time constant in that bundle: the checkout is
-   * deployed once and serves whichever gateway it is pointed at, so a key baked
-   * into it would be the wrong mode the first time a test deployment used the
-   * same page. It is served from `POST /v1/payment_intents/:id/client_action`
-   * beside the confirmation credential, which is the one response that already
-   * proves the caller may pay this payment.
+   * deployed once and serves payments of both modes, so it is served per
+   * payment from `POST /v1/payment_intents/:id/client_action`, in the mode of
+   * the payment it confirms. `pk_<mode>_…`, checked at load like the secret.
    *
-   * NOT part of `resolveStripeEnabled`'s required set: a deployment that only
-   * serves server-side integrators (Mercaria mounts its own fields) needs no
-   * publishable key, and refusing to enable the rail without one would turn a
-   * working configuration off.
+   * Not required for the card rail: a server-side integrator (Mercaria mounts
+   * its own fields) needs no publishable key.
    */
   publishableKey: string | undefined;
-  /** Platform-scope endpoint secret. */
+  /** Platform-scope endpoint secret of this mode's endpoint. */
   webhookSecret: string | undefined;
   /** Connect-scope endpoint secret — a DIFFERENT endpoint with its own secret. */
   connectWebhookSecret: string | undefined;
@@ -183,37 +196,30 @@ export interface StripeConfig {
   webhookSecretPrevious: string | undefined;
   connectWebhookSecretPrevious: string | undefined;
   /**
-   * Whether this deployment's key is a LIVE key, derived from the key itself
-   * rather than configured separately.
-   *
-   * Read by the webhook ingress to drop events of the other mode: a production
-   * URL receives test events too, and processing one would settle a payment
-   * that does not exist. Read again, before any provider call, by
-   * `services/providers/environmentGuard.ts` — the mode a deployment holds and
-   * the environment a merchant's credential carries have to agree, and only the
-   * guard checks that.
+   * Whether this mode's CARD RAIL is on — a conjunction, not a flag: the
+   * operator asked for the rail (`STRIPE_ENABLED`) AND this mode holds both
+   * endpoint secrets. A rail that took payments it could never hear about would
+   * move money the gateway never learns moved, so a partial mode stays off and
+   * says so once at boot. Tax and recurring billing need only the key and do
+   * not read this.
    */
-  livemode: boolean;
-  /**
-   * The key's mode, classified — and `unknown` is a real answer.
-   *
-   * `livemode` used to be `secretKey.startsWith('sk_live_')` and nothing else,
-   * which gets a RESTRICTED live key (`rk_live_…`) wrong in the most expensive
-   * direction: the deployment holds a live key, `livemode` reads `false`, every
-   * live webhook is dropped as a mode mismatch and a development credential is
-   * cleared to create live charges. A restricted key is the recommended shape
-   * for exactly the Accounts v2 + transfers surface this gateway uses, so it is
-   * not a hypothetical.
-   *
-   * Anything that is not one of the four known prefixes is `unknown`, and an
-   * unknown key does not enable the rail. Guessing a mode from a key nobody
-   * recognises is how a test deployment decides it is live.
-   */
-  keyMode: StripeKeyMode;
+  cardRail: boolean;
+}
+
+/**
+ * The Stripe card rail (ADR 0001 D2/D3) and the platform account's key for
+ * tax and billing, per mode (ADR 0017).
+ *
+ * A reviewed expected account independently pins each configured mode before
+ * its card rail starts. Connected-account ids remain scoped to their own rows.
+ */
+export interface StripeConfig {
+  test: StripeModeConfig | undefined;
+  live: StripeModeConfig | undefined;
 }
 
 /** How a Stripe secret key names its own mode. */
-export type StripeKeyMode = 'live' | 'test' | 'unknown';
+export type StripeKeyMode = StripeMode | 'unknown';
 
 /**
  * Classify a Stripe secret key.
@@ -229,6 +235,119 @@ export function classifyStripeKey(secretKey: string | undefined): StripeKeyMode 
   if (secretKey.startsWith('sk_live_') || secretKey.startsWith('rk_live_')) return 'live';
   if (secretKey.startsWith('sk_test_') || secretKey.startsWith('rk_test_')) return 'test';
   return 'unknown';
+}
+
+/** The raw variables of one mode, each read by its full NAME in `readStripeConfig`. */
+interface StripeModeVariables {
+  accountId?: string | undefined;
+  secretKey: string | undefined;
+  publishableKey: string | undefined;
+  webhookSecret: string | undefined;
+  webhookSecretPrevious: string | undefined;
+  connectWebhookSecret: string | undefined;
+  connectWebhookSecretPrevious: string | undefined;
+}
+
+/**
+ * Build one mode, refusing to boot on a key that names the other one.
+ *
+ * A contradiction is a THROW, not a warning that turns the mode off: the
+ * operator put a key where it does not belong, and the mode the deployment
+ * would then quietly lack is the one somebody is about to rely on. The key
+ * itself never appears in the message.
+ */
+function readStripeMode(
+  mode: StripeMode,
+  railAsked: boolean,
+  raw: StripeModeVariables,
+): StripeModeConfig | undefined {
+  const suffix = mode.toUpperCase();
+  if (raw.secretKey === undefined) {
+    const stray = Object.entries(raw)
+      .filter(([, value]) => value !== undefined)
+      .map(([name]) => name);
+    if (stray.length > 0) {
+      process.emitWarning(
+        `[Stripe] the ${mode} mode has settings but no STRIPE_SECRET_KEY_${suffix}; ` +
+          `it stays OFF. Set: ${stray.join(', ')}`,
+      );
+    }
+    return undefined;
+  }
+  const keyMode = classifyStripeKey(raw.secretKey);
+  if (keyMode !== mode) {
+    throw new Error(
+      `STRIPE_SECRET_KEY_${suffix} must be a ${mode} key (sk_${mode}_… or rk_${mode}_…); ` +
+        (keyMode === 'unknown'
+          ? 'its prefix is not a recognised Stripe secret key'
+          : `it is a ${keyMode} key`),
+    );
+  }
+  if (raw.publishableKey !== undefined && !raw.publishableKey.startsWith(`pk_${mode}_`)) {
+    throw new Error(`STRIPE_PUBLISHABLE_KEY_${suffix} must be a pk_${mode}_… key`);
+  }
+  const missing: string[] = [];
+  if (raw.webhookSecret === undefined) missing.push(`STRIPE_WEBHOOK_SECRET_${suffix}`);
+  if (raw.connectWebhookSecret === undefined) {
+    missing.push(`STRIPE_CONNECT_WEBHOOK_SECRET_${suffix}`);
+  }
+  if (railAsked && missing.length > 0) {
+    // Once, at boot, naming what is missing. Not per request, and not silent.
+    process.emitWarning(
+      `[Stripe] STRIPE_ENABLED is set but the ${mode} card rail is incomplete; ` +
+        `it stays OFF. Missing: ${missing.join(', ')}`,
+    );
+  }
+  return {
+    mode,
+    accountId: raw.accountId,
+    livemode: mode === 'live',
+    secretKey: raw.secretKey,
+    publishableKey: raw.publishableKey,
+    webhookSecret: raw.webhookSecret,
+    webhookSecretPrevious: raw.webhookSecretPrevious,
+    connectWebhookSecret: raw.connectWebhookSecret,
+    connectWebhookSecretPrevious: raw.connectWebhookSecretPrevious,
+    cardRail: railAsked && missing.length === 0,
+  };
+}
+
+/**
+ * Both modes, each optional (ADR 0017).
+ *
+ * Every variable is read by its full name rather than built from the mode, so
+ * `db/__tests__/deploySecrets.test.ts` — which finds them by `env.NAME` — can
+ * hold the deploy's secret sync to each one.
+ */
+function readStripeConfig(env: Record<string, string | undefined>): StripeConfig {
+  const railAsked = readOptional(env.STRIPE_ENABLED) === 'true';
+  const stripe: StripeConfig = {
+    test: readStripeMode('test', railAsked, {
+      accountId: readOptional(env.STRIPE_ACCOUNT_ID_TEST) ?? readOptional(env.STRIPE_ACCOUNT_ID),
+      secretKey: readOptional(env.STRIPE_SECRET_KEY_TEST),
+      publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY_TEST),
+      webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET_TEST),
+      webhookSecretPrevious: readOptional(env.STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST),
+      connectWebhookSecret: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_TEST),
+      connectWebhookSecretPrevious: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST),
+    }),
+    live: readStripeMode('live', railAsked, {
+      accountId: readOptional(env.STRIPE_ACCOUNT_ID_LIVE) ?? readOptional(env.STRIPE_ACCOUNT_ID),
+      secretKey: readOptional(env.STRIPE_SECRET_KEY_LIVE),
+      publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY_LIVE),
+      webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET_LIVE),
+      webhookSecretPrevious: readOptional(env.STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE),
+      connectWebhookSecret: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_LIVE),
+      connectWebhookSecretPrevious: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE),
+    }),
+  };
+  if (railAsked && !stripe.test && !stripe.live) {
+    process.emitWarning(
+      '[Stripe] STRIPE_ENABLED is set but neither STRIPE_SECRET_KEY_TEST nor ' +
+        'STRIPE_SECRET_KEY_LIVE is; the card rail stays OFF.',
+    );
+  }
+  return stripe;
 }
 
 function readOrigins(raw: string | undefined): string[] {
@@ -282,46 +401,6 @@ function readOptional(raw: string | undefined): string | undefined {
  * absent, because `DATABASE_URL=""` in a task definition is a misconfiguration
  * that would otherwise reach postgres.js as a connection string.
  */
-/**
- * Whether the Stripe rail is on.
- *
- * `STRIPE_ENABLED` alone is not enough. A deployment that set the flag and
- * forgot a webhook secret would accept payments it can never confirm — the
- * money would move and the gateway would never learn it did. Refusing to turn
- * the rail on, loudly and once, is the only safe reading of a partial
- * configuration.
- */
-function resolveStripeEnabled(env: Record<string, string | undefined>): boolean {
-  const asked = readOptional(env.STRIPE_ENABLED) === 'true';
-  if (!asked) return false;
-  const required = [
-    ['STRIPE_SECRET_KEY', readOptional(env.STRIPE_SECRET_KEY)],
-    ['STRIPE_WEBHOOK_SECRET', readOptional(env.STRIPE_WEBHOOK_SECRET)],
-    ['STRIPE_CONNECT_WEBHOOK_SECRET', readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET)],
-  ] as const;
-  const missing = required.filter(([, value]) => value === undefined).map(([name]) => name);
-  if (missing.length > 0) {
-    // Once, at boot, naming what is missing. Not per request, and not silent.
-    process.emitWarning(
-      `[Stripe] STRIPE_ENABLED is set but the integration is incomplete; staying OFF. Missing: ${missing.join(', ')}`,
-    );
-    return false;
-  }
-  // A key whose mode cannot be read is a key whose mode cannot be ENFORCED.
-  // Everything downstream — the ingress livemode filter, the environment guard
-  // before every provider call — is derived from the classification, so a rail
-  // turned on with an unclassifiable key would run with both of them answering
-  // from a guess.
-  if (classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === 'unknown') {
-    process.emitWarning(
-      '[Stripe] STRIPE_SECRET_KEY is not a recognised sk_live_/rk_live_/sk_test_/rk_test_ ' +
-        'key, so its mode cannot be classified; staying OFF rather than guessing.',
-    );
-    return false;
-  }
-  return true;
-}
-
 function readRequired(raw: string | undefined, name: string): string {
   const value = raw?.trim();
   if (!value) {
@@ -354,23 +433,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
       : {}),
     billingInvoicePrivateKeyFile: readOptional(env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE),
     ipHashSalt: readOptional(env.IP_HASH_SALT),
-    stripe: {
-      accountId: readOptional(env.STRIPE_ACCOUNT_ID),
-      enabled: resolveStripeEnabled(env),
-      secretKey: readOptional(env.STRIPE_SECRET_KEY),
-      publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY),
-      webhookSecret: readOptional(env.STRIPE_WEBHOOK_SECRET),
-      connectWebhookSecret: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET),
-      webhookSecretPrevious: readOptional(env.STRIPE_WEBHOOK_SECRET_PREVIOUS),
-      connectWebhookSecretPrevious: readOptional(env.STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS),
-      // Derived, never configured: a deployment cannot claim live mode with a
-      // test key or the reverse, so the two cannot disagree. `classifyStripeKey`
-      // rather than a `sk_live_` prefix test — a restricted live key
-      // (`rk_live_…`) is a live key, and reading it as test drops every live
-      // webhook while clearing a development credential to charge live cards.
-      livemode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)) === 'live',
-      keyMode: classifyStripeKey(readOptional(env.STRIPE_SECRET_KEY)),
-    },
+    stripe: readStripeConfig(env),
     oxyFiles: {
       webhookSecret: readOptional(env.OXY_FILES_WEBHOOK_SECRET),
       webhookSecretPrevious: readOptional(env.OXY_FILES_WEBHOOK_SECRET_PREVIOUS),

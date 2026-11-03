@@ -34,6 +34,7 @@ import {
 const SELLER: ConnectedAccount = {
   id: 'ca_seller',
   object: 'connected_account',
+  livemode: false,
   external_ref: 'store_42',
   rails: ['faircoin'],
   faircoin: {
@@ -59,6 +60,7 @@ const SELLER: ConnectedAccount = {
 const ON_BEHALF: PaymentIntent = {
   id: 'pi_onbehalf',
   object: 'payment_intent',
+  livemode: false,
   status: 'created',
   rail: 'faircoin',
   amount: '250000000',
@@ -140,6 +142,7 @@ describe('accountLinks', () => {
   test('mints a FairCoin onboarding link for a seller, naming the rail', async () => {
     const link = {
       object: 'account_link',
+      livemode: false,
       url: 'https://peable.to/connect/tok',
       expires_at: 1792112400,
     };
@@ -241,6 +244,7 @@ describe('the platform webhook for an on-behalf payment', () => {
     const event: WebhookEvent<'payment_intent.confirming'> = {
       id: 'evt_1',
       object: 'event',
+      livemode: false,
       type: 'payment_intent.confirming',
       created: 1792109100,
       account: 'ca_seller',

@@ -85,8 +85,9 @@ than a gap.
 > **SUPERSEDED by [ADR 0009](0009-peable-holds-the-provider-credentials.md).**
 >
 > The `provider_connections` table described below does not exist and never
-> did. The gateway builds ONE Stripe client from a single `STRIPE_SECRET_KEY`
-> belonging to whoever operates the deployment, and calls Stripe as ITSELF —
+> did. The gateway builds its Stripe clients from keys belonging to whoever
+> operates the deployment (one per mode since
+> [ADR 0017](0017-test-and-live-in-one-deployment.md)), and calls Stripe as ITSELF —
 > which is also the product decision: merchants integrate with their Oxy
 > application credential and supply no Stripe key. The reasoning about hosted
 > onboarding, about the acquirer being the regulated party and about Peable

@@ -73,6 +73,11 @@ export interface ConnectedAccountFaircoin {
 export interface ConnectedAccount {
   id: string;
   object: 'connected_account';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The merchant's OWN id for this seller — how they address it. */
   external_ref: string;
   /** Which halves this account has. Never empty. */
@@ -128,6 +133,11 @@ export interface ConnectedAccount {
 export interface Transfer {
   id: string;
   object: 'transfer';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The merchant's OWN id for what this settles. Their idempotency. */
   external_ref: string;
   /** The seller's `ca_…` — never their account id at the provider — or the object, expanded. */
@@ -160,6 +170,11 @@ export interface Transfer {
 export interface TransferReversal {
   id: string;
   object: 'transfer_reversal';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The merchant's own id for this reversal — their `Idempotency-Key`. */
   external_ref: string;
   amount: string;
@@ -198,6 +213,11 @@ export interface TransferWithReversal extends Transfer {
  */
 export interface Settlement {
   object: 'settlement';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** The `pi_…` this describes, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
   payment_intent: string | PaymentIntent;
   /**
@@ -233,6 +253,11 @@ export type RefundOrigin = 'merchant' | 'provider';
 export interface Refund {
   id: string;
   object: 'refund';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   /** `null` on an IMPORTED refund; see {@link RefundOrigin}. */
   external_ref: string | null;
   origin: RefundOrigin;

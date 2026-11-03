@@ -122,7 +122,7 @@ try {
       .replace(/^(['"])(.*)\1$/, '$2');
   }
   assert(key?.startsWith('sk_test_'));
-  process.env.STRIPE_SECRET_KEY = key;
+  process.env.STRIPE_SECRET_KEY_TEST = key;
   const { getStripeClient, stripeBillingClient } = await import(
     '../src/services/providers/stripe/client'
   );
@@ -138,7 +138,7 @@ try {
   const { createBillingRouter } = await import('../src/routes/billing');
   const { Peable } = await import('@peable.to/sdk');
   const { default: express } = await import('express');
-  const stripe = getStripeClient();
+  const stripe = getStripeClient('test');
   const requestOptions = { timeout: 10_000, maxNetworkRetries: 0 } as const;
   async function platform() {
     assert(key?.startsWith('sk_test_'));
@@ -174,7 +174,7 @@ try {
       livemode: false,
     };
     const cohorts = [{ ...owner, ...deployment, evidenceRef: runId }];
-    const client = stripeBillingClient();
+    const client = stripeBillingClient('test');
     // No Portal calls/configuration mutation in this phase. Exact retained ref is server-side only.
     const provider = createStripeBillingProvider(deployment, client, {
       portalConfigurationRef: 'bpc_1UMJzbQWiCE02OnUPVAzh1TI',
@@ -601,6 +601,6 @@ try {
   console.log('test-clock-preflight-or-cleanup: FAIL');
   process.exitCode = 1;
 } finally {
-  delete process.env.STRIPE_SECRET_KEY;
+  delete process.env.STRIPE_SECRET_KEY_TEST;
   key = undefined;
 }

@@ -51,6 +51,9 @@ export function buildEvent<K extends WebhookEventType>(
   return {
     id: newId('evt'),
     object: 'event',
+    // Every payload carries its own mode, and the envelope repeats it so a
+    // consumer can route an event without opening `data.object` (ADR 0017).
+    livemode: object.livemode,
     type,
     created: toUnix(new Date(Date.now())),
     ...(account ? { account } : {}),

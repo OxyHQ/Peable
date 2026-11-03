@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { NetworkType } from '@fairco.in/core';
-import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
+import type { CurrencyCode, MerchantEnvironment, PaymentIntentRail } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -16,8 +16,7 @@ import {
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { Database } from '../db/postgres';
 import type { PaymentProvider, ProviderClientAction } from './providers/provider';
-import { assertEnvironmentMatchesProvider } from './providers/environmentGuard';
-import { resolveCardProvider, resolveProvider } from './providers/registry';
+import { selectCardProvider, selectStoredProvider } from './providers/environmentGuard';
 import { reserveNextAccountAddress, reserveNextAddress } from './reserveAddress';
 import { newId, clientSecretFor } from '../lib/ids';
 
@@ -351,7 +350,9 @@ async function clientActionFor(
   intent: PaymentIntentRow,
 ): Promise<ProviderClientAction | undefined> {
   if (!intent.provider) return undefined;
-  const provider = resolveProvider(intent.provider);
+  // The stored payment's own mode, never the caller's: the key that created the
+  // object is the only one that can read it.
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
   if (!provider) return undefined;
 
   if (!intent.providerObjectId) {
@@ -430,10 +431,18 @@ export class IdempotencyConflictError extends Error {
  *
  * @throws {RailUnavailableError}
  */
-export function assertRailAvailable(rail: PaymentIntentRail): void {
-  if (rail === 'card' && !resolveCardProvider()) {
-    throw new RailUnavailableError('the card rail is not configured on this deployment');
+export function assertRailAvailable(
+  rail: PaymentIntentRail,
+  environment: MerchantEnvironment,
+): void {
+  if (rail === 'card' && !selectCardProvider(environment)) {
+    throw new RailUnavailableError(cardRailUnavailable(environment));
   }
+}
+
+/** The 503's text: which mode is off, since the other one may well be on. */
+function cardRailUnavailable(environment: MerchantEnvironment): string {
+  return `the card rail is not configured for ${environment === 'production' ? 'live' : 'test'} mode on this deployment`;
 }
 
 export async function createIntent(input: CreateIntentInput): Promise<CreateIntentResult> {
@@ -447,13 +456,17 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   const { rail, currency, network } = resolveRail(merchant, input, account);
   const connectedAccountId = account?.id ?? null;
 
-  // BEFORE the idempotency lookup, not just before the insert, because the
-  // replay path calls the provider too (`clientActionFor` re-reads the payment).
-  // A refused environment has to leave nothing behind and send nothing: an
-  // intent written and then abandoned would sit in `created` until the sweeper
-  // expired it, and a merchant debugging a rejected credential would find
-  // payments they never made.
-  if (rail === 'card') assertEnvironmentMatchesProvider(merchant.environment);
+  // Which provider will move this money, SELECTED by the credential's
+  // environment (ADR 0017: production ⟺ live) and decided ONCE. Resolved
+  // before the idempotency lookup and before the insert: the replay path calls
+  // the provider too, and `payment_intents_card_requires_provider_check`
+  // refuses a card intent without one — a mode that is off must fail here,
+  // where nothing has been written, rather than after a row exists that no
+  // adapter can ever act on.
+  const cardProvider = rail === 'card' ? selectCardProvider(merchant.environment) : undefined;
+  if (rail === 'card' && !cardProvider) {
+    throw new RailUnavailableError(cardRailUnavailable(merchant.environment));
+  }
 
   const db = getDb();
 
@@ -486,16 +499,6 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
     Date.now() + (expiresInSeconds ?? DEFAULT_EXPIRY_SECONDS) * MS_PER_SECOND,
   );
   const key = idempotencyKey ?? randomUUID();
-
-  // Which provider will move this money, decided ONCE and stored. Resolved
-  // before the insert because `payment_intents_card_requires_provider_check`
-  // refuses a card intent without one — a rail that is off must fail here,
-  // where nothing has been written, rather than after a row exists that no
-  // adapter can ever act on.
-  const cardProvider = rail === 'card' ? resolveCardProvider() : undefined;
-  if (rail === 'card' && !cardProvider) {
-    throw new RailUnavailableError('the card rail is not configured on this deployment');
-  }
 
   // Explicit field whitelist — never spread a caller body (mass-assignment
   // would be an IDOR). `status`, `currency` and `confirmations` take their

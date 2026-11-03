@@ -31,7 +31,8 @@ import { canStillBePaid } from '@peable.to/shared-types';
 import { config } from '../config';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import type { ProviderClientAction, ProviderPaymentResult } from './providers/provider';
-import { resolveProvider } from './providers/registry';
+import { selectStoredProvider } from './providers/environmentGuard';
+import { providerModeOf } from './providers/provider';
 
 /** The `client_action` object on the wire (snake_case, ADR 0014 D1). */
 export interface ClientActionResult {
@@ -77,11 +78,14 @@ export async function resolveClientAction(intent: PaymentIntentRow): Promise<Cli
     return { kind: 'unpayable', status: intent.status };
   }
 
-  const provider = resolveProvider(intent.provider);
+  // The payment's own mode (ADR 0017): its key reads it, and its publishable
+  // key is the one the payer's card fields must mount with.
+  const mode = providerModeOf(intent.livemode);
+  const provider = selectStoredProvider(intent.provider, intent.livemode);
   if (!provider) {
     return {
       kind: 'unavailable',
-      error: `the ${intent.provider} rail is not configured on this deployment`,
+      error: `the ${intent.provider} rail is not configured for ${mode} mode on this deployment`,
     };
   }
   if (!intent.providerObjectId) {
@@ -123,14 +127,14 @@ export async function resolveClientAction(intent: PaymentIntentRow): Promise<Cli
     };
   }
 
+  const publishableKey = config.stripe[mode]?.publishableKey;
+
   return {
     kind: 'ok',
     action: {
       kind: result.clientAction.kind,
       value: result.clientAction.value,
-      ...(config.stripe.publishableKey === undefined
-        ? {}
-        : { publishable_key: config.stripe.publishableKey }),
+      ...(publishableKey === undefined ? {} : { publishable_key: publishableKey }),
     },
   };
 }

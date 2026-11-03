@@ -39,13 +39,10 @@ import {
   TransferSourceUnresolvedError,
   TransfersUnavailableError,
 } from '../services/transfers/transferService';
-import { EnvironmentModeMismatchError } from '../services/providers/environmentGuard';
 import { ProviderError } from '../services/providers/provider';
 import { toTransferDTO, type TransferDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
-  requireProviderMode,
-  sendEnvironmentMismatch,
   sendError,
   sendProviderError,
   sendValidationError,
@@ -195,10 +192,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      // BEFORE the intent and seller lookups below, whose 404s would otherwise
-      // let a wrong-mode credential enumerate this merchant's rows.
-      if (!requireProviderMode(merchant.environment, res)) return;
-
       const parsed = createTransferBodySchema.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
@@ -286,7 +279,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       try {
         const { transfer, created } = await createTransfer({
           merchantId: merchant.id,
-          environment: merchant.environment,
           intent,
           account,
           externalRef: body.external_ref,
@@ -322,10 +314,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           sendError(res, 503, 'api_error', error.message);
           return;
         }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
-          return;
-        }
         if (error instanceof ProviderError) {
           sendProviderError(res, error);
           return;
@@ -345,8 +333,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      if (!requireProviderMode(merchant.environment, res)) return;
-
       const parsed = reverseTransferBodySchema.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
@@ -373,7 +359,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           created,
         } = await reverseTransfer({
           merchantId: merchant.id,
-          environment: merchant.environment,
           transfer,
           externalRef: parsed.data.external_ref,
           amount: parsed.data.amount,
@@ -388,6 +373,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           reversal: {
             id: reversal.publicId,
             object: 'transfer_reversal',
+            livemode: reversal.livemode,
             external_ref: reversal.externalRef,
             amount: reversal.amount,
             currency: reversal.currency,
@@ -404,10 +390,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         }
         if (error instanceof TransfersUnavailableError) {
           sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof EnvironmentModeMismatchError) {
-          sendEnvironmentMismatch(res, error.message);
           return;
         }
         if (error instanceof ProviderError) {

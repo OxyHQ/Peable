@@ -273,6 +273,11 @@ export function canExpire(status: PaymentIntentStatus): boolean {
 export interface PaymentIntent {
   id: string;
   object: 'payment_intent';
+  /**
+   * Which of the provider's two worlds this object belongs to (ADR 0017):
+   * `true` for a `production` merchant, `false` for every other environment.
+   */
+  livemode: boolean;
   status: PaymentIntentStatus;
   /** Which rail moves this payment. Decides which fields below are populated. */
   rail: PaymentIntentRail;

@@ -9,7 +9,7 @@ export async function readLocalCheckoutPreparation() {
   const { getStripeClient } = await import('../services/providers/stripe/client');
   const { getDb } = await import('../db/postgres');
   const { findMerchantByAppEnvironment } = await import('../db/merchants/merchantRepository');
-  const client = getStripeClient();
+  const client = getStripeClient('test');
   const [account, merchant, configuration, month, year] = await Promise.all([
     client.accounts.retrieve(null),
     findMerchantByAppEnvironment(getDb(), LOCAL_TEST_APP, 'development'),
@@ -38,7 +38,7 @@ export async function readLocalCheckoutPreparation() {
   ] as const) {
     assertLocalPreparationPrice(interval, price);
   }
-  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY;
+  const publishableKey = process.env.STRIPE_PUBLISHABLE_KEY_TEST;
   if (!publishableKey?.startsWith('pk_test_')) throw new Error('Missing test publishable key');
   return {
     environment: 'test' as const,
@@ -75,8 +75,8 @@ export function createPreparationReader<T>(
 
 export function createLocalPreparationReader() {
   const names = [
-    'STRIPE_SECRET_KEY',
-    'STRIPE_PUBLISHABLE_KEY',
+    'STRIPE_SECRET_KEY_TEST',
+    'STRIPE_PUBLISHABLE_KEY_TEST',
     'PEABLE_TEST_STRIPE_ACCOUNT',
     'DATABASE_URL',
   ] as const;

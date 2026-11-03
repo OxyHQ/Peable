@@ -42,6 +42,7 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
   return {
     id: 'pi_live123',
     object: 'payment_intent',
+    livemode: false,
     status: 'broadcast',
     rail: 'faircoin',
     amount: '150000000',

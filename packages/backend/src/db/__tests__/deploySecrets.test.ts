@@ -14,6 +14,8 @@ const CONFIG = readFileSync(join(REPO_ROOT, 'packages', 'backend', 'src', 'confi
 
 const INFRA_CONFIGURATION: Readonly<Record<string, string>> = {
   STRIPE_ENABLED: 'explicit infrastructure activation flag; never a secret',
+  STRIPE_ACCOUNT_ID_TEST: 'explicit expected test provider business account identity',
+  STRIPE_ACCOUNT_ID_LIVE: 'explicit expected live provider business account identity',
   STRIPE_ACCOUNT_ID: 'reviewed public provider account identity pinned at startup',
   PEABLE_BILLING_COHORT:
     'reviewed merchant/app/environment/platform-account cohort and Portal configuration; no credentials; absent by default and set only for the coordinated cohort activation',
@@ -77,14 +79,20 @@ function configVariables(): string[] {
 const AWS_RUNTIME_SECRETS = [
   'DATABASE_URL',
   'IP_HASH_SALT',
-  'STRIPE_SECRET_KEY',
-  'STRIPE_PUBLISHABLE_KEY',
-  'STRIPE_WEBHOOK_SECRET',
-  'STRIPE_CONNECT_WEBHOOK_SECRET',
-  'STRIPE_WEBHOOK_SECRET_PREVIOUS',
-  'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS',
   'OXY_FILES_WEBHOOK_SECRET',
   'OXY_FILES_WEBHOOK_SECRET_PREVIOUS',
+  'STRIPE_SECRET_KEY_TEST',
+  'STRIPE_PUBLISHABLE_KEY_TEST',
+  'STRIPE_WEBHOOK_SECRET_TEST',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_TEST',
+  'STRIPE_WEBHOOK_SECRET_PREVIOUS_TEST',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_TEST',
+  'STRIPE_SECRET_KEY_LIVE',
+  'STRIPE_PUBLISHABLE_KEY_LIVE',
+  'STRIPE_WEBHOOK_SECRET_LIVE',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_LIVE',
+  'STRIPE_WEBHOOK_SECRET_PREVIOUS_LIVE',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS_LIVE',
 ] as const;
 
 describe('AWS owns backend runtime credentials', () => {
