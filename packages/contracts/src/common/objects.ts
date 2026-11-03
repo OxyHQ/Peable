@@ -73,12 +73,24 @@ export type Expand<T> =
   T extends Ref<infer K>
     ? K extends keyof ObjectMap
       ? ObjectMap[K]
-      : never
+      : UnresolvedObject<K>
     : T extends readonly (infer U)[]
       ? Expand<U>[]
       : T extends object
         ? { [P in keyof T]: Expand<T[P]> }
         : T;
+
+/**
+ * An expanded reference to a type no module has registered in {@link ObjectMap}.
+ * Never the type of a finished contract: `contracts.test.ts` asserts every
+ * reference resolves. It exists so a resource can reference an object another
+ * module defines before that module is written.
+ */
+export interface UnresolvedObject<K extends string> {
+  readonly id: string;
+  readonly object: K;
+  readonly [field: string]: unknown;
+}
 
 /** The wire type a schema describes (its output, references resolved). */
 export type Wire<S extends z.ZodType> = Expand<z.output<S>>;
@@ -122,6 +134,20 @@ export function objectSchema(type: string): z.ZodType | undefined {
   return objectSchemas.get(type);
 }
 
+/** Object types something referenced that no module registered (asserted empty by the contract tests). */
+export const unresolvedObjectReferences = new Set<string>();
+
+/**
+ * The registered schema of `type`; when none is registered, a loose
+ * `{ id, object }` stand-in, recorded in {@link unresolvedObjectReferences}.
+ */
+export function resolveObject(type: string): z.ZodType {
+  const schema = objectSchemas.get(type);
+  if (schema) return schema;
+  unresolvedObjectReferences.add(type);
+  return z.object({ id: z.string(), object: z.literal(type) }).loose();
+}
+
 /** Every registered object type, in registration order. */
 export function objectTypes(): string[] {
   return [...objectSchemas.keys()];
@@ -137,11 +163,7 @@ export function expandable<K extends string>(
   type: K,
   description?: string,
 ): z.ZodType<string | Ref<K>, string | Ref<K>> {
-  const resolved = z.lazy(() => {
-    const schema = objectSchemas.get(type);
-    if (!schema) throw new Error(`no wire object is registered as '${type}'`);
-    return schema;
-  });
+  const resolved = z.lazy(() => resolveObject(type));
   const union = z.union([z.string(), resolved]);
   contractRegistry.add(union, {
     'x-peable-expandable': type,

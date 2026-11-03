@@ -1,16 +1,6 @@
 import { z } from 'zod';
 import { ERROR_CODES, ERROR_TYPES } from '../vocabulary/errors';
-import { contractRegistry, objectSchema } from './objects';
-
-/** Object types an error referenced before they were registered (the contract tests assert none). */
-export const unregisteredErrorReferences = new Set<string>();
-
-function objectSchemaOrThrow(type: string): z.ZodType {
-  const schema = objectSchema(type);
-  if (schema) return schema;
-  unregisteredErrorReferences.add(type);
-  return z.object({ id: z.string(), object: z.literal(type) }).loose();
-}
+import { contractRegistry, resolveObject } from './objects';
 
 /**
  * The envelopes every resource shares (ADR 0014 D1): the list, the search
@@ -91,13 +81,13 @@ export const apiErrorSchema = z
     doc_url: z.url().optional().describe('The documentation of `code`.'),
     request_id: z.string().nullable().describe('The `Request-Id` of this response, for support.'),
     payment_intent: z
-      .lazy(() => objectSchemaOrThrow('payment_intent'))
+      .lazy(() => resolveObject('payment_intent'))
       .optional()
       .describe(
         'On a `card_error` from a confirm or an invoice payment: the PaymentIntent, as it now is.',
       ),
     invoice: z
-      .lazy(() => objectSchemaOrThrow('invoice'))
+      .lazy(() => resolveObject('invoice'))
       .optional()
       .describe('On a failed invoice payment: the invoice, as it now is.'),
     refresh_url: z
