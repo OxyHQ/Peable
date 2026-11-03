@@ -29,8 +29,7 @@ import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { LanguageSettings } from '@/ui/LanguageSettings';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
-import { PageSkeleton } from '@/ui/states';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { merchantQueryKey } from '@/merchant/useMerchant';
 
 const merchantKey = merchantQueryKey;
@@ -213,7 +212,7 @@ function MerchantSettings({
         title={merchant ? undefined : t('settings.register')}
         description={merchant ? undefined : t('settings.registerIntro', { mode: modeLabel(scope) })}
       >
-        <ActionPermissionNotice action="money" />
+        <PermissionNotice action="money" />
         <MerchantFields
           form={form}
           setForm={setForm}

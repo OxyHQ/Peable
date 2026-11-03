@@ -17,8 +17,7 @@ import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -60,7 +59,7 @@ function Actions({ scope, subscription }: { scope: DashboardScope; subscription:
   if (actions.length === 0) return null;
   return (
     <View className="gap-2">
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       <View className="flex-row flex-wrap gap-2">
         {actions.map((action) => (
           <Button

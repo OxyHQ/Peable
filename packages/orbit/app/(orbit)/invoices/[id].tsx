@@ -23,9 +23,8 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { Timestamp } from '@/ui/data';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -43,7 +42,7 @@ function Actions({ scope, invoice }: { scope: DashboardScope; invoice: Invoice }
   const actions = invoiceActions(invoice);
   return (
     <View className="gap-2">
-      {actions.length ? <ActionPermissionNotice action="money" /> : null}
+      {actions.length ? <PermissionNotice action="money" /> : null}
       <View className="flex-row flex-wrap gap-2">
         {actions.map((action) => (
           <Button

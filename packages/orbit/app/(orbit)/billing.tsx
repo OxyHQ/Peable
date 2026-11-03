@@ -31,9 +31,8 @@ import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -311,7 +310,7 @@ function BillingBody({ scope }: { scope: DashboardScope }) {
   }
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       {/* Keyed by `updated`, so a save re-seeds the form from what was stored. */}
       <SettingsEditor key={settings.data.updated} scope={scope} settings={settings.data} />
       <Features scope={scope} />

@@ -189,7 +189,13 @@ describe('createOrbitTransport', () => {
           message: 'you are not a member of this application',
         }),
       ),
-    ).toEqual({ kind: 'permission', permission: null, membership: true, requestId: 'req_s' });
+    ).toEqual({
+      kind: 'permission',
+      permission: null,
+      membership: true,
+      readOnly: false,
+      requestId: 'req_s',
+    });
     expect(await stateOf(envelope(500, { type: 'api_error', message: 'internal error' }))).toEqual({
       kind: 'failure',
       reason: 'server',

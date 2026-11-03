@@ -24,10 +24,9 @@ import {
   requirementsClear,
 } from '@/money/requirements';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { orbitOrigin } from '@/ui/origin';
 import { CapabilityBadge, EnabledBadge, ToneBadge } from '@/ui/StatusBadge';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 type Rail = 'card' | 'faircoin';
 
@@ -158,7 +157,7 @@ function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: Connec
   const card = seller.rails.includes('card');
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {seller.external_ref}

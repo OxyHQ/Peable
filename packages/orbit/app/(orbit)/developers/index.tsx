@@ -40,7 +40,7 @@ import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { usePagedList } from '@/ui/paging';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { DeliveryStatusBadge, ToneBadge } from '@/ui/StatusBadge';
 import {
   buildEndpointBody,
@@ -49,7 +49,6 @@ import {
   type EndpointForm,
   ROLL_OVERLAP_SECONDS,
 } from '@/webhooks/endpointForm';
-import { PageSkeleton } from '@/ui/states';
 
 const PAGE_SIZE = 25;
 
@@ -310,7 +309,7 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
       {can('webhooks') ? (
         <AddEndpoint scope={scope} onCreated={setRevealed} />
       ) : (
-        <ActionPermissionNotice action="webhooks" />
+        <PermissionNotice action="webhooks" />
       )}
       {endpoints.length ? (
         endpoints.map((endpoint) => (

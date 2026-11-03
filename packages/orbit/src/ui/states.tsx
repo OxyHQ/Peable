@@ -19,7 +19,15 @@ import { modeForEnvironment } from '../scope/scope';
 import { useOrbitScope } from '../scope/ScopeProvider';
 import type { OrbitEnvironment } from '../api/dashboard';
 import { docsUrl, type DocsTopic } from './docs';
-import { errorState, type ErrorState } from './errorState';
+import type { DashboardAction } from '@peable.to/contracts/vocabulary';
+import { useDashboardPermissions } from '../scope/useDashboardPermissions';
+import {
+  errorState,
+  type ErrorState,
+  type PermissionState,
+  permissionCopy,
+  permissionStateFor,
+} from './errorState';
 
 /**
  * Orbit's page states, Stripe's way: nothing a gateway answers is drawn as a
@@ -138,23 +146,25 @@ export function AccountMissing({ environment }: { environment: OrbitEnvironment 
   );
 }
 
-/** A permission refusal: which permission, and who grants it (Oxy Console). */
-export function PermissionNotice({
-  state,
-}: {
-  state: Extract<ErrorState, { kind: 'permission' }>;
-}) {
-  const description = state.membership
-    ? t('state.permission.bodyMembership')
-    : state.permission
-      ? t('state.permission.body', { permission: state.permission })
-      : t('state.permission.bodyGeneric');
+/**
+ * The ONE permission state: which permission is missing, and who grants it
+ * (Oxy Console). Given the gateway's refusal (`state`), or an `action` the
+ * person lacks before anything is asked — then it renders nothing when they
+ * hold it, and says "view, not change" for a write on a page they can read.
+ */
+export function PermissionNotice(
+  props: { readonly state: PermissionState } | { readonly action: DashboardAction },
+) {
+  const { can } = useDashboardPermissions();
+  if ('action' in props && can(props.action)) return null;
+  const state = 'action' in props ? permissionStateFor(props.action) : props.state;
+  const copy = permissionCopy(state);
   return (
     <EmptyState
       testID="state-permission"
       variant="compact"
-      title={t(state.membership ? 'state.permission.membershipTitle' : 'state.permission.title')}
-      description={description}
+      title={t(copy.title)}
+      description={t(copy.body, { permission: state.permission ?? '' })}
       action={{ label: t('state.permission.action'), onPress: openUrl(OXY_CONSOLE_URL) }}
     />
   );

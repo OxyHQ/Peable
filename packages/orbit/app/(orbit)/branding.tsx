@@ -30,11 +30,10 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { Toggle } from '@/ui/Toggle';
-import { PageSkeleton } from '@/ui/states';
 import { merchantQueryKey } from '@/merchant/useMerchant';
 
 const DEFAULT = 'default';
@@ -354,7 +353,7 @@ function Settings({ scope }: { scope: DashboardScope }) {
   if (!merchant.data || !branding.data || !emails.data) return null;
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       <BrandingEditor
         key={branding.data.updated_at ?? 'unset'}
         scope={scope}

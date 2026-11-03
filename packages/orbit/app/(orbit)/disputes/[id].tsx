@@ -46,9 +46,8 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function idOf(reference: string | { id: string } | null): string | null {
   if (reference === null) return null;
@@ -214,7 +213,7 @@ function EvidenceEditor({ scope, dispute }: { scope: DashboardScope; dispute: Di
           <AdmonitionText>{why}</AdmonitionText>
         </Admonition>
       ) : !permitted ? (
-        <ActionPermissionNotice action="money" />
+        <PermissionNotice action="money" />
       ) : (
         <Admonition type="warning">
           <AdmonitionText>{t('dispute.evidence.oneShot')}</AdmonitionText>

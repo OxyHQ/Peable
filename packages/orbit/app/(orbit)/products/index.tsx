@@ -34,9 +34,8 @@ import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, ListFooter, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, ListEmpty, PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
-import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('products.filter.active') },
@@ -233,7 +232,7 @@ function ProductList({
   const products = pages.data.pages.flatMap((page) => page.data);
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       {adding && can('configure') ? <AddProduct scope={scope} /> : null}
       <View className="gap-4">
         <ProductsTable

@@ -34,7 +34,7 @@ import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import {
   DetailLayout,
   ErrorNotice,
@@ -43,7 +43,6 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 /** A reference as its id, whether or not the read expanded it. */
 function idOf(reference: string | { id: string } | null): string | null {
@@ -395,7 +394,7 @@ function ProductFeatures({ scope, product }: { scope: DashboardScope; product: P
     .map((feature) => ({ value: feature.id, label: `${feature.name} (${feature.lookup_key})` }));
   return (
     <Section title={t('product.features')} description={t('product.featuresIntro')}>
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       {attached.data.data.length ? (
         attached.data.data.map((row) => (
           <View
@@ -467,7 +466,7 @@ function ProductDetail({ scope, product }: { scope: DashboardScope; product: Pro
           content={product.active ? t('products.active') : t('products.archived')}
         />
       </View>
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       <ProductActions scope={scope} product={product} />
       {/* Keyed by `updated`, so a save elsewhere re-seeds the form from the stored product. */}
       <DetailLayout aside={<EditProduct key={product.updated} scope={scope} product={product} />}>

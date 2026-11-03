@@ -125,7 +125,13 @@ describe('the gate', () => {
     });
     expect(pageGate('required', probe({ error: refused }))).toEqual({
       kind: 'state',
-      state: { kind: 'permission', permission: null, membership: true, requestId: 'req_403' },
+      state: {
+        kind: 'permission',
+        permission: null,
+        membership: true,
+        readOnly: false,
+        requestId: 'req_403',
+      },
     });
   });
 });

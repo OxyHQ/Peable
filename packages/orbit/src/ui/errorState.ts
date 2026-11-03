@@ -1,3 +1,4 @@
+import { DASHBOARD_PERMISSIONS, type DashboardAction } from '@peable.to/contracts/vocabulary';
 import { isOrbitApiError } from '../api/transport';
 
 /**
@@ -20,11 +21,19 @@ export type ErrorState =
   /** Peable Tax is not enabled on this deployment. */
   | { kind: 'feature_unavailable'; feature: 'tax' }
   /**
-   * A permission refusal. `permission` names what is missing when the gateway
-   * said (`billing:manage`); `membership` is the caller not being a member of
-   * the application's Oxy account at all.
+   * A missing permission — refused by the gateway, or known before asking
+   * ({@link permissionStateFor}). `permission` names what is missing when it
+   * is known (`billing:manage`); `membership` is the caller not being a member
+   * of the application's Oxy account at all; `readOnly` is a page the person
+   * can see but not change.
    */
-  | { kind: 'permission'; permission: string | null; membership: boolean; requestId: string | null }
+  | {
+      kind: 'permission';
+      permission: string | null;
+      membership: boolean;
+      readOnly: boolean;
+      requestId: string | null;
+    }
   /** The Oxy session is no longer valid. */
   | { kind: 'session'; requestId: string | null }
   /** One object the page asked for does not exist (a detail page). */
@@ -71,6 +80,7 @@ export function errorState(error: unknown): ErrorState {
         kind: 'permission',
         permission: membership ? null : permission,
         membership,
+        readOnly: false,
         requestId,
       };
     }
@@ -95,4 +105,38 @@ export function errorState(error: unknown): ErrorState {
 /** Whether the state is a real failure (banner + Retry) rather than an explanation. */
 export function isFailure(state: ErrorState): boolean {
   return state.kind === 'failure';
+}
+
+export type PermissionState = Extract<ErrorState, { kind: 'permission' }>;
+
+/** The actions that only read: lacking one means the page cannot be seen at all. */
+const READ_ACTIONS: ReadonlySet<DashboardAction> = new Set(['read', 'taxRead']);
+
+/**
+ * The permission state of an action the person lacks, known BEFORE the gateway
+ * is asked — from the same `DASHBOARD_PERMISSIONS` the gateway refuses by, so
+ * the notice shown up front and the one shown on a refusal are one state.
+ */
+export function permissionStateFor(action: DashboardAction): PermissionState {
+  return {
+    kind: 'permission',
+    permission: DASHBOARD_PERMISSIONS[action],
+    membership: false,
+    readOnly: !READ_ACTIONS.has(action),
+    requestId: null,
+  };
+}
+
+/** The catalog keys a permission state is worded with. */
+export function permissionCopy(state: PermissionState): {
+  title: string;
+  body: string;
+} {
+  if (state.membership) {
+    return { title: 'state.permission.membershipTitle', body: 'state.permission.bodyMembership' };
+  }
+  return {
+    title: state.readOnly ? 'state.permission.readOnlyTitle' : 'state.permission.title',
+    body: state.permission ? 'state.permission.body' : 'state.permission.bodyGeneric',
+  };
 }

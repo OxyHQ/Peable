@@ -22,7 +22,7 @@ import { useDashboardPermissions } from '../scope/useDashboardPermissions';
  * gateway: they are never read into state, logged or cached.
  *
  * Disabled when the person lacks what the purpose's USE needs
- * (`FILE_UPLOAD_ACTION`); the page's `ActionPermissionNotice` says why.
+ * (`FILE_UPLOAD_ACTION`); the page's `PermissionNotice` says why.
  *
  * Web only for now: a native build has no document picker wired, and says so
  * rather than offering a drop zone that cannot open.

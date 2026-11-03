@@ -20,7 +20,7 @@ import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 import { Choice } from '../ui/Choice';
 import { FormField } from '../ui/FormField';
 import { ErrorNotice, Section } from '../ui/OrbitScreen';
-import { ActionPermissionNotice } from '../ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '../ui/states';
 import {
   canToggle,
   currenciesText,
@@ -33,7 +33,6 @@ import {
   unavailableReasonText,
   walletStatusText,
 } from './configuration';
-import { PageSkeleton } from '../ui/states';
 
 const scopeKey = (scope: DashboardScope) => ['orbit', scope.applicationId, scope.environment];
 const configurationKey = (scope: DashboardScope) => [
@@ -316,7 +315,7 @@ function DomainsSection({ scope }: { scope: DashboardScope }) {
 export function PaymentMethodsSettings({ scope }: { scope: DashboardScope }) {
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       <ConfigurationSection scope={scope} />
       <DomainsSection scope={scope} />
     </View>

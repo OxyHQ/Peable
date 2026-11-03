@@ -27,8 +27,7 @@ import {
 import { linkKeys, useLink } from '@/links/useLinks';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -136,7 +135,7 @@ function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink 
   });
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {linkSummary(link) || link.id}

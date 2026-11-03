@@ -6,12 +6,6 @@
  */
 
 export const ORBIT_EN: Readonly<Record<string, string>> = {
-  // Permissions (the gateway's map, `src/scope/permissions.ts`)
-  'permission.change':
-    'You can view this page. Changing it needs the {permission} permission on the application — ask an owner in Oxy Console.',
-  'permission.view':
-    'Seeing this page needs the {permission} permission on the application — ask an owner in Oxy Console.',
-
   'nav.connect': 'Connect',
 
   // Connect
@@ -236,11 +230,6 @@ export const ORBIT_EN: Readonly<Record<string, string>> = {
 };
 
 export const ORBIT_ES: Readonly<Record<string, string>> = {
-  'permission.change':
-    'Puedes ver esta página. Cambiarla requiere el permiso {permission} en la aplicación; pídeselo a un propietario en Oxy Console.',
-  'permission.view':
-    'Ver esta página requiere el permiso {permission} en la aplicación; pídeselo a un propietario en Oxy Console.',
-
   'nav.connect': 'Connect',
 
   'connect.title': 'Connect',

@@ -21,9 +21,8 @@ import { type LinkFilter, useLinkPages } from '@/links/useLinks';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { Choice } from '@/ui/Choice';
 import { ErrorNotice, ListFooter, OrbitScreen } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, ListEmpty, PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
-import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const filterOptions = () => [
   { value: 'active', label: t('links.filter.active') },
@@ -117,7 +116,7 @@ function LinkList({ scope, filter }: { scope: DashboardScope; filter: LinkFilter
   const links = pages.data.pages.flatMap((page) => page.data);
   return (
     <View className="gap-4">
-      <ActionPermissionNotice action="configure" />
+      <PermissionNotice action="configure" />
       <LinksTable
         links={links}
         empty={

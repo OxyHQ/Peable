@@ -43,7 +43,7 @@ import {
 } from '@/money/vocabulary';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import {
   AccountMissing,
   ErrorNotice,
@@ -53,7 +53,6 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 const statusOptions = () => [
@@ -387,7 +386,7 @@ function Payouts({ scope }: { scope: DashboardScope }) {
   const manual = account.data.settings.payouts.schedule?.interval === 'manual';
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       {manual && can('money') ? <ManualPayout scope={scope} /> : null}
       <PayoutList scope={scope} />
       <PayoutSchedule scope={scope} account={account.data} />

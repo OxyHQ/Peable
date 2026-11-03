@@ -33,10 +33,9 @@ import { modeForEnvironment } from '@/scope/scope';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { orbitOrigin } from '@/ui/origin';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { ErrorNotice, Field, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
-import { PageSkeleton } from '@/ui/states';
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
@@ -77,7 +76,7 @@ function CreateAccount({ scope }: { scope: DashboardScope }) {
       title={t('account.create.title')}
       description={t('account.create.intro', { mode: modeLabel(scope) })}
     >
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       <FormField
         label={t('account.create.country')}
         value={form.country}
@@ -134,7 +133,7 @@ function Onboarding({ scope, account }: { scope: DashboardScope; account: Accoun
   });
   return (
     <Section title={t('account.onboarding')} description={t('account.onboarding.help')}>
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       <View className="flex-row">
         <Button
           appearance={action === 'update' ? 'outline' : 'solid'}

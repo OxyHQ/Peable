@@ -49,7 +49,7 @@ payouts, Connect, disputes, the billing engine, every Peable Tax change), `taxRe
 `billing:read` (Peable Tax reads; `billing:manage` contains it). The gateway refuses by
 it; Orbit judges the SAME map over the selected application's
 `callerMembership.permissions` from `apps.list` (`useDashboardPermissions().can(action)`,
-`src/scope/`) and disables or hides what the person lacks, with one `ActionPermissionNotice`
+`src/scope/`) and disables or hides what the person lacks, with one `PermissionNotice` (`src/ui/states.tsx`, the same state a gateway refusal renders)
 per page or section naming the permission. The language switcher is personal and never gated.
 
 The wallet has no Tax or Contributions screen: those are Orbit's alone.

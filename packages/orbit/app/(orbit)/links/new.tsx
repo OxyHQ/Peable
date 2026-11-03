@@ -27,7 +27,7 @@ import {
 import { linkKeys } from '@/links/useLinks';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice } from '@/ui/states';
 
 function Created({ link, onAnother }: { link: PaymentLink; onAnother: () => void }) {
   const router = useRouter();
@@ -135,7 +135,7 @@ export default function NewPaymentLinkScreen() {
         can('configure') ? (
           <Builder key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
         ) : (
-          <ActionPermissionNotice action="configure" />
+          <PermissionNotice action="configure" />
         )
       }
     </OrbitScreen>

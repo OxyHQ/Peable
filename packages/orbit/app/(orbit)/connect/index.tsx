@@ -44,9 +44,8 @@ import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import { ToneBadge } from '@/ui/StatusBadge';
-import { PageSkeleton } from '@/ui/states';
 import { RowLink, Timestamp } from '@/ui/data';
 
 const SELLER_ERRORS: Record<SellerFormError, string> = {
@@ -252,7 +251,7 @@ function Sellers({ scope }: { scope: DashboardScope }) {
   const sellers = pages.data.pages.flatMap((page) => page.data);
   return (
     <Section title={t('connect.sellers')} description={t('connect.sellersIntro')}>
-      {can('money') ? <AddSeller scope={scope} /> : <ActionPermissionNotice action="money" />}
+      {can('money') ? <AddSeller scope={scope} /> : <PermissionNotice action="money" />}
       {sellers.length ? (
         <SellersTable sellers={sellers} />
       ) : (

@@ -29,8 +29,7 @@ import { t } from '@/i18n';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
-import { PageSkeleton } from '@/ui/states';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 
 type Pending = { key: string; body: CreateContribution };
 const NO_COLLECTIONS: ContributionCollectionList = {
@@ -221,7 +220,7 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
           </View>
         </Section>
       ) : (
-        <ActionPermissionNotice action="configure" />
+        <PermissionNotice action="configure" />
       )}
 
       <Section title={t('contributions.links')}>

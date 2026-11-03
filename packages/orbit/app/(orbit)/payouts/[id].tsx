@@ -26,9 +26,8 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 import { PayoutStatusBadge } from '@/ui/StatusBadge';
-import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function Reconciliation({ scope, payout }: { scope: DashboardScope; payout: Payout }) {
   const pages = usePayoutReconciliation(scope, payout.id);
@@ -95,7 +94,7 @@ function PayoutDetail({ scope, payout }: { scope: DashboardScope; payout: Payout
   const cancellable = canCancelPayout(payout.status);
   return (
     <View className="gap-6">
-      {cancellable ? <ActionPermissionNotice action="money" /> : null}
+      {cancellable ? <PermissionNotice action="money" /> : null}
       <View className="flex-row flex-wrap items-center gap-3">
         <Text variant="title-1-bold" selectable>
           {formatSignedAmount(payout.amount, payout.currency)}

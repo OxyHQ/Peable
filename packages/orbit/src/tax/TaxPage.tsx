@@ -5,7 +5,7 @@ import type { DashboardScope } from '../api/dashboard';
 import { t } from '../i18n';
 import { useDashboardPermissions } from '../scope/useDashboardPermissions';
 import { OrbitScreen } from '../ui/OrbitScreen';
-import { ActionPermissionNotice } from '../ui/ActionPermissionNotice';
+import { PermissionNotice } from '../ui/states';
 import { CollectionSettings } from './CollectionSettings';
 import {
   BusinessSection,
@@ -57,11 +57,11 @@ export function TaxPage({ page }: { page: TaxPageKey }) {
           </Text>
           {can('taxRead') ? (
             <>
-              {READ_ONLY_PAGES.has(page) ? null : <ActionPermissionNotice action="money" />}
+              {READ_ONLY_PAGES.has(page) ? null : <PermissionNotice action="money" />}
               <Body scope={scope} />
             </>
           ) : (
-            <ActionPermissionNotice action="taxRead" view />
+            <PermissionNotice action="taxRead" />
           )}
         </View>
       )}

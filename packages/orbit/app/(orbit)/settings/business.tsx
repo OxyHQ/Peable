@@ -18,7 +18,7 @@ import { t } from '@/i18n';
 import { moneyKeys, useAccount } from '@/money/useMoney';
 import { useDashboardPermissions } from '@/scope/useDashboardPermissions';
 import { FormField } from '@/ui/FormField';
-import { ActionPermissionNotice } from '@/ui/ActionPermissionNotice';
+import { PermissionNotice, PageSkeleton } from '@/ui/states';
 import {
   AccountMissing,
   ErrorNotice,
@@ -26,7 +26,6 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
-import { PageSkeleton } from '@/ui/states';
 
 const PROFILE_FIELDS: readonly {
   field: BusinessField;
@@ -100,7 +99,7 @@ function BusinessDetails({ scope, account }: { scope: DashboardScope; account: A
 
   return (
     <View className="gap-6">
-      <ActionPermissionNotice action="money" />
+      <PermissionNotice action="money" />
       <Section title={t('business.profile')}>
         {PROFILE_FIELDS.map(({ field: name, keyboard, multiline }) =>
           field(name, { ...(keyboard ? { keyboard } : {}), ...(multiline ? { multiline } : {}) }),
