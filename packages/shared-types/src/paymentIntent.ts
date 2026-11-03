@@ -1,44 +1,51 @@
-import type { CardRailPaymentMethodType } from './paymentMethodConfiguration';
-// The PaymentIntent contract — the single source of truth shared by the Peable
-// Gateway backend, SDK, and frontend. Stripe's PaymentIntent, at the root
-// (ADR 0019): one status vocabulary over two rails — the non-custodial FairCoin
-// lifecycle, and a fiat card payment served by a provider behind the gateway
-// (ADR 0001).
-import type { Charge } from './charge';
-import type { Customer } from './customer';
-import type { CurrencyCode } from './money';
-import type { NetworkType } from './network';
-import type { PaymentMethod } from './paymentMethod';
-import type { ConnectedAccount } from './settlement';
+// The PaymentIntent — Stripe's, at the root (ADR 0019): one status vocabulary
+// over two rails, the non-custodial FairCoin lifecycle and a fiat card payment
+// served by a provider behind the gateway (ADR 0001).
+//
+// The wire types are the contract's (`@peable.to/contracts`
+// `paymentIntentSchema` and its request schemas), re-exported here as types;
+// the closed value sets are the contract's zod-free vocabulary. What stays
+// here is the lifecycle — the transition table and the predicates over it —
+// which is runtime behaviour, not wire shape.
+import type { PaymentIntentStatus } from '@peable.to/contracts/vocabulary';
 
-/**
- * Which rail moves the money (ADR 0001 D1).
- *
- * On the INTENT, not on the merchant: one merchant takes both, and a merchant's
- * capabilities are a different question from what this particular payment is.
- * The rail decides which of the fields below mean anything.
- */
-export type PaymentIntentRail = 'faircoin' | 'card';
-
-/** {@link PaymentIntentRail} as the tuple the database CHECK reads. */
-export const PAYMENT_INTENT_RAILS: readonly PaymentIntentRail[] = ['faircoin', 'card'];
-
-/**
- * Stripe's seven statuses, and no others (ADR 0019).
- *
- * The FairCoin rail walks four of them: it is created in `requires_action`
- * (the payer must broadcast a transaction — `next_action.faircoin_payment`),
- * moves to `processing` once a transaction is reported and while it confirms,
- * and ends `succeeded` or `canceled`. A card walks all seven.
- */
-export type PaymentIntentStatus =
-  | 'requires_payment_method'
-  | 'requires_confirmation'
-  | 'requires_action'
-  | 'processing'
-  | 'requires_capture'
-  | 'canceled'
-  | 'succeeded';
+export type {
+  Address,
+  AddressParams,
+  CancelPaymentIntentParams,
+  CapturePaymentIntentParams,
+  ClientAction,
+  ConfirmPaymentIntentParams,
+  CreatePaymentIntentParams,
+  ListPaymentIntentsParams,
+  PaymentIntent,
+  PaymentIntentClientAction,
+  PaymentIntentFaircoin,
+  PaymentIntentLastPaymentError,
+  PaymentIntentNextAction,
+  PaymentIntentTransferData,
+  RetrievePaymentIntentParams,
+  Shipping,
+  ShippingParams,
+  SubmitPaymentIntentTxParams,
+  UpdatePaymentIntentParams,
+} from '@peable.to/contracts';
+export {
+  MERCHANT_CANCELLATION_REASONS,
+  type MerchantCancellationReason,
+  PAYMENT_INTENT_CANCELLATION_REASONS,
+  PAYMENT_INTENT_CAPTURE_METHODS,
+  PAYMENT_INTENT_RAILS,
+  PAYMENT_INTENT_SETUP_FUTURE_USAGES,
+  PAYMENT_INTENT_STATUSES,
+  PAYMENT_METHOD_TYPES,
+  type PaymentIntentCancellationReason,
+  type PaymentIntentCaptureMethod,
+  type PaymentIntentRail,
+  type PaymentIntentSetupFutureUsage,
+  type PaymentIntentStatus,
+  type PaymentMethodType,
+} from '@peable.to/contracts/vocabulary';
 
 /**
  * The statuses only a CARD payment can reach (ADR 0019).
@@ -113,11 +120,6 @@ export function isValidStatusTransition(
   return ALLOWED[from].includes(to);
 }
 
-/** Every `PaymentIntentStatus`, derived from `ALLOWED`'s keys. */
-export const PAYMENT_INTENT_STATUSES: readonly PaymentIntentStatus[] = Object.keys(
-  ALLOWED,
-) as PaymentIntentStatus[];
-
 /** The statuses that end a payment: nothing leaves them (bar the reorg exception). */
 export const TERMINAL_STATUSES: readonly PaymentIntentStatus[] = ['succeeded', 'canceled'];
 
@@ -153,294 +155,4 @@ export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = [
 /** Whether an intent in this status can still expire. See {@link EXPIRABLE_STATUSES}. */
 export function canExpire(status: PaymentIntentStatus): boolean {
   return EXPIRABLE_STATUSES.includes(status);
-}
-
-/**
- * Why an intent was cancelled — Stripe's reasons, plus `underpaid`.
- *
- *  - `abandoned` — it expired: the payer never paid (the expiry sweeper).
- *  - `requested_by_customer` / `duplicate` / `fraudulent` — the merchant said so
- *    through `POST /v1/payment_intents/:id/cancel`.
- *  - `underpaid` — FairCoin only: a transaction arrived at the address and paid
- *    less than the amount. Peable never holds those coins, so it cannot ask for
- *    the difference on the same intent; `last_payment_error` says what happened.
- *  - `automatic` — the provider cancelled it on its own.
- *
- * `null` on a cancelled intent whose cause was never recorded (one cancelled
- * without a reason, or migrated from the pre-0019 `rejected`).
- */
-export type PaymentIntentCancellationReason =
-  | 'abandoned'
-  | 'automatic'
-  | 'duplicate'
-  | 'fraudulent'
-  | 'requested_by_customer'
-  | 'underpaid';
-
-export const PAYMENT_INTENT_CANCELLATION_REASONS: readonly PaymentIntentCancellationReason[] = [
-  'abandoned',
-  'automatic',
-  'duplicate',
-  'fraudulent',
-  'requested_by_customer',
-  'underpaid',
-];
-
-/** The reasons a MERCHANT may give `POST /v1/payment_intents/:id/cancel`. */
-export const MERCHANT_CANCELLATION_REASONS = [
-  'abandoned',
-  'duplicate',
-  'fraudulent',
-  'requested_by_customer',
-] as const satisfies readonly PaymentIntentCancellationReason[];
-
-/** When a card is captured: at confirmation, or by `POST …/capture` (card only). */
-export type PaymentIntentCaptureMethod = 'automatic' | 'manual';
-export const PAYMENT_INTENT_CAPTURE_METHODS: readonly PaymentIntentCaptureMethod[] = [
-  'automatic',
-  'manual',
-];
-
-/** Card only: keep the payment method on the customer for later (ADR 0016). */
-export type PaymentIntentSetupFutureUsage = 'on_session' | 'off_session';
-export const PAYMENT_INTENT_SETUP_FUTURE_USAGES: readonly PaymentIntentSetupFutureUsage[] = [
-  'on_session',
-  'off_session',
-];
-
-/**
- * The payment method types a PaymentIntent can carry: `faircoin` on the chain
- * rail, and on the card rail the card and the local methods the provider
- * collects in its hosted fields. Wallets (Apple Pay, Google Pay) are `card`.
- */
-export type PaymentMethodType = 'faircoin' | CardRailPaymentMethodType;
-
-/** Why the last attempt failed. Peable's words, never the provider's raw prose. */
-export interface PaymentIntentLastPaymentError {
-  /** `card_error` for a declined card; `payment_error` for a FairCoin underpayment. */
-  type: 'card_error' | 'payment_error' | 'api_error';
-  code: string | null;
-  decline_code: string | null;
-  message: string;
-}
-
-import type { Shipping, ShippingParams } from '@peable.to/contracts';
-
-/** A postal address — Stripe's shape (the contract's). */
-export type { Address, AddressParams, Shipping, ShippingParams } from '@peable.to/contracts';
-
-/**
- * What the payer must do next (`status: 'requires_action'`).
- *
- *  - `faircoin_payment` — send exactly `amount` (base units) to `address` on
- *    `network`; `uri` is the BIP21-style `faircoin:` URI a wallet scans.
- *  - `use_peable_sdk` — a card challenge; `@peable.to/sdk/checkout` fetches the
- *    provider's confirmation credential through `POST …/client_action` and
- *    completes it. The credential is never on the intent itself.
- */
-export type PaymentIntentNextAction =
-  | {
-      type: 'faircoin_payment';
-      faircoin_payment: {
-        address: string;
-        network: NetworkType;
-        amount: string;
-        currency: 'FAIR';
-        uri: string;
-      };
-    }
-  | { type: 'use_peable_sdk' };
-
-/**
- * The chain side of a FairCoin payment. `null` on a card payment.
- *
- * `txid` and `confirmations` describe the transaction the payer reported:
- * `null`/`0` while the intent is `requires_action`, and the watcher's count
- * against `required_confirmations` while it is `processing`.
- */
-export interface PaymentIntentFaircoin {
-  network: NetworkType;
-  /** Watch-only receive address derived per intent from the merchant's (or seller's) xpub. */
-  address: string;
-  txid: string | null;
-  confirmations: number;
-  required_confirmations: number;
-}
-
-export interface PaymentIntent {
-  id: string;
-  object: 'payment_intent';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
-  livemode: boolean;
-  status: PaymentIntentStatus;
-  /** Which rail moves this payment. Decides which fields below are populated. */
-  rail: PaymentIntentRail;
-  /**
-   * What the payer may pay with: `['faircoin']` on the chain; on the card rail
-   * the types named at creation, or those the configuration offers in this
-   * currency.
-   */
-  payment_method_types: PaymentMethodType[];
-  /** The `pmc_…` whose methods this card payment offers; `null` on the chain and when types were named. */
-  payment_method_configuration_details: { id: string } | null;
-  /**
-   * Amount in the currency's SMALLEST unit as a canonical integer string.
-   * Never a float, and never interpretable without `currency`: m⊜ (10^-8 FAIR)
-   * on the faircoin rail, cents on a fiat one.
-   */
-  amount: string;
-  /** What can still be captured: the authorized amount while `requires_capture`, else `"0"`. */
-  amount_capturable: string;
-  /** What was received: the captured amount once `succeeded`, else `"0"`. */
-  amount_received: string;
-  /** The sum of SUCCEEDED refunds on this payment. Refund state lives on the refunds. */
-  amount_refunded: string;
-  currency: CurrencyCode;
-  capture_method: PaymentIntentCaptureMethod;
-  setup_future_usage: PaymentIntentSetupFutureUsage | null;
-  /** `cus_…`, or the {@link Customer} with `expand[]=customer`. */
-  customer: string | Customer | null;
-  /** `pm_…`, or the {@link PaymentMethod} with `expand[]=payment_method`. Card only. */
-  payment_method: string | PaymentMethod | null;
-  /** `ch_…`, or the {@link Charge} with `expand[]=latest_charge`. Card only. */
-  latest_charge: string | Charge | null;
-  next_action: PaymentIntentNextAction | null;
-  last_payment_error: PaymentIntentLastPaymentError | null;
-  cancellation_reason: PaymentIntentCancellationReason | null;
-  canceled_at: number | null;
-  description: string | null;
-  receipt_email: string | null;
-  /** Card only. */
-  statement_descriptor_suffix: string | null;
-  shipping: Shipping | null;
-  /** The chain side. FairCoin rail only; `null` on a card payment. */
-  faircoin: PaymentIntentFaircoin | null;
-  /** The merchant's PUBLIC `merch_…`. */
-  merchant_id: string;
-  /**
-   * The seller this payment is made ON BEHALF OF (`ca_…`), or `null` for a
-   * payment to the merchant itself (ADR 0012 D5). On-behalf payments are
-   * FairCoin only, and `faircoin.address` derives from that seller's own key.
-   */
-  connected_account: string | ConnectedAccount | null;
-  /**
-   * Orbit's fee on this card payment, taken by the provider from the
-   * destination account when the charge succeeds (ADR 0015 §3) — the
-   * INSTRUCTION; the fee actually taken is the `application_fee` object.
-   * `null` on a platform charge.
-   */
-  application_fee_amount: string | null;
-  /**
-   * A destination charge (ADR 0015 §2): the account (`ca_…`) the funds go to,
-   * and the amount transferred when the platform named one. `null` on a
-   * platform charge.
-   */
-  transfer_data: PaymentIntentTransferData | null;
-  /** The account (`ca_…`) that is the merchant of record, or `null` (the platform). */
-  on_behalf_of: string | null;
-  client_secret: string;
-  metadata: Record<string, string>;
-  /** When an UNPAID intent expires. Meaningful only while `can_expire`. */
-  expires_at: number;
-  /** Whether this intent can still expire (ADR 0012 D9). */
-  can_expire: boolean;
-  created: number;
-  updated_at: number;
-}
-
-/** Where a destination charge's funds go (`transfer_data`). */
-export interface PaymentIntentTransferData {
-  /** `ca_…` */
-  destination: string;
-  /** Base units transferred; `null` means the whole amount less `application_fee_amount`. */
-  amount: string | null;
-}
-
-/** `POST /v1/payment_intents`. */
-export interface CreatePaymentIntentParams {
-  /** Amount in the currency's smallest unit, as a canonical integer string. */
-  amount: string;
-  /** Defaults to `'faircoin'`. */
-  rail?: PaymentIntentRail;
-  /** Required on the faircoin rail; refused on the card rail, which has none. */
-  network?: NetworkType;
-  /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
-  currency?: CurrencyCode;
-  /**
-   * `['faircoin']` on the chain rail. On the card rail, any of the card-rail
-   * types the provider offers in `currency` — instead of a configuration.
-   */
-  payment_method_types?: PaymentMethodType[];
-  /** Card only: the `pmc_…` whose methods to offer. Defaults to the merchant's default configuration. */
-  payment_method_configuration?: string;
-  /** `cus_…`. */
-  customer?: string;
-  /** `pm_…`, card only. A saved payment method of `customer`. */
-  payment_method?: string;
-  /** Card only: confirm in the same call (needs `payment_method`). */
-  confirm?: boolean;
-  /** Card only, with `confirm`: the customer is not present (needs `customer`). */
-  off_session?: boolean;
-  /** Card only. */
-  setup_future_usage?: PaymentIntentSetupFutureUsage;
-  /** Card only. Defaults to `'automatic'`. */
-  capture_method?: PaymentIntentCaptureMethod;
-  receipt_email?: string;
-  description?: string;
-  /** Card only. */
-  statement_descriptor_suffix?: string;
-  shipping?: ShippingParams;
-  metadata?: Record<string, string>;
-  expires_in_seconds?: number;
-  /** FairCoin only: pay this seller (`ca_…`, ADR 0012 D5). */
-  connected_account?: string;
-  /**
-   * Card only, a platform acting for one of its connected accounts: Orbit's
-   * fee for this payment. Needs `transfer_data` (or `on_behalf_of`); refused
-   * beside `transfer_data.amount`.
-   */
-  application_fee_amount?: string;
-  /** Card only: a destination charge to one of the platform's connected accounts. */
-  transfer_data?: { destination: string; amount?: string };
-  /** Card only: make this connected account (`ca_…`) the merchant of record. */
-  on_behalf_of?: string;
-  /** Card only, with `confirm`: where a redirect-based challenge returns. */
-  return_url?: string;
-}
-
-/**
- * `POST /v1/payment_intents/:id`. The merchant's own bookkeeping only —
- * the amount, rail and status are the payment and move through their own
- * operations. `metadata` is a PATCH (`""` unsets a key).
- */
-export interface UpdatePaymentIntentParams {
-  metadata?: Record<string, string>;
-  description?: string;
-  receipt_email?: string;
-  shipping?: ShippingParams;
-}
-
-/** `POST /v1/payment_intents/:id/confirm` (card only). */
-export interface ConfirmPaymentIntentParams {
-  /** `pm_…`; defaults to the intent's own. */
-  payment_method?: string;
-  off_session?: boolean;
-  setup_future_usage?: PaymentIntentSetupFutureUsage;
-  return_url?: string;
-  receipt_email?: string;
-  shipping?: ShippingParams;
-}
-
-/** `POST /v1/payment_intents/:id/capture` (card only, `requires_capture`). */
-export interface CapturePaymentIntentParams {
-  /** Base units, at most the authorized amount; defaults to all of it. */
-  amount_to_capture?: string;
-}
-
-/** `POST /v1/payment_intents/:id/cancel`. */
-export interface CancelPaymentIntentParams {
-  cancellation_reason?: (typeof MERCHANT_CANCELLATION_REASONS)[number];
 }

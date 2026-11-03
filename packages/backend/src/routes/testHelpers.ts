@@ -1,15 +1,20 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { SIMULATED_FAIRCOIN_OUTCOMES } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+import { simulateFaircoinPaymentParams } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import { findSessionById, findSessionForMerchant } from '../db/payments/checkoutSessionRepository';
 import { idempotent } from '../lib/idempotency';
 import { refuseLivemode } from '../lib/liveStream';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import { toCheckoutSessionDTO } from '../lib/serializeCheckout';
 import { expireSessionNow } from '../services/checkout/sessionService';
@@ -27,10 +32,6 @@ import { resolveMerchant } from './paymentIntents';
  * retried simulation answers what the first one did instead of failing on a
  * payment that already moved.
  */
-
-const simulateBodySchema = z
-  .object({ outcome: z.enum(SIMULATED_FAIRCOIN_OUTCOMES).optional() })
-  .strict();
 
 const expireBodySchema = z.object({}).strict();
 
@@ -51,7 +52,7 @@ async function simulateFaircoinPaymentRoute(
 ): Promise<void> {
   const id = idOf(req, res);
   if (!id) return;
-  const parsed = simulateBodySchema.safeParse(req.body ?? {});
+  const parsed = simulateFaircoinPaymentParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -152,7 +153,7 @@ export function createTestHelpersRouter(deps: { requireMerchant: RequestHandler 
   const write = [
     deps.requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
   ];
   const testMode = (

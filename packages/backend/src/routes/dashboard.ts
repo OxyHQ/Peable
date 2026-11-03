@@ -48,11 +48,8 @@ import {
   validateDomain,
 } from './paymentMethodConfigurations';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
-import {
-  answerPaymentIntentList,
-  paymentIntentListFilters,
-  resolveMerchantByApp,
-} from './paymentIntents';
+import { listPaymentIntentsQuery } from '@peable.to/contracts';
+import { answerPaymentIntentList, resolveMerchantByApp } from './paymentIntents';
 import { answerWebhookDeliveryList, redeliverWebhookDelivery } from './webhookDeliveries';
 import {
   answerWebhookEndpointList,
@@ -96,7 +93,7 @@ import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import { listQuerySchema, parseQuery, type QuerySurface } from '../lib/list';
+import { dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
 import { runIdempotent } from '../lib/idempotency';
 import {
   answerBalanceTransactionList,
@@ -216,16 +213,10 @@ export async function resolveDashboardAccess(
 }
 
 /**
- * The dashboard's lists take `environment` beside the list parameters (the
- * Test/Live toggle); it is validated by `resolveDashboardAccess` and declared
- * here only so the strict list schema does not refuse it.
+ * The dashboard's payment-intent list is the contract's (`listPaymentIntentsQuery`)
+ * plus `environment` (the Test/Live toggle), validated by `resolveDashboardAccess`.
  */
-const dashboardScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
-
-const paymentIntentsListQuery = listQuerySchema({
-  ...paymentIntentListFilters,
-  ...dashboardScope,
-});
+const paymentIntentsListQuery = dashboardQuery(listPaymentIntentsQuery);
 
 /**
  * Build the `/v1/dashboard/*` router (F2.5 Phase 0 Task 2) — a human Oxy

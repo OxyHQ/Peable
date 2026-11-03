@@ -1,24 +1,30 @@
+/**
+ * PaymentIntents (`pi_…`, ADR 0019) — Stripe's surface over the FairCoin and
+ * card rails.
+ *
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `paymentIntentRoutes`): this file validates with those objects and decides
+ * nothing about the wire's shape.
+ */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
 import { verifySecret } from '@oxy.so/core/server';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { randomUUID } from 'node:crypto';
 import {
-  MERCHANT_CANCELLATION_REASONS,
-  PAYMENT_INTENT_CAPTURE_METHODS,
-  PAYMENT_INTENT_SETUP_FUTURE_USAGES,
-  PAYMENT_INTENT_STATUSES,
-  isBaseUnitString,
-  type CancelPaymentIntentParams,
-  type CapturePaymentIntentParams,
-  type ConfirmPaymentIntentParams,
-  type CreatePaymentIntentParams,
-  type PaymentIntentStatus,
-  type UpdatePaymentIntentParams,
-} from '@peable.to/shared-types';
-import { CARD_RAIL_PAYMENT_METHOD_TYPES } from '@peable.to/shared-types';
+  METADATA_LIMIT_MESSAGE,
+  cancelPaymentIntentParams,
+  capturePaymentIntentParams,
+  clientSecretQuery,
+  confirmPaymentIntentParams,
+  createPaymentIntentParams,
+  listPaymentIntentsQuery,
+  retrievePaymentIntentQuery,
+  submitPaymentIntentTxParams,
+  toShipping,
+  updatePaymentIntentParams,
+} from '@peable.to/contracts';
+import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import {
   findMerchantByAppEnvironment,
@@ -61,7 +67,6 @@ import { reportFaircoinBroadcast } from '../services/faircoinBroadcast';
 import { confirmCardIntent } from '../services/confirmIntent';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPaymentIntentDTO } from '../lib/serialize';
-import { emailSchema, shippingSchema, toShipping } from '../lib/addressSchema';
 import {
   sendError,
   sendProviderError,
@@ -69,40 +74,27 @@ import {
   requireServiceApp,
   requireAuthenticated,
   sendValidationError,
+  hasScope,
+  requireScope,
 } from '../lib/http';
 import { sendMoneyRefusal } from '../lib/moneyHttp';
-import { railBodyFields } from '../lib/railSchema';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 import { requestIdOf } from '../lib/requestId';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  expandParam,
-  type ListQuery,
-  listQuerySchema,
-  parseQuery,
-  resolveListReference,
-  retrieveQuerySchema,
-} from '../lib/list';
-import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
+import { answerList, type ListQuery, parseQuery, resolveListReference } from '../lib/list';
 
 /**
- * The payer's capability token, from the header or the query.
+ * The payer's capability token: the contract's `client_secret` query parameter
+ * (already parsed), else the `X-Peable-Client-Secret` header.
  *
  * The HEADER is preferred and the query param is accepted because the hosted
  * checkout's first REST snapshot has historically used it. Kept in one function
- * so the three payer-authorized routes read it identically — a route that
- * looked only at the query would silently reject every caller using the header,
- * and vice versa.
+ * so every payer-authorized route (here and `routes/setupIntents.ts`) reads it
+ * identically — a route that looked only at the query would silently reject
+ * every caller using the header, and vice versa.
  */
-function readClientSecret(req: Request): string | undefined {
-  const fromQuery = req.query.client_secret;
-  if (typeof fromQuery === 'string' && fromQuery.length > 0) return fromQuery;
-  return req.header('X-Peable-Client-Secret') ?? undefined;
+export function readClientSecret(req: Request, fromQuery: string | undefined): string | undefined {
+  return fromQuery ?? req.header('X-Peable-Client-Secret') ?? undefined;
 }
 
 /**
@@ -134,72 +126,6 @@ function sendStaleOrMissing(
   );
 }
 
-/**
- * The payment-intent list's own filters, beside the shared list parameters.
- * Exported: `routes/dashboard.ts` lists the SAME way so the two never drift.
- */
-export const paymentIntentListFilters = {
-  status: z
-    .enum(PAYMENT_INTENT_STATUSES as [PaymentIntentStatus, ...PaymentIntentStatus[]])
-    .optional(),
-  /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
-  connected_account: z.string().min(1).max(255).optional(),
-  /** Only this customer's payments (`cus_…`, ADR 0016). */
-  customer: z.string().min(1).max(255).optional(),
-} as const;
-
-const listPaymentIntentsQuery = listQuerySchema(paymentIntentListFilters);
-
-/** A merchant retrieve takes `expand[]`; the payer's takes `client_secret` and nothing to expand. */
-const retrieveIntentQuery = retrieveQuerySchema({});
-
-/** `""` clears a field, Stripe's rule for an update. */
-const clearable = <T extends z.ZodType>(schema: T) => z.union([schema, z.literal('')]);
-
-const updateBodySchema = z
-  .object({
-    metadata: metadataUpdateSchema.optional(),
-    description: clearable(z.string().max(1000)).optional(),
-    receipt_email: clearable(emailSchema).optional(),
-    shipping: clearable(shippingSchema).optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof UpdatePaymentIntentParams | 'expand', z.ZodType>)
-  .strict();
-
-const idParam = z.string().min(1).max(255);
-
-const confirmBodySchema = z
-  .object({
-    payment_method: idParam.optional(),
-    off_session: z.boolean().optional(),
-    setup_future_usage: z
-      .enum(PAYMENT_INTENT_SETUP_FUTURE_USAGES as ['on_session', 'off_session'])
-      .optional(),
-    return_url: z.string().url().max(2048).optional(),
-    receipt_email: emailSchema.optional(),
-    shipping: shippingSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof ConfirmPaymentIntentParams | 'expand', z.ZodType>)
-  .strict();
-
-const captureBodySchema = z
-  .object({
-    amount_to_capture: z
-      .string()
-      .refine(isBaseUnitString, 'amount_to_capture must be a minor-unit integer string')
-      .refine((value) => value !== '0', 'amount_to_capture must be positive')
-      .optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CapturePaymentIntentParams | 'expand', z.ZodType>)
-  .strict();
-
-const cancelBodySchema = z
-  .object({
-    cancellation_reason: z.enum(MERCHANT_CANCELLATION_REASONS).optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CancelPaymentIntentParams | 'expand', z.ZodType>)
-  .strict();
-
 /** Stripe's answer for an operation the intent's status does not allow. */
 function sendUnexpectedState(res: Response, intent: PaymentIntentRow, operation: string): void {
   sendError(
@@ -224,14 +150,6 @@ function sendCardOnly(res: Response, operation: string, param?: string): void {
 }
 
 /**
- * The `connected_account` a create body may carry (ADR 0012 D5). Shared by the
- * intent and checkout-session bodies so the two cannot disagree on its shape.
- */
-export const connectedAccountBodyField = {
-  connected_account: z.string().min(1).max(255).optional(),
-} as const;
-
-/**
  * Answer the two refusals an ON-BEHALF create can meet before anything is
  * written. Shared by both creating routes.
  *
@@ -250,73 +168,6 @@ export function sendConnectedAccountRefusal(res: Response, err: unknown): boolea
   }
   return false;
 }
-
-// Zod schema for the create body. Its shape must name every key of
-// `CreatePaymentIntentParams` (the `satisfies` below) and `.strict()` refuses any
-// other, so the wire contract and the shared type can never silently drift
-// apart — and a field spelled the old way is a 400, never quietly dropped.
-const createBodySchema = z
-  .object({
-    ...railBodyFields,
-    ...connectedAccountBodyField,
-    metadata: metadataCreateSchema.optional(),
-    expires_in_seconds: z.number().int().positive().optional(),
-    // `['faircoin']` on the chain; any card-rail types on the card rail
-    // (`resolveCardPaymentMethods` checks each against the provider and the
-    // currency, so the refusal names what is wrong with it).
-    payment_method_types: z
-      .array(z.enum(['faircoin', ...CARD_RAIL_PAYMENT_METHOD_TYPES]))
-      .min(1)
-      .max(CARD_RAIL_PAYMENT_METHOD_TYPES.length)
-      .optional(),
-    payment_method_configuration: idParam.optional(),
-    customer: idParam.optional(),
-    payment_method: idParam.optional(),
-    confirm: z.boolean().optional(),
-    off_session: z.boolean().optional(),
-    setup_future_usage: z
-      .enum(PAYMENT_INTENT_SETUP_FUTURE_USAGES as ['on_session', 'off_session'])
-      .optional(),
-    capture_method: z.enum(PAYMENT_INTENT_CAPTURE_METHODS as ['automatic', 'manual']).optional(),
-    receipt_email: emailSchema.optional(),
-    description: z.string().max(1000).optional(),
-    // Stripe's bound; the account prefix and this together must fit 22.
-    statement_descriptor_suffix: z
-      .string()
-      .min(1)
-      .max(22)
-      .regex(/^[^<>\\'"*]*$/, 'statement_descriptor_suffix may not contain < > \\ \' " *')
-      .optional(),
-    shipping: shippingSchema.optional(),
-    return_url: z.string().url().max(2048).optional(),
-    // A destination charge for one of the platform's connected accounts
-    // (ADR 0015 §2). Card only; `services/money/chargeRouting.ts` decides.
-    application_fee_amount: z
-      .string()
-      .refine(isBaseUnitString, 'application_fee_amount must be a minor-unit integer string')
-      .optional(),
-    transfer_data: z
-      .object({
-        destination: idParam,
-        amount: z
-          .string()
-          .refine(isBaseUnitString, 'transfer_data.amount must be a minor-unit integer string')
-          .optional(),
-      })
-      .strict()
-      .optional(),
-    on_behalf_of: idParam.optional(),
-  } satisfies Record<keyof CreatePaymentIntentParams, z.ZodType>)
-  .strict();
-
-// The payer proves possession of the intent with its `client_secret`; the
-// reported broadcast txid is what the settlement watcher then verifies on-chain.
-const submitTxBodySchema = z
-  .object({
-    client_secret: z.string().min(1),
-    txid: z.string().min(1),
-  })
-  .strict();
 
 /**
  * Single query owner for "find a Merchant by (oxyAppId, environment)" — no
@@ -471,7 +322,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -487,12 +338,12 @@ export function createPaymentIntentsRouter(deps: {
        */
       const idempotencyKey = idempotencyKeyOf(res);
 
-      const parsed = createBodySchema.safeParse(req.body);
+      const parsed = createPaymentIntentParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
       }
-      const params: CreatePaymentIntentParams = parsed.data as CreatePaymentIntentParams;
+      const params = parsed.data;
 
       try {
         const { intent, reused, clientAction } = await createIntent({
@@ -599,7 +450,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -629,20 +480,16 @@ export function createPaymentIntentsRouter(deps: {
       if (serviceApp?.appId) {
         // Merchant path — same `payments:read` requirement as the list route
         // (F2.0 gateway-review finding: this branch previously enforced no
-        // scope at all). Can't use `oxy.requireScope()` as ordinary
+        // scope at all). Can't use `requireScope()` as ordinary
         // route middleware here — that would also gate the payer/client_secret
         // branch below, which has no service token to check — so the SAME
         // scope-checking primitive is invoked manually, scoped to just this
         // branch.
-        let scopeGranted = false;
-        oxy.middleware.requireScope('payments:read')(req, res, () => {
-          scopeGranted = true;
-        });
-        if (!scopeGranted) return;
+        if (!hasScope(req, res, 'payments:read')) return;
 
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
-        const query = parseQuery(req, res, retrieveIntentQuery);
+        const query = parseQuery(req, res, retrievePaymentIntentQuery);
         if (!query) return;
         const expand = parseExpand(res, 'payment_intent', query.expand, { list: false });
         if (!expand) return;
@@ -707,7 +554,9 @@ export function createPaymentIntentsRouter(deps: {
       // on a polled response is a credential in a browser's cache and in every
       // intermediary's logs. The payer asks for it explicitly, once, through
       // `POST …/client_action`.
-      const clientSecret = readClientSecret(req);
+      const payerQuery = parseQuery(req, res, retrievePaymentIntentQuery);
+      if (!payerQuery) return;
+      const clientSecret = readClientSecret(req, payerQuery.client_secret);
       if (!clientSecret) {
         sendError(
           res,
@@ -744,7 +593,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -754,7 +603,7 @@ export function createPaymentIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = updateBodySchema.safeParse(req.body ?? {});
+      const parsed = updatePaymentIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -840,20 +689,19 @@ export function createPaymentIntentsRouter(deps: {
         return;
       }
 
+      const query = parseQuery(req, res, clientSecretQuery);
+      if (!query) return;
+
       const { serviceApp } = req as OxyAuthRequest;
       let intent: PaymentIntentRow | null;
 
       if (serviceApp?.appId) {
-        let scopeGranted = false;
-        oxy.middleware.requireScope('payments:read')(req, res, () => {
-          scopeGranted = true;
-        });
-        if (!scopeGranted) return;
+        if (!hasScope(req, res, 'payments:read')) return;
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
         intent = await findIntentForMerchant(getDb(), id, merchant.id);
       } else {
-        const clientSecret = readClientSecret(req);
+        const clientSecret = readClientSecret(req, query.client_secret);
         if (!clientSecret) {
           sendError(
             res,
@@ -925,7 +773,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents/:id/confirm',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -935,7 +783,7 @@ export function createPaymentIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = confirmBodySchema.safeParse(req.body ?? {});
+      const parsed = confirmPaymentIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -1069,7 +917,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents/:id/capture',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -1079,7 +927,7 @@ export function createPaymentIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = captureBodySchema.safeParse(req.body ?? {});
+      const parsed = capturePaymentIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -1161,7 +1009,7 @@ export function createPaymentIntentsRouter(deps: {
     '/v1/payment_intents/:id/cancel',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -1171,7 +1019,7 @@ export function createPaymentIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = cancelBodySchema.safeParse(req.body ?? {});
+      const parsed = cancelPaymentIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -1275,7 +1123,7 @@ export function createPaymentIntentsRouter(deps: {
   router.post(
     '/v1/payment_intents/:id/submit_tx',
     wrap(async (req, res) => {
-      const parsed = submitTxBodySchema.safeParse(req.body);
+      const parsed = submitPaymentIntentTxParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

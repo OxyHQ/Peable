@@ -17,10 +17,14 @@ export {
   type AddressParams,
   type CancelPaymentIntentParams,
   type CapturePaymentIntentParams,
+  type ClientAction,
   type ConfirmPaymentIntentParams,
   type CreatePaymentIntentParams,
+  type ListPaymentIntentsParams,
+  type MerchantCancellationReason,
   type PaymentIntent,
   type PaymentIntentCancellationReason,
+  type PaymentIntentClientAction,
   type PaymentIntentCaptureMethod,
   type PaymentIntentFaircoin,
   type PaymentIntentLastPaymentError,
@@ -30,8 +34,10 @@ export {
   type PaymentIntentStatus,
   type PaymentIntentTransferData,
   type PaymentMethodType,
+  type RetrievePaymentIntentParams,
   type Shipping,
   type ShippingParams,
+  type SubmitPaymentIntentTxParams,
   type UpdatePaymentIntentParams,
   CARD_ONLY_STATUSES,
   EXPIRABLE_STATUSES,
@@ -41,12 +47,13 @@ export {
   PAYMENT_INTENT_RAILS,
   PAYMENT_INTENT_SETUP_FUTURE_USAGES,
   PAYMENT_INTENT_STATUSES,
+  PAYMENT_METHOD_TYPES,
   TERMINAL_STATUSES,
   canExpire,
   canStillBePaid,
   isValidStatusTransition,
 } from './paymentIntent';
-export type { Charge, ChargeOutcome } from './charge';
+export type { Charge, ChargeOutcome, ListChargesParams } from './charge';
 export type {
   CreateCustomerParams,
   Customer,
@@ -65,11 +72,15 @@ export type {
 export {
   type CancelSetupIntentParams,
   type CreateSetupIntentParams,
+  type ListSetupIntentsParams,
+  type RetrieveSetupIntentParams,
   type SetupIntent,
   type SetupIntentCancellationReason,
   type SetupIntentStatus,
   type SetupIntentUsage,
+  SETUP_INTENT_CANCELLATION_REASONS,
   SETUP_INTENT_STATUSES,
+  SETUP_INTENT_USAGES,
 } from './setupIntent';
 export {
   PEABLE_API_VERSION,
@@ -140,8 +151,10 @@ export {
   type PromotionCodeListParams,
 } from './catalog';
 export {
+  DISPUTE_EVIDENCE_TEXT_MAX,
   DISPUTE_FILE_EVIDENCE_FIELDS,
   DISPUTE_REASONS,
+  DISPUTE_STATUSES,
   DISPUTE_TEXT_EVIDENCE_FIELDS,
   normalizeDisputeReason,
   type Dispute,
@@ -264,7 +277,13 @@ export {
   type ReconciliationMismatch,
   type ReconciliationMismatchKind,
 } from './balance';
-export { REFUND_REASONS } from './settlement';
+export {
+  REFUND_ORIGINS,
+  REFUND_REASONS,
+  REFUND_STATUSES,
+  SETTLEMENT_STATUSES,
+  type SettlementStatus,
+} from './settlement';
 export type {
   CapabilityStatus,
   ConnectedAccount,
@@ -272,6 +291,8 @@ export type {
   ConnectedAccountFaircoinStatus,
   ConnectedAccountRail,
   CreateRefundParams,
+  ListRefundsParams,
+  PaymentIntentRefundList,
   Refund,
   RefundOrigin,
   RefundReason,
@@ -390,14 +411,19 @@ export {
   type UpdateMerchantEmailSettingsParams,
 } from './branding';
 export {
+  ENRICH_MAX_ADDRESSES,
+  ENRICHMENT_KINDS,
+  SOCIAL_PAYMENT_DIRECTIONS,
   SOCIAL_SOURCE_APP_MAX_LENGTH,
   SOCIAL_SOURCE_REF_MAX_LENGTH,
   type SocialPaymentSource,
   type SocialNextAddressRequest,
   type SocialNextAddressResponse,
+  type SocialReceiveCursorParams,
   type SocialReceiveCursorResponse,
   type SocialPaymentDirection,
   type SocialPayment,
+  type SocialPaymentsParams,
   type SocialPaymentsResponse,
   type EnrichmentKind,
   type EnrichmentResult,

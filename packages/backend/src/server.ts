@@ -39,6 +39,7 @@ import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/s
 import { config } from './config';
 import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postgres';
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
+import { oxyGuard } from './lib/http';
 import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
 import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
@@ -289,11 +290,18 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     next();
   }) as RequestHandler);
   app.use(refuseMisplacedPeableAccount);
+  // Both refuse in the ONE error envelope (`oxyGuard`, ADR 0014 D1), not the library's own shape.
   const requireMerchant: RequestHandler =
-    deps.requireMerchant ?? oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE });
+    deps.requireMerchant ??
+    oxyGuard(oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE }));
   const optionalServiceAuth: RequestHandler =
     deps.optionalServiceAuth ??
-    oxy.middleware.auth({ optional: true, expectedAudience: PEABLE_SERVICE_AUDIENCE });
+    oxyGuard(
+      oxy.middleware.auth({
+        optional: true,
+        expectedAudience: PEABLE_SERVICE_AUDIENCE,
+      }),
+    );
   const publicRateLimit: RequestHandler =
     deps.publicRateLimit ??
     createOxyRateLimit(oxy, {
