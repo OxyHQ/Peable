@@ -156,6 +156,7 @@ export {
 export {
   FILE_PURPOSES,
   FILE_PURPOSE_POLICIES,
+  FILE_UPLOAD_PURPOSES,
   FILE_STATUSES,
   FILE_TYPES,
   type CreateFileFromOxyParams,
@@ -163,8 +164,30 @@ export {
   type FilePurpose,
   type FileStatus,
   type FileType,
+  type FileUploadPurpose,
   type ListFilesParams,
 } from './file';
+export {
+  SEARCHABLE_RESOURCES,
+  SEARCH_QUERY_MAX_CLAUSES,
+  SEARCH_QUERY_MAX_LENGTH,
+  SEARCH_SUBSTRING_MIN_LENGTH,
+  type SearchParams,
+  type SearchResult,
+  type SearchableResource,
+} from './search';
+export {
+  REPORT_RUN_STATUSES,
+  REPORT_TYPE_IDS,
+  REPORT_TYPE_LAYOUTS,
+  type CreateReportRunParams,
+  type ListReportRunsParams,
+  type ReportRun,
+  type ReportRunParameters,
+  type ReportRunStatus,
+  type ReportType,
+  type ReportTypeId,
+} from './reporting';
 export {
   CARD_RAIL_PAYMENT_METHOD_TYPES,
   PAYMENT_METHOD_CONFIGURATION_TYPES,

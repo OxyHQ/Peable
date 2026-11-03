@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { and, count, eq, inArray, isNull, type SQL } from 'drizzle-orm';
 import type { Address, Shipping } from '@peable.to/shared-types';
 import { customerProviderBindings, customers, paymentMethods } from '../schema';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
@@ -287,28 +287,43 @@ export async function tombstoneCustomer(
   return { customer, detachedMethodIds: detached.map((row) => row.id) };
 }
 
+export interface CustomerListScope {
+  readonly merchantId: string;
+  readonly email?: string | undefined;
+  /** A predicate compiled by `lib/search` over this table's fields — never caller text. */
+  readonly search?: SQL | undefined;
+}
+
+/** A deleted customer is a tombstone: retrievable by id, never listed or found by search. */
+function customerListWhere(params: CustomerListScope): SQL | undefined {
+  return and(
+    eq(customers.merchantId, params.merchantId),
+    isNull(customers.deletedAt),
+    params.email === undefined ? undefined : eq(customers.email, params.email),
+    params.search,
+  );
+}
+
 /** One page of a merchant's LIVE customers, newest first, optionally by exact email. */
 export async function listCustomersForMerchant(
   db: DatabaseOrTransaction,
-  params: {
-    readonly merchantId: string;
-    readonly email?: string | undefined;
-    readonly page: KeysetPage;
-  },
+  params: CustomerListScope & { readonly page: KeysetPage },
 ): Promise<{ data: CustomerRow[]; hasMore: boolean }> {
   const walk = keyset(customers.id, customers.createdAt, params.page);
   const rows = await db
     .select(CUSTOMER_COLUMNS)
     .from(customers)
-    .where(
-      and(
-        eq(customers.merchantId, params.merchantId),
-        isNull(customers.deletedAt),
-        params.email === undefined ? undefined : eq(customers.email, params.email),
-        walk.where,
-      ),
-    )
+    .where(and(customerListWhere(params), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows as CustomerRow[]);
+}
+
+/** How many customers {@link listCustomersForMerchant} would walk — a search's `total_count`. */
+export async function countCustomersForMerchant(
+  db: DatabaseOrTransaction,
+  params: CustomerListScope,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(customers).where(customerListWhere(params));
+  return row?.n ?? 0;
 }

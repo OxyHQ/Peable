@@ -54,7 +54,9 @@ export function newId(
     | 'po'
     | 'fee'
     | 'fr'
-    | 'recon',
+    | 'recon'
+    // Reporting: a report run (Stripe's `frr_`).
+    | 'frr',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

@@ -1,5 +1,32 @@
 # Changelog
 
+## 0.19.0 — Search and report runs (Orbit Phase 8)
+
+Requires `@peable.to/shared-types` 0.17.0.
+
+- New `search({ query, limit, page, expand })` on `paymentIntents`, `charges`,
+  `customers`, `products`, `prices` and `refunds` (`GET /v1/<resource>/search`,
+  Stripe's query language): a page promise (`SearchResult<T>`: `next_page`,
+  `total_count` with `expand: ['total_count']`) that is also an async iterable
+  following `next_page` with the same query (`ApiSearchPromise`). Lists and
+  searches share one auto-pager (`AutoPaging`).
+- New `peable.reporting.reportTypes` (`list`, `retrieve`) and
+  `peable.reporting.reportRuns` (`create`, `retrieve`, `list({ report_type })`):
+  `payments.itemized.1`, `balance.summary.1`, `payouts.itemized.1`, produced in
+  the background as a `finance_report_run` file.
+- New `files.contents(id)` (`GET /v1/files/:id/contents`): a report's CSV bytes
+  with its `contentType` and `filename` (`DownloadedBytes`), over the new
+  `GatewayClient.download`. `FilesResource` now takes a `GatewayClient`.
+- `Charge` gains `billing_details`.
+- Files: purpose `finance_report_run` (CSV, written by Peable only), type `csv`;
+  `FILE_UPLOAD_PURPOSES` lists what `files.create` takes, and
+  `CreateFileFromOxyParams.purpose` is a `FileUploadPurpose`.
+- New events `reporting.report_run.succeeded` and `reporting.report_run.failed`,
+  accepted by `webhooks.constructEvent`.
+- Re-exported: `SEARCHABLE_RESOURCES`, `SEARCH_QUERY_MAX_LENGTH`,
+  `SEARCH_QUERY_MAX_CLAUSES`, `SEARCH_SUBSTRING_MIN_LENGTH`, `REPORT_TYPE_IDS`,
+  `REPORT_TYPE_LAYOUTS`, `REPORT_RUN_STATUSES` and their types.
+
 ## 0.18.0 — checkout v2, payment links v2, Elements, branding (Orbit Phase 3, breaking)
 
 Requires `@peable.to/shared-types` 0.16.0.

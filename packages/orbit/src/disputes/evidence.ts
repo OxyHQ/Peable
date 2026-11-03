@@ -8,6 +8,7 @@ import type {
   DisputeTextEvidenceField,
   FilePurpose,
   FileType,
+  FileUploadPurpose,
 } from '@peable.to/shared-types';
 import type { StatusTone } from '../payments/status';
 
@@ -161,10 +162,12 @@ export const ORBIT_FILE_POLICIES: Readonly<
   business_logo: { types: ['png', 'jpg'], max_bytes: 512 * 1024 },
   identity_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
   additional_verification: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
+  // A report run's CSV: written by Peable, never uploaded (not a `FileUploadPurpose`).
+  finance_report_run: { types: ['csv'], max_bytes: 64 * 1024 * 1024 },
 };
 
 /** Filename extensions a picker should offer for `purpose` (`jpg` also as `jpeg`). */
-export function allowedExtensions(purpose: FilePurpose): string[] {
+export function allowedExtensions(purpose: FileUploadPurpose): string[] {
   return ORBIT_FILE_POLICIES[purpose].types.flatMap((type) =>
     type === 'jpg' ? ['jpg', 'jpeg'] : [type],
   );
@@ -177,7 +180,7 @@ export function allowedExtensions(purpose: FilePurpose): string[] {
  */
 export function fileRefusal(
   file: { name: string; size: number },
-  purpose: FilePurpose,
+  purpose: FileUploadPurpose,
 ): string | null {
   const policy = ORBIT_FILE_POLICIES[purpose];
   const extension = file.name.includes('.') ? file.name.split('.').pop()?.toLowerCase() : undefined;

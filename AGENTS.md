@@ -283,8 +283,35 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
-`refunds`, `setupIntents`, `social`, `tax`, `transfers`, `webhookDeliveries`,
-`webhookEndpoints`.
+`refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `transfers`,
+`webhookDeliveries`, `webhookEndpoints`.
+
+### Search and report runs (Orbit Phase 8)
+
+**A search is the resource's LIST with a compiled predicate, never a second
+reader.** `lib/search/parser.ts` parses Stripe's query language;
+`lib/search/compile.ts` turns it into ONE parameterised predicate against the
+resource's field registry (`db/search/searchFields.ts` — a field that is not
+there does not exist); `lib/search/resources.ts` binds each resource to its
+repository's own list function (`search?: SQL`) and serializer. Caller text only
+ever enters SQL as a bound parameter (substring is `strpos`, not `LIKE`), and the
+merchant predicate is the repository's. `routes/search.ts` is mounted BEFORE the
+resource routers on both surfaces — `/v1/charges/search` must not reach
+`/v1/charges/:id`. **Adding `subscriptions` / `invoices` search is one fields map
+and one registry entry** (plus `SEARCHABLE_RESOURCES` in shared-types); the
+parser, page token, routes, dashboard box and SDK need nothing. The `page` token
+is bound to its query and carries the keyset position, never the merchant.
+No extensions: no `pg_trgm`, no full-text search.
+
+**A report run is leased work.** `POST /v1/reporting/report_runs` writes a
+`pending` row; `services/reporting/reportRunWorker.ts` (started in `server.ts`,
+`.unref()`-ed) claims it in one statement (`for update skip locked`), builds the
+CSV (`services/reporting/reports.ts`, the one place each column is computed),
+stores it as a `finance_report_run` File, and completes the run AND records
+`reporting.report_run.succeeded` in one transaction gated on its own
+`lease_token`. A report file is Peable's output: never uploadable, private at
+Oxy, readable only through `GET /v1/files/:id/contents`. The ledger reports read
+the same ledger `GET /v1/balance` does (`services/money/ledgerScope.ts`).
 
 ### The catalog (ADR 0018)
 
@@ -488,7 +515,8 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 (`disputeRepository`), `files/` (`fileRepository`), `paymentMethods/`
 (`paymentMethodConfigurationRepository`: configurations, their provider
 bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
-`applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`).
+`applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`),
+`reporting/` (`reportRunRepository`, `reportData`), `search/` (`searchFields`).
 
 **Payment method breadth is a card-rail intersection, decided once per
 payment.** `services/paymentMethods/configuration.ts`: a merchant's

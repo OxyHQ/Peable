@@ -969,6 +969,8 @@ export interface ProviderChargeSnapshot {
     readonly type: string | null;
   } | null;
   readonly paymentMethodDetails: { readonly type: 'card'; readonly card: CardDetails } | null;
+  /** The charge's billing details, or `null` when the provider reported none. */
+  readonly billingDetails: BillingDetails | null;
 }
 
 /** A provider whose charges can be read for a `ch_…` snapshot (ADR 0019). */

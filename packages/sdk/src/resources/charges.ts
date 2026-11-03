@@ -1,6 +1,7 @@
-import type { Charge, ExpandParams, List, ListParams } from '@peable.to/shared-types';
+import type { Charge, ExpandParams, List, ListParams, SearchParams } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { searchResource } from '../core/search';
+import { type ApiListPromise, type ApiSearchPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Charges (ADR 0019) — read-only. A `ch_…` is the authorization a CARD payment
@@ -35,5 +36,15 @@ export class ChargesResource {
         }),
       params,
     );
+  }
+
+  /**
+   * Search in Stripe's query language — `amount`, `currency`, `customer`, `payment_intent`, `status`, `captured`, `refunded`, `disputed`, `billing_details.email|name|address.postal_code`, `payment_method_details.card.last4|brand`, `created`, `metadata['key']`. Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<Charge> {
+    return searchResource<Charge>(this.client, 'charges', params);
   }
 }

@@ -7,7 +7,7 @@ import type {
   ListFilesParams,
   ListParams,
 } from '@peable.to/shared-types';
-import type { RestClient } from '../core/client';
+import type { DownloadedBytes, GatewayClient } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 export type FileList = List<FileObject>;
@@ -50,9 +50,12 @@ function filenameOf(params: CreateFileUploadParams): string {
  *
  * `create({ purpose, oxy_file })` makes a file from an Oxy file you already own
  * instead of uploading it again; its ownership is checked once, there.
+ *
+ * `finance_report_run` files are written by report runs
+ * (`reporting.reportRuns`), never uploaded; `contents(id)` reads one back.
  */
 export class FilesResource {
-  constructor(private readonly client: RestClient) {}
+  constructor(private readonly client: GatewayClient) {}
 
   create(params: CreateFileParams, options: { idempotencyKey?: string } = {}): Promise<FileObject> {
     if ('oxy_file' in params) {
@@ -85,5 +88,14 @@ export class FilesResource {
         }),
       params,
     );
+  }
+
+  /**
+   * The bytes of a file you read back — a report run's CSV
+   * (`GET /v1/files/:id/contents`). Any other purpose is a 404: evidence and
+   * identity documents leave Peable only to their provider.
+   */
+  contents(id: string): Promise<DownloadedBytes> {
+    return this.client.download(`/v1/files/${encodeURIComponent(id)}/contents`);
   }
 }

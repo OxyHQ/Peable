@@ -65,6 +65,8 @@ export const customers = pgTable(
     index('customers_merchant_id_idx').on(table.merchantId),
     /** `GET /v1/customers?email=` — exact match, Stripe's semantics. */
     index('customers_merchant_id_email_idx').on(table.merchantId, table.email),
+    /** `GET /v1/customers/search?query=email:"…"` — case-insensitive, Stripe's semantics. */
+    index('customers_merchant_id_lower_email_idx').on(table.merchantId, sql`lower(${table.email})`),
     foreignKey({
       name: 'customers_merchant_id_fkey',
       columns: [table.merchantId],

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Platform, View } from 'react-native';
 import { useMutation } from '@tanstack/react-query';
-import type { FileObject, FilePurpose } from '@peable.to/shared-types';
+import type { FileObject, FileUploadPurpose } from '@peable.to/shared-types';
 import { FileUpload, type FileUploadFile } from '@oxy.so/bloom/file-upload';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
@@ -30,7 +30,8 @@ export function FileUploadField({
   onUploaded,
 }: {
   scope: DashboardScope;
-  purpose: FilePurpose;
+  /** Only a purpose a merchant may upload: a report's CSV is Peable's own output. */
+  purpose: FileUploadPurpose;
   label: string;
   disabled?: boolean;
   onUploaded: (file: FileObject) => void;

@@ -1,4 +1,4 @@
-import { and, eq, inArray, ne, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, ne, type SQL, sql } from 'drizzle-orm';
 import type {
   CurrencyCode,
   PriceBillingScheme,
@@ -243,6 +243,28 @@ export interface PriceListFilters {
   readonly lookupKeys?: readonly string[] | undefined;
   readonly recurringInterval?: RecurringInterval | undefined;
   readonly recurringUsageType?: RecurringUsageType | undefined;
+  /** A predicate compiled by `lib/search` over this table's fields — never caller text. */
+  readonly search?: SQL | undefined;
+}
+
+function priceListWhere(filters: Omit<PriceListFilters, 'page'>): SQL | undefined {
+  return and(
+    eq(prices.merchantId, filters.merchantId),
+    filters.productId === undefined ? undefined : eq(prices.productId, filters.productId),
+    filters.active === undefined ? undefined : eq(prices.active, filters.active),
+    filters.type === undefined ? undefined : eq(prices.type, filters.type),
+    filters.currency === undefined ? undefined : eq(prices.currency, filters.currency),
+    filters.lookupKeys === undefined
+      ? undefined
+      : inArray(prices.lookupKey, [...filters.lookupKeys]),
+    filters.recurringInterval === undefined
+      ? undefined
+      : eq(prices.recurringInterval, filters.recurringInterval),
+    filters.recurringUsageType === undefined
+      ? undefined
+      : eq(prices.recurringUsageType, filters.recurringUsageType),
+    filters.search,
+  );
 }
 
 /** One page of a merchant's prices, newest first. */
@@ -254,28 +276,19 @@ export async function listPricesForMerchant(
   const rows = await db
     .select(PRICE_COLUMNS)
     .from(prices)
-    .where(
-      and(
-        eq(prices.merchantId, filters.merchantId),
-        filters.productId === undefined ? undefined : eq(prices.productId, filters.productId),
-        filters.active === undefined ? undefined : eq(prices.active, filters.active),
-        filters.type === undefined ? undefined : eq(prices.type, filters.type),
-        filters.currency === undefined ? undefined : eq(prices.currency, filters.currency),
-        filters.lookupKeys === undefined
-          ? undefined
-          : inArray(prices.lookupKey, [...filters.lookupKeys]),
-        filters.recurringInterval === undefined
-          ? undefined
-          : eq(prices.recurringInterval, filters.recurringInterval),
-        filters.recurringUsageType === undefined
-          ? undefined
-          : eq(prices.recurringUsageType, filters.recurringUsageType),
-        walk.where,
-      ),
-    )
+    .where(and(priceListWhere(filters), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows.map(toPriceRow));
+}
+
+/** How many prices {@link listPricesForMerchant} would walk — a search's `total_count`. */
+export async function countPricesForMerchant(
+  db: DatabaseOrTransaction,
+  filters: Omit<PriceListFilters, 'page'>,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(prices).where(priceListWhere(filters));
+  return row?.n ?? 0;
 }
 
 /** Lock one price row for the rest of the transaction. */

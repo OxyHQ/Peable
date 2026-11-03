@@ -126,6 +126,50 @@ and the 50-key limit is judged on the result. Updatable today on payment intents
 await peable.paymentIntents.update('pi_…', { metadata: { order_id: '', shipped: 'yes' } });
 ```
 
+### Search
+
+Stripe's Search API: `GET /v1/{payment_intents,charges,customers,products,prices,refunds}/search?query=…`
+(SDK: `peable.<resource>.search({ query })`, a page that is also an async
+iterable). The answer is `{object: 'search_result', data, has_more, next_page,
+url}`; pass `next_page` back as `page` **with the same query** for the next
+page (a token used with another query or resource is a 400, `param: 'page'`).
+`limit` is 1–100 (default 10); `expand[]` takes `data.`-prefixed paths and
+`total_count`, which adds the number of matches (one extra count). Results are
+newest first — the same walk as the list, so a search and a list never disagree
+about order — and are scoped to your merchant and mode exactly as the list is.
+A search is read-your-writes: an object is searchable the moment it exists.
+
+The language:
+
+| Clause | Meaning |
+|---|---|
+| `field:"value"` | Equals. Case-insensitive for text; a closed value (`status`, `currency`, `type`) is normalized and must be one the field takes |
+| `field~"sub"` | Contains, case-insensitive; at least 3 characters |
+| `field>100`, `<`, `>=`, `<=`, `=` | Amounts (base units, compared as numbers — beyond a JS number too) and `created` (Unix seconds) |
+| `-clause` | Not. A NULL field counts as "not" (`-email:"x"` keeps customers with no email) |
+| `field:null` / `-field:null` | Has no value / has one |
+| `metadata['key']:'value'` | A metadata entry; `metadata['key']:null` is "no such key" |
+
+Text values are quoted (`"` or `'`; `\` escapes); numbers, `null`, `true` and
+`false` may be bare. Clauses join with spaces or `AND` (all) or with `OR`
+(any) — never both, and there are no parentheses. At most 10 clauses and 1000
+characters. Every refusal is a 400 with `param: 'query'` and the position:
+`AND and OR cannot be combined in one query … (at position 22)`.
+
+| Resource | Fields |
+|---|---|
+| `payment_intents` | `amount`, `currency`, `customer` (`cus_…`/`null`), `status`, `created`, `metadata`; plus `description`, `receipt_email` |
+| `charges` | `amount`, `currency`, `customer`, `payment_intent`, `status`, `captured`, `refunded`, `disputed`, `billing_details.email`, `billing_details.name`, `billing_details.address.postal_code`, `payment_method_details.card.last4`, `payment_method_details.card.brand`, `created`, `metadata` (the intent's) |
+| `customers` | `email`, `name`, `phone`, `created`, `metadata` (deleted customers are never found) |
+| `products` | `name`, `active`, `description`, `url`, `created`, `metadata` |
+| `prices` | `active`, `currency`, `product` (`prod_…`), `type`, `lookup_key`, `created`, `metadata` |
+| `refunds` | `amount`, `currency`, `status`, `reason`, `payment_intent`, `created`, `metadata` — a Peable addition; Stripe has no refund search |
+
+```ts
+const page = await peable.customers.search({ query: 'email:"jenny@example.com"' });
+for await (const charge of peable.charges.search({ query: 'refunded:true AND created>1780000000' })) { … }
+```
+
 ---
 
 ## 0. Prerequisites (one-time, owner/Console)
@@ -866,8 +910,12 @@ you own your logo. The type is read from the bytes:
 | `business_logo` | PNG, JPEG | 512 KB |
 | `identity_document` | PDF, PNG, JPEG | 10 MB |
 | `additional_verification` | PDF, PNG, JPEG | 10 MB |
+| `finance_report_run` | CSV | 64 MB — written by report runs only; cannot be uploaded |
 
-Only an available `business_logo` has a `url`. `status` is `available`,
+An available `business_logo` has a public `url`; an available
+`finance_report_run` has `url` = `https://api.peable.to/v1/files/:id/contents`,
+which answers the CSV to your own credential (`peable.files.contents(id)`).
+No other purpose has a `url` or `contents`. `status` is `available`,
 `withheld` (its owner hid it; it can come back) or `removed` (deleted or taken
 down). Set the logo with `peable.merchants.update({ business_logo: file.id })`:
 it is the wordmark the hosted checkout shows, beside your avatar (the square
@@ -1054,6 +1102,46 @@ Rules that are easy to get wrong:
   always open.
 - **Events:** `account.updated`, `application_fee.created|refunded`,
   `payout.created|updated|paid|failed|canceled`, `balance.available`.
+
+## Reporting — report runs
+
+Stripe's `reporting.*`. `GET /v1/reporting/report_types` lists what can be run,
+each with its `columns`, `default_columns` and `data_available_start/end`
+(the end is now: the data is live). The ids are versioned like Stripe's — the
+trailing `.1` is the column layout, so a layout change is a new id, never a
+change under one you parse:
+
+| Report type | One row per | Reads |
+|---|---|---|
+| `payments.itemized.1` | payment intent created in the interval | payments |
+| `balance.summary.1` | category (`starting_balance`, `activity_gross`, `activity_fee`, `activity`, `payouts`, `ending_balance`) per currency | your ledger (ADR 0015) |
+| `payouts.itemized.1` | payout created in the interval | your ledger |
+
+`POST /v1/reporting/report_runs` with `report_type` and `parameters
+{interval_start, interval_end, columns?, currency?}` answers a `pending`
+`reporting.report_run` (`frr_…`) at once; the CSV is produced in the background
+and the run becomes `succeeded` (with `result`, a `finance_report_run` File) or
+`failed` (with `error`), announced by `reporting.report_run.succeeded` /
+`.failed`. `interval_start` is inclusive and `interval_end` exclusive, in Unix
+seconds, and the end may not be in the future; `columns` picks a subset,
+written in the layout's order. A ledger report for a merchant without a fiat
+account is a 404 `account_missing` at creation. Amounts are base-unit strings as
+on the API; times are ISO 8601 UTC. A balance figure built on a transaction
+whose fee the provider has not reported yet is an empty cell — never `0`. A
+text cell that a spreadsheet would run as a formula (`=`, `+`, `-`, `@`) is
+written with a leading `'`.
+
+```ts
+const run = await peable.reporting.reportRuns.create({
+  report_type: 'payouts.itemized.1',
+  parameters: { interval_start: start, interval_end: end, currency: 'EUR' },
+});
+// on reporting.report_run.succeeded:
+const { bytes } = await peable.files.contents(event.data.object.result.id);
+```
+
+In Orbit: **Reports** runs them and downloads the CSV; the search box above
+every screen searches all six resources at once (an id, a query, or free text).
 
 ## Connect for FairCoin — paying sellers in their own wallets
 

@@ -41,6 +41,7 @@ const INFRA_CONFIGURATION: Readonly<Record<string, string>> = {
     'it defaults to testnet, so a deployment that never sets it stays closed',
   PEABLE_ALLOWED_ORIGINS: 'a CORS allow-list; public by definition',
   PEABLE_CHECKOUT_BASE_URL: 'the public checkout origin',
+  PEABLE_API_BASE_URL: 'the gateway public origin, for object URLs such as a report file contents',
   PEABLE_CONNECT_ONBOARDING_BASE_URL:
     'the public seller-onboarding page (ADR 0012), defaulted to the Peable wallet',
   OXY_API_URL: 'the public Oxy API origin',

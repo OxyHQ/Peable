@@ -11,6 +11,7 @@ import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
 import type { PaymentLink } from './paymentLink';
 import type { PaymentMethod } from './paymentMethod';
+import type { ReportRun } from './reporting';
 import type { ConnectedAccount, Refund } from './settlement';
 import type { SetupIntent } from './setupIntent';
 import type { WebhookEndpoint } from './webhookEndpoint';
@@ -146,6 +147,10 @@ export interface WebhookEventPayload {
   'payout.canceled': Payout;
   /** Funds became available in the account; carries the balance read from the ledger. */
   'balance.available': Balance;
+  /** A report run finished: its CSV is `result` (a `finance_report_run` file). */
+  'reporting.report_run.succeeded': ReportRun;
+  /** A report run could not be produced; `error` says why. */
+  'reporting.report_run.failed': ReportRun;
   'billing.observation.updated': BillingObservation;
   /**
    * A synthetic event sent to ONE endpoint when its owner asks to test it

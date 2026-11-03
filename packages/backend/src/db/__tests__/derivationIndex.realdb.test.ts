@@ -283,6 +283,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'recurring_mirrors',
       'recurring_observation_outbox',
       'refunds',
+      'report_runs',
       'setup_intents',
       'social_receive_cursors',
       'social_send_attributions',

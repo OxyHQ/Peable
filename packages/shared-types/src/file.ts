@@ -13,11 +13,26 @@ export const FILE_PURPOSES = [
   'business_logo',
   'identity_document',
   'additional_verification',
+  'finance_report_run',
 ] as const;
 export type FilePurpose = (typeof FILE_PURPOSES)[number];
 
+/**
+ * The purposes a merchant may upload or import. `finance_report_run` is not
+ * among them: a report's CSV is written by Peable's report runs
+ * (`/v1/reporting/report_runs`) and nobody else, so a file of that purpose is
+ * always a report Peable produced.
+ */
+export const FILE_UPLOAD_PURPOSES = [
+  'dispute_evidence',
+  'business_logo',
+  'identity_document',
+  'additional_verification',
+] as const satisfies readonly FilePurpose[];
+export type FileUploadPurpose = (typeof FILE_UPLOAD_PURPOSES)[number];
+
 /** The stored format, by its conventional extension (Stripe's `type`). */
-export const FILE_TYPES = ['pdf', 'png', 'jpg'] as const;
+export const FILE_TYPES = ['pdf', 'png', 'jpg', 'csv'] as const;
 export type FileType = (typeof FILE_TYPES)[number];
 
 /**
@@ -33,12 +48,13 @@ export const FILE_STATUSES = ['available', 'withheld', 'removed'] as const;
 export type FileStatus = (typeof FILE_STATUSES)[number];
 
 /**
- * The upload policy of each purpose: the formats it takes, recognised from the
- * bytes and never from a client's `Content-Type`, and the largest file.
+ * The policy of each purpose: the formats it takes, recognised from the bytes
+ * and never from a client's `Content-Type`, and the largest file.
  *
  * The provider's own ceilings, restated where the upload is parsed, so a file
  * the card network would refuse is refused at upload — not at the one-shot
- * dispute submission it was meant for.
+ * dispute submission it was meant for. `finance_report_run` is Peable's own
+ * output (see {@link FILE_UPLOAD_PURPOSES}); its ceiling bounds a report.
  */
 export const FILE_PURPOSE_POLICIES: Readonly<
   Record<FilePurpose, { readonly types: readonly FileType[]; readonly max_bytes: number }>
@@ -47,6 +63,7 @@ export const FILE_PURPOSE_POLICIES: Readonly<
   business_logo: { types: ['png', 'jpg'], max_bytes: 512 * 1024 },
   identity_document: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
   additional_verification: { types: ['pdf', 'png', 'jpg'], max_bytes: 10 * 1024 * 1024 },
+  finance_report_run: { types: ['csv'], max_bytes: 64 * 1024 * 1024 },
 });
 
 /**
@@ -67,10 +84,16 @@ export interface FileObject {
   type: FileType;
   status: FileStatus;
   /**
-   * A public URL for a `business_logo` that is `available` — what a payer
-   * surface renders. `null` for every other purpose: evidence and identity
-   * documents are never addressable by URL, and their bytes leave Peable only
-   * to the provider they are submitted to.
+   * Where the bytes can be read, while the file is `available`:
+   *
+   *  - a `business_logo`: a PUBLIC URL — what a payer surface renders;
+   *  - a `finance_report_run`: the gateway's `GET /v1/files/:id/contents`,
+   *    which answers the CSV to the merchant's own credential (Stripe's
+   *    `files.stripe.com/v1/files/:id/contents`).
+   *
+   * `null` for every other purpose: evidence and identity documents are never
+   * addressable by URL, and their bytes leave Peable only to the provider they
+   * are submitted to.
    */
   url: string | null;
   created: number;
@@ -86,7 +109,7 @@ export interface FileObject {
  *    checked once, here, and never again.
  */
 export interface CreateFileFromOxyParams {
-  purpose: FilePurpose;
+  purpose: FileUploadPurpose;
   /** Oxy file id. */
   oxy_file: string;
 }

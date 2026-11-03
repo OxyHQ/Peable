@@ -7,19 +7,24 @@
  * The `tax.*` and `contributions.*` strings are the wallet screens' strings,
  * carried over with those screens.
  *
- * Spanish (`es`) so far covers the money screens (`money/strings.ts`) and the
- * navigation only. It is NOT in `SUPPORTED_LOCALES` yet: offering it would
+ * Spanish (`es`) so far covers the money screens (`money/strings.ts`), the
+ * reports screen (`reports/strings.ts`), the search box (`search/strings.ts`)
+ * and the navigation only. It is NOT in `SUPPORTED_LOCALES` yet: offering it would
  * render the rest of Orbit in English under a Spanish locale. `t` falls back
  * to English per key, so turning it on is adding `'es'` here once the other
  * screens are translated.
  */
 import { MONEY_EN, MONEY_ES } from './money/strings';
+import { REPORTS_EN, REPORTS_ES } from './reports/strings';
+import { SEARCH_EN, SEARCH_ES } from './search/strings';
 
 export const SUPPORTED_LOCALES = ['en'];
 export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
   ...MONEY_EN,
+  ...REPORTS_EN,
+  ...SEARCH_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
   'error.generic': 'Something went wrong. Try again.',
@@ -676,6 +681,8 @@ const en: Record<string, string> = {
 
 const es: Record<string, string> = {
   ...MONEY_ES,
+  ...REPORTS_ES,
+  ...SEARCH_ES,
   'nav.home': 'Inicio',
   'nav.payments': 'Pagos',
   'nav.developers': 'Desarrolladores',

@@ -68,6 +68,9 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // Orbit money's contract half ships with #200; it must be DEPLOYED (its post
   // phase applied) before checkout v2 (Orbit Phase 3) merges behind it.
   '0057_orbit_money_contract': 'released with #200; deployed before checkout v2 merges',
+  // Checkout v2's data half shipped with #202, whose deploy (1f247b9) applied
+  // its post phase in production before search and report runs' `0062`–`0064`.
+  '0061_checkout_v2_data': 'released with #202; applied in production by the 1f247b9 deploy',
 };
 
 interface Migration {

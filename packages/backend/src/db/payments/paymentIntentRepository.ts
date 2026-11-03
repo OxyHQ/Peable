@@ -1,4 +1,4 @@
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, isNotNull, isNull, lt, type SQL, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import {
   EXPIRABLE_STATUSES as SHARED_EXPIRABLE_STATUSES,
@@ -504,7 +504,27 @@ export interface ListIntentsParams {
   readonly paymentLinkId?: string | undefined;
   /** Only this customer's payments — its INTERNAL id, already resolved and ownership-checked. */
   readonly customerId?: string | undefined;
+  /**
+   * A search predicate compiled by `lib/search` from a validated query over
+   * this table's own fields — never caller text. AND-ed beneath the merchant.
+   */
+  readonly search?: SQL | undefined;
   readonly page: KeysetPage;
+}
+
+function intentListWhere(params: Omit<ListIntentsParams, 'page'>): SQL | undefined {
+  return and(
+    eq(paymentIntents.merchantId, params.merchantId),
+    params.status === undefined ? undefined : eq(paymentIntents.status, params.status),
+    params.connectedAccountId === undefined
+      ? undefined
+      : eq(paymentIntents.connectedAccountId, params.connectedAccountId),
+    params.paymentLinkId === undefined
+      ? undefined
+      : eq(paymentIntents.paymentLinkId, params.paymentLinkId),
+    params.customerId === undefined ? undefined : eq(paymentIntents.customerId, params.customerId),
+    params.search,
+  );
 }
 
 /**
@@ -536,25 +556,19 @@ export async function listIntentsForMerchant(
   const rows = await db
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
-    .where(
-      and(
-        eq(paymentIntents.merchantId, params.merchantId),
-        params.status === undefined ? undefined : eq(paymentIntents.status, params.status),
-        params.connectedAccountId === undefined
-          ? undefined
-          : eq(paymentIntents.connectedAccountId, params.connectedAccountId),
-        params.paymentLinkId === undefined
-          ? undefined
-          : eq(paymentIntents.paymentLinkId, params.paymentLinkId),
-        params.customerId === undefined
-          ? undefined
-          : eq(paymentIntents.customerId, params.customerId),
-        walk.where,
-      ),
-    )
+    .where(and(intentListWhere(params), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows.map(toIntentRow));
+}
+
+/** How many intents {@link listIntentsForMerchant} would walk — a search's `total_count`. */
+export async function countIntentsForMerchant(
+  db: DatabaseOrTransaction,
+  params: Omit<ListIntentsParams, 'page'>,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(paymentIntents).where(intentListWhere(params));
+  return row?.n ?? 0;
 }
 
 /**

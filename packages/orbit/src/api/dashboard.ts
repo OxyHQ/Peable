@@ -11,6 +11,14 @@ import type {
   UpdatePaymentLinkParams,
   CreatePriceParams,
   CreateProductParams,
+  CreateReportRunParams,
+  Charge,
+  Customer,
+  ReportRun,
+  ReportType,
+  ReportTypeId,
+  Refund,
+  SearchableResource,
   Account,
   AccountLink,
   Balance,
@@ -28,6 +36,7 @@ import type {
   Dispute,
   FileObject,
   FilePurpose,
+  FileUploadPurpose,
   PaymentMethodConfiguration,
   PaymentMethodDomain,
   Price,
@@ -130,7 +139,8 @@ export interface PaymentMethodDomainListParams extends PageParams {
 
 /** `POST …/files`: the bytes and the purpose they are for. */
 export interface UploadFileParams {
-  purpose: FilePurpose;
+  /** Never `finance_report_run`: the gateway writes those, and refuses them as uploads. */
+  purpose: FileUploadPurpose;
   /** A DOM `File` on web (its name travels with it), or any `Blob` with `filename`. */
   file: Blob;
   filename?: string;
@@ -147,6 +157,42 @@ export interface BalanceTransactionListParams extends PageParams {
 
 export interface PayoutListParams extends PageParams {
   status?: PayoutStatus;
+}
+
+export interface ReportRunListParams extends PageParams {
+  report_type?: ReportTypeId;
+}
+
+/** The object each searchable resource's hits are. */
+export interface SearchHitObjects {
+  payment_intents: PaymentIntent;
+  charges: Charge;
+  customers: Customer;
+  products: Product;
+  prices: Price;
+  refunds: Refund;
+}
+
+/** One resource's hits in Orbit's global search — at most five. */
+export type DashboardSearchGroup = {
+  [R in SearchableResource]: {
+    resource: R;
+    object: string;
+    data: SearchHitObjects[R][];
+    has_more: boolean;
+  };
+}[SearchableResource];
+
+/**
+ * `GET …/search?q=`: an id is looked up, a query in the search language runs
+ * on every resource that has its fields, anything else is free text.
+ */
+export interface DashboardSearchResult {
+  object: 'dashboard_search';
+  q: string;
+  mode: 'id' | 'query' | 'text';
+  /** Only the resources with at least one hit. */
+  groups: DashboardSearchGroup[];
 }
 
 /** `POST /merchant`: mirrors the gateway's `createMerchantBodySchema` (strict). */
@@ -390,6 +436,36 @@ export function createDashboardApi(transport: OrbitTransport) {
         list<FileObject>(dashboardPath(scope, '/files', { ...params })),
       retrieve: (scope: DashboardScope, fileId: string) =>
         get<FileObject>(dashboardPath(scope, `/files/${id(fileId)}`)),
+      /** The bytes of a file the merchant reads back — a report run's CSV. */
+      contents: (scope: DashboardScope, fileId: string) =>
+        transport.request<Blob>('GET', dashboardPath(scope, `/files/${id(fileId)}/contents`), {
+          responseType: 'blob',
+        }),
+    },
+
+    /** Orbit's one search box over every searchable resource (Stripe's Search API beneath). */
+    search: {
+      global: (scope: DashboardScope, q: string) =>
+        get<DashboardSearchResult>(dashboardPath(scope, '/search', { q })),
+    },
+
+    /**
+     * Report runs (`frr_…`): asked for here, produced in the background as a
+     * CSV `finance_report_run` File, downloaded through `files.contents`.
+     */
+    reporting: {
+      reportTypes: (scope: DashboardScope) =>
+        list<ReportType>(dashboardPath(scope, '/reporting/report_types')),
+      list: (scope: DashboardScope, params: ReportRunListParams = {}) =>
+        list<ReportRun>(dashboardPath(scope, '/reporting/report_runs', { ...params })),
+      retrieve: (scope: DashboardScope, runId: string) =>
+        get<ReportRun>(dashboardPath(scope, `/reporting/report_runs/${id(runId)}`)),
+      /** `idempotencyKey` is kept by the form across retries of the same request. */
+      create: (scope: DashboardScope, body: CreateReportRunParams, idempotencyKey?: string) =>
+        transport.request<ReportRun>('POST', dashboardPath(scope, '/reporting/report_runs'), {
+          body,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        }),
     },
 
     /** Which methods payers are offered (`pmc_…`); exactly one is the default. */

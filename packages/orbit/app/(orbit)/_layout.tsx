@@ -46,6 +46,7 @@ export default function OrbitLayout() {
         <Tabs.Screen name="disputes" options={{ title: 'Disputes' }} />
         <Tabs.Screen name="balances" options={{ title: 'Balances' }} />
         <Tabs.Screen name="payouts" options={{ title: 'Payouts' }} />
+        <Tabs.Screen name="reports" options={{ title: 'Reports' }} />
         <Tabs.Screen name="account" options={{ title: 'Account' }} />
         <Tabs.Screen name="links" options={{ title: 'Payment Links' }} />
         <Tabs.Screen name="developers" options={{ title: 'Developers' }} />

@@ -70,6 +70,8 @@ const WEBHOOK_EVENT_TYPES = {
   'payout.failed': true,
   'payout.canceled': true,
   'balance.available': true,
+  'reporting.report_run.succeeded': true,
+  'reporting.report_run.failed': true,
   'webhook_endpoint.test': true,
 } satisfies Record<WebhookEventType, true>;
 

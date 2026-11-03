@@ -4,6 +4,7 @@
 // side is `PaymentIntent.faircoin`.
 import type { CurrencyCode } from './money';
 import type { PaymentIntent } from './paymentIntent';
+import type { BillingDetails } from './paymentMethod';
 
 /** Card details safe to show: never the number, never the CVC. */
 export interface CardDetails {
@@ -48,6 +49,11 @@ export interface Charge {
   refunded: boolean;
   disputed: boolean;
   outcome: ChargeOutcome | null;
+  /**
+   * Who the card's billing details name, as the provider reported them for this
+   * charge — `null` until the provider snapshot is read (as `outcome`).
+   */
+  billing_details: BillingDetails | null;
   payment_method_details: { type: 'card'; card: CardDetails } | null;
   /** Peable-hosted receipts land with Phase 3; the provider's own URL never reaches the wire. */
   receipt_url: string | null;

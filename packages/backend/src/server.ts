@@ -41,6 +41,9 @@ import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
 import { createEventsRouter } from './routes/events';
 import { createCatalogRouter } from './routes/catalog';
 import { createRequestLogsRouter } from './routes/requestLogs';
+import { createSearchRouter } from './routes/search';
+import { createReportingRouter } from './routes/reporting';
+import { startReportRunWorker, stopReportRunWorker } from './services/reporting/reportRunWorker';
 import { createTestHelpersRouter } from './routes/testHelpers';
 import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
@@ -298,6 +301,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
       windowMs: PUBLIC_RATE_LIMIT_WINDOW_MS,
     });
 
+  // Before every resource router: `/v1/charges/search` is not `/v1/charges/:id`.
+  app.use(createSearchRouter({ requireMerchant }));
   app.use(createPaymentIntentsRouter({ requireMerchant, optionalServiceAuth }));
   app.use(createSocialRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
@@ -321,6 +326,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createEventsRouter({ requireMerchant }));
   app.use(createCatalogRouter({ requireMerchant }));
   app.use(createRequestLogsRouter({ requireMerchant }));
+  app.use(createReportingRouter({ requireMerchant }));
   app.use(createTestHelpersRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
@@ -435,6 +441,7 @@ export async function start(
     stopMoneyReconciliation();
     stopSessionExpirySweeper();
     stopCustomerEmailDispatcher();
+    stopReportRunWorker();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -469,6 +476,7 @@ export async function start(
   // `services/email/mailer.ts` for the production wiring.
   configureMailer(mailerFromEnv());
   startCustomerEmailDispatcher();
+  startReportRunWorker();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

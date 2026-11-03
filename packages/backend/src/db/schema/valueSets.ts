@@ -332,6 +332,9 @@ export const WEBHOOK_EVENT_SCOPES = {
   'checkout.session.async_payment_failed': 'merchant',
   'payment_link.created': 'merchant',
   'payment_link.updated': 'merchant',
+  // Reporting: a report run finished, about the merchant's own report.
+  'reporting.report_run.succeeded': 'merchant',
+  'reporting.report_run.failed': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
