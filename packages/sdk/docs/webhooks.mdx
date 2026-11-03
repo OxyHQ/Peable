@@ -94,8 +94,9 @@ app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, re
 });
 ```
 
-`constructEvent` refuses a signature older than five minutes (its
-`toleranceSec` option changes that) and returns the event typed by its
+`constructEvent(payload, header, secret, tolerance?)` refuses a signature
+older than five minutes (`tolerance`, in seconds, changes that) and returns
+the event typed by its
 `type`: `WebhookEventPayload` in `@peable.to/shared-types` maps every event
 type to its object, so a handler cannot read the wrong shape.
 
@@ -143,4 +144,4 @@ peable trigger payment_intent.succeeded
 No public URL and no registered endpoint are needed. `listen` reads
 `GET /v1/events/stream`, a Server-Sent Events stream fed from the same
 transaction that stores each event (never a rolled-back one); the SDK exposes
-it as `peable.events.stream()`. See [Testing](/testing#the-cli).
+it as `peable.events.stream({ types: 'payment_intent.*' }, { signal, onConnect })` — `types` is a comma-separated string, and the stream reconnects after the last event it received. See [Testing](/testing#the-cli).

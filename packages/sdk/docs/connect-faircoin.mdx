@@ -29,7 +29,7 @@ Peable ──payment_intent.* { account: 'ca_…' }──▶ platform
 ## 1. Open the seller's FairCoin account
 
 ```ts
-const seller = await peable.accounts.create({
+const seller = await peable.connectedAccounts.create({
   external_ref: store.id, // YOUR id for the seller: the idempotency
   faircoin: { network: 'testnet', oxy_user_id: store.ownerOxyUserId },
 });
@@ -54,8 +54,7 @@ seller.faircoin; // { network: 'testnet', status: 'pending', oxy_user_id, regist
 ## 2. Send the seller to register their key
 
 ```ts
-const link = await peable.accountLinks.create({
-  account: seller.id,
+const link = await peable.connectedAccounts.createAccountLink(seller.id, {
   rail: 'faircoin',
   return_url: 'https://market.example/sell/payments/done',
   refresh_url: 'https://market.example/sell/payments/refresh',
@@ -166,9 +165,9 @@ through you, so a fee would need a second movement of money.
 ## Checklist
 
 - [ ] On store creation (or when the owner opts in):
-      `accounts.create({ external_ref: storeId, faircoin: { network, oxy_user_id } })`.
+      `connectedAccounts.create({ external_ref: storeId, faircoin: { network, oxy_user_id } })`.
 - [ ] Seller settings → "Get paid in FairCoin" →
-      `accountLinks.create({ account, rail: 'faircoin', … })` → redirect.
+      `connectedAccounts.createAccountLink(id, { rail: 'faircoin', … })` → redirect.
 - [ ] On `connected_account.updated` with `faircoin.status === 'active'`,
       enable FairCoin at that store's checkout.
 - [ ] One payment or Checkout Session per seller group, with

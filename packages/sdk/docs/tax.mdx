@@ -134,7 +134,7 @@ await peable.billing.createCheckoutSession({ /* … */ tax_quote: quote });
   the billing address and card country the provider holds, and gets its own
   signed quote and tax transaction. A renewal Peable cannot price stays an
   unfinalized draft and is retried — it is never released at a stale total.
-- `peable.tax.products.setTaxCode(planId, 'txcd_10103000')` sets a plan's tax
-  code; `billing.retrieveFinalInvoiceAuthority(sub, inv, { include:
-  ['tax_lines'] })` returns the signed invoice with its tax lines inside the
+- `peable.tax.products.setTaxCode(planId, { tax_code: 'txcd_10103000' })` sets
+  a plan's tax code; `billing.retrieveFinalInvoiceAuthority(sub, inv, {
+  include: 'tax_lines' })` returns the signed invoice with its tax lines inside the
   signature.
