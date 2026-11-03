@@ -60,14 +60,23 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
       (v.resource_kind === 'subscription' || v.resource_kind === 'invoice') &&
       typeof v.resource_id === 'string' &&
       v.resource_id.length > 0 &&
+      (v.subscription_id === undefined ||
+        (typeof v.subscription_id === 'string' &&
+          /^[A-Za-z0-9_.:-]{1,128}$/.test(v.subscription_id))) &&
       typeof v.revision === 'number' &&
       Number.isSafeInteger(v.revision) &&
       v.revision > 0 &&
       Number.isSafeInteger(v.observed_at) &&
       Object.keys(v).every((k) =>
-        ['object', 'livemode', 'resource_kind', 'resource_id', 'revision', 'observed_at'].includes(
-          k,
-        ),
+        [
+          'object',
+          'livemode',
+          'resource_kind',
+          'resource_id',
+          'subscription_id',
+          'revision',
+          'observed_at',
+        ].includes(k),
       )
     );
   }

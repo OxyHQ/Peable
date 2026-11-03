@@ -397,6 +397,20 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
           input: Parameters<BillingTaxCheckoutAdapter['createCheckout']>[0],
           key: string,
         ) => selectedCheckout.createCheckout(input, key),
+        ...(selectedCheckout.createEmbeddedCheckout
+          ? {
+              createEmbeddedCheckout: (
+                input: Parameters<
+                  NonNullable<BillingTaxCheckoutAdapter['createEmbeddedCheckout']>
+                >[0],
+                key: string,
+              ) => {
+                const create = selectedCheckout.createEmbeddedCheckout;
+                if (!create) throw new Error('Embedded fiscal adapter unavailable');
+                return create.call(selectedCheckout, input, key);
+              },
+            }
+          : {}),
       }
     : undefined;
   const taxQuoteCalculator = selectedTax

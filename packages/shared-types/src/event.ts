@@ -87,6 +87,8 @@ export interface BillingObservation {
   livemode: boolean;
   resource_kind: 'subscription' | 'invoice';
   resource_id: string;
+  /** Owner-scoped wake-up hint only; re-read the subscription before resolving a payer. */
+  subscription_id?: string;
   revision: number;
   observed_at: number;
 }

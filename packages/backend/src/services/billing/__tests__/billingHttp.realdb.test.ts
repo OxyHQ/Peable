@@ -1,3 +1,4 @@
+import { setStripeModes, stripeModeFixture } from '../../../__tests__/helpers/stripeModes';
 import { must } from '../../../__tests__/helpers/must';
 import { eq } from 'drizzle-orm';
 import type { BillingCheckoutOperationReader } from '../billingService';
@@ -631,6 +632,59 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         },
       };
     }
+    it('preserves embedded fiscal checkout through the configured runtime composition', async () => {
+      const fixture = await fiscalFixture();
+      const adapter = must(taxCheckoutAdapter);
+      let embeddedCalls = 0;
+      adapter.createEmbeddedCheckout = async (input) => {
+        embeddedCalls++;
+        return {
+          providerObjectRef: 'cs_test_runtime',
+          providerCustomerId: checkout.provider_customer_id,
+          livemode: false,
+          presentation: 'embedded',
+          expiresAt: input.snapshot.taxQuote.quote.expires_at,
+        };
+      };
+      const restore = setStripeModes({
+        test: stripeModeFixture('test', { publishableKey: 'pk_test_fixture' }),
+      });
+      try {
+        const runtime = must(
+          await configureBillingRuntime(
+            gatewayDb(),
+            JSON.stringify({
+              deployment,
+              portalConfigurationRef: 'bpc_one',
+              cohorts: [{ ...owner, evidenceRef: 'fixture:runtime', requireTaxQuote: true }],
+              taxQuoteAdapterRef: 'fixture',
+              taxCheckoutAdapterRef: 'fixture',
+              finalInvoiceAuthorityAdapterRef: 'fixture',
+            }),
+            client,
+            {
+              taxQuoteCalculators: { fixture: must(taxCalculator) },
+              taxCheckoutAdapters: { fixture: adapter },
+              finalInvoiceAuthorities: { fixture: must(finalAuthorityReader) },
+            },
+          ),
+        );
+        const create = must(runtime.service.createEmbeddedCheckoutSession);
+        const result = await create(
+          owner,
+          { ...checkout, tax_quote: fixture.quote },
+          'runtime:embedded',
+        );
+        expect(result).toMatchObject({ id: 'cs_test_runtime', presentation: 'embedded' });
+        expect(
+          await create(owner, { ...checkout, tax_quote: fixture.quote }, 'runtime:embedded'),
+        ).toEqual(result);
+        expect(embeddedCalls).toBe(1);
+      } finally {
+        restore();
+      }
+    });
+
     it('creates an owned fiscal embedded session, keeps secrets ephemeral and closes completed/expired actions', async () => {
       const fixture = await fiscalFixture();
       const adapter = must(taxCheckoutAdapter);

@@ -565,6 +565,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
           object: 'billing_observation',
           resource_kind: 'subscription',
           resource_id: 'sub_1',
+          subscription_id: 'sub_1',
           revision: 1,
         },
       },
@@ -574,6 +575,46 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('inactive recurring observation / real 
     expect(Number.isSafeInteger(observedAt)).toBe(true);
     expect(() => sdk.webhooks.constructEvent(raw, signature, 'other-secret')).toThrow();
   });
+  it('relays an invoice parent only from its verified same-owner observation', async () => {
+    const sub = await bind();
+    await bind('invoice', 'in_1', sub.merchantId);
+    await gatewayDb()
+      .update(merchants)
+      .set({
+        webhookUrl: 'https://example.invalid/fixture',
+        webhookSecret: 'synthetic-only',
+      })
+      .where(eq(merchants.id, sub.merchantId));
+    readSnapshot.mockResolvedValue(invoice());
+    expect(await observeRecurringEvent(await event('invoice', 'in_1'), options)).toMatchObject({
+      kind: 'observed',
+    });
+    const cohort = {
+      ...deployment,
+      merchantId: sub.merchantId,
+      oxyAppId: sub.oxyAppId,
+      evidenceRef: 'fixture-approved',
+    };
+    expect(
+      (
+        await relayRecurringObservations({
+          db: gatewayDb(),
+          enabled: true,
+          cohorts: [{ ...cohort, merchantId: (await seedMerchant()).id }],
+        })
+      ).enqueued,
+    ).toBe(0);
+    expect(
+      (await relayRecurringObservations({ db: gatewayDb(), enabled: true, cohorts: [cohort] }))
+        .enqueued,
+    ).toBe(1);
+    const [delivery] = await gatewayDb().select().from(webhookDeliveries);
+    expect(must(delivery).payload).toMatchObject({
+      data: { object: { resource_kind: 'invoice', resource_id: 'in_1', subscription_id: 'sub_1' } },
+    });
+    expect(must(delivery).merchantId).toBe(sub.merchantId);
+  });
+
   it.each(['historical-v0', null])(
     'preserves opted-in one-off refund processing for API version %s',
     async (apiVersion) => {
