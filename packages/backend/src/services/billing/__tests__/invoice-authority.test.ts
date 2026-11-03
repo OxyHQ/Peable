@@ -17,67 +17,67 @@ function fixture() {
     environment: 'development' as const,
   };
   const paid: BillingPaidInvoice = {
-    invoiceId: 'in_fixture',
-    lineId: 'il_fixture',
-    paymentIntentId: 'pi_fixture',
-    providerSubscriptionId: 'sub_fixture',
-    providerCustomerId: 'cus_fixture',
-    providerPriceId: 'price_fixture',
-    storeId: 'payer_fixture',
-    planId: 'plan_fixture',
+    invoice_id: 'in_fixture',
+    line_id: 'il_fixture',
+    payment_intent_id: 'pi_fixture',
+    provider_subscription_id: 'sub_fixture',
+    provider_customer_id: 'cus_fixture',
+    provider_price_id: 'price_fixture',
+    store_id: 'payer_fixture',
+    plan_id: 'plan_fixture',
     livemode: false,
     currency: 'USD',
-    amountPaid: '2999',
-    netAmount: '2499',
-    taxAmount: '500',
-    periodStart: '2026-10-01T00:00:00.000Z',
-    periodEnd: '2026-11-01T00:00:00.000Z',
-    paidAt: now.toISOString(),
-    observedAt: now.toISOString(),
+    amount_paid: '2999',
+    net_amount: '2499',
+    tax_amount: '500',
+    period_start: '2026-10-01T00:00:00.000Z',
+    period_end: '2026-11-01T00:00:00.000Z',
+    paid_at: now.toISOString(),
+    observed_at: now.toISOString(),
   };
   const authority: BillingFinalInvoiceAuthority = {
-    schemaVersion: 1,
+    schema_version: 1,
     source: {
-      invoiceId: paid.invoiceId,
-      paymentIntentId: paid.paymentIntentId,
-      customerId: paid.providerCustomerId,
-      subscriptionId: paid.providerSubscriptionId,
-      priceId: paid.providerPriceId,
-      planId: paid.planId,
-      merchantId: 'merch_fixture',
-      appId: owner.oxyAppId,
+      invoice_id: paid.invoice_id,
+      payment_intent_id: paid.payment_intent_id,
+      customer_id: paid.provider_customer_id,
+      subscription_id: paid.provider_subscription_id,
+      price_id: paid.provider_price_id,
+      plan_id: paid.plan_id,
+      merchant_id: 'merch_fixture',
+      app_id: owner.oxyAppId,
       mode: 'test',
       environment: owner.environment,
     },
     invoice: {
       platform: 'peable',
       currency: 'USD',
-      grossMinorUnits: 2999,
-      netMinorUnits: 2499,
-      taxMinorUnits: 500,
-      merchantFeeMinorUnits: 0,
-      taxTreatment: 'inclusive',
-      sellerId: 'seller_fixture',
-      invoiceIssuerId: 'issuer_fixture',
-      taxQuoteId: 'tax_quote_fixture',
-      customerLocationEvidenceId: 'location_fixture',
-      taxRateEvidenceId: 'rate_fixture',
+      gross_minor_units: 2999,
+      net_minor_units: 2499,
+      tax_minor_units: 500,
+      merchant_fee_minor_units: 0,
+      tax_treatment: 'inclusive',
+      seller_id: 'seller_fixture',
+      invoice_issuer_id: 'issuer_fixture',
+      tax_quote_id: 'tax_quote_fixture',
+      customer_location_evidence_id: 'location_fixture',
+      tax_rate_evidence_id: 'rate_fixture',
       context: {
-        payerAccountId: paid.storeId,
-        beneficiaryAccountId: paid.storeId,
-        providerSubscriptionId: paid.providerSubscriptionId,
-        offerId: 'offer_fixture',
-        offerVersion: 1,
-        periodStart: paid.periodStart,
-        periodEnd: paid.periodEnd,
+        payer_account_id: paid.store_id,
+        beneficiary_account_id: paid.store_id,
+        provider_subscription_id: paid.provider_subscription_id,
+        offer_id: 'offer_fixture',
+        offer_version: 1,
+        period_start: paid.period_start,
+        period_end: paid.period_end,
         mode: 'test',
         environment: owner.environment,
       },
-      issuedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      issued_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 60_000).toISOString(),
     },
     method: 'card',
-    signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+    signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
   };
   resign(authority);
   return { authority, expected: { owner, merchantPublicId: 'merch_fixture', invoice: paid }, now };
@@ -94,7 +94,7 @@ describe('signed final invoice authority', () => {
     const { authority, expected, now } = fixture();
     expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toEqual(authority);
     const reordered = {
-      schemaVersion: authority.schemaVersion,
+      schemaVersion: authority.schema_version,
       method: authority.method,
       invoice: authority.invoice,
       source: authority.source,
@@ -106,17 +106,17 @@ describe('signed final invoice authority', () => {
     expect(() => verifyFinalInvoiceAuthority(authority, expected, {}, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.sellerId = 'tampered';
+    authority.invoice.seller_id = 'tampered';
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
     resign(authority);
-    authority.source.appId = 'another_app';
+    authority.source.app_id = 'another_app';
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.source.appId = expected.owner.oxyAppId;
+    authority.source.app_id = expected.owner.oxyAppId;
     resign(authority);
     expect(() =>
       verifyFinalInvoiceAuthority(authority, expected, pinned, new Date(now.getTime() + 61_000)),
@@ -124,31 +124,31 @@ describe('signed final invoice authority', () => {
   });
   it('rejects signed totals differing from paid tax observations and unsafe Faircoin quotes', () => {
     const { authority, expected, now } = fixture();
-    authority.invoice.netMinorUnits++;
-    authority.invoice.taxMinorUnits--;
+    authority.invoice.net_minor_units++;
+    authority.invoice.tax_minor_units--;
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.netMinorUnits--;
-    authority.invoice.taxMinorUnits++;
+    authority.invoice.net_minor_units--;
+    authority.invoice.tax_minor_units++;
     authority.method = 'faircoin';
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.faircoinQuote = {
+    authority.invoice.faircoin_quote = {
       id: 'quote_fixture',
-      amountBaseUnits: '1234',
-      quotedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 120_000).toISOString(),
-      roundingEvidenceId: 'round_fixture',
+      amount_base_units: '1234',
+      quoted_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 120_000).toISOString(),
+      rounding_evidence_id: 'round_fixture',
     };
     resign(authority);
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );
-    authority.invoice.faircoinQuote.expiresAt = new Date(now.getTime() + 30_000).toISOString();
+    authority.invoice.faircoin_quote.expires_at = new Date(now.getTime() + 30_000).toISOString();
     resign(authority);
     expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now).method).toBe('faircoin');
   });
@@ -157,21 +157,21 @@ describe('signed final invoice authority', () => {
 it('keeps a settled historical FX quote verifiable while rejecting late or early payment', () => {
   const { authority, expected, now } = fixture();
   authority.method = 'faircoin';
-  authority.invoice.faircoinQuote = {
+  authority.invoice.faircoin_quote = {
     id: 'quote_old',
-    amountBaseUnits: '1234',
-    quotedAt: new Date(+now - 120_000).toISOString(),
-    expiresAt: new Date(+now - 60_000).toISOString(),
-    roundingEvidenceId: 'round_old',
+    amount_base_units: '1234',
+    quoted_at: new Date(+now - 120_000).toISOString(),
+    expires_at: new Date(+now - 60_000).toISOString(),
+    rounding_evidence_id: 'round_old',
   };
-  expected.invoice.paidAt = new Date(+now - 90_000).toISOString();
+  expected.invoice.paid_at = new Date(+now - 90_000).toISOString();
   resign(authority);
   expect(verifyFinalInvoiceAuthority(authority, expected, pinned, now).method).toBe('faircoin');
   for (const paidAt of [
-    authority.invoice.faircoinQuote.expiresAt,
+    authority.invoice.faircoin_quote.expires_at,
     new Date(+now - 120_001).toISOString(),
   ]) {
-    expected.invoice.paidAt = paidAt;
+    expected.invoice.paid_at = paidAt;
     expect(() => verifyFinalInvoiceAuthority(authority, expected, pinned, now)).toThrow(
       'invalid_provider_response',
     );

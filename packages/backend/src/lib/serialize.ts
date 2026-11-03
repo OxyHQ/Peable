@@ -42,20 +42,20 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     currency: row.currency,
     network: row.network,
     address: row.address,
-    merchantId: row.merchantId,
+    merchant_id: row.merchantId,
     // The PUBLIC `ca_…`, read in the same statement as the row. Never the
     // internal `connectedAccountId` — that is a uuid this contract never names.
-    connectedAccountId: row.connectedAccountPublicId ?? null,
+    connected_account_id: row.connectedAccountPublicId ?? null,
     txid: row.txid,
     confirmations: row.confirmations,
-    clientSecret: row.clientSecret,
+    client_secret: row.clientSecret,
     metadata: row.metadata,
-    expiresAt: row.expiresAt.toISOString(),
+    expires_at: row.expiresAt.toISOString(),
     // ADR 0012 D9: a broadcast or confirming payment never expires, whatever
     // `expiresAt` says — said per intent so a platform never has to know the set.
-    canExpire: canExpire(row.status),
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    can_expire: canExpire(row.status),
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -69,17 +69,17 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
   return {
     id: row.publicId,
     object: 'merchant',
-    oxyAppId: row.oxyAppId,
+    oxy_app_id: row.oxyAppId,
     environment: row.environment,
     network: row.network,
     xpub: row.xpub,
-    webhookUrl: row.webhookUrl ?? undefined,
-    requiredConfirmations: row.requiredConfirmations,
-    displayName: row.displayName ?? undefined,
-    avatarFileId: row.avatarFileId ?? undefined,
+    webhook_url: row.webhookUrl ?? undefined,
+    required_confirmations: row.requiredConfirmations,
+    display_name: row.displayName ?? undefined,
+    avatar_file_id: row.avatarFileId ?? undefined,
     description: row.description ?? undefined,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -110,21 +110,21 @@ export function toWebhookDeliveryDTO(
   return {
     id: row.id,
     object: 'webhook_delivery',
-    merchantId: row.merchantId,
-    intentId: intentPublicId,
-    eventId: row.eventId,
-    eventType: row.eventType,
+    merchant_id: row.merchantId,
+    intent_id: intentPublicId,
+    event_id: row.eventId,
+    event_type: row.eventType,
     url: row.url,
     attempts: row.attempts,
     delivered: row.delivered,
-    lastStatus: row.lastStatus,
+    last_status: row.lastStatus,
     // Omitted rather than emitted as `null`: the DTO's optional fields mean
     // "there is nothing to say", and a `lastError: null` on a delivered
     // delivery reads like an error field a consumer has to check.
-    ...(row.lastError !== null ? { lastError: row.lastError } : {}),
-    ...(row.nextAttemptAt !== null ? { nextAttemptAt: row.nextAttemptAt.toISOString() } : {}),
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    ...(row.lastError !== null ? { last_error: row.lastError } : {}),
+    ...(row.nextAttemptAt !== null ? { next_attempt_at: row.nextAttemptAt.toISOString() } : {}),
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -146,10 +146,10 @@ export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
       (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
     ...(row.contribution ? { contribution: row.contribution } : {}),
     metadata: row.metadata,
-    successUrl: row.successUrl ?? undefined,
+    success_url: row.successUrl ?? undefined,
     url: `${config.checkoutBaseUrl}/l/${row.publicId}`,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -195,21 +195,21 @@ export function toCheckoutSessionDTO(
   return {
     id: row.publicId,
     object: 'checkout_session',
-    paymentIntentId: intent.publicId,
-    clientSecret: intent.clientSecret,
+    payment_intent_id: intent.publicId,
+    client_secret: intent.clientSecret,
     amount: row.amount,
     currency: row.currency,
     rail: row.rail,
     network: row.network,
     // From the INTENT, which carries the public `ca_…`; the session row holds
     // only the internal id.
-    connectedAccountId: intent.connectedAccountPublicId ?? null,
+    connected_account_id: intent.connectedAccountPublicId ?? null,
     metadata: row.metadata,
-    successUrl: row.successUrl ?? undefined,
-    cancelUrl: row.cancelUrl ?? undefined,
+    success_url: row.successUrl ?? undefined,
+    cancel_url: row.cancelUrl ?? undefined,
     url: `${config.checkoutBaseUrl}/c/${row.publicId}`,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -229,10 +229,10 @@ export function toCheckoutSessionPublicDTO(
   return {
     id: row.publicId,
     object: 'checkout_session',
-    successUrl: row.successUrl ?? undefined,
-    cancelUrl: row.cancelUrl ?? undefined,
+    success_url: row.successUrl ?? undefined,
+    cancel_url: row.cancelUrl ?? undefined,
     merchant,
-    paymentIntent: toPaymentIntentDTO(intent),
+    payment_intent: toPaymentIntentDTO(intent),
   };
 }
 
@@ -252,15 +252,15 @@ export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Di
   return {
     id: row.publicId,
     object: 'dispute',
-    paymentIntentId: paymentIntentPublicId,
+    payment_intent_id: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
     status: row.status,
     reason: row.reason,
-    evidenceDueAt: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
-    evidenceSubmittedAt: row.evidenceSubmittedAt ? row.evidenceSubmittedAt.toISOString() : null,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    evidence_due_at: row.evidenceDueAt ? row.evidenceDueAt.toISOString() : null,
+    evidence_submitted_at: row.evidenceSubmittedAt ? row.evidenceSubmittedAt.toISOString() : null,
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 

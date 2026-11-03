@@ -89,7 +89,7 @@ export function LinkRoute() {
         return;
       }
       const minted = await gatewayPost<PaymentIntent>(`/v1/payment_links/${linkId}/payment_intent`);
-      rememberIntentForLink(linkId, { id: minted.id, clientSecret: minted.clientSecret });
+      rememberIntentForLink(linkId, { id: minted.id, clientSecret: minted.client_secret });
       if (generation === requestGeneration.current) setPayState({ status: 'ready', data: minted });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to start payment.';

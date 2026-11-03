@@ -27,51 +27,51 @@ import {
 const ACCOUNT: ConnectedAccount = {
   id: 'ca_1',
   object: 'connected_account',
-  externalRef: 'store_1',
+  external_ref: 'store_1',
   rails: ['card'],
   faircoin: null,
   country: 'ES',
-  defaultCurrency: 'EUR',
+  default_currency: 'EUR',
   payable: true,
-  payoutsEnabled: true,
-  chargesEnabled: true,
-  transfersCapability: 'active',
-  cardPaymentsCapability: 'active',
-  requirements: { currentlyDue: 0, eventuallyDue: 0, pastDue: 0, pendingVerification: 0 },
-  disabledReasonCodes: [],
-  lastSyncedAt: '2026-09-19T00:00:00.000Z',
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  payouts_enabled: true,
+  charges_enabled: true,
+  transfers_capability: 'active',
+  card_payments_capability: 'active',
+  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
+  disabled_reason_codes: [],
+  last_synced_at: '2026-09-19T00:00:00.000Z',
+  created: '2026-09-19T00:00:00.000Z',
+  updated_at: '2026-09-19T00:00:00.000Z',
 };
 
 const TRANSFER: Transfer = {
   id: 'tr_1',
   object: 'transfer',
-  externalRef: 'order_1',
-  connectedAccountId: 'ca_1',
-  paymentIntentId: 'pi_1',
+  external_ref: 'order_1',
+  connected_account_id: 'ca_1',
+  payment_intent_id: 'pi_1',
   amount: '5000',
   currency: 'EUR',
-  amountReversed: '0',
+  amount_reversed: '0',
   status: 'paid',
-  failureMessage: null,
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  failure_message: null,
+  created: '2026-09-19T00:00:00.000Z',
+  updated_at: '2026-09-19T00:00:00.000Z',
 };
 
 const REFUND: Refund = {
   id: 're_1',
   object: 'refund',
-  externalRef: 'refund_1',
+  external_ref: 'refund_1',
   origin: 'merchant',
-  paymentIntentId: 'pi_1',
+  payment_intent_id: 'pi_1',
   amount: '2500',
   currency: 'EUR',
   status: 'succeeded',
-  paymentStatus: 'partially_refunded',
-  failureCode: null,
-  createdAt: '2026-09-19T00:00:00.000Z',
-  updatedAt: '2026-09-19T00:00:00.000Z',
+  payment_status: 'partially_refunded',
+  failure_code: null,
+  created: '2026-09-19T00:00:00.000Z',
+  updated_at: '2026-09-19T00:00:00.000Z',
 };
 
 function gateway(body: unknown, status = 200) {
@@ -206,7 +206,7 @@ describe('RefundsResource', () => {
     // Two different questions on one response, so a caller needs no second read
     // whose answer can move on before it arrives.
     expect(refund.status).toBe('succeeded');
-    expect(refund.paymentStatus).toBe('partially_refunded');
+    expect(refund.payment_status).toBe('partially_refunded');
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/refunds`);
   });
 
@@ -266,8 +266,8 @@ describe('MerchantsResource and DisputesResource', () => {
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 
     await resource.submitEvidence('dp_1', {
-      uncategorizedText: 'Collected in person.',
-      shippingTrackingNumber: 'TRACK-1',
+      uncategorized_text: 'Collected in person.',
+      shipping_tracking_number: 'TRACK-1',
     });
 
     const call = callOf(requests);

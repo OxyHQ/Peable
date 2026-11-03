@@ -358,27 +358,27 @@ async function initialize(input: {
     },
     async calculate({ source }) {
       const quote: BillingTaxQuote = {
-        schemaVersion: 1,
+        schema_version: 1,
         source,
         quote: {
           id: `quote_${randomUUID()}`,
           currency: 'USD',
-          grossMinorUnits: 2999,
-          netMinorUnits: 2500,
-          taxMinorUnits: 499,
-          taxTreatment: 'inclusive',
-          sellerId: 'synthetic-seller',
-          invoiceIssuerId: 'synthetic-issuer',
-          taxRemitterId: 'synthetic-remitter',
-          taxServiceRef: 'synthetic-tax-service',
+          gross_minor_units: 2999,
+          net_minor_units: 2500,
+          tax_minor_units: 499,
+          tax_treatment: 'inclusive',
+          seller_id: 'synthetic-seller',
+          invoice_issuer_id: 'synthetic-issuer',
+          tax_remitter_id: 'synthetic-remitter',
+          tax_service_ref: 'synthetic-tax-service',
           country: 'RO',
-          coverageEvidenceId: 'synthetic-coverage',
-          taxRateEvidenceId: 'synthetic-rate',
-          customerLocationEvidenceId: 'synthetic-location',
-          quotedAt: observedClock().toISOString(),
-          expiresAt: new Date(observedClock().getTime() + 240000).toISOString(),
+          coverage_evidence_id: 'synthetic-coverage',
+          tax_rate_evidence_id: 'synthetic-rate',
+          customer_location_evidence_id: 'synthetic-location',
+          quoted_at: observedClock().toISOString(),
+          expires_at: new Date(observedClock().getTime() + 240000).toISOString(),
         },
-        signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+        signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
       };
       quote.signature.value = sign(
         null,
@@ -407,8 +407,8 @@ async function initialize(input: {
     async createCheckout(value) {
       if (
         value.owner.merchantId !== owner.merchantId ||
-        value.checkout.storeId !== store ||
-        value.checkout.providerCustomerId !== 'cus_fixture'
+        value.checkout.store_id !== store ||
+        value.checkout.provider_customer_id !== 'cus_fixture'
       )
         throw new Error('Foreign fixture checkout');
       quotedCheckoutDispatches++;
@@ -435,50 +435,50 @@ async function initialize(input: {
           throw new Error('Fiscal fixture requires persisted signed quote');
         const clock = observedClock();
         const authority: BillingFinalInvoiceAuthority = {
-          schemaVersion: 1,
+          schema_version: 1,
           source: {
-            invoiceId: paid.invoiceId,
-            paymentIntentId: paid.paymentIntentId,
-            customerId: paid.providerCustomerId,
-            subscriptionId: paid.providerSubscriptionId,
-            priceId: paid.providerPriceId,
-            planId: paid.planId,
-            merchantId: merchantPublicId,
-            appId: authorityOwner.oxyAppId,
+            invoice_id: paid.invoice_id,
+            payment_intent_id: paid.payment_intent_id,
+            customer_id: paid.provider_customer_id,
+            subscription_id: paid.provider_subscription_id,
+            price_id: paid.provider_price_id,
+            plan_id: paid.plan_id,
+            merchant_id: merchantPublicId,
+            app_id: authorityOwner.oxyAppId,
             mode: 'live',
             environment: 'production',
           },
           invoice: {
             platform: 'peable',
             currency: 'USD',
-            grossMinorUnits: 2999,
-            netMinorUnits: 2500,
-            taxMinorUnits: 499,
-            merchantFeeMinorUnits: 0,
-            taxTreatment: 'inclusive',
-            sellerId: 'synthetic-seller',
-            invoiceIssuerId: 'synthetic-issuer',
-            taxQuoteId: taxCheckoutSnapshot?.taxQuote.quote.id ?? 'synthetic-tax',
-            customerLocationEvidenceId: 'synthetic-location',
-            taxRateEvidenceId: 'synthetic-rate',
+            gross_minor_units: 2999,
+            net_minor_units: 2500,
+            tax_minor_units: 499,
+            merchant_fee_minor_units: 0,
+            tax_treatment: 'inclusive',
+            seller_id: 'synthetic-seller',
+            invoice_issuer_id: 'synthetic-issuer',
+            tax_quote_id: taxCheckoutSnapshot?.taxQuote.quote.id ?? 'synthetic-tax',
+            customer_location_evidence_id: 'synthetic-location',
+            tax_rate_evidence_id: 'synthetic-rate',
             context: {
-              payerAccountId: paid.storeId,
-              beneficiaryAccountId: paid.storeId,
-              providerSubscriptionId: paid.providerSubscriptionId,
-              offerId,
-              offerVersion,
-              periodStart: paid.periodStart,
-              periodEnd: paid.periodEnd,
+              payer_account_id: paid.store_id,
+              beneficiary_account_id: paid.store_id,
+              provider_subscription_id: paid.provider_subscription_id,
+              offer_id: offerId,
+              offer_version: offerVersion,
+              period_start: paid.period_start,
+              period_end: paid.period_end,
               mode: 'live',
               environment: 'production',
             },
-            issuedAt: clock.toISOString(),
-            expiresAt: new Date(
-              Math.min(clock.getTime() + 300000, Date.parse(paid.periodEnd)),
+            issued_at: clock.toISOString(),
+            expires_at: new Date(
+              Math.min(clock.getTime() + 300000, Date.parse(paid.period_end)),
             ).toISOString(),
           },
           method: 'card',
-          signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+          signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
         };
         authority.signature.value = sign(
           null,
@@ -522,7 +522,7 @@ async function initialize(input: {
   });
   billing = peable.billing;
   await billing.ensureCustomer(
-    { storeId: store, storeName: 'Synthetic fixture' },
+    { store_id: store, store_name: 'Synthetic fixture' },
     { idempotencyKey: 'fixture-customer' },
   );
   await bindings.importPrice(owner, {
@@ -534,12 +534,12 @@ async function initialize(input: {
     ? undefined
     : await billing.createCheckoutSession(
         {
-          storeId: store,
-          planId: input.planId,
-          providerCustomerId: 'cus_fixture',
-          providerPriceId: 'price_fixture',
-          trialDays: 0,
-          returnUrl: 'https://example.invalid/return',
+          store_id: store,
+          plan_id: input.planId,
+          provider_customer_id: 'cus_fixture',
+          provider_price_id: 'price_fixture',
+          trial_days: 0,
+          return_url: 'https://example.invalid/return',
         },
         { idempotencyKey: 'fixture-checkout' },
       );

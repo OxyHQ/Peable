@@ -194,13 +194,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Oxy file events, real chain', () => {
     let row = must(await findMerchantById(gatewayDb(), merchant.id));
     expect(row.avatarFileId).toBe('file_trash_cycle');
     expect(row.avatarWithheld).toBe('unavailable');
-    expect((await resolveMerchantDisplay(row)).avatarUrl).toBeNull();
+    expect((await resolveMerchantDisplay(row)).avatar_url).toBeNull();
 
     const restored = fileEvent('file.restored', 'file_trash_cycle', { occurredAt: t2 });
     expect((await post(restored, { 'oxy-signature': sign(restored) })).status).toBe(200);
     row = must(await findMerchantById(gatewayDb(), merchant.id));
     expect(row.avatarWithheld).toBeNull();
-    expect((await resolveMerchantDisplay(row)).avatarUrl).toContain('file_trash_cycle');
+    expect((await resolveMerchantDisplay(row)).avatar_url).toContain('file_trash_cycle');
 
     // A trash event that HAPPENED before the restore, delivered after it.
     const late = fileEvent('file.trashed', 'file_trash_cycle', {

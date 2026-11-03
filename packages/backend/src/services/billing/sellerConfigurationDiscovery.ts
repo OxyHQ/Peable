@@ -121,8 +121,8 @@ export async function discoverOwnedInvoiceConfiguration(options: {
     z.object({ type: z.literal('account'), account }),
   ]);
   const schema = z.object({
-    id: z.literal(paid.invoiceId),
-    customer: z.literal(paid.providerCustomerId),
+    id: z.literal(paid.invoice_id),
+    customer: z.literal(paid.provider_customer_id),
     livemode: z.literal(paid.livemode),
     issuer: role,
     on_behalf_of: account.nullable(),
@@ -142,11 +142,11 @@ export async function discoverOwnedInvoiceConfiguration(options: {
   return {
     status: 'observed' as const,
     source: {
-      invoiceId: paid.invoiceId,
-      paymentIntentId: paid.paymentIntentId,
-      customerId: paid.providerCustomerId,
-      subscriptionId: paid.providerSubscriptionId,
-      priceId: paid.providerPriceId,
+      invoiceId: paid.invoice_id,
+      paymentIntentId: paid.payment_intent_id,
+      customerId: paid.provider_customer_id,
+      subscriptionId: paid.provider_subscription_id,
+      priceId: paid.provider_price_id,
       merchantId: options.owner.merchantId,
       appId: options.owner.oxyAppId,
       environment: options.owner.environment,

@@ -14,30 +14,30 @@ const INTENT: PaymentIntent = {
   currency: 'FAIR',
   network: 'testnet',
   address: 'TC8KNvRhFUJUepcCSjBBeLa5HYo4Na11w3',
-  merchantId: 'merch_1',
+  merchant_id: 'merch_1',
   txid: null,
   confirmations: 0,
-  clientSecret: 'pi_abc_secret_xyz',
+  client_secret: 'pi_abc_secret_xyz',
   metadata: {},
-  expiresAt: '2026-07-19T00:15:00.000Z',
-  createdAt: '2026-07-19T00:00:00.000Z',
-  updatedAt: '2026-07-19T00:00:00.000Z',
+  expires_at: '2026-07-19T00:15:00.000Z',
+  created: '2026-07-19T00:00:00.000Z',
+  updated_at: '2026-07-19T00:00:00.000Z',
 };
 
 test('CheckoutSession is assignable from a representative literal', () => {
   const session: CheckoutSession = {
     id: 'cs_abc',
     object: 'checkout_session',
-    paymentIntentId: INTENT.id,
-    clientSecret: INTENT.clientSecret,
+    payment_intent_id: INTENT.id,
+    client_secret: INTENT.client_secret,
     amount: INTENT.amount,
     network: INTENT.network,
     metadata: {},
-    successUrl: 'https://merchant.example/success',
-    cancelUrl: 'https://merchant.example/cancel',
+    success_url: 'https://merchant.example/success',
+    cancel_url: 'https://merchant.example/cancel',
     url: 'https://checkout.peable.to/c/cs_abc',
-    createdAt: '2026-07-19T00:00:00.000Z',
-    updatedAt: '2026-07-19T00:00:00.000Z',
+    created: '2026-07-19T00:00:00.000Z',
+    updated_at: '2026-07-19T00:00:00.000Z',
   };
   expect(session.object).toBe('checkout_session');
 });
@@ -46,13 +46,13 @@ test('CheckoutSessionPublic wraps the full PaymentIntent DTO the page renders fr
   const publicSession: CheckoutSessionPublic = {
     id: 'cs_abc',
     object: 'checkout_session',
-    merchant: { name: 'Acme', avatarUrl: null, description: null },
-    paymentIntent: INTENT,
+    merchant: { name: 'Acme', avatar_url: null, description: null },
+    payment_intent: INTENT,
   };
-  expect(publicSession.paymentIntent.clientSecret).toBe(INTENT.clientSecret);
+  expect(publicSession.payment_intent.client_secret).toBe(INTENT.client_secret);
 });
 
 test('CreateCheckoutSessionParams accepts the minimal required shape', () => {
   const params: CreateCheckoutSessionParams = { amount: '150000000', network: 'testnet' };
-  expect(params.successUrl).toBeUndefined();
+  expect(params.success_url).toBeUndefined();
 });

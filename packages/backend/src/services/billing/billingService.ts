@@ -347,7 +347,7 @@ export function createBillingService(options: BillingServiceOptions) {
           options.taxCheckoutAdapter,
           owner,
           merchant.publicId,
-          { ...input, taxQuote: input.taxQuote },
+          { ...input, tax_quote: input.taxQuote },
           now,
         );
       }
@@ -535,7 +535,7 @@ export function createBillingService(options: BillingServiceOptions) {
         source,
         checkout: {
           id: result.id,
-          expiresAt: result.expiresAt,
+          expires_at: result.expiresAt,
           ...(Date.parse(result.expiresAt) > now().getTime() ? { url: result.url } : {}),
         },
       };
@@ -560,7 +560,7 @@ export function createBillingService(options: BillingServiceOptions) {
     async createTaxQuote(owner: BillingOwner, params: CreateBillingTaxQuoteParams) {
       authorize(owner);
       if (!options.taxQuoteCalculator) throw new BillingError('not_found', 404);
-      const customer = await findBillingCustomerForStore(db, deployment, owner, params.storeId);
+      const customer = await findBillingCustomerForStore(db, deployment, owner, params.store_id);
       const merchant = await findMerchantById(db, owner.merchantId);
       if (
         !customer ||
@@ -642,7 +642,7 @@ export function createBillingService(options: BillingServiceOptions) {
       );
       if (taxCheckoutSnapshot) verifyBillingInvoiceTaxCheckout(authority, taxCheckoutSnapshot);
       // Lines are present exactly when asked for.
-      if ((authority.invoice.taxLines !== undefined) !== (include?.taxLines === true))
+      if ((authority.invoice.tax_lines !== undefined) !== (include?.taxLines === true))
         throw new BillingError('invalid_provider_response', 502);
       return authority;
     },
@@ -664,13 +664,13 @@ export function createBillingService(options: BillingServiceOptions) {
         { ref },
         async (key) => {
           const current = await project(owner, binding, await provider.retrieveSubscription(ref));
-          const result = current.cancelAtPeriodEnd
+          const result = current.cancel_at_period_end
             ? current
             : await project(owner, binding, await provider.cancelAtPeriodEnd(ref, key));
           if (
-            !result.cancelAtPeriodEnd ||
-            result.currentPeriodStart !== current.currentPeriodStart ||
-            result.currentPeriodEnd !== current.currentPeriodEnd
+            !result.cancel_at_period_end ||
+            result.current_period_start !== current.current_period_start ||
+            result.current_period_end !== current.current_period_end
           )
             throw new BillingError('invalid_provider_response', 502);
           return { result, objectRef: ref };
@@ -680,9 +680,9 @@ export function createBillingService(options: BillingServiceOptions) {
       // make it stale: same-action retry must reconcile, never report cached success.
       const fresh = await project(owner, binding, await provider.retrieveSubscription(ref));
       if (
-        !fresh.cancelAtPeriodEnd ||
-        fresh.currentPeriodStart !== result.currentPeriodStart ||
-        fresh.currentPeriodEnd !== result.currentPeriodEnd
+        !fresh.cancel_at_period_end ||
+        fresh.current_period_start !== result.current_period_start ||
+        fresh.current_period_end !== result.current_period_end
       )
         throw new BillingError('reconciliation_required');
       return fresh;

@@ -502,27 +502,27 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         },
         async calculate({ source }) {
           return resign({
-            schemaVersion: 1,
+            schema_version: 1,
             source,
             quote: {
               id: 'quote_fixture',
               currency: 'USD',
-              grossMinorUnits: 2999,
-              netMinorUnits: 2500,
-              taxMinorUnits: 499,
-              taxTreatment: 'inclusive',
-              sellerId: 'seller_fixture',
-              invoiceIssuerId: 'issuer_fixture',
-              taxRemitterId: 'remitter_fixture',
-              taxServiceRef: 'tax_fixture',
+              gross_minor_units: 2999,
+              net_minor_units: 2500,
+              tax_minor_units: 499,
+              tax_treatment: 'inclusive',
+              seller_id: 'seller_fixture',
+              invoice_issuer_id: 'issuer_fixture',
+              tax_remitter_id: 'remitter_fixture',
+              tax_service_ref: 'tax_fixture',
               country: 'RO',
-              coverageEvidenceId: 'coverage_fixture',
-              taxRateEvidenceId: 'rate_fixture',
-              customerLocationEvidenceId: location.id,
-              quotedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + quoteLifetimeMs).toISOString(),
+              coverage_evidence_id: 'coverage_fixture',
+              tax_rate_evidence_id: 'rate_fixture',
+              customer_location_evidence_id: location.id,
+              quoted_at: time.toISOString(),
+              expires_at: new Date(time.getTime() + quoteLifetimeMs).toISOString(),
             },
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           });
         },
       };
@@ -533,48 +533,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
           if (!taxCheckoutSnapshot) throw new Error('Missing persisted checkout quote');
           const quote = taxCheckoutSnapshot.taxQuote.quote;
           const authority: BillingFinalInvoiceAuthority = {
-            schemaVersion: 1,
+            schema_version: 1,
             source: {
-              invoiceId: paid.invoiceId,
-              paymentIntentId: paid.paymentIntentId,
-              customerId: paid.providerCustomerId,
-              subscriptionId: paid.providerSubscriptionId,
-              priceId: paid.providerPriceId,
-              planId: paid.planId,
-              merchantId: merchantPublicId,
-              appId: actor.oxyAppId,
+              invoice_id: paid.invoice_id,
+              payment_intent_id: paid.payment_intent_id,
+              customer_id: paid.provider_customer_id,
+              subscription_id: paid.provider_subscription_id,
+              price_id: paid.provider_price_id,
+              plan_id: paid.plan_id,
+              merchant_id: merchantPublicId,
+              app_id: actor.oxyAppId,
               mode: 'test',
               environment: actor.environment,
             },
             invoice: {
               platform: 'peable',
               currency: quote.currency,
-              grossMinorUnits: quote.grossMinorUnits,
-              netMinorUnits: quote.netMinorUnits,
-              taxMinorUnits: quote.taxMinorUnits,
-              merchantFeeMinorUnits: 0,
-              taxTreatment: quote.taxTreatment,
-              sellerId: quote.sellerId,
-              invoiceIssuerId: quote.invoiceIssuerId,
-              taxQuoteId: quote.id,
-              customerLocationEvidenceId: quote.customerLocationEvidenceId,
-              taxRateEvidenceId: quote.taxRateEvidenceId,
+              gross_minor_units: quote.grossMinorUnits,
+              net_minor_units: quote.netMinorUnits,
+              tax_minor_units: quote.taxMinorUnits,
+              merchant_fee_minor_units: 0,
+              tax_treatment: quote.taxTreatment,
+              seller_id: quote.sellerId,
+              invoice_issuer_id: quote.invoiceIssuerId,
+              tax_quote_id: quote.id,
+              customer_location_evidence_id: quote.customerLocationEvidenceId,
+              tax_rate_evidence_id: quote.taxRateEvidenceId,
               context: {
-                payerAccountId: paid.storeId,
-                beneficiaryAccountId: paid.storeId,
-                providerSubscriptionId: paid.providerSubscriptionId,
-                offerId: taxCheckoutSnapshot.offer.offerId,
-                offerVersion: taxCheckoutSnapshot.offer.offerVersion,
-                periodStart: paid.periodStart,
-                periodEnd: paid.periodEnd,
+                payer_account_id: paid.store_id,
+                beneficiary_account_id: paid.store_id,
+                provider_subscription_id: paid.provider_subscription_id,
+                offer_id: taxCheckoutSnapshot.offer.offerId,
+                offer_version: taxCheckoutSnapshot.offer.offerVersion,
+                period_start: paid.period_start,
+                period_end: paid.period_end,
                 mode: 'test',
                 environment: actor.environment,
               },
-              issuedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              issued_at: time.toISOString(),
+              expires_at: new Date(time.getTime() + 60_000).toISOString(),
             },
             method: 'card',
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           };
           invoiceMutation(authority);
           authority.signature.value = sign(
@@ -609,9 +609,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         invoiceAuthorityKeys: verificationKeys,
       }).billing;
       const quote = await fiscalSdk.createTaxQuote({
-        storeId: checkout.storeId,
-        planId: checkout.planId,
-        customerLocationEvidenceId: location.id,
+        store_id: checkout.storeId,
+        plan_id: checkout.planId,
+        customer_location_evidence_id: location.id,
       });
       return {
         quote,
@@ -643,7 +643,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(row?.taxCheckoutSnapshot?.taxQuote).toEqual(fixture.quote);
       expect(row?.taxCheckoutSnapshot?.offer).toEqual(fixture.offer);
       const replacementQuote = structuredClone(fixture.quote);
-      replacementQuote.quote.taxRateEvidenceId = 'rate_replacement';
+      replacementQuote.quote.tax_rate_evidence_id = 'rate_replacement';
       fixture.resign(replacementQuote);
       expect(
         (
@@ -666,29 +666,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const fixture = await fiscalFixture();
       const mutations = [
         (quote: BillingTaxQuote) => {
-          quote.source.merchantId = 'merch_other';
+          quote.source.merchant_id = 'merch_other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.appId = 'app_other';
+          quote.source.app_id = 'app_other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.storeId = 'store:other';
+          quote.source.store_id = 'store:other';
         },
         (quote: BillingTaxQuote) => {
-          quote.source.planId = 'plan:other';
+          quote.source.plan_id = 'plan:other';
         },
         (quote: BillingTaxQuote) => {
           quote.source.environment = 'production';
           quote.source.mode = 'live';
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.expiresAt = time.toISOString();
+          quote.quote.expires_at = time.toISOString();
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.netMinorUnits++;
+          quote.quote.net_minor_units++;
         },
         (quote: BillingTaxQuote) => {
-          quote.quote.sellerId = 'seller_other';
+          quote.quote.seller_id = 'seller_other';
         },
       ];
       for (const mutate of mutations) {
@@ -707,7 +707,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         ).not.toBe(200);
       }
       const tampered = structuredClone(fixture.quote);
-      tampered.quote.taxRateEvidenceId = 'rate_other';
+      tampered.quote.tax_rate_evidence_id = 'rate_other';
       expect(
         (
           await request(
@@ -774,7 +774,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('verifies final invoice fiscal fields against the persisted checkout even after quote expiry', async () => {
       const fixture = await fiscalFixture(1000);
       await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'quoted:invoice' },
       );
       hasCheckout = true;
@@ -796,19 +796,19 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       });
       for (const mutation of [
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.taxQuoteId = 'quote_other';
+          authority.invoice.tax_quote_id = 'quote_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.customerLocationEvidenceId = 'location_other';
+          authority.invoice.customer_location_evidence_id = 'location_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.sellerId = 'seller_other';
+          authority.invoice.seller_id = 'seller_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.taxRateEvidenceId = 'rate_other';
+          authority.invoice.tax_rate_evidence_id = 'rate_other';
         },
         (authority: BillingFinalInvoiceAuthority) => {
-          authority.invoice.context.offerVersion++;
+          authority.invoice.context.offer_version++;
         },
       ]) {
         fixture.setInvoiceMutation(mutation);
@@ -935,15 +935,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         bindingEvidenceRef: 'fixture:verified-import',
       });
       expect(
-        (await sdk().createCheckoutSession(checkout, { idempotencyKey: 'checkout:one' })).expiresAt,
+        (await sdk().createCheckoutSession(checkout, { idempotencyKey: 'checkout:one' })).expires_at,
       ).toBe('2026-10-03T13:00:00.000Z');
       expect(
         (
           await sdk().createPortalSession(
-            { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+            { provider_customer_id: 'cus_one', return_url: checkout.returnUrl },
             { idempotencyKey: 'portal:one' },
           )
-        ).expiresAt,
+        ).expires_at,
       ).toBe('2026-10-03T12:01:00.000Z');
       expect(await sdk().retrieveSubscription('sub_one')).toMatchObject({
         storeId: 'store:one',
@@ -972,13 +972,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await sdk().ensureCustomer(customerInput, { idempotencyKey: 'customer:one' });
       expect(
         await sdk().ensureCustomer(
-          { ...customerInput, storeName: 'Renamed' },
+          { ...customerInput, store_name: 'Renamed' },
           { idempotencyKey: 'customer:one' },
         ),
       ).toEqual({ providerCustomerId: 'cus_one' });
       expect(
         await sdk().ensureCustomer(
-          { ...customerInput, storeName: 'Renamed' },
+          { ...customerInput, store_name: 'Renamed' },
           { idempotencyKey: 'customer:two' },
         ),
       ).toEqual({ providerCustomerId: 'cus_one' });
@@ -1030,7 +1030,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses portal configuration drift on the next call and immediate cancellation', async () => {
       await bindSubscription();
       await sdk().createPortalSession(
-        { providerCustomerId: 'cus_one', returnUrl: checkout.returnUrl },
+        { provider_customer_id: 'cus_one', return_url: checkout.returnUrl },
         { idempotencyKey: 'portal:one' },
       );
       portalUpdate = true;
@@ -1372,7 +1372,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         { ...customerInput, rail: 'faircoin' },
         'customer:fair',
       );
-      expect(native.providerCustomerId).toMatch(/^cus_fair[0-9a-f]{64}$/);
+      expect(native.provider_customer_id).toMatch(/^cus_fair[0-9a-f]{64}$/);
       expect(calls.filter((call) => call.method === 'customer')).toHaveLength(1);
       for (const raw of [
         { rails: [faircoin, faircoin] },
@@ -1591,48 +1591,48 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         verificationKeys,
         async read({ owner: invoiceOwner, merchantPublicId, invoice: paid }) {
           const authority: BillingFinalInvoiceAuthority = {
-            schemaVersion: 1,
+            schema_version: 1,
             source: {
-              invoiceId: paid.invoiceId,
-              paymentIntentId: paid.paymentIntentId,
-              customerId: paid.providerCustomerId,
-              subscriptionId: paid.providerSubscriptionId,
-              priceId: paid.providerPriceId,
-              planId: paid.planId,
-              merchantId: merchantPublicId,
-              appId: invoiceOwner.oxyAppId,
+              invoice_id: paid.invoice_id,
+              payment_intent_id: paid.payment_intent_id,
+              customer_id: paid.provider_customer_id,
+              subscription_id: paid.provider_subscription_id,
+              price_id: paid.provider_price_id,
+              plan_id: paid.plan_id,
+              merchant_id: merchantPublicId,
+              app_id: invoiceOwner.oxyAppId,
               mode: 'test',
               environment: invoiceOwner.environment,
             },
             invoice: {
               platform: 'peable',
               currency: paid.currency,
-              grossMinorUnits: 2999,
-              netMinorUnits: 2500,
-              taxMinorUnits: 499,
-              merchantFeeMinorUnits: 0,
-              taxTreatment: 'inclusive',
-              sellerId: 'seller_fixture',
-              invoiceIssuerId: 'issuer_fixture',
-              taxQuoteId: 'quote_fixture',
-              customerLocationEvidenceId: 'location_fixture',
-              taxRateEvidenceId: 'rate_fixture',
+              gross_minor_units: 2999,
+              net_minor_units: 2500,
+              tax_minor_units: 499,
+              merchant_fee_minor_units: 0,
+              tax_treatment: 'inclusive',
+              seller_id: 'seller_fixture',
+              invoice_issuer_id: 'issuer_fixture',
+              tax_quote_id: 'quote_fixture',
+              customer_location_evidence_id: 'location_fixture',
+              tax_rate_evidence_id: 'rate_fixture',
               context: {
-                payerAccountId: paid.storeId,
-                beneficiaryAccountId: paid.storeId,
-                providerSubscriptionId: paid.providerSubscriptionId,
-                offerId: 'offer_fixture',
-                offerVersion: 1,
-                periodStart: paid.periodStart,
-                periodEnd: paid.periodEnd,
+                payer_account_id: paid.store_id,
+                beneficiary_account_id: paid.store_id,
+                provider_subscription_id: paid.provider_subscription_id,
+                offer_id: 'offer_fixture',
+                offer_version: 1,
+                period_start: paid.period_start,
+                period_end: paid.period_end,
                 mode: 'test',
                 environment: invoiceOwner.environment,
               },
-              issuedAt: time.toISOString(),
-              expiresAt: new Date(time.getTime() + 60_000).toISOString(),
+              issued_at: time.toISOString(),
+              expires_at: new Date(time.getTime() + 60_000).toISOString(),
             },
             method: 'card',
-            signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+            signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
           };
           authority.signature.value = sign(
             null,
@@ -1681,10 +1681,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const fixture = await fiscalFixture();
       const key = 'recovery:key:encoded';
       const original = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: key },
       );
-      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      time = new Date(Date.parse(fixture.quote.quote.expires_at) + 1);
       const before = calls.length;
       const params = {
         idempotencyKey: key,
@@ -1697,7 +1697,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(recovered).toMatchObject({
         state: 'succeeded',
         source: { ...params, taxQuoteId: fixture.quote.quote.id },
-        checkout: { id: original.id, expiresAt: original.expiresAt },
+        checkout: { id: original.id, expiresAt: original.expires_at },
       });
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.url).toBeUndefined();
@@ -1776,8 +1776,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       await expect(
         sdk().retrieveCheckoutOperation({
           ...params,
-          providerCustomerId: 'cus_second',
-          storeId: 'store:second',
+          provider_customer_id: 'cus_second',
+          store_id: 'store:second',
         }),
       ).rejects.toThrow();
       expect(calls).toHaveLength(before);
@@ -1891,7 +1891,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('discovers and pins the original invoice on first checkout read after renewal through all pages', async () => {
       const fixture = await fiscalFixture();
       const hosted = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'initial:late' },
       );
       configurePaidEvidence();
@@ -1918,8 +1918,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             };
       };
       const observed = await sdk().retrieveCheckout(hosted.id);
-      expect(observed.initialInvoiceId).toBe('in_one');
-      expect(observed.subscription?.latestInvoiceId).toBe('in_renewal');
+      expect(observed.initial_invoice_id).toBe('in_one');
+      expect(observed.subscription?.latest_invoice_id).toBe('in_renewal');
       expect(cursors).toEqual([undefined, 'in_renewal']);
       client.listSubscriptionInvoices = async () => {
         throw new Error('Initial pin must survive restart/provider outage');
@@ -1936,7 +1936,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('does not pin ambiguous, foreign, wrong-price or incomplete initial invoice evidence', async () => {
       const fixture = await fiscalFixture();
       const hosted = await fixture.fiscalSdk.createCheckoutSession(
-        { ...checkout, taxQuote: fixture.quote },
+        { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'initial:invalid' },
       );
       configurePaidEvidence();
@@ -1951,7 +1951,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         has_more: false,
         data: [initial, { ...initial, id: 'in_duplicate' }],
       });
-      expect((await sdk().retrieveCheckout(hosted.id)).initialInvoiceId).toBeNull();
+      expect((await sdk().retrieveCheckout(hosted.id)).initial_invoice_id).toBeNull();
       client.listSubscriptionInvoices = async () => ({
         has_more: false,
         data: [{ ...initial, customer: 'cus_foreign' }],
@@ -1998,7 +1998,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       };
       await expect(
         fixture.fiscalSdk.createCheckoutSession(
-          { ...checkout, taxQuote: fixture.quote },
+          { ...checkout, tax_quote: fixture.quote },
           { idempotencyKey: 'recover:quote-ceiling' },
         ),
       ).rejects.toThrow();
@@ -2009,7 +2009,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         storeId: checkout.storeId,
         planId: checkout.planId,
       };
-      time = new Date(Date.parse(fixture.quote.quote.expiresAt) + 1);
+      time = new Date(Date.parse(fixture.quote.quote.expires_at) + 1);
       checkoutOperationReader = {
         async read(input) {
           return {
@@ -2018,7 +2018,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: new Date(Date.parse(fixture.quote.quote.expiresAt) + 1).toISOString(),
+              expiresAt: new Date(Date.parse(fixture.quote.quote.expires_at) + 1).toISOString(),
             },
           };
         },
@@ -2038,14 +2038,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             checkout: {
               id: 'cs_test_found',
               url: 'https://example.invalid/recovered',
-              expiresAt: fixture.quote.quote.expiresAt,
+              expiresAt: fixture.quote.quote.expires_at,
             },
           };
         },
       };
       const recovered = await sdk().retrieveCheckoutOperation(params);
       expect(recovered.state).toBe('succeeded');
-      expect(recovered.source.taxQuoteId).toBe(fixture.quote.quote.id);
+      expect(recovered.source.tax_quote_id).toBe(fixture.quote.quote.id);
       if (recovered.state !== 'succeeded') throw new Error('Expected succeeded');
       expect(recovered.checkout.url).toBeUndefined();
     });

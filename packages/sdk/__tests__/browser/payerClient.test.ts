@@ -92,14 +92,14 @@ const INTENT: PaymentIntent = {
   currency: 'FAIR',
   network: 'testnet',
   address: 'TAddr1',
-  merchantId: 'merch_1',
+  merchant_id: 'merch_1',
   txid: null,
   confirmations: 0,
-  clientSecret: 'secret_1',
+  client_secret: 'secret_1',
   metadata: {},
-  expiresAt: '2026-07-20T00:00:00.000Z',
-  createdAt: '2026-07-19T00:00:00.000Z',
-  updatedAt: '2026-07-19T00:00:00.000Z',
+  expires_at: '2026-07-20T00:00:00.000Z',
+  created: '2026-07-19T00:00:00.000Z',
+  updated_at: '2026-07-19T00:00:00.000Z',
 };
 
 describe('getPaymentIntent', () => {

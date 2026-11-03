@@ -48,9 +48,8 @@ export function createInternalErrorHandler(
     res.status(500).json({
       error: {
         type: 'api_error',
-        message: requestId
-          ? `An unexpected error occurred. Quote request ${requestId} to support.`
-          : 'An unexpected error occurred.',
+        message: 'An unexpected error occurred.',
+        request_id: requestId ?? null,
       },
     });
   };

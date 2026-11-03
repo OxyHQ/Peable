@@ -45,7 +45,7 @@ import { t, formatFairAmount } from '../../i18n';
 const HEADER_AVATAR_SIZE = 32;
 
 function counterpartyName(payment: SocialPayment): string {
-  const { displayName, username } = payment.counterparty;
+  const { display_name: displayName, username } = payment.counterparty;
   return displayName ?? (username ? `@${username}` : t('readOnly.history.unknownParty'));
 }
 
@@ -59,7 +59,7 @@ function PaymentRow({ payment, unspentSat }: { payment: SocialPayment; unspentSa
           : t('readOnly.history.received', { name })}
       </Text>
       <Text className="text-muted-foreground text-xs mt-1">
-        {new Date(payment.createdAt).toLocaleDateString()}
+        {new Date(payment.created).toLocaleDateString()}
       </Text>
       {/* Shown only when the address still holds something. A swept address
           reads 0, and printing "0 FAIR" against a real past payment would say

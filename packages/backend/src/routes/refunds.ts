@@ -71,16 +71,16 @@ function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatu
   return {
     id: row.publicId,
     object: 'refund',
-    externalRef: row.externalRef,
+    external_ref: row.externalRef,
     origin: row.origin,
-    paymentIntentId: paymentIntentPublicId,
+    payment_intent_id: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
     status: row.status,
-    paymentStatus,
-    failureCode: row.failureCode,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
+    payment_status: paymentStatus,
+    failure_code: row.failureCode,
+    created: row.createdAt.toISOString(),
+    updated_at: row.updatedAt.toISOString(),
   };
 }
 
@@ -259,7 +259,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       const settlement = await reportSettlement(intent);
       const body: Settlement = {
         object: 'settlement',
-        paymentIntentId: intent.publicId,
+        payment_intent_id: intent.publicId,
         ...settlement,
       };
       res.status(200).json(body);

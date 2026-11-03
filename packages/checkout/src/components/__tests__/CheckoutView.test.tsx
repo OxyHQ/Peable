@@ -48,14 +48,14 @@ function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     currency: 'FAIR',
     network: 'testnet',
     address: 'TAddressExample1111111111111111111',
-    merchantId: 'merch_1',
+    merchant_id: 'merch_1',
     txid: 'deadbeef',
     confirmations: 0,
-    clientSecret: 'pi_live123_secret',
+    client_secret: 'pi_live123_secret',
     metadata: {},
-    expiresAt: new Date(Date.now() + 60_000).toISOString(),
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 60_000).toISOString(),
+    created: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
     ...overrides,
   };
 }
@@ -79,7 +79,7 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
   await screen.findByText(/payment sent/i);
   expect(subscribeMock).toHaveBeenCalledWith(
     initialIntent.id,
-    initialIntent.clientSecret,
+    initialIntent.client_secret,
     expect.any(Function),
     // The connection-state callback. Asserted here as well as in
     // `CheckoutViewReconnect.test.tsx` because a change that dropped it would

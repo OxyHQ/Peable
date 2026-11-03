@@ -36,7 +36,7 @@ export function isChainIntent(intent: PaymentIntent): intent is ChainPaymentInte
 export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
   const deepLink = buildPayDeepLink({
     intentId: intent.id,
-    clientSecret: intent.clientSecret,
+    clientSecret: intent.client_secret,
     address: intent.address,
     amount: intent.amount,
     network: intent.network,

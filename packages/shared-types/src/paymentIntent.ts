@@ -289,7 +289,7 @@ export interface PaymentIntent {
    * FairCoin rail only; `null` on a card payment, which reserves no address.
    */
   address: string | null;
-  merchantId: string;
+  merchant_id: string;
   /**
    * The seller this payment is made ON BEHALF OF (`ca_…`), or `null` for a
    * payment to the merchant itself (ADR 0012 D5). On-behalf payments are
@@ -298,17 +298,17 @@ export interface PaymentIntent {
    * Optional in the type only so fixtures written against earlier versions
    * still compile; a gateway at this version always sends it.
    */
-  connectedAccountId?: string | null;
+  connected_account_id?: string | null;
   txid: string | null;
   /** On-chain confirmations. Structurally `0` for the whole life of a card payment. */
   confirmations: number;
-  clientSecret: string;
+  client_secret: string;
   metadata: Record<string, string>;
   /**
    * When an UNPAID intent expires. Meaningful only while {@link canExpire}
    * is true for `status` — see `canExpire` below.
    */
-  expiresAt: string;
+  expires_at: number;
   /**
    * Whether this intent can still expire (ADR 0012 D9). `false` once the payer
    * has reported a broadcast: a FairCoin payment that is `broadcast` or
@@ -317,9 +317,9 @@ export interface PaymentIntent {
    * Optional in the type only for fixtures written against earlier versions;
    * a gateway at this version always sends it.
    */
-  canExpire?: boolean;
-  createdAt: string;
-  updatedAt: string;
+  can_expire?: boolean;
+  created: number;
+  updated_at: number;
 }
 
 export interface CreatePaymentIntentParams {
@@ -335,7 +335,7 @@ export interface CreatePaymentIntentParams {
   /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
   currency?: CurrencyCode;
   metadata?: Record<string, string>;
-  expiresInSeconds?: number;
+  expires_in_seconds?: number;
   /**
    * Create the payment ON BEHALF OF this connected account (`ca_…`) — the
    * address derives from the seller's own key and the coins go straight to
@@ -343,5 +343,5 @@ export interface CreatePaymentIntentParams {
    * is refused. The account's FairCoin half must be `active` and `network`
    * must be the account's network.
    */
-  connectedAccount?: string;
+  connected_account?: string;
 }

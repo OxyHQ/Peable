@@ -107,11 +107,11 @@ export default function TaxScreen() {
       setSettings(loaded);
       setRegistrations(regs.data);
       setCodes(list.data);
-      setLegalName(loaded.legalName ?? '');
-      setCountry(loaded.headOffice?.country ?? '');
-      setState(loaded.headOffice?.state ?? '');
-      setPostalCode(loaded.headOffice?.postalCode ?? '');
-      setDefaultTaxCode(loaded.defaultTaxCode);
+      setLegalName(loaded.legal_name ?? '');
+      setCountry(loaded.head_office?.country ?? '');
+      setState(loaded.head_office?.state ?? '');
+      setPostalCode(loaded.head_office?.postal_code ?? '');
+      setDefaultTaxCode(loaded.default_tax_code);
     } catch (e) {
       if (current === generation.current) setError(message(e));
     }
@@ -244,15 +244,15 @@ export default function TaxScreen() {
                 void run(async () => {
                   setSettings(
                     await taxDashboard.updateSettings(scope, {
-                      legalName: legalName.trim() || null,
-                      headOffice: upper(country)
+                      legal_name: legalName.trim() || null,
+                      head_office: upper(country)
                         ? {
                             country: upper(country),
                             state: upper(state) || null,
-                            postalCode: postalCode.trim() || null,
+                            postal_code: postalCode.trim() || null,
                           }
                         : null,
-                      defaultTaxCode,
+                      default_tax_code: defaultTaxCode,
                     }),
                   );
                 }),
@@ -312,7 +312,7 @@ export default function TaxScreen() {
                     country: upper(regCountry),
                     state: upper(regState) || null,
                     scheme: regScheme,
-                    registrationNumber: regNumber.trim() || null,
+                    registration_number: regNumber.trim() || null,
                   });
                   setRegCountry('');
                   setRegState('');

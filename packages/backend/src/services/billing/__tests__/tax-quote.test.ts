@@ -54,27 +54,27 @@ function fixture() {
     async calculate({ source }) {
       calls++;
       const result: BillingTaxQuote = tamper({
-        schemaVersion: 1,
+        schema_version: 1,
         source,
         quote: {
           id: 'quote_fixture',
           currency: product.currency,
-          grossMinorUnits: product.grossMinorUnits,
-          netMinorUnits: 2500,
-          taxMinorUnits: 499,
-          taxTreatment: product.taxTreatment,
-          sellerId: product.sellerId,
-          invoiceIssuerId: product.invoiceIssuerId,
-          taxRemitterId: product.taxRemitterId,
-          taxServiceRef: product.taxServiceRef,
+          gross_minor_units: product.grossMinorUnits,
+          net_minor_units: 2500,
+          tax_minor_units: 499,
+          tax_treatment: product.taxTreatment,
+          seller_id: product.sellerId,
+          invoice_issuer_id: product.invoiceIssuerId,
+          tax_remitter_id: product.taxRemitterId,
+          tax_service_ref: product.taxServiceRef,
           country: location.country,
-          coverageEvidenceId: product.coverageEvidenceId,
-          taxRateEvidenceId: 'rate_fixture',
-          customerLocationEvidenceId: location.id,
-          quotedAt: now.toISOString(),
-          expiresAt: '2026-10-07T12:01:00.000Z',
+          coverage_evidence_id: product.coverageEvidenceId,
+          tax_rate_evidence_id: 'rate_fixture',
+          customer_location_evidence_id: location.id,
+          quoted_at: now.toISOString(),
+          expires_at: '2026-10-07T12:01:00.000Z',
         },
-        signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+        signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
       });
       result.signature.value = sign(
         null,
@@ -173,15 +173,15 @@ describe('provider-neutral Peable tax quote gate', () => {
   it('rejects supplier authority differing in fiscal actor, amounts, country, clocks or pinned signature', async () => {
     for (const mutation of [
       (result: BillingTaxQuote) => {
-        result.quote.invoiceIssuerId = 'another_issuer';
+        result.quote.invoice_issuer_id = 'another_issuer';
         return result;
       },
       (result: BillingTaxQuote) => {
-        result.quote.taxRemitterId = 'another_remitter';
+        result.quote.tax_remitter_id = 'another_remitter';
         return result;
       },
       (result: BillingTaxQuote) => {
-        result.quote.netMinorUnits++;
+        result.quote.net_minor_units++;
         return result;
       },
       (result: BillingTaxQuote) => {
@@ -189,11 +189,11 @@ describe('provider-neutral Peable tax quote gate', () => {
         return result;
       },
       (result: BillingTaxQuote) => {
-        result.quote.expiresAt = result.quote.quotedAt;
+        result.quote.expires_at = result.quote.quoted_at;
         return result;
       },
       (result: BillingTaxQuote) => {
-        result.source.appId = 'another_app';
+        result.source.app_id = 'another_app';
         return result;
       },
     ]) {

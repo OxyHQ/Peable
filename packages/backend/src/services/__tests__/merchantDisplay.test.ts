@@ -66,7 +66,7 @@ test('falls back to a neutral name and null avatar/description when unset', asyn
   const display = await resolveMerchantDisplay(merchant);
 
   expect(display.name).toBe('Peable merchant');
-  expect(display.avatarUrl).toBeNull();
+  expect(display.avatar_url).toBeNull();
   expect(display.description).toBeNull();
 });
 
@@ -75,6 +75,6 @@ test('a withheld avatar resolves to no URL: Oxy would not serve it', async () =>
     const display = await resolveMerchantDisplay(
       merchantRow({ avatarFileId: 'file_mercaria_logo', avatarWithheld }),
     );
-    expect(display.avatarUrl).toBeNull();
+    expect(display.avatar_url).toBeNull();
   }
 });

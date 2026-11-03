@@ -65,9 +65,9 @@ export function createVerifiedBillingBindings(options: {
   ) {
     const snapshot = normalizeBillingSubscription(await client.retrieveSubscription(subRef));
     if (
-      snapshot.providerSubscriptionId !== subRef ||
-      snapshot.providerCustomerId !== customerRef ||
-      snapshot.providerPriceId !== priceRef ||
+      snapshot.provider_subscription_id !== subRef ||
+      snapshot.provider_customer_id !== customerRef ||
+      snapshot.provider_price_id !== priceRef ||
       snapshot.livemode !== deployment.livemode
     )
       throw new BillingError('identity_conflict');
@@ -225,9 +225,9 @@ export function createVerifiedBillingBindings(options: {
       : null;
     if (
       snapshot &&
-      (snapshot.providerSubscriptionId !== binding?.providerRef ||
-        snapshot.providerCustomerId !== customer.providerRef ||
-        snapshot.providerPriceId !== price.providerRef ||
+      (snapshot.provider_subscription_id !== binding?.providerRef ||
+        snapshot.provider_customer_id !== customer.providerRef ||
+        snapshot.provider_price_id !== price.providerRef ||
         snapshot.livemode !== deployment.livemode)
     )
       throw new BillingError('identity_conflict');
@@ -241,7 +241,7 @@ export function createVerifiedBillingBindings(options: {
       initialInvoiceId: snapshot
         ? await discoverInitialInvoice(
             operation,
-            snapshot.providerSubscriptionId,
+            snapshot.provider_subscription_id,
             customer.providerRef,
             price.providerRef,
           )
@@ -368,7 +368,7 @@ export function createVerifiedBillingBindings(options: {
         throw new BillingError('reconciliation_required');
     },
     async retrievePaidInvoice(owner: BillingOwner, subscriptionRef: string, invoiceRef: string) {
-      const { state, chargeId, amountRefunded, ...paid } = await this.retrieveInvoiceState(
+      const { state, charge_id: chargeId, amount_refunded: amountRefunded, ...paid } = await this.retrieveInvoiceState(
         owner,
         subscriptionRef,
         invoiceRef,

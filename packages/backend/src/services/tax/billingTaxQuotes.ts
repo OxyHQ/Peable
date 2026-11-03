@@ -127,8 +127,8 @@ export function createPeableTaxQuoteCalculator(options: {
     },
     async calculate({ source, product, location }) {
       const merchant = await merchantOf({
-        merchantId: (await merchantIdFor(db, source.merchantId)) ?? '',
-        oxyAppId: source.appId,
+        merchantId: (await merchantIdFor(db, source.merchant_id)) ?? '',
+        oxyAppId: source.app_id,
         environment: source.environment,
       });
       let calculation: Awaited<ReturnType<TaxService['calculate']>>;
@@ -160,35 +160,35 @@ export function createPeableTaxQuoteCalculator(options: {
       const expiresAt = new Date(
         Math.min(
           +at + (options.quoteLifetimeMs ?? QUOTE_LIFETIME_MS),
-          Date.parse(calculation.expiresAt),
+          Date.parse(calculation.expires_at),
           Date.parse(location.expiresAt),
         ),
       );
       const quote = {
         currency: calculation.currency,
-        grossMinorUnits: calculation.amountTotal,
-        netMinorUnits: calculation.amountNet,
-        taxMinorUnits: calculation.amountTotal - calculation.amountNet,
+        grossMinorUnits: calculation.amount_total,
+        netMinorUnits: calculation.amount_net,
+        taxMinorUnits: calculation.amount_total - calculation.amount_net,
         taxTreatment: product.taxTreatment,
         sellerId: product.sellerId,
         invoiceIssuerId: product.invoiceIssuerId,
         taxRemitterId: product.taxRemitterId,
         taxServiceRef: product.taxServiceRef,
         country: calculation.country,
-        coverageEvidenceId: calculation.registrationId ?? calculation.collection,
+        coverageEvidenceId: calculation.registration_id ?? calculation.collection,
         taxRateEvidenceId: calculation.id,
         customerLocationEvidenceId: location.id,
         quotedAt: at.toISOString(),
         expiresAt: expiresAt.toISOString(),
       };
       const result: BillingTaxQuote = {
-        schemaVersion: 1,
+        schema_version: 1,
         source,
         quote: {
           id: `tax_${createHash('sha256').update(JSON.stringify({ source, quote })).digest('hex')}`,
           ...quote,
         },
-        signature: { algorithm: 'Ed25519', keyId, value: '' },
+        signature: { algorithm: 'Ed25519', key_id: keyId, value: '' },
       };
       result.signature.value = sign(
         null,
@@ -224,17 +224,17 @@ export async function invoiceTaxLines(
       ),
     );
   if (!row) return null;
-  return row.result.lineItems.flatMap((line) =>
+  return row.result.line_items.flatMap((line) =>
     line.breakdown.map((entry) => ({
       calculationId: calculationPublicId,
       country: entry.country,
       state: entry.state,
-      taxType: entry.taxType,
-      ratePercentage: entry.ratePercentage,
-      taxableMinorUnits: entry.taxableAmount,
+      taxType: entry.tax_type,
+      ratePercentage: entry.rate_percentage,
+      taxableMinorUnits: entry.taxable_amount,
       taxMinorUnits: entry.amount,
       inclusive: entry.inclusive,
-      taxabilityReason: entry.taxabilityReason,
+      taxabilityReason: entry.taxability_reason,
     })),
   );
 }

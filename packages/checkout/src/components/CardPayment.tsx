@@ -52,7 +52,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
     void (async () => {
       try {
         const [action, factory] = await Promise.all([
-          getClientAction(intent.id, intent.clientSecret),
+          getClientAction(intent.id, intent.client_secret),
           loadProviderSdk(),
         ]);
         if (cancelled) return;
@@ -95,7 +95,7 @@ export function CardPayment({ intent }: { intent: PaymentIntent }) {
       elementsRef.current = null;
       sdkRef.current = null;
     };
-  }, [intent.id, intent.clientSecret]);
+  }, [intent.id, intent.client_secret]);
 
   async function confirm(): Promise<void> {
     const sdk = sdkRef.current;

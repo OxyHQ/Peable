@@ -25,11 +25,11 @@ export interface PaymentLink {
   active: boolean;
   metadata: Record<string, string>;
   /** Optional post-payment redirect target for the checkout page. */
-  successUrl?: string;
+  success_url?: string;
   /** Canonical `checkout.peable.to/l/<id>` URL. */
   url: string;
-  createdAt: string;
-  updatedAt: string;
+  created: number;
+  updated_at: number;
 }
 
 /** What an unauthenticated checkout-page visitor may see — no secrets, no metadata. */
@@ -54,5 +54,5 @@ export interface CreatePaymentLinkParams {
   /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
   currency?: CurrencyCode;
   metadata?: Record<string, string>;
-  successUrl?: string;
+  success_url?: string;
 }

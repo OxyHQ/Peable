@@ -59,7 +59,7 @@ describe('several billing rails behind one subscription contract', () => {
     const stripe = rail('stripe');
     const faircoin = rail('faircoin', { namespaced: true });
     const billing = createMultiRailBillingService([stripe.value, faircoin.value]);
-    await billing.ensureCustomer(owner, { storeId: 's', storeName: 'S' }, 'k1');
+    await billing.ensureCustomer(owner, { store_id: 's', store_name: 'S' }, 'k1');
     await billing.createCheckoutSession(owner, checkout('cus_Abc123'), 'k2');
     await billing.retrieveSubscription(owner, 'sub_Abc123');
     await billing.cancelAtPeriodEnd(owner, 'sub_Abc123', 'k3');
@@ -80,7 +80,7 @@ describe('several billing rails behind one subscription contract', () => {
     const stripe = rail('stripe');
     const faircoin = rail('faircoin', { namespaced: true });
     const billing = createMultiRailBillingService([stripe.value, faircoin.value]);
-    await billing.ensureCustomer(owner, { storeId: 's', storeName: 'S', rail: 'faircoin' }, 'k');
+    await billing.ensureCustomer(owner, { store_id: 's', store_name: 'S', rail: 'faircoin' }, 'k');
     await billing.createCheckoutSession(owner, checkout(fair('cus_'), { rail: 'faircoin' }), 'k');
     await billing.renew?.(owner, fair('sub_'), checkout(fair('cus_')), 'k');
     await billing.retrievePaidInvoice(owner, fair('sub_'), 'in_x');
@@ -102,7 +102,7 @@ describe('several billing rails behind one subscription contract', () => {
     const billing = createMultiRailBillingService([stripe.value, faircoin.value]);
     // FairCoin does not serve this merchant: neither choosing it nor naming its objects reaches it.
     await expect(
-      billing.ensureCustomer(owner, { storeId: 's', storeName: 'S', rail: 'faircoin' }, 'k'),
+      billing.ensureCustomer(owner, { store_id: 's', store_name: 'S', rail: 'faircoin' }, 'k'),
     ).rejects.toMatchObject({ code: 'rail_unavailable' });
     await expect(billing.retrieveSubscription(owner, fair('sub_'))).rejects.toMatchObject({
       code: 'not_found',
@@ -123,9 +123,9 @@ describe('several billing rails behind one subscription contract', () => {
     const faircoin = rail('faircoin', { namespaced: true });
     const billing = createMultiRailBillingService([stripe.value, faircoin.value]);
     await billing.createTaxQuote(owner, {
-      storeId: 's',
-      planId: 'p',
-      customerLocationEvidenceId: 'l',
+      store_id: 's',
+      plan_id: 'p',
+      customer_location_evidence_id: 'l',
     });
     expect(faircoin.calls.map((call) => call.method)).toEqual(['createTaxQuote']);
     expect((await billing.listRails?.(owner))?.data.map((r) => [r.rail, r.default])).toEqual([

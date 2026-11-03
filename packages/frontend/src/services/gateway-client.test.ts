@@ -74,7 +74,7 @@ describe('enrichAddresses', () => {
     // — otherwise this test can't catch a re-introduced `.data` unwrap.
     const enrichmentMap: Record<string, EnrichmentResult> = {
       TAddr1: { kind: 'unknown' },
-      TAddr2: { kind: 'merchant', displayName: 'Shop' },
+      TAddr2: { kind: 'merchant', display_name: 'Shop' },
     };
     postMock.mockImplementationOnce(async () => enrichmentMap);
 
@@ -109,7 +109,7 @@ describe('getSocialReceiveCursor', () => {
 
     const result = await getSocialReceiveCursor('testnet');
 
-    expect(result.identityPublicKey).toBe(identityPublicKey);
+    expect(result.identity_public_key).toBe(identityPublicKey);
   });
 
   test('returns reservedThrough: 0 and no key for a caller with no reservation cursor yet', async () => {

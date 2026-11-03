@@ -61,16 +61,16 @@ function reportCsv(report: TaxReport): string {
       [
         row.country,
         row.state,
-        row.registrationId,
+        row.registration_id,
         row.scheme,
         row.collection,
-        row.taxType,
-        row.ratePercentage,
+        row.tax_type,
+        row.rate_percentage,
         row.currency,
         row.transactions,
         row.reversals,
-        row.taxableAmount,
-        row.taxAmount,
+        row.taxable_amount,
+        row.tax_amount,
       ]
         .map(cell)
         .join(','),

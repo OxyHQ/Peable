@@ -112,7 +112,7 @@ export function payDeepLinkFor(intent: PaymentIntent): string {
   }
   return buildPayDeepLink({
     intentId: intent.id,
-    clientSecret: intent.clientSecret,
+    clientSecret: intent.client_secret,
     address: intent.address,
     amount: intent.amount,
     network: intent.network,

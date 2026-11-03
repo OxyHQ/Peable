@@ -283,7 +283,7 @@ export function createSocialRouter(deps?: { requireOxyUser?: RequestHandler }): 
         oxyUserId,
         parsed.data.network,
       );
-      const body: SocialReceiveCursorResponse = { reservedThrough, identityPublicKey };
+      const body: SocialReceiveCursorResponse = { reserved_through: reservedThrough, identity_public_key: identityPublicKey };
       res.status(200).json(body);
     }),
   );

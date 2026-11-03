@@ -157,7 +157,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
         consent.authorizationId,
         async (record) => {
           if (!record) throw new Error('Expected record');
-          record.consent.maximumAmountBaseUnits = '999999';
+          record.consent.maximum_amount_base_units = '999999';
           return { record, result: 'mutate-limit' };
         },
       ),
@@ -179,7 +179,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('durable Faircoin scheduling / real Pos
     ).rejects.toThrow('fixture failure');
     const rows = await gatewayDb().select().from(faircoinRenewalAuthorizations);
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.consent.maximumAmountBaseUnits).toBe('10000');
+    expect(rows[0]?.consent.maximum_amount_base_units).toBe('10000');
     expect(rows[0]?.instructions).toHaveLength(1);
   });
   it('deduplicates concurrent consumers and acknowledges already-authorized dispatch at revocation', async () => {

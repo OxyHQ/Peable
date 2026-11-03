@@ -121,7 +121,7 @@ export default function ConnectOnboardingScreen() {
   }, [token, keyToRegister, platformName]);
 
   const backToPlatform = useCallback(() => {
-    if (onboarding) void Linking.openURL(onboarding.returnUrl);
+    if (onboarding) void Linking.openURL(onboarding.return_url);
   }, [onboarding]);
 
   if (!isAuthenticated) {

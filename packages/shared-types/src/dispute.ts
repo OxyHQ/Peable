@@ -28,7 +28,7 @@ export interface Dispute {
   id: string;
   object: 'dispute';
   /** The PUBLIC `pi_…` id, which is what every other contract here calls `id`. */
-  paymentIntentId: string;
+  payment_intent_id: string;
   /**
    * Amount in the currency's smallest unit as a canonical integer string —
    * the same encoding every other money field on these contracts uses.
@@ -49,15 +49,15 @@ export interface Dispute {
    */
   reason: string | null;
   /**
-   * When the network stops accepting evidence, ISO-8601.
+   * When the network stops accepting evidence, Unix seconds.
    *
    * `null` once the dispute is closed — there is no deadline for a decision
    * already made, and a closed dispute still showing one would put a response
    * in front of a merchant that can no longer be given.
    */
-  evidenceDueAt: string | null;
+  evidence_due_at: number | null;
   /**
-   * When the merchant's response reached the network, ISO-8601. `null` while
+   * When the merchant's response reached the network, Unix seconds. `null` while
    * none has been submitted.
    *
    * The timestamp and nothing else: the evidence itself is forwarded to the
@@ -68,9 +68,9 @@ export interface Dispute {
    * Together with `evidenceDueAt` it answers the only two questions a merchant
    * has about a live dispute: whether they still owe a response, and by when.
    */
-  evidenceSubmittedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  evidence_submitted_at: number | null;
+  created: number;
+  updated_at: number;
 }
 
 /**
@@ -107,21 +107,21 @@ export interface Dispute {
  * forgotten. What is recorded is `evidenceSubmittedAt` and nothing more.
  */
 export interface DisputeEvidence {
-  productDescription?: string;
-  customerName?: string;
-  customerEmailAddress?: string;
-  customerPurchaseIp?: string;
-  billingAddress?: string;
-  shippingAddress?: string;
-  shippingCarrier?: string;
-  shippingDate?: string;
-  shippingTrackingNumber?: string;
-  serviceDate?: string;
-  accessActivityLog?: string;
-  cancellationPolicyDisclosure?: string;
-  cancellationRebuttal?: string;
-  duplicateChargeExplanation?: string;
-  refundPolicyDisclosure?: string;
-  refundRefusalExplanation?: string;
-  uncategorizedText?: string;
+  product_description?: string;
+  customer_name?: string;
+  customer_email_address?: string;
+  customer_purchase_ip?: string;
+  billing_address?: string;
+  shipping_address?: string;
+  shipping_carrier?: string;
+  shipping_date?: string;
+  shipping_tracking_number?: string;
+  service_date?: string;
+  access_activity_log?: string;
+  cancellation_policy_disclosure?: string;
+  cancellation_rebuttal?: string;
+  duplicate_charge_explanation?: string;
+  refund_policy_disclosure?: string;
+  refund_refusal_explanation?: string;
+  uncategorized_text?: string;
 }

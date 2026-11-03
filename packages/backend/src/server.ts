@@ -72,7 +72,7 @@ import {
 } from './lib/requestId';
 
 /** Date-based API version, echoed on every response (Stripe-parity). */
-const PEABLE_VERSION = '2026-07-18';
+const PEABLE_VERSION = '2026-11-03';
 
 /**
  * Flat per-window cap for the IDENTITY-AGNOSTIC public payer routes

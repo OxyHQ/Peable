@@ -105,8 +105,8 @@ export function createCheckoutSessionsRouter(deps: {
           ...(params.rail !== undefined ? { rail: params.rail } : {}),
           ...(params.currency !== undefined ? { currency: params.currency } : {}),
           ...(params.network !== undefined ? { network: params.network } : {}),
-          ...(params.connectedAccount !== undefined
-            ? { connectedAccount: params.connectedAccount }
+          ...(params.connected_account !== undefined
+            ? { connectedAccount: params.connected_account }
             : {}),
           metadata: params.metadata,
           ...(idempotencyKey ? { idempotencyKey } : {}),
@@ -153,8 +153,8 @@ export function createCheckoutSessionsRouter(deps: {
           // account to this merchant and to the intent's network.
           connectedAccountId: intent.connectedAccountId ?? null,
           metadata: params.metadata ?? {},
-          successUrl: params.successUrl,
-          cancelUrl: params.cancelUrl,
+          successUrl: params.success_url,
+          cancelUrl: params.cancel_url,
         });
         if (!session) {
           /**

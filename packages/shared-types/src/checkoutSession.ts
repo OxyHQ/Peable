@@ -11,9 +11,9 @@ import type { PaymentIntent, PaymentIntentRail } from './paymentIntent';
 export interface CheckoutSession {
   id: string;
   object: 'checkout_session';
-  paymentIntentId: string;
+  payment_intent_id: string;
   /** The wrapped intent's `client_secret`, returned to the merchant on create. */
-  clientSecret: string;
+  client_secret: string;
   amount: string;
   currency: CurrencyCode;
   rail: PaymentIntentRail;
@@ -23,14 +23,14 @@ export interface CheckoutSession {
    * The seller the wrapped payment is made on behalf of (`ca_…`), or `null`
    * (ADR 0012 D5). Optional in the type for older fixtures; always sent.
    */
-  connectedAccountId?: string | null;
+  connected_account_id?: string | null;
   metadata: Record<string, string>;
-  successUrl?: string;
-  cancelUrl?: string;
+  success_url?: string;
+  cancel_url?: string;
   /** Canonical `checkout.peable.to/c/<id>` URL. */
   url: string;
-  createdAt: string;
-  updatedAt: string;
+  created: number;
+  updated_at: number;
 }
 
 /**
@@ -41,13 +41,13 @@ export interface CheckoutSession {
  */
 export interface CheckoutSessionPublic {
   /** Frozen commercial USD price and exact FAIR settlement quote; no payer metadata. */
-  billingQuote?: BillingFaircoinFxQuote;
+  billing_quote?: BillingFaircoinFxQuote;
   id: string;
   object: 'checkout_session';
-  successUrl?: string;
-  cancelUrl?: string;
+  success_url?: string;
+  cancel_url?: string;
   merchant: MerchantDisplay;
-  paymentIntent: PaymentIntent;
+  payment_intent: PaymentIntent;
 }
 
 export interface CreateCheckoutSessionParams {
@@ -59,8 +59,8 @@ export interface CreateCheckoutSessionParams {
   /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
   currency?: CurrencyCode;
   metadata?: Record<string, string>;
-  successUrl?: string;
-  cancelUrl?: string;
+  success_url?: string;
+  cancel_url?: string;
   /** Pay this seller (`ca_…`) rather than the merchant — see `CreatePaymentIntentParams.connectedAccount`. */
-  connectedAccount?: string;
+  connected_account?: string;
 }

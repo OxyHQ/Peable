@@ -95,7 +95,7 @@ export class BillingResource {
   retrieveCheckoutOperation(
     params: RetrieveBillingCheckoutOperationParams,
   ): Promise<BillingCheckoutOperationRecovery> {
-    const { idempotencyKey, ...query } = params;
+    const { idempotency_key: idempotencyKey, ...query } = params;
     return this.client.request(
       'GET',
       `/v1/billing/checkout_operations/${encodeURIComponent(idempotencyKey)}`,
@@ -109,19 +109,19 @@ export class BillingResource {
       body: params,
     });
     try {
-      const pinned = this.taxQuoteAuthorityKeys[result.signature.keyId];
+      const pinned = this.taxQuoteAuthorityKeys[result.signature.key_id];
       if (
         !pinned ||
-        result.schemaVersion !== 1 ||
+        result.schema_version !== 1 ||
         result.signature.algorithm !== 'Ed25519' ||
         !/^[A-Za-z0-9_-]{86}$/.test(result.signature.value) ||
-        result.source.storeId !== params.storeId ||
-        result.source.planId !== params.planId ||
-        result.quote.customerLocationEvidenceId !== params.customerLocationEvidenceId ||
-        !Number.isFinite(Date.parse(result.quote.quotedAt)) ||
-        Date.parse(result.quote.quotedAt) > Date.now() ||
-        !Number.isFinite(Date.parse(result.quote.expiresAt)) ||
-        Date.parse(result.quote.expiresAt) <= Date.now()
+        result.source.store_id !== params.store_id ||
+        result.source.plan_id !== params.plan_id ||
+        result.quote.customer_location_evidence_id !== params.customer_location_evidence_id ||
+        !Number.isFinite(Date.parse(result.quote.quoted_at)) ||
+        Date.parse(result.quote.quoted_at) > Date.now() ||
+        !Number.isFinite(Date.parse(result.quote.expires_at)) ||
+        Date.parse(result.quote.expires_at) <= Date.now()
       )
         throw new Error('Invalid quote');
       const key = createPublicKey(pinned);
@@ -154,37 +154,37 @@ export class BillingResource {
       withTaxLines ? { query: { include: 'tax_lines' } } : undefined,
     );
     try {
-      const pinnedKey = this.invoiceAuthorityKeys[authority.signature.keyId];
+      const pinnedKey = this.invoiceAuthorityKeys[authority.signature.key_id];
       if (
-        authority.schemaVersion !== 1 ||
+        authority.schema_version !== 1 ||
         !pinnedKey ||
         authority.signature.algorithm !== 'Ed25519' ||
         !/^[A-Za-z0-9_-]{86}$/.test(authority.signature.value) ||
-        authority.source.invoiceId !== invoiceRef ||
-        authority.source.subscriptionId !== subscriptionRef ||
-        authority.invoice.context.providerSubscriptionId !== subscriptionRef ||
+        authority.source.invoice_id !== invoiceRef ||
+        authority.source.subscription_id !== subscriptionRef ||
+        authority.invoice.context.provider_subscription_id !== subscriptionRef ||
         !['card', 'faircoin'].includes(authority.method) ||
-        !Number.isFinite(Date.parse(authority.invoice.issuedAt)) ||
-        Date.parse(authority.invoice.issuedAt) > Date.now() ||
-        !Number.isFinite(Date.parse(authority.invoice.expiresAt)) ||
-        Date.parse(authority.invoice.expiresAt) <= Date.now() ||
+        !Number.isFinite(Date.parse(authority.invoice.issued_at)) ||
+        Date.parse(authority.invoice.issued_at) > Date.now() ||
+        !Number.isFinite(Date.parse(authority.invoice.expires_at)) ||
+        Date.parse(authority.invoice.expires_at) <= Date.now() ||
         // Lines are present exactly when asked for, and add up to the tax.
-        withTaxLines !== Array.isArray(authority.invoice.taxLines) ||
-        (authority.invoice.taxLines !== undefined &&
-          authority.invoice.taxLines.reduce((sum, line) => sum + line.taxMinorUnits, 0) !==
-            authority.invoice.taxMinorUnits)
+        withTaxLines !== Array.isArray(authority.invoice.tax_lines) ||
+        (authority.invoice.tax_lines !== undefined &&
+          authority.invoice.tax_lines.reduce((sum, line) => sum + line.tax_minor_units, 0) !==
+            authority.invoice.tax_minor_units)
       )
         throw new Error('Invalid authority');
       if (authority.method === 'faircoin') {
-        const quote = authority.invoice.faircoinQuote;
+        const quote = authority.invoice.faircoin_quote;
         if (
           !quote ||
-          !/^[1-9][0-9]*$/.test(quote.amountBaseUnits) ||
-          !Number.isFinite(Date.parse(quote.quotedAt)) ||
-          Date.parse(quote.quotedAt) > Date.now() ||
-          !Number.isFinite(Date.parse(quote.expiresAt)) ||
-          Date.parse(quote.expiresAt) <= Date.parse(quote.quotedAt) ||
-          Date.parse(quote.expiresAt) > Date.parse(authority.invoice.expiresAt)
+          !/^[1-9][0-9]*$/.test(quote.amount_base_units) ||
+          !Number.isFinite(Date.parse(quote.quoted_at)) ||
+          Date.parse(quote.quoted_at) > Date.now() ||
+          !Number.isFinite(Date.parse(quote.expires_at)) ||
+          Date.parse(quote.expires_at) <= Date.parse(quote.quoted_at) ||
+          Date.parse(quote.expires_at) > Date.parse(authority.invoice.expires_at)
         )
           throw new Error('Invalid quote');
       }
@@ -204,19 +204,19 @@ export class BillingResource {
       if (authority.method === 'faircoin') {
         const paid = await this.retrievePaidInvoice(subscriptionRef, invoiceRef);
         // biome-ignore lint/style/noNonNullAssertion: FairCoin quote presence and bounds were verified above before signature verification.
-        const quote = authority.invoice.faircoinQuote!;
-        const paidAt = Date.parse(paid.paidAt);
+        const quote = authority.invoice.faircoin_quote!;
+        const paidAt = Date.parse(paid.paid_at);
         if (
-          paid.invoiceId !== invoiceRef ||
-          paid.providerSubscriptionId !== subscriptionRef ||
-          paid.paymentIntentId !== authority.source.paymentIntentId ||
-          paid.providerCustomerId !== authority.source.customerId ||
-          paid.providerPriceId !== authority.source.priceId ||
-          paid.storeId !== authority.invoice.context.payerAccountId ||
+          paid.invoice_id !== invoiceRef ||
+          paid.provider_subscription_id !== subscriptionRef ||
+          paid.payment_intent_id !== authority.source.payment_intent_id ||
+          paid.provider_customer_id !== authority.source.customer_id ||
+          paid.provider_price_id !== authority.source.price_id ||
+          paid.store_id !== authority.invoice.context.payer_account_id ||
           !Number.isFinite(paidAt) ||
           paidAt > Date.now() ||
-          paidAt < Date.parse(quote.quotedAt) ||
-          paidAt >= Date.parse(quote.expiresAt)
+          paidAt < Date.parse(quote.quoted_at) ||
+          paidAt >= Date.parse(quote.expires_at)
         )
           throw new Error('Payment outside signed quote');
       }

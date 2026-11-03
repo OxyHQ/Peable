@@ -62,15 +62,15 @@ test('the source bounds are published and id-shaped, not prose-shaped', () => {
 test('EnrichmentResult supports all three kinds', () => {
   const merchant: EnrichmentResult = {
     kind: 'merchant',
-    displayName: 'Mercaria',
-    avatarFileId: 'file_1',
+    display_name: 'Mercaria',
+    avatar_file_id: 'file_1',
     description: 'Marketplace',
   };
   const user: EnrichmentResult = {
     kind: 'user',
-    displayName: 'Alice',
+    display_name: 'Alice',
     username: 'alice',
-    avatarFileId: 'file_2',
+    avatar_file_id: 'file_2',
   };
   const unknown: EnrichmentResult = { kind: 'unknown' };
   expect(merchant.kind).toBe('merchant');
@@ -83,7 +83,7 @@ test('EnrichRequest / EnrichResponse round-trip', () => {
   const res: EnrichResponse = {
     data: {
       TAbC123: { kind: 'unknown' },
-      TDeF456: { kind: 'merchant', displayName: 'Shop' },
+      TDeF456: { kind: 'merchant', display_name: 'Shop' },
     },
   };
   expect(Object.keys(res.data)).toEqual(req.addresses);

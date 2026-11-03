@@ -40,7 +40,7 @@ async function run() {
       state.subscription && state.initialInvoiceId
         ? await runtime.service.retrieveInvoiceState(
             owner,
-            state.subscription.providerSubscriptionId,
+            state.subscription.provider_subscription_id,
             state.initialInvoiceId,
           )
         : null;
@@ -48,7 +48,7 @@ async function run() {
       JSON.stringify({
         checkout: state.id,
         status: state.status,
-        subscription: state.subscription?.providerSubscriptionId ?? null,
+        subscription: state.subscription?.provider_subscription_id ?? null,
         subscriptionStatus: state.subscription?.status ?? null,
         invoice,
       }),

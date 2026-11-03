@@ -347,8 +347,8 @@ try {
         evidenceRef: runId,
       });
       const actual = await sdk.billing.retrieveSubscription(value.id);
-      assert.equal(actual.storeId, `${runId}:${label}`);
-      assert.equal(actual.planId, `${runId}:plan`);
+      assert.equal(actual.store_id, `${runId}:${label}`);
+      assert.equal(actual.plan_id, `${runId}:plan`);
       return value;
     }
     async function latestInvoice(subscriptionId: string, customerId: string) {
@@ -395,7 +395,7 @@ try {
     }
     async function throughPeriod(subscriptionId: string) {
       const before = await sdk.billing.retrieveSubscription(subscriptionId);
-      const end = Date.parse(before.currentPeriodEnd) / 1000;
+      const end = Date.parse(before.current_period_end) / 1000;
       await advance(end + 1);
       await advance(end + 7201); // Observe invoice creation, then its automatic finalization window.
       return sdk.billing.retrieveSubscription(subscriptionId);
@@ -437,8 +437,8 @@ try {
       const cancelled = await mutate('sdk-period-end-cancellation', () =>
         sdk.billing.cancelAtPeriodEnd(good.id, { idempotencyKey: `${runId}:cancel` }),
       );
-      assert.equal(cancelled.cancelAtPeriodEnd, true);
-      const cancelEnd = Date.parse(cancelled.currentPeriodEnd) / 1000;
+      assert.equal(cancelled.cancel_at_period_end, true);
+      const cancelEnd = Date.parse(cancelled.current_period_end) / 1000;
       await advance(cancelEnd + 1);
       assert.equal((await sdk.billing.retrieveSubscription(good.id)).status, 'canceled');
       await passed('real-period-end-cancellation-observed');

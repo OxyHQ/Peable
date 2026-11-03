@@ -18,14 +18,14 @@ const SAMPLE_INTENT: PaymentIntent = {
   currency: 'FAIR',
   network: 'testnet',
   address: 'addr1',
-  merchantId: 'merch_1',
+  merchant_id: 'merch_1',
   txid: null,
   confirmations: 0,
-  clientSecret: 'pi_1_secret_x',
+  client_secret: 'pi_1_secret_x',
   metadata: {},
-  expiresAt: '2026-07-19T00:15:00.000Z',
-  createdAt: '2026-07-19T00:00:00.000Z',
-  updatedAt: '2026-07-19T00:00:00.000Z',
+  expires_at: '2026-07-19T00:15:00.000Z',
+  created: '2026-07-19T00:00:00.000Z',
+  updated_at: '2026-07-19T00:00:00.000Z',
 };
 
 describe('PaymentIntentsResource', () => {

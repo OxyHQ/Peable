@@ -196,12 +196,12 @@ export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
     });
     const customer = await runtime.service.ensureCustomer(
       ctx.owner,
-      { storeId: ctx.storeId, storeName: 'Local checkout', rail: 'stripe' },
+      { store_id: ctx.storeId, store_name: 'Local checkout', rail: 'stripe' },
       `embedded-customer-${intent.publicId}`,
     );
     // A retry after the provider idempotency retention window still reuses the unique customer's subscription.
     const existing = await ctx.client.subscriptions.list({
-      customer: customer.providerCustomerId,
+      customer: customer.provider_customer_id,
       status: 'all',
       limit: 2,
     });
@@ -210,7 +210,7 @@ export class LocalSubscriptionStripeProvider extends StripePaymentProvider {
     if (!existing.data.length)
       await ctx.client.subscriptions.create(
         {
-          customer: customer.providerCustomerId,
+          customer: customer.provider_customer_id,
           items: [{ price: price.id, quantity: 1 }],
           payment_behavior: 'default_incomplete',
           payment_settings: { save_default_payment_method: 'on_subscription' },
@@ -310,8 +310,8 @@ export async function readLocalSubscription(
     );
     ready =
       paid.state === 'paid' &&
-      paid.amountPaid === String(verified.selected.amount) &&
-      paid.paymentIntentId === verified.pi.id &&
+      paid.amount_paid === String(verified.selected.amount) &&
+      paid.payment_intent_id === verified.pi.id &&
       paid.currency === 'USD';
   }
   return {

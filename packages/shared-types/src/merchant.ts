@@ -10,7 +10,7 @@ export type MerchantEnvironment = (typeof MERCHANT_ENVIRONMENTS)[number];
 export interface Merchant {
   id: string;
   object: 'merchant';
-  oxyAppId: string;
+  oxy_app_id: string;
   environment: MerchantEnvironment;
   /**
    * The FairCoin chain this merchant accepts on — `null` on a CARD-ONLY
@@ -24,20 +24,20 @@ export interface Merchant {
   network: NetworkType | null;
   /** `null` on a card-only merchant. Nullable together with `network`. */
   xpub: string | null;
-  webhookUrl?: string;
-  requiredConfirmations: number;
+  webhook_url?: string;
+  required_confirmations: number;
   /**
    * Payer-facing branding. Absent when unset — `MerchantDisplay` is what a
    * payer surface renders, and it substitutes a neutral fallback; these are
    * the raw values the merchant owns.
    */
-  displayName?: string;
+  display_name?: string;
   /**
    * Bare Oxy file id, not a URL. `MerchantDisplay.avatarUrl` resolves it.
    * Absent again once Oxy reports the file deleted or taken down.
    */
-  avatarFileId?: string;
+  avatar_file_id?: string;
   description?: string;
-  createdAt: string;
-  updatedAt: string;
+  created: number;
+  updated_at: number;
 }

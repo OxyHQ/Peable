@@ -178,10 +178,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(delivered?.object).toBe('dispute');
     expect(delivered?.amount).toBe('2500');
     expect(delivered?.reason).toBe('fraudulent');
-    expect(delivered?.evidenceDueAt).not.toBeNull();
+    expect(delivered?.evidence_due_at).not.toBeNull();
     // And back to the payment, by its PUBLIC id — the internal one would name a
     // row the merchant has never seen.
-    expect(delivered?.paymentIntentId).toBe(intent.publicId);
+    expect(delivered?.payment_intent_id).toBe(intent.publicId);
   });
 
   /**
@@ -245,7 +245,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
       (payload) => payload.status === 'lost',
     );
     expect(closing).toBeDefined();
-    expect(closing?.evidenceDueAt).toBeNull();
+    expect(closing?.evidence_due_at).toBeNull();
   });
 
   it('reads a win as a win', async () => {

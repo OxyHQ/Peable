@@ -59,9 +59,9 @@ export async function enrichAddresses(
     if (!merchant) continue;
     result[address] = {
       kind: 'merchant',
-      displayName: merchant.displayName ?? undefined,
+      display_name: merchant.displayName ?? undefined,
       // Not while withheld: Oxy will not serve it (`services/merchantDisplay.ts`).
-      avatarFileId:
+      avatar_file_id:
         merchant.avatarWithheld === null ? (merchant.avatarFileId ?? undefined) : undefined,
       description: merchant.description ?? undefined,
     };
@@ -95,8 +95,8 @@ export async function enrichAddresses(
         const handle = getNormalizedUserHandle(profile) ?? profile.username;
         result[address] = {
           kind: 'user',
-          displayName: profile.name.displayName ?? handle,
-          avatarFileId: profile.avatar ?? undefined,
+          display_name: profile.name.displayName ?? handle,
+          avatar_file_id: profile.avatar ?? undefined,
           username: profile.username,
         };
       }

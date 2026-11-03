@@ -170,7 +170,7 @@ describe('Peable Tax', () => {
       amountNet: 2999,
       registrationId: null,
     });
-    expect(unregistered.lineItems[0]?.breakdown[0]?.taxabilityReason).toBe('not_registered');
+    expect(unregistered.line_items[0]?.breakdown[0]?.taxability_reason).toBe('not_registered');
   });
 
   it('fails closed when the provider is down or disagrees about the registration', async () => {
@@ -243,9 +243,9 @@ describe('Peable Tax', () => {
       customerRef: 'store_1',
     });
     const quote = await createVerifiedBillingTaxQuote(calculator, owner, merchant.publicId, {
-      storeId: 'store_1',
-      planId: 'one_monthly',
-      customerLocationEvidenceId: evidence.id,
+      store_id: 'store_1',
+      plan_id: 'one_monthly',
+      customer_location_evidence_id: evidence.id,
     });
     // Exclusive: the listed price is the net; the payer pays price plus tax.
     expect(quote.quote).toMatchObject({
@@ -256,8 +256,8 @@ describe('Peable Tax', () => {
       country: 'NL',
       taxServiceRef: 'peable_tax',
     });
-    expect(quote.quote.taxRateEvidenceId).toMatch(/^taxcalc_/);
-    expect(quote.quote.coverageEvidenceId).toMatch(/^taxreg_/);
+    expect(quote.quote.tax_rate_evidence_id).toMatch(/^taxcalc_/);
+    expect(quote.quote.coverage_evidence_id).toMatch(/^taxreg_/);
     // A tampered amount does not verify.
     const product = must(
       (await calculator.resolveProduct(owner, 'one_monthly')) as Parameters<
@@ -268,8 +268,8 @@ describe('Peable Tax', () => {
       typeof verifyBillingTaxQuote
     >[1]['location'];
     const tampered = structuredClone(quote);
-    tampered.quote.taxMinorUnits = 100;
-    tampered.quote.grossMinorUnits = 1100;
+    tampered.quote.tax_minor_units = 100;
+    tampered.quote.gross_minor_units = 1100;
     expect(() =>
       verifyBillingTaxQuote(
         tampered,
@@ -280,14 +280,14 @@ describe('Peable Tax', () => {
     ).toThrow();
 
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.taxRateEvidenceId,
+      calculationPublicId: quote.quote.tax_rate_evidence_id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
     });
     // Idempotent: the same payment observed twice is one transaction.
     await commitTaxTransaction(gatewayDb(), {
-      calculationPublicId: quote.quote.taxRateEvidenceId,
+      calculationPublicId: quote.quote.tax_rate_evidence_id,
       reference: 'in_fair_1',
       rail: 'faircoin',
       committedAt: new Date(),
@@ -311,9 +311,9 @@ describe('Peable Tax', () => {
       }),
     ]);
     const lines = must(
-      await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.taxRateEvidenceId),
+      await invoiceTaxLines(gatewayDb(), merchant.id, quote.quote.tax_rate_evidence_id),
     );
-    expect(lines.reduce((sum, line) => sum + line.taxMinorUnits, 0)).toBe(200);
+    expect(lines.reduce((sum, line) => sum + line.tax_minor_units, 0)).toBe(200);
 
     // A FairCoin refund from the seller's wallet: reversed in part, by its
     // reference once, then the rest; the report nets both.
@@ -383,7 +383,7 @@ describe('Stripe Tax provider', () => {
     const provider = createStripeTaxProvider(api, false);
     const result = await provider.calculate({
       currency: 'USD',
-      customer: { country: 'US', state: 'NY', postalCode: '10001' },
+      customer: { country: 'US', state: 'NY', postal_code: '10001' },
       shipFrom: null,
       lineItems: [
         {

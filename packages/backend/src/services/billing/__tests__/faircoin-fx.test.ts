@@ -17,8 +17,8 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
       now,
       fetch: read({ price: 0.12, source: 'wfair-base', updatedAt: now.toISOString() }),
     });
-    expect(quote.amountBaseUnits).toBe('24991666667');
-    expect(Date.parse(quote.expiresAt) - +now).toBe(600_000);
+    expect(quote.amount_base_units).toBe('24991666667');
+    expect(Date.parse(quote.expires_at) - +now).toBe(600_000);
     for (const body of [
       { price: null },
       null,
@@ -47,7 +47,7 @@ describe('USD commercial price to exact expiring FAIR settlement quote', () => {
         });
       }) as typeof fetch,
     });
-    expect(quote.amountBaseUnits).toBe('6110089590');
+    expect(quote.amount_base_units).toBe('6110089590');
     expect(new Headers(request?.headers).get('User-Agent')).toBe('Peable/1.0');
     expect(request?.redirect).toBe('error');
   });

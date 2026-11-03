@@ -34,26 +34,26 @@ import {
 const SELLER: ConnectedAccount = {
   id: 'ca_seller',
   object: 'connected_account',
-  externalRef: 'store_42',
+  external_ref: 'store_42',
   rails: ['faircoin'],
   faircoin: {
     network: 'testnet',
     status: 'pending',
-    oxyUserId: 'user_seller',
-    registeredAt: null,
+    oxy_user_id: 'user_seller',
+    registered_at: null,
   },
   country: null,
-  defaultCurrency: null,
+  default_currency: null,
   payable: false,
-  payoutsEnabled: false,
-  chargesEnabled: false,
-  transfersCapability: null,
-  cardPaymentsCapability: null,
-  requirements: { currentlyDue: 0, eventuallyDue: 0, pastDue: 0, pendingVerification: 0 },
-  disabledReasonCodes: [],
-  lastSyncedAt: null,
-  createdAt: '2026-10-16T00:00:00.000Z',
-  updatedAt: '2026-10-16T00:00:00.000Z',
+  payouts_enabled: false,
+  charges_enabled: false,
+  transfers_capability: null,
+  card_payments_capability: null,
+  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
+  disabled_reason_codes: [],
+  last_synced_at: null,
+  created: '2026-10-16T00:00:00.000Z',
+  updated_at: '2026-10-16T00:00:00.000Z',
 };
 
 const ON_BEHALF: PaymentIntent = {
@@ -65,16 +65,16 @@ const ON_BEHALF: PaymentIntent = {
   currency: 'FAIR',
   network: 'testnet',
   address: 'tFairSellerAddress',
-  merchantId: 'merch_platform',
-  connectedAccountId: 'ca_seller',
+  merchant_id: 'merch_platform',
+  connected_account_id: 'ca_seller',
   txid: null,
   confirmations: 0,
-  clientSecret: 'pi_onbehalf_secret_x',
+  client_secret: 'pi_onbehalf_secret_x',
   metadata: { order: 'o_1' },
-  expiresAt: '2026-10-16T00:15:00.000Z',
-  canExpire: true,
-  createdAt: '2026-10-16T00:00:00.000Z',
-  updatedAt: '2026-10-16T00:00:00.000Z',
+  expires_at: '2026-10-16T00:15:00.000Z',
+  can_expire: true,
+  created: '2026-10-16T00:00:00.000Z',
+  updated_at: '2026-10-16T00:00:00.000Z',
 };
 
 function gateway(body: unknown, status = 200) {
@@ -177,13 +177,13 @@ describe('payments on behalf of a seller', () => {
         amount: '250000000',
         rail: 'faircoin',
         network: 'testnet',
-        connectedAccount: 'ca_seller',
+        connected_account: 'ca_seller',
         metadata: { order: 'o_1' },
       },
       { idempotencyKey: 'order_o_1' },
     );
 
-    expect(intent.connectedAccountId).toBe('ca_seller');
+    expect(intent.connected_account_id).toBe('ca_seller');
     const request = callOf(requests);
     expect(request.headers.get('Idempotency-Key')).toBe('order_o_1');
     expect(bodyOf(request)).toMatchObject({ rail: 'faircoin', connectedAccount: 'ca_seller' });
@@ -207,7 +207,7 @@ describe('payments on behalf of a seller', () => {
     await new CheckoutSessionsResource(buildTestClient(fetchImpl)).create({
       amount: '1',
       network: 'testnet',
-      connectedAccount: 'ca_seller',
+      connected_account: 'ca_seller',
     });
     expect(bodyOf(callOf(requests))).toMatchObject({ connectedAccount: 'ca_seller' });
   });
@@ -226,7 +226,7 @@ describe('payments on behalf of a seller', () => {
     const intents = new PaymentIntentsResource(buildTestClient(fetchImpl));
     const error = await intents
       .create(
-        { amount: '1', network: 'testnet', connectedAccount: 'ca_seller' },
+        { amount: '1', network: 'testnet', connected_account: 'ca_seller' },
         { idempotencyKey: 'k' },
       )
       .catch((caught: unknown) => caught);
@@ -244,7 +244,7 @@ describe('the platform webhook for an on-behalf payment', () => {
       type: 'payment_intent.confirming',
       created: '2026-10-16T00:05:00.000Z',
       account: 'ca_seller',
-      data: { object: { ...ON_BEHALF, status: 'confirming', canExpire: false } },
+      data: { object: { ...ON_BEHALF, status: 'confirming', can_expire: false } },
     };
     const raw = JSON.stringify(event);
     const header = signWebhook('whsec_platform', raw, 1_760_000_000);
@@ -255,9 +255,9 @@ describe('the platform webhook for an on-behalf payment', () => {
 
     expect(parsed.account).toBe('ca_seller');
     if (parsed.type === 'payment_intent.confirming') {
-      expect(parsed.data.object.connectedAccountId).toBe('ca_seller');
+      expect(parsed.data.object.connected_account_id).toBe('ca_seller');
       // A broadcast/confirming payment NEVER expires: never cancel the order for it.
-      expect(parsed.data.object.canExpire).toBe(false);
+      expect(parsed.data.object.can_expire).toBe(false);
       expect(canExpire(parsed.data.object.status)).toBe(false);
     } else {
       throw new Error(`unexpected event type ${parsed.type}`);

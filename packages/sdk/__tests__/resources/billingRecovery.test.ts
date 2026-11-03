@@ -44,7 +44,7 @@ describe('checkout operation recovery official SDK transport', () => {
     const expected: BillingCheckoutOperationRecovery = {
       state: 'succeeded',
       source,
-      checkout: { id: 'cs_test_fixture', expiresAt: '2026-10-01T00:00:00Z' },
+      checkout: { id: 'cs_test_fixture', expires_at: '2026-10-01T00:00:00Z' },
     };
     const fixture = resource(expected);
     expect(await fixture.billing.retrieveCheckoutOperation(params)).toEqual(expected);

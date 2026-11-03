@@ -69,8 +69,8 @@ export async function probeTaxProvider() {
       calculations[probe.name] = {
         livemode: result.livemode,
         amountTax: result.lineItems[0]?.amountTax,
-        reasons: result.lineItems[0]?.breakdown.map((entry) => entry.taxabilityReason),
-        rates: result.lineItems[0]?.breakdown.map((entry) => entry.ratePercentage),
+        reasons: result.lineItems[0]?.breakdown.map((entry) => entry.taxability_reason),
+        rates: result.lineItems[0]?.breakdown.map((entry) => entry.rate_percentage),
       };
     } catch (error) {
       calculations[probe.name] = { error: reason(error) };

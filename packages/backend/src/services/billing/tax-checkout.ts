@@ -67,19 +67,19 @@ export async function prepareBillingTaxCheckout(
   now: () => Date,
 ): Promise<BillingTaxCheckoutSnapshot> {
   const product = billingTaxProductSchema.parse(
-    await calculator.resolveProduct(owner, input.planId, input.providerPriceId),
+    await calculator.resolveProduct(owner, input.plan_id, input.provider_price_id),
   );
   const location = billingCustomerLocationSchema.parse(
-    await calculator.readCustomerLocation(owner, input.taxQuote.quote.customerLocationEvidenceId),
+    await calculator.readCustomerLocation(owner, input.tax_quote.quote.customer_location_evidence_id),
   );
   const offer = billingTaxOfferSchema.parse(
-    await adapter.resolveOffer(owner, input.providerPriceId),
+    await adapter.resolveOffer(owner, input.provider_price_id),
   );
   const clock = now();
   if (
-    input.trialDays !== 0 ||
-    location.id !== input.taxQuote.quote.customerLocationEvidenceId ||
-    location.storeId !== input.storeId ||
+    input.trial_days !== 0 ||
+    location.id !== input.tax_quote.quote.customer_location_evidence_id ||
+    location.storeId !== input.store_id ||
     location.appId !== owner.oxyAppId ||
     location.environment !== owner.environment ||
     (location.mode === 'live') !== (owner.environment === 'production') ||
@@ -88,22 +88,22 @@ export async function prepareBillingTaxCheckout(
     Date.parse(location.expiresAt) <= Date.parse(location.observedAt) ||
     (product.allowedCountries !== undefined &&
       !product.allowedCountries.includes(location.country)) ||
-    product.planId !== input.planId ||
-    offer.planId !== input.planId ||
-    offer.providerPriceId !== input.providerPriceId ||
+    product.planId !== input.plan_id ||
+    offer.planId !== input.plan_id ||
+    offer.providerPriceId !== input.provider_price_id ||
     offer.currency !== product.currency ||
     offer.grossMinorUnits !== product.grossMinorUnits ||
     offer.taxTreatment !== product.taxTreatment
   )
     throw new BillingError('identity_conflict');
   const taxQuote = verifyBillingTaxQuote(
-    input.taxQuote,
+    input.tax_quote,
     {
       source: {
-        merchantId: merchantPublicId,
-        appId: owner.oxyAppId,
-        storeId: input.storeId,
-        planId: input.planId,
+        merchant_id: merchantPublicId,
+        app_id: owner.oxyAppId,
+        store_id: input.store_id,
+        plan_id: input.plan_id,
         mode: location.mode,
         environment: owner.environment,
       },
@@ -129,18 +129,18 @@ export function verifyBillingInvoiceTaxCheckout(
   const { invoice } = authority;
   const quote = snapshot.taxQuote.quote;
   if (
-    invoice.taxQuoteId !== quote.id ||
+    invoice.tax_quote_id !== quote.id ||
     invoice.currency !== quote.currency ||
-    invoice.grossMinorUnits !== quote.grossMinorUnits ||
-    invoice.netMinorUnits !== quote.netMinorUnits ||
-    invoice.taxMinorUnits !== quote.taxMinorUnits ||
-    invoice.taxTreatment !== quote.taxTreatment ||
-    invoice.sellerId !== quote.sellerId ||
-    invoice.invoiceIssuerId !== quote.invoiceIssuerId ||
-    invoice.customerLocationEvidenceId !== quote.customerLocationEvidenceId ||
-    invoice.taxRateEvidenceId !== quote.taxRateEvidenceId ||
-    invoice.context.offerId !== snapshot.offer.offerId ||
-    invoice.context.offerVersion !== snapshot.offer.offerVersion
+    invoice.gross_minor_units !== quote.grossMinorUnits ||
+    invoice.net_minor_units !== quote.netMinorUnits ||
+    invoice.tax_minor_units !== quote.taxMinorUnits ||
+    invoice.tax_treatment !== quote.taxTreatment ||
+    invoice.seller_id !== quote.sellerId ||
+    invoice.invoice_issuer_id !== quote.invoiceIssuerId ||
+    invoice.customer_location_evidence_id !== quote.customerLocationEvidenceId ||
+    invoice.tax_rate_evidence_id !== quote.taxRateEvidenceId ||
+    invoice.context.offer_id !== snapshot.offer.offerId ||
+    invoice.context.offer_version !== snapshot.offer.offerVersion
   )
     throw new BillingError('invalid_provider_response', 502);
 }

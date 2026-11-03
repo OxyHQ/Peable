@@ -205,17 +205,17 @@ export function createTaxService(options: TaxServiceOptions) {
   function settingsDto(merchant: MerchantRow, row: SettingsRow | undefined): TaxSettings {
     return {
       object: 'tax.settings',
-      merchantId: merchant.publicId,
+      merchant_id: merchant.publicId,
       status: row?.status ?? 'draft',
-      legalName: row?.legalName ?? null,
-      headOffice: row?.headOffice ?? null,
-      defaultTaxCode: row?.defaultTaxCode ?? 'txcd_10000000',
-      defaultTaxBehavior: row?.defaultTaxBehavior ?? 'exclusive',
-      calculationAccount: row?.calculationAccount ?? 'none',
+      legal_name: row?.legalName ?? null,
+      head_office: row?.headOffice ?? null,
+      default_tax_code: row?.defaultTaxCode ?? 'txcd_10000000',
+      default_tax_behavior: row?.defaultTaxBehavior ?? 'exclusive',
+      calculation_account: row?.calculationAccount ?? 'none',
       provider: providerFor(merchant, row)?.id ?? null,
-      approvedAt: iso(row?.approvedAt),
-      approvedBy: row?.approvedBy ?? null,
-      updatedAt: iso(row?.updatedAt),
+      approved_at: iso(row?.approvedAt),
+      approved_by: row?.approvedBy ?? null,
+      updated_at: iso(row?.updatedAt),
     };
   }
   function registrationDto(row: RegistrationRow, at = now()): TaxRegistration {
@@ -232,20 +232,20 @@ export function createTaxService(options: TaxServiceOptions) {
       country: row.country,
       state: row.state,
       scheme: row.scheme,
-      registrationNumber: row.registrationNumber,
-      activeFrom: (row.activeFrom ?? row.createdAt).toISOString(),
-      expiresAt: iso(row.expiresAt),
+      registration_number: row.registrationNumber,
+      active_from: (row.activeFrom ?? row.createdAt).toISOString(),
+      expires_at: iso(row.expiresAt),
       status,
-      approvedAt: iso(row.approvedAt),
-      providerRegistrationRef: row.providerRef,
-      createdAt: row.createdAt.toISOString(),
+      approved_at: iso(row.approvedAt),
+      provider_registration_ref: row.providerRef,
+      created: row.createdAt.toISOString(),
     };
   }
   function evidenceDto(merchant: MerchantRow, row: EvidenceRow): TaxLocationEvidence {
     return {
       object: 'tax.location_evidence',
       id: row.publicId,
-      customerRef: row.customerRef,
+      customer_ref: row.customerRef,
       status: row.status,
       rule: row.rule,
       country: row.country,
@@ -255,8 +255,8 @@ export function createTaxService(options: TaxServiceOptions) {
         country: item.country,
         state: item.state,
       })),
-      observedAt: row.observedAt.toISOString(),
-      expiresAt: row.expiresAt.toISOString(),
+      observed_at: row.observedAt.toISOString(),
+      expires_at: row.expiresAt.toISOString(),
       livemode: merchant.livemode,
     };
   }
@@ -467,9 +467,9 @@ export function createTaxService(options: TaxServiceOptions) {
       if (!row) throw new Error('product code upsert returned nothing');
       return {
         object: 'tax.product',
-        productRef: row.productRef,
-        taxCode: row.taxCode,
-        updatedAt: row.updatedAt.toISOString(),
+        product_ref: row.productRef,
+        tax_code: row.taxCode,
+        updated_at: row.updatedAt.toISOString(),
       };
     },
     /**
@@ -685,20 +685,20 @@ export function createTaxService(options: TaxServiceOptions) {
       let computed: TaxCalculationLineItem[];
       const untaxed = (line: (typeof lines)[number], reason: string): TaxCalculationLineItem => ({
         ...line,
-        amountTax: 0,
-        amountNet: line.amount,
+        amount_tax: 0,
+        amount_net: line.amount,
         breakdown: [
           {
             country,
             state: evidence.state,
             level: null,
-            displayName: null,
-            taxType: null,
-            ratePercentage: null,
-            taxableAmount: 0,
+            display_name: null,
+            tax_type: null,
+            rate_percentage: null,
+            taxable_amount: 0,
             amount: 0,
             inclusive: line.taxBehavior === 'inclusive',
-            taxabilityReason: reason,
+            taxability_reason: reason,
           },
         ],
       });
@@ -729,7 +729,7 @@ export function createTaxService(options: TaxServiceOptions) {
             customer: {
               country,
               state: evidence.state,
-              postalCode: billing?.postalCode ?? null,
+              postal_code: billing?.postalCode ?? null,
               city: billing?.city ?? null,
               line1: billing?.line1 ?? null,
               line2: billing?.line2 ?? null,
@@ -767,8 +767,8 @@ export function createTaxService(options: TaxServiceOptions) {
           };
         });
         const reasons = computed
-          .filter((line) => line.taxCode !== NONTAXABLE_TAX_CODE)
-          .flatMap((line) => line.breakdown.map((entry) => entry.taxabilityReason));
+          .filter((line) => line.tax_code !== NONTAXABLE_TAX_CODE)
+          .flatMap((line) => line.breakdown.map((entry) => entry.taxability_reason));
         // Registered here per Peable, unregistered per the provider: collecting
         // nothing would under-collect silently, so nothing is quoted.
         if (!reasons.length || reasons.every((reason) => reason === 'not_collecting'))
@@ -780,12 +780,12 @@ export function createTaxService(options: TaxServiceOptions) {
         providerExpiry = answer.expiresAt;
       }
       const taxAmountExclusive = computed
-        .filter((line) => line.taxBehavior === 'exclusive')
-        .reduce((sum, line) => sum + line.amountTax, 0);
+        .filter((line) => line.tax_behavior === 'exclusive')
+        .reduce((sum, line) => sum + line.amount_tax, 0);
       const taxAmountInclusive = computed
-        .filter((line) => line.taxBehavior === 'inclusive')
-        .reduce((sum, line) => sum + line.amountTax, 0);
-      const amountNet = computed.reduce((sum, line) => sum + line.amountNet, 0);
+        .filter((line) => line.tax_behavior === 'inclusive')
+        .reduce((sum, line) => sum + line.amount_tax, 0);
+      const amountNet = computed.reduce((sum, line) => sum + line.amount_net, 0);
       const amountTotal = computed.reduce((sum, line) => sum + line.amount, 0) + taxAmountExclusive;
       if (![amountNet, amountTotal].every(Number.isSafeInteger))
         throw new TaxError('invalid_tax_request', 'amount overflow');
@@ -801,20 +801,20 @@ export function createTaxService(options: TaxServiceOptions) {
         id: publicId,
         currency,
         collection,
-        registrationId: registration?.publicId ?? null,
+        registration_id: registration?.publicId ?? null,
         provider: providerId,
-        providerCalculationRef: providerRef,
-        customerLocationEvidenceId: evidence.publicId,
+        provider_calculation_ref: providerRef,
+        customer_location_evidence_id: evidence.publicId,
         country,
         state: evidence.state,
-        amountTotal,
-        amountNet,
-        taxAmountExclusive,
-        taxAmountInclusive,
-        lineItems: computed,
-        taxDate: at.toISOString(),
-        createdAt: at.toISOString(),
-        expiresAt: expiresAt.toISOString(),
+        amount_total: amountTotal,
+        amount_net: amountNet,
+        tax_amount_exclusive: taxAmountExclusive,
+        tax_amount_inclusive: taxAmountInclusive,
+        line_items: computed,
+        tax_date: at.toISOString(),
+        created: at.toISOString(),
+        expires_at: expiresAt.toISOString(),
         livemode: merchant.livemode,
       };
       await db.insert(taxCalculations).values({
@@ -850,7 +850,7 @@ export function createTaxService(options: TaxServiceOptions) {
       return {
         object: 'list',
         data: rows.slice(0, limit).map(transactionDto),
-        hasMore: rows.length > limit,
+        has_more: rows.length > limit,
       };
     },
     /**
@@ -920,36 +920,36 @@ export function createTaxService(options: TaxServiceOptions) {
           const calculation = row.calculation.result;
           // A reversal nets into its original's rows with its own signed lines.
           const reversal = row.transaction.reversal;
-          const lineItems = reversal ? reversal.lineItems : calculation.lineItems;
+          const lineItems = reversal ? reversal.line_items : calculation.line_items;
           for (const line of lineItems)
             for (const entry of line.breakdown) {
               const key = JSON.stringify([
                 entry.country,
                 entry.state,
-                calculation.registrationId,
+                calculation.registration_id,
                 calculation.collection,
-                entry.taxType,
-                entry.ratePercentage,
+                entry.tax_type,
+                entry.rate_percentage,
                 calculation.currency,
               ]);
               const existing = rows.get(key) ?? {
                 country: entry.country,
                 state: entry.state,
-                registrationId: calculation.registrationId,
-                scheme: calculation.registrationId
-                  ? (schemes.get(calculation.registrationId) ?? null)
+                registration_id: calculation.registration_id,
+                scheme: calculation.registration_id
+                  ? (schemes.get(calculation.registration_id) ?? null)
                   : null,
                 collection: calculation.collection,
-                taxType: entry.taxType,
-                ratePercentage: entry.ratePercentage,
+                tax_type: entry.tax_type,
+                rate_percentage: entry.rate_percentage,
                 currency: calculation.currency,
                 transactions: 0,
                 reversals: 0,
-                taxableAmount: 0,
-                taxAmount: 0,
+                taxable_amount: 0,
+                tax_amount: 0,
               };
-              existing.taxableAmount += entry.taxableAmount;
-              existing.taxAmount += entry.amount;
+              existing.taxable_amount += entry.taxable_amount;
+              existing.tax_amount += entry.amount;
               rows.set(key, existing);
             }
           // Count each transaction once per row it contributes to.
@@ -959,10 +959,10 @@ export function createTaxService(options: TaxServiceOptions) {
                 JSON.stringify([
                   entry.country,
                   entry.state,
-                  calculation.registrationId,
+                  calculation.registration_id,
                   calculation.collection,
-                  entry.taxType,
-                  entry.ratePercentage,
+                  entry.tax_type,
+                  entry.rate_percentage,
                   calculation.currency,
                 ]),
               ),
@@ -985,7 +985,7 @@ export function createTaxService(options: TaxServiceOptions) {
           (a, b) =>
             a.country.localeCompare(b.country) ||
             (a.state ?? '').localeCompare(b.state ?? '') ||
-            (a.ratePercentage ?? '').localeCompare(b.ratePercentage ?? ''),
+            (a.rate_percentage ?? '').localeCompare(b.rate_percentage ?? ''),
         ),
       };
     },
@@ -1052,11 +1052,11 @@ function transactionDto(row: {
     object: 'tax.transaction',
     id: row.transaction.publicId,
     type: row.transaction.reversal ? 'reversal' : 'transaction',
-    calculationId: row.calculation.publicId,
+    calculation_id: row.calculation.publicId,
     reference: row.transaction.reference,
     rail: row.transaction.rail,
-    committedAt: row.transaction.committedAt.toISOString(),
-    reversalOf: row.originalPublicId ?? null,
+    committed_at: row.transaction.committedAt.toISOString(),
+    reversal_of: row.originalPublicId ?? null,
     reversal: row.transaction.reversal ?? null,
     calculation: row.calculation.result,
   };
@@ -1110,16 +1110,16 @@ function scaled(value: number, numerator: number, denominator: number): number {
  * line. Always cumulative, so the parts of several partial reversals add up to
  * exactly the original once everything is reversed. */
 function cumulativeLines(calculation: TaxCalculation, reversed: number) {
-  const total = calculation.amountTotal;
-  return calculation.lineItems.map((line) => {
+  const total = calculation.amount_total;
+  return calculation.line_items.map((line) => {
     const breakdown = line.breakdown.map((entry) => ({
       ...entry,
-      taxableAmount: scaled(entry.taxableAmount, reversed, total),
+      taxableAmount: scaled(entry.taxable_amount, reversed, total),
       amount: scaled(entry.amount, reversed, total),
     }));
     const amountTax = breakdown.reduce((sum, entry) => sum + entry.amount, 0);
     const gross = scaled(
-      line.amount + (line.taxBehavior === 'exclusive' ? line.amountTax : 0),
+      line.amount + (line.tax_behavior === 'exclusive' ? line.amount_tax : 0),
       reversed,
       total,
     );
@@ -1173,8 +1173,8 @@ export async function reverseTaxTransaction(
         calculation,
         originalPublicId: original.publicId,
       });
-    const total = calculation.result.amountTotal;
-    const reversed = -existing.reduce((sum, row) => sum + (row.reversal?.amountTotal ?? 0), 0);
+    const total = calculation.result.amount_total;
+    const reversed = -existing.reduce((sum, row) => sum + (row.reversal?.amount_total ?? 0), 0);
     const target = input.target(reversed, total);
     if (!Number.isSafeInteger(target) || target < 0 || target > total)
       throw new TaxError('invalid_tax_request', 'a reversal cannot exceed the original');
@@ -1189,7 +1189,7 @@ export async function reverseTaxTransaction(
       const gross = was.gross - now.gross;
       return {
         ...now.line,
-        amount: gross - (now.line.taxBehavior === 'exclusive' ? amountTax : 0),
+        amount: gross - (now.line.tax_behavior === 'exclusive' ? amountTax : 0),
         amountTax,
         amountNet: gross - amountTax,
         breakdown: now.breakdown.map((entry, at) => {
@@ -1206,10 +1206,10 @@ export async function reverseTaxTransaction(
     const taxAmount = lineItems.reduce((sum, line) => sum + line.amountTax, 0);
     const amountNet = lineItems.reduce((sum, line) => sum + line.amountNet, 0);
     const reversal: TaxTransactionReversal = {
-      amountTotal: amountNet + taxAmount,
-      amountNet,
-      taxAmount,
-      lineItems,
+      amount_total: amountNet + taxAmount,
+      amount_net: amountNet,
+      tax_amount: taxAmount,
+      line_items: lineItems,
     };
     const [row] = await tx
       .insert(taxTransactions)

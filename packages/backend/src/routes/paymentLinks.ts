@@ -132,7 +132,7 @@ export function createPaymentLinksRouter(deps: {
         rail: resolved.rail,
         network: resolved.network,
         metadata: params.metadata ?? {},
-        successUrl: params.successUrl,
+        successUrl: params.success_url,
       });
 
       res.status(201).json(toPaymentLinkDTO(link));

@@ -46,7 +46,7 @@ export function forgetIntentForLink(linkId: string): void {
 }
 
 function isExpired(intent: PaymentIntent): boolean {
-  return Date.parse(intent.expiresAt) <= Date.now();
+  return Date.parse(intent.expires_at) <= Date.now();
 }
 
 /**

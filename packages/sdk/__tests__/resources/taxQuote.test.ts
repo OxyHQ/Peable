@@ -13,34 +13,34 @@ function fixture() {
     customerLocationEvidenceId: 'location_fixture',
   };
   const result: BillingTaxQuote = {
-    schemaVersion: 1,
+    schema_version: 1,
     source: {
-      merchantId: 'merch_fixture',
-      appId: 'app_fixture',
-      storeId: request.storeId,
-      planId: request.planId,
+      merchant_id: 'merch_fixture',
+      app_id: 'app_fixture',
+      store_id: request.storeId,
+      plan_id: request.planId,
       mode: 'test',
       environment: 'development',
     },
     quote: {
       id: 'quote_fixture',
       currency: 'USD',
-      grossMinorUnits: 2999,
-      netMinorUnits: 2500,
-      taxMinorUnits: 499,
-      taxTreatment: 'inclusive',
-      sellerId: 'seller_fixture',
-      invoiceIssuerId: 'issuer_fixture',
-      taxRemitterId: 'remitter_fixture',
-      taxServiceRef: 'calculator_fixture',
+      gross_minor_units: 2999,
+      net_minor_units: 2500,
+      tax_minor_units: 499,
+      tax_treatment: 'inclusive',
+      seller_id: 'seller_fixture',
+      invoice_issuer_id: 'issuer_fixture',
+      tax_remitter_id: 'remitter_fixture',
+      tax_service_ref: 'calculator_fixture',
       country: 'RO',
-      coverageEvidenceId: 'coverage_fixture',
-      taxRateEvidenceId: 'rate_fixture',
-      customerLocationEvidenceId: request.customerLocationEvidenceId,
-      quotedAt: now.toISOString(),
-      expiresAt: new Date(now.getTime() + 60_000).toISOString(),
+      coverage_evidence_id: 'coverage_fixture',
+      tax_rate_evidence_id: 'rate_fixture',
+      customer_location_evidence_id: request.customerLocationEvidenceId,
+      quoted_at: now.toISOString(),
+      expires_at: new Date(now.getTime() + 60_000).toISOString(),
     },
-    signature: { algorithm: 'Ed25519', keyId: 'fixture', value: '' },
+    signature: { algorithm: 'Ed25519', key_id: 'fixture', value: '' },
   };
   const resign = () => {
     result.signature.value = sign(
@@ -82,14 +82,14 @@ describe('pinned SDK tax quote authority', () => {
   it('rejects pinned-signature tampering, foreign evidence and expired signed quotations', async () => {
     const value = fixture();
     const resource = new BillingResource(value.client, undefined, value.pinned);
-    value.result.quote.invoiceIssuerId = 'tampered_issuer';
+    value.result.quote.invoice_issuer_id = 'tampered_issuer';
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
     value.resign();
-    value.result.quote.customerLocationEvidenceId = 'another_location';
+    value.result.quote.customer_location_evidence_id = 'another_location';
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
-    value.result.quote.customerLocationEvidenceId = value.request.customerLocationEvidenceId;
-    value.result.quote.expiresAt = new Date(Date.now() - 1).toISOString();
+    value.result.quote.customer_location_evidence_id = value.request.customerLocationEvidenceId;
+    value.result.quote.expires_at = new Date(Date.now() - 1).toISOString();
     value.resign();
     await expect(resource.createTaxQuote(value.request)).rejects.toThrow('verification failed');
   });

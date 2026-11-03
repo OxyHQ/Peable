@@ -161,7 +161,7 @@ test('atomic flow: create -> submit_tx -> watcher settles -> socket + webhook', 
     body: JSON.stringify({ amount: AMOUNT, network: 'testnet' }),
   });
   expect(createRes.status).toBe(201);
-  expect(createRes.headers.get('Peable-Version')).toBe('2026-07-18');
+  expect(createRes.headers.get('Peable-Version')).toBe('2026-11-03');
   const created = (await createRes.json()) as {
     id: string;
     address: string;

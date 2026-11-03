@@ -192,25 +192,25 @@ export async function readOwnedInvoiceState(
         : refunded === invoice.total
           ? 'fully_refunded'
           : 'partially_refunded',
-    chargeId: intent.latest_charge.id,
-    amountRefunded: String(refunded),
-    invoiceId: invoice.id,
-    lineId: line.id,
-    paymentIntentId: intent.id,
-    providerSubscriptionId: expected.subscriptionId,
-    providerCustomerId: expected.customerId,
-    providerPriceId: expected.priceId,
-    storeId: expected.storeId,
-    planId: expected.planId,
+    charge_id: intent.latest_charge.id,
+    amount_refunded: String(refunded),
+    invoice_id: invoice.id,
+    line_id: line.id,
+    payment_intent_id: intent.id,
+    provider_subscription_id: expected.subscriptionId,
+    provider_customer_id: expected.customerId,
+    provider_price_id: expected.priceId,
+    store_id: expected.storeId,
+    plan_id: expected.planId,
     livemode: expected.livemode,
     currency: invoice.currency.toUpperCase(),
-    amountPaid: String(invoice.amount_paid),
-    netAmount: net === null ? null : String(net),
-    taxAmount: net === null ? null : String(invoice.total - net),
-    periodStart: new Date(line.period.start * 1000).toISOString(),
-    periodEnd: new Date(line.period.end * 1000).toISOString(),
-    paidAt: new Date(payment.status_transitions.paid_at * 1000).toISOString(),
-    observedAt: clock().toISOString(),
+    amount_paid: String(invoice.amount_paid),
+    net_amount: net === null ? null : String(net),
+    tax_amount: net === null ? null : String(invoice.total - net),
+    period_start: new Date(line.period.start * 1000).toISOString(),
+    period_end: new Date(line.period.end * 1000).toISOString(),
+    paid_at: new Date(payment.status_transitions.paid_at * 1000).toISOString(),
+    observed_at: clock().toISOString(),
   };
 }
 
@@ -220,6 +220,6 @@ export async function readOwnedPaidInvoice(
 ): Promise<BillingPaidInvoice> {
   const value = await readOwnedInvoiceState(client, expected);
   if (value.state !== 'paid') throw new BillingError('reconciliation_required');
-  const { state, chargeId, amountRefunded, ...paid } = value;
+  const { state, charge_id: chargeId, amount_refunded: amountRefunded, ...paid } = value;
   return paid;
 }

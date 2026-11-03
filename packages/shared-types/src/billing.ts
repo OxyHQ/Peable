@@ -14,7 +14,7 @@ export const BILLING_SUBSCRIPTION_STATUSES = [
 ] as const;
 export type BillingSubscriptionStatus = (typeof BILLING_SUBSCRIPTION_STATUSES)[number];
 export interface BillingCustomer {
-  providerCustomerId: string;
+  provider_customer_id: string;
 }
 
 /** A settlement rail a merchant's recurring offers can be paid through. `stripe`
@@ -27,12 +27,12 @@ export type BillingRailSettlement = 'fiat' | 'faircoin';
 /** One offer a rail can sell. Fiat provider rails bind their prices from the
  * app's own provider catalogue, so they list `offers: null`. */
 export interface BillingRailOffer {
-  providerPriceId: string;
-  planId: string;
+  provider_price_id: string;
+  plan_id: string;
   interval: 'month' | 'year';
   currency: string;
-  grossMinorUnits: number;
-  taxTreatment: 'inclusive' | 'exclusive';
+  gross_minor_units: number;
+  tax_treatment: 'inclusive' | 'exclusive';
 }
 export interface BillingRailOption {
   rail: BillingRail;
@@ -40,7 +40,7 @@ export interface BillingRailOption {
   /** The rail a request that names none is served by: the first configured. */
   default: boolean;
   /** Whether `createTaxQuote` is answered for this rail. */
-  taxQuotes: boolean;
+  tax_quotes: boolean;
   /** `automatic`: the provider charges each period. `payer_initiated`: each
    * period is an explicit payment through `renewSubscription`. */
   renewal: 'automatic' | 'payer_initiated';
@@ -51,8 +51,8 @@ export interface BillingRailList {
   data: BillingRailOption[];
 }
 export interface EnsureBillingCustomerParams {
-  storeId: string;
-  storeName: string;
+  store_id: string;
+  store_name: string;
   /** The payer's chosen rail. Omitted: the merchant's default rail. A customer
    * belongs to one rail, and its checkouts and subscriptions follow it. */
   rail?: BillingRail;
@@ -62,41 +62,41 @@ export interface CreateBillingCheckoutParams {
   rail?: BillingRail;
   /** Opt-in fiscal checkout. The full signed quote is immutable and single-use.
    * Requires a trusted Peable adapter capable of applying these exact amounts. */
-  taxQuote?: BillingTaxQuote;
-  providerCustomerId: string;
-  providerPriceId: string;
-  trialDays: number;
-  returnUrl: string;
-  storeId: string;
-  planId: string;
+  tax_quote?: BillingTaxQuote;
+  provider_customer_id: string;
+  provider_price_id: string;
+  trial_days: number;
+  return_url: string;
+  store_id: string;
+  plan_id: string;
 }
 export interface CreateBillingPortalParams {
-  providerCustomerId: string;
-  returnUrl: string;
+  provider_customer_id: string;
+  return_url: string;
 }
 /** Sensitive owner-only URL. The gateway refuses replay after expiresAt. */
 export interface BillingHostedSession {
   url: string;
-  expiresAt: string;
+  expires_at: number;
 }
 /** Provider observations only. Consumers own plan/status/entitlement interpretation. */
 export interface BillingSubscription {
-  providerSubscriptionId: string;
+  provider_subscription_id: string;
   /** Discovery only; invoice must still be read and proven paid. */
-  latestInvoiceId?: string | null;
-  providerCustomerId: string;
-  providerPriceId: string;
-  storeId: string;
-  planId: string;
+  latest_invoice_id?: string | null;
+  provider_customer_id: string;
+  provider_price_id: string;
+  store_id: string;
+  plan_id: string;
   livemode: boolean;
   status: BillingSubscriptionStatus;
   interval: 'month' | 'year';
-  cancelAtPeriodEnd: boolean;
-  currentPeriodStart: string;
-  currentPeriodEnd: string;
-  trialEndsAt: string | null;
-  cancelAt: string | null;
-  cancelledAt: string | null;
+  cancel_at_period_end: boolean;
+  current_period_start: number;
+  current_period_end: number;
+  trial_ends_at: number | null;
+  cancel_at: number | null;
+  cancelled_at: number | null;
 }
 
 /** Owned recurring checkout correlation; completing checkout is not paid evidence. */
@@ -105,100 +105,100 @@ export interface BillingCheckoutSession extends BillingHostedSession {
 }
 export interface BillingCheckoutObservation {
   /** Immutable subscription_create invoice proven for this exact checkout. Discovery only, never paid authority. */
-  initialInvoiceId: string | null;
+  initial_invoice_id: string | null;
   id: string;
   status: 'open' | 'complete' | 'expired';
-  storeId: string;
-  planId: string;
-  providerCustomerId: string;
-  providerPriceId: string;
+  store_id: string;
+  plan_id: string;
+  provider_customer_id: string;
+  provider_price_id: string;
   subscription: BillingSubscription | null;
 }
 /** Authenticated authoritative read, one settled full non-prorated line only.
  * Tax figures are provider observations, not a tax quote or seller configuration. */
 export interface BillingInvoiceState extends BillingPaidInvoice {
-  chargeId: string;
-  amountRefunded: string;
+  charge_id: string;
+  amount_refunded: string;
   state: 'paid' | 'fully_refunded' | 'partially_refunded';
 }
 export interface BillingPaidInvoice {
-  invoiceId: string;
-  lineId: string;
-  paymentIntentId: string;
-  providerSubscriptionId: string;
-  providerCustomerId: string;
-  providerPriceId: string;
-  storeId: string;
-  planId: string;
+  invoice_id: string;
+  line_id: string;
+  payment_intent_id: string;
+  provider_subscription_id: string;
+  provider_customer_id: string;
+  provider_price_id: string;
+  store_id: string;
+  plan_id: string;
   livemode: boolean;
   currency: string;
-  amountPaid: string;
-  netAmount: string | null;
-  taxAmount: string | null;
-  periodStart: string;
-  periodEnd: string;
-  paidAt: string;
-  observedAt: string;
+  amount_paid: string;
+  net_amount: string | null;
+  tax_amount: string | null;
+  period_start: number;
+  period_end: number;
+  paid_at: number;
+  observed_at: number;
 }
 
 /** Provider-independent fiscal evidence. Values come from the configured authority,
  * never from invoice amounts, merchant metadata, or an application tax guess. */
 export interface BillingInvoiceAuthoritySource {
-  invoiceId: string;
-  paymentIntentId: string;
-  customerId: string;
-  subscriptionId: string;
-  priceId: string;
-  planId: string;
-  merchantId: string;
-  appId: string;
+  invoice_id: string;
+  payment_intent_id: string;
+  customer_id: string;
+  subscription_id: string;
+  price_id: string;
+  plan_id: string;
+  merchant_id: string;
+  app_id: string;
   mode: 'test' | 'live';
   environment: 'development' | 'staging' | 'production';
 }
 export interface BillingFinalInvoice {
   platform: 'peable';
   currency: string;
-  grossMinorUnits: number;
-  netMinorUnits: number;
-  taxMinorUnits: number;
-  merchantFeeMinorUnits: number;
-  taxTreatment: 'inclusive' | 'exclusive';
-  sellerId: string;
-  invoiceIssuerId: string;
-  taxQuoteId: string;
-  customerLocationEvidenceId: string;
-  taxRateEvidenceId: string;
+  gross_minor_units: number;
+  net_minor_units: number;
+  tax_minor_units: number;
+  merchant_fee_minor_units: number;
+  tax_treatment: 'inclusive' | 'exclusive';
+  seller_id: string;
+  invoice_issuer_id: string;
+  tax_quote_id: string;
+  customer_location_evidence_id: string;
+  tax_rate_evidence_id: string;
   context: {
-    payerAccountId: string;
-    beneficiaryAccountId: string;
-    providerSubscriptionId: string;
-    offerId: string;
-    offerVersion: number;
-    periodStart: string;
-    periodEnd: string;
+    payer_account_id: string;
+    beneficiary_account_id: string;
+    provider_subscription_id: string;
+    offer_id: string;
+    offer_version: number;
+    period_start: number;
+    period_end: number;
     mode: 'test' | 'live';
     environment: 'development' | 'staging' | 'production';
   };
-  issuedAt: string;
-  expiresAt: string;
-  faircoinQuote?: {
+  issued_at: number;
+  expires_at: number;
+  faircoin_quote?: {
     id: string;
-    amountBaseUnits: string;
-    quotedAt: string;
-    expiresAt: string;
-    roundingEvidenceId: string;
+    amount_base_units: string;
+    quoted_at: number;
+    expires_at: number;
+    rounding_evidence_id: string;
   };
   /** Present only when requested (`include: ['tax_lines']`): the frozen
    * Peable Tax lines behind `taxMinorUnits`, covered by the same signature. */
-  taxLines?: BillingInvoiceTaxLine[];
+  tax_lines?: BillingInvoiceTaxLine[];
 }
 export interface BillingFinalInvoiceAuthority {
-  schemaVersion: 1;
+  schema_version: 2;
   source: BillingInvoiceAuthoritySource;
   invoice: BillingFinalInvoice;
   method: 'card' | 'faircoin';
   /** Versioned canonical payload: source, invoice and method after strict schema parsing. */
-  signature: { algorithm: 'Ed25519'; keyId: string; value: string };
+  signature: { algorithm: 'Ed25519'; key_id: string; value: string };
 }
 
 /** An automatic renewal authorization is an explicit, bounded instruction.
@@ -207,27 +207,27 @@ export type BillingFaircoinRenewalChoice =
   | { method: 'faircoin'; renewal: 'manual_monthly' }
   | { method: 'faircoin'; renewal: 'automatic'; consent: BillingFaircoinRenewalConsent };
 export interface BillingFaircoinRenewalConsent {
-  authorizationId: string;
-  payerAccountId: string;
-  merchantId: string;
-  appId: string;
-  subscriptionId: string;
-  planId: string;
+  authorization_id: string;
+  payer_account_id: string;
+  merchant_id: string;
+  app_id: string;
+  subscription_id: string;
+  plan_id: string;
   mode: 'test' | 'live';
   environment: 'development' | 'staging' | 'production';
-  explicitConsent: true;
-  consentEvidenceId: string;
-  maximumAmountBaseUnits: string;
+  explicit_consent: true;
+  consent_evidence_id: string;
+  maximum_amount_base_units: string;
   interval: 'month';
-  intervalCount: 1;
-  startsAt: string;
-  expiresAt: string;
-  acceptedAt: string;
+  interval_count: 1;
+  starts_at: number;
+  expires_at: number;
+  accepted_at: number;
 }
 export interface BillingFaircoinRenewalRevocation {
-  authorizationId: string;
-  revokedAt: string;
-  revocationEvidenceId: string;
+  authorization_id: string;
+  revoked_at: number;
+  revocation_evidence_id: string;
 }
 
 /** A merchant asks Peable to quote a registered product. Monetary/fiscal
@@ -235,57 +235,57 @@ export interface BillingFaircoinRenewalRevocation {
 export interface CreateBillingTaxQuoteParams {
   /** Omitted: the first of the merchant's rails that answers tax quotes. */
   rail?: BillingRail;
-  storeId: string;
-  planId: string;
+  store_id: string;
+  plan_id: string;
   /** Selects one offer when a plan is sold at several prices. */
-  providerPriceId?: string;
+  provider_price_id?: string;
   /** A `tax.location_evidence` id (`taxloc_…`) recorded for this `storeId`. */
-  customerLocationEvidenceId: string;
+  customer_location_evidence_id: string;
 }
 export interface BillingTaxQuote {
-  schemaVersion: 1;
+  schema_version: 2;
   source: {
-    merchantId: string;
-    appId: string;
-    storeId: string;
-    planId: string;
+    merchant_id: string;
+    app_id: string;
+    store_id: string;
+    plan_id: string;
     mode: 'test' | 'live';
     environment: 'development' | 'staging' | 'production';
   };
   quote: {
     id: string;
     currency: string;
-    grossMinorUnits: number;
-    netMinorUnits: number;
-    taxMinorUnits: number;
-    taxTreatment: 'inclusive' | 'exclusive';
-    sellerId: string;
-    invoiceIssuerId: string;
-    taxRemitterId: string;
-    taxServiceRef: string;
+    gross_minor_units: number;
+    net_minor_units: number;
+    tax_minor_units: number;
+    tax_treatment: 'inclusive' | 'exclusive';
+    seller_id: string;
+    invoice_issuer_id: string;
+    tax_remitter_id: string;
+    tax_service_ref: string;
     country: string;
-    coverageEvidenceId: string;
-    taxRateEvidenceId: string;
-    customerLocationEvidenceId: string;
-    quotedAt: string;
-    expiresAt: string;
+    coverage_evidence_id: string;
+    tax_rate_evidence_id: string;
+    customer_location_evidence_id: string;
+    quoted_at: number;
+    expires_at: number;
   };
-  signature: { algorithm: 'Ed25519'; keyId: string; value: string };
+  signature: { algorithm: 'Ed25519'; key_id: string; value: string };
 }
 
 /** Read-only recovery of one previously attempted recurring checkout. Neither
  * absence nor uncertainty permits cancellation or another financial operation. */
 export interface RetrieveBillingCheckoutOperationParams {
-  idempotencyKey: string;
-  providerCustomerId: string;
-  providerPriceId: string;
-  storeId: string;
-  planId: string;
+  idempotency_key: string;
+  provider_customer_id: string;
+  provider_price_id: string;
+  store_id: string;
+  plan_id: string;
 }
 export interface BillingCheckoutOperationSource extends RetrieveBillingCheckoutOperationParams {
-  taxQuoteId: string | null;
-  merchantId: string;
-  appId: string;
+  tax_quote_id: string | null;
+  merchant_id: string;
+  app_id: string;
   mode: 'test' | 'live';
   environment: 'development' | 'staging' | 'production';
 }
@@ -294,18 +294,18 @@ export type BillingCheckoutOperationRecovery =
   | {
       state: 'succeeded';
       source: BillingCheckoutOperationSource;
-      checkout: { id: string; expiresAt: string; url?: string };
+      checkout: { id: string; expires_at: string; url?: string };
     };
 
 export interface BillingFaircoinFxQuote {
   id: string;
   currency: 'USD';
-  grossMinorUnits: number;
-  amountBaseUnits: string;
-  usdPerFair: string;
+  gross_minor_units: number;
+  amount_base_units: string;
+  usd_per_fair: string;
   source: string;
-  observedAt: string;
-  quotedAt: string;
-  expiresAt: string;
+  observed_at: number;
+  quoted_at: number;
+  expires_at: number;
   rounding: 'ceil_to_base_unit';
 }

@@ -130,12 +130,12 @@ export function verifyFinalInvoiceAuthority(
   const paid = expected.invoice;
   const context = invoice.context;
   if (
-    source.invoiceId !== paid.invoiceId ||
-    source.paymentIntentId !== paid.paymentIntentId ||
-    source.customerId !== paid.providerCustomerId ||
-    source.subscriptionId !== paid.providerSubscriptionId ||
-    source.priceId !== paid.providerPriceId ||
-    source.planId !== paid.planId ||
+    source.invoiceId !== paid.invoice_id ||
+    source.paymentIntentId !== paid.payment_intent_id ||
+    source.customerId !== paid.provider_customer_id ||
+    source.subscriptionId !== paid.provider_subscription_id ||
+    source.priceId !== paid.provider_price_id ||
+    source.planId !== paid.plan_id ||
     source.merchantId !== expected.merchantPublicId ||
     source.appId !== expected.owner.oxyAppId ||
     source.environment !== expected.owner.environment ||
@@ -143,17 +143,17 @@ export function verifyFinalInvoiceAuthority(
     context.mode !== source.mode ||
     context.environment !== source.environment ||
     context.providerSubscriptionId !== source.subscriptionId ||
-    context.payerAccountId !== paid.storeId ||
-    context.beneficiaryAccountId !== paid.storeId ||
-    context.periodStart !== paid.periodStart ||
-    context.periodEnd !== paid.periodEnd ||
+    context.payerAccountId !== paid.store_id ||
+    context.beneficiaryAccountId !== paid.store_id ||
+    context.periodStart !== paid.period_start ||
+    context.periodEnd !== paid.period_end ||
     Date.parse(context.periodEnd) <= Date.parse(context.periodStart) ||
     invoice.currency !== paid.currency ||
-    BigInt(invoice.grossMinorUnits) !== BigInt(paid.amountPaid) ||
-    paid.netAmount === null ||
-    paid.taxAmount === null ||
-    BigInt(invoice.netMinorUnits) !== BigInt(paid.netAmount) ||
-    BigInt(invoice.taxMinorUnits) !== BigInt(paid.taxAmount) ||
+    BigInt(invoice.grossMinorUnits) !== BigInt(paid.amount_paid) ||
+    paid.net_amount === null ||
+    paid.tax_amount === null ||
+    BigInt(invoice.netMinorUnits) !== BigInt(paid.net_amount) ||
+    BigInt(invoice.taxMinorUnits) !== BigInt(paid.tax_amount) ||
     invoice.netMinorUnits + invoice.taxMinorUnits !== invoice.grossMinorUnits ||
     (invoice.taxLines !== undefined &&
       invoice.taxLines.reduce((sum, line) => sum + line.taxMinorUnits, 0) !==
@@ -162,9 +162,9 @@ export function verifyFinalInvoiceAuthority(
     Date.parse(invoice.issuedAt) > now.getTime() ||
     Date.parse(invoice.expiresAt) <= now.getTime() ||
     Date.parse(invoice.expiresAt) <= Date.parse(invoice.issuedAt) ||
-    Date.parse(paid.paidAt) > now.getTime() ||
-    Date.parse(paid.observedAt) > now.getTime() ||
-    now.getTime() - Date.parse(paid.observedAt) > 60_000
+    Date.parse(paid.paid_at) > now.getTime() ||
+    Date.parse(paid.observed_at) > now.getTime() ||
+    now.getTime() - Date.parse(paid.observed_at) > 60_000
   )
     throw new BillingError('invalid_provider_response', 502);
   if (
@@ -172,8 +172,8 @@ export function verifyFinalInvoiceAuthority(
     (!invoice.faircoinQuote ||
       Date.parse(invoice.faircoinQuote.quotedAt) > now.getTime() ||
       Date.parse(invoice.faircoinQuote.expiresAt) > Date.parse(invoice.expiresAt) ||
-      Date.parse(paid.paidAt) < Date.parse(invoice.faircoinQuote.quotedAt) ||
-      Date.parse(paid.paidAt) >= Date.parse(invoice.faircoinQuote.expiresAt) ||
+      Date.parse(paid.paid_at) < Date.parse(invoice.faircoinQuote.quotedAt) ||
+      Date.parse(paid.paid_at) >= Date.parse(invoice.faircoinQuote.expiresAt) ||
       Date.parse(invoice.faircoinQuote.expiresAt) <= Date.parse(invoice.faircoinQuote.quotedAt))
   )
     throw new BillingError('invalid_provider_response', 502);

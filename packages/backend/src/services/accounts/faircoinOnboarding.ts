@@ -191,12 +191,12 @@ export async function describeOnboarding(input: {
   if (!platform) throw new Error(`platform merchant missing for account ${account.publicId}`);
   return {
     object: 'connect_onboarding',
-    accountId: account.publicId,
+    account_id: account.publicId,
     platform: await resolveMerchantDisplay(platform),
     // Narrowed by `resolveLink`, which refuses an account with no network.
     network: account.network as NonNullable<ConnectedAccountRow['network']>,
-    expiresAt: link.expiresAt.toISOString(),
-    returnUrl: link.returnUrl,
+    expires_at: link.expiresAt.toISOString(),
+    return_url: link.returnUrl,
   };
 }
 

@@ -125,9 +125,9 @@ export function createConnectRouter(deps?: { requireOxyUser?: RequestHandler }):
         });
         const body: ConnectOnboardingComplete = {
           object: 'connect_onboarding',
-          accountId: account.publicId,
+          account_id: account.publicId,
           status: 'active',
-          returnUrl,
+          return_url: returnUrl,
         };
         res.status(200).json(body);
       } catch (error) {

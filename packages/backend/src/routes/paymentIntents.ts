@@ -334,11 +334,11 @@ export function createPaymentIntentsRouter(deps: {
           ...(params.rail !== undefined ? { rail: params.rail } : {}),
           ...(params.currency !== undefined ? { currency: params.currency } : {}),
           ...(params.network !== undefined ? { network: params.network } : {}),
-          ...(params.connectedAccount !== undefined
-            ? { connectedAccount: params.connectedAccount }
+          ...(params.connected_account !== undefined
+            ? { connectedAccount: params.connected_account }
             : {}),
           metadata: params.metadata,
-          expiresInSeconds: params.expiresInSeconds,
+          expiresInSeconds: params.expires_in_seconds,
           idempotencyKey,
         });
         res.status(reused ? 200 : 201).json({

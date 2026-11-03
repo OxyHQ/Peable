@@ -103,19 +103,19 @@ export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubsc
   if (!item || item.current_period_end <= item.current_period_start)
     throw new BillingError('invalid_provider_response', 502);
   return {
-    latestInvoiceId: parsed.latest_invoice ?? null,
-    providerSubscriptionId: parsed.id,
-    providerCustomerId: parsed.customer,
-    providerPriceId: item.price.id,
+    latest_invoice_id: parsed.latest_invoice ?? null,
+    provider_subscription_id: parsed.id,
+    provider_customer_id: parsed.customer,
+    provider_price_id: item.price.id,
     livemode: parsed.livemode,
     status: parsed.status,
     interval: item.price.recurring.interval,
-    cancelAtPeriodEnd: parsed.cancel_at_period_end,
-    currentPeriodStart: new Date(item.current_period_start * 1000).toISOString(),
-    currentPeriodEnd: new Date(item.current_period_end * 1000).toISOString(),
-    trialEndsAt: iso(parsed.trial_end),
-    cancelAt: iso(parsed.cancel_at),
-    cancelledAt: iso(parsed.canceled_at),
+    cancel_at_period_end: parsed.cancel_at_period_end,
+    current_period_start: new Date(item.current_period_start * 1000).toISOString(),
+    current_period_end: new Date(item.current_period_end * 1000).toISOString(),
+    trial_ends_at: iso(parsed.trial_end),
+    cancel_at: iso(parsed.cancel_at),
+    cancelled_at: iso(parsed.canceled_at),
   };
 }
 export function createStripeBillingProvider(
@@ -167,14 +167,14 @@ export function createStripeBillingProvider(
     async ensureCustomer(input, key) {
       const customer = z
         .object({ id: ref('cus_'), livemode: z.boolean(), deleted: z.literal(false).optional() })
-        .parse(await client.createCustomer({ name: input.storeName }, key));
+        .parse(await client.createCustomer({ name: input.store_name }, key));
       return { providerCustomerId: customer.id, livemode: customer.livemode };
     },
     async createCheckoutSession(input, key) {
-      if (input.taxQuote !== undefined) throw new BillingError('not_found', 404);
-      const successUrl = new URL(input.returnUrl);
+      if (input.tax_quote !== undefined) throw new BillingError('not_found', 404);
+      const successUrl = new URL(input.return_url);
       successUrl.searchParams.set('billing', 'complete');
-      const cancelUrl = new URL(input.returnUrl);
+      const cancelUrl = new URL(input.return_url);
       cancelUrl.searchParams.set('billing', 'cancelled');
       const session = z
         .object({
@@ -194,10 +194,10 @@ export function createStripeBillingProvider(
               mode: 'subscription',
               // Peable's bound price owns the settlement currency, not visitor location.
               adaptive_pricing: { enabled: false },
-              customer: input.providerCustomerId,
-              line_items: [{ price: input.providerPriceId, quantity: 1 }],
-              ...(input.trialDays > 0
-                ? { subscription_data: { trial_period_days: input.trialDays } }
+              customer: input.provider_customer_id,
+              line_items: [{ price: input.provider_price_id, quantity: 1 }],
+              ...(input.trial_days > 0
+                ? { subscription_data: { trial_period_days: input.trial_days } }
                 : {}),
               success_url: successUrl.toString(),
               cancel_url: cancelUrl.toString(),
@@ -229,8 +229,8 @@ export function createStripeBillingProvider(
         .parse(
           await client.createPortal(
             {
-              customer: input.providerCustomerId,
-              return_url: input.returnUrl,
+              customer: input.provider_customer_id,
+              return_url: input.return_url,
               configuration: portalConfigurationRef,
             },
             key,

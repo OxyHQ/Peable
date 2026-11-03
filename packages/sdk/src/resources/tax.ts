@@ -83,7 +83,7 @@ export class TaxResource {
             from: params.from,
             to: params.to,
             limit: params.limit,
-            startingAfter: params.startingAfter,
+            startingAfter: params.starting_after,
           },
         }),
       createReversal: (id, params) =>

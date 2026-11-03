@@ -64,16 +64,16 @@ export interface ConnectedAccountFaircoin {
   network: NetworkType;
   status: ConnectedAccountFaircoinStatus;
   /** The Oxy user who may register the key — and, once `active`, who did. */
-  oxyUserId: string;
+  oxy_user_id: string;
   /** When the seller registered their key. `null` while `pending`. */
-  registeredAt: string | null;
+  registered_at: number | null;
 }
 
 export interface ConnectedAccount {
   id: string;
   object: 'connected_account';
   /** The merchant's OWN id for this seller — how they address it. */
-  externalRef: string;
+  external_ref: string;
   /** Which halves this account has. Never empty. */
   rails: readonly ConnectedAccountRail[];
   /**
@@ -87,7 +87,7 @@ export interface ConnectedAccount {
    * no card half and was never asked for one (ADR 0012 D1).
    */
   country: string | null;
-  defaultCurrency: string | null;
+  default_currency: string | null;
   /**
    * Whether this seller can receive a CARD settlement (a transfer) right now.
    * Always `false` on a FairCoin-only seller.
@@ -98,41 +98,41 @@ export interface ConnectedAccount {
    * question that belongs to the merchant.
    */
   payable: boolean;
-  payoutsEnabled: boolean;
-  chargesEnabled: boolean;
+  payouts_enabled: boolean;
+  charges_enabled: boolean;
   /**
    * `null` means the capability was never REQUESTED, which is a different fact
    * from the provider declining it (`inactive`). Collapsing the two makes "why
    * is this seller stuck" unanswerable.
    */
-  transfersCapability: CapabilityStatus | null;
-  cardPaymentsCapability: CapabilityStatus | null;
+  transfers_capability: CapabilityStatus | null;
+  card_payments_capability: CapabilityStatus | null;
   /**
    * COUNTS of outstanding requirements, never the requirements themselves and
    * never their values. The gateway records that a seller owes a document; it
    * does not learn what the document says.
    */
   requirements: {
-    currentlyDue: number;
-    eventuallyDue: number;
-    pastDue: number;
-    pendingVerification: number;
+    currently_due: number;
+    eventually_due: number;
+    past_due: number;
+    pending_verification: number;
   };
-  disabledReasonCodes: readonly string[];
-  lastSyncedAt: string | null;
-  createdAt: string;
-  updatedAt: string;
+  disabled_reason_codes: readonly string[];
+  last_synced_at: number | null;
+  created: number;
+  updated_at: number;
 }
 
 export interface Transfer {
   id: string;
   object: 'transfer';
   /** The merchant's OWN id for what this settles. Their idempotency. */
-  externalRef: string;
+  external_ref: string;
   /** The `ca_…` of the seller — never their account id at the provider. */
-  connectedAccountId: string;
+  connected_account_id: string;
   /** The `pi_…` this settlement was funded by — never an internal primary key. */
-  paymentIntentId: string;
+  payment_intent_id: string;
   amount: string;
   currency: string;
   /**
@@ -142,11 +142,11 @@ export interface Transfer {
    * add up reversals it may not have all seen, which is why this is the
    * provider's own total rather than a sum of the reversals below.
    */
-  amountReversed: string;
+  amount_reversed: string;
   status: TransferStatus;
-  failureMessage: string | null;
-  createdAt: string;
-  updatedAt: string;
+  failure_message: string | null;
+  created: number;
+  updated_at: number;
 }
 
 /**
@@ -160,12 +160,12 @@ export interface TransferReversal {
   id: string;
   object: 'transfer_reversal';
   /** The merchant's own id for this reversal — their `Idempotency-Key`. */
-  externalRef: string;
+  external_ref: string;
   amount: string;
   currency: string;
   status: TransferReversalStatus;
-  failureMessage: string | null;
-  createdAt: string;
+  failure_message: string | null;
+  created: number;
 }
 
 /** What `POST /v1/transfers/:id/reversals` answers: the transfer, and the leg. */
@@ -198,7 +198,7 @@ export interface TransferWithReversal extends Transfer {
 export interface Settlement {
   object: 'settlement';
   /** The `pi_…` this describes. */
-  paymentIntentId: string;
+  payment_intent_id: string;
   /**
    *  - `available` — settled; these figures are final.
    *  - `pending`   — a settlement record exists and is not final yet.
@@ -211,10 +211,10 @@ export interface Settlement {
   net: string | null;
   /** The SETTLEMENT currency, which may differ from the payment's. */
   currency: string | null;
-  /** When the funds become available, ISO-8601. */
-  availableOn: string | null;
+  /** When the funds become available, Unix seconds. */
+  available_on: number | null;
   /** Present only when a conversion happened. `null` is not a rate of 1. */
-  exchangeRate: number | null;
+  exchange_rate: number | null;
 }
 
 /** Where one refund stands — the MONEY's own lifecycle, not the payment's. */
@@ -233,9 +233,9 @@ export interface Refund {
   id: string;
   object: 'refund';
   /** `null` on an IMPORTED refund; see {@link RefundOrigin}. */
-  externalRef: string | null;
+  external_ref: string | null;
   origin: RefundOrigin;
-  paymentIntentId: string;
+  payment_intent_id: string;
   amount: string;
   currency: CurrencyCode | string;
   status: RefundStatus;
@@ -247,8 +247,8 @@ export interface Refund {
    * them re-read the intent is a round trip whose answer can move on before it
    * arrives.
    */
-  paymentStatus: string;
-  failureCode: string | null;
-  createdAt: string;
-  updatedAt: string;
+  payment_status: string;
+  failure_code: string | null;
+  created: number;
+  updated_at: number;
 }

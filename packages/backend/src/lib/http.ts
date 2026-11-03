@@ -7,11 +7,12 @@ import {
 } from '../services/providers/environmentGuard';
 import type { ProviderError } from '../services/providers/provider';
 import { redactProviderMessage } from '../services/providers/redact';
+import { requestIdOf } from './requestId';
 
 /**
  * Turn a provider failure into an HTTP answer without leaking its text raw.
  *
- * **502 for a retryable provider fault, 422 for a permanent refusal.** The
+ * **502 for a retryable provider fault, 400 for a permanent refusal.** The
  * distinction is the merchant's to act on and it is the only thing this
  * function decides: one means try again, the other means the request as sent
  * will never work. Getting it backwards tells a merchant to retry something
@@ -30,26 +31,72 @@ import { redactProviderMessage } from '../services/providers/redact';
 export function sendProviderError(res: Response, error: ProviderError): void {
   sendError(
     res,
-    error.retryable ? 502 : 422,
+    error.retryable ? 502 : 400,
     error.retryable ? 'api_error' : 'invalid_request_error',
     redactProviderMessage(error.message),
   );
 }
 
-/** Stripe-ish error envelope: `{ error: { type, message } }`. */
+/**
+ * The one error envelope (ADR 0014 D1):
+ * `{ error: { type, code?, param?, message, request_id } }`.
+ *
+ * - `type` is the broad class a caller branches on first.
+ * - `code` is the machine-readable reason, for refusals a caller must tell apart
+ *   (`account_not_ready`, `idempotency_error`, …).
+ * - `param` names the offending request field in bracket notation
+ *   (`metadata[order_id]`, `line_items[0][price]`), when there is one.
+ * - `request_id` is the `Request-Id` of this response, so support can find it.
+ *
+ * 422 is never used: a request that is well-formed JSON but invalid is a 400,
+ * as on Stripe.
+ */
 export function sendError(
   res: Response,
   status: number,
   type: string,
   message: string,
-  /**
-   * A machine-readable reason beside the broad `type`, for the few refusals a
-   * caller must branch on — `account_not_ready` (ADR 0012) is the first. Absent
-   * otherwise, so every existing error body is byte-for-byte what it was.
-   */
   code?: string,
+  param?: string,
 ): void {
-  res.status(status).json({ error: { type, message, ...(code ? { code } : {}) } });
+  res.status(status).json({
+    error: {
+      type,
+      ...(code ? { code } : {}),
+      ...(param ? { param } : {}),
+      message,
+      request_id: requestIdOf(res) ?? null,
+    },
+  });
+}
+
+/** A Zod issue path in Stripe's bracket notation: `['metadata','a']` → `metadata[a]`. */
+export function paramFromPath(path: readonly PropertyKey[]): string | undefined {
+  const [head, ...rest] = path.map(String);
+  if (head === undefined) return undefined;
+  return head + rest.map((segment) => `[${segment}]`).join('');
+}
+
+/**
+ * Answer a request that failed schema validation: 400 `invalid_request_error`
+ * naming the first offending field. One helper so every route reports the same
+ * `param` for the same mistake.
+ */
+export function sendValidationError(
+  res: Response,
+  error: { issues: readonly { path: readonly PropertyKey[]; message: string }[] },
+  fallback = 'invalid request',
+): void {
+  const issue = error.issues[0];
+  const param = issue ? paramFromPath(issue.path) : undefined;
+  sendError(
+    res,
+    400,
+    'invalid_request_error',
+    issue ? issue.message : fallback,
+    'parameter_invalid',
+    param,
+  );
 }
 
 // Express 4 does not forward rejected promises to the error handler, so wrap
@@ -125,8 +172,8 @@ export function requireProviderMode(environment: MerchantEnvironment, res: Respo
 /**
  * Answer a credential that reached a deployment running the other mode.
  *
- * 403, not 422: the request is well-formed and the caller is authenticated,
- * they are simply not authorized to move money in this mode. A 422 would send
+ * 403, not 400: the request is well-formed and the caller is authenticated,
+ * they are simply not authorized to move money in this mode.  A 400 would send
  * an integrator off editing a body that was never the problem.
  *
  * Shared because the branch appears in every route that can reach a provider,

@@ -118,9 +118,9 @@ export function assertFaircoinRenewalActor(
   actor: FaircoinRenewalActor,
 ): void {
   if (
-    consent.payerAccountId !== actor.payerAccountId ||
-    consent.merchantId !== actor.merchantId ||
-    consent.appId !== actor.appId ||
+    consent.payer_account_id !== actor.payerAccountId ||
+    consent.merchant_id !== actor.merchantId ||
+    consent.app_id !== actor.appId ||
     consent.mode !== actor.mode ||
     consent.environment !== actor.environment
   )
@@ -133,8 +133,8 @@ export function assertFaircoinRenewalActive(
 ): void {
   if (
     revocation ||
-    Date.parse(consent.startsAt) > now.getTime() ||
-    Date.parse(consent.expiresAt) <= now.getTime()
+    Date.parse(consent.starts_at) > now.getTime() ||
+    Date.parse(consent.expires_at) <= now.getTime()
   )
     throw new BillingError('identity_conflict');
 }
@@ -250,13 +250,13 @@ export function createFaircoinRenewalAuthorization(options: {
           ).getUTCDate();
           nextMonth.setUTCDate(Math.min(start.getUTCDate(), daysInMonth));
           if (
-            instruction.subscriptionId !== record.consent.subscriptionId ||
-            instruction.planId !== record.consent.planId ||
-            BigInt(instruction.amountBaseUnits) > BigInt(record.consent.maximumAmountBaseUnits) ||
-            start.getTime() < Date.parse(record.consent.startsAt) ||
+            instruction.subscriptionId !== record.consent.subscription_id ||
+            instruction.planId !== record.consent.plan_id ||
+            BigInt(instruction.amountBaseUnits) > BigInt(record.consent.maximum_amount_base_units) ||
+            start.getTime() < Date.parse(record.consent.starts_at) ||
             start.getTime() > now().getTime() ||
             end.getTime() <= now().getTime() ||
-            end.getTime() > Date.parse(record.consent.expiresAt) ||
+            end.getTime() > Date.parse(record.consent.expires_at) ||
             end.getTime() !== nextMonth.getTime()
           )
             throw new BillingError('identity_conflict');
