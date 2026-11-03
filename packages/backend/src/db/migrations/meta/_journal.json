@@ -253,6 +253,13 @@
       "when": 1792783448326,
       "tag": "0035_amazing_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1793716915913,
+      "tag": "0036_orbit_wire_json",
+      "breakpoints": true
     }
   ]
 }

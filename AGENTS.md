@@ -142,8 +142,8 @@ separate product. **No extensions** (an explicit empty list in
   `merch_…` / `link_…` / `cs_…` lives in `public_id` and is what the wire
   contracts call `id`; `id` itself is the internal primary key that other tables
   reference — never the public one. Both ids
-  are on shipped contracts (`CheckoutSession.paymentIntentId` and
-  `WebhookDelivery.intentId` carry the `pi_…`), which is why
+  are on shipped contracts (`CheckoutSession.payment_intent_id` and
+  `WebhookDelivery.intent_id` carry the `pi_…`), which is why
   `listDeliveriesForMerchant` joins the public id in rather than the DTO
   emitting the internal one, and why `findIntentById` (by primary key) is a
   DIFFERENT function from `findIntentByPublicId`. The socket room is keyed by
@@ -254,6 +254,18 @@ read-modify-write race. The `- 1` is load-bearing: dropping it hands out an
 index one higher than the one recorded, and the address a payer is shown is not
 the address the next reservation avoids. The same statement returns the xpub, so
 the key the address derives from is the one the reservation was taken against.
+
+## The wire (ADR 0014)
+
+One Stripe-style wire, changed at the root — there is no legacy shape and no
+translation layer. Request bodies, query strings, responses, socket frames and
+webhook payloads are `snake_case`; every instant is integer Unix seconds
+(`lib/time.ts` `toUnix`); amounts are base-unit strings and currencies uppercase.
+Errors are `{error:{type, code?, param?, message, request_id}}` through
+`lib/http.ts` `sendError` / `sendValidationError`; 422 is never used. Request
+body schemas are strict: an unknown field is a 400 naming it. Internal
+TypeScript, repositories and columns stay camelCase; a jsonb column that stores
+a wire object stores the wire shape (migration `0036` converted them).
 
 ## Backend surface
 
