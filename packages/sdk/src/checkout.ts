@@ -35,12 +35,75 @@ export {
 } from './browser/mount';
 
 export {
+  mountCheckout,
+  mountCheckoutIn,
+  DEFAULT_CHECKOUT_URL,
+  type MountCheckoutOptions,
+  type EmbeddedCheckoutInstance,
+  type EmbeddedCheckoutEnvironment,
+} from './browser/embeddedCheckout';
+
+export {
+  createPeableElements,
+  createPeableElementsWith,
+  awaitGateway,
+  decidePayment,
+  decideSetup,
+  providerAmount,
+  type CreatePeableElementsOptions,
+  type PeableElements,
+  type PeableElement,
+  type PeableElementType,
+  type PeableElementOptions,
+  type PeableElementEvent,
+  type PeableConfirmError,
+  type PeablePaymentResult,
+  type PeableSetupResult,
+  type ConfirmOptions,
+  type ElementsDependencies,
+  type GatewayDecision,
+} from './browser/elements';
+
+export {
+  EMBED_MESSAGE_SOURCE,
+  EMBED_PROTOCOL_VERSION,
+  type EmbedFrameMessage,
+  type EmbedHostMessage,
+  type EmbedEnvelope,
+  sessionIdFromClientSecret,
+  normalizeOrigin,
+  buildEmbedUrl,
+  parseEmbedFragment,
+  envelope as embedEnvelope,
+  readFrameMessage,
+  readHostMessage,
+} from './browser/embedProtocol';
+
+export {
+  APPEARANCE_THEMES,
+  APPEARANCE_RULE_SELECTORS,
+  FONT_STACKS,
+  BORDER_RADII,
+  type Appearance,
+  type AppearanceTheme,
+  type AppearanceVariables,
+  type AppearanceRules,
+  resolveAppearance,
+  toProviderAppearance,
+  toCssVariables,
+  appearanceFromBranding,
+} from './browser/appearance';
+
+export {
   loadProviderSdk,
   type ProviderElement,
   type ProviderElements,
   type ProviderFieldEvent,
   type ProviderSdk,
   type ProviderConfirmResult,
+  type ProviderSetupConfirmResult,
+  type ProviderElementType,
+  type ProviderFactory,
 } from './browser/providerJs';
 
 // The card rail's wallets + payment fields, shared with `packages/checkout`

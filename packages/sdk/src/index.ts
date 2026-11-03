@@ -309,7 +309,14 @@ export type {
 } from '@peable.to/shared-types';
 export type { ServiceTokenProvider } from './core/serviceToken';
 
-export type { CreateCheckoutSessionOptions } from './resources/checkoutSessions';
+export type {
+  CreateCheckoutSessionOptions,
+  CheckoutSessionList,
+  CheckoutSessionListParams,
+  CheckoutLineItemList,
+  CheckoutLineItemListParams,
+} from './resources/checkoutSessions';
+export { CheckoutResource, CheckoutSessionsResource } from './resources/checkoutSessions';
 export type {
   CreatePaymentIntentOptions,
   PaymentIntentClientAction,
@@ -336,7 +343,33 @@ export type {
   ConnectedAccountFaircoinStatus,
   ConnectedAccountRail,
   CheckoutSession,
+  CheckoutSessionPublic,
+  CheckoutLineItem,
+  CheckoutLineItemParams,
+  CheckoutPriceDataParams,
+  CheckoutProductDataParams,
+  CheckoutCustomField,
+  CheckoutCustomFieldParams,
+  CheckoutCustomerDetails,
+  CheckoutShippingDetails,
+  CheckoutSessionMode,
+  CheckoutSessionStatus,
+  CheckoutSessionPaymentStatus,
+  CheckoutLocale,
+  CheckoutUiMode,
   CreateCheckoutSessionParams,
+  UpdateCheckoutSessionParams,
+  PaymentLink,
+  CreatePaymentLinkParams,
+  PaymentLinkLineItemParams,
+  PaymentLinkAfterCompletionParams,
+  MerchantBranding,
+  UpdateMerchantBrandingParams,
+  MerchantEmailSettings,
+  UpdateMerchantEmailSettingsParams,
+  CheckoutBranding,
+  BrandingFont,
+  BrandingBorderStyle,
   CreatePaymentIntentParams,
   CancelPaymentIntentParams,
   CapturePaymentIntentParams,
@@ -487,6 +520,11 @@ export {
   PAYOUT_WEEKLY_ANCHORS,
   RECONCILIATION_MISMATCH_KINDS,
 } from '@peable.to/shared-types';
+export {
+  MerchantBrandingResource,
+  MerchantEmailSettingsResource,
+  MerchantsResource,
+} from './resources/merchants';
 export { ChargesResource } from './resources/charges';
 export type { ChargeList, ChargeListParams } from './resources/charges';
 export type {
@@ -515,10 +553,13 @@ export type {
   TransferList,
 } from './resources/transfers';
 export type {
+  CreatePaymentLinkOptions,
+  PaymentLinkLineItemList,
   PaymentLinkListParams,
   PaymentLinkList,
   UpdatePaymentLinkParams,
 } from './resources/paymentLinks';
+export { PaymentLinksResource } from './resources/paymentLinks';
 export { WEBHOOK_SIGNATURE_HEADER, WebhooksResource } from './resources/webhooks';
 export {
   EventsResource,

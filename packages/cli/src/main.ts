@@ -410,19 +410,49 @@ const COMMANDS: Record<string, Command> = {
 
   'checkout_sessions create': {
     usage:
-      'peable checkout_sessions create --amount <base units> [--currency] [--rail] [--network] [--success-url <url>] [--cancel-url <url>] [--metadata key=value]… [--json]',
-    summary: 'Create a hosted checkout session',
+      'peable checkout_sessions create (--price <price_…>… | --amount <base units> [--currency FAIR|EUR|USD] [--name <text>]) [--quantity <n>] --success-url <url> [--cancel-url <url>] [--metadata key=value]… [--json]',
+    summary: 'Create a hosted checkout session over prices, or one inline line',
     options: {
-      ...PAYMENT_OPTIONS,
+      price: { type: 'string', multiple: true },
+      amount: { type: 'string' },
+      currency: { type: 'string' },
+      name: { type: 'string' },
+      quantity: { type: 'string' },
+      metadata: { type: 'string', multiple: true },
       'success-url': { type: 'string' },
       'cancel-url': { type: 'string' },
     },
     async run(context) {
       const { values } = context;
+      const quantity = Number(str(values, 'quantity') ?? '1');
+      if (!Number.isSafeInteger(quantity) || quantity < 1) {
+        throw new UsageError('--quantity must be a positive integer');
+      }
+      const prices = Array.isArray(values.price)
+        ? values.price.filter((value): value is string => typeof value === 'string')
+        : [];
+      const amount = str(values, 'amount');
+      if ((prices.length === 0) === (amount === undefined)) {
+        throw new UsageError('give --price (one or more) or --amount, not both');
+      }
+      const meta = metadata(values);
       const session = await (await context.peable()).checkout.sessions.create({
-        ...paymentParams(values),
-        ...(str(values, 'success-url') ? { success_url: str(values, 'success-url') } : {}),
+        line_items:
+          prices.length > 0
+            ? prices.map((price) => ({ price, quantity }))
+            : [
+                {
+                  price_data: {
+                    currency: (str(values, 'currency') ?? 'FAIR') as CurrencyCode,
+                    unit_amount: amount ?? '0',
+                    product_data: { name: str(values, 'name') ?? 'Test item' },
+                  },
+                  quantity,
+                },
+              ],
+        success_url: required(values, 'success-url'),
         ...(str(values, 'cancel-url') ? { cancel_url: str(values, 'cancel-url') } : {}),
+        ...(meta ? { metadata: meta } : {}),
       });
       context.io.out(render(session, context.json));
     },

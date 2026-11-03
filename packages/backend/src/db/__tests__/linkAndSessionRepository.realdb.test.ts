@@ -49,7 +49,6 @@ function linkParams(merchant: MerchantRow, overrides: Record<string, unknown> = 
     oxyAppId: merchant.oxyAppId,
     environment: merchant.environment,
     rail: 'faircoin' as const,
-    amount: '250000000',
     currency: 'FAIR' as const,
     network: merchant.network,
     metadata: {},
@@ -115,7 +114,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
 
     expect(link.active).toBe(true);
     expect(link.oxyAppId).toBe(merchant.oxyAppId);
-    expect(link.successUrl).toBeNull();
+    expect(link.afterCompletionType).toBe('hosted_confirmation');
+    expect(link.amount).toBeNull();
   });
 
   /**
@@ -191,13 +191,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
 
     const patched = await updatePaymentLink(must(suite).db, link.publicId, owner.id, {
       active: false,
-      successUrl: 'https://shop.example/thanks',
+      options: {
+        afterCompletionType: 'redirect',
+        afterCompletionUrl: 'https://shop.example/thanks',
+      },
     });
     if (typeof patched === 'string') throw new Error(`update answered ${patched}`);
     expect(patched.active).toBe(false);
-    expect(patched.successUrl).toBe('https://shop.example/thanks');
-    // The price is untouched: it is not in the patch type at all.
-    expect(patched.amount).toBe('250000000');
+    expect(patched.afterCompletionUrl).toBe('https://shop.example/thanks');
+    // The lines are untouched: they are not in the patch type at all.
+    expect(patched.amount).toBeNull();
   });
 
   it('filters a link page by active and excludes other merchants', async () => {
@@ -223,9 +226,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const session = await insertCheckoutSession(must(suite).db, sessionParams(merchant, intent.id));
 
     expect(session?.paymentIntentId).toBe(intent.id);
-    // The client secret lives on the intent and nowhere else — there is no
-    // column here to copy it into.
-    expect(Object.keys(session ?? {})).not.toContain('clientSecret');
+    // The session's own capability (Orbit Phase 3) — NOT the payment's secret,
+    // which stays on the intent alone.
+    expect(session?.clientSecret).toMatch(/_secret_[0-9a-f]{32}$/);
+    expect(session?.clientSecret).not.toBe(intent.clientSecret);
   });
 
   /**

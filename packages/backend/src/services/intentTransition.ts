@@ -37,6 +37,8 @@ import {
 import { ensureChargeForIntent } from '../db/payments/chargeRepository';
 import { emitIntentUpdateToActive } from '../realtime/socket';
 import { toPaymentIntentDTO } from '../lib/serialize';
+import { followIntentForCheckout } from './checkout/completion';
+import { enqueuePaymentReceipt, enqueueRefundNotice } from './email/outbox';
 import { recordEvent } from './events';
 import { kickWebhookOutbox } from './webhookOutbox';
 
@@ -180,6 +182,10 @@ export async function recordIntentEvent(
   previousStatus?: PaymentIntentStatus,
 ): Promise<void> {
   const object = toPaymentIntentDTO(row);
+  // The checkout session wrapping this payment follows it, and a succeeded
+  // payment owes its receipt — both in this transaction (Orbit Phase 3).
+  await followIntentForCheckout(tx, row);
+  if (row.status === 'succeeded') await enqueuePaymentReceipt(tx, row);
   for (const type of intentEventsFor(row)) {
     await recordEvent(tx, {
       merchantId: row.merchantId,
@@ -227,6 +233,8 @@ export async function recordRefundEvent(
     account: row.connectedAccountPublicId,
     paymentIntentId: row.id,
   });
+  // A refund that succeeded owes the payer a notice (Orbit Phase 3).
+  if (refund.status === 'succeeded') await enqueueRefundNotice(tx, row, refund.id);
 }
 
 /** `charge.refunded`: the charge whose `amount_refunded` just moved. */

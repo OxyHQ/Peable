@@ -12,7 +12,15 @@
 // carry any of the merchant-authed code `checkout.ts` warns against into the
 // browser bundle.
 import { io, type Socket } from 'socket.io-client';
-import type { PaymentIntent } from '@peable.to/shared-types';
+import type {
+  CheckoutSessionPublic,
+  CreatePaymentLinkSessionParams,
+  PaymentIntent,
+  PaymentLinkSessionStart,
+  PublicPaymentLink,
+  SetupIntent,
+  UpdateCheckoutSessionPublicParams,
+} from '@peable.to/shared-types';
 import { errorFromResponse, PeableApiError, PeableInvalidRequestError } from '../core/errors';
 
 const DEFAULT_GATEWAY_URL = 'https://api.peable.to';
@@ -89,6 +97,42 @@ export interface PeableCheckoutClient {
    *   handed one would render a card form over a finished payment.
    */
   getClientAction(id: string, clientSecret: string): Promise<PeableClientAction>;
+  /**
+   * `GET /v1/checkout_sessions/:id/public` — the session as the payer sees it.
+   * `clientSecret` is the session's (`cs_…_secret_…`), sent as a header.
+   */
+  getCheckoutSession(id: string, clientSecret: string): Promise<CheckoutSessionPublic>;
+  /** `POST /v1/checkout_sessions/:id/public` — quantities, promotion code, details. */
+  updateCheckoutSession(
+    id: string,
+    clientSecret: string,
+    params: UpdateCheckoutSessionPublicParams,
+  ): Promise<CheckoutSessionPublic>;
+  /**
+   * `POST /v1/checkout_sessions/:id/public/confirm` — lock the order and create
+   * its payment (or setup). Resolving is NOT completion: the session completes
+   * when the gateway says so, which `getCheckoutSession` reports.
+   */
+  confirmCheckoutSession(id: string, clientSecret: string): Promise<CheckoutSessionPublic>;
+  /** `GET /v1/setup_intents/:id` with the payer's `client_secret` — the row as the gateway holds it. */
+  getSetupIntent(id: string, clientSecret: string): Promise<SetupIntent>;
+  /**
+   * `POST /v1/setup_intents/:id/client_action` — the provider credential to
+   * confirm a SetupIntent with, same rules as {@link getClientAction}.
+   */
+  getSetupClientAction(id: string, clientSecret: string): Promise<PeableClientAction>;
+  /** `GET /v1/payment_links/:id/public` — what a link shows before checkout starts. */
+  getPaymentLink(id: string): Promise<PublicPaymentLink>;
+  /**
+   * `POST /v1/payment_links/:id/checkout_sessions` — start checkout from a link.
+   * `idempotencyKey` (a UUID) is required for a contribution link, so a retry
+   * after a lost answer returns the same session instead of a second one.
+   */
+  startPaymentLinkSession(
+    id: string,
+    params?: CreatePaymentLinkSessionParams,
+    idempotencyKey?: string,
+  ): Promise<PaymentLinkSessionStart>;
 }
 
 export interface CreatePeableCheckoutOptions {
@@ -301,5 +345,73 @@ export function createPeableCheckout(opts: CreatePeableCheckoutOptions = {}): Pe
     };
   }
 
-  return { getPaymentIntent, subscribe, submitTx, getClientAction };
+  async function call<T>(
+    path: string,
+    init: {
+      method?: 'GET' | 'POST';
+      clientSecret?: string;
+      body?: unknown;
+      idempotencyKey?: string;
+    },
+  ): Promise<T> {
+    const headers: Record<string, string> = {};
+    if (init.clientSecret) headers['X-Peable-Client-Secret'] = init.clientSecret;
+    if (init.body !== undefined) headers['Content-Type'] = 'application/json';
+    if (init.idempotencyKey) headers['Idempotency-Key'] = init.idempotencyKey;
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}${path}`, {
+        method: init.method ?? 'GET',
+        headers,
+        ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
+      });
+    } catch (cause) {
+      throw new PeableApiError(
+        `Failed to reach the Peable Gateway at ${baseUrl}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+    const body = await readJsonBody(response);
+    if (!response.ok)
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
+    return body as T;
+  }
+
+  const sessionPath = (id: string) => `/v1/checkout_sessions/${encodeURIComponent(id)}/public`;
+
+  return {
+    getPaymentIntent,
+    subscribe,
+    submitTx,
+    getClientAction,
+    getCheckoutSession: (id, clientSecret) =>
+      call<CheckoutSessionPublic>(sessionPath(id), { clientSecret }),
+    updateCheckoutSession: (id, clientSecret, params) =>
+      call<CheckoutSessionPublic>(sessionPath(id), { method: 'POST', clientSecret, body: params }),
+    confirmCheckoutSession: (id, clientSecret) =>
+      call<CheckoutSessionPublic>(`${sessionPath(id)}/confirm`, {
+        method: 'POST',
+        clientSecret,
+        body: {},
+      }),
+    getSetupIntent: (id, clientSecret) =>
+      call<SetupIntent>(`/v1/setup_intents/${encodeURIComponent(id)}`, { clientSecret }),
+    getSetupClientAction: (id, clientSecret) =>
+      call<PeableClientAction>(`/v1/setup_intents/${encodeURIComponent(id)}/client_action`, {
+        method: 'POST',
+        clientSecret,
+      }),
+    getPaymentLink: (id) =>
+      call<PublicPaymentLink>(`/v1/payment_links/${encodeURIComponent(id)}/public`, {}),
+    startPaymentLinkSession: (id, params = {}, idempotencyKey) =>
+      call<PaymentLinkSessionStart>(
+        `/v1/payment_links/${encodeURIComponent(id)}/checkout_sessions`,
+        {
+          method: 'POST',
+          body: params,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        },
+      ),
+  };
 }

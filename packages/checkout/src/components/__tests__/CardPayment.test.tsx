@@ -91,6 +91,7 @@ mock.module('../../lib/providerJs', () => ({
       confirmPayment: confirmMock,
     };
   },
+  confirmSetupOf: () => null,
   resetProviderSdkForTesting: () => undefined,
 }));
 
@@ -358,4 +359,14 @@ test('offers the form again after a redirect the bank failed', async () => {
   await waitFor(() => {
     expect(mounted).toHaveLength(2);
   });
+});
+
+/** The merchant's branding reaches the provider's fields: one appearance for wallets and form. */
+test('hands the branding appearance to the provider elements', async () => {
+  const appearance = { theme: 'stripe', variables: { colorPrimary: '#ff0000' } };
+  render(<CardPayment intent={cardIntent()} providerAppearance={appearance} />);
+  await waitFor(() => {
+    expect(mounted).toHaveLength(2);
+  });
+  expect(elementsOptions[0]).toEqual({ clientSecret: 'pi_stripe_1_secret_live', appearance });
 });

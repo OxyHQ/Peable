@@ -40,6 +40,7 @@ import {
   gatewayDb,
   seedIntent,
   seedLink,
+  seedPrice,
   seedMerchant,
   seedSession,
   testXpubFor,
@@ -518,7 +519,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
       const intent = await seedIntent(merchant);
       const session = await seedSession(merchant, intent);
       const refusals = [
-        `/v1/checkout_sessions/${session.publicId}?expand[]=customer`,
+        `/v1/checkout_sessions/${session.publicId}?expand[]=line_items`,
         `/v1/checkout_sessions/${session.publicId}?expand[]=payment_intent.address`,
         `/v1/checkout_sessions/${session.publicId}?expand[]=payment_intent..connected_account`,
         `/v1/checkout_sessions/${session.publicId}?expand[]=a.b.c.d.e`,
@@ -611,17 +612,17 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
 
     test('creates refuse oversized metadata and drop empty values', async () => {
       const fiftyOne = Object.fromEntries(Array.from({ length: 51 }, (_, i) => [`k${i}`, 'v']));
+      const price = await seedPrice(merchant, { currency: 'FAIR' });
+      const lineItems = [{ price: price.publicId, quantity: 1 }];
       const refused = await call('POST', '/v1/payment_links', {
-        amount: '1000',
-        network: 'testnet',
+        line_items: lineItems,
         metadata: fiftyOne,
       });
       expect(refused.status).toBe(400);
       expect(refused.json.error?.param).toBe('metadata');
 
       const created = await call('POST', '/v1/payment_links', {
-        amount: '1000',
-        network: 'testnet',
+        line_items: lineItems,
         metadata: { kept: 'a', empty: '' },
       });
       expect(created.status).toBe(201);

@@ -198,3 +198,65 @@ export async function updatePromotionCode(
     throw error;
   }
 }
+
+/** The merchant's ACTIVE code with this spelling (case-insensitive) — what a payer typed. */
+export async function findActivePromotionCodeByCode(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  code: string,
+): Promise<PromotionCodeRow | null> {
+  const [row] = await db
+    .select(PROMOTION_CODE_COLUMNS)
+    .from(promotionCodes)
+    .where(
+      and(
+        eq(promotionCodes.merchantId, merchantId),
+        eq(promotionCodes.active, true),
+        sql`lower(${promotionCodes.code}) = lower(${code})`,
+      ),
+    );
+  return row ? toPromotionCodeRow(row) : null;
+}
+
+export async function findPromotionCodeById(
+  db: DatabaseOrTransaction,
+  id: string,
+): Promise<PromotionCodeRow | null> {
+  const [row] = await db
+    .select(PROMOTION_CODE_COLUMNS)
+    .from(promotionCodes)
+    .where(eq(promotionCodes.id, id));
+  return row ? toPromotionCodeRow(row) : null;
+}
+
+/** Lock a code by its INTERNAL id (a session's reservation check). */
+export async function lockPromotionCodeById(
+  tx: Transaction,
+  id: string,
+): Promise<PromotionCodeRow | null> {
+  const [row] = await tx
+    .select(PROMOTION_CODE_COLUMNS)
+    .from(promotionCodes)
+    .where(eq(promotionCodes.id, id))
+    .for('update', { of: promotionCodes });
+  return row ? toPromotionCodeRow(row) : null;
+}
+
+/**
+ * Count one redemption at checkout completion — ONE statement, the bound in
+ * the `UPDATE` (see `redeemCoupon`). Not gated on `active` or `expires_at`: a
+ * code valid when the payer confirmed is honoured for the payment it priced.
+ */
+export async function redeemPromotionCode(tx: DatabaseOrTransaction, id: string): Promise<boolean> {
+  const rows = await tx
+    .update(promotionCodes)
+    .set({ timesRedeemed: sql`${promotionCodes.timesRedeemed} + 1` })
+    .where(
+      and(
+        eq(promotionCodes.id, id),
+        sql`(${promotionCodes.maxRedemptions} is null or ${promotionCodes.timesRedeemed} < ${promotionCodes.maxRedemptions})`,
+      ),
+    )
+    .returning({ id: promotionCodes.id });
+  return rows.length > 0;
+}

@@ -1,16 +1,16 @@
 /* Peable checkout — hand-written CSS, no Tailwind/Bloom. This app is served
  * to anonymous payers (checkout.peable.to); bundle weight and first paint matter
- * more than a shared design system here (spec §6). Brand token VALUES are
- * copied in as CSS custom properties rather than importing Bloom's theme. */
+ * more than a shared design system here (spec §6).
+ *
+ * Mobile first. The merchant's branding arrives as CSS custom properties on
+ * `.checkout-shell` (`lib/branding.ts`, from the SDK's appearance module):
+ * `--peable-color-primary`, `--peable-color-accent`, `--peable-font-family`,
+ * `--peable-border-radius`, `--peable-spacing-unit`. Nothing else here is
+ * merchant-controlled, and every value they can hold was validated (a colour,
+ * a length, a font stack from a fixed list). */
 
 :root {
-  /* Canonical Oxy purple (Bloom preset, HSL 277 66% 56%). */
   --oxy-purple: #c46ede;
-  /* Slightly-lighter tint for sufficient contrast against dark backgrounds —
-   * a straight darker shade would lose against --bg in dark mode. Task 9
-   * finalizes the visual. */
-  --oxy-purple-dark: #cd84e3;
-  --oxy-success: #16a34a;
   --oxy-warning: #d97706;
   --oxy-danger: #dc2626;
 
@@ -18,7 +18,8 @@
   --bg-elevated: #f7f7fb;
   --text: #17181c;
   --text-muted: #5c5f6a;
-  --border: #e4e4ec;
+  --border: #d9d9e3;
+  --focus: #1f6feb;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,7 +28,7 @@
     --bg-elevated: #1b1b20;
     --text: #f2f2f5;
     --text-muted: #a3a5b0;
-    --border: #2a2a31;
+    --border: #34343c;
   }
 }
 
@@ -38,70 +39,491 @@
 html,
 body,
 #root {
-  height: 100%;
+  min-height: 100%;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   background: var(--bg);
   color: var(--text);
+  line-height: 1.45;
+}
+
+input,
+select {
+  width: 100%;
+  min-height: 42px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 15px;
+}
+
+input[type="checkbox"] {
+  width: 18px;
+  min-height: 18px;
+  accent-color: var(--primary);
+}
+
+input[aria-invalid="true"],
+select[aria-invalid="true"] {
+  border-color: var(--oxy-danger);
+}
+
+input[readonly] {
+  background: var(--bg-elevated);
+  color: var(--text-muted);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+:focus-visible {
+  outline: 2px solid var(--peable-color-primary, var(--focus));
+  outline-offset: 2px;
 }
 
 .checkout-page {
-  min-height: 100%;
+  min-height: 100vh;
   display: flex;
-  align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 16px;
 }
 
 .checkout-page__pending {
   color: var(--text-muted);
   font-size: 15px;
   text-align: center;
+  margin-top: 48px;
 }
 
-.checkout-view {
+/* ── The shell ─────────────────────────────────────────────────────────── */
+
+.checkout-shell {
+  --radius: var(--peable-border-radius, 8px);
+  --space: var(--peable-spacing-unit, 4px);
+  --primary: var(--peable-color-primary, var(--oxy-purple));
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 20px;
+  gap: calc(var(--space) * 5);
   width: 100%;
-  max-width: 360px;
+  max-width: 960px;
+  font-family: var(--peable-font-family, inherit);
 }
 
-.merchant-identity {
+.checkout-shell--embedded {
+  max-width: none;
+  padding: 0;
+}
+
+.embed-root {
+  padding: 8px;
+}
+
+.back-link {
+  align-self: flex-start;
+  color: var(--text-muted);
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.back-link:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.brand-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
 }
 
-.merchant-identity__avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
+.brand-header__identity {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.brand-header__icon {
+  width: 36px;
+  height: 36px;
+  border-radius: min(var(--radius), 50%);
   object-fit: cover;
 }
 
-.merchant-identity__logo {
-  display: block;
-  max-width: 180px;
-  max-height: 32px;
+.brand-header__logo {
+  max-height: 40px;
+  max-width: 220px;
   object-fit: contain;
 }
 
-.merchant-identity__name {
-  margin: 0;
-  color: var(--text);
+.brand-header__name {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.brand-header__badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--oxy-warning) 18%, transparent);
+  color: var(--oxy-warning);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.checkout-columns {
+  display: grid;
+  gap: calc(var(--space) * 6);
+}
+
+@media (min-width: 840px) {
+  .checkout-columns {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+    align-items: start;
+  }
+  .checkout-columns__summary {
+    position: sticky;
+    top: 16px;
+  }
+}
+
+.section-heading {
+  margin: 0 0 calc(var(--space) * 3);
   font-size: 15px;
   font-weight: 600;
 }
 
-.merchant-identity__description {
+.checkout-footer {
+  color: var(--text-muted);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* ── Order summary ─────────────────────────────────────────────────────── */
+
+.order-summary {
+  padding: calc(var(--space) * 4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+}
+
+.line-items {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 3);
+}
+
+.line-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.line-item__image {
+  width: 44px;
+  height: 44px;
+  border-radius: min(var(--radius), 12px);
+  object-fit: cover;
+}
+
+.line-item__body {
+  grid-column: 2;
+}
+
+.line-item__name {
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.line-item__unit,
+.line-item__qty {
   margin: 2px 0 0;
   color: var(--text-muted);
   font-size: 13px;
+}
+
+.line-item__amount {
+  grid-column: 3;
+  margin: 0;
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+}
+
+.quantity {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.quantity__step {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 16px;
+  cursor: pointer;
+}
+
+.quantity__step:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.quantity__input {
+  width: 64px;
+  text-align: center;
+}
+
+.promo {
+  margin-top: calc(var(--space) * 4);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.promo--applied {
+  flex-direction: row;
+  align-items: center;
+  gap: 12px;
+}
+
+.promo__code {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 14%, transparent);
+  font-weight: 600;
+}
+
+.promo__row {
+  display: flex;
+  gap: 8px;
+}
+
+.promo__row input {
+  flex: 1;
+}
+
+.totals {
+  margin: calc(var(--space) * 4) 0 0;
+  padding-top: calc(var(--space) * 3);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 14px;
+}
+
+.totals__row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.totals__row dt,
+.totals__row dd {
+  margin: 0;
+}
+
+.totals__row--total {
+  font-size: 17px;
+  font-weight: 700;
+}
+
+/* ── Forms ─────────────────────────────────────────────────────────────── */
+
+.checkout-form,
+.details,
+.details__section,
+.address {
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--space) * 3);
+}
+
+.details__section {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.details__row,
+.address__row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: calc(var(--space) * 3);
+}
+
+@media (min-width: 480px) {
+  .details__row,
+  .address__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+}
+
+.field label {
+  font-weight: 500;
+}
+
+.field__optional {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.field--checkbox {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.field__error,
+.checkout-error {
+  margin: 0;
+  color: var(--oxy-danger);
+  font-size: 13px;
+}
+
+.field--checkbox .field__error {
+  flex-basis: 100%;
+}
+
+.checkout-error {
+  padding: 10px 12px;
+  border-radius: var(--radius, 8px);
+  background: color-mix(in srgb, var(--oxy-danger) 10%, transparent);
+}
+
+.checkout-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.checkout-button {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 20px;
+  border: none;
+  border-radius: var(--radius, 12px);
+  background: var(--primary, var(--oxy-purple));
+  color: #ffffff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.checkout-button:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.checkout-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.secondary-button {
+  min-height: 42px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 8px);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--primary);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* ── Results ───────────────────────────────────────────────────────────── */
+
+.checkout-result {
+  padding: calc(var(--space) * 8) calc(var(--space) * 5);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  text-align: center;
+}
+
+.checkout-result__title {
+  margin: 0 0 8px;
+  font-size: 22px;
+}
+
+.checkout-result__message {
+  white-space: pre-line;
+}
+
+.contribution__purpose {
+  margin: 0;
+  font-size: 16px;
+}
+
+.contribution__amount {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 700;
+}
+
+/* ── Paying one payment ────────────────────────────────────────────────── */
+
+.checkout-view {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.billing-quote p {
+  margin: 0 0 4px;
+  font-size: 14px;
 }
 
 .pay-with-peable {
@@ -114,26 +536,22 @@ body {
 
 .pay-with-peable__amount {
   margin: 0;
-  color: var(--text);
-  font-size: 40px;
+  font-size: 32px;
   font-weight: 700;
   letter-spacing: -0.02em;
 }
 
 .pay-with-peable__button {
   width: 100%;
-  padding: 14px 20px;
+  min-height: 48px;
+  padding: 12px 20px;
   border: none;
-  border-radius: 12px;
-  background: var(--oxy-purple);
+  border-radius: var(--radius, 12px);
+  background: var(--primary, var(--oxy-purple));
   color: #ffffff;
   font-size: 16px;
   font-weight: 600;
   cursor: pointer;
-}
-
-.pay-with-peable__button:hover {
-  background: var(--oxy-purple-dark);
 }
 
 .pay-with-peable__qr {
@@ -143,6 +561,7 @@ body {
   gap: 10px;
 }
 
+/* A QR code is a scan target, not themed UI: always black on white. */
 .qr {
   padding: 12px;
   background: #ffffff;
@@ -156,6 +575,11 @@ body {
   font-size: 13px;
 }
 
+.display-currency {
+  font-size: 13px;
+  text-align: center;
+}
+
 .status-panel {
   display: flex;
   flex-direction: column;
@@ -163,7 +587,7 @@ body {
   gap: 8px;
   width: 100%;
   padding: 28px 20px;
-  border-radius: 16px;
+  border-radius: var(--radius, 16px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
   text-align: center;
@@ -173,9 +597,15 @@ body {
   width: 28px;
   height: 28px;
   border: 3px solid var(--border);
-  border-top-color: var(--oxy-purple);
+  border-top-color: var(--primary, var(--oxy-purple));
   border-radius: 50%;
   animation: status-panel-spin 0.8s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-panel__spinner {
+    animation-duration: 3s;
+  }
 }
 
 @keyframes status-panel-spin {
@@ -197,7 +627,7 @@ body {
 }
 
 .status-panel--primary .status-panel__icon {
-  background: var(--oxy-purple);
+  background: var(--primary, var(--oxy-purple));
 }
 
 .status-panel--warning .status-panel__icon {
@@ -210,7 +640,6 @@ body {
 
 .status-panel__title {
   margin: 4px 0 0;
-  color: var(--text);
   font-size: 16px;
   font-weight: 600;
 }
@@ -221,27 +650,10 @@ body {
   font-size: 13px;
 }
 
-.status-panel__cta {
-  margin-top: 8px;
-  padding: 10px 24px;
-  border-radius: 10px;
-  background: var(--oxy-purple);
-  color: #ffffff;
-  font-size: 14px;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.status-panel__cta:hover {
-  background: var(--oxy-purple-dark);
-}
-
 /* ── The card surface ─────────────────────────────────────────────────────
- *
- * The FIELDS are the provider's own iframe and this file cannot style their
- * inside — only the box they sit in. That separation is the point: the card
- * number never enters this document, so it never enters this bundle's scope.
- */
+ * The FIELDS are the provider's own iframes and this file cannot style their
+ * inside — only the box they sit in. Their look comes from the appearance
+ * handed to the provider. */
 .card-payment {
   display: flex;
   flex-direction: column;
@@ -249,9 +661,6 @@ body {
 }
 
 .card-payment__fields {
-  /* A floor rather than a fixed height: the provider's iframe grows when it
-   * offers more payment methods, and a fixed height would clip them. The floor
-   * stops the Pay button jumping up the page while the form loads. */
   min-height: 180px;
 }
 
@@ -285,29 +694,8 @@ body {
 .card-payment__error {
   margin: 0;
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: var(--radius, 10px);
   background: color-mix(in srgb, var(--oxy-danger) 12%, transparent);
   color: var(--oxy-danger);
   font-size: 13px;
-}
-
-.card-payment__button {
-  width: 100%;
-  padding: 14px 20px;
-  border: none;
-  border-radius: 12px;
-  background: var(--oxy-purple);
-  color: #ffffff;
-  font-size: 16px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.card-payment__button:hover:not(:disabled) {
-  background: var(--oxy-purple-dark);
-}
-
-.card-payment__button:disabled {
-  opacity: 0.6;
-  cursor: progress;
 }

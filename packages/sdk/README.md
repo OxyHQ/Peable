@@ -278,6 +278,173 @@ await peable.promotionCodes.create({ coupon: 'LAUNCH20', code: 'LAUNCH', max_red
   and promotion codes are archived, never deleted, so there is no
   `price.deleted` or `promotion_code.deleted`.
 
+### Checkout Sessions v2 (Orbit Phase 3)
+
+A session is an ORDER — line items, a discount, tax and what to collect — that
+the payer completes on Peable's hosted checkout (`session.url`) or the embedded
+one (`session.client_secret`). **No payment exists until the payer confirms**:
+`payment_intent` (or `setup_intent` in `setup` mode) is `null` until then, and is
+created with the amount the session computed.
+
+```ts
+const session = await peable.checkout.sessions.create(
+  {
+    mode: 'payment',
+    line_items: [
+      { price: 'price_…', quantity: 1, adjustable_quantity: { enabled: true, maximum: 5 } },
+      {
+        price_data: { currency: 'EUR', unit_amount: '500', product_data: { name: 'Gift wrap' } },
+        quantity: 1,
+      },
+    ],
+    allow_promotion_codes: true, // or discounts: [{ promotion_code: 'promo_…' }]
+    customer_email: 'ana@example.com',
+    billing_address_collection: 'required',
+    shipping_address_collection: { allowed_countries: ['ES', 'PT', 'FR'] },
+    phone_number_collection: { enabled: true },
+    tax_id_collection: { enabled: true },
+    custom_fields: [{ key: 'engraving', label: { type: 'custom', custom: 'Engraving' }, type: 'text' }],
+    consent_collection: { terms_of_service: 'required' },
+    automatic_tax: { enabled: true },
+    locale: 'es',
+    success_url: 'https://shop.example/thanks?session={CHECKOUT_SESSION_ID}',
+    cancel_url: 'https://shop.example/cart',
+    client_reference_id: order.id,
+  },
+  { idempotencyKey: `checkout:${order.id}` },
+);
+// redirect the payer to session.url
+```
+
+- `mode`: `payment`, `setup` (save a card; give `currency` and a `customer`, no
+  `line_items`) or `subscription` — the last answers 400 `param: 'mode'` until the
+  native billing engine fulfils it; nothing is faked.
+- Amounts are base-unit strings: `amount_subtotal`, `amount_total`,
+  `total_details.{amount_discount, amount_tax, amount_shipping}`. All line items
+  share one currency, and the currency decides the rail (`FAIR` → FairCoin).
+- `status` is `open` → `complete` | `expired`; `payment_status` is `paid`,
+  `unpaid` (a manual capture, or a FairCoin payment still confirming —
+  `checkout.session.async_payment_succeeded|failed` follows) or
+  `no_payment_required`. **Fulfil on `checkout.session.completed`** (or by
+  retrieving the session), never on the payer arriving at `success_url`.
+- `automatic_tax` is Peable Tax with the collected address as location evidence;
+  a covered sale it cannot price fails closed and the payer cannot pay.
+- `expires_at` is 30 minutes to 24 hours from now (default 24 h).
+  `expire(id)` ends an open session now and cancels its unpaid payment.
+
+```ts
+await peable.checkout.sessions.expire(session.id);
+for await (const item of peable.checkout.sessions.listLineItems(session.id, {
+  expand: ['data.price'],
+})) {
+  console.log(item.description, item.quantity, item.amount_total);
+}
+await peable.checkout.sessions.list({ payment_link: 'link_…', status: 'complete' });
+```
+
+Events: `checkout.session.completed`, `checkout.session.expired`,
+`checkout.session.async_payment_succeeded`, `checkout.session.async_payment_failed`.
+
+### Payment Links v2
+
+A link is a shareable URL over catalog **prices**. A payer visiting `link.url`
+starts a Checkout Session with its line items and options — a link never mints a
+payment on its own.
+
+```ts
+const link = await peable.paymentLinks.create({
+  line_items: [{ price: 'price_…', quantity: 1, adjustable_quantity: { enabled: true } }],
+  allow_promotion_codes: true,
+  shipping_address_collection: { allowed_countries: ['ES'] },
+  after_completion: { type: 'hosted_confirmation', hosted_confirmation: { custom_message: '¡Gracias!' } },
+  // or { type: 'redirect', redirect: { url: 'https://shop.example/thanks?session={CHECKOUT_SESSION_ID}' } }
+  restrictions: { completed_sessions: { limit: 100 } },
+});
+await peable.paymentLinks.update(link.id, { active: false });
+const items = await peable.paymentLinks.listLineItems(link.id);
+```
+
+Line items are fixed once a link exists (create another link to change them);
+every other option can be updated. Events: `payment_link.created|updated`.
+
+### Branding and customer emails
+
+```ts
+await peable.merchants.branding.update({
+  primary_color: '#0A7CFF',
+  accent_color: '#0B1F33',
+  font: 'inter', // a fixed list of system font stacks
+  border_style: 'rounded', // rounded | rectangular | pill
+  use_avatar_as_icon: true,
+  logo: 'file_…', // a File of purpose business_logo (peable.files.create); null removes it
+});
+await peable.merchants.emailSettings.update({
+  payment_receipts: true,
+  refund_notices: true,
+  checkout_confirmations: false,
+  support_email: 'help@shop.example',
+});
+```
+
+Branding is applied to the hosted checkout, the embedded checkout and Peable's
+receipts. `null` resets a field to Peable's default.
+
+### Embedded checkout and Elements (`@peable.to/sdk/checkout`)
+
+Create the session with `ui_mode: 'embedded'` and hand its `client_secret` to the
+browser. The checkout is framed from `checkout.peable.to`; messages are checked
+for origin and source on both sides, and the secret travels only in the frame's
+URL fragment.
+
+```ts
+import { PeableCheckout } from '@peable.to/sdk/checkout';
+
+const checkout = PeableCheckout.mountCheckout('#checkout', {
+  clientSecret, // cs_…_secret_…
+  appearance: { theme: 'night', variables: { colorPrimary: '#0A7CFF' } },
+  locale: 'es',
+  onComplete: ({ sessionId, successUrl }) => showThanks(sessionId),
+});
+// checkout.updateAppearance({...}); checkout.destroy();
+```
+
+`onComplete` fires only after the gateway says the session is complete; without
+it the page navigates to the session's `success_url`. Still fulfil server-side.
+
+Elements mount the card provider's own secure fields (card data never touches
+your page or Peable) inside Peable chrome, styled by one `appearance`:
+
+```ts
+import { createPeableElements } from '@peable.to/sdk/checkout';
+
+const elements = createPeableElements({
+  publishableKey, // or paymentIntent: { id, client_secret } to fetch it
+  amount: '2700',
+  currency: 'EUR',
+  appearance: {
+    theme: 'peable', // 'peable' | 'night' | 'flat'
+    variables: { colorPrimary: '#0A7CFF', borderRadius: '8px', fontFamily: 'Inter, sans-serif' },
+    rules: { '.Input': { boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)' } },
+  },
+});
+await elements.create('expressCheckout').mount('#wallets');
+await elements.create('payment', { label: 'Card' }).mount('#card');
+await elements.create('address', { provider: { mode: 'billing' } }).mount('#address');
+
+const result = await elements.confirmPayment({ paymentIntent: { id, client_secret } });
+if ('error' in result) showError(result.error.message);
+else if (result.status === 'pending') keepWatching(result.paymentIntent);
+else showPaid(result.paymentIntent);
+```
+
+`confirmPayment` / `confirmSetup` confirm with the provider and then **wait for
+the gateway's own status** (realtime, with a REST poll beside it): they resolve
+`succeeded`, `processing` or `requires_capture` only when the gateway says so, an
+error for a fresh decline, and `pending` if the gateway has not decided within
+`timeoutMs` (default 60 s). Invalid `appearance` values (anything that is not a
+colour, a length, a font list, or a rule property from a fixed set) are dropped,
+never passed to CSS or the provider.
+
 ### Own Oxy applications: shared workload transport
 
 ```ts

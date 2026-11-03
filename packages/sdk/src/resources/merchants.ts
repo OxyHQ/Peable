@@ -1,4 +1,10 @@
-import type { Merchant } from '@peable.to/shared-types';
+import type {
+  Merchant,
+  MerchantBranding,
+  MerchantEmailSettings,
+  UpdateMerchantBrandingParams,
+  UpdateMerchantEmailSettingsParams,
+} from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
 
 /**
@@ -64,8 +70,50 @@ export interface UpdateMerchantParams {
   description?: string | null;
 }
 
-export class MerchantsResource {
+/**
+ * How your hosted and embedded checkout and Peable's receipts look. Colours
+ * are `#rrggbb`, the font and border style come from fixed safe lists, and the
+ * logo is your `business_logo` File (`peable.files.create`, purpose
+ * `business_logo`) — the same field `merchants.update({ business_logo })` sets.
+ */
+export class MerchantBrandingResource {
   constructor(private readonly client: RestClient) {}
+
+  retrieve(): Promise<MerchantBranding> {
+    return this.client.request<MerchantBranding>('GET', '/v1/merchants/me/branding');
+  }
+
+  /** `null` resets a field to Peable's default; omitting it leaves it alone. */
+  update(params: UpdateMerchantBrandingParams): Promise<MerchantBranding> {
+    return this.client.request<MerchantBranding>('POST', '/v1/merchants/me/branding', {
+      body: params,
+    });
+  }
+}
+
+/** Which customer emails Peable sends for you: receipts, refund notices, checkout confirmations. */
+export class MerchantEmailSettingsResource {
+  constructor(private readonly client: RestClient) {}
+
+  retrieve(): Promise<MerchantEmailSettings> {
+    return this.client.request<MerchantEmailSettings>('GET', '/v1/merchants/me/email_settings');
+  }
+
+  update(params: UpdateMerchantEmailSettingsParams): Promise<MerchantEmailSettings> {
+    return this.client.request<MerchantEmailSettings>('POST', '/v1/merchants/me/email_settings', {
+      body: params,
+    });
+  }
+}
+
+export class MerchantsResource {
+  readonly branding: MerchantBrandingResource;
+  readonly emailSettings: MerchantEmailSettingsResource;
+
+  constructor(private readonly client: RestClient) {
+    this.branding = new MerchantBrandingResource(client);
+    this.emailSettings = new MerchantEmailSettingsResource(client);
+  }
 
   register(
     params: RegisterMerchantParams = {},

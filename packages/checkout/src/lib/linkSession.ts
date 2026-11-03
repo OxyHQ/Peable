@@ -1,89 +1,67 @@
-// Reuse-if-open for `/l/:linkId` (spec §6): a payer who reloads or re-visits
-// a payment link should land back on the SAME in-flight `PaymentIntent`
-// rather than minting a new receive address every time. The server always
-// mints fresh on request — this module is what decides, client-side,
-// whether the page even needs to ask for a fresh one.
-import { getPaymentIntent } from './intentClient';
-import { canStillBePaid, type PaymentIntent } from '@peable.to/shared-types';
+// Reuse-if-open for `/l/:linkId`: a payer who reloads or re-visits a payment
+// link lands back on the SAME open checkout session rather than starting a new
+// one each time. Only an id and the session's own secret are remembered, in
+// this tab's sessionStorage; whether the session is still open is asked of the
+// gateway, never assumed.
+import { getCheckoutSession } from './sessionClient';
 
-export interface OpenIntentRef {
+export interface OpenSessionRef {
   id: string;
   clientSecret: string;
 }
 
-function storageKey(linkId: string): string {
-  return `peable:link-intent:${linkId}`;
-}
+const storageKey = (linkId: string) => `peable:link-session:${linkId}`;
 
-/** Raw sessionStorage read — does NOT check whether the referenced intent is
- * still open; callers that need that go through `getReusableIntentForLink`. */
-export function getOpenIntentForLink(linkId: string): OpenIntentRef | null {
-  const raw = sessionStorage.getItem(storageKey(linkId));
-  if (!raw) return null;
-  let parsed: unknown;
+export function getRememberedSession(linkId: string): OpenSessionRef | null {
+  let raw: string | null;
   try {
-    parsed = JSON.parse(raw);
+    raw = sessionStorage.getItem(storageKey(linkId));
   } catch {
     return null;
   }
-  if (
-    typeof parsed === 'object' &&
-    parsed !== null &&
-    typeof (parsed as { id?: unknown }).id === 'string' &&
-    typeof (parsed as { clientSecret?: unknown }).clientSecret === 'string'
-  ) {
-    return parsed as OpenIntentRef;
+  if (!raw) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      typeof (parsed as { id?: unknown }).id === 'string' &&
+      typeof (parsed as { clientSecret?: unknown }).clientSecret === 'string'
+    ) {
+      return parsed as OpenSessionRef;
+    }
+  } catch {
+    // A corrupt entry is treated as none.
   }
   return null;
 }
 
-export function rememberIntentForLink(linkId: string, intent: OpenIntentRef): void {
-  sessionStorage.setItem(storageKey(linkId), JSON.stringify(intent));
-}
-
-export function forgetIntentForLink(linkId: string): void {
-  sessionStorage.removeItem(storageKey(linkId));
-}
-
-function isExpired(intent: PaymentIntent): boolean {
-  return intent.expires_at * 1000 <= Date.now();
-}
-
-/**
- * True when a remembered intent is still safe to reuse as-is: the payer can
- * still complete a payment against it, and it is not past its own `expires_at`.
- *
- * `canStillBePaid` asks the question in the payer's terms: is the payment
- * still open — anything but `succeeded` or `canceled` (ADR 0019). A payment
- * that already succeeded must never be reused, or a payer who has paid sees
- * their old receipt forever with no way to pay the link again.
- */
-function isReusable(intent: PaymentIntent): boolean {
-  return canStillBePaid(intent.status) && !isExpired(intent);
-}
-
-/**
- * The reuse-if-open decision for `/l/:linkId`: re-fetch a remembered intent
- * (if any) and reuse it when it's still open; otherwise fall through so the
- * caller mints a fresh one and remembers it via `rememberIntentForLink`.
- * Never mints itself — payment links have no SDK client core (only payment
- * intents do), so minting is a plain `POST` the route makes directly.
- */
-export async function getReusableIntentForLink(linkId: string): Promise<PaymentIntent | null> {
-  const remembered = getOpenIntentForLink(linkId);
-  if (!remembered) return null;
-
-  let intent: PaymentIntent;
+export function rememberSession(linkId: string, session: OpenSessionRef): void {
   try {
-    intent = await getPaymentIntent(remembered.id, remembered.clientSecret);
+    sessionStorage.setItem(storageKey(linkId), JSON.stringify(session));
   } catch {
-    forgetIntentForLink(linkId);
-    return null;
+    // Storage unavailable: the next visit starts a fresh session, which is safe.
   }
+}
 
-  if (!isReusable(intent)) {
-    forgetIntentForLink(linkId);
-    return null;
+export function forgetSession(linkId: string): void {
+  try {
+    sessionStorage.removeItem(storageKey(linkId));
+  } catch {
+    // Nothing to forget.
   }
-  return intent;
+}
+
+/** A remembered session the payer can still use, or `null` (and it is forgotten). */
+export async function reusableSessionForLink(linkId: string): Promise<OpenSessionRef | null> {
+  const remembered = getRememberedSession(linkId);
+  if (!remembered) return null;
+  try {
+    const session = await getCheckoutSession(remembered.id, remembered.clientSecret);
+    if (session.status === 'open' && session.expires_at * 1000 > Date.now()) return remembered;
+  } catch {
+    // Unreadable: start over.
+  }
+  forgetSession(linkId);
+  return null;
 }

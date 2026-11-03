@@ -1,95 +1,25 @@
-import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
+import { afterEach, beforeEach, expect, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
-import { intentFixture } from '../../__tests__/intentFixture';
-import type { CheckoutSessionPublic, PaymentIntent } from '@peable.to/shared-types';
+import { installCheckoutMocks, mocks, resetMocks } from '../../__tests__/checkoutMocks';
+import { sessionFixture } from '../../__tests__/sessionFixture';
 
-// SessionRoute never touches `../lib/intentClient` directly, but
-// CheckoutView -> subscribe() does — mock it the same way LinkRoute.test.tsx
-// does so the realtime subscription doesn't hit a real socket.
-mock.module('../../lib/intentClient', () => ({
-  getPaymentIntent: mock(async () => {
-    throw new Error('not used by SessionRoute');
-  }),
-  subscribe: mock(async () => () => undefined),
-  submitTx: mock(async () => {
-    throw new Error('not used by SessionRoute');
-  }),
-  /**
-   * Present because `mock.module` replaces the WHOLE module, process-wide.
-   *
-   * A factory that omits an export makes every OTHER file importing it fail
-   * with `Export named 'x' not found` — and which file that is depends on bun's
-   * run order, so the symptom appears in a file that never mentioned the name.
-   * Throwing rather than stubbing keeps it honest: nothing here renders a card
-   * form, so a call would be a surprise worth seeing.
-   */
-  getClientAction: mock(async () => {
-    throw new Error('getClientAction is not exercised by this suite');
-  }),
-}));
-
-// Renders the full CheckoutView -> PayWithPeable -> Qr chain, which draws to
-// a real <canvas> 2D context — unsupported by happy-dom. Stub it out (same
-// as LinkRoute.test.tsx/IntentRoute.test.tsx).
-mock.module('qr-creator/dist/qr-creator.es6.min.js', () => ({
-  default: { render: () => undefined },
-}));
-
+installCheckoutMocks();
 const { SessionRoute } = await import('../SessionRoute');
 
-function makeIntent(
-  overrides: Partial<PaymentIntent> = {},
-  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = {},
-): PaymentIntent {
-  return intentFixture(
-    {
-      id: 'pi_wrapped456',
-      rail: 'faircoin',
-      status: 'requires_action',
-      amount: '100000000',
-      client_secret: 'session_secret_abc',
-      expires_at: Math.floor((Date.now() + 60_000) / 1000),
-      ...overrides,
-    },
-    chain,
-  );
-}
-
-const SESSION: CheckoutSessionPublic = {
-  id: 'cs_test123',
-  object: 'checkout_session',
-  livemode: false,
-  success_url: 'https://merchant.example/thanks',
-  merchant: { name: 'Test Merchant', avatar_url: null, logo_url: null, description: null },
-  payment_intent: makeIntent(),
-};
-
-const originalFetch = globalThis.fetch;
-let fetchMock: ReturnType<typeof mock>;
-let capturedUrl: string | undefined;
-let capturedInit: RequestInit | undefined;
+const SECRET = 'cs_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff';
 
 beforeEach(() => {
-  capturedUrl = undefined;
-  capturedInit = undefined;
-  fetchMock = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-    capturedUrl = typeof input === 'string' ? input : input.toString();
-    capturedInit = init;
-    return new Response(JSON.stringify(SESSION), { status: 200 });
-  });
-  globalThis.fetch = fetchMock as unknown as typeof fetch;
+  resetMocks();
 });
-
 afterEach(() => {
   cleanup();
-  globalThis.fetch = originalFetch;
+  document.documentElement.lang = '';
 });
 
-function renderSessionRoute(hash: string) {
-  window.history.pushState({}, '', `/c/cs_test123${hash}`);
+function renderAt(entry: string) {
   render(
-    <MemoryRouter initialEntries={['/c/cs_test123']}>
+    <MemoryRouter initialEntries={[entry]}>
       <Routes>
         <Route path="/c/:sessionId" element={<SessionRoute />} />
       </Routes>
@@ -97,23 +27,41 @@ function renderSessionRoute(hash: string) {
   );
 }
 
-test('sends the fragment client_secret via the X-Peable-Client-Secret header, never a query param', async () => {
-  renderSessionRoute('#cs=session_secret_abc');
-
-  expect(await screen.findByText('1 FAIR')).toBeDefined();
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(capturedUrl).not.toContain('client_secret');
-  expect(capturedUrl?.endsWith('/v1/checkout_sessions/cs_test123/public')).toBe(true);
-  expect(new Headers(capturedInit?.headers).get('X-Peable-Client-Secret')).toBe(
-    'session_secret_abc',
-  );
+test('reads the secret from the fragment and loads the session with it', async () => {
+  mocks.getCheckoutSession.mockImplementation(async () => sessionFixture());
+  renderAt(`/c/cs_0123456789abcdef01234567#cs=${SECRET}`);
+  expect(await screen.findByText('Notebook')).toBeTruthy();
+  expect(mocks.getCheckoutSession).toHaveBeenCalledWith('cs_0123456789abcdef01234567', SECRET);
 });
 
-test('shows an error and never calls the Gateway when the fragment has no client_secret', async () => {
-  renderSessionRoute('');
-
+test('never loads without a fragment secret — a query-string secret is not accepted', async () => {
+  renderAt(`/c/cs_0123456789abcdef01234567?cs=${SECRET}`);
   expect(
     await screen.findByText('This checkout link is missing required parameters.'),
-  ).toBeDefined();
-  expect(fetchMock).not.toHaveBeenCalled();
+  ).toBeTruthy();
+  expect(mocks.getCheckoutSession).not.toHaveBeenCalled();
+});
+
+test("renders in the session's locale and sets the document language", async () => {
+  mocks.getCheckoutSession.mockImplementation(async () => sessionFixture({ locale: 'es' }));
+  renderAt(`/c/cs_0123456789abcdef01234567#cs=${SECRET}`);
+  expect(await screen.findByText('Resumen del pedido')).toBeTruthy();
+  expect(screen.getByRole('button', { name: /^Pagar/ })).toBeTruthy();
+  expect(document.documentElement.lang).toBe('es');
+});
+
+test('a ?locale= override wins over the merchant locale', async () => {
+  mocks.getCheckoutSession.mockImplementation(async () => sessionFixture({ locale: 'es' }));
+  window.history.pushState({}, '', '/c/cs_0123456789abcdef01234567?locale=de');
+  renderAt(`/c/cs_0123456789abcdef01234567?locale=de#cs=${SECRET}`);
+  expect(await screen.findByText('Bestellübersicht')).toBeTruthy();
+  window.history.pushState({}, '', '/');
+});
+
+test('a load failure is shown', async () => {
+  mocks.getCheckoutSession.mockImplementation(async () => {
+    throw new Error('checkout session not found');
+  });
+  renderAt(`/c/cs_0123456789abcdef01234567#cs=${SECRET}`);
+  expect((await screen.findByRole('alert')).textContent).toBe('checkout session not found');
 });

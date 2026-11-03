@@ -42,6 +42,13 @@ export {
   payouts,
   reconciliationMismatches,
 } from './money';
+export {
+  checkoutSessionLineItems,
+  customerEmails,
+  merchantBranding,
+  merchantEmailSettings,
+  paymentLinkLineItems,
+} from './checkout';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

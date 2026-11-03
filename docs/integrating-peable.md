@@ -170,10 +170,13 @@ Node 18+ (global `fetch`). Server entry is zero-runtime-dep; the browser entry
 
 ## 2. Server: create a Checkout Session
 
-A **Checkout Session** wraps exactly one payment and gives you a hosted URL to
-redirect the buyer to — the least code, Stripe-Checkout parity. This example
-uses an external customer credential; own products construct the client with
-the factory below and use the same checkout methods.
+A **Checkout Session** is an ORDER — line items over your catalog, a discount,
+Peable Tax, what to collect from the payer — completed on Peable's hosted page
+(or embedded in yours). The payment is created when the payer CONFIRMS, with
+the amount the session computed; the session completes when the PAYMENT does,
+never on a browser callback. Stripe Checkout's model (Orbit Phase 3). This
+example uses an external customer credential; own products construct the client
+with the factory below and use the same checkout methods.
 
 ```ts
 import { Peable } from '@peable.to/sdk';
@@ -181,23 +184,59 @@ import { Peable } from '@peable.to/sdk';
 const peable = new Peable({
   publicKey: process.env.PEABLE_PUBLIC_KEY!, // oxy_dk_…
   secret:    process.env.PEABLE_SECRET!,     // credential secret
-  // baseURL defaults to https://api.peable.to
-  // oxyApiUrl defaults to https://api.oxy.so (service-token mint host)
 });
 
-// amount is in BASE UNITS (m⊜), integer string. 1 FAIR = 100_000_000 m⊜.
+// Amounts are BASE-UNIT strings. A FAIR order pays on the FairCoin rail, a
+// EUR/USD one by card: the line items' currency decides.
 const session = await peable.checkout.sessions.create({
-  amount:  '250000000',          // 2.5 FAIR
-  network: 'testnet',            // 'testnet' | 'mainnet' — start on testnet
+  line_items: [
+    { price: 'price_…', quantity: 2, adjustable_quantity: { enabled: true, maximum: 10 } },
+    { price_data: { currency: 'FAIR', unit_amount: '50000000', product_data: { name: 'Gift wrap' } }, quantity: 1 },
+  ],
+  allow_promotion_codes: true,             // or discounts: [{ coupon: 'LAUNCH' }]
+  billing_address_collection: 'required',
+  shipping_address_collection: { allowed_countries: ['ES', 'PT'] },
+  phone_number_collection: { enabled: true },
+  custom_fields: [{ key: 'gift_note', label: { type: 'custom', custom: 'Gift note' }, type: 'text', optional: true }],
+  consent_collection: { terms_of_service: 'required' }, // needs branding.terms_of_service_url
+  automatic_tax: { enabled: true },        // Peable Tax; fails CLOSED
+  customer_email: 'buyer@example.com',     // or customer: 'cus_…'
+  locale: 'es',                            // en es fr de it pt, or 'auto'
+  success_url: 'https://mercaria.example/done?cs={CHECKOUT_SESSION_ID}',
+  cancel_url: 'https://mercaria.example/cart', // "Back to merchant", before payment
+  expires_at: Math.floor(Date.now() / 1000) + 3600, // 30 min – 24 h; default 24 h
+  client_reference_id: 'MERCARIA-ORDER-123',
   metadata: { order_id: 'MERCARIA-ORDER-123' },
-  success_url: 'https://mercaria.example/checkout/success?order=123',
-  cancel_url:  'https://mercaria.example/cart',
 });
 
-// session.url  → redirect the buyer here (checkout.peable.to/c/<id>#cs=…)
-// session.id, session.payment_intent (the `pi_…`), session.client_secret also returned
+// session.url → redirect the buyer (checkout.peable.to/c/<id>#cs=<session secret>)
 return redirect(session.url);
 ```
+
+| Field | Meaning |
+|---|---|
+| `mode` | `payment` (default), `setup` (save a card for a customer — `currency` required, card only: FairCoin has no stored methods), `subscription` (validated; answers 400 `param: mode` "not available yet" until the native billing engine registers its fulfiller) |
+| `status` / `payment_status` | `open` → `complete` or `expired`; `paid`, `unpaid` (a FairCoin payment broadcast and confirming, or a card authorized for manual capture), `no_payment_required` (setup, or a discount took the total to zero) |
+| `amount_subtotal`, `amount_total`, `total_details` | priced by the catalog's one pricing module: tiers, `transform_quantity`, the discount (half-up percent per line; an amount off allocated in proportion), Peable Tax on the discounted lines |
+| `ui_mode` | `hosted` (answers `url`) or `embedded` (answers `client_secret` for `PeableCheckout.mountCheckout`) |
+| `payment_intent` / `setup_intent` | `null` until the payer confirms; expandable |
+
+`POST /v1/checkout_sessions/:id/expire` expires an open session (its payment, if
+confirmed, is cancelled first — a payment already in flight cannot be called
+off). `GET /v1/checkout_sessions/:id/line_items` lists its lines (`expand[]=data.price`).
+`list` filters by `payment_intent`, `payment_link`, `customer`, `status`.
+
+**Promotion codes are reserved at confirm and counted at completion.** The
+confirm that links a payment takes the code's row lock and counts the open
+sessions already holding it, so two payers racing for a code's last redemption
+cannot both get it; `times_redeemed` moves in one guarded statement in the
+completion's transaction.
+
+Events: `checkout.session.completed` (when the payment succeeded, was
+authorized for capture, or — FairCoin — was broadcast), then
+`checkout.session.async_payment_succeeded` / `async_payment_failed` when the
+chain decides; `checkout.session.expired`. Fulfil on `completed` with
+`payment_status: 'paid'`, or on `async_payment_succeeded`.
 
 ### Own Oxy applications: shared workload transport
 
@@ -354,12 +393,27 @@ Lists filter Stripe's way: products by `active` and `ids[]`; prices by
 `active`. `expand[]` reaches `product.default_price`, `price.product` and
 `promotion_code.coupon` / `customer`.
 
-### Payment Links (shareable, reusable price)
+### Payment Links (a shareable URL over your prices)
 
 ```ts
-const link = await peable.paymentLinks.create({ amount: '250000000', network: 'testnet' });
-// link.url → checkout.peable.to/l/<id>, share anywhere; each visit mints a fresh intent
+const link = await peable.paymentLinks.create({
+  line_items: [{ price: 'price_…', quantity: 1, adjustable_quantity: { enabled: true, maximum: 5 } }],
+  allow_promotion_codes: true,
+  after_completion: { type: 'redirect', redirect: { url: 'https://shop.example/thanks?cs={CHECKOUT_SESSION_ID}' } },
+  // or { type: 'hosted_confirmation', hosted_confirmation: { custom_message: 'Thanks!' } }
+  restrictions: { completed_sessions: { limit: 100 } }, // deactivates itself at 100
+});
+// link.url → checkout.peable.to/l/<id>: share it, or show it as a QR code.
 ```
+
+One-time prices of ONE currency, up to twenty. A visit creates a **Checkout
+Session** with the link's lines and options (Stripe's semantics) — never a
+payment; the payment exists only once the payer confirms that session, and it
+carries the link (`payment_link` on the session, the intent's own link for a
+contribution's collections). The lines are fixed once shared; `active`,
+`metadata` and every option change with `POST /v1/payment_links/:id`
+(`payment_link.updated` names the moved fields). `GET …/line_items` lists them.
+Orbit → Payment Links builds them from your products (copy the URL or the QR).
 
 ---
 
@@ -518,6 +572,93 @@ const action = await peable.paymentIntents.clientAction(intent.id);
 Use that rather than creating a second payment. A buyer returning the next day
 to a checkout that mints a fresh intent leaves the first one alive until it
 expires — two prices they can be shown and two payments they can make.
+
+---
+
+## Checkout experience — embedded checkout, Elements, branding, emails (Orbit Phase 3)
+
+### Hosted checkout
+
+`session.url` opens `checkout.peable.to/c/<id>`. The payer sees your branding,
+the lines (with a quantity stepper where you allowed one), a promotion-code
+box, the fields you asked for, the totals with tax, and then the payment step:
+the card provider's own secure fields (with Apple Pay / Google Pay above them
+when the provider offers them — card data never touches Peable) or the FairCoin
+deep link / QR. It speaks `en es fr de it pt` (`locale`, else the browser's
+language). It redirects to `success_url` only after the gateway says the session
+is `complete`; until then it shows what is true ("confirming"), and an expired
+session says so.
+
+### Embedded checkout
+
+Create the session with `ui_mode: 'embedded'` and hand its `client_secret` to
+the browser:
+
+```ts
+import { PeableCheckout } from '@peable.to/sdk/checkout';
+
+const checkout = PeableCheckout.mountCheckout('#checkout', {
+  clientSecret,                       // cs_…_secret_…
+  appearance: { theme: 'flat', variables: { colorPrimary: '#0a7d33' } },
+  onComplete: ({ sessionId, successUrl }) => router.push(`/thanks?cs=${sessionId}`),
+});
+```
+
+The same experience runs in an iframe from `checkout.peable.to`. The frame and
+your page talk over `postMessage`, each checking the other's origin AND window;
+the client secret travels in the frame URL's fragment, never to a server log.
+`complete` is posted only after the gateway says so — re-read the session on
+your server before fulfilling anyway.
+
+### Elements and `appearance`
+
+```ts
+import { createPeableElements } from '@peable.to/sdk/checkout';
+
+const elements = createPeableElements({
+  paymentIntent: { id, client_secret },          // or a setupIntent
+  appearance: { theme: 'peable', variables: { borderRadius: '12px' }, rules: { '.Input': { borderColor: '#d0d7de' } } },
+  locale: 'fr',
+});
+elements.create('expressCheckout').mount('#wallets');
+elements.create('payment').mount('#payment');
+const result = await elements.confirmPayment({ paymentIntent: { id, client_secret }, return_url: location.href });
+```
+
+`appearance` (`theme` `peable|night|flat`, `variables` `colorPrimary`,
+`colorBackground`, `colorText`, `colorDanger`, `fontFamily`, `borderRadius`,
+`spacingUnit`, and `rules` for a fixed set of selectors) styles Peable's chrome
+AND is passed to the provider's Elements; unknown or unsafe values are dropped.
+`confirmPayment` / `confirmSetup` confirm with the provider and then wait for
+the GATEWAY's status (socket, with a poll fallback) — they resolve from
+Peable's word, never from the provider's callback alone.
+
+### Branding
+
+`GET|POST /v1/merchants/me/branding` (Orbit → Branding, with a live preview):
+
+| Field | |
+|---|---|
+| `use_avatar_as_icon` | the square icon is your avatar |
+| `logo` | a `file_…` of purpose `business_logo` (Files API) — the same field as `POST /v1/merchants/me {business_logo}` |
+| `primary_color`, `accent_color` | `#rrggbb` |
+| `font` | `system inter roboto open_sans lato source_sans noto_sans serif monospace` — system stacks, no remote font is ever loaded |
+| `border_style` | `rounded rectangular pill` |
+| `terms_of_service_url` | `https://…`, needed before asking for terms acceptance |
+
+It applies to hosted and embedded checkout and to Peable's emails.
+
+### Customer emails
+
+`GET|POST /v1/merchants/me/email_settings`: `payment_receipts` (default on),
+`refund_notices` (on), `checkout_confirmations` (off), `support_email` (the
+reply-to). A receipt goes to the payment's `receipt_email` — a checkout session
+sets it from the email the payer gave — with your branding, the lines, the
+amount, the date, the rail and a receipt number from your own sequence
+(`R-000042`). Nothing else: no address, no card or FairCoin details, no
+secrets. Emails are owed in the transaction of the change they report and sent
+afterwards through Oxy's outbound mail relay; a receipt not sent within three
+days is dropped rather than sent late.
 
 ---
 
@@ -976,8 +1117,12 @@ list (`for await`) walks every page. `setActive` is a `POST`.
 The app's Settings → Organization contributions screen uses this SDK.
 
 Payers open the existing anonymous `https://checkout.peable.to/l/<id>` page.
-An operation UUID and exact amount are saved **before** minting an intent and
-reused after lost replies or reloads. Replaying the key with a different amount
+Since Orbit Phase 3 a contribution link is a payment link whose one line is the
+contribution: the visit starts a Checkout Session (`POST
+/v1/payment_links/:id/checkout_sessions`, the payer's amount for a free one) and
+the payment is created when the donor confirms it. An operation UUID and exact
+amount are saved **before** starting the session and reused after lost replies
+or reloads (`Idempotency-Key`: the same key returns the same session). Replaying the key with a different amount
 conflicts. Disabling or expiring a link refuses new attempts while permitting
 recovery of an already-created attempt. No Oxy login is required at hosted
 checkout; signing remains in the payer's existing wallet. The gateway only

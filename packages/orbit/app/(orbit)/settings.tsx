@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Merchant } from '@peable.to/shared-types';
-import { Button } from '@oxy.so/bloom/button';
+import { Button, LinkButton } from '@oxy.so/bloom/button';
 import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
@@ -25,7 +26,6 @@ import {
 } from '@/merchant/form';
 import { PaymentMethodsSettings } from '@/paymentMethods/PaymentMethodsSettings';
 import { modeForEnvironment } from '@/scope/scope';
-import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
@@ -38,6 +38,21 @@ const merchantKey = (scope: DashboardScope) => [
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
+
+/** The checkout look and customer emails live on their own screen. */
+function BrandingPointer() {
+  const router = useRouter();
+  return (
+    <View className="flex-row flex-wrap items-center gap-2">
+      <Text variant="caption-1-regular" className="text-muted-foreground">
+        {t('settings.brandingPointer')}
+      </Text>
+      <LinkButton size="sm" onPress={() => router.push('/branding')}>
+        {t('settings.brandingOpen')}
+      </LinkButton>
+    </View>
+  );
+}
 
 function MerchantFields({
   form,
@@ -58,6 +73,7 @@ function MerchantFields({
     <View className="gap-6">
       <View className="gap-4">
         <Text variant="body-semibold">{t('settings.branding')}</Text>
+        <BrandingPointer />
         <FormField
           label={t('settings.displayName')}
           value={form.displayName}
@@ -127,52 +143,6 @@ function MerchantFields({
         />
       </View>
     </View>
-  );
-}
-
-/**
- * The wordmark payer surfaces show in their header (`business_logo`), beside —
- * never instead of — the avatar. Uploaded as a `business_logo` file, then set
- * on the merchant.
- */
-function LogoSettings({ scope, merchant }: { scope: DashboardScope; merchant: Merchant }) {
-  const queryClient = useQueryClient();
-  const setLogo = useMutation({
-    mutationFn: (fileId: string | null) =>
-      dashboardApi.merchant.update(scope, { business_logo: fileId }),
-    onSuccess: (saved) => {
-      queryClient.setQueryData(merchantKey(scope), saved);
-      toast.success(saved.business_logo ? t('settings.logo.saved') : t('settings.logo.removed'));
-    },
-    onError: (error) => toast.error(describeError(error, t('error.generic'))),
-  });
-  return (
-    <Section title={t('settings.logo')} description={t('settings.logo.intro')}>
-      <Field
-        label={t('settings.logo.current')}
-        value={merchant.business_logo ?? t('settings.logo.none')}
-        mono={merchant.business_logo !== undefined}
-      />
-      <FileUploadField
-        scope={scope}
-        purpose="business_logo"
-        label={t('settings.logo.upload')}
-        disabled={setLogo.isPending}
-        onUploaded={(file) => setLogo.mutate(file.id)}
-      />
-      {merchant.business_logo ? (
-        <View className="flex-row justify-end">
-          <Button
-            appearance="outline"
-            size="sm"
-            loading={setLogo.isPending}
-            onPress={() => setLogo.mutate(null)}
-          >
-            {t('settings.logo.remove')}
-          </Button>
-        </View>
-      ) : null}
-    </Section>
   );
 }
 
@@ -255,7 +225,6 @@ function MerchantSettings({
           </Button>
         </View>
       </Section>
-      {merchant ? <LogoSettings scope={scope} merchant={merchant} /> : null}
       {merchant ? <PaymentMethodsSettings scope={scope} /> : null}
     </View>
   );

@@ -132,11 +132,6 @@ export async function insertCoupon(
   return row;
 }
 
-async function findCouponById(db: DatabaseOrTransaction, id: string): Promise<CouponRow | null> {
-  const [row] = await db.select(COUPON_COLUMNS).from(coupons).where(eq(coupons.id, id));
-  return row ? toCouponRow(row) : null;
-}
-
 /**
  * One coupon by its id, scoped to the merchant. Deleted coupons are not found
  * unless `includeDeleted` (an expansion of a promotion code naming one).
@@ -244,4 +239,46 @@ export async function deleteCoupon(tx: Transaction, couponId: string): Promise<C
     .returning(COUPON_COLUMNS);
   if (!row) throw new Error(`coupon ${couponId} was not live under its lock`);
   return toCouponRow(row);
+}
+
+/** A coupon by its INTERNAL id, deleted or not — what a session's discount names. */
+export async function findCouponById(
+  db: DatabaseOrTransaction,
+  id: string,
+): Promise<CouponRow | null> {
+  const [row] = await db.select(COUPON_COLUMNS).from(coupons).where(eq(coupons.id, id));
+  return row ? toCouponRow(row) : null;
+}
+
+/**
+ * Count one redemption — at checkout completion, in its transaction. ONE
+ * statement: the increment and the `max_redemptions` bound are the same
+ * `UPDATE`, so two completions racing for the last redemption cannot both
+ * count it (`coupons_redemptions_check` would refuse the second anyway).
+ * Checkout reserved the redemption when the payer confirmed, so a refusal here
+ * means the bound moved under a reservation — `false`, never an exception that
+ * would roll back the payment it is counted for.
+ */
+export async function redeemCoupon(tx: DatabaseOrTransaction, id: string): Promise<boolean> {
+  const rows = await tx
+    .update(coupons)
+    .set({ timesRedeemed: sql`${coupons.timesRedeemed} + 1` })
+    .where(
+      and(
+        eq(coupons.id, id),
+        sql`(${coupons.maxRedemptions} is null or ${coupons.timesRedeemed} < ${coupons.maxRedemptions})`,
+      ),
+    )
+    .returning({ id: coupons.id });
+  return rows.length > 0;
+}
+
+/** Lock a coupon by its INTERNAL id (a session's reservation check). */
+export async function lockCouponById(tx: Transaction, id: string): Promise<CouponRow | null> {
+  const [row] = await tx
+    .select(COUPON_COLUMNS)
+    .from(coupons)
+    .where(eq(coupons.id, id))
+    .for('update', { of: coupons });
+  return row ? toCouponRow(row) : null;
 }

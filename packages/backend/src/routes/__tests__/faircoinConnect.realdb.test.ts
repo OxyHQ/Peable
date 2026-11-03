@@ -596,9 +596,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
   test('opens a hosted checkout on behalf of a seller', async () => {
     const seller = await onboardSeller('store_checkout', 44);
     const res = await call('POST', '/v1/checkout_sessions', {
-      amount: '300000000',
-      rail: 'faircoin',
-      network: 'testnet',
+      line_items: [
+        {
+          price_data: {
+            currency: 'FAIR',
+            unit_amount: '300000000',
+            product_data: { name: 'Plant' },
+          },
+          quantity: 1,
+        },
+      ],
       connected_account: seller.id,
       success_url: 'https://platform.example/ok',
     });
@@ -606,7 +613,25 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(res.json.connected_account).toBe(seller.id);
     expect(res.json.success_url).toBe('https://platform.example/ok');
     expect(res.json.network).toBe('testnet');
-    const intent = must(await findIntentByPublicId(gatewayDb(), String(res.json.payment_intent)));
+    // The payer confirms: the payment's address derives from the SELLER's key.
+    const secret = {
+      'X-Peable-Client-Secret': decodeURIComponent(String(res.json.url).split('#cs=')[1] ?? ''),
+    };
+    await call(
+      'POST',
+      `/v1/checkout_sessions/${res.json.id}/public`,
+      { customer_details: { email: 'b@example.com' } },
+      secret,
+    );
+    const confirmed = await call(
+      'POST',
+      `/v1/checkout_sessions/${res.json.id}/public/confirm`,
+      {},
+      secret,
+    );
+    expect(confirmed.status).toBe(200);
+    const pi = (confirmed.json.payment_intent as { id: string }).id;
+    const intent = must(await findIntentByPublicId(gatewayDb(), pi));
     expect(intent.address).toBe(
       deriveIntentAddress(testXpubFor('testnet', 44), 0, 0, getNetwork('testnet')),
     );

@@ -341,3 +341,17 @@ export async function updatePrice(
     throw error;
   }
 }
+
+/** The merchant's prices among these INTERNAL ids (any order). */
+export async function findPricesByIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  ids: readonly string[],
+): Promise<PriceRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select(PRICE_COLUMNS)
+    .from(prices)
+    .where(and(eq(prices.merchantId, merchantId), inArray(prices.id, [...ids])));
+  return rows.map(toPriceRow);
+}

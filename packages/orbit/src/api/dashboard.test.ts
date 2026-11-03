@@ -525,3 +525,55 @@ describe('isAccountMissing', () => {
     ).toBe(false);
   });
 });
+
+describe('payment links', () => {
+  it('lists with the active filter and the cursor, and reads a link and its line items', async () => {
+    answer = (call) =>
+      call.path.includes('/line_items') || !call.path.includes('/payment_links/')
+        ? { object: 'list', data: [{ id: 'li_1' }], has_more: false }
+        : { id: 'link_1' };
+    await api.paymentLinks.list(scope, { active: false, limit: 25, starting_after: 'link_0' });
+    await api.paymentLinks.retrieve(scope, 'link_1');
+    const items = await api.paymentLinks.lineItems(scope, 'link_1');
+    expect(items.data.map((item) => item.id)).toEqual(['li_1']);
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'GET /v1/dashboard/applications/app%201/payment_links?environment=development&active=false&limit=25&starting_after=link_0',
+      'GET /v1/dashboard/applications/app%201/payment_links/link_1?environment=development',
+      'GET /v1/dashboard/applications/app%201/payment_links/link_1/line_items?environment=development',
+    ]);
+  });
+
+  it('creates and updates with POST bodies', async () => {
+    answer = () => ({ id: 'link_1' });
+    await api.paymentLinks.create(scope, { line_items: [{ price: 'price_1', quantity: 2 }] });
+    await api.paymentLinks.update(scope, 'link 1', { active: false });
+    expect(calls[0]).toEqual({
+      method: 'POST',
+      path: '/v1/dashboard/applications/app%201/payment_links?environment=development',
+      options: { body: { line_items: [{ price: 'price_1', quantity: 2 }] } },
+    });
+    expect(calls[1]).toEqual({
+      method: 'POST',
+      path: '/v1/dashboard/applications/app%201/payment_links/link%201?environment=development',
+      options: { body: { active: false } },
+    });
+  });
+});
+
+describe('branding and email settings', () => {
+  it('reads and writes both on their own paths', async () => {
+    answer = () => ({});
+    await api.branding.retrieve(live);
+    await api.branding.update(live, { primary_color: '#112233' });
+    await api.emailSettings.retrieve(live);
+    await api.emailSettings.update(live, { refund_notices: false });
+    expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual([
+      'GET /v1/dashboard/applications/app_live/branding?environment=production',
+      'POST /v1/dashboard/applications/app_live/branding?environment=production',
+      'GET /v1/dashboard/applications/app_live/email_settings?environment=production',
+      'POST /v1/dashboard/applications/app_live/email_settings?environment=production',
+    ]);
+    expect(calls[1]?.options).toEqual({ body: { primary_color: '#112233' } });
+    expect(calls[3]?.options).toEqual({ body: { refund_notices: false } });
+  });
+});

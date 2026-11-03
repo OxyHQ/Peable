@@ -25,6 +25,7 @@ import { getDb } from '../../db/postgres';
 import { clientSecretFor, newId } from '../../lib/ids';
 import { toSetupIntentDTO } from '../../lib/serialize';
 import { recordCustomerObjectEvent, type CustomerObjectEventType } from '../intentTransition';
+import { followSetupIntentForCheckout } from '../checkout/completion';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { toLastPaymentError } from '../intentReconciliation';
 import { selectCardProvider, selectStoredProvider } from '../providers/environmentGuard';
@@ -226,6 +227,8 @@ export async function applySetupResult(
         // The row moved underneath: undo the registration with the rest.
         throw new StaleSetupIntent(change.kind === 'stale' ? change.current : null);
       }
+      // A setup checkout session completes (or expires) with its SetupIntent.
+      await followSetupIntentForCheckout(tx, change.row);
       const eventType = setupEventFor(change.row);
       if (eventType !== null) {
         await recordCustomerObjectEvent(

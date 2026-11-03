@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNull, sql } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import type {
   PaymentIntentLastPaymentError,
@@ -218,4 +218,20 @@ export async function updateSetupIntentState(
     .where(eq(setupIntents.id, id));
   if (!current) return { kind: 'missing' };
   return { kind: 'stale', current: current.status as SetupIntentStatus };
+}
+
+/** The merchant's SetupIntents among these `seti_…` (an expansion's loader). */
+export async function findSetupIntentsForMerchantByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<SetupIntentRow[]> {
+  if (publicIds.length === 0) return [];
+  const rows = await db
+    .select(SETUP_INTENT_COLUMNS)
+    .from(setupIntents)
+    .where(
+      and(eq(setupIntents.merchantId, merchantId), inArray(setupIntents.publicId, [...publicIds])),
+    );
+  return rows.map(toRow);
 }

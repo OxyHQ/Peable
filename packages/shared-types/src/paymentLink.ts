@@ -1,80 +1,154 @@
+// Payment Link v2 (Orbit Phase 3) — Stripe's model: a shareable URL over
+// catalog PRICES. A payer visiting it creates a Checkout Session with the
+// link's line items and options; the session creates the payment when the
+// payer confirms. Nothing about a link mints a payment on its own.
+//
+// A contribution link (an Oxy organization's FairCoin collection,
+// `@peable.to/contracts`) is a payment link whose one line is the contribution
+// itself — a fixed amount, or one the payer chooses — rather than a price.
 import type { ContributionDetails } from '@peable.to/contracts';
-// PaymentLink contract — a shareable, reusable generator of `PaymentIntent`s.
-// A link's price is immutable once shared (only `active`/`metadata`/`successUrl`
-// are mutable); each payer visit mints (or, at the page layer, reuses an open)
-// a fresh `PaymentIntent` bound to the link's merchant/amount/currency/rail.
+import type { CheckoutBranding } from './branding';
+import type {
+  CheckoutAdjustableQuantity,
+  CheckoutAfterCompletion,
+  CheckoutBillingAddressCollection,
+  CheckoutCustomField,
+  CheckoutCustomFieldParams,
+  CheckoutCustomerCreation,
+  CheckoutLineItem,
+  CheckoutLocale,
+  CheckoutSubmitType,
+} from './checkoutSession';
 import type { CurrencyCode } from './money';
-import type { NetworkType } from './network';
 import type { MerchantDisplay } from './merchantDisplay';
+import type { NetworkType } from './network';
 import type { PaymentIntentRail } from './paymentIntent';
 
-/** The merchant-facing DTO — returned by the merchant-authed CRUD routes. */
+export const PAYMENT_LINK_LIMITS = Object.freeze({
+  lineItemsMax: 20,
+  customMessageMax: 500,
+});
+
 export interface PaymentLink {
   id: string;
   object: 'payment_link';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
   livemode: boolean;
-  contribution?: ContributionDetails;
-  /**
-   * Amount in the currency's smallest unit, as a canonical integer string.
-   * Never a float, and never interpretable without `currency`.
-   */
-  amount: string;
+  active: boolean;
   currency: CurrencyCode;
   rail: PaymentIntentRail;
-  /** FairCoin rail only; `null` on a card link. */
   network: NetworkType | null;
-  active: boolean;
+  /** The link's prices (`GET /v1/payment_links/:id/line_items` lists them in full). */
+  line_items: CheckoutLineItem[];
+  allow_promotion_codes: boolean;
+  billing_address_collection: CheckoutBillingAddressCollection;
+  shipping_address_collection: { allowed_countries: string[] } | null;
+  phone_number_collection: { enabled: boolean };
+  tax_id_collection: { enabled: boolean };
+  custom_fields: CheckoutCustomField[];
+  consent_collection: { terms_of_service: 'none' | 'required' } | null;
+  automatic_tax: { enabled: boolean };
+  customer_creation: CheckoutCustomerCreation;
+  after_completion: CheckoutAfterCompletion;
+  restrictions: { completed_sessions: { limit: number; count: number } } | null;
+  submit_type: CheckoutSubmitType;
+  locale: CheckoutLocale | null;
+  /** Present on an organization contribution link (FairCoin). */
+  contribution?: ContributionDetails;
   metadata: Record<string, string>;
-  /** Optional post-payment redirect target for the checkout page. */
-  success_url?: string;
-  /** Canonical `checkout.peable.to/l/<id>` URL. */
+  /** `checkout.peable.to/l/<id>` — share it, or render it as a QR code. */
   url: string;
   created: number;
   updated_at: number;
 }
 
-/** What an unauthenticated checkout-page visitor may see — no secrets, no metadata. */
+/** What an anonymous visitor may see before checkout starts — no metadata, no counts. */
 export interface PublicPaymentLink {
   id: string;
   object: 'payment_link';
-  /**
-   * Which of the provider's two worlds this object belongs to (ADR 0017):
-   * `true` for a `production` merchant, `false` for every other environment.
-   */
   livemode: boolean;
-  contribution?: ContributionDetails;
-  amount: string;
+  active: boolean;
   currency: CurrencyCode;
   rail: PaymentIntentRail;
   network: NetworkType | null;
-  active: boolean;
+  line_items: CheckoutLineItem[];
+  contribution?: ContributionDetails;
+  /** A fixed contribution's amount; `null` when the payer chooses (or for a price link). */
+  contribution_amount: string | null;
   merchant: MerchantDisplay;
+  branding: CheckoutBranding;
+  locale: CheckoutLocale | null;
+}
+
+export interface PaymentLinkLineItemParams {
+  price: string;
+  quantity: number;
+  adjustable_quantity?: { enabled: boolean; minimum?: number; maximum?: number };
+}
+
+export interface PaymentLinkAfterCompletionParams {
+  type: 'redirect' | 'hosted_confirmation';
+  /** `type: redirect` — may carry `{CHECKOUT_SESSION_ID}`. */
+  redirect?: { url: string };
+  hosted_confirmation?: { custom_message?: string };
 }
 
 export interface CreatePaymentLinkParams {
-  amount: string;
-  /** Defaults to `'faircoin'`, so pre-ADR-0001 integrations keep working. */
-  rail?: PaymentIntentRail;
-  /** Required on the faircoin rail; refused on the card rail. */
-  network?: NetworkType;
-  /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
-  currency?: CurrencyCode;
+  /** 1–20 prices of ONE currency, one-time prices only. */
+  line_items: PaymentLinkLineItemParams[];
+  allow_promotion_codes?: boolean;
+  billing_address_collection?: CheckoutBillingAddressCollection;
+  shipping_address_collection?: { allowed_countries: string[] };
+  phone_number_collection?: { enabled: boolean };
+  tax_id_collection?: { enabled: boolean };
+  custom_fields?: CheckoutCustomFieldParams[];
+  consent_collection?: { terms_of_service?: 'none' | 'required' };
+  automatic_tax?: { enabled: boolean };
+  customer_creation?: CheckoutCustomerCreation;
+  after_completion?: PaymentLinkAfterCompletionParams;
+  restrictions?: { completed_sessions: { limit: number } };
+  submit_type?: CheckoutSubmitType;
+  locale?: CheckoutLocale | 'auto';
   metadata?: Record<string, string>;
-  success_url?: string;
 }
 
 /**
- * `POST /v1/payment_links/:id`. `amount`/`network` are deliberately absent — a
- * link's price is immutable once shared.
+ * `POST /v1/payment_links/:id`. The line items are fixed once shared (a payer
+ * may hold a session priced from them); everything else may change.
  */
 export interface UpdatePaymentLinkParams {
   active?: boolean;
+  allow_promotion_codes?: boolean;
+  billing_address_collection?: CheckoutBillingAddressCollection;
+  shipping_address_collection?: { allowed_countries: string[] } | '';
+  phone_number_collection?: { enabled: boolean };
+  tax_id_collection?: { enabled: boolean };
+  custom_fields?: CheckoutCustomFieldParams[] | '';
+  consent_collection?: { terms_of_service?: 'none' | 'required' };
+  automatic_tax?: { enabled: boolean };
+  customer_creation?: CheckoutCustomerCreation;
+  after_completion?: PaymentLinkAfterCompletionParams;
+  restrictions?: { completed_sessions: { limit: number } } | '';
+  submit_type?: CheckoutSubmitType;
+  locale?: CheckoutLocale | 'auto';
   /** A patch: named keys are set, `""` removes a key, others are kept. */
   metadata?: Record<string, string>;
-  /** `null` removes it. */
-  success_url?: string | null;
 }
+
+/**
+ * `POST /v1/payment_links/:id/checkout_sessions` — a payer starting checkout
+ * (anonymous, rate-limited). A contribution link the payer prices takes
+ * `amount`; nothing else is the payer's to say.
+ */
+export interface CreatePaymentLinkSessionParams {
+  amount?: string;
+}
+
+/** Its answer: where to go — the hosted session and the secret that opens it. */
+export interface PaymentLinkSessionStart {
+  object: 'checkout_session_start';
+  id: string;
+  client_secret: string;
+  url: string;
+}
+
+export type { CheckoutAdjustableQuantity };

@@ -43,18 +43,31 @@ export interface ProviderElement {
   destroy(): void;
 }
 
+/** The element kinds Peable mounts. */
+export type ProviderElementType =
+  | 'payment'
+  | 'expressCheckout'
+  | 'address'
+  | 'cardNumber'
+  | 'cardExpiry'
+  | 'cardCvc';
+
 export interface ProviderElements {
   update?(options: Record<string, unknown>): void;
-  create(
-    type: 'payment' | 'expressCheckout' | 'cardNumber' | 'cardExpiry' | 'cardCvc',
-    options?: Record<string, unknown>,
-  ): ProviderElement;
-  getElement(type: 'payment' | 'expressCheckout'): ProviderElement | null;
+  create(type: ProviderElementType, options?: Record<string, unknown>): ProviderElement;
+  getElement(type: 'payment' | 'expressCheckout' | 'address'): ProviderElement | null;
+  /** Deferred-intent flow: validate the fields before the payment exists. */
+  submit?(): Promise<{ error?: { message?: string; type?: string } }>;
 }
 
 export interface ProviderConfirmResult {
   error?: { message?: string; type?: string };
   paymentIntent?: { status?: string };
+}
+
+export interface ProviderSetupConfirmResult {
+  error?: { message?: string; type?: string };
+  setupIntent?: { status?: string };
 }
 
 /** Minimal Checkout Elements contract; no provider UI or entitlement ownership. */
@@ -111,12 +124,20 @@ export interface ProviderSdk {
   ): Promise<ProviderConfirmResult>;
   confirmPayment(options: {
     elements: ProviderElements;
+    /** The provider's credential, when the elements were created before the payment. */
+    clientSecret?: string;
     confirmParams?: Record<string, unknown>;
     redirect?: 'if_required' | 'always';
   }): Promise<ProviderConfirmResult>;
+  confirmSetup?(options: {
+    elements: ProviderElements;
+    clientSecret?: string;
+    confirmParams?: Record<string, unknown>;
+    redirect?: 'if_required' | 'always';
+  }): Promise<ProviderSetupConfirmResult>;
 }
 
-type ProviderFactory = (key: string, options?: Record<string, unknown>) => ProviderSdk;
+export type ProviderFactory = (key: string, options?: Record<string, unknown>) => ProviderSdk;
 
 /**
  * The in-flight or completed load. Module-level because the script is a

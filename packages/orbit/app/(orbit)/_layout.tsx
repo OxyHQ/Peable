@@ -47,9 +47,11 @@ export default function OrbitLayout() {
         <Tabs.Screen name="balances" options={{ title: 'Balances' }} />
         <Tabs.Screen name="payouts" options={{ title: 'Payouts' }} />
         <Tabs.Screen name="account" options={{ title: 'Account' }} />
+        <Tabs.Screen name="links" options={{ title: 'Payment Links' }} />
         <Tabs.Screen name="developers" options={{ title: 'Developers' }} />
         <Tabs.Screen name="tax" options={{ title: 'Tax' }} />
         <Tabs.Screen name="contributions" options={{ title: 'Contributions' }} />
+        <Tabs.Screen name="branding" options={{ title: 'Branding' }} />
         <Tabs.Screen name="settings" options={{ title: 'Settings' }} />
       </Tabs>
     </TabBarMinimizeProvider>

@@ -1,447 +1,453 @@
+/**
+ * Checkout Sessions (Orbit Phase 3).
+ *
+ * The merchant routes are DATA (`checkoutSessionRoutes`), mounted on the
+ * service-authed `/v1/checkout_sessions` surface here and on Orbit's dashboard
+ * from the same list (`catalogRoutes.ts`), so the two cannot answer
+ * differently. The payer routes — `…/public`, `…/public/confirm` — are
+ * UNAUTHENTICATED and rate-limited, authorized by possession of the session's
+ * `client_secret` (or, for a session wrapping a payment, that payment's), sent
+ * in the `X-Peable-Client-Secret` header and never in a URL.
+ */
 import { eq } from 'drizzle-orm';
-import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { oxy } from '../oxy';
 import { verifySecret } from '@oxy.so/core/server';
-import type {
-  CreateCheckoutSessionParams,
-  UpdateCheckoutSessionParams,
+import {
+  CHECKOUT_SESSION_STATUSES,
+  type CheckoutSessionPublic,
+  type UpdateCheckoutSessionParams,
 } from '@peable.to/shared-types';
-import { getDb } from '../db/postgres';
-import { findMerchantById } from '../db/merchants/merchantRepository';
+import { findCouponById } from '../db/catalog/couponRepository';
+import { findPromotionCodeById } from '../db/catalog/promotionCodeRepository';
+import { findLiveCustomerForMerchant } from '../db/customers/customerRepository';
+import { findBranding } from '../db/merchants/brandingRepository';
+import { findMerchantById, type MerchantRow } from '../db/merchants/merchantRepository';
 import {
-  findIntentById,
-  findIntentForMerchant,
-  findIntentsByIds,
-} from '../db/payments/paymentIntentRepository';
-import {
-  findSessionByIntentId,
+  type CheckoutSessionRow,
+  findLineItemInSession,
   findSessionByPublicId,
   findSessionForMerchant,
-  insertCheckoutSession,
+  listLineItems,
   listSessionsForMerchant,
   updateSessionMetadata,
 } from '../db/payments/checkoutSessionRepository';
-import {
-  createIntent,
-  IdempotencyConflictError,
-  NetworkMismatchError,
-  RailMismatchError,
-  RailUnavailableError,
-} from '../services/createIntent';
-import { resolveMerchantDisplay } from '../services/merchantDisplay';
-import { newId } from '../lib/ids';
-import { toCheckoutSessionDTO, toCheckoutSessionPublicDTO } from '../lib/serialize';
-import { sendError, wrap, requireAuthenticated, sendValidationError } from '../lib/http';
-import {
-  connectedAccountBodyField,
-  resolveMerchant,
-  sendConnectedAccountRefusal,
-} from './paymentIntents';
-import { railBodyFields } from '../lib/railSchema';
-import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
+import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
+import { findLinkForMerchant } from '../db/payments/paymentLinkRepository';
+import { getDb } from '../db/postgres';
+import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { expandObjects, parseExpand } from '../lib/expand';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 import {
   answerList,
   expandParam,
-  listQuerySchema,
   parseQuery,
   resolveListReference,
-  retrieveQuerySchema,
+  surfaceListQuery,
+  surfaceRetrieveQuery,
 } from '../lib/list';
+import { METADATA_LIMIT_MESSAGE, metadataUpdateSchema } from '../lib/metadata';
+import { toPaymentIntentDTO } from '../lib/serialize';
 import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
+  toCheckoutBranding,
+  toCheckoutLineItemDTO,
+  toCheckoutSessionDTO,
+  toCheckoutSessionPublicDTO,
+} from '../lib/serializeCheckout';
+import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
+import { createSessionBodySchema, payerUpdateSchema } from '../services/checkout/params';
+import {
+  type CheckoutDeps,
+  confirmSessionAsPayer,
+  createCheckoutSession,
+  expireSessionForMerchant,
+  publishableKeyFor,
+  setupClientSecretOf,
+  updateSessionAsPayer,
+} from '../services/checkout/sessionService';
+import { resolveMerchantDisplay } from '../services/merchantDisplay';
+import { type CatalogRoute, createCatalogApiRouter } from './catalogRoutes';
 
-/** `GET /v1/checkout_sessions`: every session, or the one wrapping a payment. */
-const listSessionsQuery = listQuerySchema({
-  payment_intent: z.string().min(1).max(255).optional(),
+const idSchema = z.string().min(1).max(255);
+
+const listSessionsQuery = surfaceListQuery({
+  payment_intent: idSchema.optional(),
+  payment_link: idSchema.optional(),
+  customer: idSchema.optional(),
+  status: z.enum(CHECKOUT_SESSION_STATUSES).optional(),
 });
-const retrieveSessionQuery = retrieveQuerySchema({});
+const retrieveSessionQuery = surfaceRetrieveQuery();
+const lineItemsQuery = surfaceListQuery({});
 
 const updateBodySchema = z
   .object({
     metadata: metadataUpdateSchema.optional(),
     expand: expandParam.optional(),
-  } satisfies Record<keyof UpdateCheckoutSessionParams | 'expand', z.ZodType>)
+  } satisfies Record<keyof UpdateCheckoutSessionParams | 'expand', z.ZodTypeAny>)
   .strict();
 
-const createBodySchema = z
-  .object({
-    ...railBodyFields,
-    ...connectedAccountBodyField,
-    metadata: metadataCreateSchema.optional(),
-    success_url: z.string().url().optional(),
-    cancel_url: z.string().url().optional(),
-  } satisfies Record<keyof CreateCheckoutSessionParams, z.ZodType>)
-  .strict();
+function idParam(req: Request, res: Response): string | null {
+  const { id } = req.params;
+  if (!id) {
+    sendError(res, 400, 'invalid_request_error', 'id is required');
+    return null;
+  }
+  return id;
+}
+
+async function answerSession(
+  res: Response,
+  merchant: MerchantRow,
+  row: CheckoutSessionRow,
+  expand: readonly string[] | undefined,
+  status = 200,
+): Promise<void> {
+  const tree = parseExpand(res, 'checkout_session', expand, { list: false });
+  if (!tree) return;
+  const dto = toCheckoutSessionDTO(row);
+  await expandObjects([dto], 'checkout_session', tree, merchant.id);
+  res.status(status).json(dto);
+}
+
+async function sessionOr404(id: string, merchant: MerchantRow): Promise<CheckoutSessionRow> {
+  const row = await findSessionForMerchant(getDb(), id, merchant.id);
+  if (!row) throw new CheckoutError(404, 'resource_missing', 'checkout session not found');
+  return row;
+}
+
+/** The merchant's session routes, as data — mounted on the API and on Orbit's dashboard. */
+export function checkoutSessionRoutes(deps: CheckoutDeps): CatalogRoute[] {
+  return [
+    {
+      method: 'post',
+      path: '/checkout_sessions',
+      core: async (req, res, merchant) => {
+        const parsed = createSessionBodySchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+          sendValidationError(res, parsed.error);
+          return;
+        }
+        if (!parseExpand(res, 'checkout_session', parsed.data.expand, { list: false })) return;
+        const row = await createCheckoutSession(merchant, parsed.data, deps);
+        await answerSession(res, merchant, row, parsed.data.expand, 201);
+      },
+    },
+    {
+      method: 'get',
+      path: '/checkout_sessions',
+      core: async (req, res, merchant, surface) => {
+        const query = parseQuery(req, res, listSessionsQuery[surface]);
+        if (!query) return;
+        const db = getDb();
+        const intent = await resolveListReference(
+          res,
+          'payment_intent',
+          query.payment_intent,
+          async (id) => (await findIntentForMerchant(db, id, merchant.id))?.id ?? null,
+        );
+        if (!intent.ok) return;
+        const link = await resolveListReference(
+          res,
+          'payment_link',
+          query.payment_link,
+          async (id) => (await findLinkForMerchant(db, id, merchant.id))?.id ?? null,
+        );
+        if (!link.ok) return;
+        const customer = await resolveListReference(
+          res,
+          'customer',
+          query.customer,
+          async (id) => (await findLiveCustomerForMerchant(db, id, merchant.id))?.id ?? null,
+        );
+        if (!customer.ok) return;
+        await answerList(req, res, {
+          query,
+          type: 'checkout_session',
+          merchantId: merchant.id,
+          cursor: async (publicId) =>
+            (await findSessionForMerchant(db, publicId, merchant.id))?.id ?? null,
+          fetch: (page) =>
+            listSessionsForMerchant(db, {
+              merchantId: merchant.id,
+              paymentIntentId: intent.id,
+              paymentLinkId: link.id,
+              customerId: customer.id,
+              status: query.status,
+              page,
+            }),
+          serialize: toCheckoutSessionDTO,
+        });
+      },
+    },
+    {
+      method: 'get',
+      path: '/checkout_sessions/:id',
+      core: async (req, res, merchant, surface) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const query = parseQuery(req, res, retrieveSessionQuery[surface]);
+        if (!query) return;
+        if (!parseExpand(res, 'checkout_session', query.expand, { list: false })) return;
+        await answerSession(res, merchant, await sessionOr404(id, merchant), query.expand);
+      },
+    },
+    {
+      method: 'post',
+      path: '/checkout_sessions/:id',
+      core: async (req, res, merchant) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const parsed = updateBodySchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+          sendValidationError(res, parsed.error);
+          return;
+        }
+        if (!parseExpand(res, 'checkout_session', parsed.data.expand, { list: false })) return;
+        const db = getDb();
+        const row =
+          parsed.data.metadata === undefined
+            ? ((await findSessionForMerchant(db, id, merchant.id)) ?? 'missing')
+            : await updateSessionMetadata(db, id, merchant.id, parsed.data.metadata);
+        if (row === 'missing')
+          throw new CheckoutError(404, 'resource_missing', 'checkout session not found');
+        if (row === 'limit_exceeded') {
+          throw new CheckoutError(400, 'parameter_invalid', METADATA_LIMIT_MESSAGE, 'metadata');
+        }
+        await answerSession(res, merchant, row, parsed.data.expand);
+      },
+    },
+    {
+      method: 'post',
+      path: '/checkout_sessions/:id/expire',
+      core: async (req, res, merchant) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const parsed = z
+          .object({ expand: expandParam.optional() })
+          .strict()
+          .safeParse(req.body ?? {});
+        if (!parsed.success) {
+          sendValidationError(res, parsed.error);
+          return;
+        }
+        const row = await expireSessionForMerchant(await sessionOr404(id, merchant));
+        await answerSession(res, merchant, row, parsed.data.expand);
+      },
+    },
+    {
+      method: 'get',
+      path: '/checkout_sessions/:id/line_items',
+      core: async (req, res, merchant, surface) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const query = parseQuery(req, res, lineItemsQuery[surface]);
+        if (!query) return;
+        const session = await sessionOr404(id, merchant);
+        const db = getDb();
+        // A session has at most twenty lines; the list contract pages over
+        // them in their order, the cursor being a line's own `li_…`.
+        const lines = await listLineItems(db, session.id);
+        await answerList(req, res, {
+          query: { ...query, created: undefined },
+          type: 'item',
+          merchantId: merchant.id,
+          cursor: async (publicId) =>
+            (await findLineItemInSession(db, session.id, publicId))?.id ?? null,
+          fetch: async (page) => {
+            const index = (lineId: string | undefined) =>
+              lineId === undefined ? -1 : lines.findIndex((line) => line.id === lineId);
+            let window = lines;
+            if (page.after !== undefined) window = lines.slice(index(page.after) + 1);
+            else if (page.before !== undefined) {
+              const end = index(page.before);
+              window = lines.slice(Math.max(0, end - page.limit), end);
+              return { data: window, hasMore: end - page.limit > 0 };
+            }
+            return { data: window.slice(0, page.limit), hasMore: window.length > page.limit };
+          },
+          serialize: toCheckoutLineItemDTO,
+        });
+      },
+    },
+  ];
+}
+
+// ---- Payer routes ---------------------------------------------------------------------
+
+function clientSecretOf(req: Request): string | undefined {
+  return req.header('X-Peable-Client-Secret') ?? undefined;
+}
 
 /**
- * Build the checkout-session REST router (F2.2). `POST`/merchant `GET` follow
- * the same merchant-authed chain as `paymentIntents.ts`; the public `GET
- * .../public` is the checkout page's payer path, authorized by possession of
- * the wrapped intent's `client_secret` — exactly the same idiom as the payer
- * branch of `GET /v1/payment_intents/:id` — never a service token.
+ * The session a payer may act on, or the answer already sent. Unknown session
+ * and wrong secret answer differently (404 / 403), as the payment intent's
+ * payer read does: the id is not a secret, the client secret is.
  */
+async function payerSession(
+  req: Request,
+  res: Response,
+): Promise<{ session: CheckoutSessionRow; merchant: MerchantRow } | null> {
+  const id = idParam(req, res);
+  if (!id) return null;
+  const secret = clientSecretOf(req);
+  if (!secret) {
+    sendError(res, 401, 'authentication_error', 'missing client_secret');
+    return null;
+  }
+  const db = getDb();
+  const session = await findSessionByPublicId(db, id);
+  if (!session) {
+    sendError(res, 404, 'invalid_request_error', 'checkout session not found');
+    return null;
+  }
+  let authorized = session.clientSecret !== null && verifySecret(secret, session.clientSecret);
+  if (!authorized && session.paymentIntentId !== null) {
+    // A session around a payment also opens with that payment's secret, which
+    // already authorizes paying it — the FairCoin billing invoice's link.
+    const intent = await findIntentById(db, session.paymentIntentId);
+    authorized = intent !== null && verifySecret(secret, intent.clientSecret);
+  }
+  if (!authorized) {
+    sendError(res, 403, 'permission_error', 'invalid client_secret');
+    return null;
+  }
+  const merchant = await findMerchantById(db, session.merchantId);
+  if (!merchant) {
+    sendError(res, 404, 'invalid_request_error', 'checkout session not found');
+    return null;
+  }
+  return { session, merchant };
+}
+
+/** The discount as the payer sees it: the code they typed, or the coupon's name, and its terms. */
+async function discountView(
+  session: CheckoutSessionRow,
+): Promise<CheckoutSessionPublic['discount']> {
+  if (session.couponId === null) return null;
+  const db = getDb();
+  const [coupon, code] = await Promise.all([
+    findCouponById(db, session.couponId),
+    session.promotionCodeId ? findPromotionCodeById(db, session.promotionCodeId) : null,
+  ]);
+  if (!coupon) return null;
+  return {
+    promotion_code: code?.code ?? null,
+    coupon_name: coupon.name,
+    amount_off: coupon.amountOff,
+    percent_off: coupon.percentOffBps === null ? null : coupon.percentOffBps / 100,
+  };
+}
+
+/** The whole payer view of a session. */
+export async function publicSessionDTO(
+  session: CheckoutSessionRow,
+  merchant: MerchantRow,
+): Promise<CheckoutSessionPublic> {
+  const db = getDb();
+  const [lines, display, brandingRow, intent, setup, discount] = await Promise.all([
+    listLineItems(db, session.id),
+    resolveMerchantDisplay(merchant),
+    findBranding(db, merchant.id),
+    session.paymentIntentId ? findIntentById(db, session.paymentIntentId) : null,
+    setupClientSecretOf(session),
+    discountView(session),
+  ]);
+  const [billing] = session.paymentIntentId
+    ? await db
+        .select({ fxQuote: faircoinBillingInvoices.fxQuote })
+        .from(faircoinBillingInvoices)
+        .where(eq(faircoinBillingInvoices.paymentIntentId, session.paymentIntentId))
+    : [];
+  return toCheckoutSessionPublicDTO({
+    session,
+    lines,
+    merchant: display,
+    branding: toCheckoutBranding(merchant, brandingRow),
+    paymentIntent: intent ? toPaymentIntentDTO(intent) : null,
+    setupIntent: setup,
+    discount,
+    termsOfServiceUrl: brandingRow.termsOfServiceUrl,
+    publishableKey: publishableKeyFor(session),
+    ...(billing ? { billingQuote: billing.fxQuote } : {}),
+  });
+}
+
+function answerPayer(res: Response, body: CheckoutSessionPublic): void {
+  // A payer's view carries a client secret: never cached by anything in front.
+  res.setHeader('Cache-Control', 'no-store');
+  res.status(200).json(body);
+}
+
+/** Build the checkout-session router: merchant API + payer routes. */
 export function createCheckoutSessionsRouter(deps: {
   requireMerchant: RequestHandler;
   publicRateLimit: RequestHandler;
+  checkout?: CheckoutDeps;
 }): Router {
-  const { requireMerchant, publicRateLimit } = deps;
+  const checkoutDeps = deps.checkout ?? {};
   const router = Router();
-
-  router.post(
-    '/v1/checkout_sessions',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      const parsed = createBodySchema.safeParse(req.body);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const params: CreateCheckoutSessionParams = parsed.data as CreateCheckoutSessionParams;
-
-      /**
-       * A retried request is answered by the generic layer (`idempotent`, ADR
-       * 0014 D3) before this handler runs. The key also converges the INTENT
-       * (`payment_intents.idempotency_key`), and `checkout_sessions` is unique
-       * on the intent it wraps — so the session that already wraps the
-       * replayed intent IS the session that key created. That is the second
-       * line, for a retry the generic layer let through (a lease takeover, or
-       * after its 24 hours): one order never gets two live sessions and two
-       * prices a buyer can be shown.
-       */
-      const idempotencyKey = idempotencyKeyOf(res);
-
-      try {
-        const { intent, reused } = await createIntent({
-          merchant,
-          amount: params.amount,
-          ...(params.rail !== undefined ? { rail: params.rail } : {}),
-          ...(params.currency !== undefined ? { currency: params.currency } : {}),
-          ...(params.network !== undefined ? { network: params.network } : {}),
-          ...(params.connected_account !== undefined
-            ? { connectedAccount: params.connected_account }
-            : {}),
-          metadata: params.metadata,
-          ...(idempotencyKey ? { idempotencyKey } : {}),
-        });
-
-        if (reused) {
-          // The key named an intent that already exists, so the session that
-          // wraps it already exists too. 200, not 201: nothing was created, and
-          // the status code is what tells a merchant whether they just made a
-          // second checkout.
-          const existing = await findSessionByIntentId(getDb(), intent.id);
-          if (existing) {
-            res.status(200).json(toCheckoutSessionDTO(existing, intent));
-            return;
-          }
-          // The intent exists and no session wraps it — a create interrupted
-          // between the two writes. Fall through and write the session, which
-          // is what finishing that create means.
-        }
-
-        // Explicit field whitelist — never spread `req.body`.
-        //
-        // `paymentIntentId` is the intent's INTERNAL id, which is what
-        // `checkout_sessions.payment_intent_id` references, NOT the public
-        // `pi_…`. The public id still reaches the wire, from
-        // `toCheckoutSessionDTO`, which reads it off the intent.
-        const session = await insertCheckoutSession(getDb(), {
-          publicId: newId('cs'),
-          merchantId: merchant.id,
-          oxyAppId: merchant.oxyAppId,
-          environment: merchant.environment,
-          paymentIntentId: intent.id,
-          amount: params.amount,
-          // Copied from the INTENT, never re-derived from the request. The two
-          // rows live in different tables, so no constraint can catch a session
-          // whose rail disagrees with the payment it wraps — and that
-          // disagreement is a card form rendered over a FairCoin payment.
-          currency: intent.currency,
-          rail: intent.rail,
-          network: intent.network,
-          // From the INTENT, for the reason the rail is: a session whose seller
-          // disagreed with the payment it wraps would show one payee and pay
-          // another. `checkout_sessions_connected_account_network_fkey` holds the
-          // account to this merchant and to the intent's network.
-          connectedAccountId: intent.connectedAccountId ?? null,
-          metadata: params.metadata ?? {},
-          successUrl: params.success_url,
-          cancelUrl: params.cancel_url,
-        });
-        if (!session) {
-          /**
-           * Another request wrapped this intent between the read above and this
-           * insert — two concurrent creates with one `Idempotency-Key`. The
-           * unique index decided the winner; re-reading it is correct rather
-           * than merely convenient, because both requests named the same intent
-           * and therefore the same session.
-           *
-           * Before the key was honoured this branch was unreachable and said
-           * so: every session minted a fresh intent, so nothing else could have
-           * wrapped it.
-           */
-          const winner = await findSessionByIntentId(getDb(), intent.id);
-          if (!winner) {
-            throw new Error(`checkout session insert found intent ${intent.id} already wrapped`);
-          }
-          res.status(200).json(toCheckoutSessionDTO(winner, intent));
-          return;
-        }
-
-        res.status(201).json(toCheckoutSessionDTO(session, intent));
-      } catch (err) {
-        if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 400, 'invalid_request_error', err.message);
-          return;
-        }
-        if (sendConnectedAccountRefusal(res, err)) return;
-        if (err instanceof IdempotencyConflictError) {
-          sendError(res, 400, 'invalid_request_error', err.message, 'idempotency_error');
-          return;
-        }
-        // 503, not 400: the rail is not configured on this deployment, which is
-        // not something the caller can fix by sending different fields.
-        if (err instanceof RailUnavailableError) {
-          sendError(res, 503, 'api_error', err.message);
-          return;
-        }
-        throw err;
-      }
+  router.use(
+    createCatalogApiRouter(checkoutSessionRoutes(checkoutDeps), {
+      requireMerchant: deps.requireMerchant,
     }),
   );
 
-  /** Every session of the merchant, newest first — or the one wrapping `payment_intent=pi_…`. */
-  router.get(
-    '/v1/checkout_sessions',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const query = parseQuery(req, res, listSessionsQuery);
-      if (!query) return;
-
-      const db = getDb();
-      const intent = await resolveListReference(
-        res,
-        'payment_intent',
-        query.payment_intent,
-        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
-      );
-      if (!intent.ok) return;
-
-      await answerList(req, res, {
-        query,
-        type: 'checkout_session',
-        merchantId: merchant.id,
-        cursor: async (publicId) =>
-          (await findSessionForMerchant(db, publicId, merchant.id))?.id ?? null,
-        fetch: async (page) => {
-          const sessions = await listSessionsForMerchant(db, {
-            merchantId: merchant.id,
-            paymentIntentId: intent.id,
-            page,
-          });
-          // The DTO reads the wrapped intent (its `pi_…`, `client_secret`,
-          // seller), so the page's intents are read in ONE query, not per row.
-          const intents = new Map(
-            (
-              await findIntentsByIds(
-                db,
-                sessions.data.map((s) => s.paymentIntentId),
-              )
-            ).map((row) => [row.id, row]),
-          );
-          return {
-            hasMore: sessions.hasMore,
-            data: sessions.data.map((session) => {
-              const wrapped = intents.get(session.paymentIntentId);
-              if (!wrapped) {
-                throw new Error(`checkout session ${session.publicId} wraps an unreadable intent`);
-              }
-              return { session, intent: wrapped };
-            }),
-          };
-        },
-        serialize: ({ session, intent: wrapped }) => toCheckoutSessionDTO(session, wrapped),
-      });
-    }),
-  );
-
-  router.get(
-    '/v1/checkout_sessions/:id',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-      const query = parseQuery(req, res, retrieveSessionQuery);
-      if (!query) return;
-      const expand = parseExpand(res, 'checkout_session', query.expand, { list: false });
-      if (!expand) return;
-
-      const db = getDb();
-      const session = await findSessionForMerchant(db, id, merchant.id);
-      if (!session) {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
-        return;
-      }
-      // By PRIMARY KEY, and deliberately unscoped: the session that names it
-      // was already ownership-checked, so a second merchant predicate here
-      // would be a second authority for a decision already made.
-      const intent = await findIntentById(db, session.paymentIntentId);
-      if (!intent) {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
-        return;
-      }
-      const dto = toCheckoutSessionDTO(session, intent);
-      await expandObjects([dto], 'checkout_session', expand, merchant.id);
-      res.status(200).json(dto);
-    }),
-  );
-
-  /**
-   * Update a session — `POST`, Stripe's verb. Only the merchant's `metadata`
-   * is mutable: the amount, rail and seller are the wrapped payment's.
-   */
-  router.post(
-    '/v1/checkout_sessions/:id',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-      const parsed = updateBodySchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const expand = parseExpand(res, 'checkout_session', parsed.data.expand, { list: false });
-      if (!expand) return;
-
-      const db = getDb();
-      const session =
-        parsed.data.metadata === undefined
-          ? ((await findSessionForMerchant(db, id, merchant.id)) ?? 'missing')
-          : await updateSessionMetadata(db, id, merchant.id, parsed.data.metadata);
-      if (session === 'missing') {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
-        return;
-      }
-      if (session === 'limit_exceeded') {
-        sendError(
-          res,
-          400,
-          'invalid_request_error',
-          METADATA_LIMIT_MESSAGE,
-          'parameter_invalid',
-          'metadata',
-        );
-        return;
-      }
-      const intent = await findIntentById(db, session.paymentIntentId);
-      if (!intent) {
-        throw new Error(`checkout session ${session.publicId} wraps an unreadable intent`);
-      }
-      const dto = toCheckoutSessionDTO(session, intent);
-      await expandObjects([dto], 'checkout_session', expand, merchant.id);
-      res.status(200).json(dto);
-    }),
-  );
-
-  // Public payer path — UNAUTHENTICATED, rate-limited, authorized by
-  // possession of the wrapped intent's `client_secret` (query param or
-  // `X-Peable-Client-Secret` header — mirrors `GET /v1/payment_intents/:id`).
-  // Never leaks `merchant`/`payment_intent` without a proven secret.
   router.get(
     '/v1/checkout_sessions/:id/public',
-    publicRateLimit,
+    deps.publicRateLimit,
     wrap(async (req, res) => {
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
+      const found = await payerSession(req, res);
+      if (!found) return;
+      answerPayer(res, await publicSessionDTO(found.session, found.merchant));
+    }),
+  );
 
-      const db = getDb();
-      const session = await findSessionByPublicId(db, id);
-      if (!session) {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
+  router.post(
+    '/v1/checkout_sessions/:id/public',
+    deps.publicRateLimit,
+    wrap(async (req, res) => {
+      const found = await payerSession(req, res);
+      if (!found) return;
+      const parsed = payerUpdateSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
         return;
       }
-      // Unscoped by primary key: this path proves its right to the row by
-      // presenting the wrapped intent's `client_secret`, verified below.
-      const intent = await findIntentById(db, session.paymentIntentId);
-      if (!intent) {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
-        return;
+      try {
+        const row = await updateSessionAsPayer(
+          found.session,
+          found.merchant,
+          parsed.data,
+          checkoutDeps,
+        );
+        answerPayer(res, await publicSessionDTO(row, found.merchant));
+      } catch (error) {
+        sendCheckoutError(res, error);
       }
+    }),
+  );
 
-      const clientSecretParam = req.query.client_secret;
-      const clientSecret =
-        typeof clientSecretParam === 'string'
-          ? clientSecretParam
-          : req.header('X-Peable-Client-Secret');
-      if (!clientSecret) {
-        sendError(res, 401, 'authentication_error', 'missing client_secret');
+  router.post(
+    '/v1/checkout_sessions/:id/public/confirm',
+    deps.publicRateLimit,
+    wrap(async (req, res) => {
+      const found = await payerSession(req, res);
+      if (!found) return;
+      const parsed = z
+        .object({})
+        .strict()
+        .safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
         return;
       }
-      if (!verifySecret(clientSecret, intent.clientSecret)) {
-        sendError(res, 403, 'permission_error', 'invalid client_secret');
-        return;
+      try {
+        const row = await confirmSessionAsPayer(found.session, found.merchant, checkoutDeps);
+        answerPayer(res, await publicSessionDTO(row, found.merchant));
+      } catch (error) {
+        sendCheckoutError(res, error);
       }
-
-      const merchant = await findMerchantById(db, session.merchantId);
-      if (!merchant) {
-        sendError(res, 404, 'invalid_request_error', 'checkout session not found');
-        return;
-      }
-      const merchantDisplay = await resolveMerchantDisplay(merchant);
-      const [billing] = await db
-        .select({ fxQuote: faircoinBillingInvoices.fxQuote })
-        .from(faircoinBillingInvoices)
-        .where(eq(faircoinBillingInvoices.paymentIntentId, intent.id));
-      res.setHeader('Cache-Control', 'no-store');
-      res.status(200).json({
-        ...toCheckoutSessionPublicDTO(session, merchantDisplay, intent),
-        ...(billing ? { billing_quote: billing.fxQuote } : {}),
-      });
     }),
   );
 

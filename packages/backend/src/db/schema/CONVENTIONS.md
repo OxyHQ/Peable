@@ -729,3 +729,54 @@ fields on `payment_intents`. Decisions a reader would otherwise undo:
   connected_accounts, `0056` payment_intents; `0052` the new tables), every constraint added to an
   existing table is `NOT VALID`, and the post migration validates them and drops
   the requirement counts.
+
+
+## Checkout v2 (Orbit Phase 3)
+
+`checkout_sessions` (now an order), `checkout_session_line_items`,
+`payment_link_line_items`, the new `payment_links` options, `merchant_branding`,
+`merchant_email_settings` and `customer_emails` (`schema/payments.ts`,
+`schema/checkout.ts`). Decisions a reader would otherwise undo:
+
+- **`checkout_sessions.amount` is `amount_total`.** The column kept its name so
+  the image that predates the order model kept serving through the rollout;
+  the subtotal, discount, tax and shipping are their own columns
+  (`checkout_sessions_amounts_check`).
+- **`payment_intent_id` is nullable**: an open session has no payment until the
+  payer confirms. The unique index still makes a payment one session's (NULLs
+  are distinct). `checkout_sessions_mode_objects_check` keeps a setup session
+  without a payment and a payment session without a SetupIntent.
+- **One fact per pair**: `complete` ⇔ `completed_at`, `expired` ⇔ `expired_at`
+  (`checkout_sessions_status_instants_check`); `no_payment_required` is setup's,
+  or a priced session completed at a zero total
+  (`checkout_sessions_payment_status_agrees_check`).
+- **A line keeps the price it was priced with** (`price` jsonb), so a quantity
+  the payer changes is re-priced by the same rule even if the catalog price is
+  archived meanwhile. Prices are immutable, so for a catalog line the snapshot
+  IS the price. Its bounds are a CHECK: a non-adjustable line has none and
+  quantity ≥ 1; an adjustable one sits inside its own minimum and maximum.
+- **Same-merchant references are composite** — line → `prices (id,
+  merchant_id)` and `products`, session → `customers`, `coupons`,
+  `promotion_codes (id, merchant_id)`. The two new unique targets
+  (`prices_id_merchant_id_key`, `promotion_codes_id_merchant_id_key`) were moved
+  above their foreign keys by hand (§Composite foreign keys).
+- **Only contribution links keep an amount** (`payment_links_amount_shape_check`);
+  a price link's amounts are its lines'. Pre-Phase-3 price links were migrated
+  to one product + one one-time price + one line each (no catalog events: nothing
+  happened to them now), and `success_url` became `after_completion` before the
+  column was dropped.
+- **A link visit's operation key is unique per link**
+  (`checkout_sessions_link_operation_key`): the contribution's write-before-
+  network UUID returns the session it created, under a race too.
+- **The receipt counter is the derivation index's pattern**:
+  `merchant_email_settings.next_receipt_number`, claimed by one upsert
+  `RETURNING n - 1`.
+- **`customer_emails.dedupe_key`** (`<kind>:<subject id>`) is the outbox's
+  idempotency; `customer_emails_subject_check` makes each kind name exactly its
+  subject, and a receipt its number.
+- **Migrations `0058`–`0061`.** `0058` the new tables and `payment_links`
+  (every CHECK on an existing table `NOT VALID`); `0059` `checkout_sessions`'
+  hot-table DDL alone (FKs and CHECKs `NOT VALID`); `0060` its indexes `IF NOT
+  EXISTS`; `0061` (post) the data — pre-Phase-3 sessions get a client secret,
+  their payment's deadline and status and one line; price links their catalog
+  rows — then every `VALIDATE`, then the generated `DROP COLUMN success_url`.

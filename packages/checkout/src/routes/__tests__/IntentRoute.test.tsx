@@ -68,7 +68,7 @@ afterEach(() => {
 function renderIntentRoute(pathAndSearch: string, hash: string) {
   window.history.pushState({}, '', `${pathAndSearch}${hash}`);
   render(
-    <MemoryRouter initialEntries={[pathAndSearch]}>
+    <MemoryRouter initialEntries={[`${pathAndSearch}${hash}`]}>
       <Routes>
         <Route path="/i/:intentId" element={<IntentRoute />} />
       </Routes>

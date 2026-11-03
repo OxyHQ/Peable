@@ -64,11 +64,9 @@ afterEach(() => {
   unsubscribeMock.mockClear();
 });
 
-test('renders the initial snapshot, advances on a socket update, and shows the success CTA once succeeded', async () => {
+test('renders the initial snapshot and advances on every socket update', async () => {
   const initialIntent = makeIntent({ status: 'processing' });
-  const { unmount } = render(
-    <CheckoutView intent={initialIntent} successUrl="https://merchant.example/thanks" />,
-  );
+  const { unmount } = render(<CheckoutView intent={initialIntent} />);
 
   // First frame is the REST snapshot the route already loaded, not a fetch.
   expect(screen.getByText(/payment sent/i)).toBeDefined();
@@ -103,14 +101,14 @@ test('renders the initial snapshot, advances on a socket update, and shows the s
     capturedOnUpdate?.(settledIntent);
   });
   expect(await screen.findByText(/payment complete/i)).toBeDefined();
-  const cta = screen.getByRole('link', { name: /continue/i });
-  expect(cta.getAttribute('href')).toBe('https://merchant.example/thanks');
+  // Leaving for the merchant is the SESSION's decision, never this view's.
+  expect(screen.queryByRole('link')).toBeNull();
 
   unmount();
   expect(unsubscribeMock).toHaveBeenCalledTimes(1);
 });
 
-test('does not show a success CTA without a successUrl', async () => {
+test('a succeeded payment offers no link of its own', async () => {
   const settledIntent = makeIntent({ status: 'succeeded' });
   render(<CheckoutView intent={settledIntent} />);
 
@@ -137,7 +135,7 @@ test('an expired frozen subscription quote shows canonical amounts and no paymen
       billingQuote={quote}
     />,
   );
-  expect(screen.getByText('Catalogue total: 1.00 USD')).toBeTruthy();
+  expect(screen.getByText('Catalogue total: $1.00')).toBeTruthy();
   expect(screen.getByText('Payment quote: 3.33333334 FAIR')).toBeTruthy();
   expect(screen.getByRole('alert').textContent).toContain('expired');
   expect(screen.queryByText('Scan with the Peable app')).toBeNull();

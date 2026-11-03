@@ -78,27 +78,27 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 
 | Capability | State | Today | Target |
 |---|---|---|---|
-| Hosted checkout | ✅ | One amount per session | |
-| Checkout `mode` payment/subscription/setup | ❌ | Payment only; subscriptions via Stripe-hosted Checkout | All three on Peable checkout |
-| Line items, quantity | ❌ | — | `line_items`, `adjustable_quantity` |
-| Discounts / promo codes | ❌ | — | Present |
-| Collect email/address/phone/tax id/custom fields | ❌ | — | Present |
-| Tax shown at checkout | 🟡 | FairCoin `billingQuote` only | `automatic_tax` for every rail |
-| `success_url` redirect / `cancel_url` | 🟡 | Success CTA only; cancel stored, unused | Redirect with `{CHECKOUT_SESSION_ID}`; cancel rendered |
-| Session list/expire/line_items | 🟡 | List (`payment_intent=`); metadata update | expire, line_items |
-| Locales | 🟡 | Checkout English only; UI kit en/es | es/en/fr/de/it/pt |
-| Merchant branding | 🟡 | Avatar (square icon), `business_logo` (a `file_`, the wordmark — `MerchantDisplay.logo_url`, shown by the hosted checkout), name, description; Orbit uploads the logo | Colours, font |
-| Payment Links | 🟡 | Single amount; contributions | On Prices; quantity, promos, `after_completion` |
-| Embedded components | 🟡 | FairCoin button; RN/Bloom sheet with split card fields | Payment Element, Express Checkout, Address Element; `appearance` API |
-| Customer portal | 🟡 | Stripe Billing Portal | Orbit-hosted portal + configurations |
-| Receipts and billing emails | ❌ | — | Via Oxy outbound mail relay |
+| Hosted checkout | ✅ | An ORDER (Stripe's Checkout Session, at the root): the payment is created when the payer confirms, with the amount the session computed; completion follows the payment's own transitions (`services/checkout/completion.ts`), never a client callback. Migrations `0058`–`0061` (data of every pre-Phase-3 session and link migrated) | |
+| Checkout `mode` payment/subscription/setup | 🟡 | `payment`; `setup` (card: a SetupIntent for the given or created customer, `no_payment_required`); `subscription` validated (recurring lines) and refused with 400 `param: mode` until the billing engine registers `SubscriptionCheckoutFulfiller` | Subscription fulfilment (billing engine) |
+| Line items, quantity | ✅ | `line_items` `price` or `price_data` (`product` / `product_data`), per-unit and tiered, `adjustable_quantity`; `GET …/line_items` (`li_`, `expand[]=data.price\|product`) | |
+| Discounts / promo codes | ✅ | `discounts` (coupon or promotion code) or `allow_promotion_codes` (payer entry); every refusal named; the redemption reserved at confirm under the code's row lock and counted at completion in one guarded statement | |
+| Collect email/address/phone/tax id/custom fields | ✅ | `customer` / `customer_email` / `customer_creation`, `billing_address_collection`, `shipping_address_collection.allowed_countries`, `phone_number_collection`, `tax_id_collection`, `custom_fields` (≤3 text/numeric/dropdown), `consent_collection.terms_of_service`; validated by `param` | Shipping rates |
+| Tax shown at checkout | ✅ | `automatic_tax` on every rail: Peable Tax with the billing address as evidence, priced after the discount, fails CLOSED (`failed` blocks confirm); committed at payment | |
+| `success_url` redirect / `cancel_url` | ✅ | `{CHECKOUT_SESSION_ID}` substituted; redirect only once the session reads `complete`; cancel shown as "Back to merchant" before payment | |
+| Session list/expire/line_items | ✅ | List (`payment_intent`, `payment_link`, `customer`, `status`); `expire` (cancels a confirmed payment first); line items; expiry sweeper; `checkout.session.completed\|expired\|async_payment_succeeded\|async_payment_failed` | |
+| Locales | ✅ | Hosted/embedded checkout and emails en/es/fr/de/it/pt (`locale`, else the browser) | |
+| Merchant branding | ✅ | `branding` (icon = avatar, logo = `business_logo`, primary/accent colour, font from a closed set, border style, terms URL) on hosted + embedded checkout and emails; Orbit → Branding with preview | |
+| Payment Links | ✅ | On Prices (one currency, ≤20), quantity/adjustable, promos, collection options, `after_completion`, `restrictions.completed_sessions` (self-deactivating), `payment_link.created\|updated`; a visit creates a Checkout Session; contribution links are links whose one line is the contribution | |
+| Embedded components | ✅ | `PeableCheckout.mountCheckout` (iframe, origin-checked `postMessage`); `createPeableElements` (`payment`, `expressCheckout`, `address`; provider-hosted secure fields), `appearance` API, `confirmPayment`/`confirmSetup` that wait for the gateway | Real-browser provider acceptance |
+| Customer portal | 🟡 | Stripe Billing Portal | Orbit-hosted portal (billing engine) |
+| Receipts and billing emails | 🟡 | Receipts (numbered per merchant), refund notices, checkout confirmations — an outbox in the change's transaction, per-merchant on/off, `support_email` reply-to; an injected `Mailer` (`log` in development) | Production relay adapter (Oxy outbound relay); invoice emails (billing engine) |
 
 ## Phase 4 — Billing (ADR 0018)
 
 | Capability | State | Today | Target |
 |---|---|---|---|
 | Products / Prices | ✅ | Native `prod_` / `price_` (ADR 0016/0018): products CRUD (`active`, `ids[]`, `created`; delete only with no prices and no coupon naming it), `default_price` (expandable, an active price of the product; `default_price_data` on create), `tax_code` checked against Peable Tax codes; prices per-unit or tiered (`graduated`/`volume`), `transform_quantity`, one-time or recurring (≤ 3 years), `tax_behavior`, `lookup_key` unique per merchant with `transfer_lookup_key`; immutable but `active`/`nickname`/`metadata`/`lookup_key`/unset `tax_behavior`; list `product`, `active`, `type`, `currency`, `lookup_keys[]`, `recurring[interval\|usage_type]`; shared `price_data` validator; pure pricing module (`services/catalog/pricing.ts`). JSON offers / provider prices still serve billing until the engine | `custom_unit_amount`, `currency_options`, `unit_amount_decimal`, metered prices (need meters), `product_data`, Search |
-| Coupons / Promotion codes | ✅ | Coupons: merchant-chosen or `coupon_` id (never reused), `percent_off` (2 decimals, basis points) xor `amount_off`+`currency`, `duration` once/repeating/forever, `max_redemptions`, `redeem_by`, `applies_to.products`, `valid`; update name/metadata; delete (tombstone). Promotion codes `promo_`: case-insensitive `code` unique among active codes (generated when absent), `customer`, `max_redemptions`, `expires_at` (≤ coupon `redeem_by`), `restrictions` (first-time, minimum amount); update `active`/`metadata`; list `code`/`coupon`/`customer`/`active`. Discount math (half-up percent, capped amount) and every refusal in `pricing.ts`; nothing redeems yet | Redemption counting at checkout/invoices; `currency_options`; restrictions on update |
+| Coupons / Promotion codes | ✅ | Coupons: merchant-chosen or `coupon_` id (never reused), `percent_off` (2 decimals, basis points) xor `amount_off`+`currency`, `duration` once/repeating/forever, `max_redemptions`, `redeem_by`, `applies_to.products`, `valid`; update name/metadata; delete (tombstone). Promotion codes `promo_`: case-insensitive `code` unique among active codes (generated when absent), `customer`, `max_redemptions`, `expires_at` (≤ coupon `redeem_by`), `restrictions` (first-time, minimum amount); update `active`/`metadata`; list `code`/`coupon`/`customer`/`active`. Discount math (half-up percent, capped amount) and every refusal in `pricing.ts`; redeemed (counted) at checkout completion | Redemption counting on invoices; `currency_options`; restrictions on update |
 | Subscriptions | 🟡 | Stripe Billing via Checkout; FairCoin native | Native engine |
 | Plan change / proration / quantity | ❌ | Refused | Supported |
 | Pause / cancel now | ❌ | Cancel at period end only | Supported |
@@ -136,7 +136,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Payments / refunds / disputes UI | 🟡 | Payments list (status filter, `starting_after` paging) and detail (amount by currency decimals, timeline from the intent's own fields, metadata); Home counts/volume computed client-side from the first page. Disputes list (status, reason, amount by currency decimals, respond-by deadline with past due) and detail: 17 text + 9 file evidence fields (file fields upload `dispute_evidence` files), Save draft, Submit once behind a one-shot confirmation, Accept (close) behind its own; read-only once submitted, closed, under review or past due. No refunds UI | Refunds |
 | Payment methods settings | ✅ | Settings → Payment methods: per-method on/off for the selected `pmc_` (default first), availability, currencies and the capability reason for anything unavailable (shown disabled, never hidden); Wallet domains (add, check again, enable/disable, Apple Pay / Google Pay status with its detail) | |
 | Customers / catalog / subscriptions / invoices UI | 🟡 | Products: list (active/archived), create with a first price, edit, archive, delete, prices per product (add, archive, set default) over the dashboard catalog routes | Coupons and promotion codes, customers, subscriptions, invoices |
-| Payment Links builder | ❌ | — | Present |
+| Payment Links builder | ✅ | Orbit → Payment Links: pick products' prices, quantities, options; copy URL / QR; activate/deactivate | |
 | Balances / payouts / reports | 🟡 | Balances (available / pending / FairCoin informational, balance transactions, open reconciliation mismatches), Payouts (list, detail with its reconciliation report, manual payout, cancel, schedule), Account (onboarding status, requirements, start/resume onboarding) | Reports beyond payout reconciliation |
 | Developers (keys, webhooks, events, logs) | 🟡 | Webhook delivery log (status, attempts, last error, next attempt) with Redeliver; merchant webhook URL/secret in Settings; backend routes for request logs (`/v1/dashboard/applications/:id/request_logs`) | Keys, endpoints, events, request logs UI |
 | Team and roles | 🟡 | Oxy membership checks on dashboard routes | Orbit settings over Oxy membership |

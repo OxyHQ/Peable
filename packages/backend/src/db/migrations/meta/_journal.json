@@ -407,6 +407,34 @@
       "when": 1793730001523,
       "tag": "0057_orbit_money_contract",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "7",
+      "when": 1793731100357,
+      "tag": "0058_checkout_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1793731101533,
+      "tag": "0059_checkout_sessions_v2",
+      "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "7",
+      "when": 1793731102896,
+      "tag": "0060_checkout_sessions_indexes",
+      "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1793731104444,
+      "tag": "0061_checkout_v2_data",
+      "breakpoints": true
     }
   ]
 }

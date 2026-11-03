@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useI18n } from '../i18n';
 // `qr-creator` has no `exports` map, only legacy `main` (a browser-global
 // script with NO `module.exports` at all — importing the bare specifier
 // resolves to `undefined` under Bun's Node-compatible runtime resolution,
@@ -15,6 +16,7 @@ import QrCreator from 'qr-creator/dist/qr-creator.es6.min.js';
 // previously appended, so a re-render with new `text` would otherwise stack
 // canvases.
 export function Qr({ text, size = 200 }: { text: string; size?: number }) {
+  const { t } = useI18n();
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -30,5 +32,5 @@ export function Qr({ text, size = 200 }: { text: string; size?: number }) {
     );
   }, [text, size]);
 
-  return <div ref={containerRef} className="qr" role="img" aria-label="QR code" />;
+  return <div ref={containerRef} className="qr" role="img" aria-label={t('qrLabel')} />;
 }

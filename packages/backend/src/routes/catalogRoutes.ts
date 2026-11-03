@@ -3,6 +3,7 @@ import type { Request, RequestHandler, Response } from 'express';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { oxy } from '../oxy';
 import { CatalogError } from '../services/catalog/catalogService';
+import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import type { QuerySurface } from '../lib/list';
@@ -33,6 +34,11 @@ export interface CatalogRoute {
 
 /** The ADR 0014 answer for a {@link CatalogError}; anything else is rethrown. */
 export function sendCatalogError(res: Response, error: unknown): void {
+  // Checkout's routes (sessions, payment links, branding) ride the same mount.
+  if (error instanceof CheckoutError) {
+    sendCheckoutError(res, error);
+    return;
+  }
   if (!(error instanceof CatalogError)) throw error;
   sendError(res, error.status, 'invalid_request_error', error.message, error.code, error.param);
 }

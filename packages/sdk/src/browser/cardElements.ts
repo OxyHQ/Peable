@@ -137,8 +137,14 @@ export interface CardElementsOptions {
   readonly onWalletsChange?: (wallets: readonly ExpressWallet[]) => void;
   /** A wallet confirmation's outcome (it is started from the wallet sheet, not from `confirm`). */
   readonly onWalletOutcome?: (outcome: CardConfirmOutcome) => void;
-  /** Extra Payment Element options (appearance, layout). */
+  /** Extra Payment Element options (layout). */
   readonly paymentOptions?: Readonly<Record<string, unknown>>;
+  /**
+   * The provider's Elements `appearance` (`toProviderAppearance(...)`), so the
+   * wallets and the secure fields match the page — the merchant's branding on
+   * hosted checkout.
+   */
+  readonly appearance?: Readonly<Record<string, unknown>>;
 }
 
 export interface CardElementsHandle {
@@ -161,7 +167,10 @@ const DECLINED_FALLBACK = 'This payment could not be completed.';
  */
 export function mountCardElements(options: CardElementsOptions): CardElementsHandle {
   const { sdk, returnUrl } = options;
-  const elements = sdk.elements({ clientSecret: options.clientSecret });
+  const elements = sdk.elements({
+    clientSecret: options.clientSecret,
+    ...(options.appearance ? { appearance: options.appearance } : {}),
+  });
   const confirmParams = { return_url: returnUrl };
 
   async function confirmWith(): Promise<CardConfirmOutcome> {

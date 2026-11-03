@@ -62,8 +62,9 @@ describe('closed value sets', () => {
    */
   it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
     // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair
-    // + Orbit money's nine (ADR 0015).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(49);
+    // + Orbit money's nine (ADR 0015) + checkout's four and payment links'
+    // two (Orbit Phase 3).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(55);
     for (const retired of [
       'payment_intent.settled',
       'payment_intent.confirming',
@@ -189,6 +190,9 @@ describe('the base-unit amount pattern', () => {
     // `application_fee_refunds.amount`, `payouts.amount` and the intent's
     // `application_fee_amount` and `transfer_amount` (the ledger's signed
     // amounts use their own pattern).
-    expect(occurrences).toBe(22);
+    // Orbit Phase 3: the four amounts of `checkout_session_line_items`, the
+    // re-added `payment_links_amount_check` (now nullable) and the session's
+    // four totals (`checkout_sessions_amounts_check`).
+    expect(occurrences).toBe(31);
   });
 });

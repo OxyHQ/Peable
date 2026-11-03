@@ -3,19 +3,14 @@ import type {
   CurrencyCode,
   DisputeEvidence,
   Charge,
-  CheckoutSession,
   Customer,
   DeletedCustomer,
   PaymentMethod,
   SetupIntent,
-  CheckoutSessionPublic,
   Dispute,
   Merchant,
-  MerchantDisplay,
   PaymentIntent,
   PaymentIntentNextAction,
-  PaymentLink,
-  PublicPaymentLink,
   Refund,
   RequestLog,
   SocialPaymentSource,
@@ -25,7 +20,6 @@ import type {
 } from '@peable.to/shared-types';
 import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/shared-types';
 import type { ContributionDetails } from '@peable.to/contracts';
-import { config } from '../config';
 import { toUnix, toUnixOrNull } from './time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
@@ -33,8 +27,6 @@ import type { ChargeRow } from '../db/payments/chargeRepository';
 import type { CustomerRow } from '../db/customers/customerRepository';
 import type { PaymentMethodRow } from '../db/customers/paymentMethodRepository';
 import type { SetupIntentRow } from '../db/customers/setupIntentRepository';
-import type { PaymentLinkRow } from '../db/payments/paymentLinkRepository';
-import type { CheckoutSessionRow } from '../db/payments/checkoutSessionRepository';
 import type { DisputeRow } from '../db/disputes/disputeRepository';
 import type { RefundRow } from '../db/refunds/refundRepository';
 import type { StoredContribution } from '../db/schema/payments';
@@ -337,118 +329,6 @@ export function toContributionDetails(stored: StoredContribution): ContributionD
     purpose: stored.purpose,
     amount_mode: stored.amountMode,
     expires_at: stored.expiresAt === null ? null : toUnix(new Date(stored.expiresAt)),
-  };
-}
-
-/**
- * Serialize a persisted PaymentLink row to its merchant-facing DTO
- * (the SDK/dashboard CRUD shape). `url` is built from `config.checkoutBaseUrl`
- * so it always points at the hosted checkout page for the CURRENT deploy.
- */
-export function toPaymentLinkDTO(row: PaymentLinkRow): PaymentLink {
-  return {
-    id: row.publicId,
-    object: 'payment_link',
-    livemode: row.livemode,
-    amount: row.amount,
-    currency: row.currency,
-    rail: row.rail,
-    network: row.network,
-    active:
-      row.active &&
-      (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
-    ...(row.contribution ? { contribution: toContributionDetails(row.contribution) } : {}),
-    metadata: row.metadata,
-    success_url: row.successUrl ?? undefined,
-    url: `${config.checkoutBaseUrl}/l/${row.publicId}`,
-    created: toUnix(row.createdAt),
-    updated_at: toUnix(row.updatedAt),
-  };
-}
-
-/**
- * Serialize a persisted PaymentLink row to what an UNAUTHENTICATED
- * checkout-page visitor may see: no `metadata`, no `success_url`, no internal
- * ids beyond the public one. `merchant` is resolved separately by
- * `services/merchantDisplay.ts` and passed in — this function never touches
- * the network to build it.
- */
-export function toPublicPaymentLinkDTO(
-  row: PaymentLinkRow,
-  merchant: MerchantDisplay,
-): PublicPaymentLink {
-  return {
-    id: row.publicId,
-    object: 'payment_link',
-    livemode: row.livemode,
-    amount: row.amount,
-    currency: row.currency,
-    rail: row.rail,
-    network: row.network,
-    active:
-      row.active &&
-      (!row.contribution?.expiresAt || Date.parse(row.contribution.expiresAt) > Date.now()),
-    ...(row.contribution ? { contribution: toContributionDetails(row.contribution) } : {}),
-    merchant,
-  };
-}
-
-/**
- * Serialize a persisted CheckoutSession row to its merchant/SDK-facing DTO.
- * The wrapped intent is passed in rather than re-fetched here, and supplies
- * both `payment_intent` and `client_secret` — the session row itself
- * deliberately never stores a copy of the secret.
- *
- * `payment_intent` is the intent's PUBLIC `pi_…`, not the internal reference
- * the session stores, because that is what the shipped contract carries.
- */
-export function toCheckoutSessionDTO(
-  row: CheckoutSessionRow,
-  intent: PaymentIntentRow,
-): CheckoutSession {
-  return {
-    id: row.publicId,
-    object: 'checkout_session',
-    livemode: row.livemode,
-    payment_intent: intent.publicId,
-    client_secret: intent.clientSecret,
-    amount: row.amount,
-    currency: row.currency,
-    rail: row.rail,
-    network: row.network,
-    // From the INTENT, which carries the public `ca_…`; the session row holds
-    // only the internal id.
-    connected_account: intent.connectedAccountPublicId ?? null,
-    metadata: row.metadata,
-    success_url: row.successUrl ?? undefined,
-    cancel_url: row.cancelUrl ?? undefined,
-    url: `${config.checkoutBaseUrl}/c/${row.publicId}`,
-    created: toUnix(row.createdAt),
-    updated_at: toUnix(row.updatedAt),
-  };
-}
-
-/**
- * Serialize a persisted CheckoutSession row to what the checkout page
- * loads at `/c/:id`, authorized by possession of the wrapped intent's
- * `client_secret` (see `routes/checkoutSessions.ts`'s public GET). Reuses
- * `toPaymentIntentDTO`'s output unchanged for `payment_intent` — it already
- * carries `client_secret`, which the page needs to open the socket and to
- * `submit_tx`.
- */
-export function toCheckoutSessionPublicDTO(
-  row: CheckoutSessionRow,
-  merchant: MerchantDisplay,
-  intent: PaymentIntentRow,
-): CheckoutSessionPublic {
-  return {
-    id: row.publicId,
-    object: 'checkout_session',
-    livemode: row.livemode,
-    success_url: row.successUrl ?? undefined,
-    cancel_url: row.cancelUrl ?? undefined,
-    merchant,
-    payment_intent: toPaymentIntentDTO(intent),
   };
 }
 

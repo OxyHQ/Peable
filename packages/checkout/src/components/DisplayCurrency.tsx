@@ -7,6 +7,7 @@ import {
   type DisplayCurrency as Currency,
   type DisplayRates,
 } from '@peable.to/sdk/display';
+import { useI18n } from '../i18n';
 
 const STORAGE_KEY = 'peable.displayCurrency';
 function savedCurrency(): Currency {
@@ -22,6 +23,7 @@ function savedCurrency(): Currency {
 
 /** Anonymous display choice. No authentication, payment mutation or stale rate fallback. */
 export function DisplayCurrency({ amount }: { amount: string }) {
+  const { t } = useI18n();
   const id = useId();
   const [currency, setCurrency] = useState(savedCurrency);
   const [rates, setRates] = useState<DisplayRates | null>(null);
@@ -63,7 +65,7 @@ export function DisplayCurrency({ amount }: { amount: string }) {
   });
   return (
     <div className="display-currency">
-      <label htmlFor={id}>Display currency</label>{' '}
+      <label htmlFor={id}>{t('displayCurrency')}</label>{' '}
       <select
         id={id}
         value={currency}
@@ -89,10 +91,10 @@ export function DisplayCurrency({ amount }: { amount: string }) {
       </select>
       {currency !== 'FAIR' && (
         <p aria-live="polite">
-          {display ? `Approx. ${display}` : `Equivalent in ${currency} unavailable`}
+          {display ? t('approx', { amount: display }) : t('equivalentUnavailable', { currency })}
         </p>
       )}
-      <p>The payment amount is fixed in FAIR. Display equivalents are estimates.</p>
+      <p>{t('displayDisclaimer')}</p>
     </div>
   );
 }

@@ -23,6 +23,7 @@ import {
   type CardElementsHandle,
 } from './cardElements';
 import { loadProviderSdk } from './providerJs';
+import { mountCheckout } from './embeddedCheckout';
 import { PeableApiError, PeableError, PeableInvalidRequestError } from '../core/errors';
 
 // ---------------------------------------------------------------------------
@@ -631,4 +632,9 @@ function mount(target: string | Element, opts: PeableCheckoutMountOptions): Peab
   };
 }
 
-export const PeableCheckout = { mount };
+/**
+ * `PeableCheckout.mount` — the FairCoin "Pay with Peable" button for one
+ * payment intent; `PeableCheckout.mountCheckout` — the embedded Checkout
+ * Session (`ui_mode: 'embedded'`), framed from checkout.peable.to.
+ */
+export const PeableCheckout = { mount, mountCheckout };

@@ -206,8 +206,7 @@ describe('payments on behalf of a seller', () => {
       201,
     );
     await new CheckoutSessionsResource(buildTestClient(fetchImpl)).create({
-      amount: '1',
-      network: 'testnet',
+      line_items: [{ price: 'price_fair', quantity: 1 }],
       connected_account: 'ca_seller',
     });
     expect(bodyOf(callOf(requests))).toMatchObject({ connected_account: 'ca_seller' });

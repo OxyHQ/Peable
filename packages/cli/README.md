@@ -126,7 +126,8 @@ peable events retrieve evt_…
 peable payment_intents list [--status succeeded]
 peable payment_intents retrieve pi_…
 peable payment_intents create --amount 100000000 [--metadata order=42]   # FairCoin testnet
-peable checkout_sessions create --amount 100000000 --success-url https://shop.example/thanks
+peable checkout_sessions create --amount 100000000 --name 'Test item' --success-url https://shop.example/thanks
+peable checkout_sessions create --price price_… --quantity 2 --success-url https://shop.example/thanks
 peable webhook_endpoints list
 peable webhook_endpoints create --url https://shop.example/hook --events payment_intent.succeeded
 peable webhook_endpoints delete we_…

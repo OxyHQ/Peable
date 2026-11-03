@@ -4,10 +4,12 @@
 import type { Account } from './account';
 import type { ApplicationFee, Balance, Payout } from './balance';
 import type { Charge } from './charge';
+import type { CheckoutSession } from './checkoutSession';
 import type { Coupon, Price, Product, PromotionCode } from './catalog';
 import type { Customer } from './customer';
 import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
+import type { PaymentLink } from './paymentLink';
 import type { PaymentMethod } from './paymentMethod';
 import type { ConnectedAccount, Refund } from './settlement';
 import type { SetupIntent } from './setupIntent';
@@ -107,6 +109,20 @@ export interface WebhookEventPayload {
   'coupon.deleted': Coupon;
   'promotion_code.created': PromotionCode;
   'promotion_code.updated': PromotionCode;
+  /**
+   * Checkout (Orbit Phase 3). `completed` when the payer finished: the payment
+   * succeeded (`payment_status: paid`), was authorized for a manual capture,
+   * or — a FairCoin payment — was broadcast and is confirming (`unpaid`), in
+   * which case `async_payment_succeeded` or `async_payment_failed` follows
+   * when the chain decides. `expired` when it ran out or the merchant expired
+   * it. Each carries the session as `GET /v1/checkout_sessions/:id` returns it.
+   */
+  'checkout.session.completed': CheckoutSession;
+  'checkout.session.expired': CheckoutSession;
+  'checkout.session.async_payment_succeeded': CheckoutSession;
+  'checkout.session.async_payment_failed': CheckoutSession;
+  'payment_link.created': PaymentLink;
+  'payment_link.updated': PaymentLink;
   /**
    * A seller's account changed — their READINESS, in practice. Emitted when the
    * fields a merchant ACTS on change, not on every refresh. It names no payment
