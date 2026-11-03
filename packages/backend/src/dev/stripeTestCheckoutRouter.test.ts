@@ -15,6 +15,10 @@ async function harness(assertEnvironment = () => {}) {
   app.use(
     createLocalStripeTestCheckoutRouter({
       assertEnvironment,
+      read: async (id, capability) => {
+        if (id !== 'pi_local' || capability !== 'payer-capability') throw new Error('not found');
+        return { ready: false, invoiceStatus: 'open' };
+      },
       create: async (key) => {
         keys.push(key);
         return { intentId: 'pi_local', clientSecret: 'payer-capability' };
@@ -26,7 +30,11 @@ async function harness(assertEnvironment = () => {}) {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return {
     keys,
-    request: (headers: Record<string, string> = {}, body = '{}') =>
+    read: (id = 'pi_local', capability = 'payer-capability', origin = 'http://localhost:8110') =>
+      fetch(`${base}/__local/checkout-test/${id}/subscription`, {
+        headers: { Host: '127.0.0.1:4310', Origin: origin, 'X-Peable-Client-Secret': capability },
+      }),
+    request: (headers: Record<string, string> = {}, body = '{"interval":"month"}') =>
       fetch(`${base}/__local/checkout-test`, {
         method: 'POST',
         body,
@@ -65,7 +73,14 @@ describe('loopback test checkout entry', () => {
   });
   test('rejects caller-selected amounts and missing operation identities', async () => {
     const h = await harness();
-    for (const body of ['{"amount":1}', '[]']) expect((await h.request({}, body)).status).toBe(400);
+    for (const body of [
+      '{"amount":1}',
+      '[]',
+      '{}',
+      '{"interval":"week"}',
+      '{"interval":"month","amount":1}',
+    ])
+      expect((await h.request({}, body)).status).toBe(400);
     expect((await h.request({ 'Idempotency-Key': '' })).status).toBe(400);
     expect(h.keys).toHaveLength(0);
   });
@@ -79,6 +94,16 @@ describe('loopback test checkout entry', () => {
     expect(r.status).toBe(503);
     expect(await r.json()).toEqual({ error: 'local_test_unavailable' });
     expect(h.keys).toHaveLength(0);
+  });
+  test('subscription read requires the exact payer capability and allowed origin', async () => {
+    const h = await harness();
+    expect((await h.read()).status).toBe(200);
+    expect((await h.read('pi_local', '')).status).toBe(403);
+    expect((await h.read('pi_local', 'wrong-capability')).status).toBe(503);
+    expect((await h.read('pi_other', 'payer-capability')).status).toBe(503);
+    expect((await h.read('pi_local', 'payer-capability', 'https://attacker.example')).status).toBe(
+      403,
+    );
   });
   test('bounds requests even when different operation keys are supplied', async () => {
     const h = await harness();

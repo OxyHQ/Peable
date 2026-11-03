@@ -36,7 +36,11 @@ export async function configureLocalStripeCardEntry() {
   if (enabled.length !== 1 || enabled[0] !== 'card')
     throw new Error('Local card-entry configuration permits other methods');
   const { configureStripePaymentProvider } = await import('../services/providers/registry');
-  configureStripePaymentProvider({
-    paymentMethodConfiguration: configuration.id,
-  });
+  const { LocalSubscriptionStripeProvider } = await import('./stripeTestEmbeddedSubscription');
+  configureStripePaymentProvider(
+    {
+      paymentMethodConfiguration: configuration.id,
+    },
+    (options) => new LocalSubscriptionStripeProvider(options),
+  );
 }

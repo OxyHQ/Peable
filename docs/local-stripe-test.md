@@ -142,18 +142,45 @@ pinned version; never rewrite stored events or relax the observation identity
 guard to make a local test pass. Events arriving before verified object binding
 remain pending for a supported explicit observation retry after binding.
 
-The local runner also mounts `POST /__local/checkout-test` for the normal local
-Mention Subscribe flow. This route is absent from ordinary gateway startup. It
-accepts only an empty JSON object, exact loopback peer/Host and the two local
-8110 origins, `X-Peable-Local-Test: 1`, and a stable 16–80 character
-`Idempotency-Key`. The runner limits it to ten requests per minute. It verifies
-the approved test account, key mode, isolated database and local card-only
-merchant, then uses the same production `createIntent` path as the seed CLI.
-The amount is fixed at 599 USD minor units: this is a one-time provider-fields
-test, not a recurring subscription or an access grant. The response contains
-only `{ intentId, clientSecret }`, is `no-store`, and belongs in component memory;
-never put it in browser storage, query strings or application logs. Use the
-separate hosted subscription harness above to test recurring billing.
+The local runner mounts `POST /__local/checkout-test` for normal local Mention
+Subscribe. This route is absent from ordinary gateway startup. It accepts only
+`{ "interval": "month" }` or `{ "interval": "year" }`, the exact loopback
+peer/Host and the two local 8110 origins, `X-Peable-Local-Test: 1`, and a stable
+16–80 character `Idempotency-Key`. It permits ten requests per minute. Server
+catalogue prices are fixed at 599 or 5750 USD minor units; callers cannot choose
+an amount, customer, price or merchant. Changing cadence with the same operation
+key is rejected rather than creating a second purchase.
+
+This route creates a real TEST `default_incomplete` subscription and links its
+**existing first-invoice PaymentIntent** through ordinary Peable `createIntent`.
+It does not create another one-time charge. A guarded local adapter installed
+once at runner startup owns this bridge; production startup is unchanged. The
+isolated customer is bound to the durable intent, provider creation uses stable
+idempotency, and retries also check that customer's unique subscription. Price,
+customer, subscription, initial invoice and payment identities, account mode,
+amount and currency are verified before exposing any payer action. Signed
+provider events still drive the existing intent transitions/outbox.
+
+The no-store response includes `kind: subscription`, `environment: test`, the
+Peable `intentId` and payer `clientSecret`, subscription ID, interval, amount,
+currency and actual provider period dates. Keep capabilities in component memory,
+never browser storage, URL fragments, query strings or logs. Ordinary anonymous
+payer client-action APIs return the first-invoice confirmation capability.
+`GET /__local/checkout-test/:intentId/subscription` requires the same local
+origin/Host and `X-Peable-Client-Secret`. Its `ready` flag requires the signed
+Peable settlement, active subscription, and the existing strict Billing paid
+invoice proof, including actual charge, amount and refund reconciliation. No
+production entitlement grant is configured. The optional tax breakdown uses the
+provider invoice total excluding tax and its recorded tax entries, reconciled to
+the exact total and inclusive treatment. Missing or conflicting values omit the
+breakdown; recorded zero remains zero. Fixture tax never enters this checkout.
+
+Invoice-owned payments cannot be directly canceled. The local adapter verifies
+the entire binding and voids only an unpaid initial invoice of an incomplete
+subscription. If payment wins that race, it rereads provider truth; it never
+cancels an active subscription. The ordinary reject/expiry service consumes the
+result. The separate CLI one-time harness remains available for isolated provider
+field checks; the normal Plus route does not use it.
 
 Local card entry uses the dedicated non-default TEST payment method configuration
 `pmc_1UXZRQAofUef123L4QGpwlFQ`. Only card is enabled there; Link enrollment and
