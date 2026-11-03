@@ -426,37 +426,8 @@ export {
 } from './billing-authority';
 
 export type { BillingFaircoinFxQuote } from './billing';
-export {
-  TAX_REGISTRATION_SCHEMES,
-  TAX_LOCATION_EVIDENCE_TYPES,
-  type TaxRegistrationScheme,
-  type TaxLocationEvidenceType,
-  type TaxBehavior,
-  type TaxAddress,
-  type TaxCode,
-  type TaxCalculationAccount,
-  type TaxSettings,
-  type UpdateTaxSettingsParams,
-  type TaxRegistration,
-  type CreateTaxRegistrationParams,
-  type TaxProductCode,
-  type TaxLocationEvidenceItem,
-  type CreateTaxLocationEvidenceParams,
-  type TaxLocationEvidence,
-  type TaxLineItemParams,
-  type CreateTaxCalculationParams,
-  type TaxBreakdownEntry,
-  type TaxCalculationLineItem,
-  type TaxCalculation,
-  type TaxTransaction,
-  type TaxTransactionList,
-  type TaxTransactionReversal,
-  type CreateTaxReversalParams,
-  type ListTaxTransactionsParams,
-  type TaxReportRow,
-  type TaxReport,
-  type BillingInvoiceTaxLine,
-} from './tax';
+// Peable Tax (ADR 0011) and its business compliance (ADR 0020).
+export * from './tax';
 
 export {
   SUBSCRIPTION_STATUSES,
@@ -575,4 +546,3 @@ export {
   type PublicPortalSession,
   type PublicPortalSubscription,
 } from './billingEngine';
-export * from './taxCompliance';

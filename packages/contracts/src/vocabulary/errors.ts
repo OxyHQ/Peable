@@ -84,9 +84,10 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The merchant already has the maximum number of webhook endpoints.',
   account_not_ready:
     'The connected account cannot take this payment yet: its onboarding or a capability is incomplete.',
-  approval_incomplete: 'The tax registration has not been approved by the account owner yet.',
+  approval_incomplete:
+    'The tax settings cannot be approved yet: a legal name and head office are required, or they changed during the approval.',
   approval_requires_provider:
-    'The tax registration needs the provider to confirm it before it can be approved.',
+    'Registered sales need a tax provider, and this application has none: the approval would leave covered sales unpriceable.',
   checkout_session_expired: 'The Checkout Session has expired.',
   checkout_session_not_open: 'The Checkout Session is no longer open (complete or expired).',
   customer_location_conflicting:
@@ -94,7 +95,7 @@ export const ERROR_CODE_DESCRIPTIONS = {
   customer_location_expired: "The customer's location evidence is too old to price a sale with.",
   customer_location_insufficient:
     "There is not enough evidence of the customer's location to decide whether the sale is taxed.",
-  customer_location_invalid: "The customer's location evidence is malformed.",
+  customer_location_invalid: "The tax provider could not use the customer's location.",
   dispute_already_submitted:
     'Evidence for this dispute has already been submitted; it is one shot.',
   dispute_not_answerable: 'The dispute is in a status that no longer accepts evidence.',
@@ -121,10 +122,11 @@ export const ERROR_CODE_DESCRIPTIONS = {
   rail_unavailable: 'The payment rail this request needs is not available.',
   reconciliation_required:
     'The billing operation has an unknown outcome at the provider and is being reconciled.',
-  registration_immutable: 'An approved tax registration cannot be changed.',
+  registration_immutable:
+    'An approved or ended tax registration cannot be deleted or changed this way; end it instead.',
   resource_already_exists: 'An object with this identity already exists.',
   result_expired: 'The stored result of this operation has expired.',
-  review_item_not_open: 'The review item is already resolved.',
+  review_item_not_open: 'The review item is already resolved or dismissed.',
   rule_set_version_unavailable: 'The tax rule set version is not available.',
   subscription_line_invalid: 'A subscription line item is not valid for Checkout.',
   tax_behavior_locked: "The price's `tax_behavior` cannot change once set.",

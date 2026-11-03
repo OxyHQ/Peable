@@ -1,56 +1,11 @@
 import { createHmac } from 'node:crypto';
-import { isIP } from 'node:net';
-import { z } from 'zod';
-import type { TaxLocationEvidenceType } from '@peable.to/shared-types';
+import {
+  type CreateTaxLocationEvidenceParams,
+  type TaxLocationEvidenceType,
+  taxLocationEvidenceItemsParam,
+} from '@peable.to/contracts';
 import type { StoredTaxEvidenceItem } from '../../db/schema/tax';
 import { locationRuleFor, type TaxLocationRule } from './jurisdictions';
-
-const country = z.string().regex(/^[A-Z]{2}$/);
-const subdivision = z
-  .string()
-  .regex(/^[A-Z0-9]{1,3}$/)
-  .nullish();
-const shortText = z.string().trim().min(1).max(200).nullish();
-export const taxAddressSchema = z
-  .object({
-    country,
-    state: subdivision,
-    postal_code: z.string().trim().min(1).max(20).nullish(),
-    city: shortText,
-    line1: shortText,
-    line2: shortText,
-  })
-  .strict();
-
-/** The accepted evidence kinds. Strict: an item claiming a language, currency,
- * locale or timezone is not a smaller kind of evidence, it is refused. */
-const evidenceItemSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('billing_address'), address: taxAddressSchema }).strict(),
-  z
-    .object({
-      type: z.literal('ip_address'),
-      ip_address: z.string().refine((value) => isIP(value) !== 0, 'Not an IP address'),
-      country,
-      state: subdivision,
-    })
-    .strict(),
-  z
-    .object({
-      type: z.enum(['payment_method_country', 'bank_country', 'sim_country', 'landline_country']),
-      country,
-    })
-    .strict(),
-]);
-export const createTaxLocationEvidenceSchema = z
-  .object({
-    customer_ref: z
-      .string()
-      .min(1)
-      .max(128)
-      .regex(/^[A-Za-z0-9_.:-]+$/),
-    evidence: z.array(evidenceItemSchema).min(1).max(6),
-  })
-  .strict();
 
 export interface EvaluatedEvidence {
   status: 'sufficient' | 'insufficient' | 'conflicting';
@@ -68,10 +23,10 @@ export interface EvaluatedEvidence {
  * is inferred: an item names a country, or it is not evidence.
  */
 export function evaluateEvidence(
-  raw: z.input<typeof createTaxLocationEvidenceSchema>['evidence'],
+  raw: CreateTaxLocationEvidenceParams['evidence'],
   ipHashSalt: string | undefined,
 ): EvaluatedEvidence {
-  const parsed = z.array(evidenceItemSchema).min(1).max(6).parse(raw);
+  const parsed = taxLocationEvidenceItemsParam.parse(raw);
   const items: StoredTaxEvidenceItem[] = parsed.map((item) => {
     if (item.type === 'billing_address')
       return {

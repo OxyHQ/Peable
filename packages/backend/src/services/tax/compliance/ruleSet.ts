@@ -16,6 +16,7 @@
  * finding of a rule goes to the review queue for a person to decide.
  */
 import type {
+  CurrencyCode,
   TaxCoverageLimit,
   TaxJurisdictionRule,
   TaxRuleSet,
@@ -75,7 +76,7 @@ export interface RuleDefinition {
   readonly effectiveFrom: string;
   /** Minor units of `currency`. */
   readonly thresholdMinor: bigint | null;
-  readonly currency: string;
+  readonly currency: CurrencyCode;
   readonly period: 'current_or_previous_calendar_year' | 'preceding_twelve_calendar_months';
   /** Fraction of the threshold at which `approaching_threshold` is reported, in percent. */
   readonly approachingPercent: number;
