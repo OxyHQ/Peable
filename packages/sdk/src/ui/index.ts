@@ -21,3 +21,18 @@ export {
   type PeableProviderFieldsProps,
   type ProviderConfirmation,
 } from './PeableProviderFields';
+export {
+  PeableOrderDetailsSheet,
+  type PeableOrderDetailsSheetProps,
+} from './PeableOrderDetailsSheet';
+export {
+  availableOrderReward,
+  matchingRewardOffers,
+  selectedRewardCategories,
+} from './orderRewards';
+export type {
+  PeableOrderDetails,
+  PeableOrderReward,
+  PeableRewardOffer,
+  OrderRewardScreen,
+} from './orderRewards';

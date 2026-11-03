@@ -145,3 +145,19 @@ The hosted checkout and this UI share `loadProviderSdk` through the anonymous
 `/checkout` browser entry. React/Bloom remain unreachable from that entry or the
 server root. Appearance uses Bloom's current theme via the provider API, with
 bounded loading/readiness timeouts and retry. It never reads iframe card values.
+
+### Order details and optional rewards
+
+The optional `@peable.to/sdk/checkout/ui` entry also exports
+`PeableOrderDetailsSheet`. Its host supplies the order's quoted total, paid and
+remaining amounts, dated repayment observations, and explicit optional actions.
+It uses Bloom's order progress/timeline, grouped sections and dialog compositor;
+it does not calculate a loan, initiate an early payment, or infer autopay.
+
+Reward data is bound to an order and includes eligibility, a deadline, category
+requirements, offer descriptions and full conditions. Browsing and selecting an
+offer are separate from explicitly confirming a claim. The host must revalidate
+order binding, eligibility and expiry and make claims idempotent. The SDK has no
+reward service, persistence, fulfillment or entitlement side effects. A rejected
+claim never changes the order's payment status. `claiming` blocks dismissal until
+the host supplies a result. No reward is inferred for a successful payment.

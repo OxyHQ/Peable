@@ -1,8 +1,7 @@
 import { PeableMethodContent, type PeableMethodDetails } from './PeableMethodContent';
-import { StatusRing, type StatusRingProps } from '@oxy.so/bloom/loading';
-import { Image, View } from 'react-native';
+import type { StatusRingProps } from '@oxy.so/bloom/loading';
+import { PeableBrandStatus } from './PeableBrandStatus';
 import { CheckoutSheet, type CheckoutSheetProps } from '@oxy.so/bloom/checkout-sheet';
-import peableLogo from './assets/peable.png';
 import { formatCheckoutAmount } from './amount';
 import { checkoutMessage } from './messages';
 
@@ -45,33 +44,23 @@ export function PeableCheckoutSheet({
       label={(key, values) => checkoutMessage(locale, key, values, messages)}
       formatAmount={(amount, currency) => formatCheckoutAmount(amount, currency, locale)}
       footer={
-        <View pointerEvents="none" style={{ alignItems: 'center', padding: 12 }}>
-          <StatusRing
-            testID="peable-brand-status"
-            state={
-              brandState ??
-              (props.step === 'processing'
-                ? 'loading'
-                : props.step === 'success'
-                  ? 'success'
-                  : props.step === 'failure'
-                    ? 'error'
-                    : 'idle')
-            }
-            accessibilityLabel={
-              props.step === 'processing' || props.step === 'success' || props.step === 'failure'
-                ? checkoutMessage(locale, `result.${props.step}`, undefined, messages)
-                : 'Peable'
-            }
-          >
-            <Image
-              source={typeof peableLogo === 'string' ? { uri: peableLogo } : peableLogo}
-              style={{ width: 32, height: 32 }}
-              resizeMode="contain"
-              accessibilityLabel="Peable"
-            />
-          </StatusRing>
-        </View>
+        <PeableBrandStatus
+          state={
+            brandState ??
+            (props.step === 'processing'
+              ? 'loading'
+              : props.step === 'success'
+                ? 'success'
+                : props.step === 'failure'
+                  ? 'error'
+                  : 'idle')
+          }
+          label={
+            props.step === 'processing' || props.step === 'success' || props.step === 'failure'
+              ? checkoutMessage(locale, `result.${props.step}`, undefined, messages)
+              : 'Peable'
+          }
+        />
       }
     />
   );
