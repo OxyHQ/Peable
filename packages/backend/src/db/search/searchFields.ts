@@ -1,12 +1,24 @@
 import { sql } from 'drizzle-orm';
 import {
+  COLLECTION_METHODS,
   CURRENCY_CODES,
+  INVOICE_STATUSES,
   PAYMENT_INTENT_STATUSES,
   PRICE_TYPES,
   REFUND_REASONS,
+  SUBSCRIPTION_STATUSES,
 } from '@peable.to/shared-types';
 import type { SearchFields } from '../../lib/search/compile';
-import { charges, customers, paymentIntents, prices, products, refunds } from '../schema';
+import {
+  charges,
+  customers,
+  invoices,
+  paymentIntents,
+  prices,
+  products,
+  refunds,
+  subscriptions,
+} from '../schema';
 import { REFUND_STATUSES } from '../schema/valueSets';
 
 /**
@@ -21,12 +33,12 @@ import { REFUND_STATUSES } from '../schema/valueSets';
  *
  * ## Adding a resource
  *
- * One map here and one entry in `lib/search/resources.ts` — the subscriptions
- * and invoices of the billing engine (ADR 0018) are exactly that: declare
- * `status`, `customer`, `created`, `metadata` (and Stripe's
- * `invoices`: `total`, `number`, `subscription`), give the repository's list
- * function a `search` predicate and a count, and register it. The parser, the
- * page token, the routes, the dashboard search and the SDK need no change.
+ * One map here and one entry in `lib/search/resources.ts` — as the billing
+ * engine's subscriptions and invoices (ADR 0018) were added: declare the
+ * fields, give the repository's list function a `search` predicate and a
+ * count, and register it. The parser, the page token, the routes and the
+ * dashboard search need no change; the SDK gains one `search` method and
+ * Orbit one row shape.
  */
 
 /** The internal key of `cus_…` in the caller's merchant, or NULL. */
@@ -38,6 +50,9 @@ const intentKey = (publicId: string, merchantId: string) =>
 
 const productKey = (publicId: string, merchantId: string) =>
   sql`select ${products.id} from ${products} where ${products.publicId} = ${publicId}::text and ${products.merchantId} = ${merchantId}::text`;
+
+const subscriptionKey = (publicId: string, merchantId: string) =>
+  sql`select ${subscriptions.id} from ${subscriptions} where ${subscriptions.publicId} = ${publicId}::text and ${subscriptions.merchantId} = ${merchantId}::text`;
 
 /** A charge's own intent, by the charge's reference — raw and qualified. */
 const ofChargeIntent = (expression: string) =>
@@ -236,4 +251,87 @@ export const REFUND_SEARCH_FIELDS: SearchFields = {
   },
   created: { type: 'timestamp', sql: refunds.createdAt },
   metadata: { type: 'metadata', sql: refunds.metadata },
+};
+
+/**
+ * Stripe's Subscription search fields (`status`, `created`, `metadata`), plus
+ * `customer`, `currency`, `collection_method` and `description` (Peable
+ * additions). A search finds every status, canceled included — hiding
+ * canceled subscriptions is the list's default, not the search's.
+ */
+export const SUBSCRIPTION_SEARCH_FIELDS: SearchFields = {
+  status: {
+    type: 'token',
+    sql: subscriptions.status,
+    values: SUBSCRIPTION_STATUSES,
+    case: 'lower',
+    nullable: false,
+  },
+  customer: {
+    type: 'reference',
+    sql: subscriptions.customerId,
+    prefix: 'cus',
+    resolve: customerKey,
+    nullable: false,
+  },
+  currency: {
+    type: 'token',
+    sql: subscriptions.currency,
+    values: CURRENCY_CODES,
+    case: 'upper',
+    nullable: false,
+  },
+  collection_method: {
+    type: 'token',
+    sql: subscriptions.collectionMethod,
+    values: COLLECTION_METHODS,
+    case: 'lower',
+    nullable: false,
+  },
+  description: { type: 'string', sql: subscriptions.description, nullable: true },
+  created: { type: 'timestamp', sql: subscriptions.createdAt },
+  metadata: { type: 'metadata', sql: subscriptions.metadata },
+};
+
+/**
+ * Stripe's Invoice search fields (`created`, `currency`, `customer`,
+ * `metadata`, `number`, `status`, `subscription`, `total`), plus the
+ * customer's email and name as the invoice recorded them (Peable additions,
+ * what the dashboard's free-text box matches).
+ */
+export const INVOICE_SEARCH_FIELDS: SearchFields = {
+  status: {
+    type: 'token',
+    sql: invoices.status,
+    values: INVOICE_STATUSES,
+    case: 'lower',
+    nullable: false,
+  },
+  customer: {
+    type: 'reference',
+    sql: invoices.customerId,
+    prefix: 'cus',
+    resolve: customerKey,
+    nullable: false,
+  },
+  subscription: {
+    type: 'reference',
+    sql: invoices.subscriptionId,
+    prefix: 'sub',
+    resolve: subscriptionKey,
+    nullable: true,
+  },
+  currency: {
+    type: 'token',
+    sql: invoices.currency,
+    values: CURRENCY_CODES,
+    case: 'upper',
+    nullable: false,
+  },
+  number: { type: 'string', sql: invoices.number, nullable: true, substring: false },
+  total: { type: 'amount', sql: invoices.total },
+  customer_email: { type: 'string', sql: invoices.customerEmail, nullable: true },
+  customer_name: { type: 'string', sql: invoices.customerName, nullable: true },
+  created: { type: 'timestamp', sql: invoices.createdAt },
+  metadata: { type: 'metadata', sql: invoices.metadata },
 };

@@ -41,6 +41,7 @@ async function insertOwed(
     paymentIntentId?: string;
     refundId?: string;
     checkoutSessionId?: string;
+    invoiceId?: string;
     receiptNumber?: string;
   },
 ): Promise<void> {
@@ -128,6 +129,36 @@ export async function enqueueCheckoutConfirmation(
   });
 }
 
+/**
+ * An invoice's email is owed (ADR 0018): `invoice` (sent for its customer to
+ * pay — at finalization of a `send_invoice` invoice, or by `POST …/send`) or
+ * `invoice_payment_failed` (dunning). `occasion` keeps each sending distinct:
+ * a re-send is a new email, a retried finalization is not.
+ */
+export async function enqueueInvoiceEmail(
+  tx: DatabaseOrTransaction,
+  invoice: {
+    readonly id: string;
+    readonly merchantId: string;
+    readonly customerEmail: string | null;
+  },
+  kind: 'invoice' | 'invoice_payment_failed',
+  occasion: string,
+): Promise<boolean> {
+  const email = invoice.customerEmail;
+  if (!email || !EMAIL.test(email)) return false;
+  const dedupeKey = `${kind}:${invoice.id}:${occasion}`;
+  if (await alreadyOwed(tx, dedupeKey)) return true;
+  await insertOwed(tx, {
+    merchantId: invoice.merchantId,
+    kind,
+    dedupeKey,
+    recipient: email,
+    invoiceId: invoice.id,
+  });
+  return true;
+}
+
 // ---- The dispatcher's reads and writes ----------------------------------------------
 
 export interface OwedEmailRow {
@@ -138,6 +169,7 @@ export interface OwedEmailRow {
   readonly paymentIntentId: string | null;
   readonly refundId: string | null;
   readonly checkoutSessionId: string | null;
+  readonly invoiceId: string | null;
   readonly receiptNumber: string | null;
   readonly attempts: number;
   readonly expiresAt: Date;
@@ -176,6 +208,7 @@ export async function claimOwedEmails(
       paymentIntentId: customerEmails.paymentIntentId,
       refundId: customerEmails.refundId,
       checkoutSessionId: customerEmails.checkoutSessionId,
+      invoiceId: customerEmails.invoiceId,
       receiptNumber: customerEmails.receiptNumber,
       attempts: customerEmails.attempts,
       expiresAt: customerEmails.expiresAt,

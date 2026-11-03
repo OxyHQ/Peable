@@ -3,6 +3,7 @@
  * delete, list (`email=` exact). A deleted customer is a tombstone that still
  * retrieves, as `{id, object: 'customer', deleted: true}`.
  */
+import { findLiveTestClockForMerchant } from '../db/billingEngine/testClockRepository';
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
@@ -65,6 +66,7 @@ const createBodySchema = z
       .strict()
       .optional(),
     metadata: metadataCreateSchema.optional(),
+    test_clock: z.string().min(1).max(255).optional(),
     expand: expandParam.optional(),
   } satisfies Record<keyof CreateCustomerParams | 'expand', z.ZodType>)
   .strict();
@@ -136,7 +138,32 @@ export function createCustomersRouter(deps: { requireMerchant: RequestHandler })
         ...(body.address !== undefined ? { address: toAddress(body.address) } : {}),
         ...(body.shipping !== undefined ? { shipping: toShipping(body.shipping) } : {}),
       };
-      const customer = await createCustomer(merchant, { ...fields, metadata: body.metadata ?? {} });
+      let testClockId: string | null = null;
+      if (body.test_clock !== undefined) {
+        // Test mode only (ADR 0018 §3): a live customer lives on the wall clock.
+        const clock = merchant.livemode
+          ? null
+          : await findLiveTestClockForMerchant(getDb(), body.test_clock, merchant.id);
+        if (!clock) {
+          sendError(
+            res,
+            400,
+            'invalid_request_error',
+            merchant.livemode
+              ? 'test clocks exist in test mode only'
+              : `no such test clock: '${body.test_clock}'`,
+            merchant.livemode ? 'parameter_invalid' : 'resource_missing',
+            'test_clock',
+          );
+          return;
+        }
+        testClockId = clock.id;
+      }
+      const customer = await createCustomer(merchant, {
+        ...fields,
+        metadata: body.metadata ?? {},
+        testClockId,
+      });
       const dto = toCustomerDTO(customer);
       await expandObjects([dto], 'customer', expand, merchant.id);
       res.status(201).json(dto);

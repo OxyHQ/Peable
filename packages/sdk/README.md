@@ -121,7 +121,7 @@ await peable.paymentLinks.update(link.id, { active: false });
 ### Search (0.19.0)
 
 Stripe's Search API on `paymentIntents`, `charges`, `customers`, `products`,
-`prices` and `refunds`: `search({ query, limit?, page?, expand? })` answers a
+`prices` and `refunds` — and, since 0.20.0, `subscriptions` and `invoices`: `search({ query, limit?, page?, expand? })` answers a
 promise of one page — `{ object: 'search_result', data, has_more, next_page,
 url }` — that is ALSO an async iterable over every match, following
 `next_page` with the same query:
@@ -321,8 +321,8 @@ await peable.promotionCodes.create({ coupon: 'LAUNCH20', code: 'LAUNCH', max_red
   price of a plan. `lookup_keys` (at most 10) filters a list by them.
 - Tiered prices: `billing_scheme: 'tiered'`, `tiers_mode: 'graduated' |
   'volume'`, `tiers: [{ up_to, unit_amount?, flat_amount? }]`, the last `up_to`
-  `'inf'`. `transform_quantity` packs per-unit quantities. Metered usage
-  (`usage_type: 'metered'`) is refused until meters exist.
+  `'inf'`. `transform_quantity` packs per-unit quantities. A metered price
+  (`recurring: { usage_type: 'metered', meter: 'mtr_…' }`) bills a meter's usage.
 - A product with prices (or named by a coupon's `applies_to`) cannot be
   deleted — archive it. **Coupon ids are never reused**, even after `del`.
   Coupons change only `name` and `metadata`.
@@ -501,6 +501,63 @@ error for a fresh decline, and `pending` if the gateway has not decided within
 `timeoutMs` (default 60 s). Invalid `appearance` values (anything that is not a
 colour, a length, a font list, or a rule property from a fixed set) are dropped,
 never passed to CSS or the provider.
+### Billing engine: subscriptions, invoices, credit notes, meters, entitlements, portal (0.20.0, ADR 0018)
+
+Orbit runs its own billing: subscriptions and invoices are Orbit objects with
+Orbit ids, priced from the catalog, taxed by Peable Tax before an invoice
+finalizes, and collected with a PaymentIntent — off-session against a saved
+card, or by the payer from their wallet on FairCoin (never a debit). It sits
+beside `billing.*` (the Stripe-Billing proxy), which is unchanged.
+
+```ts
+const sub = await peable.subscriptions.create({
+  customer: 'cus_…',
+  items: [{ price: 'price_…', quantity: 2 }],
+  trial_period_days: 14,
+  automatic_tax: { enabled: true },
+  expand: ['latest_invoice'],
+});
+await peable.subscriptions.update(sub.id, {
+  items: [{ id: sub.items.data[0].id, price: 'price_pro' }],
+  proration_behavior: 'always_invoice',
+});
+await peable.subscriptions.cancel(sub.id, { invoice_now: true, prorate: true });
+
+const draft = await peable.invoices.create({ customer: 'cus_…', currency: 'EUR' });
+await peable.invoiceItems.create({ customer: 'cus_…', invoice: draft.id, amount: '4200', currency: 'EUR' });
+const open = await peable.invoices.finalizeInvoice(draft.id); // numbered PREFIX-0001, gapless
+await peable.invoices.pay(open.id); // a decline is a PeableCardError
+await peable.creditNotes.create({ invoice: open.id, amount: '1000', reason: 'order_change' });
+const next = await peable.invoices.retrieveUpcoming({ customer: 'cus_…' });
+```
+
+- **Statuses** are Stripe's: subscriptions `incomplete`, `incomplete_expired`,
+  `trialing`, `active`, `past_due`, `unpaid`, `canceled`, `paused`; invoices
+  `draft` → `open` → `paid` | `void` | `uncollectible`. Every change records its
+  event (`customer.subscription.*`, `invoice.*`, `invoiceitem.*`, `credit_note.*`).
+- **Signed amounts**: a proration credit line, an invoice whose credits exceed
+  its charges and a customer balance (negative is credit) may start with `-`.
+- **Customer balance**: `customerBalanceTransactions.create('cus_…', { amount:
+  '-500', currency: 'EUR' })`; applied to the next invoice when it finalizes.
+- **Test clocks** (test mode): `testHelpers.testClocks.create({ frozen_time })`,
+  attach a customer with `customers.create({ test_clock })`, then
+  `testClocks.advance(id, { frozen_time })` runs trials, renewals and dunning
+  up to that time before it answers.
+- **Dunning**: `billingSettings.update({ dunning: { retry_schedule_days: [1, 3,
+  5, 7], final_action: 'cancel' | 'unpaid' | 'past_due', invoice_action:
+  'mark_uncollectible' | 'leave_open' }, emails: { … } })`.
+- **Usage**: `billing.meters.create({ display_name, event_name, default_aggregation:
+  { formula: 'sum' | 'count' | 'last' } })`, then
+  `billing.meterEvents.create({ event_name, identifier, payload: {
+  peable_customer_id, value } })` — idempotent by `identifier`.
+- **Entitlements**: `entitlements.features.create({ lookup_key: 'mention_plus',
+  name })`, `entitlements.productFeatures.attach('prod_…', { entitlement_feature })`
+  for EVERY product that grants it, and `entitlements.activeEntitlements.list({
+  customer })` is the access answer — one entitlement per feature however many
+  products grant it. Listen for `entitlements.active_entitlement_summary.updated`.
+- **Portal**: `billingPortal.sessions.create({ customer, return_url })` answers a
+  one-hour `url` to Orbit's hosted portal, configured by
+  `billingPortal.configurations`.
 
 ### Own Oxy applications: shared workload transport
 

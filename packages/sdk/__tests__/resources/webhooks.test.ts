@@ -27,6 +27,7 @@ import {
   requirementsFixture,
 } from '../support/moneyFixtures';
 import { checkoutSessionFixture, paymentLinkFixture } from '../support/checkoutFixture';
+import { BILLING_EVENT_PAYLOADS } from '../support/billingFixtures';
 
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
@@ -275,6 +276,9 @@ const customer: Customer = {
   shipping: null,
   invoice_settings: { default_payment_method: null },
   metadata: {},
+  balance: '0',
+  currency: null,
+  test_clock: null,
   created: EVENT.created,
 };
 const paymentMethod: PaymentMethod = {
@@ -343,7 +347,7 @@ const price: Price = {
   tiers_mode: null,
   transform_quantity: null,
   type: 'recurring',
-  recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+  recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed', meter: null },
   tax_behavior: 'exclusive',
   lookup_key: 'plus_monthly',
   nickname: null,
@@ -453,6 +457,7 @@ const payloads = {
   },
   'payment_link.created': paymentLinkFixture,
   'payment_link.updated': { ...paymentLinkFixture, active: false },
+  ...BILLING_EVENT_PAYLOADS,
   'connected_account.updated': account,
   'account.updated': accountFixture(),
   'application_fee.created': applicationFeeFixture(),

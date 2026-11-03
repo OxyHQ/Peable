@@ -946,6 +946,13 @@ export function createTaxService(options: TaxServiceOptions) {
           'invalid_tax_request',
           'card refunds and credit notes are reversed from the provider',
         );
+      // An Orbit invoice (ADR 0018) is reversed by its own credit notes and
+      // proration credits; a hand-entered reversal would count one twice.
+      if (original.rail === 'orbit')
+        throw new TaxError(
+          'invalid_tax_request',
+          'an Orbit invoice is reversed by its credit notes; issue one instead',
+        );
       const row = await reverseTaxTransaction(db, {
         originalId: original.id,
         reference: input.reference,
@@ -1208,7 +1215,7 @@ function cumulativeLines(calculation: TaxCalculation, reversed: number) {
  * if there already is one, and null when there is nothing to write.
  */
 export async function reverseTaxTransaction(
-  db: Database,
+  db: DatabaseOrTransaction,
   input: {
     originalId: string;
     /** The reversal's own reference, or one minted from its sequence number. */

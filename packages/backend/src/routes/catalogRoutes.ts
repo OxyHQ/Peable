@@ -5,6 +5,9 @@ import { oxy } from '../oxy';
 import { CatalogError } from '../services/catalog/catalogService';
 import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requestIdOf } from '../lib/requestId';
+import { BillingEngineError } from '../services/billingEngine/errors';
+import { StaleTransitionError } from '../services/billingEngine/transitions';
 import { idempotent } from '../lib/idempotency';
 import type { QuerySurface } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
@@ -32,11 +35,31 @@ export interface CatalogRoute {
   readonly core: CatalogCore;
 }
 
-/** The ADR 0014 answer for a {@link CatalogError}; anything else is rethrown. */
+/**
+ * The ADR 0014 answer for a {@link CatalogError} or a billing engine refusal
+ * ({@link BillingEngineError}, ADR 0018); anything else is rethrown.
+ */
 export function sendCatalogError(res: Response, error: unknown): void {
   // Checkout's routes (sessions, payment links, branding) ride the same mount.
   if (error instanceof CheckoutError) {
     sendCheckoutError(res, error);
+    return;
+  }
+  if (error instanceof BillingEngineError) {
+    res.status(error.status).json({
+      error: {
+        type: error.type,
+        code: error.code,
+        ...(error.param ? { param: error.param } : {}),
+        message: error.message,
+        ...error.extra,
+        request_id: requestIdOf(res) ?? null,
+      },
+    });
+    return;
+  }
+  if (error instanceof StaleTransitionError) {
+    sendError(res, 409, 'invalid_request_error', error.message, 'resource_conflict');
     return;
   }
   if (!(error instanceof CatalogError)) throw error;

@@ -577,3 +577,93 @@ describe('branding and email settings', () => {
     expect(calls[3]?.options).toEqual({ body: { refund_notices: false } });
   });
 });
+
+describe('the billing engine (ADR 0018)', () => {
+  const list = () => ({ object: 'list', data: [], has_more: false });
+
+  it('lists customers by email and reads their balance and entitlements', async () => {
+    answer = list;
+    await api.customers.list(scope, { email: 'a@b.test', limit: 25 });
+    await api.customers.balanceTransactions(scope, 'cus_1', { limit: 25 });
+    await api.customers.activeEntitlements(scope, 'cus_1');
+    expect(calls.map((call) => call.path)).toEqual([
+      '/v1/dashboard/applications/app%201/customers?environment=development&email=a%40b.test&limit=25',
+      '/v1/dashboard/applications/app%201/customers/cus_1/balance_transactions?environment=development&limit=25',
+      '/v1/dashboard/applications/app%201/entitlements/active_entitlements?environment=development&customer=cus_1',
+    ]);
+  });
+
+  it('reads a subscription with its latest invoice expanded, and acts on it', async () => {
+    answer = () => ({ id: 'sub_1' });
+    await api.subscriptions.retrieve(scope, 'sub_1');
+    await api.subscriptions.update(scope, 'sub_1', { cancel_at_period_end: true });
+    await api.subscriptions.update(scope, 'sub_1', { pause_collection: '' });
+    await api.subscriptions.cancel(scope, 'sub_1', { prorate: true });
+    await api.subscriptions.resume(scope, 'sub_1');
+    const base = '/v1/dashboard/applications/app%201/subscriptions/sub_1';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${base}?environment=development&expand%5B%5D=latest_invoice`, undefined],
+      ['POST', `${base}?environment=development`, { cancel_at_period_end: true }],
+      ['POST', `${base}?environment=development`, { pause_collection: '' }],
+      ['DELETE', `${base}?environment=development`, { prorate: true }],
+      ['POST', `${base}/resume?environment=development`, {}],
+    ]);
+  });
+
+  it('filters subscriptions and invoices, and posts invoice actions', async () => {
+    answer = list;
+    await api.subscriptions.list(live, { status: 'all', customer: 'cus_9' });
+    await api.invoices.list(live, { status: 'open', starting_after: 'in_1' });
+    answer = () => ({ id: 'in_1' });
+    for (const action of ['finalize', 'void', 'send', 'mark_uncollectible'] as const) {
+      await api.invoices.act(live, 'in_1', action);
+    }
+    const base = '/v1/dashboard/applications/app_live';
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['GET', `${base}/subscriptions?environment=production&status=all&customer=cus_9`],
+      ['GET', `${base}/invoices?environment=production&status=open&starting_after=in_1`],
+      ['POST', `${base}/invoices/in_1/finalize?environment=production`],
+      ['POST', `${base}/invoices/in_1/void?environment=production`],
+      ['POST', `${base}/invoices/in_1/send?environment=production`],
+      ['POST', `${base}/invoices/in_1/mark_uncollectible?environment=production`],
+    ]);
+  });
+
+  it('reads and updates billing settings', async () => {
+    answer = () => ({ object: 'billing_settings' });
+    await api.billingSettings.retrieve(scope);
+    await api.billingSettings.update(scope, { dunning: { retry_schedule_days: [2] } });
+    const path = '/v1/dashboard/applications/app%201/billing_settings?environment=development';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', path, undefined],
+      ['POST', path, { dunning: { retry_schedule_days: [2] } }],
+    ]);
+  });
+
+  it('creates, archives, attaches and detaches features', async () => {
+    answer = () => ({ object: 'list', data: [], has_more: false, id: 'x' });
+    await api.features.list(scope, { limit: 100 });
+    await api.features.create(scope, { lookup_key: 'mention_plus', name: 'Mention Plus' });
+    await api.features.update(scope, 'feat_1', { active: false });
+    await api.features.ofProduct(scope, 'prod_1');
+    await api.features.attach(scope, 'prod_1', 'feat_1');
+    await api.features.detach(scope, 'prod_1', 'prodft_1');
+    const base = '/v1/dashboard/applications/app%201';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      ['GET', `${base}/entitlements/features?environment=development&limit=100`, undefined],
+      [
+        'POST',
+        `${base}/entitlements/features?environment=development`,
+        { lookup_key: 'mention_plus', name: 'Mention Plus' },
+      ],
+      ['POST', `${base}/entitlements/features/feat_1?environment=development`, { active: false }],
+      ['GET', `${base}/products/prod_1/features?environment=development&limit=100`, undefined],
+      [
+        'POST',
+        `${base}/products/prod_1/features?environment=development`,
+        { entitlement_feature: 'feat_1' },
+      ],
+      ['DELETE', `${base}/products/prod_1/features/prodft_1?environment=development`, undefined],
+    ]);
+  });
+});

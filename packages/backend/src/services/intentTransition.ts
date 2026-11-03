@@ -41,6 +41,7 @@ import { followIntentForCheckout } from './checkout/completion';
 import { enqueuePaymentReceipt, enqueueRefundNotice } from './email/outbox';
 import { recordEvent } from './events';
 import { kickWebhookOutbox } from './webhookOutbox';
+import { onInvoicePaymentTransition } from './billingEngine/collect';
 
 type IntentEventType = Extract<WebhookEventType, `payment_intent.${string}`>;
 
@@ -160,7 +161,12 @@ export async function transitionIntent(
     if (row.rail === 'faircoin') await recordFaircoinLedger(tx, row, change.from);
     const moved = change.from !== change.status;
     const failedAttempt = change.lastPaymentError !== undefined;
-    if (moved || failedAttempt) await recordIntentEvent(tx, row, change.from);
+    if (moved || failedAttempt) {
+      await recordIntentEvent(tx, row, change.from);
+      // An invoice this intent collects moves WITH it (ADR 0018 §4): paid,
+      // failed, action required — in this same transaction.
+      await onInvoicePaymentTransition(tx, row, change.from);
+    }
     return result;
   });
 }

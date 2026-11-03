@@ -5,17 +5,23 @@
  *
  * Where a hit opens follows the screens that exist: a payment opens itself; a
  * charge and a refund open their payment; a product opens itself and a price
- * its product. A customer has no detail screen yet, so its row has no link.
+ * its product; a customer, a subscription and an invoice open themselves.
  */
 import type { SearchableResource } from '@peable.to/shared-types';
 import type { DashboardSearchGroup } from '../api/dashboard';
 import { formatAmount } from '../format/money';
 import { t } from '../i18n';
+import { invoiceStatusLabel, subscriptionStatusLabel } from '../billing/status';
 import { paymentStatusLabel } from '../payments/status';
 
 /** An expo-router destination with one dynamic segment. */
 export interface SearchHref {
-  pathname: '/payments/[id]' | '/products/[id]';
+  pathname:
+    | '/payments/[id]'
+    | '/products/[id]'
+    | '/customers/[id]'
+    | '/subscriptions/[id]'
+    | '/invoices/[id]';
   params: { id: string };
 }
 
@@ -38,6 +44,12 @@ const join = (...parts: (string | null | undefined)[]) =>
 
 const payment = (id: string): SearchHref => ({ pathname: '/payments/[id]', params: { id } });
 const product = (id: string): SearchHref => ({ pathname: '/products/[id]', params: { id } });
+const customerHref = (id: string): SearchHref => ({ pathname: '/customers/[id]', params: { id } });
+const subscriptionHref = (id: string): SearchHref => ({
+  pathname: '/subscriptions/[id]',
+  params: { id },
+});
+const invoiceHref = (id: string): SearchHref => ({ pathname: '/invoices/[id]', params: { id } });
 
 /** The rows of one group, in the gateway's order (newest first). */
 export function searchRows(group: DashboardSearchGroup): SearchRow[] {
@@ -80,7 +92,7 @@ export function searchRows(group: DashboardSearchGroup): SearchRow[] {
         key: customer.id,
         label: customer.name ?? customer.email ?? customer.id,
         sublabel: join(customer.name ? customer.email : null, customer.phone, customer.id),
-        href: null,
+        href: customerHref(customer.id),
       }));
     case 'products':
       return group.data.map((item) => ({
@@ -105,6 +117,29 @@ export function searchRows(group: DashboardSearchGroup): SearchRow[] {
           href: product(idOf(price.product)),
         };
       });
+    case 'subscriptions':
+      return group.data.map((subscription) => ({
+        key: subscription.id,
+        label: subscription.description ?? subscription.id,
+        sublabel: join(
+          subscriptionStatusLabel(subscription.status),
+          idOf(subscription.customer),
+          subscription.description === null ? null : subscription.id,
+        ),
+        href: subscriptionHref(subscription.id),
+      }));
+    case 'invoices':
+      return group.data.map((invoice) => ({
+        key: invoice.id,
+        label: invoice.number ?? invoice.id,
+        sublabel: join(
+          formatAmount(invoice.total, invoice.currency),
+          invoiceStatusLabel(invoice.status),
+          invoice.customer_email,
+          invoice.number === null ? null : invoice.id,
+        ),
+        href: invoiceHref(invoice.id),
+      }));
   }
 }
 

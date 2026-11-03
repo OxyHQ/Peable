@@ -9,11 +9,24 @@ import type {
   UpdateMerchantBrandingParams,
   UpdateMerchantEmailSettingsParams,
   UpdatePaymentLinkParams,
+  ActiveEntitlement,
+  BillingSettings,
+  CreateEntitlementFeatureParams,
+  Customer,
+  CustomerBalanceTransaction,
+  EntitlementFeature,
+  Invoice,
+  InvoiceStatus,
+  ProductFeature,
+  Subscription,
+  SubscriptionStatus,
+  UpdateBillingSettingsParams,
+  UpdateEntitlementFeatureParams,
+  UpdateSubscriptionParams,
   CreatePriceParams,
   CreateProductParams,
   CreateReportRunParams,
   Charge,
-  Customer,
   ReportRun,
   ReportType,
   ReportTypeId,
@@ -119,6 +132,35 @@ export interface PaymentLinkListParams extends PageParams {
   active?: boolean;
 }
 
+export interface CustomerListParams extends PageParams {
+  /** An exact email. */
+  email?: string;
+}
+
+export interface SubscriptionListParams extends PageParams {
+  customer?: string;
+  /** A status, `all` (cancelled included) or `ended`; absent hides cancelled ones. */
+  status?: SubscriptionStatus | 'all' | 'ended';
+}
+
+export interface InvoiceListParams extends PageParams {
+  customer?: string;
+  subscription?: string;
+  status?: InvoiceStatus;
+}
+
+export interface FeatureListParams extends PageParams {
+  /** `true` archived only, `false` active only, absent for both. */
+  archived?: boolean;
+}
+
+/** What `DELETE` of a dashboard resource answers. */
+export interface Deleted {
+  id: string;
+  object: string;
+  deleted: true;
+}
+
 export interface PaymentIntentListParams extends PageParams {
   status?: PaymentIntentStatus;
 }
@@ -171,6 +213,8 @@ export interface SearchHitObjects {
   products: Product;
   prices: Price;
   refunds: Refund;
+  subscriptions: Subscription;
+  invoices: Invoice;
 }
 
 /** One resource's hits in Orbit's global search — at most five. */
@@ -396,6 +440,117 @@ export function createDashboardApi(transport: OrbitTransport) {
         transport.request<Price>('POST', dashboardPath(scope, `/prices/${id(priceId)}`), {
           body,
         }),
+    },
+
+    /** Customers (`cus_…`): the dashboard's read-only mirror of `/v1/customers`. */
+    customers: {
+      list: (scope: DashboardScope, params: CustomerListParams = {}) =>
+        list<Customer>(dashboardPath(scope, '/customers', { ...params })),
+      retrieve: (scope: DashboardScope, customerId: string) =>
+        get<Customer>(dashboardPath(scope, `/customers/${id(customerId)}`)),
+      balanceTransactions: (scope: DashboardScope, customerId: string, params: PageParams = {}) =>
+        list<CustomerBalanceTransaction>(
+          dashboardPath(scope, `/customers/${id(customerId)}/balance_transactions`, { ...params }),
+        ),
+      /** What the customer is entitled to now (ADR 0018 §6) — a complete set, never paged. */
+      activeEntitlements: (scope: DashboardScope, customerId: string) =>
+        list<ActiveEntitlement>(
+          dashboardPath(scope, '/entitlements/active_entitlements', { customer: customerId }),
+        ),
+    },
+
+    /** Native subscriptions (`sub_…`, ADR 0018). */
+    subscriptions: {
+      list: (scope: DashboardScope, params: SubscriptionListParams = {}) =>
+        list<Subscription>(dashboardPath(scope, '/subscriptions', { ...params })),
+      retrieve: (scope: DashboardScope, subscriptionId: string) =>
+        get<Subscription>(
+          dashboardPath(scope, `/subscriptions/${id(subscriptionId)}`, {
+            expand: ['latest_invoice'],
+          }),
+        ),
+      update: (scope: DashboardScope, subscriptionId: string, body: UpdateSubscriptionParams) =>
+        transport.request<Subscription>(
+          'POST',
+          dashboardPath(scope, `/subscriptions/${id(subscriptionId)}`),
+          { body },
+        ),
+      /** Cancel now (`DELETE`), optionally crediting the unused time. */
+      cancel: (scope: DashboardScope, subscriptionId: string, body: { prorate?: boolean } = {}) =>
+        transport.request<Subscription>(
+          'DELETE',
+          dashboardPath(scope, `/subscriptions/${id(subscriptionId)}`),
+          { body },
+        ),
+      /** A `paused` subscription (a trial that ended with no payment method) becomes active. */
+      resume: (scope: DashboardScope, subscriptionId: string) =>
+        transport.request<Subscription>(
+          'POST',
+          dashboardPath(scope, `/subscriptions/${id(subscriptionId)}/resume`),
+          { body: {} },
+        ),
+    },
+
+    /** Native invoices (`in_…`, ADR 0018). */
+    invoices: {
+      list: (scope: DashboardScope, params: InvoiceListParams = {}) =>
+        list<Invoice>(dashboardPath(scope, '/invoices', { ...params })),
+      retrieve: (scope: DashboardScope, invoiceId: string) =>
+        get<Invoice>(dashboardPath(scope, `/invoices/${id(invoiceId)}`)),
+      /** `finalize`, `void`, `send` (email to the customer) or `mark_uncollectible`. */
+      act: (
+        scope: DashboardScope,
+        invoiceId: string,
+        action: 'finalize' | 'void' | 'send' | 'mark_uncollectible',
+      ) =>
+        transport.request<Invoice>(
+          'POST',
+          dashboardPath(scope, `/invoices/${id(invoiceId)}/${action}`),
+          { body: {} },
+        ),
+    },
+
+    /** Numbering and dunning (ADR 0018 §6). Every field has a default; the row exists on first read. */
+    billingSettings: {
+      retrieve: (scope: DashboardScope) =>
+        get<BillingSettings>(dashboardPath(scope, '/billing_settings')),
+      update: (scope: DashboardScope, body: UpdateBillingSettingsParams) =>
+        transport.request<BillingSettings>('POST', dashboardPath(scope, '/billing_settings'), {
+          body,
+        }),
+    },
+
+    /** Entitlement features (`feat_…`) and the products that grant them. */
+    features: {
+      list: (scope: DashboardScope, params: FeatureListParams = {}) =>
+        list<EntitlementFeature>(dashboardPath(scope, '/entitlements/features', { ...params })),
+      create: (scope: DashboardScope, body: CreateEntitlementFeatureParams) =>
+        transport.request<EntitlementFeature>(
+          'POST',
+          dashboardPath(scope, '/entitlements/features'),
+          { body },
+        ),
+      update: (scope: DashboardScope, featureId: string, body: UpdateEntitlementFeatureParams) =>
+        transport.request<EntitlementFeature>(
+          'POST',
+          dashboardPath(scope, `/entitlements/features/${id(featureId)}`),
+          { body },
+        ),
+      ofProduct: (scope: DashboardScope, productId: string) =>
+        list<ProductFeature>(
+          dashboardPath(scope, `/products/${id(productId)}/features`, { limit: 100 }),
+        ),
+      attach: (scope: DashboardScope, productId: string, featureId: string) =>
+        transport.request<ProductFeature>(
+          'POST',
+          dashboardPath(scope, `/products/${id(productId)}/features`),
+          { body: { entitlement_feature: featureId } },
+        ),
+      detach: (scope: DashboardScope, productId: string, attachmentId: string) =>
+        transport.request<Deleted>(
+          'DELETE',
+          dashboardPath(scope, `/products/${id(productId)}/features/${id(attachmentId)}`),
+        ),
     },
 
     /**

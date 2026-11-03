@@ -30,7 +30,6 @@ import {
   findIntentByPublicId,
   findIntentForMerchant,
   listIntentsForMerchant,
-  setIntentPaymentMethod,
   updateIntentDetails,
 } from '../db/payments/paymentIntentRepository';
 import { findLiveCustomerForMerchant } from '../db/customers/customerRepository';
@@ -47,7 +46,6 @@ import {
   RailMismatchError,
   RailUnavailableError,
 } from '../services/createIntent';
-import { ensureProviderCustomer } from '../services/customers/providerCustomer';
 import { selectStoredProvider } from '../services/providers/environmentGuard';
 import { ProviderError } from '../services/providers/provider';
 import { findAccountByPublicId } from '../db/accounts/connectedAccountRepository';
@@ -60,6 +58,7 @@ import {
 import { resolveClientAction } from '../services/clientAction';
 import { applyEvent } from '../services/intentState';
 import { reportFaircoinBroadcast } from '../services/faircoinBroadcast';
+import { confirmCardIntent } from '../services/confirmIntent';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import { emailSchema, shippingSchema, toShipping } from '../lib/addressSchema';
@@ -1003,49 +1002,36 @@ export function createPaymentIntentsRouter(deps: {
       }
       if (customer === null) throw new Error('assertUsablePaymentMethod admitted no customer');
 
-      const provider = intent.provider
-        ? selectStoredProvider(intent.provider, intent.livemode)
-        : undefined;
-      if (!provider || !intent.providerObjectId) {
-        sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
-        return;
-      }
-
-      // The method (and what came with it) recorded first, under the status
-      // CAS: a confirmation racing another cannot repoint a payment that moved.
-      const prepared = await setIntentPaymentMethod(db, intent.id, intent.status, {
-        paymentMethodId: paymentMethod.id,
-        setupFutureUsage: body.setup_future_usage,
-        receiptEmail: body.receipt_email,
-        ...(body.shipping !== undefined ? { shipping: toShipping(body.shipping) } : {}),
-      });
-      if (!prepared) {
-        const current = await findIntentById(db, intent.id);
-        sendStaleOrMissing(
-          res,
-          current ? { kind: 'stale', current: current.status } : { kind: 'missing' },
-        );
-        return;
-      }
-
+      let current: PaymentIntentRow;
       try {
-        const customerObjectId = await ensureProviderCustomer(customer, provider);
-        const result = await provider.confirm({
-          intentId: intent.publicId,
-          providerObjectId: intent.providerObjectId,
-          paymentMethodObjectId: paymentMethod.providerObjectId,
-          customerObjectId,
-          ...(body.off_session === true ? { offSession: true } : {}),
-          ...(body.setup_future_usage !== undefined
-            ? { setupFutureUsage: body.setup_future_usage }
-            : {}),
-          ...(body.return_url !== undefined ? { returnUrl: body.return_url } : {}),
+        const outcome = await confirmCardIntent({
+          intent,
+          paymentMethod,
+          customer,
+          offSession: body.off_session,
+          setupFutureUsage: body.setup_future_usage,
+          receiptEmail: body.receipt_email,
+          ...(body.shipping !== undefined ? { shipping: toShipping(body.shipping) } : {}),
+          returnUrl: body.return_url,
           // One provider operation per Peable request: the generic key when the
           // caller sent one (a retry is the same confirmation), otherwise fresh
           // — a second confirm after a decline is a NEW attempt.
           idempotencyKey: `confirm:${intent.publicId}:${idempotencyKeyOf(res) ?? randomUUID()}`,
         });
-        await applyProviderPaymentResult(prepared, result);
+        if (outcome.kind === 'unavailable') {
+          sendError(res, 503, 'api_error', 'the card rail cannot reach this payment right now');
+          return;
+        }
+        if (outcome.kind === 'stale') {
+          sendStaleOrMissing(
+            res,
+            outcome.current
+              ? { kind: 'stale', current: outcome.current.status }
+              : { kind: 'missing' },
+          );
+          return;
+        }
+        current = outcome.intent;
       } catch (error) {
         if (error instanceof ProviderError) {
           sendProviderError(res, error);
@@ -1054,7 +1040,6 @@ export function createPaymentIntentsRouter(deps: {
         throw error;
       }
 
-      const current = (await findIntentById(db, intent.id)) ?? prepared;
       const dto = toPaymentIntentDTO(current);
       await expandObjects([dto], 'payment_intent', expand, merchant.id);
       if (current.status === 'requires_payment_method' && current.lastPaymentError !== null) {

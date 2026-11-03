@@ -15,6 +15,15 @@ import type { ReportRun } from './reporting';
 import type { ConnectedAccount, Refund } from './settlement';
 import type { SetupIntent } from './setupIntent';
 import type { WebhookEndpoint } from './webhookEndpoint';
+import type { Subscription } from './subscription';
+import type { CreditNote, Invoice, InvoiceItem } from './invoice';
+import type {
+  ActiveEntitlementSummary,
+  BillingMeter,
+  BillingPortalConfiguration,
+  BillingPortalSession,
+  TestClock,
+} from './billingEngine';
 
 /**
  * The wire date every response names in `Peable-Version`, and the
@@ -124,6 +133,55 @@ export interface WebhookEventPayload {
   'checkout.session.async_payment_failed': CheckoutSession;
   'payment_link.created': PaymentLink;
   'payment_link.updated': PaymentLink;
+  /**
+   * The native billing engine (ADR 0018). Every status change of a
+   * subscription or an invoice is recorded in the transaction that makes it,
+   * with `previous_attributes` naming what moved.
+   *
+   * `customer.subscription.trial_will_end` is sent three days before a trial
+   * ends; `paused` / `resumed` are the `paused` STATUS (a trial that ended with
+   * no payment method), not `pause_collection`, which is an `updated`.
+   */
+  'customer.subscription.created': Subscription;
+  'customer.subscription.updated': Subscription;
+  'customer.subscription.deleted': Subscription;
+  'customer.subscription.trial_will_end': Subscription;
+  'customer.subscription.paused': Subscription;
+  'customer.subscription.resumed': Subscription;
+  /**
+   * `invoice.upcoming` is sent a few days before a renewal (the invoice it
+   * carries is a preview, `id` empty, never stored); `invoice.sent` when the
+   * invoice is emailed to the customer.
+   */
+  'invoice.created': Invoice;
+  'invoice.updated': Invoice;
+  'invoice.deleted': Invoice;
+  'invoice.finalized': Invoice;
+  'invoice.paid': Invoice;
+  'invoice.payment_failed': Invoice;
+  'invoice.payment_action_required': Invoice;
+  'invoice.voided': Invoice;
+  'invoice.marked_uncollectible': Invoice;
+  'invoice.upcoming': Invoice;
+  'invoice.sent': Invoice;
+  'invoiceitem.created': InvoiceItem;
+  'invoiceitem.deleted': InvoiceItem;
+  'credit_note.created': CreditNote;
+  'credit_note.updated': CreditNote;
+  'credit_note.voided': CreditNote;
+  'test_helpers.test_clock.created': TestClock;
+  'test_helpers.test_clock.advancing': TestClock;
+  'test_helpers.test_clock.ready': TestClock;
+  'test_helpers.test_clock.deleted': TestClock;
+  'billing.meter.created': BillingMeter;
+  'billing.meter.updated': BillingMeter;
+  'billing.meter.deactivated': BillingMeter;
+  'billing.meter.reactivated': BillingMeter;
+  /** A customer's active entitlements changed — re-read them, then grant or withdraw access. */
+  'entitlements.active_entitlement_summary.updated': ActiveEntitlementSummary;
+  'billing_portal.configuration.created': BillingPortalConfiguration;
+  'billing_portal.configuration.updated': BillingPortalConfiguration;
+  'billing_portal.session.created': BillingPortalSession;
   /**
    * A seller's account changed — their READINESS, in practice. Emitted when the
    * fields a merchant ACTS on change, not on every refresh. It names no payment

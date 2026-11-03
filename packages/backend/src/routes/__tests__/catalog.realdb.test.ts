@@ -439,7 +439,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the catalog', () => {
         'POST',
         '/v1/prices',
         { ...base, unit_amount: '1', recurring: { interval: 'month', usage_type: 'metered' } },
-        'recurring[usage_type]',
+        'recurring[meter]',
       );
       await refused(
         'POST',

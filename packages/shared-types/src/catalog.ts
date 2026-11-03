@@ -29,9 +29,8 @@ export const RECURRING_INTERVALS = ['day', 'week', 'month', 'year'] as const;
 export type RecurringInterval = (typeof RECURRING_INTERVALS)[number];
 
 /**
- * `licensed` bills the quantity on the subscription. `metered` bills reported
- * usage and needs a meter; meters are not part of Orbit yet, so the gateway
- * refuses a metered price rather than store one nothing can bill.
+ * `licensed` bills the quantity on the subscription. `metered` bills the usage
+ * a meter (`recurring.meter`, `mtr_…`) aggregated over the period, in arrears.
  */
 export const RECURRING_USAGE_TYPES = ['licensed', 'metered'] as const;
 export type RecurringUsageType = (typeof RECURRING_USAGE_TYPES)[number];
@@ -140,6 +139,8 @@ export interface PriceRecurring {
   /** Intervals between billings: `interval: 'month', interval_count: 3` is quarterly. At most three years. */
   interval_count: number;
   usage_type: RecurringUsageType;
+  /** The meter (`mtr_…`) a `metered` price bills; `null` when `licensed`. */
+  meter: string | null;
 }
 
 /**
@@ -261,6 +262,8 @@ export interface RecurringParams {
   interval_count?: number;
   /** Default `licensed`. */
   usage_type?: RecurringUsageType;
+  /** Required with `usage_type: 'metered'`: the meter (`mtr_…`) it bills. */
+  meter?: string;
 }
 
 export interface PriceTierParams {

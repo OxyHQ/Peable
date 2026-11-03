@@ -26,6 +26,9 @@ const CUSTOMER: Customer = {
   shipping: null,
   invoice_settings: { default_payment_method: null },
   metadata: {},
+  balance: '0',
+  currency: null,
+  test_clock: null,
   created: 1789776000,
 };
 

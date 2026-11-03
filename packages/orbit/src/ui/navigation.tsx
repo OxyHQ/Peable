@@ -31,6 +31,10 @@ import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
 import { RiStore2Line } from '@oxy.so/bloom/icons/RiStore2Line';
 import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
 import { RiWallet3Line } from '@oxy.so/bloom/icons/RiWallet3Line';
+import { RiUserLine } from '@oxy.so/bloom/icons/RiUserLine';
+import { RiRepeatLine } from '@oxy.so/bloom/icons/RiRepeatLine';
+import { RiFileList3Line } from '@oxy.so/bloom/icons/RiFileList3Line';
+import { RiCalendarScheduleLine } from '@oxy.so/bloom/icons/RiCalendarScheduleLine';
 import { t } from '../i18n';
 
 export type OrbitTab =
@@ -43,6 +47,10 @@ export type OrbitTab =
   | 'reports'
   | 'account'
   | 'links'
+  | 'customers'
+  | 'subscriptions'
+  | 'invoices'
+  | 'billing'
   | 'developers'
   | 'tax'
   | 'contributions'
@@ -65,6 +73,14 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
   reports: { labelKey: 'nav.reports', icon: RiBarChartBoxLine, activeIcon: RiBarChartBoxLine },
   account: { labelKey: 'nav.account', icon: RiStore2Line, activeIcon: RiStore2Line },
   links: { labelKey: 'nav.links', icon: RiLinksLine, activeIcon: RiLinksLine },
+  customers: { labelKey: 'nav.customers', icon: RiUserLine, activeIcon: RiUserLine },
+  subscriptions: { labelKey: 'nav.subscriptions', icon: RiRepeatLine, activeIcon: RiRepeatLine },
+  invoices: { labelKey: 'nav.invoices', icon: RiFileList3Line, activeIcon: RiFileList3Line },
+  billing: {
+    labelKey: 'nav.billing',
+    icon: RiCalendarScheduleLine,
+    activeIcon: RiCalendarScheduleLine,
+  },
   developers: {
     labelKey: 'nav.developers',
     icon: RiTerminalBoxLine,
@@ -91,6 +107,10 @@ export const ORBIT_TABS: readonly OrbitTab[] = [
   'reports',
   'account',
   'links',
+  'customers',
+  'subscriptions',
+  'invoices',
+  'billing',
   'developers',
   'tax',
   'contributions',

@@ -4,6 +4,7 @@ import type {
   SimulateFaircoinPaymentParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { TestClocksResource } from './billingEngine';
 
 /**
  * `peable.testHelpers` — move a TEST-MODE object the way the outside world
@@ -54,9 +55,12 @@ class CheckoutSessionTestHelpers {
 export class TestHelpersResource {
   readonly paymentIntents: PaymentIntentTestHelpers;
   readonly checkoutSessions: CheckoutSessionTestHelpers;
+  /** Test clocks (`clock_…`, ADR 0018): run subscriptions through time in seconds. */
+  readonly testClocks: TestClocksResource;
 
   constructor(client: RestClient) {
     this.paymentIntents = new PaymentIntentTestHelpers(client);
     this.checkoutSessions = new CheckoutSessionTestHelpers(client);
+    this.testClocks = new TestClocksResource(client);
   }
 }

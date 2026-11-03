@@ -14,6 +14,7 @@ import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/
 import type { PriceRecurring } from '@peable.to/shared-types';
 import { prices, products } from './catalog';
 import { merchants } from './merchants';
+import { invoices } from './billingEngine';
 import { checkoutSessions, paymentIntents, paymentLinks } from './payments';
 import { refunds } from './refunds';
 import type { StoredPriceTier } from './catalog';
@@ -272,6 +273,8 @@ export const customerEmails = pgTable(
     paymentIntentId: text().references(() => paymentIntents.id, { onDelete: 'restrict' }),
     refundId: text().references(() => refunds.id, { onDelete: 'restrict' }),
     checkoutSessionId: text().references(() => checkoutSessions.id, { onDelete: 'restrict' }),
+    /** The invoice an `invoice` / `invoice_payment_failed` email is about (ADR 0018). */
+    invoiceId: text(),
     /** A receipt's number — the merchant's sequence, claimed at enqueue. */
     receiptNumber: text(),
     status: text().notNull().default('pending'),
@@ -290,6 +293,11 @@ export const customerEmails = pgTable(
       .on(table.nextAttemptAt)
       .where(sql`${table.status} = 'pending'`),
     index('customer_emails_merchant_id_idx').on(table.merchantId),
+    foreignKey({
+      name: 'customer_emails_invoice_fkey',
+      columns: [table.invoiceId],
+      foreignColumns: [invoices.id],
+    }).onDelete('restrict'),
     check('customer_emails_kind_check', sql.raw(`kind in (${inList(CUSTOMER_EMAIL_KINDS)})`)),
     check(
       'customer_emails_status_check',
@@ -300,7 +308,8 @@ export const customerEmails = pgTable(
       'customer_emails_subject_check',
       sql`(${table.kind} = 'payment_receipt' and ${table.paymentIntentId} is not null and ${table.receiptNumber} is not null)
         or (${table.kind} = 'refund_notice' and ${table.refundId} is not null)
-        or (${table.kind} = 'checkout_confirmation' and ${table.checkoutSessionId} is not null)`,
+        or (${table.kind} = 'checkout_confirmation' and ${table.checkoutSessionId} is not null)
+        or (${table.kind} in ('invoice', 'invoice_payment_failed') and ${table.invoiceId} is not null)`,
     ),
     check(
       'customer_emails_sent_check',

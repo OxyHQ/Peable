@@ -3,7 +3,21 @@ import type { AnyPgColumn } from 'drizzle-orm/pg-core';
 import type { SearchableResource } from '@peable.to/shared-types';
 import type { DatabaseOrTransaction } from '../../db/postgres';
 import type { KeysetPage } from '../../db/keyset';
-import { charges, customers, paymentIntents, prices, products, refunds } from '../../db/schema';
+import {
+  charges,
+  customers,
+  invoices,
+  paymentIntents,
+  prices,
+  products,
+  refunds,
+  subscriptions,
+} from '../../db/schema';
+import {
+  countSubscriptions,
+  listSubscriptions,
+} from '../../db/billingEngine/subscriptionRepository';
+import { countInvoices, listInvoices } from '../../db/billingEngine/invoiceRepository';
 import {
   countIntentsForMerchant,
   listIntentsForMerchant,
@@ -25,14 +39,17 @@ import { countRefundsForMerchant, listRefundsForMerchant } from '../../db/refund
 import {
   CHARGE_SEARCH_FIELDS,
   CUSTOMER_SEARCH_FIELDS,
+  INVOICE_SEARCH_FIELDS,
   PAYMENT_INTENT_SEARCH_FIELDS,
   PRICE_SEARCH_FIELDS,
   PRODUCT_SEARCH_FIELDS,
   REFUND_SEARCH_FIELDS,
+  SUBSCRIPTION_SEARCH_FIELDS,
 } from '../../db/search/searchFields';
 import type { ExpandableType } from '../expand';
 import { toChargeDTO, toCustomerDTO, toPaymentIntentDTO, toRefundDTO } from '../serialize';
 import { toPriceDTO, toProductDTO } from '../serializeCatalog';
+import { renderInvoices, renderSubscriptions } from '../serializeBilling';
 import type { SearchFields } from './compile';
 
 /**
@@ -89,8 +106,16 @@ function entry<Row extends { readonly id: string }>(definition: {
     page: KeysetPage,
   ) => Promise<{ data: Row[]; hasMore: boolean }>;
   readonly count: (db: DatabaseOrTransaction, merchantId: string, search: SQL) => Promise<number>;
-  readonly serialize: (row: Row) => object;
+  /**
+   * The list's own serializer: per row, or — for an object whose DTO reads
+   * more rows (a subscription's items, an invoice's lines) — the list's batch
+   * renderer, one round trip per page rather than per hit.
+   */
+  readonly serialize:
+    | { readonly row: (row: Row) => object }
+    | { readonly page: (db: DatabaseOrTransaction, rows: Row[]) => Promise<object[]> };
 }): SearchResource {
+  const serialize = definition.serialize;
   return {
     name: definition.name,
     object: definition.object,
@@ -100,8 +125,10 @@ function entry<Row extends { readonly id: string }>(definition: {
     textFields: definition.textFields,
     async run(db, { merchantId, search, page }) {
       const result = await definition.list(db, merchantId, search, page);
+      const objects =
+        'row' in serialize ? result.data.map(serialize.row) : await serialize.page(db, result.data);
       return {
-        data: result.data.map((row) => ({ key: row.id, object: definition.serialize(row) })),
+        data: result.data.map((row, index) => ({ key: row.id, object: objects[index] as object })),
         hasMore: result.hasMore,
       };
     },
@@ -120,7 +147,7 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     list: (db, merchantId, search, page) =>
       listIntentsForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countIntentsForMerchant(db, { merchantId, search }),
-    serialize: toPaymentIntentDTO,
+    serialize: { row: toPaymentIntentDTO },
   }),
   charges: entry({
     name: 'charges',
@@ -136,7 +163,7 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     list: (db, merchantId, search, page) =>
       listChargesForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countChargesForMerchant(db, { merchantId, search }),
-    serialize: toChargeDTO,
+    serialize: { row: toChargeDTO },
   }),
   customers: entry({
     name: 'customers',
@@ -148,7 +175,7 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     list: (db, merchantId, search, page) =>
       listCustomersForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countCustomersForMerchant(db, { merchantId, search }),
-    serialize: toCustomerDTO,
+    serialize: { row: toCustomerDTO },
   }),
   products: entry({
     name: 'products',
@@ -160,7 +187,7 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     list: (db, merchantId, search, page) =>
       listProductsForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countProductsForMerchant(db, { merchantId, search }),
-    serialize: toProductDTO,
+    serialize: { row: toProductDTO },
   }),
   prices: entry({
     name: 'prices',
@@ -171,7 +198,7 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     textFields: ['lookup_key'],
     list: (db, merchantId, search, page) => listPricesForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countPricesForMerchant(db, { merchantId, search }),
-    serialize: toPriceDTO,
+    serialize: { row: toPriceDTO },
   }),
   refunds: entry({
     name: 'refunds',
@@ -183,6 +210,32 @@ export const SEARCH_RESOURCES: Readonly<Record<SearchableResource, SearchResourc
     list: (db, merchantId, search, page) =>
       listRefundsForMerchant(db, { merchantId, search, page }),
     count: (db, merchantId, search) => countRefundsForMerchant(db, { merchantId, search }),
-    serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId),
+    serialize: { row: (row) => toRefundDTO(row, row.paymentIntentPublicId) },
+  }),
+  // The billing engine (ADR 0018). A search walks EVERY status (`all`): the
+  // list's default of hiding canceled subscriptions is not a search's.
+  subscriptions: entry({
+    name: 'subscriptions',
+    object: 'subscription',
+    fields: SUBSCRIPTION_SEARCH_FIELDS,
+    idPrefix: 'sub',
+    publicId: subscriptions.publicId,
+    textFields: ['description'],
+    list: (db, merchantId, search, page) =>
+      listSubscriptions(db, { merchantId, search, page, status: 'all' }),
+    count: (db, merchantId, search) =>
+      countSubscriptions(db, { merchantId, search, status: 'all' }),
+    serialize: { page: renderSubscriptions },
+  }),
+  invoices: entry({
+    name: 'invoices',
+    object: 'invoice',
+    fields: INVOICE_SEARCH_FIELDS,
+    idPrefix: 'in',
+    publicId: invoices.publicId,
+    textFields: ['customer_email', 'customer_name', 'number'],
+    list: (db, merchantId, search, page) => listInvoices(db, { merchantId, search, page }),
+    count: (db, merchantId, search) => countInvoices(db, { merchantId, search }),
+    serialize: { page: renderInvoices },
   }),
 };

@@ -46,6 +46,11 @@ import { createReportingRouter } from './routes/reporting';
 import { startReportRunWorker, stopReportRunWorker } from './services/reporting/reportRunWorker';
 import { createTestHelpersRouter } from './routes/testHelpers';
 import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
+import { createBillingEngineRouter, createPublicBillingRouter } from './routes/billingEngine';
+import { configureBillingEngine } from './services/billingEngine/runtime';
+import { billingEngineCheckoutFulfiller } from './services/billingEngine/checkoutFulfiller';
+import { registerSubscriptionCheckoutFulfiller } from './services/checkout/subscriptionFulfiller';
+import { startBillingEngine, stopBillingEngine } from './services/billingEngine/scheduler';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createBrandingRouter } from './routes/branding';
@@ -328,6 +333,13 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createRequestLogsRouter({ requireMerchant }));
   app.use(createReportingRouter({ requireMerchant }));
   app.use(createTestHelpersRouter({ requireMerchant }));
+  // The native billing engine (ADR 0018). Before the Stripe-Billing proxy's
+  // router, which owns the rest of `/v1/billing/*`.
+  configureBillingEngine({ tax: deps.taxService });
+  // Checkout's `mode: 'subscription'` is the engine's to fulfil (ADR 0018).
+  registerSubscriptionCheckoutFulfiller(billingEngineCheckoutFulfiller);
+  app.use(createBillingEngineRouter({ requireMerchant }));
+  app.use(createPublicBillingRouter({ publicRateLimit }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   // Checkout (Orbit Phase 3): sessions price with Peable Tax when asked to.
@@ -442,6 +454,7 @@ export async function start(
     stopSessionExpirySweeper();
     stopCustomerEmailDispatcher();
     stopReportRunWorker();
+    stopBillingEngine();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -477,6 +490,8 @@ export async function start(
   configureMailer(mailerFromEnv());
   startCustomerEmailDispatcher();
   startReportRunWorker();
+  // The billing engine's scheduler (ADR 0018 §5): leased, per process.
+  startBillingEngine();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

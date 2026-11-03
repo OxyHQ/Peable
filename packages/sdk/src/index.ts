@@ -1,4 +1,15 @@
-import { BillingResource } from './resources/billing';
+import {
+  BillingNamespace,
+  BillingPortalResource,
+  BillingSettingsResource,
+  CreditNotesResource,
+  CustomerBalanceTransactionsResource,
+  EntitlementsResource,
+  InvoiceItemsResource,
+  InvoicesResource,
+  SubscriptionItemsResource,
+  SubscriptionsResource,
+} from './resources/billingEngine';
 import { TaxResource } from './resources/tax';
 export { TaxResource } from './resources/tax';
 export type {
@@ -137,7 +148,11 @@ import { ReportingResource } from './resources/reporting';
 export class Peable {
   /** Release requester-bound shared transport resources after the operation. */
   readonly dispose: () => void;
-  readonly billing: BillingResource;
+  /**
+   * The Stripe-Billing proxy (`/v1/billing/*`), plus the native engine's
+   * usage meters: `billing.meters`, `billing.meterEvents` (ADR 0018).
+   */
+  readonly billing: BillingNamespace;
   /** Peable Tax: location evidence, calculations, and what was collected. */
   readonly tax: TaxResource;
   readonly paymentIntents: PaymentIntentsResource;
@@ -212,6 +227,24 @@ export class Peable {
   readonly paymentMethodConfigurations: PaymentMethodConfigurationsResource;
   /** Web domains wallets (Apple Pay, Google Pay) may run on (`pmd_…`). */
   readonly paymentMethodDomains: PaymentMethodDomainsResource;
+  /** The native billing engine (ADR 0018): subscriptions (`sub_…`). */
+  readonly subscriptions: SubscriptionsResource;
+  /** A subscription's items (`si_…`). */
+  readonly subscriptionItems: SubscriptionItemsResource;
+  /** Invoices (`in_…`): finalize, pay, send, void, preview the upcoming one. */
+  readonly invoices: InvoicesResource;
+  /** Invoice items (`ii_…`) — pending on a customer, or on a draft. */
+  readonly invoiceItems: InvoiceItemsResource;
+  /** Credit notes (`cn_…`). */
+  readonly creditNotes: CreditNotesResource;
+  /** A customer's balance ledger (`cbtxn_…`). */
+  readonly customerBalanceTransactions: CustomerBalanceTransactionsResource;
+  /** Invoice numbering and dunning. */
+  readonly billingSettings: BillingSettingsResource;
+  /** Features, what grants them, and what a customer may access now. */
+  readonly entitlements: EntitlementsResource;
+  /** The Orbit-hosted customer portal: configurations and sessions. */
+  readonly billingPortal: BillingPortalResource;
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
@@ -230,7 +263,7 @@ export class Peable {
       transport ? { fetch: transport.fetch } : {},
     );
 
-    this.billing = new BillingResource(
+    this.billing = new BillingNamespace(
       client,
       resolved.invoiceAuthorityKeys,
       resolved.taxQuoteAuthorityKeys,
@@ -270,6 +303,15 @@ export class Peable {
     this.files = new FilesResource(client);
     this.paymentMethodConfigurations = new PaymentMethodConfigurationsResource(client);
     this.paymentMethodDomains = new PaymentMethodDomainsResource(client);
+    this.subscriptions = new SubscriptionsResource(client);
+    this.subscriptionItems = new SubscriptionItemsResource(client);
+    this.invoices = new InvoicesResource(client);
+    this.invoiceItems = new InvoiceItemsResource(client);
+    this.creditNotes = new CreditNotesResource(client);
+    this.customerBalanceTransactions = new CustomerBalanceTransactionsResource(client);
+    this.billingSettings = new BillingSettingsResource(client);
+    this.entitlements = new EntitlementsResource(client);
+    this.billingPortal = new BillingPortalResource(client);
   }
 }
 
@@ -633,6 +675,106 @@ export {
   PromotionCodesResource,
 } from './resources/catalog';
 export type { CatalogCreateOptions } from './resources/catalog';
+export {
+  ActiveEntitlementsResource,
+  BillingMeterEventsResource,
+  BillingMetersResource,
+  BillingNamespace,
+  BillingPortalConfigurationsResource,
+  BillingPortalResource,
+  BillingPortalSessionsResource,
+  BillingSettingsResource,
+  CreditNotesResource,
+  CustomerBalanceTransactionsResource,
+  EntitlementFeaturesResource,
+  EntitlementsResource,
+  InvoiceItemsResource,
+  InvoicesResource,
+  ProductFeaturesResource,
+  SubscriptionItemsResource,
+  SubscriptionsResource,
+  TestClocksResource,
+} from './resources/billingEngine';
+export type { BillingCreateOptions } from './resources/billingEngine';
+/** The native billing engine's wire objects and parameters (ADR 0018). */
+export type {
+  ActiveEntitlement,
+  ActiveEntitlementListParams,
+  ActiveEntitlementSummary,
+  AdvanceTestClockParams,
+  AutomaticTaxStatus,
+  BillingMeter,
+  BillingMeterEvent,
+  BillingMeterEventSummary,
+  BillingMeterEventSummaryParams,
+  BillingMeterListParams,
+  BillingPortalConfiguration,
+  BillingPortalConfigurationListParams,
+  BillingPortalFeatures,
+  BillingPortalSession,
+  BillingSettings,
+  CancelSubscriptionParams,
+  CollectionMethod,
+  CreateBillingMeterEventParams,
+  CreateBillingMeterParams,
+  CreateBillingPortalConfigurationParams,
+  CreateBillingPortalSessionParams,
+  CreateCreditNoteParams,
+  CreateCustomerBalanceTransactionParams,
+  CreateEntitlementFeatureParams,
+  CreateInvoiceItemParams,
+  CreateInvoiceParams,
+  CreateSubscriptionItemParams,
+  CreateSubscriptionParams,
+  CreateTestClockParams,
+  CreditNote,
+  CreditNoteLineItem,
+  CreditNoteListParams,
+  CreditNoteReason,
+  CustomerBalanceTransaction,
+  DeletedInvoice,
+  DeletedInvoiceItem,
+  DeletedSubscriptionItem,
+  DeletedTestClock,
+  DeleteSubscriptionItemParams,
+  Discount,
+  DiscountParams,
+  DunningFinalAction,
+  EntitlementFeature,
+  EntitlementFeatureListParams,
+  FinalizeInvoiceParams,
+  Invoice,
+  InvoiceBillingReason,
+  InvoiceItem,
+  InvoiceItemListParams,
+  InvoiceLineItem,
+  InvoiceListParams,
+  InvoiceStatus,
+  MeterAggregation,
+  PauseCollectionBehavior,
+  PayInvoiceParams,
+  PaymentBehavior,
+  ProductFeature,
+  ProrationBehavior,
+  PublicInvoice,
+  PublicPortalSession,
+  ResumeSubscriptionParams,
+  Subscription,
+  SubscriptionItem,
+  SubscriptionItemListParams,
+  SubscriptionListParams,
+  SubscriptionStatus,
+  TestClock,
+  UpcomingInvoiceParams,
+  UpdateBillingMeterParams,
+  UpdateBillingPortalConfigurationParams,
+  UpdateBillingSettingsParams,
+  UpdateEntitlementFeatureParams,
+  UpdateInvoiceItemParams,
+  UpdateInvoiceParams,
+  UpdateSubscriptionItemParams,
+  UpdateSubscriptionParams,
+} from '@peable.to/shared-types';
 /** The catalog's wire objects and parameters (ADR 0018). */
 export type {
   Coupon,

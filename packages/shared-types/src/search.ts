@@ -50,6 +50,8 @@ export const SEARCHABLE_RESOURCES = [
   'products',
   'prices',
   'refunds',
+  'subscriptions',
+  'invoices',
 ] as const;
 export type SearchableResource = (typeof SEARCHABLE_RESOURCES)[number];
 

@@ -1,6 +1,6 @@
 # ADR 0018 — Orbit runs its own billing engine
 
-**Status:** accepted.
+**Status:** accepted; Phase 4b as built (below), the proxy migration pending.
 **Supersedes, when implemented:** ADR 0010 (card rail) and ADR 0013's renewal hold.
 **Date:** 2026-11-03.
 
@@ -61,3 +61,192 @@ the periods and invoices itself and collects each one with a PaymentIntent.
   Oxy's outbound mail relay), not the provider's defaults.
 - Saved PaymentMethods and SetupIntents (Orbit payments core) are a prerequisite
   for card renewals on the native engine.
+
+## As built (Phase 4b)
+
+The engine lives beside the Stripe-Billing proxy, not instead of it: native
+objects under their own routes, the proxy's `/v1/billing/*` untouched until its
+consumers move (§7, the plan below). Code: `services/billingEngine/*`,
+`db/billingEngine/*`, `db/schema/billingEngine.ts` (+ `testClocks.ts`,
+`meters.ts`), `routes/billingEngine/*`; schema decisions in `CONVENTIONS.md`
+§Billing engine.
+
+### Objects and routes
+
+| Object | Routes |
+|---|---|
+| Subscriptions `sub_`, items `si_` | `POST/GET /v1/subscriptions`, `GET/POST/DELETE /v1/subscriptions/:id`, `POST …/:id/resume`; `/v1/subscription_items[/:id]` |
+| Invoices `in_`, lines `il_`, items `ii_` | `POST/GET /v1/invoices`, `GET /v1/invoices/upcoming`, `GET/POST/DELETE /v1/invoices/:id`, `POST …/finalize\|pay\|send\|void\|mark_uncollectible`, `GET …/lines`, `GET …/pdf`; `/v1/invoiceitems[/:id]` |
+| Credit notes `cn_` | `POST/GET /v1/credit_notes`, `GET …/preview`, `GET …/:id`, `POST …/:id/void` |
+| Customer balance `cbtxn_` | `POST/GET /v1/customers/:id/balance_transactions[/:id]`; `customer.balance`, `customer.currency` |
+| Test clocks `clock_` | `/v1/test_helpers/test_clocks[/:id]`, `POST …/:id/advance` (test mode only) |
+| Billing settings | `GET/POST /v1/billing_settings` (numbering prefix, dunning, emails) |
+| Meters `mtr_`, meter events | `/v1/billing/meters[/:id]`, `…/deactivate\|reactivate`, `…/event_summaries`; `POST /v1/billing/meter_events` |
+| Entitlements `feat_`, `prodft_` | `/v1/entitlements/features[/:id]`, `/v1/products/:id/features[/:id]`, `GET /v1/entitlements/active_entitlements?customer=` |
+| Portal `bpc_`, `bps_` | `/v1/billing_portal/configurations[/:id]`, `POST /v1/billing_portal/sessions` |
+| Payer-facing (anonymous, bearer token) | `GET /v1/invoices/public/:token`, `POST …/pay`, `GET …/pdf`; `GET /v1/billing_portal/public/:token` and its actions; checkout pages `/invoice/:token`, `/portal/:token` |
+
+Every route is one list mounted on the merchant API and on Orbit's dashboard
+(`catalogRoutes.ts`). The meter routes are new names under `/v1/billing/`; the
+proxy keeps every path it had (`/v1/billing/portal_sessions` included).
+
+### Decisions taken while building it
+
+1. **One transition function per object** (`transitions.ts`):
+   `transitionSubscription` / `transitionInvoice` check the state machine
+   (`stateMachines.ts`), write with a CAS on the status read, record the event
+   (`customer.subscription.created|updated|deleted|paused|resumed`,
+   `invoice.finalized|paid|voided|marked_uncollectible`) and refresh the
+   customer's entitlement summary, in the caller's transaction.
+2. **The payment hook.** `transitionIntent` calls `onInvoicePaymentTransition`
+   inside the PaymentIntent's own transaction, so an invoice is paid (tax
+   committed, subscription active again) or failed (attempt counted, retry
+   scheduled, `past_due`) atomically with the payment. A card intent is linked
+   to its invoice BEFORE it is confirmed, so the hook always finds it;
+   `confirmCardIntent` (`services/confirmIntent.ts`) is the one server-side
+   confirm, shared with `POST /v1/payment_intents/:id/confirm`.
+3. **FairCoin is collected by the payer.** The rail follows the currency: a
+   `FAIR` subscription or invoice is `send_invoice` (anything else is 400
+   `faircoin_cannot_debit`), and each period is paid from the payer's wallet
+   through the hosted invoice page's PaymentIntent — explicit renewal, never a
+   debit. A fiat-priced, FX-quoted FairCoin sale stays on
+   `faircoinBillingService.ts` until it is migrated (below).
+4. **Tax before finalize, fail closed** (`invoiceTax.ts`). With
+   `automatic_tax.enabled` the customer's location is recorded as fresh Peable
+   Tax evidence from their billing address and card country; insufficient
+   evidence is `automatic_tax.status: requires_location_inputs`, a provider
+   failure `failed` — the invoice stays a draft (retried hourly when
+   auto-advancing); it never finalizes untaxed. Uncovered sales are
+   `not_registered` (zero, recorded). A subscription's FIRST invoice is priced
+   and taxed before anything is written, so a fail-closed create writes
+   nothing. Proration credits are not recalculated: their tax is the credited
+   line's tax scaled to the share, and once paid they are reversals of that
+   line's tax transaction (ADR 0013's rule). Credit notes are reversals too;
+   pre-payment notes are reversed when the invoice's tax is committed. Native
+   tax transactions carry `rail: 'orbit'`, and `POST
+   /v1/tax/transactions/:id/reversals` refuses them (their reversals are
+   credit notes).
+5. **Numbering is gapless per merchant (and so per mode).** The counter lives in
+   `billing_settings` and is taken by one `UPDATE … RETURNING next - 1` in the
+   finalize transaction; a rollback returns it. Prefix: eight characters of the
+   merchant id unless set. Credit notes are `<invoice number>-CN-nn`.
+6. **Time is injected** (`runtime.ts`). `engineNow` answers a test clock's
+   `frozen_time` for its customers and the wall clock otherwise; the
+   scheduler's claim judges "due" on each row's own clock inside the claim
+   statement. Advancing a test clock runs passes for it until nothing on it is
+   due, then answers `ready` (Stripe answers `advancing` first; completing
+   before answering is the deliberate departure — a test needs no polling).
+7. **The scheduler** (`scheduler.ts`) has no job table: subscriptions and
+   invoices carry `next_action_at`, claimed with `FOR UPDATE SKIP LOCKED` and a
+   lease, worked outside the claim. It is idempotent by the rows themselves:
+   renewal invoices are unique per (subscription, reason, period start), every
+   status write is a CAS, payment attempts are keyed by invoice and attempt
+   number. Started per process in `server.ts`, `.unref()`ed.
+8. **Dunning defaults**: retries 1, 3, 5 and 7 days after each failed attempt;
+   then the invoice is marked uncollectible and the subscription cancelled;
+   invoices due 30 days after finalization; emails on. A provider outage defers
+   an attempt an hour without spending one. A `send_invoice` invoice past due
+   moves the subscription to `past_due`, and the final action runs once the
+   schedule's total length has also passed.
+9. **Payment behaviour.** `allow_incomplete` (default) charges the first invoice
+   at once; `default_incomplete` leaves its PaymentIntent for the payer
+   (`latest_invoice.payment_intent`); `error_if_incomplete` answers 402 — and
+   keeps the rows it wrote as `incomplete_expired` with a void invoice rather
+   than deleting them (history is never removed). An unpaid first invoice
+   expires the subscription after 23 hours (`send_invoice`: at its due date).
+10. **Prorations** are by the second, rounded once per line; the credit names
+    the line it credits (`credits_line_id`). `always_invoice` and an interval
+    change invoice at once (`subscription_update`); `create_prorations` leaves
+    pending invoice items for the next renewal; `DELETE` with `invoice_now`
+    bills a final `subscription_cancel` invoice, whose negative total becomes
+    customer credit.
+11. **One discount** per subscription or invoice (`coupon`, `promotion_code` or a
+    one-entry `discounts[]`); stacked discounts are refused rather than
+    guessed. Redemptions are counted by CAS when the discount is applied.
+12. **Entitlements** are the active features granted by products on the
+    customer's `trialing`, `active` or `past_due` subscriptions — one per
+    feature whatever the number of granting products, so Mention Plus through
+    the Plus product or through Oxy One is one entitlement, and buying One never
+    asks for Plus. `entitlements.active_entitlement_summary.updated` is recorded
+    only when the set moves.
+13. **Mail** rides Orbit's ONE transactional email outbox (`services/email/*`,
+    Orbit Phase 3): an `invoice` email (a finalized `send_invoice` invoice when
+    the billing settings send them, or `POST /v1/invoices/:id/send`) and an
+    `invoice_payment_failed` notice (dunning) are OWED in the transaction of the
+    change, rendered in the payer's locale with a link to the hosted invoice,
+    and sent by the dispatcher through the injected `Mailer`. `invoice.sent` and
+    `sent_at` are recorded only when the relay accepted the email; with no
+    mailer wired, rows wait and expire — nothing claims a send.
+14. **The PDF** is rendered by a dependency-free PDF 1.4 writer (`pdf.ts`):
+    standard Helvetica, WinAnsi text, no embedded fonts — a few hundred bytes of
+    objects instead of a layout engine in the runtime image.
+15. **Checkout's `mode: 'subscription'`** is fulfilled by the engine
+    (`checkoutFulfiller.ts`, registered at boot): a session's lines must be
+    stored, licensed recurring prices on one currency and interval; at confirm
+    the subscription is created `default_incomplete` with the session's
+    customer, tax setting and discount (redeemed once, by the session), its
+    first invoice finalized (tax before finalize), and the session wraps that
+    invoice's PaymentIntent — a card one saving its card for the renewals
+    (`setup_future_usage: off_session`). The invoice must ask for exactly the
+    session's amount or nothing is charged; the payment hook activates the
+    subscription in the completion's transaction.
+16. **Search** (`GET /v1/subscriptions/search`, `GET /v1/invoices/search`,
+    Orbit Phase 8's one Search API) is a field map in `db/search/searchFields.ts`
+    and a registry entry walking `listSubscriptions` / `listInvoices` with the
+    compiled predicate, serialized by the lists' own batch renderers. A
+    subscription search walks every status: hiding canceled subscriptions is
+    the list's default, not the search's.
+
+### Not built yet
+
+Subscription schedules and quotes (as §5 says); `invoice.finalization_failed`;
+stacked discounts; FX-quoted (fiat-priced) FairCoin invoices on the engine;
+deleting a test clock's customers with it (its subscriptions are cancelled); a
+production mail relay adapter (the outbox's `Mailer`); trials in checkout's
+subscription mode; the portal's card update needs the provider SDK to expose
+setup confirmation in the browser (`@peable.to/sdk`'s `ProviderSdk` type covers
+payments only today).
+
+### Migrating the Stripe-Billing proxy onto native objects (§7) — for the owner to schedule
+
+Per proxy subscription (a Stripe `sub_…` reached through `/v1/billing/*`, bound
+in `billing_object_bindings`), in this order, idempotently, one subscription
+per transaction:
+
+1. **Customer.** Find or create the Orbit `cus_…` for the proxy customer (by
+   the binding's subject) and record the existing Stripe customer as its
+   `customer_provider_bindings` row (ADR 0016 D2) — no new provider customer.
+2. **Payment method.** Read the Stripe subscription's default payment method,
+   register it as the customer's `pm_…` (`registerPaymentMethod`, provider
+   object = the Stripe `pm_…`) and make it the customer's default.
+3. **Catalog.** Map the bound Stripe price to the Orbit `price_…` of the same
+   offer (created once per offer with the same amount, currency, interval and
+   `tax_behavior`), and attach the offer's features (`mention_plus` to Plus AND
+   to One).
+4. **Subscription.** Insert the native subscription directly in its CURRENT
+   state — status from Stripe (`active`/`trialing`/`past_due`), the current
+   period's start and end, `billing_cycle_anchor` = Stripe's anchor,
+   `cancel_at_period_end`, `automatic_tax.enabled` when the cohort used Peable
+   Tax — with NO first invoice (the current period is already paid at Stripe)
+   and `next_action_at` = the period end. This is a migration entry point in
+   the engine, not `POST /v1/subscriptions`, so no charge and no proration can
+   occur.
+5. **Stop Stripe renewing it.** Set the Stripe subscription
+   `cancel_at_period_end: true` (no proration, no refund) so its paid period
+   ends naturally; from the next period the engine invoices and charges
+   off-session against the migrated payment method — no second charge for the
+   period already paid, and ADR 0013's draft hold is never needed for it.
+6. **Consumers.** Switch each consumer (Mention, the oxy personal plans) from
+   the proxy's `billing.*` calls to `subscriptions` and
+   `entitlements.activeEntitlements` in the release that migrates its
+   subscriptions; access is read from active entitlements, which include
+   One → Plus.
+7. **Remove the proxy** (ADR 0016 §5) once no proxy subscription is left
+   un-migrated: the `/v1/billing/*` routes other than meters, the proxy code in
+   `services/billing/*`, its contracts and SDK methods; ADR 0010 and ADR 0013's
+   draft hold marked superseded, their tax-reversal rules carried over.
+
+Safety: a dry run that lists every planned mapping first; the binding row as
+the per-subscription marker, so a rerun skips what is migrated; never migrate a
+subscription whose Stripe state is `incomplete` or `unpaid`, or that has an open
+invoice — those are resolved at Stripe first.

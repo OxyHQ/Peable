@@ -22,6 +22,7 @@ import {
 } from '@peable.to/shared-types';
 import { customers } from './customers';
 import { merchants } from './merchants';
+import { billingMeters } from './meters';
 import {
   BASE_UNIT_STRING_PATTERN,
   COUPON_DURATIONS,
@@ -175,6 +176,8 @@ export const prices = pgTable(
     recurringInterval: text(),
     recurringIntervalCount: integer(),
     recurringUsageType: text(),
+    /** The meter a `metered` price bills (ADR 0018 §7). */
+    meterId: text(),
     taxBehavior: text().notNull().default('unspecified'),
     lookupKey: text(),
     nickname: text(),
@@ -188,6 +191,11 @@ export const prices = pgTable(
     unique('prices_id_product_id_key').on(table.id, table.productId),
     /** The target of the line-item references: a line names its own merchant's price. */
     unique('prices_id_merchant_id_key').on(table.id, table.merchantId),
+    foreignKey({
+      name: 'prices_meter_fkey',
+      columns: [table.meterId, table.merchantId],
+      foreignColumns: [billingMeters.id, billingMeters.merchantId],
+    }).onDelete('restrict'),
     /** A price and its product belong to one merchant. */
     foreignKey({
       name: 'prices_product_merchant_fkey',
@@ -237,11 +245,11 @@ export const prices = pgTable(
         `(transform_quantity_divide_by is null) = (transform_quantity_round is null) and (transform_quantity_divide_by is null or (transform_quantity_divide_by >= 1 and billing_scheme = 'per_unit')) and (transform_quantity_round is null or transform_quantity_round in (${inList(TRANSFORM_QUANTITY_ROUNDS)}))`,
       ),
     ),
-    /** Recurring ⇔ an interval, a count and a usage type; at most three years apart. */
+    /** Recurring ⇔ an interval, a count and a usage type; at most three years apart; metered ⇔ a meter. */
     check(
       'prices_recurring_check',
       sql.raw(
-        `(type = 'recurring') = (recurring_interval is not null) and (recurring_interval is null) = (recurring_interval_count is null) and (recurring_interval is null) = (recurring_usage_type is null) and (recurring_interval is null or recurring_interval in (${inList(RECURRING_INTERVALS)})) and (recurring_usage_type is null or recurring_usage_type in (${inList(RECURRING_USAGE_TYPES)})) and (recurring_interval_count is null or recurring_interval_count between 1 and case recurring_interval when 'day' then 1095 when 'week' then 156 when 'month' then 36 else 3 end)`,
+        `(type = 'recurring') = (recurring_interval is not null) and (recurring_interval is null) = (recurring_interval_count is null) and (recurring_interval is null) = (recurring_usage_type is null) and (recurring_interval is null or recurring_interval in (${inList(RECURRING_INTERVALS)})) and (recurring_usage_type is null or recurring_usage_type in (${inList(RECURRING_USAGE_TYPES)})) and (recurring_interval_count is null or recurring_interval_count between 1 and case recurring_interval when 'day' then 1095 when 'week' then 156 when 'month' then 36 else 3 end) and (recurring_usage_type = 'metered') = (meter_id is not null)`,
       ),
     ),
     check(

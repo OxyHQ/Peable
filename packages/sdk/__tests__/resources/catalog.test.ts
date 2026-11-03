@@ -50,7 +50,7 @@ const PRICE: Price = {
   tiers_mode: null,
   transform_quantity: null,
   type: 'recurring',
-  recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+  recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed', meter: null },
   tax_behavior: 'unspecified',
   lookup_key: 'plus_monthly',
   nickname: null,

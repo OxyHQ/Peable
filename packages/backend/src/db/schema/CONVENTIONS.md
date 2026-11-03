@@ -813,3 +813,87 @@ fields on `payment_intents`. Decisions a reader would otherwise undo:
   EXISTS`; `0061` (post) the data — pre-Phase-3 sessions get a client secret,
   their payment's deadline and status and one line; price links their catalog
   rows — then every `VALIDATE`, then the generated `DROP COLUMN success_url`.
+## Billing engine (ADR 0018)
+
+`subscriptions`, `subscription_items`, `invoices`, `invoice_line_items`,
+`invoice_items`, `credit_notes`, `credit_note_lines`,
+`customer_balance_transactions`, `billing_settings`, `test_clocks`,
+`billing_meters`, `billing_meter_events`, `entitlement_features`,
+`product_features`, `customer_entitlement_summaries`,
+`billing_portal_configurations`, `billing_portal_sessions`
+(`schema/billingEngine.ts`, `testClocks.ts`, `meters.ts`), plus `customers.balance
+/ currency / test_clock_id` and `prices.meter_id`. Decisions a reader would
+otherwise undo:
+
+- **Statuses move only by CAS** — `setSubscriptionStatus` / `setInvoiceStatus`
+  (`status = from` in the WHERE), reached only from `transitions.ts`. Every
+  other write goes through the `…Patch` functions, which cannot name `status`.
+- **SIGNED amounts** carry `SIGNED_BASE_UNIT_STRING_PATTERN`
+  (`^(0|-?[1-9][0-9]*)$`: no `+`, no `-0`): a line's `amount` and
+  `discount_amount` (a credit's discount has the credit's sign), an invoice's
+  `subtotal`, `total_discount`, `tax`, `total`, `total_excluding_tax`,
+  `starting_balance`, `ending_balance`, a customer's `balance` and a balance
+  transaction's `amount`/`ending_balance`. Everything a payer is ASKED for
+  (`amount_due`, `amount_paid`, credit-note totals) is unsigned.
+- **A negative invoice item is a proration** (`invoice_items_amounts_check`):
+  `createInvoiceItem` refuses a negative amount, so a merchant credit is a
+  credit note or a balance transaction, never a hand-made negative item.
+- **Finalized means numbered**: `invoices_finalized_check` makes `number`,
+  `hosted_token`, `finalized_at` and `ending_balance` exist exactly from `open`
+  on, and `invoices_automatic_tax_check` refuses a non-draft taxed invoice
+  whose `automatic_tax_status` is not `complete` — an invoice cannot leave
+  draft untaxed even if code tried.
+- **The invoice counter is in `billing_settings`**, taken by one `UPDATE …
+  RETURNING next_invoice_number - 1` inside the finalize transaction (the
+  derivation index's pattern): row-locked, `integer` for §Counters' reason, and
+  gapless because a rollback returns the number. `invoices_merchant_number_key`
+  (partial, numbered rows) is the backstop.
+- **One engine invoice per subscription period**:
+  `invoices_subscription_period_reason_key` on `(subscription_id,
+  billing_reason, period_start)` for `subscription_create`/`subscription_cycle`
+  — the insert is `ON CONFLICT DO NOTHING`, so a second worker renewing the
+  same period writes nothing. Proration and cancel invoices are outside it.
+- **Same-merchant references are composite** (`(customer_id, merchant_id) →
+  customers`, `(price_id, merchant_id) → prices` — which is why `prices` gained
+  `prices_id_merchant_id_key`, hand-moved above the foreign keys in the
+  migration); a subscription's and an invoice's default method is one of the
+  CUSTOMER's (`(default_payment_method_id, customer_id) → payment_methods`), a
+  subscription's latest invoice one of ITS invoices (`(latest_invoice_id, id) →
+  invoices (id, subscription_id)`, a cycle drizzle-kit emits after both
+  tables), and an invoice's subscription the same customer's.
+- **FairCoin cannot be debited, as a CHECK**:
+  `subscriptions_faircoin_sends_invoices_check` and
+  `invoices_faircoin_sends_check` (`currency <> 'FAIR' or (send_invoice and no
+  default method)`).
+- **`test_clock_id` is copied** from the customer onto its subscriptions and
+  invoices, so the scheduler's claim is one join to `test_clocks`; a customer's
+  clock never changes. The claim's `coalesce(tc.frozen_time, now())` is the
+  injected clock (ADR 0018 §3) in SQL. Test-mode-only is the service's check
+  (a CHECK cannot read the merchant's mode).
+- **`next_action_at` + `lease_expires_at` are the scheduler** — partial indexes
+  on `next_action_at is not null`; no job table to drift from the rows.
+- **Ordered ids for lines and invoice items** (`orderedId`): a uuid v7 is
+  ordered only to the millisecond, and a credit and its replacing charge are
+  written within one; lines are read back in key order, so their ids are
+  minted strictly increasing per process.
+- **Meter events are idempotent forever** by `(merchant_id, identifier)`; one
+  ACTIVE meter per event name (`billing_meters_merchant_active_event_key`,
+  partial); `prices_recurring_check` gained `metered ⇔ meter_id`.
+- **Entitlement summaries are the compare half** of
+  `entitlements.active_entitlement_summary.updated`: the event is recorded only
+  when `customer_entitlement_summaries.feature_ids` moves (row-locked).
+- **A portal session stores only its token's SHA-256** (`token_hash`), never
+  the bearer token; an invoice's `hosted_token` is stored (it is re-rendered
+  into `hosted_invoice_url` on every read, like a payment link id).
+- **Invoice emails ride Orbit's ONE email outbox** (`customer_emails`, kinds
+  `invoice` and `invoice_payment_failed`, `invoice_id`): owed in the change's
+  transaction, sent by the dispatcher; `invoice.sent` is recorded only when the
+  relay accepted the email.
+- **Migrations `0065`/`0066`**. `0065` is `pre`: new
+  tables, additive columns, and the constraints added to EXISTING tables
+  (`customer_emails_invoice_fkey`, `customer_emails_kind_check`,
+  `customer_emails_subject_check`, `customers_test_clock_fkey`,
+  `customers_balance_check`, `prices_meter_fkey`,
+  `prices_recurring_check`, `events_type_check`,
+  `webhook_endpoints_enabled_events_check`) re-added `NOT VALID` by hand;
+  `0066` (`post`) validates them.

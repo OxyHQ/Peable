@@ -158,10 +158,15 @@ export function gatewayDb(): Database {
  * Registration happens while the file is being evaluated, which is what lets a
  * helper own `beforeAll`/`afterAll` on the caller's behalf.
  */
+const SUITE_DATABASE_TIMEOUT_MS = 60_000;
+
 export function useGatewayDatabase(): void {
+  // Creating and migrating a database grows with every migration (sixty now),
+  // and bun's default 5 s hook timeout is not a budget for that on a loaded
+  // machine: the timeout is the suite's, not a claim about the migrations.
   beforeAll(async () => {
     suite = await createSuiteDatabase();
-  });
+  }, SUITE_DATABASE_TIMEOUT_MS);
 
   afterAll(async () => {
     await flushRequestLogs();

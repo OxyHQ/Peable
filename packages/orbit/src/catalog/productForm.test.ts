@@ -185,14 +185,14 @@ describe('formatPriceLabel', () => {
     expect(
       formatPriceLabel({
         ...base,
-        recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+        recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed', meter: null },
       }),
     ).toBe('19.99 EUR / month');
     expect(
       formatPriceLabel({
         ...base,
         unit_amount: '1250',
-        recurring: { interval: 'month', interval_count: 3, usage_type: 'licensed' },
+        recurring: { interval: 'month', interval_count: 3, usage_type: 'licensed', meter: null },
       }),
     ).toBe('12.50 EUR every 3 months');
     expect(formatPriceLabel({ ...base, currency: 'FAIR', unit_amount: '150000000' })).toBe(

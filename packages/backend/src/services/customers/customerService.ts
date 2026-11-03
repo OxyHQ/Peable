@@ -37,7 +37,11 @@ export class CustomerParameterError extends Error {
 
 export async function createCustomer(
   merchant: MerchantRow,
-  fields: CustomerFields & { readonly metadata: Record<string, string> },
+  fields: CustomerFields & {
+    readonly metadata: Record<string, string>;
+    /** INTERNAL id of a test clock of this (test-mode) merchant, or `null`. */
+    readonly testClockId?: string | null;
+  },
 ): Promise<CustomerRow> {
   const customer = await getDb().transaction(async (tx) => {
     const row = await insertCustomer(tx, {

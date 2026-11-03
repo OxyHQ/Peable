@@ -10,6 +10,7 @@ import { getDb } from '../../db/postgres';
 import { currentMailer, MailerRefusedError, type Mailer } from './mailer';
 import { claimOwedEmails, markEmailFailed, markEmailSent } from './outbox';
 import { renderOwedEmail } from './render';
+import { recordInvoiceSent } from '../billingEngine/notices';
 
 const BACKOFF_MINUTES = [1, 5, 30, 60];
 const DEFAULT_INTERVAL_MS = 15_000;
@@ -57,6 +58,8 @@ export async function dispatchCustomerEmails(
     try {
       await mailer.send(email);
       await markEmailSent(db, row.id);
+      // An invoice is `sent` (ADR 0018) only once the relay took its email.
+      if (row.kind === 'invoice' && row.invoiceId) await recordInvoiceSent(row.invoiceId);
       sent += 1;
     } catch (error) {
       if (error instanceof MailerRefusedError) {

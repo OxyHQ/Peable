@@ -59,6 +59,7 @@ import {
 import { recordEvent } from '../events';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { generatePromotionCode } from './params';
+import { findMeterForMerchant } from '../../db/billingEngine/meterRepository';
 import type { PricingPrice } from './pricing';
 import { pricingPriceOfShape } from './pricingRows';
 
@@ -167,11 +168,17 @@ export async function createProduct(merchant: MerchantRow, input: NewProduct): P
       merchantId: merchant.id,
     });
     if (defaultPrice) {
+      const shape = await withMeter(
+        tx,
+        merchant.id,
+        defaultPrice,
+        'default_price_data[recurring][meter]',
+      );
       const written = await insertPrice(tx, {
         publicId: newId('price'),
         merchantId: merchant.id,
         productId: product.id,
-        shape: defaultPrice,
+        shape,
         active: true,
         lookupKey: null,
         transferLookupKey: false,
@@ -292,8 +299,33 @@ function lookupKeyTaken(): CatalogError {
  * was taken from. The product is LOCKED, so a concurrent delete of it cannot
  * leave the new price pointing at nothing.
  */
+/**
+ * Resolve a metered shape's `mtr_…` (ADR 0018 §7): it must be an ACTIVE meter
+ * of the merchant.
+ */
+async function withMeter(
+  tx: DatabaseOrTransaction,
+  merchantId: string,
+  shape: PriceShape,
+  param: string,
+): Promise<PriceShape> {
+  const recurring = shape.recurring;
+  if (!recurring?.meterPublicId) return shape;
+  const meter = await findMeterForMerchant(tx, recurring.meterPublicId, merchantId);
+  if (meter?.status !== 'active') {
+    throw new CatalogError(
+      'resource_missing',
+      `no active meter '${recurring.meterPublicId}'`,
+      param,
+    );
+  }
+  const { meterPublicId: _named, ...rest } = recurring;
+  return { ...shape, recurring: { ...rest, meterId: meter.id } };
+}
+
 export async function createPrice(merchant: MerchantRow, input: NewPrice): Promise<PriceRow> {
   return committed(async (tx) => {
+    input = { ...input, shape: await withMeter(tx, merchant.id, input.shape, 'recurring[meter]') };
     const found = await findProductForMerchant(tx, input.product, merchant.id);
     const product = found ? await lockProduct(tx, found.id) : null;
     if (!product) {

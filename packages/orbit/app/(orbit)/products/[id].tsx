@@ -30,6 +30,8 @@ import {
   productFormOf,
 } from '@/catalog/productForm';
 import { catalogKeys, useProduct, useProductPrices } from '@/catalog/useCatalog';
+import { billingKeys, useFeatures, useProductFeatures } from '@/billing/useBilling';
+import { Choice } from '@/ui/Choice';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
@@ -334,6 +336,103 @@ function Prices({ scope, product }: { scope: DashboardScope; product: Product })
   );
 }
 
+/** The features this product grants (ADR 0018 §6): what an app checks to grant access. */
+function ProductFeatures({ scope, product }: { scope: DashboardScope; product: Product }) {
+  const queryClient = useQueryClient();
+  const attached = useProductFeatures(scope, product.id);
+  const features = useFeatures(scope);
+  const [choice, setChoice] = useState<string | null>(null);
+  const refresh = () =>
+    void queryClient.invalidateQueries({
+      queryKey: billingKeys.productFeatures(scope, product.id),
+    });
+  const attach = useMutation({
+    mutationFn: (featureId: string) => dashboardApi.features.attach(scope, product.id, featureId),
+    onSuccess: () => {
+      toast.success(t('product.features.attached'));
+      setChoice(null);
+      refresh();
+    },
+    onError: fail,
+  });
+  const detach = useMutation({
+    mutationFn: (attachmentId: string) =>
+      dashboardApi.features.detach(scope, product.id, attachmentId),
+    onSuccess: () => {
+      toast.success(t('product.features.detached'));
+      refresh();
+    },
+    onError: fail,
+  });
+  if (attached.isPending || features.isPending) {
+    return <Loading accessibilityLabel={t('product.features')} />;
+  }
+  if (attached.isError)
+    return <ErrorNotice error={attached.error} onRetry={() => void attached.refetch()} />;
+  if (features.isError)
+    return <ErrorNotice error={features.error} onRetry={() => void features.refetch()} />;
+  const granted = new Set(attached.data.data.map((row) => row.entitlement_feature.id));
+  const options = features.data.data
+    .filter((feature) => feature.active && !granted.has(feature.id))
+    .map((feature) => ({ value: feature.id, label: `${feature.name} (${feature.lookup_key})` }));
+  return (
+    <Section title={t('product.features')} description={t('product.featuresIntro')}>
+      {attached.data.data.length ? (
+        attached.data.data.map((row) => (
+          <View
+            key={row.id}
+            className="flex-row flex-wrap items-center gap-2 py-2 border-b border-border"
+          >
+            <Text variant="body-2-semibold">{row.entitlement_feature.name}</Text>
+            <Text
+              variant="caption-1-regular"
+              selectable
+              className="text-muted-foreground font-mono"
+            >
+              {row.entitlement_feature.lookup_key}
+            </Text>
+            <View className="flex-1" />
+            <Button
+              appearance="outline"
+              size="sm"
+              loading={detach.isPending && detach.variables === row.id}
+              onPress={() => detach.mutate(row.id)}
+            >
+              {t('product.features.detach')}
+            </Button>
+          </View>
+        ))
+      ) : (
+        <Text variant="body-2-regular" className="text-muted-foreground">
+          {t('product.features.none')}
+        </Text>
+      )}
+      {options.length ? (
+        <View className="flex-row flex-wrap items-end gap-2 pt-2">
+          <View className="flex-1 min-w-48">
+            <Choice
+              label={t('product.features.choose')}
+              value={choice}
+              options={options}
+              onChange={setChoice}
+              disabled={attach.isPending}
+            />
+          </View>
+          <Button
+            appearance="solid"
+            tone="accent"
+            size="sm"
+            loading={attach.isPending}
+            onPress={() => (choice ? attach.mutate(choice) : undefined)}
+          >
+            {t('product.features.attach')}
+          </Button>
+        </View>
+      ) : null}
+    </Section>
+  );
+}
+
 function ProductDetail({ scope, product }: { scope: DashboardScope; product: Product }) {
   return (
     <View className="gap-6">
@@ -352,6 +451,7 @@ function ProductDetail({ scope, product }: { scope: DashboardScope; product: Pro
       {/* Keyed by `updated`, so a save elsewhere re-seeds the form from the stored product. */}
       <EditProduct key={product.updated} scope={scope} product={product} />
       <Prices scope={scope} product={product} />
+      <ProductFeatures scope={scope} product={product} />
     </View>
   );
 }
