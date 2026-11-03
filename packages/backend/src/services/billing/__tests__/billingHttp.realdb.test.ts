@@ -187,7 +187,11 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         livemode: false,
         async account() {
           calls.push({ method: 'account' });
-          return { id: accountId };
+          return {
+            id: accountId,
+            charges_enabled: true,
+            capabilities: { card_payments: 'active' },
+          };
         },
         async createCustomer(params, key) {
           calls.push({ method: 'customer', params, key });
@@ -284,6 +288,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       };
       const provider = createStripeBillingProvider(deployment, client, {
         portalConfigurationRef: 'bpc_one',
+        embeddedPublishableKey: 'pk_test_fixture',
         now: () => time,
       });
       const cohorts: BillingCohort[] = [
@@ -626,6 +631,132 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         },
       };
     }
+    it('creates an owned fiscal embedded session, keeps secrets ephemeral and closes completed/expired actions', async () => {
+      const fixture = await fiscalFixture();
+      const adapter = must(taxCheckoutAdapter);
+      let created = 0;
+      adapter.createEmbeddedCheckout = async (input) => {
+        created++;
+        return {
+          providerObjectRef: 'cs_test_embedded',
+          providerCustomerId: checkout.provider_customer_id,
+          livemode: false,
+          presentation: 'embedded',
+          expiresAt: input.snapshot.taxQuote.quote.expires_at,
+        };
+      };
+      const raw = {
+        id: 'cs_test_embedded',
+        customer: checkout.provider_customer_id,
+        livemode: false,
+        mode: 'subscription',
+        ui_mode: 'elements',
+        automatic_tax: { enabled: false },
+        status: 'open',
+        client_secret: 'cs_test_embedded_secret_ephemeral',
+        expires_at: fixture.quote.quote.expires_at,
+        amount_total: fixture.quote.quote.gross_minor_units,
+        currency: 'usd',
+        total_details: { amount_tax: fixture.quote.quote.tax_minor_units },
+        line_items: {
+          has_more: false,
+          data: [{ quantity: 1, price: { id: checkout.provider_price_id } }],
+        },
+      };
+      let readCount = 0;
+      client.retrieveEmbeddedCheckout = async () => {
+        readCount++;
+        return structuredClone(raw);
+      };
+      const configuration = await fixture.fiscalSdk.embeddedCheckoutConfiguration();
+      expect(configuration.publishable_key).toBe('pk_test_fixture');
+      expect(configuration.scope.app_id).toBe(owner.oxyAppId);
+      const input = { ...checkout, tax_quote: fixture.quote };
+      const session = await fixture.fiscalSdk.createEmbeddedCheckoutSession(input, {
+        idempotencyKey: 'embedded:one',
+      });
+      expect(session).toEqual({
+        id: 'cs_test_embedded',
+        presentation: 'embedded',
+        expires_at: fixture.quote.quote.expires_at,
+      });
+      expect(
+        await fixture.fiscalSdk.createEmbeddedCheckoutSession(input, {
+          idempotencyKey: 'embedded:one',
+        }),
+      ).toEqual(session);
+      expect(created).toBe(1);
+      expect(
+        (await request('/v1/billing/checkout_sessions', 'owner', input, 'embedded:one')).status,
+      ).toBe(409);
+      const binding = await fixture.fiscalSdk.retrieveEmbeddedCheckoutAction(session.id);
+      expect(binding.status).toBe('open');
+      expect(binding.action?.client_secret).toBe(raw.client_secret);
+      expect(binding.scope.store_id).toBe(checkout.store_id);
+      expect(binding.tax_quote).toEqual(fixture.quote);
+      expect(JSON.stringify(await gatewayDb().select().from(billingOperations))).not.toContain(
+        raw.client_secret,
+      );
+      expect(
+        (
+          await request(
+            `/v1/billing/embedded_checkout_sessions/${session.id}/client_action`,
+            'other',
+          )
+        ).status,
+      ).toBe(404);
+      expect(readCount).toBe(1);
+      for (const patch of [
+        { amount_total: 1 },
+        { currency: 'eur' },
+        { customer: 'cus_foreign' },
+        { livemode: true },
+        { ui_mode: 'hosted' },
+        { automatic_tax: { enabled: true } },
+        {
+          line_items: { has_more: false, data: [{ quantity: 1, price: { id: 'price_foreign' } }] },
+        },
+      ]) {
+        client.retrieveEmbeddedCheckout = async () => ({ ...structuredClone(raw), ...patch });
+        expect(
+          (await request(`/v1/billing/embedded_checkout_sessions/${session.id}/client_action`)).ok,
+        ).toBe(false);
+      }
+      client.retrieveEmbeddedCheckout = async () => ({
+        ...structuredClone(raw),
+        status: 'complete',
+        client_secret: null,
+      });
+      expect(await fixture.fiscalSdk.retrieveEmbeddedCheckoutAction(session.id)).toMatchObject({
+        status: 'complete',
+        action: null,
+      });
+      client.retrieveEmbeddedCheckout = async () => ({
+        ...structuredClone(raw),
+        status: 'expired',
+        client_secret: null,
+      });
+      expect(await fixture.fiscalSdk.retrieveEmbeddedCheckoutAction(session.id)).toMatchObject({
+        status: 'expired',
+        action: null,
+      });
+      accountId = 'acct_foreign';
+      expect((await request('/v1/billing/embedded_checkout_configuration')).ok).toBe(false);
+    });
+    it('does not offer embedded checkout without configured fiscal authority or a signed quote', async () => {
+      expect((await request('/v1/billing/embedded_checkout_configuration')).status).toBe(404);
+      expect(
+        (
+          await request(
+            '/v1/billing/embedded_checkout_sessions',
+            'owner',
+            checkout,
+            'embedded:noquote',
+          )
+        ).status,
+      ).toBe(404);
+      expect(calls.some((call) => call.method === 'checkout')).toBe(false);
+    });
     it('persists the signed inclusive quote through the real HTTP SDK boundary and rejects reuse under another key', async () => {
       const fixture = await fiscalFixture();
       const input = { ...checkout, tax_quote: fixture.quote };
@@ -1744,6 +1875,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(await sdk().retrieveCheckoutOperation(params)).toEqual(recovered);
       const freshProvider = createStripeBillingProvider(deployment, client, {
         portalConfigurationRef: 'bpc_one',
+        embeddedPublishableKey: 'pk_test_fixture',
         now: () => time,
       });
       const restarted = createBillingService({
@@ -1756,6 +1888,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const foreignDeployment = { ...deployment, platformAccountId: 'acct_other' };
       const foreignProvider = createStripeBillingProvider(foreignDeployment, client, {
         portalConfigurationRef: 'bpc_one',
+        embeddedPublishableKey: 'pk_test_fixture',
         now: () => time,
       });
       const foreignService = createBillingService({

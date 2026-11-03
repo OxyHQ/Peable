@@ -29,6 +29,7 @@ export interface StripeBillingClient {
   retrieveCustomer(ref: string): Promise<unknown>;
   retrievePrice(ref: string): Promise<unknown>;
   retrieveCheckout(ref: string): Promise<unknown>;
+  retrieveEmbeddedCheckout?(ref: string): Promise<unknown>;
   listCheckoutsForSubscription(ref: string): Promise<unknown>;
   retrieveTaxSettings?(): Promise<unknown>;
   listTaxRegistrations?(startingAfter?: string): Promise<unknown>;
@@ -120,7 +121,7 @@ export function normalizeBillingSubscription(raw: unknown): ProviderBillingSubsc
 export function createStripeBillingProvider(
   deploymentInput: BillingDeployment,
   client: StripeBillingClient = stripeBillingClient(),
-  options: { portalConfigurationRef: string; now?: () => Date },
+  options: { portalConfigurationRef: string; now?: () => Date; embeddedPublishableKey?: string },
 ): BillingProvider {
   const deployment = billingDeploymentSchema.parse(deploymentInput);
   const now = options.now ?? (() => new Date());
@@ -162,6 +163,82 @@ export function createStripeBillingProvider(
     async verifyDeployment() {
       const account = z.object({ id: ref('acct_') }).parse(await client.account());
       if (account.id !== deployment.platformAccountId) throw new BillingError('identity_conflict');
+    },
+    async embeddedConfiguration() {
+      const publishableKey = options.embeddedPublishableKey;
+      const prefix = deployment.livemode ? 'pk_live_' : 'pk_test_';
+      if (!publishableKey?.startsWith(prefix)) throw new BillingError('not_found', 404);
+      const account = z
+        .object({
+          id: z.literal(deployment.platformAccountId),
+          charges_enabled: z.literal(true),
+          capabilities: z.object({ card_payments: z.literal('active') }),
+        })
+        .parse(await client.account());
+      if (!account.id) throw new BillingError('identity_conflict');
+      return { publishableKey };
+    },
+    async retrieveEmbeddedAction(checkoutRef) {
+      if (!client.retrieveEmbeddedCheckout) throw new BillingError('not_found', 404);
+      const publishableKey = options.embeddedPublishableKey;
+      if (!publishableKey?.startsWith(deployment.livemode ? 'pk_live_' : 'pk_test_'))
+        throw new BillingError('not_found', 404);
+      const session = z
+        .object({
+          id: z.literal(checkoutRef),
+          livemode: z.literal(deployment.livemode),
+          mode: z.literal('subscription'),
+          ui_mode: z.enum(['custom', 'elements']),
+          status: z.enum(['open', 'complete', 'expired']),
+          client_secret: z.string().min(1).nullable(),
+          customer: ref('cus_'),
+          expires_at: seconds,
+          amount_total: z.number().int().positive().safe(),
+          currency: z.string().regex(/^[a-z]{3}$/),
+          total_details: z.object({ amount_tax: z.number().int().nonnegative().safe() }),
+          automatic_tax: z.object({ enabled: z.literal(false) }),
+          line_items: z.object({
+            has_more: z.literal(false),
+            data: z
+              .array(z.object({ quantity: z.literal(1), price: z.object({ id: ref('price_') }) }))
+              .length(1),
+          }),
+        })
+        .parse(await client.retrieveEmbeddedCheckout(checkoutRef));
+      const price = session.line_items.data[0]?.price.id;
+      if (
+        !price ||
+        (session.status === 'open' &&
+          session.expires_at > toUnix(now()) &&
+          !session.client_secret?.startsWith(`${checkoutRef}_secret_`))
+      )
+        throw new BillingError('result_expired');
+      const status =
+        session.status === 'open' && session.expires_at <= toUnix(now())
+          ? 'expired'
+          : session.status;
+      return {
+        status,
+        amountMinorUnits: session.amount_total,
+        currency: session.currency.toUpperCase(),
+        action:
+          status === 'open' && session.client_secret
+            ? {
+                kind: 'checkout_session' as const,
+                provider: 'stripe' as const,
+                session_id: checkoutRef,
+                client_secret: session.client_secret,
+                publishable_key: publishableKey,
+                amount_minor_units: session.amount_total,
+                currency: session.currency.toUpperCase(),
+              }
+            : null,
+        providerCustomerId: session.customer,
+        providerPriceId: price,
+        livemode: session.livemode,
+        expiresAt: session.expires_at,
+        taxMinorUnits: session.total_details.amount_tax,
+      };
     },
     async ensureCustomer(input, key) {
       const customer = z

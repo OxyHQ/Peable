@@ -10,6 +10,9 @@ import type {
   BillingRailList,
   BillingHostedSession,
   BillingCheckoutSession,
+  BillingEmbeddedCheckoutSession,
+  BillingEmbeddedCheckoutConfiguration,
+  BillingEmbeddedCheckoutBinding,
   BillingCheckoutObservation,
   BillingPaidInvoice,
   BillingInvoiceState,
@@ -69,6 +72,24 @@ export class BillingResource {
       body: params,
       idempotencyKey: options.idempotencyKey,
     });
+  }
+  embeddedCheckoutConfiguration(): Promise<BillingEmbeddedCheckoutConfiguration> {
+    return this.client.request('GET', '/v1/billing/embedded_checkout_configuration');
+  }
+  createEmbeddedCheckoutSession(
+    params: CreateBillingCheckoutParams,
+    options: BillingRequestOptions,
+  ): Promise<BillingEmbeddedCheckoutSession> {
+    return this.client.request('POST', '/v1/billing/embedded_checkout_sessions', {
+      body: params,
+      idempotencyKey: options.idempotencyKey,
+    });
+  }
+  retrieveEmbeddedCheckoutAction(ref: string): Promise<BillingEmbeddedCheckoutBinding> {
+    return this.client.request(
+      'GET',
+      `/v1/billing/embedded_checkout_sessions/${encodeURIComponent(ref)}/client_action`,
+    );
   }
   /** Opens a new expiring FAIR payment for one monthly period. Never auto-debits. */
   renewSubscription(

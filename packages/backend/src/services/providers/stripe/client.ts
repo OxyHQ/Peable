@@ -367,6 +367,8 @@ export function stripeBillingClient() {
       getStripeClient().checkout.sessions.list({ subscription: ref, limit: 2 }, requestOptions),
     retrieveCheckout: (ref: string) =>
       getStripeClient().checkout.sessions.retrieve(ref, {}, requestOptions),
+    retrieveEmbeddedCheckout: (ref: string) =>
+      getStripeClient().checkout.sessions.retrieve(ref, { expand: ['line_items'] }, requestOptions),
     retrieveTaxSettings: () => getStripeClient().tax.settings.retrieve({}, requestOptions),
     listTaxRegistrations: (startingAfter?: string) =>
       getStripeClient().tax.registrations.list(

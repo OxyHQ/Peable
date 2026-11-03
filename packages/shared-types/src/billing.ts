@@ -309,3 +309,43 @@ export interface BillingFaircoinFxQuote {
   expires_at: number;
   rounding: 'ceil_to_base_unit';
 }
+
+/** Durable embedded-session reference. Provider secrets are never persisted in it. */
+export interface BillingEmbeddedCheckoutSession {
+  id: string;
+  presentation: 'embedded';
+  expires_at: number;
+}
+/** Ephemeral processor capability released only to the authenticated owning workload. */
+export interface BillingEmbeddedCheckoutAction {
+  kind: 'checkout_session';
+  provider: 'stripe';
+  session_id: string;
+  client_secret: string;
+  publishable_key: string;
+  amount_minor_units: number;
+  currency: string;
+}
+export interface BillingEmbeddedCheckoutScope {
+  merchant_id: string;
+  app_id: string;
+  environment: 'development' | 'staging' | 'production';
+  mode: 'test' | 'live';
+}
+export interface BillingEmbeddedCheckoutConfiguration {
+  scope: BillingEmbeddedCheckoutScope;
+  publishable_key: string;
+  payment_methods: { id: 'card'; available: boolean }[];
+}
+export interface BillingEmbeddedCheckoutBinding {
+  status: 'open' | 'complete' | 'expired';
+  action: BillingEmbeddedCheckoutAction | null;
+  scope: BillingEmbeddedCheckoutScope & {
+    store_id: string;
+    plan_id: string;
+    provider_customer_id: string;
+    provider_price_id: string;
+  };
+  tax_quote: BillingTaxQuote;
+  expires_at: number;
+}

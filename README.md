@@ -91,9 +91,11 @@ prepares authorization and a separate Pay action confirms it. Authentication
 challenges and declined-payment retry have also been verified.
 
 These tests do **not** grant production Plus access or establish live availability.
-Production still uses the hosted, gated integration; the embedded public billing
-binding, authoritative entitlement delivery and fiscal readiness require completion
-and acceptance. Closing the sheet or checkout window never grants Plus.
+The backend now provides an owned embedded billing-session binding alongside
+hosted checkout, preserving the same signed tax quote, subscription ownership and
+invoice authority. Production activation still requires the correct merchant,
+provider account, approved fiscal settings and authoritative entitlement delivery
+to be configured and verified together. Closing the sheet or checkout window never grants Plus.
 
 ### FairCoin is a payment method, not an exchange product
 

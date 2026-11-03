@@ -1,5 +1,6 @@
 import type {
   BillingSubscription,
+  BillingEmbeddedCheckoutAction,
   CreateBillingCheckoutParams,
   CreateBillingPortalParams,
   EnsureBillingCustomerParams,
@@ -19,6 +20,8 @@ export interface BillingProvider {
   readonly deployment: BillingDeployment;
   /** Must establish the configured platform account and key mode before any effect. */
   verifyDeployment(): Promise<void>;
+  embeddedConfiguration?(): Promise<{ publishableKey: string }>;
+  retrieveEmbeddedAction?(ref: string): Promise<ProviderEmbeddedAction>;
   verifyPortalConfiguration(): Promise<void>;
   ensureCustomer(
     input: EnsureBillingCustomerParams,
@@ -37,4 +40,23 @@ export interface BillingProvider {
     providerSubscriptionId: string,
     idempotencyKey: string,
   ): Promise<ProviderBillingSubscription>;
+}
+
+export interface ProviderEmbeddedSession {
+  providerObjectRef: string;
+  providerCustomerId: string;
+  livemode: boolean;
+  presentation: 'embedded';
+  expiresAt: number;
+}
+export interface ProviderEmbeddedAction {
+  status: 'open' | 'complete' | 'expired';
+  amountMinorUnits: number;
+  currency: string;
+  action: BillingEmbeddedCheckoutAction | null;
+  providerCustomerId: string;
+  providerPriceId: string;
+  livemode: boolean;
+  expiresAt: number;
+  taxMinorUnits: number;
 }

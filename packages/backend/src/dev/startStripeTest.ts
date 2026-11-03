@@ -4,6 +4,7 @@ import { LOCAL_TEST_APP, localTestBillingConfiguration } from './stripeTestBilli
 let stage = 'local configuration';
 async function run() {
   assertLocalStripeTestEnvironment(process.env);
+  process.env.STRIPE_ACCOUNT_ID = process.env.PEABLE_TEST_STRIPE_ACCOUNT;
   const { configureLocalStripeCardEntry } = await import('./stripeTestCardPolicy');
   await configureLocalStripeCardEntry();
   if (process.env.PORT !== '4310') throw new Error('Local Stripe test requires port4310');

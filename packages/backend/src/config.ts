@@ -147,6 +147,8 @@ function readReconciliationMode(raw: string | undefined): OxyFileReconciliationM
 }
 
 export interface StripeConfig {
+  /** Explicit business identity, independently checked before the card rail starts. */
+  accountId?: string | undefined;
   /** True only when `STRIPE_ENABLED` is set AND every required secret is present. */
   enabled: boolean;
   secretKey: string | undefined;
@@ -353,6 +355,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     billingInvoicePrivateKeyFile: readOptional(env.PEABLE_BILLING_INVOICE_PRIVATE_KEY_FILE),
     ipHashSalt: readOptional(env.IP_HASH_SALT),
     stripe: {
+      accountId: readOptional(env.STRIPE_ACCOUNT_ID),
       enabled: resolveStripeEnabled(env),
       secretKey: readOptional(env.STRIPE_SECRET_KEY),
       publishableKey: readOptional(env.STRIPE_PUBLISHABLE_KEY),

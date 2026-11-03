@@ -297,11 +297,12 @@ describe('MerchantsResource and DisputesResource', () => {
     const { fetch: fetchImpl, requests } = gateway({ id: 'merch_1' }, 201);
     const resource = new MerchantsResource(buildTestClient(fetchImpl));
 
-    await resource.register();
+    await resource.register({}, { idempotencyKey: 'merchant-registration-stable' });
 
     const call = requests.find((r) => !r.url.includes('/auth/service-token'));
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/merchants`);
     expect(call?.body).toBe('{}');
+    expect(new Headers(call?.headers).get('Idempotency-Key')).toBe('merchant-registration-stable');
   });
 
   test('disputes are read-only and scoped to one payment', async () => {

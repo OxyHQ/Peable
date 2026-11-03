@@ -522,9 +522,11 @@ conflicts plain, 11 with it, each a Peable edit to the same lines.
 
 `.github/workflows/deploy-aws.yml` is the only deployment: native `linux/arm64`
 build on an arm64 runner, pushed to ECR `oxy/peable`, rolling the `peable` ECS
-service on `oxy-cluster`. GitHub repo secrets are the source of truth and are
-synced to SSM by the workflow, which skips empty or placeholder values rather
-than overwriting a real one.
+service on `oxy-cluster`. AWS SSM SecureString is the sole source of truth for backend credentials.
+Deployments never synchronize credentials from GitHub. Peable uses its own
+`/oxy/peable/*` references; another app's processor key must never configure it.
+Provision and rotate real values in AWS, then review their task-definition
+references with the matching provider account, mode and merchant cohort.
 
 It and the two Pages deploys (`deploy-frontend.yml`, `deploy-checkout.yml`)
 start on `workflow_run` after CI succeeds on a push to main, never beside it.

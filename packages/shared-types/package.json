@@ -1,7 +1,7 @@
 {
   "name": "@peable.to/shared-types",
-  "version": "0.6.0",
-  "description": "Shared TypeScript types for the Peable Gateway — the wire contract shared by the backend, SDK, and frontend.",
+  "version": "0.7.0",
+  "description": "Shared TypeScript types for the Peable Gateway \u2014 the wire contract shared by the backend, SDK, and frontend.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
   "types": "dist/types/index.d.ts",

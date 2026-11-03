@@ -348,6 +348,18 @@ export async function start(
   } = {},
 ): Promise<Gateway> {
   const database = await connectPostgres();
+  if (config.stripe.enabled) {
+    const { verifyStripeAccountIdentity } = await import(
+      './services/providers/stripe/accountIdentity'
+    );
+    const { getStripeClient } = await import('./services/providers/stripe/client');
+    await verifyStripeAccountIdentity({
+      enabled: true,
+      expectedAccountId: config.stripe.accountId,
+      readAccount: () => getStripeClient().accounts.retrieve(null),
+    });
+  }
+
   const taxProvider = configuredTaxProvider();
   const taxService = createConfiguredTaxService(database, taxProvider);
   void reportTaxProvider(taxProvider);
