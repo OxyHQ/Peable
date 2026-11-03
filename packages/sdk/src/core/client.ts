@@ -1,8 +1,9 @@
 // `RestClient` — the thin HTTP layer every resource namespace calls through.
 // Prefixes `baseURL`, attaches the bearer service token, sets
-// `Idempotency-Key` when given, serializes query params, parses JSON, and
-// maps every non-2xx response via `errors.ts`.
+// `Idempotency-Key` on every POST (the caller's, or a fresh one), serializes
+// query params, parses JSON, and maps every non-2xx response via `errors.ts`.
 
+import { randomUUID } from 'node:crypto';
 import { resolveRequestTimeout } from './config';
 import { errorFromResponse, PeableApiError } from './errors';
 import type { ServiceTokenProvider } from './serviceToken';
@@ -13,6 +14,12 @@ const HTTP_UNAUTHORIZED = 401;
 export interface RestClientRequestOptions {
   body?: unknown;
   query?: Record<string, string | number | undefined>;
+  /**
+   * Sent as `Idempotency-Key`. On a POST without one, the client mints a uuid
+   * per call — the same key for every attempt of that call — so a retry of
+   * the same call can never run twice (ADR 0014 D3). Pass your own to make a
+   * retry ACROSS calls (after a crash, from a queue) converge too.
+   */
   idempotencyKey?: string;
   headers?: Record<string, string>;
 }
@@ -139,7 +146,17 @@ export function createRestClient(
 
   return {
     request<T>(method: string, path: string, opts: RestClientRequestOptions = {}): Promise<T> {
-      return performRequest<T>(method, path, opts, true);
+      // Minted ONCE per call, above the attempts, so the 401 re-attempt below
+      // presents the same key: a request the gateway already ran is answered
+      // with its stored result rather than run again.
+      const idempotencyKey =
+        opts.idempotencyKey ?? (method.toUpperCase() === 'POST' ? randomUUID() : undefined);
+      return performRequest<T>(
+        method,
+        path,
+        idempotencyKey === undefined ? opts : { ...opts, idempotencyKey },
+        true,
+      );
     },
   };
 }

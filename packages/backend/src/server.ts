@@ -62,6 +62,7 @@ import { getTransaction } from './services/explorer';
 import type { SafeFetchFn } from './services/webhookDispatcher';
 import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './services/webhookOutbox';
 import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
+import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
 import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
@@ -70,6 +71,7 @@ import {
   createInternalErrorHandler,
   requestIdMiddleware,
 } from './lib/requestId';
+import { IDEMPOTENT_REPLAYED_HEADER } from './lib/idempotency';
 
 /** Date-based API version, echoed on every response (Stripe-parity). */
 const PEABLE_VERSION = '2026-11-03';
@@ -213,8 +215,13 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // dashboard (`dashboard.peable.to`) must be listed explicitly via
   // `config.allowedOrigins` (`PEABLE_ALLOWED_ORIGINS`) — the SAME list the
   // Socket.io `cors.origin` check below already reads.
+  // A browser reading a response may see which request it was and whether it
+  // is a replay of an earlier one (ADR 0014 D1, D3).
   app.use(
-    createOxyCors({ appOrigins: config.allowedOrigins, exposedHeaders: [REQUEST_ID_HEADER] }),
+    createOxyCors({
+      appOrigins: config.allowedOrigins,
+      exposedHeaders: [REQUEST_ID_HEADER, IDEMPOTENT_REPLAYED_HEADER],
+    }),
   );
 
   // ─── MOUNTED BEFORE `express.json()` AND BEFORE THE GLOBAL RATE LIMITER ───
@@ -365,6 +372,7 @@ export async function start(
     gateway.watcher.stop();
     stopWebhookOutbox();
     stopExpirySweeper();
+    stopIdempotencySweeper();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -389,6 +397,7 @@ export async function start(
   gateway.watcher.start();
   startWebhookOutbox({ safeFetch: undefined });
   startExpirySweeper();
+  startIdempotencySweeper();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on `config.stripe.enabled`

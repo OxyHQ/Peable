@@ -50,6 +50,19 @@ describe('PaymentIntentsResource', () => {
     expect(JSON.parse(call?.body ?? '{}')).toEqual({ amount: '100000', network: 'testnet' });
   });
 
+  test('create() without options sends a minted Idempotency-Key — the key is optional', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch((req) => {
+      if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
+      return { status: 201, json: SAMPLE_INTENT };
+    });
+    const resource = new PaymentIntentsResource(buildTestClient(fetchImpl));
+
+    await resource.create({ amount: '100000', network: 'testnet' });
+
+    const call = requests.find((r) => !r.url.includes('/auth/service-token'));
+    expect(call?.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+  });
+
   test('retrieve() GETs /v1/payment_intents/:id', async () => {
     const { fetch: fetchImpl, requests } = createMockFetch((req) => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();

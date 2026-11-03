@@ -381,3 +381,17 @@ export const OXY_FILE_RECONCILIATION_STATUSES = [
   'abandoned',
 ] as const;
 export type OxyFileReconciliationStatus = (typeof OXY_FILE_RECONCILIATION_STATUSES)[number];
+
+/**
+ * Where one `Idempotency-Key` stands — `idempotency_keys.status` (ADR 0014 D3).
+ *
+ *  - `in_progress` — the first request presenting the key holds its lease and
+ *                    is still running. Another request with the same key is
+ *                    answered 409 `idempotency_error` until it finishes or the
+ *                    lease runs out.
+ *  - `completed`   — the first request finished with a 2xx or 4xx, and its
+ *                    status and body are stored for replay. A 5xx is never
+ *                    stored: the row is deleted so the caller can retry.
+ */
+export const IDEMPOTENCY_KEY_STATUSES = ['in_progress', 'completed'] as const;
+export type IdempotencyKeyStatus = (typeof IDEMPOTENCY_KEY_STATUSES)[number];

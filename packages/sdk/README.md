@@ -21,6 +21,29 @@ offending field in bracket notation (`metadata[order_id]`), and `err.requestId`
 the response's `Request-Id` — quote it to Peable support. A request that is
 well-formed JSON but invalid is a 400, never a 422.
 
+### Idempotency: every POST, automatically
+
+Every `POST` the client sends carries an `Idempotency-Key` (ADR 0014 D3). When
+you pass none, the client mints a uuid for that call and reuses it for the
+call's own re-attempt, so a retried call never runs twice. Pass your own — one
+stable key per order — to make a retry from ANOTHER call (after a crash, from a
+job queue) converge too:
+
+```ts
+await peable.checkout.sessions.create(params, { idempotencyKey: `checkout:${order.id}` });
+```
+
+Within 24 hours, per merchant (application + environment), the gateway answers:
+
+- same key, same request → the stored response, with `Idempotent-Replayed: true`;
+- same key, different request → `PeableInvalidRequestError`, `code: 'idempotency_error'` (400);
+- same key while the first is still running → `code: 'idempotency_error'` (409) — retry later.
+
+A 5xx is never stored, so retrying it with the same key runs it again. The
+key is a request-retry layer, not a business identity: refunds, transfers and
+reversals still take `external_ref`, which is durable and decides whether money
+moves twice.
+
 Signed billing documents (tax quotes and final invoice authorities) carry
 `schema_version: 2`, whose instants are Unix seconds; the verifiers accept no
 other version.
@@ -61,10 +84,10 @@ pass `requestTimeoutMs: 20_000`. A401 may still trigger the existing single toke
 refresh/retry; timeouts and interrupted responses never retry a payment POST.
 The remote outcome may be unknown: recover explicitly with the same durable key.
 
-`paymentIntents.reject`, `refunds.create`, and `transfers.create` now accept an
-optional second `{ idempotencyKey }` argument, forwarding the existing header.
-Refund/transfer `external_ref` remains their durable business identity; the option
-neither replaces it nor changes gateway financial semantics.
+`paymentIntents.reject`, `refunds.create`, and `transfers.create` accept an
+optional second `{ idempotencyKey }` argument; without it the client mints one
+(above). Refund/transfer/reversal `external_ref` remains their durable business
+identity; the key neither replaces it nor changes gateway financial semantics.
 
 ### Connect for FairCoin (0.4.0)
 

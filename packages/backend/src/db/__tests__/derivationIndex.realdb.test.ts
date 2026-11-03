@@ -243,6 +243,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('merchant derivation-index reservation'
       'faircoin_billing_invoices',
       'faircoin_billing_subscriptions',
       'faircoin_renewal_authorizations',
+      'idempotency_keys',
       'merchant_avatar_audit',
       'merchants',
       'oxy_file_events',

@@ -77,6 +77,55 @@ describe('createRestClient', () => {
     expect(requests[0]?.headers.get('Idempotency-Key')).toBe('idem-123');
   });
 
+  /**
+   * Every POST carries a key (ADR 0014 D3), as Stripe's SDKs do: without one,
+   * a call whose response was lost could only be retried as a SECOND request.
+   */
+  test('mints a fresh uuid Idempotency-Key per POST call when none is given', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({ status: 201, json: {} }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
+
+    await client.request('POST', '/v1/payment_links', { body: { amount: '100' } });
+    await client.request('POST', '/v1/payment_links', { body: { amount: '100' } });
+
+    const first = requests[0]?.headers.get('Idempotency-Key');
+    const second = requests[1]?.headers.get('Idempotency-Key');
+    expect(first).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(second).toMatch(/^[0-9a-f-]{36}$/);
+    // Two calls are two operations.
+    expect(second).not.toBe(first);
+  });
+
+  test('re-attempting a POST after a 401 presents the SAME minted key', async () => {
+    let calls = 0;
+    const { fetch: fetchImpl, requests } = createMockFetch(() => {
+      calls += 1;
+      return calls === 1
+        ? { status: 401, json: { error: { type: 'authentication_error', message: 'expired' } } }
+        : { status: 201, json: { id: 'pi_1' } };
+    });
+    const { provider } = fakeTokenProvider(['tok_old', 'tok_new']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
+
+    await client.request('POST', '/v1/payment_intents', { body: { amount: '100' } });
+
+    expect(requests).toHaveLength(2);
+    const key = requests[0]?.headers.get('Idempotency-Key');
+    expect(key).toMatch(/^[0-9a-f-]{36}$/);
+    expect(requests[1]?.headers.get('Idempotency-Key')).toBe(key ?? 'missing');
+  });
+
+  test('never sends a key on a GET', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({ status: 200, json: {} }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
+
+    await client.request('GET', '/v1/payment_links');
+
+    expect(requests[0]?.headers.get('Idempotency-Key')).toBeNull();
+  });
+
   test('serializes query params and skips undefined values', async () => {
     const { fetch: fetchImpl, requests } = createMockFetch(() => ({
       status: 200,
