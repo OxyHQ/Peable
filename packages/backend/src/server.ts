@@ -328,7 +328,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
 export async function start(
-  options: { billingAdapters?: BillingRuntimeAdapters } = {},
+  options: { billingAdapters?: BillingRuntimeAdapters; listenHost?: string } = {},
 ): Promise<void> {
   const database = await connectPostgres();
   const taxProvider = configuredTaxProvider();
@@ -399,7 +399,7 @@ export async function start(
   if (config.oxyFiles.reconciliationMode !== 'off') {
     startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
   }
-  gateway.httpServer.listen(config.port);
+  gateway.httpServer.listen(config.port, options.listenHost);
 }
 
 if (import.meta.main) {
