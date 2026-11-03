@@ -50,7 +50,11 @@ export function PeableProviderCardFields({
   actionRef.current = action;
   const sessionRef = useRef(checkoutSession);
   sessionRef.current = checkoutSession;
-  const [localBilling, setBilling] = useState({ country: '', postcode: '' });
+  const [localBilling, setBilling] = useState<{
+    country: string;
+    postcode: string;
+    email?: string;
+  }>({ country: '', postcode: '' });
   const billing = billingDetails ?? localBilling;
   const billingRef = useRef(billing);
   billingRef.current = billing;
@@ -219,6 +223,7 @@ export function PeableProviderCardFields({
                   active &&
                   billingRef.current.country === billingSnapshot.country &&
                   billingRef.current.postcode === billingSnapshot.postcode &&
+                  billingRef.current.email === billingSnapshot.email &&
                   !actionRef.current &&
                   Object.entries(snapshot).every(
                     ([key, value]) => sessionRef.current?.[key as keyof typeof snapshot] === value,
