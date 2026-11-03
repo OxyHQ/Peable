@@ -1,8 +1,11 @@
 import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
-import { LOCAL_TEST_APP } from './stripeTestBilling';
+import { LOCAL_TEST_APP, LOCAL_TEST_PRICES } from './stripeTestBilling';
 
 /** Shared by the CLI and loopback runner; never mounted by the production server. */
-export async function createLocalStripeTestIntent(operationKey: string) {
+export async function createLocalStripeTestIntent(
+  operationKey: string,
+  interval?: 'month' | 'year',
+) {
   assertLocalStripeTestEnvironment(process.env);
   if (!/^[A-Za-z0-9_-]{1,100}$/.test(operationKey)) throw new Error('Invalid local operation key');
   const { getStripeClient } = await import('../services/providers/stripe/client');
@@ -40,9 +43,11 @@ export async function createLocalStripeTestIntent(operationKey: string) {
     merchant,
     rail: 'card',
     currency: 'USD',
-    amount: '599',
-    idempotencyKey: `local-test-${operationKey}`,
-    metadata: { purpose: 'local-provider-integration-test' },
+    amount: String(interval ? LOCAL_TEST_PRICES[interval].amount : 599),
+    idempotencyKey: `local-test-${interval ? 'subscription' : 'payment'}-${operationKey}`,
+    metadata: interval
+      ? { purpose: 'local-test-subscription', interval }
+      : { purpose: 'local-provider-integration-test' },
   });
   return { account: account.id, merchant, created };
 }

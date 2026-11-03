@@ -7,7 +7,11 @@ const PEERS = new Set(['127.0.0.1', '::ffff:127.0.0.1']);
 /** Only the strict loopback runner imports this router. No merchant-auth bypass is added to /v1. */
 export function createLocalStripeTestCheckoutRouter(options: {
   assertEnvironment?: () => void;
-  create: (operationKey: string) => Promise<{ intentId: string; clientSecret: string }>;
+  create: (
+    operationKey: string,
+    interval: 'month' | 'year',
+  ) => Promise<{ intentId: string; clientSecret: string }>;
+  read?: (intentId: string, capability: string) => Promise<unknown>;
 }) {
   const assertEnvironment =
     options.assertEnvironment ?? (() => assertLocalStripeTestEnvironment(process.env));
@@ -33,7 +37,8 @@ export function createLocalStripeTestCheckoutRouter(options: {
       !req.body ||
       Array.isArray(req.body) ||
       typeof req.body !== 'object' ||
-      Object.keys(req.body).length !== 0
+      Object.keys(req.body).length !== 1 ||
+      (req.body.interval !== 'month' && req.body.interval !== 'year')
     ) {
       res.status(400).json({ error: 'invalid_local_test_request' });
       return;
@@ -48,10 +53,31 @@ export function createLocalStripeTestCheckoutRouter(options: {
     attempts.push(now);
     try {
       assertEnvironment();
-      const result = await options.create(key);
+      const result = await options.create(key, req.body.interval);
       res.json(result);
     } catch {
       res.status(503).json({ error: 'local_test_unavailable' });
+    }
+  });
+  router.get('/__local/checkout-test/:intentId/subscription', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    const capability = req.get('x-peable-client-secret');
+    if (
+      !PEERS.has(req.socket.remoteAddress ?? '') ||
+      req.get('host') !== '127.0.0.1:4310' ||
+      !ORIGINS.has(req.get('origin') ?? '') ||
+      !capability ||
+      capability.length > 256 ||
+      !options.read
+    ) {
+      res.status(403).json({ error: 'local_test_request_required' });
+      return;
+    }
+    try {
+      assertEnvironment();
+      res.json(await options.read(req.params.intentId, capability));
+    } catch {
+      res.status(503).json({ error: 'local_test_subscription_unavailable' });
     }
   });
   return router;
