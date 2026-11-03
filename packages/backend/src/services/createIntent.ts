@@ -40,6 +40,16 @@ import { newId, clientSecretFor } from '../lib/ids';
 const DEFAULT_EXPIRY_SECONDS = 15 * 60;
 const MS_PER_SECOND = 1000;
 
+import {
+  type CardPaymentMethods,
+  ensureProviderConfiguration,
+  PaymentMethodsParameterError,
+  resolveCardPaymentMethods,
+} from './paymentMethods/configuration';
+import { findConfigurationById } from '../db/paymentMethods/paymentMethodConfigurationRepository';
+import { isPaymentMethodConfiguringProvider } from './providers/provider';
+import type { CardRailPaymentMethodType } from '@peable.to/shared-types';
+
 /**
  * Thrown when a caller's `network` doesn't match the merchant's configured
  * network — the data-integrity firewall (F2.0 task 1a) that keeps a
@@ -172,8 +182,10 @@ export interface CreateIntentInput {
    * but no replay lookup is ever done against a key nobody can present again.
    */
   idempotencyKey?: string;
-  /** Must be the rail's own type (`['card']` / `['faircoin']`) when given. */
+  /** `['faircoin']` on the chain; on the card rail, exactly the methods to offer. */
   paymentMethodTypes?: readonly PaymentMethodType[];
+  /** Card only: the `pmc_…` whose methods to offer (default: the merchant's default). */
+  paymentMethodConfiguration?: string;
   /** `cus_…` (ADR 0016). */
   customer?: string;
   /** `pm_…`, card only — a saved method of `customer`. */
@@ -241,14 +253,20 @@ export async function resolvePaymentParties(
     | 'paymentMethodTypes'
   >,
 ): Promise<{ customer: CustomerRow | null; paymentMethod: PaymentMethodRow | null }> {
-  if (input.paymentMethodTypes !== undefined) {
+  if (rail === 'faircoin' && input.paymentMethodTypes !== undefined) {
     const types = [...new Set(input.paymentMethodTypes)];
-    if (types.length !== 1 || types[0] !== rail) {
+    if (types.length !== 1 || types[0] !== 'faircoin') {
       throw new IntentParameterError(
-        `the ${rail} rail takes payment_method_types ['${rail}']`,
+        "the faircoin rail takes payment_method_types ['faircoin']",
         'payment_method_types',
       );
     }
+  }
+  if (rail === 'card' && input.paymentMethodTypes?.includes('faircoin')) {
+    throw new IntentParameterError(
+      'faircoin is the chain rail: a card payment cannot offer it',
+      'payment_method_types',
+    );
   }
   if (rail === 'faircoin') {
     for (const [field, param] of CARD_ONLY_PARAMS) {
@@ -467,6 +485,63 @@ export function resolveRail(
 }
 
 /**
+ * A card payment's methods as the provider takes them, read from the ROW — so
+ * the resume path (`clientActionFor`) offers exactly what the create decided:
+ * the configuration's provider binding (pushed first if behind), or the named
+ * types. A saved card names its own type in the adapter.
+ */
+async function offeredMethodsFor(
+  intent: PaymentIntentRow,
+  provider: PaymentProvider,
+  savedPaymentMethodObjectId: string | undefined,
+): Promise<{
+  paymentMethodTypes?: CardRailPaymentMethodType[];
+  paymentMethodConfigurationObjectId?: string;
+}> {
+  if (savedPaymentMethodObjectId !== undefined || intent.rail !== 'card') return {};
+  // A provider with no configuration object is handed the methods the
+  // configuration resolved to, which the row already holds.
+  if (
+    intent.paymentMethodConfigurationId !== null &&
+    isPaymentMethodConfiguringProvider(provider)
+  ) {
+    const configuration = await findConfigurationById(getDb(), intent.paymentMethodConfigurationId);
+    if (configuration !== null) {
+      return {
+        paymentMethodConfigurationObjectId: await ensureProviderConfiguration(
+          configuration,
+          provider,
+        ),
+      };
+    }
+  }
+  return intent.paymentMethodTypes !== null
+    ? { paymentMethodTypes: intent.paymentMethodTypes }
+    : {};
+}
+
+/** `resolveCardPaymentMethods`, its refusal spoken as the intent's own parameter error. */
+async function resolveCardMethodsOrRefuse(
+  merchant: MerchantRow,
+  currency: CurrencyCode,
+  input: Pick<CreateIntentInput, 'paymentMethodTypes' | 'paymentMethodConfiguration'>,
+  savedPaymentMethod: boolean,
+): Promise<CardPaymentMethods> {
+  try {
+    return await resolveCardPaymentMethods(merchant, currency, {
+      paymentMethodTypes: input.paymentMethodTypes,
+      paymentMethodConfiguration: input.paymentMethodConfiguration,
+      savedPaymentMethod,
+    });
+  } catch (error) {
+    if (error instanceof PaymentMethodsParameterError) {
+      throw new IntentParameterError(error.message, error.param, error.code);
+    }
+    throw error;
+  }
+}
+
+/**
  * Create the payment at the provider and link it to the row we already wrote.
  *
  * The idempotency key is derived from the intent's PUBLIC id and nothing else,
@@ -487,6 +562,7 @@ async function attachProviderPayment(
     readonly returnUrl?: string;
   } = {},
 ): Promise<ProviderClientAction | undefined> {
+  const offered = await offeredMethodsFor(intent, provider, extras.paymentMethodObjectId);
   const result = await provider.createPayment({
     intentId: intent.publicId,
     amount: { amount: intent.amount, currency: intent.currency },
@@ -503,6 +579,7 @@ async function attachProviderPayment(
     ...(intent.statementDescriptorSuffix !== null
       ? { statementDescriptorSuffix: intent.statementDescriptorSuffix }
       : {}),
+    ...offered,
     ...extras,
   });
 
@@ -656,6 +733,12 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
   const { rail, currency, network } = resolveRail(merchant, input, account);
   const connectedAccountId = account?.id ?? null;
   const { customer, paymentMethod } = await resolvePaymentParties(merchant, rail, input);
+  // What a card payment offers, decided ONCE, before anything is reserved or
+  // written: named types, or the configuration's methods in this currency.
+  const methods =
+    rail === 'card'
+      ? await resolveCardMethodsOrRefuse(merchant, currency, input, paymentMethod !== null)
+      : null;
 
   // Which provider will move this money, SELECTED by the credential's
   // environment (ADR 0017: production ⟺ live) and decided ONCE. Resolved
@@ -736,6 +819,8 @@ export async function createIntent(input: CreateIntentInput): Promise<CreateInte
       status,
       customerId: customer?.id ?? null,
       paymentMethodId: paymentMethod?.id ?? null,
+      paymentMethodTypes: methods?.types ?? null,
+      paymentMethodConfigurationId: methods?.configuration?.id ?? null,
       captureMethod: input.captureMethod ?? 'automatic',
       setupFutureUsage: input.setupFutureUsage ?? null,
       description: input.description ?? null,

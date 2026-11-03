@@ -27,6 +27,8 @@ const WEBHOOK_EVENT_TYPES = {
   'charge.dispute.created': true,
   'charge.dispute.updated': true,
   'charge.dispute.closed': true,
+  'charge.dispute.funds_withdrawn': true,
+  'charge.dispute.funds_reinstated': true,
   'refund.created': true,
   'refund.updated': true,
   'refund.failed': true,

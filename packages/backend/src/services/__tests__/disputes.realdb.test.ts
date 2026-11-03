@@ -61,6 +61,7 @@ async function storeDisputeEvent(input: {
   reason?: string;
   status?: string;
   dueBy?: number;
+  isChargeRefundable?: boolean;
 }): Promise<string> {
   counter += 1;
   const objectIds: Record<string, string> = {};
@@ -87,6 +88,11 @@ async function storeDisputeEvent(input: {
           ...(input.reason ? { reason: input.reason } : {}),
           ...(input.status ? { status: input.status } : {}),
           ...(input.dueBy ? { evidence_details: { due_by: input.dueBy } } : {}),
+          ...(input.isChargeRefundable === undefined
+            ? {}
+            : { is_charge_refundable: input.isChargeRefundable }),
+          // What a real payload carries and the redaction must drop.
+          evidence: { customer_name: 'Jane Buyer' },
         },
       },
     }),
@@ -174,7 +180,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(delivered?.object).toBe('dispute');
     expect(delivered?.amount).toBe('2500');
     expect(delivered?.reason).toBe('fraudulent');
-    expect(delivered?.evidence_due_at).not.toBeNull();
+    expect(delivered?.evidence_details.due_by).not.toBeNull();
     // And back to the payment, by its PUBLIC id — the internal one would name a
     // row the merchant has never seen.
     expect(delivered?.payment_intent).toBe(intent.publicId);
@@ -241,7 +247,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
       (payload) => payload.status === 'lost',
     );
     expect(closing).toBeDefined();
-    expect(closing?.evidence_due_at).toBeNull();
+    expect(closing?.evidence_details.due_by).toBeNull();
   });
 
   it('reads a win as a win', async () => {
@@ -368,5 +374,78 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(after).toBeDefined();
     expect((await listDisputesForIntent(gatewayDb(), intent.id))[0]?.status).toBe('needs_response');
     expect(before).toBe(intent.status);
+  });
+
+  /**
+   * The money moving is told as what it is — `funds_withdrawn`, then
+   * `funds_reinstated` — and moves no status by its type; the payload's
+   * `is_charge_refundable` is recorded, and nothing of the evidence is.
+   */
+  it('tells the merchant about the funds, records refundability, and stores no evidence', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_funds');
+    const base = {
+      intentObjectId: 'pi_stripe_dp_funds',
+      disputeObjectId: 'dp_stripe_funds',
+      reason: 'product_not_received',
+    };
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.created', status: 'needs_response' });
+    await storeDisputeEvent({
+      ...base,
+      type: 'charge.dispute.funds_withdrawn',
+      isChargeRefundable: true,
+    });
+    await runProviderEventDrainPass();
+
+    const [row] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(row?.status).toBe('needs_response');
+    expect(row?.isChargeRefundable).toBe(true);
+    expect(await deliveriesFor(intent.id)).toEqual([
+      'charge.dispute.created',
+      'charge.dispute.funds_withdrawn',
+    ]);
+
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.funds_reinstated', status: 'won' });
+    await runProviderEventDrainPass();
+    const [won] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(won?.status).toBe('won');
+    expect((await deliveriesFor(intent.id)).at(-1)).toBe('charge.dispute.funds_reinstated');
+
+    const stored = await storedEvents({ paymentIntentId: intent.id });
+    expect(JSON.stringify(stored)).not.toContain('Jane Buyer');
+    const payload = stored.at(-1)?.event.data.object as Dispute;
+    expect(payload.reason).toBe('product_not_received');
+    expect(payload.evidence).toBeUndefined();
+  });
+
+  /** A close the merchant already recorded (`…/close`) is not news twice. */
+  it('does not tell a close twice when the outcome was already recorded', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_close_once');
+    const base = {
+      intentObjectId: 'pi_stripe_dp_close_once',
+      disputeObjectId: 'dp_stripe_close_once',
+    };
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.created' });
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.closed', status: 'lost' });
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.closed', status: 'lost' });
+    await runProviderEventDrainPass();
+    const closes = (await deliveriesFor(intent.id)).filter(
+      (type) => type === 'charge.dispute.closed',
+    );
+    expect(closes).toHaveLength(1);
+  });
+
+  it('normalises an unknown network reason to general on the wire', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_reason');
+    await storeDisputeEvent({
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_reason',
+      disputeObjectId: 'dp_stripe_reason',
+      reason: 'scheme_code_4837',
+    });
+    await runProviderEventDrainPass();
+    const [row] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(row?.reason).toBe('scheme_code_4837');
+    const [payload] = await disputePayloadsFor(intent.id);
+    expect(payload?.reason).toBe('general');
   });
 });

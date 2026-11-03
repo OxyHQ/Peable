@@ -8,7 +8,8 @@
  * uses — and Oxy adds what is missing and removes what is stale (only
  * references created before the run began, so a write racing the inventory is
  * never undone). The first run is how avatars set before this change enter the
- * model.
+ * model. Each entity type is its own run: `merchant_avatar` (merchant-owned
+ * Oxy files) and `file` (every live Orbit File).
  *
  * One run per entity type at a time across every task: the claim is a row in
  * `oxy_file_reconciliation_runs`, which is also the report — mode, counts,
@@ -18,6 +19,7 @@
  */
 import { getDb } from '../../db/postgres';
 import { listMerchantAvatarUses } from '../../db/merchants/merchantRepository';
+import { listFileUses } from '../../db/files/fileRepository';
 import {
   claimReconciliationRun,
   finishReconciliationRun,
@@ -41,6 +43,8 @@ export function inventoryFor(
   switch (entityType) {
     case 'merchant_avatar':
       return listMerchantAvatarUses(db);
+    case 'file':
+      return listFileUses(db);
     default: {
       const unhandled: never = entityType;
       throw new Error(`no inventory for entity type ${String(unhandled)}`);

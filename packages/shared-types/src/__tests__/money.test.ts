@@ -2,6 +2,7 @@ import { test, expect } from 'bun:test';
 import {
   CURRENCY_CODES,
   CURRENCY_DECIMALS,
+  FIAT_CURRENCY_CODES,
   UNITS_PER_COIN,
   decimalsFor,
   isBaseUnitString,
@@ -28,6 +29,20 @@ test('fiat currencies do not share FairCoin scale', () => {
   expect(decimalsFor('FAIR')).toBe(8);
 });
 
+/**
+ * ISO 4217 minor units. JPY is the one zero-decimal member: an amount of `1500`
+ * is fifteen hundred yen, and a formatter that assumed two decimals would show
+ * fifteen.
+ */
+test('the fiat scales are ISO 4217 minor units', () => {
+  expect(decimalsFor('JPY')).toBe(0);
+  for (const code of ['GBP', 'CHF', 'SEK', 'NOK', 'DKK', 'PLN', 'CZK', 'CAD', 'AUD'] as const) {
+    expect(decimalsFor(code)).toBe(2);
+  }
+  expect(FIAT_CURRENCY_CODES).not.toContain('FAIR');
+  expect(FIAT_CURRENCY_CODES.length).toBe(CURRENCY_CODES.length - 1);
+});
+
 test('every listed currency has a scale', () => {
   for (const code of CURRENCY_CODES) {
     expect(Number.isInteger(CURRENCY_DECIMALS[code])).toBe(true);
@@ -39,7 +54,8 @@ test('every listed currency has a scale', () => {
 test('isCurrencyCode admits exactly the listed set', () => {
   expect(isCurrencyCode('EUR')).toBe(true);
   expect(isCurrencyCode('FAIR')).toBe(true);
-  expect(isCurrencyCode('GBP')).toBe(false);
+  expect(isCurrencyCode('GBP')).toBe(true);
+  expect(isCurrencyCode('BRL')).toBe(false);
   expect(isCurrencyCode('eur')).toBe(false);
 });
 

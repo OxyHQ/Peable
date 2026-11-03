@@ -13,6 +13,17 @@ export const ORBIT_CURRENCY_DECIMALS: Readonly<Record<CurrencyCode, number>> = {
   FAIR: 8,
   EUR: 2,
   USD: 2,
+  GBP: 2,
+  CHF: 2,
+  SEK: 2,
+  NOK: 2,
+  DKK: 2,
+  PLN: 2,
+  CZK: 2,
+  CAD: 2,
+  AUD: 2,
+  // Zero-decimal: `1500` is fifteen hundred yen.
+  JPY: 0,
 };
 
 const BASE_UNITS = /^(0|[1-9][0-9]*)$/;

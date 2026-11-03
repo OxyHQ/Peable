@@ -1,3 +1,4 @@
+import type { CardRailPaymentMethodType } from './paymentMethodConfiguration';
 // The PaymentIntent contract — the single source of truth shared by the Peable
 // Gateway backend, SDK, and frontend. Stripe's PaymentIntent, at the root
 // (ADR 0019): one status vocabulary over two rails — the non-custodial FairCoin
@@ -207,8 +208,12 @@ export const PAYMENT_INTENT_SETUP_FUTURE_USAGES: readonly PaymentIntentSetupFutu
   'off_session',
 ];
 
-/** The payment method types a rail accepts. One per rail today. */
-export type PaymentMethodType = 'card' | 'faircoin';
+/**
+ * The payment method types a PaymentIntent can carry: `faircoin` on the chain
+ * rail, and on the card rail the card and the local methods the provider
+ * collects in its hosted fields. Wallets (Apple Pay, Google Pay) are `card`.
+ */
+export type PaymentMethodType = 'faircoin' | CardRailPaymentMethodType;
 
 /** Why the last attempt failed. Peable's words, never the provider's raw prose. */
 export interface PaymentIntentLastPaymentError {
@@ -306,7 +311,14 @@ export interface PaymentIntent {
   status: PaymentIntentStatus;
   /** Which rail moves this payment. Decides which fields below are populated. */
   rail: PaymentIntentRail;
+  /**
+   * What the payer may pay with: `['faircoin']` on the chain; on the card rail
+   * the types named at creation, or those the configuration offers in this
+   * currency.
+   */
   payment_method_types: PaymentMethodType[];
+  /** The `pmc_…` whose methods this card payment offers; `null` on the chain and when types were named. */
+  payment_method_configuration_details: { id: string } | null;
   /**
    * Amount in the currency's SMALLEST unit as a canonical integer string.
    * Never a float, and never interpretable without `currency`: m⊜ (10^-8 FAIR)
@@ -367,8 +379,13 @@ export interface CreatePaymentIntentParams {
   network?: NetworkType;
   /** Defaults to `'FAIR'` on the faircoin rail; required on the card rail. */
   currency?: CurrencyCode;
-  /** Must name the rail's own type: `['card']` or `['faircoin']`. */
+  /**
+   * `['faircoin']` on the chain rail. On the card rail, any of the card-rail
+   * types the provider offers in `currency` — instead of a configuration.
+   */
   payment_method_types?: PaymentMethodType[];
+  /** Card only: the `pmc_…` whose methods to offer. Defaults to the merchant's default configuration. */
+  payment_method_configuration?: string;
   /** `cus_…`. */
   customer?: string;
   /** `pm_…`, card only. A saved payment method of `customer`. */

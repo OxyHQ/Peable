@@ -1,11 +1,23 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, index, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  foreignKey,
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  unique,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import { files } from './files';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
 import {
   BASE_UNIT_STRING_PATTERN,
   CURRENCY_CODES,
+  DISPUTE_FILE_EVIDENCE_FIELDS,
   DISPUTE_STATUSES,
   PROVIDER_IDS,
 } from './valueSets';
@@ -46,8 +58,8 @@ import {
  * separate object. Stripe models it the same way: a Charge is `disputed`; a
  * PaymentIntent has no such status.
  *
- * The merchant hears about it through `payment_intent.disputed` and
- * `payment_intent.dispute_closed`, and reads the detail from these rows.
+ * The merchant hears about it through `charge.dispute.*` events, and reads the
+ * detail from these rows.
  *
  * ## `amount` is what is being HELD, not what was paid
  *
@@ -108,11 +120,26 @@ export const disputes = pgTable(
      * attempt is refused by reading this rather than by asking the provider.
      */
     evidenceSubmittedAt: timestamptz(),
+    /**
+     * Whether evidence has been STAGED — the provider's own answer
+     * (`evidence_details.has_evidence`) after the last draft, recorded as a
+     * boolean. The draft itself lives at the provider and only there: the
+     * provider is the store of a response in progress, and this gateway keeps
+     * the fact that one exists, never its words.
+     */
+    hasEvidence: boolean().notNull().default(false),
+    /** The provider's `is_charge_refundable`, as its last event or answer said. */
+    isChargeRefundable: boolean().notNull().default(false),
+    /** The merchant's own bookkeeping (Stripe's limits, ADR 0014 D1). */
+    metadata: jsonb().$type<Record<string, string>>().notNull().default(sql`'{}'::jsonb`),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     unique('disputes_public_id_key').on(table.publicId),
+    /** The target of `dispute_evidence_files`' same-merchant reference. */
+    unique('disputes_id_merchant_id_key').on(table.id, table.merchantId),
+    check('disputes_metadata_object_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
     /**
      * ONE row per network dispute. The whole idempotency of this table.
      *
@@ -175,5 +202,55 @@ export const disputes = pgTable(
     index('disputes_unanswered_idx')
       .on(table.evidenceDueAt)
       .where(sql`${table.evidenceSubmittedAt} is null`),
+  ],
+);
+
+/**
+ * The FILES a merchant attached to a dispute's response — one per evidence
+ * field, by id only (`file_…`). The text evidence is not here and never is: a
+ * draft lives at the provider, and a submission is forwarded and forgotten.
+ *
+ * A file's BYTES go to the provider at submission time and only then
+ * (`services/disputeEvidence.ts`); the provider's own file ids are not kept,
+ * because nothing here ever needs to name them again.
+ *
+ * The composite references make the two rules structural: the dispute and the
+ * file belong to the SAME merchant, and the file's purpose is
+ * `dispute_evidence` — a merchant cannot attach another merchant's upload, nor
+ * submit their identity document to a card network by naming its id.
+ */
+export const disputeEvidenceFiles = pgTable(
+  'dispute_evidence_files',
+  {
+    disputeId: text().notNull(),
+    merchantId: text().notNull(),
+    field: text().notNull(),
+    fileId: text().notNull(),
+    /** Always `dispute_evidence`: the purpose half of the file reference. */
+    filePurpose: text().notNull().default('dispute_evidence'),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'dispute_evidence_files_pkey',
+      columns: [table.disputeId, table.field],
+    }),
+    index('dispute_evidence_files_file_id_idx').on(table.fileId),
+    foreignKey({
+      name: 'dispute_evidence_files_dispute_fkey',
+      columns: [table.disputeId, table.merchantId],
+      foreignColumns: [disputes.id, disputes.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'dispute_evidence_files_file_fkey',
+      columns: [table.fileId, table.merchantId, table.filePurpose],
+      foreignColumns: [files.id, files.merchantId, files.purpose],
+    }).onDelete('restrict'),
+    check(
+      'dispute_evidence_files_field_check',
+      sql.raw(`field in (${inList(DISPUTE_FILE_EVIDENCE_FIELDS)})`),
+    ),
+    check('dispute_evidence_files_purpose_check', sql`${table.filePurpose} = 'dispute_evidence'`),
   ],
 );

@@ -18,6 +18,7 @@ import {
   type PaymentIntentStatus,
   type UpdatePaymentIntentParams,
 } from '@peable.to/shared-types';
+import { CARD_RAIL_PAYMENT_METHOD_TYPES } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findMerchantByAppEnvironment } from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -257,11 +258,15 @@ const createBodySchema = z
     ...connectedAccountBodyField,
     metadata: metadataCreateSchema.optional(),
     expires_in_seconds: z.number().int().positive().optional(),
+    // `['faircoin']` on the chain; any card-rail types on the card rail
+    // (`resolveCardPaymentMethods` checks each against the provider and the
+    // currency, so the refusal names what is wrong with it).
     payment_method_types: z
-      .array(z.enum(['card', 'faircoin']))
+      .array(z.enum(['faircoin', ...CARD_RAIL_PAYMENT_METHOD_TYPES]))
       .min(1)
-      .max(1)
+      .max(CARD_RAIL_PAYMENT_METHOD_TYPES.length)
       .optional(),
+    payment_method_configuration: idParam.optional(),
     customer: idParam.optional(),
     payment_method: idParam.optional(),
     confirm: z.boolean().optional(),
@@ -480,6 +485,9 @@ export function createPaymentIntentsRouter(deps: {
           ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
           ...(params.payment_method_types !== undefined
             ? { paymentMethodTypes: params.payment_method_types }
+            : {}),
+          ...(params.payment_method_configuration !== undefined
+            ? { paymentMethodConfiguration: params.payment_method_configuration }
             : {}),
           ...(params.customer !== undefined ? { customer: params.customer } : {}),
           ...(params.payment_method !== undefined ? { paymentMethod: params.payment_method } : {}),

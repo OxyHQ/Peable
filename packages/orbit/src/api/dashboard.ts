@@ -1,10 +1,20 @@
 import type {
+  CreatePaymentMethodConfigurationParams,
+  CreatePaymentMethodDomainParams,
   CreatePriceParams,
   CreateProductParams,
   CreateTaxRegistrationParams,
   DeletedProduct,
+  Dispute,
+  FileObject,
+  FilePurpose,
+  PaymentMethodConfiguration,
+  PaymentMethodDomain,
   Price,
   Product,
+  UpdateDisputeParams,
+  UpdatePaymentMethodConfigurationParams,
+  UpdatePaymentMethodDomainParams,
   UpdatePriceParams,
   UpdateProductParams,
   Merchant,
@@ -79,6 +89,28 @@ export interface PaymentIntentListParams extends PageParams {
   status?: PaymentIntentStatus;
 }
 
+export interface DisputeListParams extends PageParams {
+  /** Only the disputes of this payment (`pi_…`). */
+  payment_intent?: string;
+}
+
+export interface FileListParams extends PageParams {
+  purpose?: FilePurpose;
+}
+
+export interface PaymentMethodDomainListParams extends PageParams {
+  domain_name?: string;
+  enabled?: boolean;
+}
+
+/** `POST …/files`: the bytes and the purpose they are for. */
+export interface UploadFileParams {
+  purpose: FilePurpose;
+  /** A DOM `File` on web (its name travels with it), or any `Blob` with `filename`. */
+  file: Blob;
+  filename?: string;
+}
+
 /** `POST /merchant`: mirrors the gateway's `createMerchantBodySchema` (strict). */
 export interface RegisterMerchantBody {
   /** The FairCoin half: both `network` and `xpub`, or neither (a card-only merchant). */
@@ -95,6 +127,8 @@ export interface UpdateMerchantBody {
   required_confirmations?: number;
   display_name?: string | null;
   description?: string | null;
+  /** A `file_…` of purpose `business_logo`; `null` removes the logo. */
+  business_logo?: string | null;
 }
 
 /** `/v1/dashboard/applications/:id<rest>?environment=…&<query>`. */
@@ -190,6 +224,100 @@ export function createDashboardApi(transport: OrbitTransport) {
         transport.request<Price>('POST', dashboardPath(scope, `/prices/${id(priceId)}`), {
           body,
         }),
+    },
+
+    /**
+     * Disputes (`dp_…`). A retrieve carries `evidence` (read live by the
+     * gateway; never stored by Peable); lists do not. `update` with
+     * `submit: true` is ONE-SHOT at the card network, and `close` accepts the
+     * dispute as lost — screens confirm both before calling.
+     */
+    disputes: {
+      list: (scope: DashboardScope, params: DisputeListParams = {}) =>
+        list<Dispute>(dashboardPath(scope, '/disputes', { ...params })),
+      retrieve: (scope: DashboardScope, disputeId: string) =>
+        get<Dispute>(dashboardPath(scope, `/disputes/${id(disputeId)}`)),
+      update: (scope: DashboardScope, disputeId: string, body: UpdateDisputeParams) =>
+        transport.request<Dispute>('POST', dashboardPath(scope, `/disputes/${id(disputeId)}`), {
+          body,
+        }),
+      close: (scope: DashboardScope, disputeId: string) =>
+        transport.request<Dispute>(
+          'POST',
+          dashboardPath(scope, `/disputes/${id(disputeId)}/close`),
+        ),
+    },
+
+    /** Files (`file_…`), uploaded as `multipart/form-data`; stored in Oxy Files by the gateway. */
+    files: {
+      upload: (scope: DashboardScope, params: UploadFileParams) =>
+        transport.request<FileObject>('POST', dashboardPath(scope, '/files'), {
+          form: () => {
+            const form = new FormData();
+            form.append('purpose', params.purpose);
+            if (params.filename !== undefined) form.append('file', params.file, params.filename);
+            else form.append('file', params.file);
+            return form;
+          },
+        }),
+      list: (scope: DashboardScope, params: FileListParams = {}) =>
+        list<FileObject>(dashboardPath(scope, '/files', { ...params })),
+      retrieve: (scope: DashboardScope, fileId: string) =>
+        get<FileObject>(dashboardPath(scope, `/files/${id(fileId)}`)),
+    },
+
+    /** Which methods payers are offered (`pmc_…`); exactly one is the default. */
+    paymentMethodConfigurations: {
+      list: (scope: DashboardScope, params: PageParams = {}) =>
+        list<PaymentMethodConfiguration>(
+          dashboardPath(scope, '/payment_method_configurations', { ...params }),
+        ),
+      create: (scope: DashboardScope, body: CreatePaymentMethodConfigurationParams) =>
+        transport.request<PaymentMethodConfiguration>(
+          'POST',
+          dashboardPath(scope, '/payment_method_configurations'),
+          { body },
+        ),
+      retrieve: (scope: DashboardScope, configurationId: string) =>
+        get<PaymentMethodConfiguration>(
+          dashboardPath(scope, `/payment_method_configurations/${id(configurationId)}`),
+        ),
+      update: (
+        scope: DashboardScope,
+        configurationId: string,
+        body: UpdatePaymentMethodConfigurationParams,
+      ) =>
+        transport.request<PaymentMethodConfiguration>(
+          'POST',
+          dashboardPath(scope, `/payment_method_configurations/${id(configurationId)}`),
+          { body },
+        ),
+    },
+
+    /** Web domains wallets (Apple Pay, Google Pay) may run on (`pmd_…`). */
+    paymentMethodDomains: {
+      list: (scope: DashboardScope, params: PaymentMethodDomainListParams = {}) =>
+        list<PaymentMethodDomain>(dashboardPath(scope, '/payment_method_domains', { ...params })),
+      create: (scope: DashboardScope, body: CreatePaymentMethodDomainParams) =>
+        transport.request<PaymentMethodDomain>(
+          'POST',
+          dashboardPath(scope, '/payment_method_domains'),
+          { body },
+        ),
+      retrieve: (scope: DashboardScope, domainId: string) =>
+        get<PaymentMethodDomain>(dashboardPath(scope, `/payment_method_domains/${id(domainId)}`)),
+      update: (scope: DashboardScope, domainId: string, body: UpdatePaymentMethodDomainParams) =>
+        transport.request<PaymentMethodDomain>(
+          'POST',
+          dashboardPath(scope, `/payment_method_domains/${id(domainId)}`),
+          { body },
+        ),
+      /** Ask the provider to check the domain again; answers its new wallet statuses. */
+      validate: (scope: DashboardScope, domainId: string) =>
+        transport.request<PaymentMethodDomain>(
+          'POST',
+          dashboardPath(scope, `/payment_method_domains/${id(domainId)}/validate`),
+        ),
     },
 
     /**

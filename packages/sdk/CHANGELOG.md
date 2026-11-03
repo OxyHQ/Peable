@@ -1,5 +1,55 @@
 # Changelog
 
+## 0.16.0 — Files, complete disputes, payment method breadth (breaking)
+
+Requires `@peable.to/shared-types` 0.14.0.
+
+- **Breaking:** `disputes.submitEvidence` (`POST /v1/disputes/:id/evidence`) is
+  removed, with no alias. Use `disputes.update(id, { evidence, metadata, submit })`
+  (`POST /v1/disputes/:id`): `submit` omitted or `false` stages a draft at the
+  provider; `submit: true` uploads the attached files and submits, once. New
+  `disputes.close(id)` accepts a dispute (`lost`). `DisputesResource` moved from
+  `resources/merchants` to `resources/disputes`.
+- **Breaking:** the `Dispute` object is Stripe's: `evidence_due_at` /
+  `evidence_submitted_at` are replaced by `evidence_details {due_by,
+  has_evidence, past_due, submission_count, submitted_at}`; new `charge`
+  (expandable), `is_charge_refundable`, `metadata`, `reason` as Stripe's enum,
+  and `evidence` on live reads only. File evidence fields (`receipt`,
+  `customer_communication`, `shipping_documentation`, `uncategorized_file`, …)
+  take `file_…` ids. New events `charge.dispute.funds_withdrawn` and
+  `charge.dispute.funds_reinstated`, accepted by `webhooks.constructEvent`.
+- New `peable.files` (`create` — multipart bytes or `{ oxy_file }` — `retrieve`,
+  `list({ purpose })`). `RestClient` requests take a `form` (`FormData`) beside
+  `body`.
+- New `peable.paymentMethodConfigurations` (`create` / `retrieve` / `update` /
+  `list`) and `peable.paymentMethodDomains` (`create` / `retrieve` / `update` /
+  `list` / `validate`).
+- `paymentIntents.create` takes `payment_method_configuration` and card-rail
+  `payment_method_types` (`card`, `sepa_debit`, `ideal`, `bancontact`, `eps`);
+  `PaymentIntent.payment_method_configuration_details` is new.
+- `merchants.update` takes `business_logo` (a `file_…` of purpose
+  `business_logo`), beside `avatar_file_id` — the wordmark, not the icon.
+- Currencies widened: GBP, CHF, SEK, NOK, DKK, PLN, CZK, CAD, AUD and JPY
+  (zero-decimal) join FAIR, EUR and USD. `CURRENCY_CODES`, `CURRENCY_DECIMALS`
+  and `FIAT_CURRENCY_CODES` are re-exported.
+- `@peable.to/sdk/checkout`: `mountCardElements` mounts the provider's wallet
+  buttons (Apple Pay and Google Pay only; the provider's own wallet is off) above
+  its Payment Element, which shows the card and local methods the intent offers.
+  One confirmation path; an accepted confirmation is never success.
+- `@peable.to/sdk/checkout`: `availableWallets`, `readRedirectReturn`,
+  `withoutRedirectParams` and `delayedProcessingNotice` (SEPA Debit takes
+  business days); new `ProviderFieldEvent` type export; provider types cover
+  `expressCheckout` and its `confirm` event.
+- `PeableCheckout.mount`: a card intent now renders wallets, payment fields and a
+  Pay button instead of the FairCoin button; it handles bank-redirect returns
+  (shows "confirming", removes the secret from the URL) and shows the gateway's
+  status once the payment leaves the payer's hands.
+- `@peable.to/sdk/checkout/ui`: `intentMethodAvailability` and
+  `intentCheckoutMethods` list a card intent's wallets and local methods for the
+  Bloom sheet. A method the device or host cannot run is listed as unavailable
+  with a reason, never hidden or faked. New English and Spanish `method.*`
+  messages.
+
 ## 0.15.0 — live tails, request logs and test helpers
 
 Additive. Requires `@peable.to/shared-types` 0.13.0.

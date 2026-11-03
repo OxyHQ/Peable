@@ -30,6 +30,13 @@ export interface RequestOptions {
   query?: Query;
   /** Serialized as JSON. */
   body?: unknown;
+  /**
+   * A `multipart/form-data` body instead of `body`, built afresh by each call
+   * so the linked client can replay it once after a 401 (a consumed form cannot
+   * be re-sent). No `Content-Type` is set: the runtime writes it with the
+   * boundary.
+   */
+  form?: () => FormData;
   /** Sent as `Idempotency-Key` (ADR 0014 D3). Only when the caller has one to keep. */
   idempotencyKey?: string;
 }
@@ -127,11 +134,15 @@ export function createOrbitTransport(client: RawResponseClient): OrbitTransport 
         headers['Content-Type'] = 'application/json';
         body = JSON.stringify(options.body);
       }
+      if (options.body !== undefined && options.form) {
+        throw new Error('A request carries a JSON body or a form, never both');
+      }
       if (options.idempotencyKey) headers['Idempotency-Key'] = options.idempotencyKey;
       const response = await client.requestAuthenticatedResponse({
         method,
         url: withQuery(path, options.query),
         ...(body === undefined ? {} : { body }),
+        ...(options.form ? { bodyFactory: options.form } : {}),
         ...(Object.keys(headers).length ? { headers } : {}),
       });
       if (!response.ok) throw await errorFromResponse(response);

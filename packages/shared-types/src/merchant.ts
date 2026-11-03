@@ -41,6 +41,13 @@ export interface Merchant {
    * Absent again once Oxy reports the file deleted or taken down.
    */
   avatar_file_id?: string;
+  /**
+   * The wide wordmark payer surfaces show in their header: a `file_…` of
+   * purpose `business_logo`. Beside the avatar, never instead of it — the avatar
+   * is the square identity image (Stripe's branding `icon`), the logo is the
+   * wordmark (Stripe's branding `logo`). Absent when unset.
+   */
+  business_logo?: string;
   description?: string;
   created: number;
   updated_at: number;

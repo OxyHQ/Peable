@@ -1,7 +1,9 @@
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
+import type { DisputeFileEvidenceField } from '@peable.to/shared-types';
 import { newId } from '../../lib/ids';
 import type { DisputeStatus } from '../schema/valueSets';
-import { disputes, paymentIntents } from '../schema';
+import { disputeEvidenceFiles, disputes, files, paymentIntents } from '../schema';
+import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
@@ -28,6 +30,12 @@ export interface DisputeRow {
   readonly evidenceDueAt: Date | null;
   /** When the merchant's response reached the network. `null` if it has not. */
   readonly evidenceSubmittedAt: Date | null;
+  /** Whether evidence is staged — the provider's answer, a boolean and never the words. */
+  readonly hasEvidence: boolean;
+  readonly isChargeRefundable: boolean;
+  readonly metadata: Record<string, string>;
+  /** The disputed payment's `ch_…`, when it has one. */
+  readonly chargePublicId: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
@@ -46,6 +54,14 @@ const DISPUTE_COLUMNS = {
   reason: disputes.reason,
   evidenceDueAt: disputes.evidenceDueAt,
   evidenceSubmittedAt: disputes.evidenceSubmittedAt,
+  hasEvidence: disputes.hasEvidence,
+  isChargeRefundable: disputes.isChargeRefundable,
+  metadata: disputes.metadata,
+  // Table-qualified raw SQL (CONVENTIONS.md §Payments core): RETURNING renders
+  // columns unqualified, and an unqualified column here would bind to `charges`.
+  chargePublicId: sql<
+    string | null
+  >`(select "charges"."public_id" from "charges" where "charges"."payment_intent_id" = "disputes"."payment_intent_id")`,
   createdAt: disputes.createdAt,
   updatedAt: disputes.updatedAt,
 } as const;
@@ -67,6 +83,8 @@ export interface UpsertDisputeParams {
   readonly status: DisputeStatus;
   readonly reason?: string | null;
   readonly evidenceDueAt?: Date | null;
+  /** The provider's `is_charge_refundable`; absent keeps what is stored. */
+  readonly isChargeRefundable?: boolean;
 }
 
 /**
@@ -117,6 +135,7 @@ export async function upsertDispute(
       providerObjectId: params.providerObjectId,
       reason: params.reason ?? null,
       evidenceDueAt: params.evidenceDueAt ?? null,
+      isChargeRefundable: params.isChargeRefundable ?? false,
     })
     .onConflictDoUpdate({
       target: [disputes.provider, disputes.providerObjectId],
@@ -124,6 +143,9 @@ export async function upsertDispute(
         status: params.status,
         reason: params.reason ?? null,
         evidenceDueAt: params.evidenceDueAt ?? null,
+        ...(params.isChargeRefundable === undefined
+          ? {}
+          : { isChargeRefundable: params.isChargeRefundable }),
         updatedAt: new Date(),
       },
     })
@@ -173,7 +195,7 @@ export async function markDisputeEvidenceSubmitted(
 ): Promise<DisputeRow | null> {
   const [row] = await db
     .update(disputes)
-    .set({ evidenceSubmittedAt: at })
+    .set({ evidenceSubmittedAt: at, hasEvidence: true })
     .where(and(eq(disputes.id, disputeId), isNull(disputes.evidenceSubmittedAt)))
     .returning(DISPUTE_COLUMNS);
   return row ? toRow(row) : null;
@@ -256,4 +278,118 @@ export async function listDisputesForMerchant(
   return walk.finish(
     rows.map((row) => ({ ...toRow(row), paymentIntentPublicId: row.paymentIntentPublicId })),
   );
+}
+
+/**
+ * Record what the provider said after a draft: whether evidence is staged, and
+ * whether the charge is still refundable. The draft's words stay at the
+ * provider.
+ */
+export async function recordDisputeDraft(
+  db: DatabaseOrTransaction,
+  disputeId: string,
+  facts: { readonly hasEvidence: boolean; readonly isChargeRefundable: boolean },
+): Promise<DisputeRow | null> {
+  const [row] = await db
+    .update(disputes)
+    .set({ hasEvidence: facts.hasEvidence, isChargeRefundable: facts.isChargeRefundable })
+    .where(eq(disputes.id, disputeId))
+    .returning(DISPUTE_COLUMNS);
+  return row ? toRow(row) : null;
+}
+
+/** Merge a metadata patch in the statement (`db/metadata.ts`). */
+export async function updateDisputeMetadata(
+  db: DatabaseOrTransaction,
+  disputeId: string,
+  patch: MetadataPatch,
+): Promise<DisputeRow | 'limit_exceeded'> {
+  const merged = mergedMetadata(disputes.metadata, patch);
+  const [row] = await db
+    .update(disputes)
+    .set({ metadata: merged })
+    .where(and(eq(disputes.id, disputeId), metadataWithinLimit(merged)))
+    .returning(DISPUTE_COLUMNS);
+  return row ? toRow(row) : 'limit_exceeded';
+}
+
+/**
+ * The merchant accepted the dispute: `lost`, with no deadline left — a
+ * COMPARE-AND-SWAP on `needs_response`, so a close racing the network's own
+ * decision (or a second close) changes nothing and returns `null`.
+ */
+export async function closeDisputeAsLost(
+  db: DatabaseOrTransaction,
+  disputeId: string,
+): Promise<DisputeRow | null> {
+  const [row] = await db
+    .update(disputes)
+    .set({ status: 'lost', evidenceDueAt: null })
+    .where(and(eq(disputes.id, disputeId), eq(disputes.status, 'needs_response')))
+    .returning(DISPUTE_COLUMNS);
+  return row ? toRow(row) : null;
+}
+
+/** One file attached to a dispute's response. */
+export interface DisputeEvidenceFileRow {
+  readonly field: DisputeFileEvidenceField;
+  /** The File's INTERNAL id. */
+  readonly fileId: string;
+  readonly filePublicId: string;
+}
+
+/** The files attached to a dispute, by field. */
+export async function listDisputeEvidenceFiles(
+  db: DatabaseOrTransaction,
+  disputeId: string,
+): Promise<DisputeEvidenceFileRow[]> {
+  const rows = await db
+    .select({
+      field: disputeEvidenceFiles.field,
+      fileId: disputeEvidenceFiles.fileId,
+      filePublicId: files.publicId,
+    })
+    .from(disputeEvidenceFiles)
+    .innerJoin(files, eq(files.id, disputeEvidenceFiles.fileId))
+    .where(eq(disputeEvidenceFiles.disputeId, disputeId));
+  return rows.map((row) => ({ ...row, field: row.field as DisputeFileEvidenceField }));
+}
+
+/**
+ * Attach (`fileId`) or detach (`null`) files per field, in the caller's
+ * transaction. The composite references refuse another merchant's file and
+ * any file not of purpose `dispute_evidence`; the caller has checked both, so
+ * the answer is a 400 and not a constraint.
+ */
+export async function setDisputeEvidenceFiles(
+  db: DatabaseOrTransaction,
+  dispute: { readonly id: string; readonly merchantId: string },
+  changes: readonly { readonly field: DisputeFileEvidenceField; readonly fileId: string | null }[],
+): Promise<void> {
+  const detach = changes.filter((change) => change.fileId === null).map((change) => change.field);
+  if (detach.length > 0) {
+    await db
+      .delete(disputeEvidenceFiles)
+      .where(
+        and(
+          eq(disputeEvidenceFiles.disputeId, dispute.id),
+          inArray(disputeEvidenceFiles.field, detach),
+        ),
+      );
+  }
+  for (const change of changes) {
+    if (change.fileId === null) continue;
+    await db
+      .insert(disputeEvidenceFiles)
+      .values({
+        disputeId: dispute.id,
+        merchantId: dispute.merchantId,
+        field: change.field,
+        fileId: change.fileId,
+      })
+      .onConflictDoUpdate({
+        target: [disputeEvidenceFiles.disputeId, disputeEvidenceFiles.field],
+        set: { fileId: change.fileId },
+      });
+  }
 }

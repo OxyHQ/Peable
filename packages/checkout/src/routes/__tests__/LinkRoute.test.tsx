@@ -51,7 +51,7 @@ const LINK: PublicPaymentLink = {
   rail: 'faircoin',
   network: 'testnet',
   active: true,
-  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
+  merchant: { name: 'Test Merchant', avatar_url: null, logo_url: null, description: null },
 };
 
 function makeIntent(

@@ -67,11 +67,11 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | PI fields (receipt email, descriptor, shipping, description) | ✅ | All four; `statement_descriptor_suffix` card only and the one forwarded to the provider | Peable-sent receipts (Phase 3) |
 | Charges | 🟡 | Read-only `ch_` per succeeded card authorization: retrieve, list (`payment_intent=`), expandable `latest_charge`; `outcome`, `payment_method_details.card`, `amount_captured/refunded`, `captured`, `refunded`, `disputed` | `receipt_url` (Peable receipts, Phase 3), `balance_transaction` (ledger, Phase 5) |
 | Refunds | 🟡 | Create; retrieve; list (global, `payment_intent=`, per intent); no reason | update/cancel; `reason`; `metadata`; fee/transfer reversal flags |
-| Disputes | 🟡 | Retrieve; list (global, `payment_intent=`, per intent); text evidence, one shot | close; `metadata`; file evidence (still not stored) |
-| Files | ❌ | — | `file_` over Oxy Files |
-| Wallets (Apple/Google Pay) | ❌ | Possible via Payment Element config, unmodelled | Domain registration + Express Checkout |
-| Local methods (SEPA, iDEAL, Bancontact, Bizum) | ❌ | — | Via provider, `payment_method_configurations` |
-| Currencies | 🟡 | FAIR, EUR, USD | Provider-supported set |
+| Disputes | ✅ | Stripe's object: retrieve (with `evidence`, read live), list (`payment_intent=`, `charge=`, per intent); `POST /v1/disputes/:id` stages a draft at the provider (`submit: false`, no words stored here) or submits once (`submit: true`, second refused 409); 17 text + 9 file fields (`file_…` of purpose `dispute_evidence`, bytes uploaded to the provider at submission only); `…/close` accepts (lost); `evidence_details {due_by, has_evidence, past_due, submission_count, submitted_at}`, `charge` (expandable), `is_charge_refundable`, `metadata`, `reason` as Stripe's enum; `charge.dispute.created\|updated\|closed\|funds_withdrawn\|funds_reinstated` | `balance_transactions` (ledger, Phase 5); `enhanced_evidence`, `duplicate_charge_id` |
+| Files | ✅ | `file_` over Oxy Files: `POST /v1/files` (multipart bytes, or `oxy_file` for a merchant-owned logo through the one ownership check), retrieve, list (`purpose=`); purposes `dispute_evidence`, `business_logo`, `identity_document`, `additional_verification` with per-purpose type (sniffed from the bytes) and size limits; Peable-owned private storage (public for logos), reference sync in the row's transaction, nightly reconciliation; file events withhold/remove; `url` only for an available logo | File links; `identity_document` consumed by Peable-hosted onboarding |
+| Wallets (Apple/Google Pay) | ✅ | `payment_method_domains` (`pmd_`: create with validation, list, retrieve, update `enabled`, `…/validate`) registered at the provider; wallets per configuration; Express Checkout in the hosted checkout and `@peable.to/sdk/checkout` (Apple Pay and Google Pay only) | |
+| Local methods (SEPA, iDEAL, Bancontact, EPS; Bizum) | 🟡 | `payment_method_configurations` (`pmc_`: default per merchant, create, update with merged preferences, list) bound to the provider's configuration, pushed per version; PI create honours `payment_method_types` or `payment_method_configuration`, filtered by currency, stored on the intent; Payment Element shows them; unavailable methods carry `unavailable_reason` | Bizum (`provider_unsupported`: the processing provider does not offer it); non-card saved methods (SEPA mandates) |
+| Currencies | ✅ | FAIR; EUR, USD, GBP, CHF, SEK, NOK, DKK, PLN, CZK, CAD, AUD, JPY (JPY zero-decimal) on the card rail, CHECKs widened (`0049`/`0050`, validated `0051`) | More as the provider and methods need |
 | Transfers list/retrieve | ✅ | Global (`payment_intent=`, `connected_account=`) and per intent; retrieve | |
 
 ## Phase 3 — Checkout, Links, Elements, portal, emails
@@ -87,7 +87,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | `success_url` redirect / `cancel_url` | 🟡 | Success CTA only; cancel stored, unused | Redirect with `{CHECKOUT_SESSION_ID}`; cancel rendered |
 | Session list/expire/line_items | 🟡 | List (`payment_intent=`); metadata update | expire, line_items |
 | Locales | 🟡 | Checkout English only; UI kit en/es | es/en/fr/de/it/pt |
-| Merchant branding | 🟡 | Avatar, name, description | Logo, icon, colours, font |
+| Merchant branding | 🟡 | Avatar (square icon), `business_logo` (a `file_`, the wordmark — `MerchantDisplay.logo_url`, shown by the hosted checkout), name, description; Orbit uploads the logo | Colours, font |
 | Payment Links | 🟡 | Single amount; contributions | On Prices; quantity, promos, `after_completion` |
 | Embedded components | 🟡 | FairCoin button; RN/Bloom sheet with split card fields | Payment Element, Express Checkout, Address Element; `appearance` API |
 | Customer portal | 🟡 | Stripe Billing Portal | Orbit-hosted portal + configurations |
@@ -131,7 +131,8 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | Merchant dashboard | 🟡 | `packages/orbit`: Expo web + Bloom, Oxy sign-in, organization/application picker, Rail navigation; Tax and Contributions ported (still also in the wallet until removed there) | Deployed at orbit.peable.to; every area below |
-| Payments / refunds / disputes UI | 🟡 | Payments list (status filter, `starting_after` paging) and detail (amount by currency decimals, timeline from the intent's own fields, metadata); Home counts/volume computed client-side from the first page. No refunds or disputes UI | Present |
+| Payments / refunds / disputes UI | 🟡 | Payments list (status filter, `starting_after` paging) and detail (amount by currency decimals, timeline from the intent's own fields, metadata); Home counts/volume computed client-side from the first page. Disputes list (status, reason, amount by currency decimals, respond-by deadline with past due) and detail: 17 text + 9 file evidence fields (file fields upload `dispute_evidence` files), Save draft, Submit once behind a one-shot confirmation, Accept (close) behind its own; read-only once submitted, closed, under review or past due. No refunds UI | Refunds |
+| Payment methods settings | ✅ | Settings → Payment methods: per-method on/off for the selected `pmc_` (default first), availability, currencies and the capability reason for anything unavailable (shown disabled, never hidden); Wallet domains (add, check again, enable/disable, Apple Pay / Google Pay status with its detail) | |
 | Customers / catalog / subscriptions / invoices UI | 🟡 | Products: list (active/archived), create with a first price, edit, archive, delete, prices per product (add, archive, set default) over the dashboard catalog routes | Coupons and promotion codes, customers, subscriptions, invoices |
 | Payment Links builder | ❌ | — | Present |
 | Balances / payouts / reports | ❌ | — | Present |

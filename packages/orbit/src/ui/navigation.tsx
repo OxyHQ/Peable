@@ -15,6 +15,7 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Rail } from '@oxy.so/bloom/rail';
 import { TabBar, TabBarButton, useTabBarFootprint } from '@oxy.so/bloom/tab-bar';
 import { useTheme } from '@oxy.so/bloom/theme';
+import { RiAlarmWarningLine } from '@oxy.so/bloom/icons/RiAlarmWarningLine';
 import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
@@ -30,6 +31,7 @@ export type OrbitTab =
   | 'index'
   | 'payments'
   | 'products'
+  | 'disputes'
   | 'developers'
   | 'tax'
   | 'contributions'
@@ -41,6 +43,11 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
   index: { labelKey: 'nav.home', icon: RiHome5Line, activeIcon: RiHome5Fill },
   payments: { labelKey: 'nav.payments', icon: RiBankCardLine, activeIcon: RiBankCardLine },
   products: { labelKey: 'nav.products', icon: RiPriceTag3Line, activeIcon: RiPriceTag3Line },
+  disputes: {
+    labelKey: 'nav.disputes',
+    icon: RiAlarmWarningLine,
+    activeIcon: RiAlarmWarningLine,
+  },
   developers: {
     labelKey: 'nav.developers',
     icon: RiTerminalBoxLine,
@@ -60,6 +67,7 @@ export const ORBIT_TABS: readonly OrbitTab[] = [
   'index',
   'payments',
   'products',
+  'disputes',
   'developers',
   'tax',
   'contributions',

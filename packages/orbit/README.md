@@ -16,10 +16,11 @@ iOS and Android.
 | Home | Counts and gross volume **computed in the browser from the first page (100) of payments**, labelled as such; five most recent payments | `GET …/payment_intents` |
 | Payments | List with a status filter and `starting_after` / `has_more` paging; detail with amount by currency decimals, a timeline built only from the intent's own fields, and metadata | `GET …/payment_intents`, `GET …/payment_intents/:id` |
 | Products | The catalog (ADR 0018): products with an Active / Archived filter and `starting_after` paging; create a product with an optional first price (`default_price_data`); detail to rename, describe, set unit label and statement descriptor, archive / unarchive, delete (refused by the gateway while it has prices); its prices with Active / Default badges — add a price (currency, amount in whole units converted exactly to base units, one-time or every N days/weeks/months/years, tax behavior), archive / unarchive, make default | `GET/POST …/products`, `GET/POST/DELETE …/products/:id`, `GET/POST …/prices`, `POST …/prices/:id` |
+| Disputes | List with status, reason, amount by currency decimals and the respond-by deadline (past due flagged); detail with the dispute's facts and the evidence form — 17 text fields and 9 file fields (uploaded as `dispute_evidence` files), **Save draft** (`submit: false`), **Submit response** once behind a one-shot confirmation, **Accept dispute** (close, lost) behind its own; read-only once submitted, closed, under review or past due. Evidence lives only in the detail's query cache | `GET …/disputes`, `GET/POST …/disputes/:id`, `POST …/disputes/:id/close`, `POST …/files` |
 | Developers | Webhook **endpoints** (add with URL + events, enable/disable, **Roll secret** with a 24 h overlap, **Send test event**, delete; the `whsec_…` is shown once, on add and roll), the **events** of the last 30 days, and the delivery log — status, attempts, last error, next attempt, event and endpoint — with **Redeliver** | `GET/POST …/webhook_endpoints`, `POST/DELETE …/webhook_endpoints/:id`, `POST …/webhook_endpoints/:id/roll_secret`, `POST …/webhook_endpoints/:id/test`, `GET …/events`, `GET …/webhook_deliveries`, `POST …/webhook_deliveries/:id/redeliver` |
 | Tax | Peable Tax, ported from the wallet's `app/tax.tsx` | `…/tax/*` |
 | Contributions | Contribution links, ported from the wallet's `app/contributions.tsx` (same `@peable.to/sdk/contributions` resource) | `/v1/organizations/:org/applications/:app/contributions*` |
-| Settings | Register or update the merchant for the selected application and mode: branding (display name, description), required confirmations, and — at registration — the optional FairCoin network + **watch-only** xpub | `GET/POST/PATCH …/merchant` |
+| Settings | Register or update the merchant for the selected application and mode: branding (display name, description), required confirmations, and — at registration — the optional FairCoin network + **watch-only** xpub; the **logo** (`business_logo` file, beside the avatar); **Payment methods**: one row per method of the selected configuration with an on/off switch, availability, the currencies it applies to and, when it cannot be offered, why (shown disabled, never hidden); **Wallet domains** for Apple Pay / Google Pay (add, check again, enable/disable, per-wallet status) | `GET/POST/PATCH …/merchant`, `POST …/files`, `GET/POST …/payment_method_configurations[/:id]`, `GET/POST …/payment_method_domains[/:id]`, `POST …/payment_method_domains/:id/validate` |
 
 `…` is `/v1/dashboard/applications/:applicationId`, always with `?environment=`.
 Every call is made as the signed-in **Oxy user**; the gateway asks oxy-api for the
@@ -43,8 +44,10 @@ SDK's `ContributionsResource` on the same transport. A 404 from a merchant-scope
 means "no merchant in this mode", and the screens offer Settings for it.
 
 Values from `@peable.to/shared-types` that a browser needs at runtime (currency
-decimals, the status list) are restated in `src/format/money.ts` and
-`src/payments/status.ts` and **pinned by tests** to the shared-types originals: the
+decimals, the status list, the dispute evidence fields and reasons, the file
+policies, the payment method types) are restated in `src/format/money.ts`,
+`src/payments/status.ts`, `src/disputes/evidence.ts` and
+`src/paymentMethods/configuration.ts` and **pinned by tests** to the shared-types originals: the
 shared-types root barrel also exports the `node:crypto` webhook signer, which a web or
 native bundle cannot load.
 

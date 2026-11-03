@@ -2,6 +2,7 @@ import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import {
   EXPIRABLE_STATUSES as SHARED_EXPIRABLE_STATUSES,
+  type CardRailPaymentMethodType,
   type CurrencyCode,
   type PaymentIntentCancellationReason,
   type PaymentIntentCaptureMethod,
@@ -87,6 +88,11 @@ export interface PaymentIntentRow {
   readonly paymentMethodPublicId: string | null;
   /** The `ch_…` of the authorization that succeeded, when there is one. Card only. */
   readonly latestChargePublicId: string | null;
+  /** Card only: what the payer may pay with, fixed at creation. `null` on the chain. */
+  readonly paymentMethodTypes: CardRailPaymentMethodType[] | null;
+  /** INTERNAL id of the configuration it offers, and its public `pmc_…`. Card only. */
+  readonly paymentMethodConfigurationId: string | null;
+  readonly paymentMethodConfigurationPublicId: string | null;
   readonly captureMethod: PaymentIntentCaptureMethod;
   readonly setupFutureUsage: PaymentIntentSetupFutureUsage | null;
   readonly description: string | null;
@@ -159,6 +165,11 @@ const INTENT_COLUMNS = {
   // over `charges` or `refunds` would bind to THAT table's own `id`.
   latestChargePublicId: sql<string | null>`${sql.raw(
     '(select ch.public_id from charges ch where ch.payment_intent_id = "payment_intents"."id")',
+  )}`,
+  paymentMethodTypes: paymentIntents.paymentMethodTypes,
+  paymentMethodConfigurationId: paymentIntents.paymentMethodConfigurationId,
+  paymentMethodConfigurationPublicId: sql<string | null>`${sql.raw(
+    '(select pmc.public_id from payment_method_configurations pmc where pmc.id = "payment_intents"."payment_method_configuration_id")',
   )}`,
   captureMethod: paymentIntents.captureMethod,
   setupFutureUsage: paymentIntents.setupFutureUsage,
@@ -233,6 +244,9 @@ export interface InsertPaymentIntentParams {
   readonly status: 'requires_action' | 'requires_payment_method' | 'requires_confirmation';
   readonly customerId?: string | null;
   readonly paymentMethodId?: string | null;
+  /** Card only, and required there (`payment_intents_payment_method_types_rail_check`). */
+  readonly paymentMethodTypes?: readonly CardRailPaymentMethodType[] | null;
+  readonly paymentMethodConfigurationId?: string | null;
   readonly captureMethod?: PaymentIntentCaptureMethod;
   readonly setupFutureUsage?: PaymentIntentSetupFutureUsage | null;
   readonly description?: string | null;
@@ -279,6 +293,8 @@ export async function insertPaymentIntent(
       connectedAccountId: params.connectedAccountId ?? null,
       customerId: params.customerId ?? null,
       paymentMethodId: params.paymentMethodId ?? null,
+      paymentMethodTypes: params.paymentMethodTypes ? [...params.paymentMethodTypes] : null,
+      paymentMethodConfigurationId: params.paymentMethodConfigurationId ?? null,
       captureMethod: params.captureMethod ?? 'automatic',
       setupFutureUsage: params.setupFutureUsage ?? null,
       description: params.description ?? null,

@@ -15,6 +15,15 @@ export type { PeableMethodDetails } from './PeableMethodContent';
 export { checkoutFeedbackSounds } from './feedback';
 
 export type { WalletObservation } from './walletView';
+export {
+  INTENT_METHOD_ORDER,
+  intentCheckoutMethods,
+  intentMethodAvailability,
+  type IntentMethodAvailability,
+  type IntentMethodCapabilities,
+  type IntentMethodType,
+  type IntentMethodUnavailableReason,
+} from './intentMethods';
 export { validInstallmentQuote, type InstallmentQuote } from './installmentPlan';
 export {
   PeableProviderFields,

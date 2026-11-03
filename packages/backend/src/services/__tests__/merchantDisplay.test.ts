@@ -29,6 +29,8 @@ function merchantRow(values: Partial<MerchantRow>): MerchantRow {
     displayName: null,
     avatarFileId: null,
     avatarWithheld: null,
+    businessLogo: null,
+    businessLogoOxyFileId: null,
     description: null,
     createdAt: new Date('2026-01-01T00:00:00.000Z'),
     updatedAt: new Date('2026-01-01T00:00:00.000Z'),
@@ -52,6 +54,7 @@ test('resolves name + avatar_url + description when all identity fields are set'
     // The public-CDN builder (`oxy.assets.publicUrl`) — never a
     // hand-built `cloud.oxy.so` string — with the ecosystem's 'thumb' variant.
     avatar_url: 'https://cloud.oxy.so/file_mercaria_logo?variant=thumb',
+    logo_url: null,
     description: 'Marketplace',
   });
 });

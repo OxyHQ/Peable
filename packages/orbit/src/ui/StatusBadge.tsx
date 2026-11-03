@@ -1,5 +1,10 @@
-import type { PaymentIntentStatus, WebhookDeliveryStatus } from '@peable.to/shared-types';
+import type {
+  DisputeStatus,
+  PaymentIntentStatus,
+  WebhookDeliveryStatus,
+} from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
+import { disputeStatusLabel, disputeStatusTone } from '../disputes/evidence';
 import {
   deliveryStatusLabel,
   deliveryStatusTone,
@@ -25,6 +30,17 @@ export function DeliveryStatusBadge({ status }: { status: WebhookDeliveryStatus 
       tone={deliveryStatusTone(status)}
       size="label-small"
       content={deliveryStatusLabel(status)}
+    />
+  );
+}
+
+export function DisputeStatusBadge({ status }: { status: DisputeStatus }) {
+  return (
+    <Badge
+      appearance="subtle"
+      tone={disputeStatusTone(status)}
+      size="label-small"
+      content={disputeStatusLabel(status)}
     />
   );
 }

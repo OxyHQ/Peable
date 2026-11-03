@@ -1,38 +1,47 @@
 /**
- * The dispute surface: read, and RESPOND.
+ * The dispute surface — Stripe's: retrieve, list, update (stage evidence, or
+ * submit it ONCE), close (accept).
  *
- * ## What the write is, and why it was not here
+ * A dispute is initiated by the card network, so the writes here are the
+ * merchant's RESPONSE. `services/disputeEvidence.ts` carries the rules: a draft
+ * lives at the provider and Peable keeps none of its words; files are the
+ * merchant's `file_…` uploads, their bytes forwarded only at submission; a
+ * response is submitted once and a second one is refused.
  *
- * Every other money route has a POST because the merchant initiates. A dispute
- * is initiated by the card network, so the only write worth having is
- * submitting EVIDENCE — and this file used to say, correctly, that the
- * provider port had no `submitDisputeEvidence` and that *"adding the route
- * without it would give merchants a surface that accepts their evidence and
- * does nothing with it, which is worse for them than having no route at all:
- * they would believe they had responded."*
- *
- * That was right while the port was missing and it was never a destination.
- * The deadline was exposed and the response was not, so a merchant could read
- * `evidence_due_at`, watch it pass, and lose a dispute this gateway had told them
- * about and given them no way to answer. `DisputeHandlingProvider` exists now;
- * the POST is below.
- *
- * TEXT evidence only, and nothing is stored. `services/disputeEvidence.ts`
- * carries both arguments.
+ * Every handler is a core `(req, res, merchant, surface)` shared by the
+ * service-authed routes below and the dashboard's (`routes/dashboard.ts`).
  */
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
+import {
+  DISPUTE_FILE_EVIDENCE_FIELDS,
+  DISPUTE_TEXT_EVIDENCE_FIELDS,
+  type DisputeEvidence,
+  type DisputeFileEvidenceField,
+  type DisputeTextEvidenceField,
+} from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
-import { findDisputeByPublicId, listDisputesForMerchant } from '../db/disputes/disputeRepository';
+import { findChargeForMerchant } from '../db/payments/chargeRepository';
 import {
+  findDisputeByPublicId,
+  listDisputesForMerchant,
+  type DisputeRow,
+} from '../db/disputes/disputeRepository';
+import {
+  closeDispute,
   DisputeNotAnswerableError,
+  DisputeParameterError,
   DisputesUnanswerableError,
-  submitDisputeEvidence,
+  readDisputeEvidence,
+  updateDispute,
 } from '../services/disputeEvidence';
-import type { DisputeEvidence } from '@peable.to/shared-types';
+import type { OxyFilesClient } from '../services/oxyFiles/client';
+import { oxyFilesClient } from '../services/oxyFiles/client';
+import { FileStorageUnavailableError } from '../services/files';
 import { ProviderError } from '../services/providers/provider';
 import { toDisputeDTO } from '../lib/serialize';
 import {
@@ -44,85 +53,284 @@ import {
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
+import { metadataUpdateSchema } from '../lib/metadata';
 import {
   answerList,
+  completeList,
   listQuerySchema,
   parseQuery,
+  type QuerySurface,
   resolveListReference,
-  retrieveQuerySchema,
+  surfaceListQuery,
+  surfaceRetrieveQuery,
 } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-/** `GET /v1/disputes`: every dispute of the merchant, or of one payment. */
-const listDisputesQuery = listQuerySchema({
+const listDisputesQuery = surfaceListQuery({
   payment_intent: z.string().min(1).max(255).optional(),
+  charge: z.string().min(1).max(255).optional(),
 });
 /** The per-payment sub-list: the payment is in the path. */
 const listIntentDisputesQuery = listQuerySchema({});
-const retrieveDisputeQuery = retrieveQuerySchema({});
+const retrieveDisputeQuery = surfaceRetrieveQuery();
 
 /**
- * How long one evidence field may be.
- *
- * The provider's own ceiling, restated where the request is parsed: a body that
- * exceeds it is refused here with a message naming the field, rather than at
- * the acquirer with a message about a one-shot submission that then cannot be
- * retried in the shape the merchant sent.
+ * How long one TEXT evidence field may be — the provider's ceiling, restated
+ * where the request is parsed, so an over-long field is refused here with its
+ * name rather than at the acquirer during a one-shot submission.
  */
 const EVIDENCE_FIELD_MAX = 20_000;
+const FILE_ID_MAX = 255;
 
-const evidenceField = z.string().min(1).max(EVIDENCE_FIELD_MAX).optional();
+/** `""` unsets a field, as on Stripe. */
+const textField = z.string().max(EVIDENCE_FIELD_MAX).optional();
+const fileField = z.string().max(FILE_ID_MAX).optional();
 
 /**
- * The TEXT evidence fields, in the gateway's spelling.
- *
- * A closed set rather than a passthrough object: evidence goes to a card
- * network that has its own field names, and a gateway forwarding whatever it
- * was handed would let a typo become a field the network silently ignores —
- * discovered by losing the dispute. The adapter maps these to the provider's
- * names, in one place.
- *
- * File attachments are deliberately absent; the service says why.
+ * The evidence fields, in the network's names — a CLOSED set. Unknown keys are
+ * REFUSED rather than dropped: a merchant who sent `tracking_number` instead of
+ * `shipping_tracking_number` would otherwise submit, finally, a response missing
+ * the field they relied on, and find out when the dispute is decided.
  */
-const evidenceBodySchema = z
+const evidenceSchema = z
   .object({
-    product_description: evidenceField,
-    customer_name: evidenceField,
-    customer_email_address: evidenceField,
-    customer_purchase_ip: evidenceField,
-    billing_address: evidenceField,
-    shipping_address: evidenceField,
-    shipping_carrier: evidenceField,
-    shipping_date: evidenceField,
-    shipping_tracking_number: evidenceField,
-    service_date: evidenceField,
-    access_activity_log: evidenceField,
-    cancellation_policy_disclosure: evidenceField,
-    cancellation_rebuttal: evidenceField,
-    duplicate_charge_explanation: evidenceField,
-    refund_policy_disclosure: evidenceField,
-    refund_refusal_explanation: evidenceField,
-    uncategorized_text: evidenceField,
-  } satisfies Record<keyof DisputeEvidence, typeof evidenceField>)
-  // Unknown keys are REFUSED rather than dropped. A merchant who sent
-  // `tracking_number` instead of `shipping_tracking_number` would otherwise submit
-  // — finally — a response missing the field they were relying on, and find out
-  // when the dispute is decided.
+    ...(Object.fromEntries(
+      DISPUTE_TEXT_EVIDENCE_FIELDS.map((field) => [field, textField]),
+    ) as Record<DisputeTextEvidenceField, typeof textField>),
+    ...(Object.fromEntries(
+      DISPUTE_FILE_EVIDENCE_FIELDS.map((field) => [field, fileField]),
+    ) as Record<DisputeFileEvidenceField, typeof fileField>),
+  })
   .strict();
 
-export function createDisputesRouter(deps: { requireMerchant: RequestHandler }): Router {
+const updateBodySchema = z
+  .object({
+    evidence: evidenceSchema.optional(),
+    metadata: metadataUpdateSchema.optional(),
+    submit: z.boolean().optional(),
+  })
+  .strict();
+
+function sendNotFound(res: Response): void {
+  sendError(res, 404, 'invalid_request_error', 'dispute not found', 'resource_missing', 'id');
+}
+
+async function loadDispute(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<DisputeRow | null> {
+  const { disputeId } = req.params;
+  if (!disputeId) {
+    sendError(res, 400, 'invalid_request_error', 'disputeId is required');
+    return null;
+  }
+  // ONE 404 for "does not exist" and "is not yours", scoped in the predicate.
+  const dispute = await findDisputeByPublicId(getDb(), merchant.id, disputeId);
+  if (!dispute) sendNotFound(res);
+  return dispute;
+}
+
+async function intentPublicIdOf(dispute: DisputeRow): Promise<string> {
+  const intent = await findIntentById(getDb(), dispute.paymentIntentId);
+  if (!intent) {
+    // `disputes.payment_intent_id` carries a foreign key with `on delete
+    // restrict`; stated so loosening it fails loudly.
+    throw new Error(`dispute ${dispute.publicId} names an intent that cannot be read`);
+  }
+  return intent.publicId;
+}
+
+/** Answer a service error, or rethrow what is not one. */
+function sendDisputeError(res: Response, error: unknown): void {
+  if (error instanceof DisputeNotAnswerableError) {
+    // 409: well-formed, and the dispute is not in a state that takes it —
+    // answered, closed, or past its deadline. No edit of the body fixes that.
+    sendError(res, 409, 'invalid_request_error', error.message, error.code);
+    return;
+  }
+  if (error instanceof DisputeParameterError) {
+    sendError(res, 400, 'invalid_request_error', error.message, 'parameter_invalid', error.param);
+    return;
+  }
+  if (error instanceof DisputesUnanswerableError || error instanceof FileStorageUnavailableError) {
+    sendError(res, 503, 'api_error', error.message);
+    return;
+  }
+  if (error instanceof ProviderError) {
+    sendProviderError(res, error);
+    return;
+  }
+  throw error;
+}
+
+/** `GET /v1/disputes`: every dispute of the merchant, or of one payment or charge. */
+export async function answerDisputeList(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface = 'api',
+): Promise<void> {
+  const query = parseQuery(req, res, listDisputesQuery[surface]);
+  if (!query) return;
+  const db = getDb();
+  const byIntent = await resolveListReference(
+    res,
+    'payment_intent',
+    query.payment_intent,
+    async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+  );
+  if (!byIntent.ok) return;
+  // A charge is one card payment's authorization: its disputes are its payment's.
+  const byCharge = await resolveListReference(
+    res,
+    'charge',
+    query.charge,
+    async (publicId) =>
+      (await findChargeForMerchant(db, publicId, merchant.id))?.paymentIntentId ?? null,
+  );
+  if (!byCharge.ok) return;
+  if (byIntent.id !== undefined && byCharge.id !== undefined && byIntent.id !== byCharge.id) {
+    // A payment and a charge that are not each other's: nothing matches both.
+    res.status(200).json(completeList(req, []));
+    return;
+  }
+  await answerList(req, res, {
+    query,
+    type: 'dispute',
+    merchantId: merchant.id,
+    cursor: async (publicId) =>
+      (await findDisputeByPublicId(db, merchant.id, publicId))?.id ?? null,
+    fetch: (page) =>
+      listDisputesForMerchant(db, {
+        merchantId: merchant.id,
+        paymentIntentId: byIntent.id ?? byCharge.id,
+        page,
+      }),
+    serialize: (row) => toDisputeDTO(row, row.paymentIntentPublicId),
+  });
+}
+
+/**
+ * `GET /v1/disputes/:id` — the one read that carries `evidence`, read live:
+ * the text from the provider (where a draft lives), the files from here.
+ */
+export async function retrieveDispute(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface = 'api',
+): Promise<void> {
+  const query = parseQuery(req, res, retrieveDisputeQuery[surface]);
+  if (!query) return;
+  const expand = parseExpand(res, 'dispute', query.expand, { list: false });
+  if (!expand) return;
+  const dispute = await loadDispute(req, res, merchant);
+  if (!dispute) return;
+
+  let evidence: DisputeEvidence | undefined;
+  try {
+    evidence = await readDisputeEvidence(dispute);
+  } catch (error) {
+    // A mode this deployment holds no key for can still SHOW its disputes —
+    // without the evidence only the provider holds.
+    if (!(error instanceof DisputesUnanswerableError)) {
+      sendDisputeError(res, error);
+      return;
+    }
+  }
+  const dto = toDisputeDTO(dispute, await intentPublicIdOf(dispute), evidence);
+  await expandObjects([dto], 'dispute', expand, merchant.id);
+  res.status(200).json(dto);
+}
+
+/** `POST /v1/disputes/:id` — metadata, a draft, or the one submission. */
+export async function updateDisputeCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  files: OxyFilesClient,
+): Promise<void> {
+  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const dispute = await loadDispute(req, res, merchant);
+  if (!dispute) return;
+  try {
+    const result = await updateDispute({
+      dispute,
+      ...(parsed.data.evidence !== undefined ? { evidence: parsed.data.evidence } : {}),
+      ...(parsed.data.metadata !== undefined ? { metadata: parsed.data.metadata } : {}),
+      submit: parsed.data.submit === true,
+      files,
+    });
+    res
+      .status(200)
+      .json(toDisputeDTO(result.dispute, await intentPublicIdOf(result.dispute), result.evidence));
+  } catch (error) {
+    sendDisputeError(res, error);
+  }
+}
+
+/** `POST /v1/disputes/:id/close` — accept the dispute; it is lost. */
+export async function closeDisputeCore(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const parsed = z
+    .object({})
+    .strict()
+    .safeParse(req.body ?? {});
+  if (!parsed.success) {
+    sendValidationError(res, parsed.error);
+    return;
+  }
+  const dispute = await loadDispute(req, res, merchant);
+  if (!dispute) return;
+  try {
+    const result = await closeDispute(dispute);
+    res
+      .status(200)
+      .json(toDisputeDTO(result.dispute, await intentPublicIdOf(result.dispute), result.evidence));
+  } catch (error) {
+    sendDisputeError(res, error);
+  }
+}
+
+export function createDisputesRouter(deps: {
+  requireMerchant: RequestHandler;
+  /** Oxy Files, to read evidence bytes at submission. Default: the real client. */
+  files?: OxyFilesClient;
+}): Router {
   const router = Router();
   const { requireMerchant } = deps;
-
-  router.get(
-    '/v1/payment_intents/:intentId/disputes',
+  const files = deps.files ?? oxyFilesClient;
+  const read = [
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:read'),
+  ];
+  const write = [
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+  ];
+  const withMerchant = (
+    handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
+  ) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
+      await handler(req, res, merchant);
+    });
 
+  router.get(
+    '/v1/payment_intents/:intentId/disputes',
+    ...read,
+    withMerchant(async (req, res, merchant) => {
       const { intentId } = req.params;
       if (!intentId) {
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
@@ -130,17 +338,12 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
       }
       const query = parseQuery(req, res, listIntentDisputesQuery);
       if (!query) return;
-
       const db = getDb();
-      // ONE 404 for both "does not exist" and "is not yours", scoped in the
-      // predicate: distinguishing them tells a caller whether another
-      // merchant's `pi_…` is real.
       const intent = await findIntentForMerchant(db, intentId, merchant.id);
       if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
-
       await answerList(req, res, {
         query,
         type: 'dispute',
@@ -157,159 +360,19 @@ export function createDisputesRouter(deps: { requireMerchant: RequestHandler }):
       });
     }),
   );
-
-  /** Every dispute of the merchant, newest first — or of one payment, `payment_intent=pi_…`. */
-  router.get(
-    '/v1/disputes',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const query = parseQuery(req, res, listDisputesQuery);
-      if (!query) return;
-
-      const db = getDb();
-      const intent = await resolveListReference(
-        res,
-        'payment_intent',
-        query.payment_intent,
-        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
-      );
-      if (!intent.ok) return;
-
-      await answerList(req, res, {
-        query,
-        type: 'dispute',
-        merchantId: merchant.id,
-        cursor: async (publicId) =>
-          (await findDisputeByPublicId(db, merchant.id, publicId))?.id ?? null,
-        fetch: (page) =>
-          listDisputesForMerchant(db, {
-            merchantId: merchant.id,
-            paymentIntentId: intent.id,
-            page,
-          }),
-        serialize: (row) => toDisputeDTO(row, row.paymentIntentPublicId),
-      });
-    }),
-  );
-
-  /** One dispute, by `dp_…`, scoped to the merchant in the predicate. */
-  router.get(
-    '/v1/disputes/:disputeId',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const { disputeId } = req.params;
-      if (!disputeId) {
-        sendError(res, 400, 'invalid_request_error', 'disputeId is required');
-        return;
-      }
-      const query = parseQuery(req, res, retrieveDisputeQuery);
-      if (!query) return;
-      const expand = parseExpand(res, 'dispute', query.expand, { list: false });
-      if (!expand) return;
-
-      const db = getDb();
-      const dispute = await findDisputeByPublicId(db, merchant.id, disputeId);
-      if (!dispute) {
-        sendError(res, 404, 'invalid_request_error', 'dispute not found');
-        return;
-      }
-      const intent = await findIntentById(db, dispute.paymentIntentId);
-      if (!intent) {
-        // `disputes.payment_intent_id` carries a foreign key with `on delete
-        // restrict`; stated so loosening it fails loudly.
-        throw new Error(`dispute ${dispute.publicId} names an intent that cannot be read`);
-      }
-      const dto = toDisputeDTO(dispute, intent.publicId);
-      await expandObjects([dto], 'dispute', expand, merchant.id);
-      res.status(200).json(dto);
-    }),
-  );
-
-  /**
-   * Answer a dispute.
-   *
-   * ONE SHOT. Submitting is one-way at the network, so a second call answers
-   * 200 with the dispute as it stands rather than sending a second response —
-   * the same distinction the settlement and refund routes make between a replay
-   * and a new operation, and here it is not recoverable at all if got wrong.
-   *
-   * Evidence is TEXT and is never stored: it carries a customer's name, their
-   * email, a billing address and correspondence, and this gateway keeps none of
-   * that. Files are out of scope, explicitly — see the service.
-   */
+  router.get('/v1/disputes', ...read, withMerchant(answerDisputeList));
+  router.get('/v1/disputes/:disputeId', ...read, withMerchant(retrieveDispute));
   router.post(
-    '/v1/disputes/:disputeId/evidence',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    '/v1/disputes/:disputeId',
+    ...write,
     idempotent,
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-      const { disputeId } = req.params;
-      if (!disputeId) {
-        sendError(res, 400, 'invalid_request_error', 'disputeId is required');
-        return;
-      }
-
-      const parsed = evidenceBodySchema.safeParse(req.body);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-
-      const db = getDb();
-      const dispute = await findDisputeByPublicId(db, merchant.id, disputeId);
-      if (!dispute) {
-        sendError(res, 404, 'invalid_request_error', 'dispute not found');
-        return;
-      }
-      const intent = await findIntentById(db, dispute.paymentIntentId);
-      if (!intent) {
-        // Structurally unreachable: `disputes.payment_intent_id` carries a
-        // foreign key with `on delete restrict`. Stated rather than asserted
-        // away, so a future change that loosens it fails loudly instead of
-        // emitting an empty id.
-        throw new Error(`dispute ${dispute.publicId} names an intent that cannot be read`);
-      }
-
-      try {
-        const { dispute: answered, submitted } = await submitDisputeEvidence({
-          dispute,
-          evidence: parsed.data,
-        });
-        // 201 for a response this call delivered, 200 for one already given.
-        // A merchant retrying after a timeout needs to know whether the network
-        // heard them once or twice — and it can only ever be once.
-        res.status(submitted ? 201 : 200).json(toDisputeDTO(answered, intent.publicId));
-      } catch (error) {
-        if (error instanceof DisputeNotAnswerableError) {
-          // 409: the request is well-formed and the dispute is simply not in a
-          // state that accepts it — closed, or past its deadline. Neither is
-          // fixable by editing the body, which a 400 would suggest.
-          sendError(res, 409, 'invalid_request_error', error.message);
-          return;
-        }
-        if (error instanceof DisputesUnanswerableError) {
-          sendError(res, 503, 'api_error', error.message);
-          return;
-        }
-        if (error instanceof ProviderError) {
-          sendProviderError(res, error);
-          return;
-        }
-        throw error;
-      }
-    }),
+    withMerchant((req, res, merchant) => updateDisputeCore(req, res, merchant, files)),
   );
-
+  router.post(
+    '/v1/disputes/:disputeId/close',
+    ...write,
+    idempotent,
+    withMerchant(closeDisputeCore),
+  );
   return router;
 }

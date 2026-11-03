@@ -70,7 +70,10 @@ export type ExpandableType =
   | 'price'
   | 'coupon'
   | 'promotion_code'
-  | 'request_log';
+  | 'request_log'
+  | 'file'
+  | 'payment_method_configuration'
+  | 'payment_method_domain';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -99,7 +102,7 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   checkout_session: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
   refund: { payment_intent: 'payment_intent' },
   transfer: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
-  dispute: { payment_intent: 'payment_intent' },
+  dispute: { payment_intent: 'payment_intent', charge: 'charge' },
   settlement: { payment_intent: 'payment_intent' },
   connected_account: {},
   payment_link: {},
@@ -107,6 +110,9 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   webhook_endpoint: {},
   event: {},
   request_log: {},
+  file: {},
+  payment_method_configuration: {},
+  payment_method_domain: {},
   'tax.transaction': {},
   product: { default_price: 'price' },
   price: { product: 'product' },

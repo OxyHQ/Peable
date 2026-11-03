@@ -6,5 +6,7 @@ export interface MerchantDisplay {
   name: string;
   /** Resolved server-side via the canonical media chokepoint; `null` when the merchant has no avatar. */
   avatar_url: string | null;
+  /** The merchant's `business_logo`, resolved; `null` when unset or not being served. */
+  logo_url: string | null;
   description: string | null;
 }

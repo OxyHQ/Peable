@@ -32,6 +32,7 @@ export function intentFixture(
     status,
     rail,
     payment_method_types: [rail],
+    payment_method_configuration_details: null,
     amount,
     amount_capturable: '0',
     amount_received: status === 'succeeded' ? amount : '0',

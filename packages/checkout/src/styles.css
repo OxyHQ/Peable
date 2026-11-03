@@ -84,6 +84,13 @@ body {
   object-fit: cover;
 }
 
+.merchant-identity__logo {
+  display: block;
+  max-width: 180px;
+  max-height: 32px;
+  object-fit: contain;
+}
+
 .merchant-identity__name {
   margin: 0;
   color: var(--text);
@@ -246,6 +253,26 @@ body {
    * offers more payment methods, and a fixed height would clip them. The floor
    * stops the Pay button jumping up the page while the form loads. */
   min-height: 180px;
+}
+
+.card-payment__wallets {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* `hidden` must win over the flex display above: the slot stays out of the
+ * layout until the provider reports a wallet this device can run. */
+.card-payment__wallets[hidden],
+.card-payment__fields[hidden] {
+  display: none;
+}
+
+.card-payment__divider {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
 }
 
 .card-payment__hint {

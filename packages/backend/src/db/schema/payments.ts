@@ -16,8 +16,10 @@ import type { PaymentIntentLastPaymentError, Shipping } from '@peable.to/shared-
 import { connectedAccounts } from './connectedAccounts';
 import { customers, paymentMethods } from './customers';
 import { merchants } from './merchants';
+import { paymentMethodConfigurations } from './paymentMethodConfigurations';
 import {
   BASE_UNIT_STRING_PATTERN,
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
   CANCELLATION_REASON_VALUES,
   CAPTURE_METHOD_VALUES,
   CARD_ONLY_STATUSES,
@@ -164,6 +166,15 @@ export const paymentIntents = pgTable(
     customerId: text(),
     /** The saved card (`pm_…`) it is charged to. Card only. */
     paymentMethodId: text(),
+    /**
+     * What the payer may pay with — card rail only (the chain's is `faircoin`,
+     * by its rail). Fixed at creation: the types the merchant named, or those
+     * the configuration offered in this currency when the payment was made, so
+     * a later configuration change never re-prices what a payer was shown.
+     */
+    paymentMethodTypes: text().array(),
+    /** The `pmc_…` whose methods this card payment offers; NULL when types were named. Card only. */
+    paymentMethodConfigurationId: text(),
     /** `automatic` captures at confirmation; `manual` holds the authorization (card only). */
     captureMethod: text().notNull().default('automatic'),
     /** Card only: keep the payment method on the customer for later. */
@@ -395,6 +406,34 @@ export const paymentIntents = pgTable(
       'payment_intents_shipping_object_check',
       sql`${table.shipping} is null or jsonb_typeof(${table.shipping}) = 'object'`,
     ),
+    /**
+     * Only a card payment carries types; a chain payment is FairCoin by its rail.
+     *
+     * One direction only, on purpose: card rows written before payment method
+     * breadth hold none until the post-phase backfill, and the outgoing image
+     * keeps writing them without during the rollout. The writer
+     * (`resolveCardPaymentMethods` → `insertPaymentIntent`) always sets them.
+     */
+    check(
+      'payment_intents_payment_method_types_rail_check',
+      sql`${table.rail} = 'card' or ${table.paymentMethodTypes} is null`,
+    ),
+    check(
+      'payment_intents_payment_method_types_check',
+      sql.raw(
+        `payment_method_types is null or (cardinality(payment_method_types) >= 1 and payment_method_types <@ ARRAY[${inList(CARD_RAIL_PAYMENT_METHOD_TYPES)}]::text[])`,
+      ),
+    ),
+    check(
+      'payment_intents_payment_method_configuration_card_check',
+      sql`${table.rail} = 'card' or ${table.paymentMethodConfigurationId} is null`,
+    ),
+    /** The configuration is this merchant's. */
+    foreignKey({
+      name: 'payment_intents_payment_method_configuration_merchant_fkey',
+      columns: [table.paymentMethodConfigurationId, table.merchantId],
+      foreignColumns: [paymentMethodConfigurations.id, paymentMethodConfigurations.merchantId],
+    }).onDelete('restrict'),
     /** The customer is this merchant's. */
     foreignKey({
       name: 'payment_intents_customer_merchant_fkey',

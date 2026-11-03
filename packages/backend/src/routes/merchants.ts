@@ -24,7 +24,8 @@ import {
 import { resolveMerchant } from './paymentIntents';
 import { enqueueReferenceSync } from '../db/oxyFiles/referenceSyncRepository';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
-import { acceptMerchantAvatar, type AvatarActor } from '../services/oxyFiles/merchantAvatar';
+import { acceptOxyFile, type FileActor } from '../services/oxyFiles/fileOwnership';
+import { findFileByPublicId } from '../db/files/fileRepository';
 import { kickReferenceSync } from '../services/oxyFiles/referenceSync';
 
 /** Exported: `routes/dashboard.ts` parses the SAME registration body for its dashboard-authed register route (F2.5) so the two never drift. */
@@ -34,6 +35,7 @@ import { kickReferenceSync } from '../services/oxyFiles/referenceSync';
 // held to a chip-sized length rather than a paragraph.
 const DISPLAY_NAME_MAX = 64;
 const AVATAR_FILE_ID_MAX = 128;
+const FILE_ID_MAX = 255;
 const DESCRIPTION_MAX = 512;
 
 const brandingFields = {
@@ -72,6 +74,9 @@ export const patchMerchantBodySchema = z
     // `.nullable()` on top of the create bounds: `null` clears the field.
     display_name: brandingFields.display_name.unwrap().nullable().optional(),
     avatar_file_id: brandingFields.avatar_file_id.unwrap().nullable().optional(),
+    // A `file_…` of purpose `business_logo` — a File needs a merchant to own
+    // it, so the logo is set on an update, never at registration.
+    business_logo: z.string().min(1).max(FILE_ID_MAX).nullable().optional(),
     description: brandingFields.description.unwrap().nullable().optional(),
   })
   .strict();
@@ -82,16 +87,16 @@ export type RegisterMerchantResult =
 
 /** What an avatar write needs: who is writing, and how to ask Oxy about the file. */
 export interface AvatarAuthority {
-  readonly actor: AvatarActor;
+  readonly actor: FileActor;
   readonly files: OxyFilesClient;
 }
 
 /**
- * The avatar authority of a SERVICE-authenticated caller: the token's own
+ * The file authority of a SERVICE-authenticated caller: the token's own
  * application, its owner account (the billing principal Oxy signed into the
  * token) and, under a delegation grant, the user it acts as.
  */
-export function serviceAvatarActor(req: Request, appId: string): AvatarActor {
+export function serviceFileActor(req: Request, appId: string): FileActor {
   const { serviceApp, serviceActingAs } = req as OxyAuthRequest;
   return {
     applicationId: appId,
@@ -165,10 +170,10 @@ export async function registerMerchant(
   // decides whether the avatar is accepted at all.
   const publicId = newId('merch');
   if (params.avatar_file_id !== undefined) {
-    const accepted = await acceptMerchantAvatar(
+    const accepted = await acceptOxyFile(
       avatar.files,
       params.avatar_file_id,
-      publicId,
+      { entityType: 'merchant_avatar', entityId: publicId, param: 'avatar_file_id' },
       avatar.actor,
     );
     if (!accepted.ok) return accepted;
@@ -255,6 +260,7 @@ export async function applyMerchantPatch(
     required_confirmations?: number;
     display_name?: string | null;
     avatar_file_id?: string | null;
+    business_logo?: string | null;
     description?: string | null;
   },
   avatar: AvatarAuthority,
@@ -266,13 +272,31 @@ export async function applyMerchantPatch(
       ? params.avatar_file_id
       : undefined;
   if (newAvatar !== undefined) {
-    const accepted = await acceptMerchantAvatar(
+    const accepted = await acceptOxyFile(
       avatar.files,
       newAvatar,
-      merchant.publicId,
+      { entityType: 'merchant_avatar', entityId: merchant.publicId, param: 'avatar_file_id' },
       avatar.actor,
     );
     if (!accepted.ok) return accepted;
+  }
+
+  // The logo is one of THIS merchant's own Files, of purpose `business_logo`
+  // and not removed. The File already holds its Oxy reference, so this needs
+  // nothing from Oxy; `merchants_business_logo_file_fkey` makes "this
+  // merchant's" structural, and this is where the purpose is checked.
+  let businessLogoFileId: string | null | undefined;
+  if (params.business_logo === null) businessLogoFileId = null;
+  else if (params.business_logo !== undefined) {
+    const logo = await findFileByPublicId(getDb(), merchant.id, params.business_logo);
+    if (logo?.purpose !== 'business_logo' || logo.removedAt !== null) {
+      return {
+        ok: false,
+        status: 400,
+        message: 'business_logo must name one of your files of purpose business_logo',
+      };
+    }
+    businessLogoFileId = logo.id;
   }
 
   // The patch is applied and re-read in ONE statement, so what the response
@@ -286,6 +310,7 @@ export async function applyMerchantPatch(
       requiredConfirmations: params.required_confirmations,
       displayName: params.display_name,
       avatarFileId: params.avatar_file_id,
+      businessLogoFileId,
       description: params.description,
     });
   } catch (error) {
@@ -334,7 +359,7 @@ export function createMerchantsRouter(deps: {
         return;
       }
       const result = await registerMerchant(serviceApp.appId, serviceApp.environment, parsed.data, {
-        actor: serviceAvatarActor(req, serviceApp.appId),
+        actor: serviceFileActor(req, serviceApp.appId),
         files,
       });
       if (!result.ok) {
@@ -374,7 +399,7 @@ export function createMerchantsRouter(deps: {
         return;
       }
       const result = await applyMerchantPatch(merchant, parsed.data, {
-        actor: serviceAvatarActor(req, merchant.oxyAppId),
+        actor: serviceFileActor(req, merchant.oxyAppId),
         files,
       });
       if (!result.ok) {

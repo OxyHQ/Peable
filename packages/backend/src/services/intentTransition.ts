@@ -259,12 +259,21 @@ export async function recordDisputeEvent(
   tx: DatabaseOrTransaction,
   row: PaymentIntentRow,
   dispute: Dispute,
-  type: 'charge.dispute.created' | 'charge.dispute.updated' | 'charge.dispute.closed',
+  type:
+    | 'charge.dispute.created'
+    | 'charge.dispute.updated'
+    | 'charge.dispute.closed'
+    | 'charge.dispute.funds_withdrawn'
+    | 'charge.dispute.funds_reinstated',
+  previousAttributes?: Record<string, unknown>,
 ): Promise<void> {
+  // An event is STORED: the dispute it carries must never hold evidence.
+  const { evidence: _evidence, ...stored } = dispute;
   await recordEvent(tx, {
     merchantId: row.merchantId,
     type,
-    object: dispute,
+    object: stored,
+    ...(previousAttributes ? { previousAttributes } : {}),
     account: row.connectedAccountPublicId,
     paymentIntentId: row.id,
   });

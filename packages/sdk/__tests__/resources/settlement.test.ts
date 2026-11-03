@@ -16,7 +16,8 @@ import type { ConnectedAccount, Refund, Transfer } from '@peable.to/shared-types
 import { ConnectedAccountsResource } from '../../src/resources/connectedAccounts';
 import { RefundsResource } from '../../src/resources/refunds';
 import { TransfersResource } from '../../src/resources/transfers';
-import { DisputesResource, MerchantsResource } from '../../src/resources/merchants';
+import { MerchantsResource } from '../../src/resources/merchants';
+import { DisputesResource } from '../../src/resources/disputes';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
   buildTestClient,
@@ -269,25 +270,27 @@ describe('settlement reporting', () => {
 
 describe('MerchantsResource and DisputesResource', () => {
   /**
-   * Answering a dispute is ONE SHOT — submitting is one-way at the card
-   * network — so everything the merchant has goes in the first call.
+   * `submitEvidence` (`POST …/evidence`) is gone: evidence is staged or
+   * submitted through the dispute's own update, Stripe's `POST /v1/disputes/:id`.
    */
-  test('submits dispute evidence as text, to the dispute itself', async () => {
-    const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' }, 201);
+  test('submits dispute evidence through the dispute update, once', async () => {
+    const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' });
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 
-    await resource.submitEvidence('dp_1', {
-      uncategorized_text: 'Collected in person.',
-      shipping_tracking_number: 'TRACK-1',
+    await resource.update('dp_1', {
+      evidence: { uncategorized_text: 'Collected in person.', receipt: 'file_1' },
+      submit: true,
     });
 
     const call = callOf(requests);
     expect(call?.method).toBe('POST');
-    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/evidence`);
+    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1`);
     expect(JSON.parse(call?.body ?? '{}')).toEqual({
-      uncategorized_text: 'Collected in person.',
-      shipping_tracking_number: 'TRACK-1',
+      evidence: { uncategorized_text: 'Collected in person.', receipt: 'file_1' },
+      submit: true,
     });
+    expect(new Headers(call?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect('submitEvidence' in resource).toBe(false);
   });
 
   /**
@@ -307,7 +310,7 @@ describe('MerchantsResource and DisputesResource', () => {
     expect(new Headers(call?.headers).get('Idempotency-Key')).toBe('merchant-registration-stable');
   });
 
-  test('disputes are read-only and scoped to one payment', async () => {
+  test("lists one payment's disputes", async () => {
     const { fetch: fetchImpl, requests } = gateway({ object: 'list', data: [] });
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 

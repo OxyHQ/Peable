@@ -15,6 +15,12 @@ describe('formatAmountValue', () => {
     expect(formatAmountValue('0', 'USD')).toBe('0.00');
   });
 
+  it('formats a zero-decimal currency without a fraction', () => {
+    expect(formatAmountValue('1500', 'JPY')).toBe('1,500');
+    expect(formatAmountValue('0', 'JPY')).toBe('0');
+    expect(formatAmountValue('1250', 'GBP')).toBe('12.50');
+  });
+
   it('groups thousands of the whole part', () => {
     expect(formatAmountValue('123456789', 'USD')).toBe('1,234,567.89');
   });
@@ -34,7 +40,7 @@ describe('formatAmountValue', () => {
     expect(formatAmountValue('12.5', 'EUR')).toBeNull();
     expect(formatAmountValue('-1', 'EUR')).toBeNull();
     expect(formatAmountValue('007', 'EUR')).toBeNull();
-    expect(formatAmountValue('100', 'GBP')).toBeNull();
+    expect(formatAmountValue('100', 'BRL')).toBeNull();
     expect(formatAmountValue('100', 'toString')).toBeNull();
   });
 });
@@ -45,7 +51,7 @@ describe('formatAmount', () => {
   });
 
   it('shows an unreadable amount as its raw base units rather than a wrong number', () => {
-    expect(formatAmount('100', 'GBP')).toBe('100 (base units) GBP');
+    expect(formatAmount('100', 'BRL')).toBe('100 (base units) BRL');
   });
 });
 

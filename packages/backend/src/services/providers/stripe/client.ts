@@ -325,18 +325,106 @@ export function retrieveStripeTransfer(mode: ProviderMode, id: string): Promise<
 /**
  * Submit a merchant's response to a dispute.
  *
- * `disputes.update` is the same call for saving a draft and for submitting; the
- * difference is `submit`, and it is one-way. The gateway only ever sends
- * `submit: true` (`services/disputeEvidence.ts` says why), so this signature
- * takes the whole body rather than hiding the flag.
+ * `disputes.update` is the same call for staging a draft and for submitting;
+ * the difference is `submit`, and it is one-way — which is why this signature
+ * takes the whole body rather than hiding the flag. A draft carries no
+ * idempotency key (setting fields is naturally idempotent); a submission does.
  */
 export function updateStripeDispute(
   mode: ProviderMode,
   id: string,
   params: Stripe.DisputeUpdateParams,
+  idempotencyKey?: string,
+): Promise<Stripe.Dispute> {
+  return call(mode, 'dispute', (stripe) =>
+    stripe.disputes.update(id, params, idempotencyKey ? { idempotencyKey } : {}),
+  );
+}
+
+/** Read a dispute — the staged evidence text with it. */
+export function retrieveStripeDispute(mode: ProviderMode, id: string): Promise<Stripe.Dispute> {
+  return call(mode, 'dispute', (stripe) => stripe.disputes.retrieve(id));
+}
+
+/** Accept a dispute (Stripe's `close`): it is lost, one-way. */
+export function closeStripeDispute(
+  mode: ProviderMode,
+  id: string,
   idempotencyKey: string,
 ): Promise<Stripe.Dispute> {
-  return call(mode, 'dispute', (stripe) => stripe.disputes.update(id, params, { idempotencyKey }));
+  return call(mode, 'dispute', (stripe) => stripe.disputes.close(id, {}, { idempotencyKey }));
+}
+
+/**
+ * Upload one dispute evidence file. The bytes are in memory for the length of
+ * this call and are never logged; the returned id is used in the submission
+ * and not kept.
+ */
+export function createStripeDisputeFile(
+  mode: ProviderMode,
+  file: { readonly data: Uint8Array; readonly name: string; readonly type: string },
+  idempotencyKey: string,
+): Promise<Stripe.File> {
+  return call(mode, 'file', (stripe) =>
+    stripe.files.create(
+      {
+        purpose: 'dispute_evidence',
+        file: { data: Buffer.from(file.data), name: file.name, type: file.type },
+      },
+      { idempotencyKey },
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payment method configurations and domains
+// ---------------------------------------------------------------------------
+
+export function createStripePaymentMethodConfiguration(
+  mode: ProviderMode,
+  params: Stripe.PaymentMethodConfigurationCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethodConfiguration> {
+  return call(mode, 'paymentMethodConfiguration', (stripe) =>
+    stripe.paymentMethodConfigurations.create(params, { idempotencyKey }),
+  );
+}
+
+export function updateStripePaymentMethodConfiguration(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentMethodConfigurationUpdateParams,
+): Promise<Stripe.PaymentMethodConfiguration> {
+  return call(mode, 'paymentMethodConfiguration', (stripe) =>
+    stripe.paymentMethodConfigurations.update(id, params),
+  );
+}
+
+export function createStripePaymentMethodDomain(
+  mode: ProviderMode,
+  params: Stripe.PaymentMethodDomainCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) =>
+    stripe.paymentMethodDomains.create(params, { idempotencyKey }),
+  );
+}
+
+export function updateStripePaymentMethodDomain(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentMethodDomainUpdateParams,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) =>
+    stripe.paymentMethodDomains.update(id, params),
+  );
+}
+
+export function validateStripePaymentMethodDomain(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) => stripe.paymentMethodDomains.validate(id));
 }
 
 // ---------------------------------------------------------------------------

@@ -278,3 +278,107 @@ describe('isMerchantMissing', () => {
     expect(isMerchantMissing(new Error('404'))).toBe(false);
   });
 });
+
+const base = '/v1/dashboard/applications/app%201';
+
+describe('disputes', () => {
+  it('lists, retrieves, updates and closes under the scope', async () => {
+    answer = (call) =>
+      call.method === 'GET' && call.path.includes('/disputes?')
+        ? { object: 'list', data: [{ id: 'dp_1' }], has_more: false }
+        : { id: 'dp_1' };
+    await api.disputes.list(scope, { payment_intent: 'pi_1', limit: 25 });
+    await api.disputes.retrieve(scope, 'dp_1');
+    await api.disputes.update(scope, 'dp_1', {
+      evidence: { uncategorized_text: 'Signed for.', receipt: 'file_1' },
+      submit: false,
+    });
+    await api.disputes.close(scope, 'dp/1');
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['GET', `${base}/disputes?environment=development&payment_intent=pi_1&limit=25`],
+      ['GET', `${base}/disputes/dp_1?environment=development`],
+      ['POST', `${base}/disputes/dp_1?environment=development`],
+      ['POST', `${base}/disputes/dp%2F1/close?environment=development`],
+    ]);
+    expect(calls[2]?.options).toEqual({
+      body: { evidence: { uncategorized_text: 'Signed for.', receipt: 'file_1' }, submit: false },
+    });
+    // `close` takes no body at all.
+    expect(calls[3]?.options).toBeUndefined();
+  });
+});
+
+describe('files', () => {
+  it('uploads as a form with the purpose and the file, never as JSON', async () => {
+    answer = () => ({ id: 'file_1', object: 'file' });
+    const blob = new Blob(['%PDF-1.4'], { type: 'application/pdf' });
+    const file = await api.files.upload(scope, {
+      purpose: 'dispute_evidence',
+      file: blob,
+      filename: 'receipt.pdf',
+    });
+    expect(file.id).toBe('file_1');
+    const call = calls[0];
+    expect(call?.method).toBe('POST');
+    expect(call?.path).toBe(`${base}/files?environment=development`);
+    expect(call?.options?.body).toBeUndefined();
+    const form = call?.options?.form?.();
+    expect(form?.get('purpose')).toBe('dispute_evidence');
+    const part = form?.get('file');
+    expect(part).toBeInstanceOf(Blob);
+    expect((part as File).name).toBe('receipt.pdf');
+  });
+
+  it('lists by purpose and retrieves by id', async () => {
+    answer = (call) => (call.path.includes('/files?') ? { object: 'list', data: [] } : {});
+    await api.files.list(scope, { purpose: 'business_logo' });
+    await api.files.retrieve(scope, 'file_9');
+    expect(calls.map((call) => call.path)).toEqual([
+      `${base}/files?environment=development&purpose=business_logo`,
+      `${base}/files/file_9?environment=development`,
+    ]);
+  });
+});
+
+describe('payment method configurations', () => {
+  it('maps list, create, retrieve and update', async () => {
+    answer = (call) =>
+      call.method === 'GET' && !call.path.includes('/pmc_')
+        ? { object: 'list', data: [] }
+        : { id: 'pmc_1' };
+    await api.paymentMethodConfigurations.list(scope);
+    await api.paymentMethodConfigurations.create(scope, { name: 'EU' });
+    await api.paymentMethodConfigurations.retrieve(scope, 'pmc_1');
+    await api.paymentMethodConfigurations.update(scope, 'pmc_1', {
+      ideal: { display_preference: { preference: 'on' } },
+    });
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['GET', `${base}/payment_method_configurations?environment=development`],
+      ['POST', `${base}/payment_method_configurations?environment=development`],
+      ['GET', `${base}/payment_method_configurations/pmc_1?environment=development`],
+      ['POST', `${base}/payment_method_configurations/pmc_1?environment=development`],
+    ]);
+    expect(calls[3]?.options).toEqual({
+      body: { ideal: { display_preference: { preference: 'on' } } },
+    });
+  });
+});
+
+describe('payment method domains', () => {
+  it('maps list, create, update and validate', async () => {
+    answer = (call) =>
+      call.method === 'GET' ? { object: 'list', data: [] } : { id: 'pmd_1', object: 'x' };
+    await api.paymentMethodDomains.list(scope, { enabled: true });
+    await api.paymentMethodDomains.create(scope, { domain_name: 'shop.example.com' });
+    await api.paymentMethodDomains.update(scope, 'pmd_1', { enabled: false });
+    await api.paymentMethodDomains.validate(scope, 'pmd_1');
+    expect(calls.map((call) => [call.method, call.path])).toEqual([
+      ['GET', `${base}/payment_method_domains?environment=development&enabled=true`],
+      ['POST', `${base}/payment_method_domains?environment=development`],
+      ['POST', `${base}/payment_method_domains/pmd_1?environment=development`],
+      ['POST', `${base}/payment_method_domains/pmd_1/validate?environment=development`],
+    ]);
+    expect(calls[1]?.options).toEqual({ body: { domain_name: 'shop.example.com' } });
+    expect(calls[2]?.options).toEqual({ body: { enabled: false } });
+  });
+});

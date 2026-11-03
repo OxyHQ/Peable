@@ -12,6 +12,7 @@ export function intentDTO(overrides: Partial<PaymentIntent> = {}): PaymentIntent
     status: 'succeeded',
     rail: 'faircoin',
     payment_method_types: ['faircoin'],
+    payment_method_configuration_details: null,
     amount: '100000000',
     amount_capturable: '0',
     amount_received: '100000000',
