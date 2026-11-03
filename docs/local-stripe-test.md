@@ -56,8 +56,78 @@ only this payer capability; no application credential or provider secret.
 
 The local runner binds only loopback and does not publish workload telemetry.
 Existing merchant-authenticated API routes remain authenticated. The harness
-refuses recurring billing cohort activation: a real subscription requires its
-own reviewed test product/prices, billing owner/cohort and webhook lifecycle.
+refuses arbitrary recurring billing cohort activation. The optional reviewed
+local recurring path below supplies test products/prices, owner and lifecycle.
 This one-time test must not grant Mention Plus or represent a subscription.
 Tax shown in a UI fixture is not a provider-calculated tax quote; this runner
 does not activate tax registrations or infer fiscal eligibility.
+
+## Actual recurring test subscription
+
+The reviewed local catalogue is `peable_local_mention_plus`: monthly USD599
+minor units and annual USD5750, both inclusive. Its exact test price and portal
+references live in `src/dev/stripeTestBilling.ts`. Before any binding, the CLI
+reads Stripe and checks the account, mode, active price, product, amount,
+currency, interval and tax behavior. It uses the existing verified-price import,
+Billing customer and hosted subscription Checkout implementations. The local
+billing owner is the isolated development merchant, not the production Oxy or
+Mention application. No production account receives access.
+
+The optional recurring test restricted key additionally needs:
+
+- Prices read; Customers write (and read).
+- Checkout Sessions write (and read).
+- Billing Portal configurations read.
+- Subscriptions read; Invoices read; Charges read for subscription invoice and
+  refund/dispute lifecycle observation.
+
+Accounts read and PaymentIntents read/write remain required for the one-time
+field test. Payment methods are configured on the test account; the harness does
+not enable live methods. A permission failure reports the operation stage and
+points to this checklist without printing provider payloads.
+
+The return URL must remain HTTPS loopback. The prepared local terminal page uses
+an isolated self-signed certificate at
+`~/.local/share/peable-stripe-test/tls/localhost.{key,crt}`. It grants no access
+and makes no payment-success claim. Global TLS verification/trust is unchanged;
+manual browsers may show a certificate warning. An automated browser can trust
+this certificate only in its isolated test context. Run it with:
+
+```sh
+bun packages/backend/src/dev/stripeTestReturn.ts
+```
+
+Set `PEABLE_TEST_RETURN_URL=https://127.0.0.1:4311/return` and, optionally,
+`PEABLE_TEST_SUBSCRIPTION_INTERVAL=month` or `year`. Then:
+
+```sh
+bun --env-file=.env.local packages/backend/src/dev/seedStripeTestSubscription.ts
+```
+
+The secure `subscription-month.json` or `subscription-year.json` artifact in the
+same runtime directory contains the actual hosted session. This creates an
+incomplete test subscription checkout, not a successful subscription. Use the
+provider's test payment details in the hosted page to complete it.
+
+For recurring webhook processing, set `PEABLE_TEST_ENABLE_BILLING=true` and
+start/restart the local gateway after the merchant exists. Its cohort is built
+from the local merchant, verified test account and fixed test portal config;
+arbitrary `PEABLE_BILLING_COHORT` environment input is refused. Observations use
+the existing durable provider-event/recurring machinery. The merchant must have
+no external webhook target, so no production entitlement consumer is contacted.
+Verify completion through signed events and the existing Billing readback, not
+through the terminal return page. A real subscription has not been tested until
+that traffic has happened.
+
+After a hosted test payment, inspect the existing Billing-owned checkout and
+initial invoice state with:
+
+```sh
+bun --env-file=.env.local packages/backend/src/dev/readStripeTestSubscription.ts
+```
+
+It reads the secure artifact, re-resolves the isolated owner and verifies the
+provider's object graph through the production Billing readback. Output is the
+sanitized domain status, not a provider payload or a hosted URL. The optional
+interval variable selects the annual artifact. A returned page by itself is not
+proof of completion.

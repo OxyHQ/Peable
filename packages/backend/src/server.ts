@@ -328,7 +328,11 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
  * queue through `SKIP LOCKED` rather than needing a leader.
  */
 export async function start(
-  options: { billingAdapters?: BillingRuntimeAdapters; listenHost?: string } = {},
+  options: {
+    billingAdapters?: BillingRuntimeAdapters;
+    listenHost?: string;
+    billingConfiguration?: string;
+  } = {},
 ): Promise<void> {
   const database = await connectPostgres();
   const taxProvider = configuredTaxProvider();
@@ -336,7 +340,7 @@ export async function start(
   void reportTaxProvider(taxProvider);
   const billingRuntime = await configureBillingRuntime(
     database,
-    config.billingCohortConfig,
+    options.billingConfiguration ?? config.billingCohortConfig,
     undefined,
     { taxService, ...options.billingAdapters },
   );

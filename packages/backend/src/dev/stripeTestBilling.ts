@@ -1,0 +1,61 @@
+/** Approved local test catalogue, never a production offer or entitlement mapping. */
+export const LOCAL_TEST_PRODUCT = 'peable_local_mention_plus';
+export const LOCAL_TEST_PORTAL = 'bpc_1UXYM9AofUef123LHMEjc7ig';
+export const LOCAL_TEST_APP = 'peable-local-stripe-test';
+export const LOCAL_TEST_PRICES = {
+  month: { id: 'price_1UXYLNAofUef123LlBvYkDuP', amount: 599, plan: 'local-mention-plus-monthly' },
+  year: { id: 'price_1UXYLcAofUef123Lj2BeXxxU', amount: 5750, plan: 'local-mention-plus-annual' },
+} as const;
+
+export function localTestBillingConfiguration(
+  merchant: {
+    id: string;
+    oxyAppId: string;
+    environment: string;
+    livemode: boolean;
+    webhookUrl: string | null;
+  },
+  accountId: string,
+) {
+  if (
+    merchant.oxyAppId !== LOCAL_TEST_APP ||
+    merchant.environment !== 'development' ||
+    merchant.livemode ||
+    merchant.webhookUrl
+  ) {
+    throw new Error(
+      'Recurring test requires the isolated development merchant without an external webhook target',
+    );
+  }
+  return {
+    deployment: { provider: 'stripe' as const, platformAccountId: accountId, livemode: false },
+    portalConfigurationRef: LOCAL_TEST_PORTAL,
+    observationsEnabled: true,
+    cohorts: [
+      {
+        merchantId: merchant.id,
+        oxyAppId: merchant.oxyAppId,
+        environment: 'development' as const,
+        evidenceRef: 'local-test-approved-mention-plus',
+      },
+    ],
+  };
+}
+
+export function requireLocalBillingReturnUrl(value: string | undefined): string {
+  let url: URL;
+  try {
+    url = new URL(value ?? '');
+  } catch {
+    throw new Error('A loopback HTTPS return URL is required');
+  }
+  if (
+    url.protocol !== 'https:' ||
+    !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
+    url.username ||
+    url.password
+  ) {
+    throw new Error('Recurring test return URL must use loopback HTTPS without credentials');
+  }
+  return url.toString();
+}
