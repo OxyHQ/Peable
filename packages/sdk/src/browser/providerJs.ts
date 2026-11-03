@@ -65,6 +65,7 @@ export interface ProviderCheckoutActions {
     paymentMethod: string;
     redirect: 'if_required';
     returnUrl?: string;
+    email?: string;
   }): Promise<
     | { type: 'success'; session: ProviderCheckoutSession }
     | { type: 'error'; error: { message?: string } }
@@ -83,7 +84,7 @@ export interface ProviderSdk {
   createPaymentMethod?(data: {
     type: 'card';
     card: ProviderElement;
-    billing_details: { address: { country: string; postal_code: string } };
+    billing_details: { address: { country: string; postal_code: string }; email?: string };
   }): Promise<{
     error?: { message?: string };
     paymentMethod?: { id: string; card?: { brand?: string; last4?: string } };
@@ -95,7 +96,7 @@ export interface ProviderSdk {
         | string
         | {
             card: ProviderElement;
-            billing_details: { address: { country: string; postal_code: string } };
+            billing_details: { address: { country: string; postal_code: string }; email?: string };
           };
       return_url?: string;
     },

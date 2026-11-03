@@ -56,13 +56,12 @@ export async function prepareCheckoutSessionCard({
   card,
   billing,
   action,
-  returnUrl,
   messages,
   isCurrent,
 }: {
   provider: ProviderSdk;
   card: ProviderElement;
-  billing: { country: string; postcode: string };
+  billing: { country: string; postcode: string; email?: string };
   action: CheckoutSessionAction;
   returnUrl: string;
   messages: { failed: string; incomplete: string; busy: string; closed: string };
@@ -76,6 +75,7 @@ export async function prepareCheckoutSessionCard({
   )
     return { prepared: false, error: messages.failed };
   const authority = { ...action };
+  const receiptEmail = billing.email?.trim();
   const loaded = await provider
     .initCheckoutElementsSdk({ clientSecret: authority.client_secret })
     .loadActions();
@@ -92,7 +92,10 @@ export async function prepareCheckoutSessionCard({
   const result = await provider.createPaymentMethod({
     type: 'card',
     card,
-    billing_details: { address: { country: billing.country, postal_code: billing.postcode } },
+    billing_details: {
+      address: { country: billing.country, postal_code: billing.postcode },
+      ...(receiptEmail ? { email: receiptEmail } : {}),
+    },
   });
   if (!isCurrent()) return { prepared: false, error: messages.closed };
   const method = result.paymentMethod;
@@ -130,7 +133,7 @@ export async function prepareCheckoutSessionCard({
           const outcome = await actions.confirm({
             paymentMethod: token,
             redirect: 'if_required',
-            returnUrl,
+            ...(receiptEmail ? { email: receiptEmail } : {}),
           });
           if (disposed || !isCurrent()) return { accepted: false, error: messages.closed };
           if (outcome.type === 'error')

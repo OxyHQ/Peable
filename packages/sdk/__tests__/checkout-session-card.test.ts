@@ -20,7 +20,7 @@ const action: CheckoutSessionAction = {
   currency: 'USD',
 };
 const messages = { failed: 'failed', incomplete: 'incomplete', busy: 'busy', closed: 'closed' };
-function fixture() {
+function fixture(email?: string) {
   let current = true;
   let session: ProviderCheckoutSession = {
     id: action.session_id,
@@ -57,7 +57,7 @@ function fixture() {
     prepareCheckoutSessionCard({
       provider,
       card,
-      billing: { country: 'US', postcode: '19802' },
+      billing: { country: 'US', postcode: '19802', email },
       action,
       returnUrl: 'https://mention.earth/plus',
       messages,
@@ -89,7 +89,6 @@ describe('Checkout Session secure card authority', () => {
     expect(f.confirm).toHaveBeenCalledWith({
       paymentMethod: 'pm_owned',
       redirect: 'if_required',
-      returnUrl: 'https://mention.earth/plus',
     });
     await result.authorization.confirm();
     expect(f.confirm).toHaveBeenCalledTimes(1);
@@ -191,6 +190,22 @@ describe('Checkout Session secure card authority', () => {
     if (!result.prepared) throw new Error('Expected preparation');
     expect(f.confirm).not.toHaveBeenCalled();
     expect(await result.authorization.confirm()).toEqual({ accepted: true });
+  });
+  it('passes only an explicitly supplied receipt email and keeps the server return URL', async () => {
+    const f = fixture('buyer@example.test');
+    const result = await f.prepare();
+    if (!result.prepared) throw new Error('Expected preparation');
+    expect(f.tokenize).toHaveBeenCalledWith(
+      expect.objectContaining({
+        billing_details: expect.objectContaining({ email: 'buyer@example.test' }),
+      }),
+    );
+    await result.authorization.confirm();
+    expect(f.confirm).toHaveBeenCalledWith({
+      paymentMethod: 'pm_owned',
+      redirect: 'if_required',
+      email: 'buyer@example.test',
+    });
   });
   it('rejects mismatched public key and session mode', () => {
     expect(matchingCheckoutSessionAction(action, 'pk_test_other')).toBeUndefined();

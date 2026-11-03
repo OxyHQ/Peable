@@ -9,7 +9,7 @@ export interface PeableProviderFieldsProps {
   /** Read-only configuration can mount secure fields before payment authority exists. */
   cardConfiguration?: { readonly publishableKey: string };
   /** Billing details already collected and bound by the host's authoritative quote. */
-  billingDetails?: { readonly country: string; readonly postcode: string };
+  billingDetails?: { readonly country: string; readonly postcode: string; readonly email?: string };
   locale?: string;
   disabled?: boolean;
   /** Only require a postal code when the host has an explicit billing requirement. */
