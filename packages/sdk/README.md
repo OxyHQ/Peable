@@ -64,3 +64,26 @@ const intent = await peable.paymentIntents.create(
 an on-behalf payment carry `event.account`; `intent.canExpire` is `false` once a
 payer has broadcast, so never cancel an order on `expiresAt` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
+
+### Optional checkout presentation (local development)
+
+`@peable.to/sdk/checkout/ui` exposes the controlled `PeableCheckoutSheet` and
+checkout view-model types. It composes Bloom's `CheckoutSheet` with Peable's
+provided brand asset, localized copy and minor-unit currency formatting. The
+host supplies quoted items, requirements, draft state, navigation and the
+`onAuthorize` callback. Card collection is a provider-owned `cardEntry` slot;
+the component never collects or stores card numbers, calls payment APIs, or
+grants access. Shipping is conditional on the request. Optional `brandState`
+controls presentation only; a host may restore the logo after confirmed
+success before closing. Completion timers and authoritative outcomes belong
+to the host.
+
+This entry is ESM/React Native only, with optional React, React Native and Bloom
+peers. Neither the server root nor the anonymous `/checkout` core imports it;
+the module-graph isolation test enforces that boundary. The Peable logo is
+copied into the ESM build and included in the package artifact.
+
+This UI currently requires the coordinated **local** Bloom checkout/status-ring
+build and local SDK build. Registry version 0.5.0 does not acquire these APIs
+until a separately authorized package release. Local Mention development uses
+an explicit source resolver/artifact override; no publication is implied.

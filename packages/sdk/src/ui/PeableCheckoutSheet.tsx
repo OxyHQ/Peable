@@ -1,0 +1,64 @@
+import { StatusRing, type StatusRingProps } from '@oxy.so/bloom/loading';
+import { Image, View } from 'react-native';
+import { CheckoutSheet, type CheckoutSheetProps } from '@oxy.so/bloom/checkout-sheet';
+import peableLogo from './assets/peable.png';
+import { formatCheckoutAmount } from './amount';
+import { checkoutMessage } from './messages';
+
+export type PeableCheckoutSheetProps = Omit<
+  CheckoutSheetProps,
+  'label' | 'formatAmount' | 'footer'
+> & {
+  /** Host-resolved language, e.g. the Oxy Services language preference. */
+  locale?: string;
+  /** Controlled completion presentation; never changes payment state. */
+  brandState?: StatusRingProps['state'];
+  /** Optional product copy overrides. Preview disclosures remain the local host's responsibility. */
+  messages?: Readonly<Record<string, string>>;
+};
+
+/** Controlled payment presentation. Only the host's onAuthorize callback can start a payment.
+ * No credentials, payment requests, persistence or entitlement updates are owned by this component. */
+export function PeableCheckoutSheet({
+  locale = 'en',
+  messages,
+  brandState,
+  ...props
+}: PeableCheckoutSheetProps) {
+  return (
+    <CheckoutSheet
+      {...props}
+      label={(key, values) => checkoutMessage(locale, key, values, messages)}
+      formatAmount={(amount, currency) => formatCheckoutAmount(amount, currency, locale)}
+      footer={
+        <View pointerEvents="none" style={{ alignItems: 'center', padding: 12 }}>
+          <StatusRing
+            testID="peable-brand-status"
+            state={
+              brandState ??
+              (props.step === 'processing'
+                ? 'loading'
+                : props.step === 'success'
+                  ? 'success'
+                  : props.step === 'failure'
+                    ? 'error'
+                    : 'idle')
+            }
+            accessibilityLabel={
+              props.step === 'processing' || props.step === 'success' || props.step === 'failure'
+                ? checkoutMessage(locale, `result.${props.step}`, undefined, messages)
+                : 'Peable'
+            }
+          >
+            <Image
+              source={typeof peableLogo === 'string' ? { uri: peableLogo } : peableLogo}
+              style={{ width: 32, height: 32 }}
+              resizeMode="contain"
+              accessibilityLabel="Peable"
+            />
+          </StatusRing>
+        </View>
+      }
+    />
+  );
+}
