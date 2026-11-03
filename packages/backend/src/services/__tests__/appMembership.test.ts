@@ -1,228 +1,251 @@
-import { test, expect, describe, mock } from 'bun:test';
-import { IncomingMessage } from 'node:http';
-import { Socket } from 'node:net';
-import { SsrfRejection } from '@oxy.so/core/server';
-import type { SafeFetchResult } from '@oxy.so/core/server';
-import { assertAppMembership } from '../appMembership';
-
-const OXY_API_URL = 'https://oxy-api.test';
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  spyOn,
+  test,
+} from 'bun:test';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import { assertAppMembership, type MembershipClientFactory } from '../appMembership';
 
 /**
- * Build a fake `SafeFetchFn` that resolves once with a real `IncomingMessage`
- * carrying `body` as its JSON payload — mirrors the fake-safeFetch pattern
- * `routes/__tests__/webhookDeliveries.test.ts` already uses (a real
- * `IncomingMessage` so `fetchCallerMembership`'s stream reader runs for real
- * against controlled bytes, not a mock of the reader itself).
+ * oxy-api stand-in on LOOPBACK, reached through the real Oxy SDK client.
+ *
+ * Loopback is the point: in production `api.oxy.so` resolves, inside the VPC,
+ * to the internal load balancer — a private address — and the SSRF guard the
+ * check used to go through refused it, so every owner was told they were not
+ * a member. A check that cannot reach a private oxy-api fails these tests.
  */
-function fakeSafeFetchOnce(
-  status: number,
-  body: unknown,
-): {
-  fn: (url: string, options?: { headers?: Record<string, string> }) => Promise<SafeFetchResult>;
-  calls: { url: string; headers?: Record<string, string> }[];
-} {
-  const calls: { url: string; headers?: Record<string, string> }[] = [];
-  const fn = async (
-    url: string,
-    options?: { headers?: Record<string, string> },
-  ): Promise<SafeFetchResult> => {
-    calls.push({ url, headers: options?.headers });
-    const response = new IncomingMessage(new Socket());
-    response.push(Buffer.from(JSON.stringify(body)));
-    response.push(null);
-    return { response, status, headers: {}, finalUrl: url };
+type Handler = (req: IncomingMessage, res: ServerResponse) => void;
+let handler: Handler;
+let server: Server;
+let oxyApiUrl: string;
+const seen: { url?: string; authorization?: string }[] = [];
+
+function answer(status: number, body: unknown): Handler {
+  return (req, res) => {
+    seen.push({ url: req.url, authorization: req.headers.authorization });
+    res.writeHead(status, { 'Content-Type': 'application/json' });
+    res.end(typeof body === 'string' ? body : JSON.stringify(body));
   };
-  return { fn, calls };
 }
 
-describe('assertAppMembership', () => {
-  test('a non-null callerMembership -> allowed: true', async () => {
-    const { fn } = fakeSafeFetchOnce(200, {
-      application: { callerMembership: { role: 'owner', permissions: ['app:read'] } },
+const member = (extra: Record<string, unknown> = {}) => ({
+  application: {
+    _id: 'app',
+    callerMembership: { role: 'owner', permissions: ['app:read', 'billing:read'] },
+    ...extra,
+  },
+});
+
+/**
+ * A JWT-shaped user bearer, as Oxy mints them (the SDK attaches only a token
+ * whose claims it can read). Unsigned: oxy-api — here the stand-in — is what
+ * verifies it, never the gateway.
+ */
+function userBearer(sessionId: string): string {
+  const part = (value: object) => Buffer.from(JSON.stringify(value)).toString('base64url');
+  const exp = Math.floor(Date.now() / 1000) + 3600;
+  return `${part({ alg: 'HS256', typ: 'JWT' })}.${part({ userId: 'user_jwt', sessionId, exp })}.sig`;
+}
+const BEARER = userBearer('sess_test');
+
+let warn: ReturnType<typeof spyOn>;
+const logged = () => warn.mock.calls.map((args: unknown[]) => String(args[0])).join('\n');
+
+beforeAll(async () => {
+  server = createServer((req, res) => handler(req, res));
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  oxyApiUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+});
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+});
+beforeEach(() => {
+  seen.length = 0;
+  warn = spyOn(console, 'warn').mockImplementation(() => undefined);
+});
+afterEach(() => {
+  warn.mockRestore();
+});
+
+let n = 0;
+/** A fresh (user, application) pair, so the module's cache never crosses tests. */
+const fresh = () => {
+  n += 1;
+  return { userId: `user_${n}`, applicationId: `app_${n}` };
+};
+
+describe('assertAppMembership through the Oxy SDK, oxy-api on a private address', () => {
+  test("a member is let in, with permissions and the owner account, the caller's bearer forwarded", async () => {
+    const { userId, applicationId } = fresh();
+    handler = answer(200, member({ ownerAccountId: 'acct_owner' }));
+    const result = await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl });
+    expect(result).toEqual({
+      allowed: true,
+      ownerAccountId: 'acct_owner',
+      permissions: ['app:read', 'billing:read'],
+      official: false,
     });
-    const result = await assertAppMembership('user_a', 'app_1', 'bearer-a', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(result.allowed).toBe(true);
+    expect(seen).toEqual([
+      { url: `/applications/${applicationId}`, authorization: `Bearer ${BEARER}` },
+    ]);
   });
 
-  test("carries the application's owner account — the account a member acts for — and caches it", async () => {
-    const { fn, calls } = fakeSafeFetchOnce(200, {
-      application: { callerMembership: { role: 'admin' }, ownerAccountId: 'acct_owner' },
-    });
-    const deps = { safeFetch: fn, oxyApiUrl: OXY_API_URL };
-    const first = await assertAppMembership('user_owner_1', 'app_owner', 'bearer', deps);
-    const cached = await assertAppMembership('user_owner_1', 'app_owner', 'bearer', deps);
-    expect(first).toEqual({ allowed: true, ownerAccountId: 'acct_owner', official: false });
-    expect(cached).toEqual(first);
-    expect(calls).toHaveLength(1);
+  test('a member is cached for the TTL — the second check never reaches oxy-api', async () => {
+    const { userId, applicationId } = fresh();
+    handler = answer(200, member());
+    await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl });
+    await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl });
+    expect(seen).toHaveLength(1);
   });
 
-  test('a refused membership carries no owner account', async () => {
-    const { fn } = fakeSafeFetchOnce(200, {
-      application: { callerMembership: null, ownerAccountId: 'acct_owner' },
-    });
-    const result = await assertAppMembership('user_owner_2', 'app_owner', 'bearer', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(result).toEqual({ allowed: false });
+  test('an official application is reported as such', async () => {
+    const { userId, applicationId } = fresh();
+    handler = answer(200, member({ type: 'first_party' }));
+    expect((await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).official).toBe(
+      true,
+    );
   });
 
-  test('a null callerMembership -> allowed: false', async () => {
-    const { fn } = fakeSafeFetchOnce(200, { application: { callerMembership: null } });
-    const result = await assertAppMembership('user_b', 'app_1', 'bearer-b', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
+  test('a null callerMembership is an answer: not a member, cached, no owner account', async () => {
+    const { userId, applicationId } = fresh();
+    handler = answer(200, { application: { callerMembership: null, ownerAccountId: 'acct' } });
+    expect(await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).toEqual({
+      allowed: false,
     });
-    expect(result.allowed).toBe(false);
+    await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl });
+    expect(seen).toHaveLength(1);
   });
 
-  test('a 403 from oxy-api -> allowed: false', async () => {
-    const { fn } = fakeSafeFetchOnce(403, { error: 'forbidden' });
-    const result = await assertAppMembership('user_c', 'app_1', 'bearer-c', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
+  test.each([403, 404])('a %d is an answer: not a member, cached', async (status) => {
+    const { userId, applicationId } = fresh();
+    handler = answer(status, { error: 'nope', message: 'nope' });
+    expect(await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).toEqual({
+      allowed: false,
     });
-    expect(result.allowed).toBe(false);
+    await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl });
+    expect(seen).toHaveLength(1);
   });
 
-  test('a 404 from oxy-api -> allowed: false', async () => {
-    const { fn } = fakeSafeFetchOnce(404, { error: 'not found' });
-    const result = await assertAppMembership('user_d', 'app_1', 'bearer-d', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
+  test('a 401 asks the caller to sign in again, and is not cached', async () => {
+    const { userId, applicationId } = fresh();
+    handler = answer(401, { error: 'Invalid session', message: 'Session not found or expired' });
+    expect(await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).toEqual({
+      allowed: false,
+      unauthenticated: true,
     });
-    expect(result.allowed).toBe(false);
+    handler = answer(200, member());
+    expect((await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).allowed).toBe(
+      true,
+    );
   });
 
-  test("forwards the caller's bearer as Authorization and hits the right URL", async () => {
-    const { fn, calls } = fakeSafeFetchOnce(200, {
-      application: { callerMembership: { role: 'owner' } },
-    });
-    await assertAppMembership('user_e', 'app_forward', 'bearer-e-secret', {
-      safeFetch: fn,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(calls).toHaveLength(1);
-    expect(calls[0]?.url).toBe(`${OXY_API_URL}/applications/app_forward`);
-    expect(calls[0]?.headers?.Authorization).toBe('Bearer bearer-e-secret');
-  });
+  test.each([
+    ['a 500', 500, { error: 'boom' }],
+    ['a 503', 503, { error: 'down' }],
+    ['an answer off the contract', 200, { application: { callerMembership: 'yes' } }],
+  ] as const)(
+    '%s is an outage: logged, and never cached as "not a member"',
+    async (_label, status, body) => {
+      const { userId, applicationId } = fresh();
+      handler = answer(status, body);
+      expect(
+        await assertAppMembership(userId, applicationId, BEARER, {
+          oxyApiUrl,
+          requestId: 'req_outage',
+        }),
+      ).toEqual({ allowed: false, unavailable: true });
+      expect(logged()).toContain(`application=${applicationId}`);
+      expect(logged()).toContain('request=req_outage');
+      expect(logged()).not.toContain(BEARER);
 
-  test('a malformed (non-JSON) body -> allowed: false, never throws', async () => {
-    const safeFetch = async (): Promise<SafeFetchResult> => {
-      const response = new IncomingMessage(new Socket());
-      response.push(Buffer.from('not json'));
-      response.push(null);
-      return { response, status: 200, headers: {}, finalUrl: OXY_API_URL };
+      handler = answer(200, member());
+      expect(
+        (await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).allowed,
+      ).toBe(true);
+    },
+  );
+
+  test('oxy-api unreachable is an outage, logged, not cached', async () => {
+    const { userId, applicationId } = fresh();
+    const closed = createServer();
+    await new Promise<void>((resolve) => closed.listen(0, '127.0.0.1', resolve));
+    const deadUrl = `http://127.0.0.1:${(closed.address() as AddressInfo).port}`;
+    await new Promise<void>((resolve) => closed.close(() => resolve()));
+
+    expect(
+      await assertAppMembership(userId, applicationId, BEARER, {
+        oxyApiUrl: deadUrl,
+        requestId: 'req_down',
+      }),
+    ).toEqual({ allowed: false, unavailable: true });
+    expect(logged()).toContain('request=req_down');
+
+    handler = answer(200, member());
+    expect((await assertAppMembership(userId, applicationId, BEARER, { oxyApiUrl })).allowed).toBe(
+      true,
+    );
+  });
+});
+
+describe('assertAppMembership client handling', () => {
+  test('builds one client per check for the caller, and disposes it', async () => {
+    const { userId, applicationId } = fresh();
+    const made: { token: string; baseURL: string; disposed: boolean }[] = [];
+    const client: MembershipClientFactory = (token, baseURL) => {
+      const entry = { token, baseURL, disposed: false };
+      made.push(entry);
+      return {
+        apps: { get: async () => member().application },
+        dispose: () => {
+          entry.disposed = true;
+        },
+      };
     };
-    const result = await assertAppMembership('user_f', 'app_1', 'bearer-f', {
-      safeFetch,
-      oxyApiUrl: OXY_API_URL,
+    await assertAppMembership(userId, applicationId, 'bearer-x', {
+      client,
+      oxyApiUrl: 'https://oxy.test',
     });
-    expect(result.allowed).toBe(false);
+    expect(made).toEqual([{ token: 'bearer-x', baseURL: 'https://oxy.test', disposed: true }]);
   });
 
-  test('safeFetch throwing SsrfRejection -> allowed: false, never throws', async () => {
-    const safeFetch = async (): Promise<SafeFetchResult> => {
-      throw new SsrfRejection('blocked');
-    };
-    const result = await assertAppMembership('user_g', 'app_1', 'bearer-g', {
-      safeFetch,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(result.allowed).toBe(false);
-  });
-
-  test('safeFetch throwing an unexpected error -> allowed: false, never throws', async () => {
-    const safeFetch = async (): Promise<SafeFetchResult> => {
-      throw new Error('network unreachable');
-    };
-    const result = await assertAppMembership('user_h', 'app_1', 'bearer-h', {
-      safeFetch,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(result.allowed).toBe(false);
-  });
-
-  test('a cache hit avoids a second upstream call', async () => {
-    const upstream = mock(async (): Promise<SafeFetchResult> => {
-      const response = new IncomingMessage(new Socket());
-      response.push(
-        Buffer.from(JSON.stringify({ application: { callerMembership: { role: 'owner' } } })),
-      );
-      response.push(null);
-      return { response, status: 200, headers: {}, finalUrl: OXY_API_URL };
-    });
-
-    const first = await assertAppMembership('user_cache', 'app_cache', 'bearer-i', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(first.allowed).toBe(true);
-    expect(upstream).toHaveBeenCalledTimes(1);
-
-    // Second call within the TTL — even though the stub would still answer
-    // `true` if invoked, the assertion that matters is the call COUNT: prove
-    // it's genuinely served from cache, not merely consistently true.
-    const second = await assertAppMembership('user_cache', 'app_cache', 'bearer-i', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(second.allowed).toBe(true);
-    expect(upstream).toHaveBeenCalledTimes(1);
-  });
-
-  test('TTL expiry re-checks against oxy-api instead of serving a stale cache entry', async () => {
+  test('TTL expiry re-checks against oxy-api instead of serving a stale entry', async () => {
+    const { userId, applicationId } = fresh();
     let call = 0;
-    const upstream = async (): Promise<SafeFetchResult> => {
-      call += 1;
-      // Flips the answer on the second call so the assertion can only pass if
-      // the cache entry genuinely expired and a real re-check happened.
-      const callerMembership = call === 1 ? { role: 'owner' } : null;
-      const response = new IncomingMessage(new Socket());
-      response.push(Buffer.from(JSON.stringify({ application: { callerMembership } })));
-      response.push(null);
-      return { response, status: 200, headers: {}, finalUrl: OXY_API_URL };
-    };
-
-    const first = await assertAppMembership('user_ttl', 'app_ttl', 'bearer-j', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-      ttlMs: 10,
+    const client: MembershipClientFactory = () => ({
+      apps: {
+        get: async () => {
+          call += 1;
+          return { callerMembership: call === 1 ? { role: 'owner' } : null };
+        },
+      },
     });
-    expect(first.allowed).toBe(true);
-
+    const deps = { client, oxyApiUrl: 'https://oxy.test', ttlMs: 10 };
+    expect((await assertAppMembership(userId, applicationId, 'b', deps)).allowed).toBe(true);
     await new Promise((resolve) => setTimeout(resolve, 25));
-
-    const second = await assertAppMembership('user_ttl', 'app_ttl', 'bearer-j', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-      ttlMs: 10,
-    });
-    expect(second.allowed).toBe(false);
+    expect((await assertAppMembership(userId, applicationId, 'b', deps)).allowed).toBe(false);
     expect(call).toBe(2);
   });
 
-  test('the cache is keyed per (userId, applicationId) — a different user against the same application is checked independently', async () => {
-    const upstream = mock(async (): Promise<SafeFetchResult> => {
-      const response = new IncomingMessage(new Socket());
-      response.push(
-        Buffer.from(JSON.stringify({ application: { callerMembership: { role: 'member' } } })),
-      );
-      response.push(null);
-      return { response, status: 200, headers: {}, finalUrl: OXY_API_URL };
+  test('the cache is keyed per (userId, applicationId)', async () => {
+    const { applicationId } = fresh();
+    let call = 0;
+    const client: MembershipClientFactory = () => ({
+      apps: {
+        get: async () => {
+          call += 1;
+          return member().application;
+        },
+      },
     });
-
-    await assertAppMembership('user_k1', 'app_shared', 'bearer-k1', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-    });
-    await assertAppMembership('user_k2', 'app_shared', 'bearer-k2', {
-      safeFetch: upstream,
-      oxyApiUrl: OXY_API_URL,
-    });
-    expect(upstream).toHaveBeenCalledTimes(2);
+    const deps = { client, oxyApiUrl: 'https://oxy.test' };
+    await assertAppMembership('user_k1', applicationId, 'b1', deps);
+    await assertAppMembership('user_k2', applicationId, 'b2', deps);
+    expect(call).toBe(2);
   });
 });
