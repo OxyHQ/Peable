@@ -69,7 +69,7 @@ describe('PaymentLinksResource', () => {
     expect(url.searchParams.get('starting_after')).toBe('link_0');
   });
 
-  test('update() PATCHes /v1/payment_links/:id with only the whitelisted fields given', async () => {
+  test('update() POSTs /v1/payment_links/:id with only the whitelisted fields given', async () => {
     const { fetch: fetchImpl, requests } = createMockFetch((req) => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { id: 'link_1', object: 'payment_link', active: false } };
@@ -79,7 +79,7 @@ describe('PaymentLinksResource', () => {
     await resource.update('link_1', { active: false });
 
     const call = gatewayCallOf(requests);
-    expect(call?.method).toBe('PATCH');
+    expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_links/link_1`);
     expect(JSON.parse(call?.body ?? '{}')).toEqual({ active: false });
   });

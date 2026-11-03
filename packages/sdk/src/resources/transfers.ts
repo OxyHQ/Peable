@@ -1,5 +1,12 @@
-import type { Transfer, TransferWithReversal } from '@peable.to/shared-types';
+import type {
+  ExpandParams,
+  List,
+  ListParams,
+  Transfer,
+  TransferWithReversal,
+} from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Settling a seller out of a funded payment, and taking it back.
@@ -17,9 +24,9 @@ import type { RestClient } from '../core/client';
 
 export interface CreateTransferParams {
   /** The `pi_…` this settles out of. Must be a SETTLED payment. */
-  payment_intent_id: string;
+  payment_intent: string;
   /** Name the seller by exactly one of these: the `ca_…`, or your own reference. */
-  connected_account_id?: string;
+  connected_account?: string;
   connected_account_ref?: string;
   /** YOUR id for what this settles. The idempotency, and it is durable. */
   external_ref: string;
@@ -42,9 +49,13 @@ export interface ReverseTransferParams {
   external_ref: string;
 }
 
-export interface TransferList {
-  object: 'list';
-  data: Transfer[];
+export type TransferList = List<Transfer>;
+
+export interface TransferListParams extends ListParams {
+  /** Only what this payment (`pi_…`) settled. */
+  payment_intent?: string;
+  /** Only what this seller (`ca_…`) was paid. */
+  connected_account?: string;
 }
 
 export class TransfersResource {
@@ -94,11 +105,37 @@ export class TransfersResource {
     );
   }
 
+  /** One settlement, by `tr_…`. Expand `payment_intent` and/or `connected_account`. */
+  retrieve(id: string, params: ExpandParams = {}): Promise<Transfer> {
+    return this.client.request<Transfer>('GET', `/v1/transfers/${encodeURIComponent(id)}`, {
+      query: { expand: params.expand },
+    });
+  }
+
+  /** Every settlement, newest first — narrowed by payment and/or seller. */
+  list(params: TransferListParams = {}): ApiListPromise<Transfer> {
+    return listPromise(
+      (page: TransferListParams) =>
+        this.client.request<TransferList>('GET', '/v1/transfers', {
+          query: listQuery(page, {
+            payment_intent: page.payment_intent,
+            connected_account: page.connected_account,
+          }),
+        }),
+      params,
+    );
+  }
+
   /** What one payment settled — the reconciliation read. */
-  listForPaymentIntent(paymentIntentId: string): Promise<TransferList> {
-    return this.client.request<TransferList>(
-      'GET',
-      `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/transfers`,
+  listForPaymentIntent(paymentIntentId: string, params: ListParams = {}): ApiListPromise<Transfer> {
+    return listPromise(
+      (page: ListParams) =>
+        this.client.request<TransferList>(
+          'GET',
+          `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/transfers`,
+          { query: listQuery(page) },
+        ),
+      params,
     );
   }
 }

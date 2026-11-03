@@ -31,9 +31,10 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Error envelope | 🟡 | `{type, code?, param?, message, request_id}`; 400 validation; strict bodies; no leak | + `doc_url` once docs.peable.to exists |
 | `Request-Id` | ✅ | Header on every response and `request_id` in every error | |
 | Generic idempotency | ✅ | Optional `Idempotency-Key` on every merchant POST (`idempotency_keys`, `lib/idempotency.ts`): stored 2xx/4xx replayed with `Idempotent-Replayed: true` for 24 h per merchant, 400/409 `idempotency_error`, 5xx released; PI unique key and `external_ref` stay beneath it. Not on registration, `client_action` (a read) or billing (own operation ledger) | |
-| List pagination | 🟡 | `starting_after`, `limit`; three envelopes; sub-lists unpaginated | + `ending_before`, `created[...]`, `url`; one envelope everywhere |
-| `expand[]` | ❌ | — | Depth 4, merchant-scoped |
-| Metadata | 🟡 | PI/link/session create only; no limits; PI immutable | Every mutable resource; Stripe limits; updatable |
+| List pagination | ✅ | One helper (`lib/list.ts` + `db/keyset.ts`) for every list, sub-lists included: `{object, data, has_more, url}`, `limit` 1–100 (default 10), `starting_after` / `ending_before` (newest first both ways), `created[gt\|gte\|lt\|lte]`, scoped cursors (400 `resource_missing`), strict query. Tax codes/registrations/products are complete sets (`has_more: false`) | |
+| `expand[]` | 🟡 | Registry (`lib/expand.ts`), dot paths ≤ 4, `data.` on lists, merchant-scoped, one query per level. Expandable references are named without `_id`: `payment_intent`, `connected_account` on PI, session, refund, transfer, dispute, settlement | `expand` on create bodies; more objects as they become resources |
+| Metadata | 🟡 | Stripe limits on every create/update that takes it; updates are patches (`""` unsets), merged in SQL; updatable on PI, link, session | Refunds, transfers, connected accounts, disputes need a `metadata` column |
+| Update verb | ✅ | `POST /v1/<objects>/:id` for PI, link, session, contribution, `merchants/me`; no `PATCH` on the merchant API | Dashboard owner routes (`…/merchant`, `…/tax/settings`) still `PATCH` |
 | Search API | ❌ | — | Phase 8 |
 | OpenAPI | 🟡 | Contributions only | Whole API from `packages/contracts` |
 | Request logs | ❌ | — | 30-day redacted log for Orbit and CLI |
@@ -56,20 +57,20 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | PaymentIntent create/retrieve/list | ✅ | | |
-| PI update / confirm (server) / capture / cancel | 🟡 | `/reject` only | All, with `cancellation_reason` |
+| PI update / confirm (server) / capture / cancel | 🟡 | `POST /v1/payment_intents/:id` (metadata); `/reject` | confirm/capture/cancel, with `cancellation_reason` |
 | Manual capture | ❌ | Automatic only | `capture_method: manual`, `amount_to_capture` |
 | Customers | ❌ | Only `ensureCustomer` on Stripe for billing | Native `cus_` (ADR 0016) |
 | PaymentMethods | ❌ | — | Native `pm_`, attach/detach/list |
 | SetupIntents / off-session | ❌ | — | `seti_`, `setup_future_usage`, `off_session` |
 | PI fields (receipt email, descriptor, shipping, description) | ❌ | — | Present |
 | Charges | ❌ | Provider charge id internal | Read-only `ch_` with `outcome`, `receipt_url` |
-| Refunds | 🟡 | Create; per-intent list; no reason | retrieve/list/update/cancel; `reason`; fee/transfer reversal flags |
-| Disputes | 🟡 | Per-intent list; text evidence, one shot | retrieve/list/close; file evidence (still not stored) |
+| Refunds | 🟡 | Create; retrieve; list (global, `payment_intent=`, per intent); no reason | update/cancel; `reason`; `metadata`; fee/transfer reversal flags |
+| Disputes | 🟡 | Retrieve; list (global, `payment_intent=`, per intent); text evidence, one shot | close; `metadata`; file evidence (still not stored) |
 | Files | ❌ | — | `file_` over Oxy Files |
 | Wallets (Apple/Google Pay) | ❌ | Possible via Payment Element config, unmodelled | Domain registration + Express Checkout |
 | Local methods (SEPA, iDEAL, Bancontact, Bizum) | ❌ | — | Via provider, `payment_method_configurations` |
 | Currencies | 🟡 | FAIR, EUR, USD | Provider-supported set |
-| Transfers list/retrieve | 🟡 | Per intent only | Global |
+| Transfers list/retrieve | ✅ | Global (`payment_intent=`, `connected_account=`) and per intent; retrieve | |
 
 ## Phase 3 — Checkout, Links, Elements, portal, emails
 
@@ -82,7 +83,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Collect email/address/phone/tax id/custom fields | ❌ | — | Present |
 | Tax shown at checkout | 🟡 | FairCoin `billingQuote` only | `automatic_tax` for every rail |
 | `success_url` redirect / `cancel_url` | 🟡 | Success CTA only; cancel stored, unused | Redirect with `{CHECKOUT_SESSION_ID}`; cancel rendered |
-| Session list/expire/line_items | ❌ | — | Present |
+| Session list/expire/line_items | 🟡 | List (`payment_intent=`); metadata update | expire, line_items |
 | Locales | 🟡 | Checkout English only; UI kit en/es | es/en/fr/de/it/pt |
 | Merchant branding | 🟡 | Avatar, name, description | Logo, icon, colours, font |
 | Payment Links | 🟡 | Single amount; contributions | On Prices; quantity, promos, `after_completion` |
@@ -141,7 +142,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Capability | State | Today | Target |
 |---|---|---|---|
 | Server SDK | 🟡 | Resources above; typed errors; `constructEvent` | 1.0 generated from OpenAPI |
-| Auto-pagination | 🟡 | Contributions only | All lists |
+| Auto-pagination | ✅ | `list()` is a page promise and an async iterable on every list; `autoPagingEach`, `autoPagingToArray({ limit })`; `expand` option | |
 | Auto idempotency keys / retries / default timeout | 🟡 | A uuid key on every POST (0.8.0); one 401 retry under the same key; no network retries; no default timeout | Retries with backoff; default timeout |
 | Version pinning in SDK | ❌ | — | `apiVersion` |
 | CLI (`listen`, `trigger`, `logs tail`) | ❌ | — | `@peable.to/cli` |

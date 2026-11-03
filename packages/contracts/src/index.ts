@@ -45,10 +45,17 @@ export const contributionLinkSchema = z
   })
   .strict();
 export type ContributionLink = z.infer<typeof contributionLinkSchema>;
-/** The one list envelope (ADR 0014 D1). */
+/**
+ * The one list envelope (ADR 0014 D1): `url` is the path that was listed.
+ */
 function listSchema<T extends z.ZodType>(item: T) {
   return z
-    .object({ object: z.literal('list'), data: z.array(item), has_more: z.boolean() })
+    .object({
+      object: z.literal('list'),
+      data: z.array(item),
+      has_more: z.boolean(),
+      url: z.string(),
+    })
     .strict();
 }
 export const contributionListSchema = listSchema(contributionLinkSchema);
@@ -77,18 +84,53 @@ export const contributionCollectionSchema = z
   .strict();
 export type ContributionCollection = z.infer<typeof contributionCollectionSchema>;
 export const contributionCollectionListSchema = listSchema(contributionCollectionSchema);
+const unixSecondsQuery = z.coerce.number().int().nonnegative();
+
 /**
- * Paging: `starting_after` is the public id of the last object of the previous
- * page (`link_…` for links, `pi_…` for collections), resolved by the gateway
- * inside the caller's organization, application and environment.
+ * The list parameters every list accepts (ADR 0014 D1), newest first:
+ *
+ * - `limit` 1–100, default 10;
+ * - `starting_after` — the id of the last object of the previous page — or
+ *   `ending_before` — the id of the first object of the current one, which
+ *   pages backwards and still answers newest first. Never both;
+ * - `created` (one second) or `created[gt|gte|lt|lte]`, Unix seconds.
+ *
+ * Cursors are resolved by the gateway inside the caller's scope; one naming
+ * anything else is a 400 with `param` naming the cursor.
+ */
+export const listQueryShape = {
+  limit: z.coerce.number().int().min(1).max(100).default(10),
+  starting_after: z.string().min(1).max(255).optional(),
+  ending_before: z.string().min(1).max(255).optional(),
+  created: z
+    .union([
+      unixSecondsQuery.transform((x) => ({ gte: x, lte: x })),
+      z
+        .object({
+          gt: unixSecondsQuery.optional(),
+          gte: unixSecondsQuery.optional(),
+          lt: unixSecondsQuery.optional(),
+          lte: unixSecondsQuery.optional(),
+        })
+        .strict(),
+    ])
+    .optional(),
+};
+
+/**
+ * Paging a contribution list: the list parameters (`link_…` cursors for links,
+ * `pi_…` for collections) plus the environment the Test/Live toggle selects.
  */
 export const contributionPageQuerySchema = z
   .object({
-    limit: z.coerce.number().int().min(1).max(100).default(10),
-    starting_after: z.string().min(1).max(200).optional(),
+    ...listQueryShape,
     environment: z.enum(['development', 'staging', 'production']),
   })
-  .strict();
+  .strict()
+  .refine((query) => query.starting_after === undefined || query.ending_before === undefined, {
+    message: 'starting_after and ending_before are mutually exclusive',
+    path: ['ending_before'],
+  });
 export const contributionMintSchema = z
   .object({ amount: contributionAmountSchema.optional() })
   .strict();

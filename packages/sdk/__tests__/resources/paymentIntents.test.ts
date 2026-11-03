@@ -19,6 +19,7 @@ const SAMPLE_INTENT: PaymentIntent = {
   network: 'testnet',
   address: 'addr1',
   merchant_id: 'merch_1',
+  connected_account: null,
   txid: null,
   confirmations: 0,
   client_secret: 'pi_1_secret_x',

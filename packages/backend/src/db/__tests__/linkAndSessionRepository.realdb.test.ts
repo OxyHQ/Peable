@@ -185,17 +185,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
 
     expect(
       await updatePaymentLink(must(suite).db, link.publicId, stranger.id, { active: false }),
-    ).toBeNull();
+    ).toBe('missing');
     expect((await findLinkByPublicId(must(suite).db, link.publicId))?.active).toBe(true);
 
     const patched = await updatePaymentLink(must(suite).db, link.publicId, owner.id, {
       active: false,
       successUrl: 'https://shop.example/thanks',
     });
-    expect(patched?.active).toBe(false);
-    expect(patched?.successUrl).toBe('https://shop.example/thanks');
+    if (typeof patched === 'string') throw new Error(`update answered ${patched}`);
+    expect(patched.active).toBe(false);
+    expect(patched.successUrl).toBe('https://shop.example/thanks');
     // The price is untouched: it is not in the patch type at all.
-    expect(patched?.amount).toBe('250000000');
+    expect(patched.amount).toBe('250000000');
   });
 
   it('filters a link page by active and excludes other merchants', async () => {
@@ -209,7 +210,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
     const page = await listLinksForMerchant(must(suite).db, {
       merchantId: merchant.id,
       active: true,
-      limit: 10,
+      page: { limit: 10 },
     });
     expect(page.data.map((row) => row.publicId)).toEqual([live.publicId]);
     expect(page.hasMore).toBe(false);
@@ -285,7 +286,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment link and checkout session repo
       sessionParams(stranger, (await makeIntent(stranger)).id),
     );
 
-    const rows = await listSessionsForMerchant(must(suite).db, merchant.id, 10);
-    expect(rows.map((row) => row.publicId)).toEqual([must(mine).publicId]);
+    const page = await listSessionsForMerchant(must(suite).db, {
+      merchantId: merchant.id,
+      page: { limit: 10 },
+    });
+    expect(page.data.map((row) => row.publicId)).toEqual([must(mine).publicId]);
   });
 });

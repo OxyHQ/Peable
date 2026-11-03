@@ -7,23 +7,16 @@ import {
   contributionPatchSchema,
   contributionLinkSchema,
   type ContributionCollection,
-  type ContributionCollectionList,
-  type ContributionList,
 } from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
-  findLinkByPublicId,
   findLinkForMerchant,
+  listLinksForMerchant,
   updatePaymentLink,
   type PaymentLinkRow,
 } from '../db/payments/paymentLinkRepository';
-import {
-  createContributionLink,
-  listContributions,
-  listContributionCollections,
-  contributionRefunds,
-} from '../db/payments/contributionRepository';
+import { createContributionLink, contributionRefunds } from '../db/payments/contributionRepository';
 import { authorizeContributionOrganization } from '../services/contributionAccess';
 import { resolveRail } from '../services/createIntent';
 import { resolveMerchantByApp } from './paymentIntents';
@@ -32,7 +25,12 @@ import { config } from '../config';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { fromUnix, toUnix } from '../lib/time';
 import { toContributionDetails } from '../lib/serialize';
-import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
+import {
+  findIntentForMerchant,
+  listIntentsForMerchant,
+  type PaymentIntentRow,
+} from '../db/payments/paymentIntentRepository';
+import { answerList } from '../lib/list';
 function dto(row: PaymentLinkRow) {
   return contributionLinkSchema.parse({
     id: row.publicId,
@@ -45,17 +43,6 @@ function dto(row: PaymentLinkRow) {
     contribution: row.contribution ? toContributionDetails(row.contribution) : null,
     created: toUnix(row.createdAt),
   });
-}
-/** Answer a `starting_after` that names nothing this caller can page from. */
-function sendUnknownCursor(res: Parameters<typeof sendError>[0]): void {
-  sendError(
-    res,
-    400,
-    'invalid_request_error',
-    'starting_after does not name an object in this list',
-    'resource_missing',
-    'starting_after',
-  );
 }
 export function createContributionsRouter(
   deps: {
@@ -177,35 +164,33 @@ export function createContributionsRouter(
   );
   router.get(
     root,
-    wrap(async (_req, res) => {
+    wrap(async (req, res) => {
       const { org, merchant, query } = res.locals.contribution;
-      // `starting_after` is resolved INSIDE the caller's scope — the merchant is
-      // already this application and environment, and the link must be this
-      // organization's — so another organization's id pages nothing and reveals
-      // nothing: it is refused exactly like an id that does not exist.
-      const after: string | undefined = query.starting_after;
-      if (after !== undefined) {
-        const cursor = await findLinkForMerchant(getDb(), after, merchant.id);
-        if (!cursor || cursor.contribution?.organizationId !== org) {
-          sendUnknownCursor(res);
-          return;
-        }
-      }
-      const page = await listContributions(getDb(), merchant.id, org, query.limit, after);
-      const hasMore = page.length > query.limit;
-      const rows = page.slice(0, query.limit);
-      const data = await Promise.all(
-        rows.map(async (r) => {
-          const row = await findLinkByPublicId(getDb(), r.publicId);
-          if (!row) throw new Error('Link disappeared');
-          return dto(row);
-        }),
-      );
-      const body: ContributionList = { object: 'list', data, has_more: hasMore };
-      res.json(body);
+      const db = getDb();
+      await answerList(req, res, {
+        query,
+        type: 'payment_link',
+        merchantId: merchant.id,
+        // A cursor is resolved INSIDE the caller's scope — the merchant is
+        // already this application and environment, and the link must be this
+        // organization's — so another organization's id pages nothing and
+        // reveals nothing: it is refused exactly like an id that does not exist.
+        cursor: async (publicId) => {
+          const cursor = await findLinkForMerchant(db, publicId, merchant.id);
+          return cursor !== null && cursor.contribution?.organizationId === org ? cursor.id : null;
+        },
+        fetch: (page) =>
+          listLinksForMerchant(db, {
+            merchantId: merchant.id,
+            contributionOrganizationId: org,
+            page,
+          }),
+        serialize: dto,
+      });
     }),
   );
-  router.patch(
+  // POST, as every update on this API is; there is no PATCH.
+  router.post(
     `${root}/:id`,
     wrap(async (req, res) => {
       const { org, merchant } = res.locals.contribution;
@@ -220,7 +205,7 @@ export function createContributionsRouter(
         return;
       }
       const updated = await updatePaymentLink(getDb(), link.publicId, merchant.id, body.data);
-      if (!updated) throw new Error('Link disappeared');
+      if (typeof updated === 'string') throw new Error('Link disappeared');
       res.json(dto(updated));
     }),
   );
@@ -237,52 +222,38 @@ export function createContributionsRouter(
         sendError(res, 404, 'invalid_request_error', 'Contribution not found');
         return;
       }
-      // A collection is a `pi_…` minted from THIS link; any other id is refused.
-      const after: string | undefined = query.starting_after;
-      if (after !== undefined) {
-        const cursor = await findIntentForMerchant(getDb(), after, merchant.id);
-        if (!cursor || cursor.paymentLinkId !== link.id) {
-          sendUnknownCursor(res);
-          return;
-        }
-      }
-      const page = await listContributionCollections(
-        getDb(),
-        merchant.id,
-        link.id,
-        query.limit,
-        after,
-      );
-      const rows = page.slice(0, query.limit);
-      const data = await Promise.all(
-        rows.map(
-          async (row): Promise<ContributionCollection> => ({
-            id: row.publicId,
-            object: 'payment_intent',
-            amount: row.amount,
-            // Structurally FAIR: a contribution link is faircoin-only
-            // (`payment_links_contribution_shape`) and every intent it mints
-            // inherits that rail, whose currency is FAIR.
-            currency: 'FAIR',
-            status: row.status,
-            created: toUnix(row.createdAt),
-            refund_capability: 'unsupported_non_custodial',
-            refunds: (await contributionRefunds(getDb(), row.id)).map((r) => ({
-              id: r.id,
-              object: 'refund',
-              amount: r.amount,
-              status: r.status,
-              created: toUnix(r.createdAt),
-            })),
-          }),
-        ),
-      );
-      const body: ContributionCollectionList = {
-        object: 'list',
-        data,
-        has_more: page.length > query.limit,
-      };
-      res.json(body);
+      const db = getDb();
+      await answerList(req, res, {
+        query,
+        type: 'payment_intent',
+        merchantId: merchant.id,
+        // A collection is a `pi_…` minted from THIS link; any other id is refused.
+        cursor: async (publicId) => {
+          const cursor = await findIntentForMerchant(db, publicId, merchant.id);
+          return cursor?.paymentLinkId === link.id ? cursor.id : null;
+        },
+        fetch: (page) =>
+          listIntentsForMerchant(db, { merchantId: merchant.id, paymentLinkId: link.id, page }),
+        serialize: async (row: PaymentIntentRow): Promise<ContributionCollection> => ({
+          id: row.publicId,
+          object: 'payment_intent',
+          amount: row.amount,
+          // Structurally FAIR: a contribution link is faircoin-only
+          // (`payment_links_contribution_shape`) and every intent it mints
+          // inherits that rail, whose currency is FAIR.
+          currency: 'FAIR',
+          status: row.status,
+          created: toUnix(row.createdAt),
+          refund_capability: 'unsupported_non_custodial',
+          refunds: (await contributionRefunds(db, row.id)).map((r) => ({
+            id: r.id,
+            object: 'refund',
+            amount: r.amount,
+            status: r.status,
+            created: toUnix(r.createdAt),
+          })),
+        }),
+      });
     }),
   );
   return router;

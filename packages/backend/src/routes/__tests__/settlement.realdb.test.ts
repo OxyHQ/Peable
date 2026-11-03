@@ -399,8 +399,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       faircoin: { network: 'testnet', oxy_user_id: 'user_fair_transfer' },
     });
     const transfer = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: fair.json.id,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: fair.json.id,
       external_ref: 'order_to_fair_seller',
       amount: '1000',
     });
@@ -627,16 +627,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('settles a seller and reports the public ids only', async () => {
     const accountId = await payableAccount('store_t_a');
     const { status, json } = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_1',
       amount: '5000',
     });
 
     expect(status).toBe(201);
     expect(json.object).toBe('transfer');
-    expect(json.connected_account_id).toBe(accountId);
-    expect(json.payment_intent_id).toBe('pi_settled_for_transfers');
+    expect(json.connected_account).toBe(accountId);
+    expect(json.payment_intent).toBe('pi_settled_for_transfers');
     expect(json.status).toBe('paid');
     const text = JSON.stringify(json);
     expect(text).not.toContain('acct_fake');
@@ -659,8 +659,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test("names the source CHARGE, not the payment, and the payment's own group", async () => {
     const accountId = await payableAccount('store_t_b');
     await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_group',
       amount: '5000',
     });
@@ -686,16 +686,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     providerCalls.length = 0;
 
     await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_cart_two_sellers',
-      connected_account_id: first,
+      payment_intent: 'pi_cart_two_sellers',
+      connected_account: first,
       external_ref: 'order_charge_1',
       amount: '1000',
     });
     const readsAfterFirst = providerCalls.filter((entry) => entry.fn === 'getStatus').length;
 
     await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_cart_two_sellers',
-      connected_account_id: second,
+      payment_intent: 'pi_cart_two_sellers',
+      connected_account: second,
       external_ref: 'order_charge_2',
       amount: '1000',
     });
@@ -723,16 +723,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const other = await payableAccount('store_budget_b');
 
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_budget',
-      connected_account_id: seller,
+      payment_intent: 'pi_budget',
+      connected_account: seller,
       external_ref: 'budget_1',
       amount: '9000',
     });
     expect(first.status).toBe(201);
 
     const second = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_budget',
-      connected_account_id: other,
+      payment_intent: 'pi_budget',
+      connected_account: other,
       external_ref: 'budget_2',
       amount: '2000',
     });
@@ -743,8 +743,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     // ...and the remaining 1000 still settles.
     const third = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_budget',
-      connected_account_id: other,
+      payment_intent: 'pi_budget',
+      connected_account: other,
       external_ref: 'budget_3',
       amount: '1000',
     });
@@ -770,8 +770,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     });
 
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_resume',
-      connected_account_id: seller,
+      payment_intent: 'pi_resume',
+      connected_account: seller,
       external_ref: 'order_resume',
       amount: '1000',
     });
@@ -781,8 +781,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     createTransferThrows = null;
     providerCalls.length = 0;
     const retry = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_resume',
-      connected_account_id: seller,
+      payment_intent: 'pi_resume',
+      connected_account: seller,
       external_ref: 'order_resume',
       amount: '1000',
     });
@@ -810,8 +810,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await settledCardIntent('pi_history', '50000');
     const seller = await payableAccount('store_history');
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_history',
-      connected_account_id: seller,
+      payment_intent: 'pi_history',
+      connected_account: seller,
       external_ref: 'order_history',
       amount: '1000',
     });
@@ -821,8 +821,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     createTransferThrows = new Error('the acquirer could not be reached');
 
     const replay = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_history',
-      connected_account_id: seller,
+      payment_intent: 'pi_history',
+      connected_account: seller,
       external_ref: 'order_history',
       amount: '1000',
     });
@@ -845,16 +845,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const seller = await payableAccount('store_conflict');
 
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_conflict',
-      connected_account_id: seller,
+      payment_intent: 'pi_conflict',
+      connected_account: seller,
       external_ref: 'conflict_ref',
       amount: '1000',
     });
     expect(first.status).toBe(201);
 
     const reused = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_conflict',
-      connected_account_id: seller,
+      payment_intent: 'pi_conflict',
+      connected_account: seller,
       external_ref: 'conflict_ref',
       amount: '2000',
     });
@@ -862,8 +862,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     // The same reference with the SAME content is still an ordinary replay.
     const replay = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_conflict',
-      connected_account_id: seller,
+      payment_intent: 'pi_conflict',
+      connected_account: seller,
       external_ref: 'conflict_ref',
       amount: '1000',
     });
@@ -886,8 +886,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     getStatusStatus = 'processing';
 
     const { status } = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_no_charge',
-      connected_account_id: accountId,
+      payment_intent: 'pi_no_charge',
+      connected_account: accountId,
       external_ref: 'order_no_charge',
       amount: '1000',
     });
@@ -904,15 +904,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('a repeated settlement of one order converges and does not pay twice', async () => {
     const accountId = await payableAccount('store_t_c');
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_dup',
       amount: '5000',
     });
     providerCalls.length = 0;
     const second = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_dup',
       amount: '5000',
     });
@@ -931,8 +931,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('answers a retry even after the seller stops being payable', async () => {
     const accountId = await payableAccount('store_t_restricted');
     const first = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_restricted',
       amount: '5000',
     });
@@ -947,8 +947,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await call('POST', `/v1/connected_accounts/${accountId}/refresh`);
 
     const retry = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_restricted',
       amount: '5000',
     });
@@ -964,8 +964,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       business_type: 'individual',
     });
     const { status, json } = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: String(created.json.id),
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: String(created.json.id),
       external_ref: 'order_unready',
       amount: '5000',
     });
@@ -977,7 +977,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test("names the seller by the merchant's own ref as well as by ca_…", async () => {
     await payableAccount('store_t_byref');
     const { status, json } = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
+      payment_intent: 'pi_settled_for_transfers',
       connected_account_ref: 'store_t_byref',
       external_ref: 'order_byref',
       amount: '1000',
@@ -988,14 +988,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
   test('refuses a body naming the seller twice or not at all', async () => {
     const both = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: 'ca_x',
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: 'ca_x',
       connected_account_ref: 'store_x',
       external_ref: 'order_both',
       amount: '1000',
     });
     const neither = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
+      payment_intent: 'pi_settled_for_transfers',
       external_ref: 'order_neither',
       amount: '1000',
     });
@@ -1011,8 +1011,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const accountId = await payableAccount('store_t_amount');
     for (const amount of ['10.50', '-1', '01', '1e3', '']) {
       const { status } = await call('POST', '/v1/transfers', {
-        payment_intent_id: 'pi_settled_for_transfers',
-        connected_account_id: accountId,
+        payment_intent: 'pi_settled_for_transfers',
+        connected_account: accountId,
         external_ref: `order_amount_${amount || 'empty'}`,
         amount,
       });
@@ -1023,8 +1023,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('reverses a settlement and reports the cumulative total', async () => {
     const accountId = await payableAccount('store_t_rev');
     const created = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_rev',
       amount: '5000',
     });
@@ -1068,8 +1068,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     await settledCardIntent('pi_two_reversals', '100000');
     const accountId = await payableAccount('store_two_rev');
     const created = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_two_reversals',
-      connected_account_id: accountId,
+      payment_intent: 'pi_two_reversals',
+      connected_account: accountId,
       external_ref: 'order_two_rev',
       amount: '2000',
     });
@@ -1136,8 +1136,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('refuses a reversal that carries no operation identity', async () => {
     const accountId = await payableAccount('store_no_key');
     const created = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_no_key',
       amount: '1000',
     });
@@ -1155,8 +1155,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('refuses a reversal larger than the transfer', async () => {
     const accountId = await payableAccount('store_t_over');
     const created = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_over',
       amount: '5000',
     });
@@ -1170,8 +1170,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('does not settle, read or reverse across merchants', async () => {
     const accountId = await payableAccount('store_t_cross');
     const created = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_cross',
       amount: '1000',
     });
@@ -1180,7 +1180,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     // The other merchant cannot see the payment at all, so it is a 404 rather
     // than a 403: distinguishing them would tell them the `pi_…` is real.
     const settle = await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
+      payment_intent: 'pi_settled_for_transfers',
       connected_account_ref: 'store_t_cross',
       external_ref: 'order_cross_2',
       amount: '1000',
@@ -1199,8 +1199,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
   test('lists what one payment settled', async () => {
     const accountId = await payableAccount('store_t_list');
     await call('POST', '/v1/transfers', {
-      payment_intent_id: 'pi_settled_for_transfers',
-      connected_account_id: accountId,
+      payment_intent: 'pi_settled_for_transfers',
+      connected_account: accountId,
       external_ref: 'order_list_1',
       amount: '1000',
     });

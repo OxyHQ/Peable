@@ -9,3 +9,4 @@ export {
   type ContributionScope,
 } from './resources/contributions';
 export type { RestClient, RestClientRequestOptions } from './core/client';
+export { encodeQuery, type ApiListPromise, type QueryValue } from './core/list';

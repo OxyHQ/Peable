@@ -230,8 +230,8 @@ describe('POST /v1/payment_links', () => {
   });
 });
 
-describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
-  test('list -> retrieve -> patch round trip', async () => {
+describe('GET/POST /v1/payment_links (merchant CRUD)', () => {
+  test('list -> retrieve -> update round trip', async () => {
     const createRes = await fetch(`${baseUrl}/v1/payment_links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -251,7 +251,7 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
     expect(fetched.id).toBe(created.id);
 
     const patchRes = await fetch(`${baseUrl}/v1/payment_links/${created.id}`, {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: false, metadata: { note: 'paused' } }),
     });
@@ -259,11 +259,19 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
     const patched = await readJson<PaymentLinkResponse>(patchRes);
     expect(patched.active).toBe(false);
     expect(patched.metadata).toEqual({ note: 'paused' });
-    // amount/network are never accepted by PATCH — immutable once shared.
+    // amount/network are never accepted by an update — immutable once shared.
     expect(patched.amount).toBe(created.amount);
+
+    // There is no PATCH spelling of the same operation: one verb per operation.
+    const legacy = await fetch(`${baseUrl}/v1/payment_links/${created.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ active: true }),
+    });
+    expect(legacy.status).toBe(404);
   });
 
-  test('PATCH refuses amount/network (a whitelist, never a passthrough) and changes nothing', async () => {
+  test('an update refuses amount/network (a whitelist, never a passthrough) and changes nothing', async () => {
     const createRes = await fetch(`${baseUrl}/v1/payment_links`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -272,7 +280,7 @@ describe('GET/PATCH /v1/payment_links (merchant CRUD)', () => {
     const created = await readJson<PaymentLinkResponse>(createRes);
 
     const patchRes = await fetch(`${baseUrl}/v1/payment_links/${created.id}`, {
-      method: 'PATCH',
+      method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ amount: '999999999', network: 'mainnet' }),
     });

@@ -308,7 +308,7 @@ describe('Peable Tax', () => {
       from: String(Math.floor(Date.now() / 1000) - 3600),
       to: String(Math.floor(Date.now() / 1000) + 3600),
     };
-    const list = await tax.listTransactions(merchant, window);
+    const list = await tax.listTransactions(merchant, { limit: 100 });
     expect(list.data).toHaveLength(1);
     const report = await tax.report(merchant, window);
     expect(report.rows).toEqual([

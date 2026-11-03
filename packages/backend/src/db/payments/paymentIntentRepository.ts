@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import {
   EXPIRABLE_STATUSES as SHARED_EXPIRABLE_STATUSES,
@@ -10,6 +10,8 @@ import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 // Type-only: this repository must not pull the Stripe SDK into a query path.
 import type { ProviderId } from '../../services/providers/provider';
 import { connectedAccounts, paymentIntents } from '../schema';
+import { keyset, type KeysetPage } from '../keyset';
+import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import type { DatabaseOrTransaction } from '../postgres';
 
 /**
@@ -349,17 +351,17 @@ export async function findIntentByIdForMerchant(
 export interface ListIntentsParams {
   readonly merchantId: string;
   readonly status?: PaymentIntentStatus | undefined;
-  readonly limit: number;
-  /** The internal id of the `starting_after` cursor row, already resolved and ownership-checked. */
-  readonly after?: string | undefined;
   /** Only payments on behalf of this seller — its INTERNAL id, already resolved and ownership-checked. */
   readonly connectedAccountId?: string | undefined;
+  /** Only the payments minted from this link — its INTERNAL id, already resolved and ownership-checked. */
+  readonly paymentLinkId?: string | undefined;
+  readonly page: KeysetPage;
 }
 
 /**
  * One page, newest first, plus whether another exists.
  *
- * Ordered by the PRIMARY KEY descending.
+ * Ordered by the PRIMARY KEY descending, through `db/keyset.ts`.
  * Two separate properties, and only one of them is total:
  *
  *  - **Pagination is exact.** The key is unique and the order is total, so a
@@ -376,33 +378,99 @@ export interface ListIntentsParams {
  * Nothing in this API promises sub-millisecond ordering, and the pagination contract is
  * unaffected — but do not restate this as "primary-key order is creation order",
  * because at the resolution that matters it is not.
- *
- * Fetches `limit + 1` and reports `hasMore` from the overflow rather than
- * counting, so a page costs one indexed scan and no `count(*)`.
  */
 export async function listIntentsForMerchant(
   db: DatabaseOrTransaction,
   params: ListIntentsParams,
 ): Promise<{ data: PaymentIntentRow[]; hasMore: boolean }> {
-  const conditions = [eq(paymentIntents.merchantId, params.merchantId)];
-  if (params.status !== undefined) conditions.push(eq(paymentIntents.status, params.status));
-  if (params.connectedAccountId !== undefined) {
-    conditions.push(eq(paymentIntents.connectedAccountId, params.connectedAccountId));
-  }
-  if (params.after !== undefined) conditions.push(lt(paymentIntents.id, params.after));
-
+  const walk = keyset(paymentIntents.id, paymentIntents.createdAt, params.page);
   const rows = await db
     .select(INTENT_COLUMNS)
     .from(paymentIntents)
-    .where(and(...conditions))
-    .orderBy(desc(paymentIntents.id))
-    .limit(params.limit + 1);
+    .where(
+      and(
+        eq(paymentIntents.merchantId, params.merchantId),
+        params.status === undefined ? undefined : eq(paymentIntents.status, params.status),
+        params.connectedAccountId === undefined
+          ? undefined
+          : eq(paymentIntents.connectedAccountId, params.connectedAccountId),
+        params.paymentLinkId === undefined
+          ? undefined
+          : eq(paymentIntents.paymentLinkId, params.paymentLinkId),
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map(toIntentRow));
+}
 
-  const hasMore = rows.length > params.limit;
-  return {
-    data: (hasMore ? rows.slice(0, params.limit) : rows).map(toIntentRow),
-    hasMore,
-  };
+/**
+ * Several intents by PUBLIC id, scoped to the merchant in the predicate — the
+ * `expand[]` loader. One query for a whole page rather than one per row.
+ */
+export async function findIntentsForMerchantByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<PaymentIntentRow[]> {
+  if (publicIds.length === 0) return [];
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(
+      and(
+        eq(paymentIntents.merchantId, merchantId),
+        inArray(paymentIntents.publicId, [...publicIds]),
+      ),
+    );
+  return rows.map(toIntentRow);
+}
+
+/**
+ * Several intents by PRIMARY KEY — the references a page of sessions holds.
+ * Unscoped for `findIntentById`'s reason: every caller has already proved its
+ * right to the rows that point here.
+ */
+export async function findIntentsByIds(
+  db: DatabaseOrTransaction,
+  ids: readonly string[],
+): Promise<PaymentIntentRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select(INTENT_COLUMNS)
+    .from(paymentIntents)
+    .where(inArray(paymentIntents.id, [...ids]));
+  return rows.map(toIntentRow);
+}
+
+/**
+ * Replace the merchant's own metadata on one intent — the only field
+ * `POST /v1/payment_intents/:id` changes.
+ *
+ * Merged in ONE statement (`db/metadata.ts`), scoped to the merchant in the
+ * predicate. `limitExceeded` is distinct from `missing` because the two are
+ * different answers: 400 naming `metadata`, and 404.
+ */
+export async function updateIntentMetadata(
+  db: DatabaseOrTransaction,
+  publicId: string,
+  merchantId: string,
+  patch: MetadataPatch,
+): Promise<PaymentIntentRow | 'missing' | 'limit_exceeded'> {
+  const scope = and(
+    eq(paymentIntents.publicId, publicId),
+    eq(paymentIntents.merchantId, merchantId),
+  );
+  const merged = mergedMetadata(paymentIntents.metadata, patch);
+  const [row] = await db
+    .update(paymentIntents)
+    .set({ metadata: merged })
+    .where(and(scope, metadataWithinLimit(merged)))
+    .returning(INTENT_COLUMNS);
+  if (row) return toIntentRow(row);
+  const [exists] = await db.select({ id: paymentIntents.id }).from(paymentIntents).where(scope);
+  return exists ? 'limit_exceeded' : 'missing';
 }
 
 /**

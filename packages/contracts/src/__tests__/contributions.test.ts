@@ -45,13 +45,46 @@ test('the wire is snake_case with Unix-second instants, and nothing else', () =>
 });
 test('lists use the one envelope and page by starting_after', () => {
   expect(
-    contributionListSchema.safeParse({ object: 'list', data: [], has_more: false }).success,
+    contributionListSchema.safeParse({ object: 'list', data: [], has_more: false, url: '/v1/x' })
+      .success,
   ).toBe(true);
+  // `url` is part of the envelope, not optional.
+  expect(
+    contributionListSchema.safeParse({ object: 'list', data: [], has_more: false }).success,
+  ).toBe(false);
   expect(contributionListSchema.safeParse({ items: [], nextCursor: null }).success).toBe(false);
   expect(
     contributionPageQuerySchema.parse({ environment: 'production', starting_after: 'link_1' }),
   ).toEqual({ environment: 'production', starting_after: 'link_1', limit: 10 });
   expect(
     contributionPageQuerySchema.safeParse({ environment: 'production', cursor: 'x' }).success,
+  ).toBe(false);
+});
+test('the list parameters: ending_before, created ranges, never both cursors', () => {
+  expect(
+    contributionPageQuerySchema.parse({
+      environment: 'production',
+      ending_before: 'link_1',
+      created: { gte: '100', lt: '200' },
+    }),
+  ).toEqual({
+    environment: 'production',
+    ending_before: 'link_1',
+    created: { gte: 100, lt: 200 },
+    limit: 10,
+  });
+  expect(
+    contributionPageQuerySchema.parse({ environment: 'production', created: '100' }).created,
+  ).toEqual({ gte: 100, lte: 100 });
+  const both = contributionPageQuerySchema.safeParse({
+    environment: 'production',
+    starting_after: 'link_1',
+    ending_before: 'link_2',
+  });
+  expect(both.success).toBe(false);
+  expect(both.error?.issues[0]?.path).toEqual(['ending_before']);
+  expect(
+    contributionPageQuerySchema.safeParse({ environment: 'production', created: { after: 1 } })
+      .success,
   ).toBe(false);
 });

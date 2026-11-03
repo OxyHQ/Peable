@@ -1,10 +1,12 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
 import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { checkoutSessions } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
+import { keyset, type KeysetPage } from '../keyset';
+import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 
 /**
  * Reads and writes for `checkout_sessions` — a hosted-checkout session wrapping
@@ -200,17 +202,58 @@ export async function findSessionForMerchant(
   return row ? toSessionRow(row) : null;
 }
 
-/** Sessions a merchant owns, newest first. Same ordering contract as the intent list. */
+export interface ListSessionsParams {
+  readonly merchantId: string;
+  /** Only the session wrapping this payment — its INTERNAL id, already resolved inside the merchant. */
+  readonly paymentIntentId?: string | undefined;
+  readonly page: KeysetPage;
+}
+
+/** Sessions a merchant owns, newest first. Same ordering contract as the intent list (`db/keyset.ts`). */
 export async function listSessionsForMerchant(
   db: DatabaseOrTransaction,
-  merchantId: string,
-  limit: number,
-): Promise<CheckoutSessionRow[]> {
+  params: ListSessionsParams,
+): Promise<{ data: CheckoutSessionRow[]; hasMore: boolean }> {
+  const walk = keyset(checkoutSessions.id, checkoutSessions.createdAt, params.page);
   const rows = await db
     .select(SESSION_COLUMNS)
     .from(checkoutSessions)
-    .where(eq(checkoutSessions.merchantId, merchantId))
-    .orderBy(desc(checkoutSessions.id))
-    .limit(limit);
-  return rows.map(toSessionRow);
+    .where(
+      and(
+        eq(checkoutSessions.merchantId, params.merchantId),
+        params.paymentIntentId === undefined
+          ? undefined
+          : eq(checkoutSessions.paymentIntentId, params.paymentIntentId),
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map(toSessionRow));
+}
+
+/**
+ * Replace the merchant's metadata on one session — `POST /v1/checkout_sessions/:id`.
+ * Merged in the statement (`db/metadata.ts`); see `updateIntentMetadata` for
+ * why `limit_exceeded` and `missing` are different answers.
+ */
+export async function updateSessionMetadata(
+  db: DatabaseOrTransaction,
+  publicId: string,
+  merchantId: string,
+  patch: MetadataPatch,
+): Promise<CheckoutSessionRow | 'missing' | 'limit_exceeded'> {
+  const scope = and(
+    eq(checkoutSessions.publicId, publicId),
+    eq(checkoutSessions.merchantId, merchantId),
+  );
+  const merged = mergedMetadata(checkoutSessions.metadata, patch);
+  const [row] = await db
+    .update(checkoutSessions)
+    .set({ metadata: merged })
+    .where(and(scope, metadataWithinLimit(merged)))
+    .returning(SESSION_COLUMNS);
+  if (row) return toSessionRow(row);
+  const [exists] = await db.select({ id: checkoutSessions.id }).from(checkoutSessions).where(scope);
+  return exists ? 'limit_exceeded' : 'missing';
 }

@@ -456,7 +456,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('Peable Tax on the card rail / real Pos
       from: Math.floor(Date.now() / 1000) - 3600,
       to: Math.floor(Date.now() / 1000) + 3600,
     };
-    const listed = await tax.listTransactions(merchant, window);
+    const listed = await tax.listTransactions(merchant, { limit: 100 });
     const reversal = listed.data.find((row) => row.type === 'reversal');
     expect(reversal).toMatchObject({
       reference: 'in_two:reversal:1',

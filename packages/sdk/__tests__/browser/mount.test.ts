@@ -42,6 +42,7 @@ const INTENT: PaymentIntent = {
   network: NET,
   address: ADDR,
   merchant_id: 'merch_1',
+  connected_account: null,
   txid: null,
   confirmations: 0,
   client_secret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',

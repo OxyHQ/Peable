@@ -1,10 +1,42 @@
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import { createOxyAuthMiddleware } from '@oxy.so/core/server';
+import { createOxyAuthMiddleware, OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
+import { z } from 'zod';
 import type { TaxReport } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { fromUnix } from '../lib/time';
+import { answerList, completeList, listQuerySchema, parseQuery } from '../lib/list';
+
+/** The shared list parameters; `created[...]` filters `committed_at`. */
+const listTaxTransactionsQuery = listQuerySchema({});
+/**
+ * The dashboard's copy also carries `environment` (the Test/Live toggle),
+ * validated by `resolveDashboardAccess` before the list runs.
+ */
+const dashboardListTaxTransactionsQuery = listQuerySchema({
+  environment: z.enum(OXY_SERVICE_ENVIRONMENTS),
+});
+
+/** Both tax-transaction lists — the merchant API's and the owner dashboard's — answer here. */
+async function answerTaxTransactionList(
+  req: Request,
+  res: Response,
+  tax: TaxService,
+  merchant: MerchantRow,
+  schema: typeof listTaxTransactionsQuery | typeof dashboardListTaxTransactionsQuery,
+): Promise<void> {
+  const query = parseQuery(req, res, schema);
+  if (!query) return;
+  await answerList(req, res, {
+    query,
+    type: 'tax.transaction',
+    merchantId: merchant.id,
+    cursor: (publicId) => tax.findTransactionKey(merchant, publicId),
+    fetch: (page) => tax.listTransactions(merchant, page),
+    serialize: (transaction) => transaction,
+  });
+}
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
 import { resolveDashboardAccess, type DashboardAccess } from './dashboard';
@@ -154,7 +186,7 @@ export function createTaxRouter(deps: {
   router.get(
     '/v1/tax/codes',
     ...read,
-    route(async () => ({ object: 'list', data: TAX_CODES })),
+    route(async (_tax, _merchant, req) => completeList(req, TAX_CODES)),
   );
   router.get(
     '/v1/tax/settings',
@@ -164,18 +196,12 @@ export function createTaxRouter(deps: {
   router.get(
     '/v1/tax/registrations',
     ...read,
-    route(async (tax, merchant) => ({
-      object: 'list',
-      data: await tax.listRegistrations(merchant),
-    })),
+    route(async (tax, merchant, req) => completeList(req, await tax.listRegistrations(merchant))),
   );
   router.get(
     '/v1/tax/products',
     ...read,
-    route(async (tax, merchant) => ({
-      object: 'list',
-      data: await tax.listProductCodes(merchant),
-    })),
+    route(async (tax, merchant, req) => completeList(req, await tax.listProductCodes(merchant))),
   );
   router.put(
     '/v1/tax/products/:productRef',
@@ -209,7 +235,11 @@ export function createTaxRouter(deps: {
   router.get(
     '/v1/tax/transactions',
     ...read,
-    route((tax, merchant, req) => tax.listTransactions(merchant, req.query)),
+    route(
+      (tax, merchant, req, res) =>
+        answerTaxTransactionList(req, res, tax, merchant, listTaxTransactionsQuery),
+      -1,
+    ),
   );
   // A refund the rail cannot report itself (FairCoin: the seller refunds from
   // their own wallet). Card refunds are observed from the provider.
@@ -288,7 +318,7 @@ export function createDashboardTaxRouter(deps: {
   router.get(
     `${base}/codes`,
     requireOxyUser,
-    route('billing:read', async () => ({ object: 'list', data: TAX_CODES })),
+    route('billing:read', async (_tax, _merchant, req) => completeList(req, TAX_CODES)),
   );
   router.get(
     `${base}/settings`,
@@ -303,10 +333,9 @@ export function createDashboardTaxRouter(deps: {
   router.get(
     `${base}/registrations`,
     requireOxyUser,
-    route('billing:read', async (tax, merchant) => ({
-      object: 'list',
-      data: await tax.listRegistrations(merchant),
-    })),
+    route('billing:read', async (tax, merchant, req) =>
+      completeList(req, await tax.listRegistrations(merchant)),
+    ),
   );
   router.post(
     `${base}/registrations`,
@@ -334,10 +363,9 @@ export function createDashboardTaxRouter(deps: {
   router.get(
     `${base}/products`,
     requireOxyUser,
-    route('billing:read', async (tax, merchant) => ({
-      object: 'list',
-      data: await tax.listProductCodes(merchant),
-    })),
+    route('billing:read', async (tax, merchant, req) =>
+      completeList(req, await tax.listProductCodes(merchant)),
+    ),
   );
   router.put(
     `${base}/products/:productRef`,
@@ -377,7 +405,12 @@ export function createDashboardTaxRouter(deps: {
   router.get(
     `${base}/transactions`,
     requireOxyUser,
-    route('billing:read', (tax, merchant, req) => tax.listTransactions(merchant, req.query)),
+    route(
+      'billing:read',
+      (tax, merchant, req, _access, res) =>
+        answerTaxTransactionList(req, res, tax, merchant, dashboardListTaxTransactionsQuery),
+      -1,
+    ),
   );
   router.get(
     `${base}/reports/summary`,

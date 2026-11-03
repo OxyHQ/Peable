@@ -333,7 +333,7 @@ describe('PATCH /v1/merchants/me', () => {
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           webhook_url: 'https://merchant.example/new-hook',
@@ -362,7 +362,7 @@ describe('PATCH /v1/merchants/me', () => {
       });
 
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ required_confirmations: 2, xpub: 'attempted-change' }),
       });
@@ -385,7 +385,7 @@ describe('PATCH /v1/merchants/me', () => {
     const { server: s, baseUrl: url } = await listen(app);
     try {
       const res = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ required_confirmations: 2 }),
       });
@@ -462,7 +462,7 @@ describe('merchant branding', () => {
       });
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ display_name: 'New', description: null }),
       });
@@ -488,7 +488,7 @@ describe('merchant branding', () => {
       // Patching an unrelated field must not blank the name — `null` clears,
       // absent means "leave alone", the same contract webhook_url already has.
       const patched = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ required_confirmations: 3 }),
       });
@@ -722,7 +722,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       await gatewayDb().delete(oxyFileReferenceSyncs);
 
       const refused = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ avatar_file_id: 'file_stranger' }),
       });
@@ -730,7 +730,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       expect(await queuedSyncs()).toEqual([]);
 
       const patched = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ avatar_file_id: 'file_b' }),
       });
@@ -745,7 +745,7 @@ describe('merchant avatar ownership (ADR 0043)', () => {
       const lookupsBefore = files.added.length;
       await gatewayDb().delete(oxyFileReferenceSyncs);
       const cleared = await fetch(`${url}/v1/merchants/me`, {
-        method: 'PATCH',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ avatar_file_id: null }),
       });

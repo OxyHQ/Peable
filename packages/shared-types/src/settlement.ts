@@ -23,6 +23,7 @@
 // absent from these interfaces.
 import type { CurrencyCode } from './money';
 import type { NetworkType } from './network';
+import type { PaymentIntent } from './paymentIntent';
 
 /** How a provider reports one capability on a seller's account. */
 export type CapabilityStatus = 'active' | 'pending' | 'inactive';
@@ -129,10 +130,10 @@ export interface Transfer {
   object: 'transfer';
   /** The merchant's OWN id for what this settles. Their idempotency. */
   external_ref: string;
-  /** The `ca_…` of the seller — never their account id at the provider. */
-  connected_account_id: string;
-  /** The `pi_…` this settlement was funded by — never an internal primary key. */
-  payment_intent_id: string;
+  /** The seller's `ca_…` — never their account id at the provider — or the object, expanded. */
+  connected_account: string | ConnectedAccount;
+  /** The `pi_…` this settlement was funded by, or the {@link PaymentIntent}, expanded. */
+  payment_intent: string | PaymentIntent;
   amount: string;
   currency: string;
   /**
@@ -197,8 +198,8 @@ export interface TransferWithReversal extends Transfer {
  */
 export interface Settlement {
   object: 'settlement';
-  /** The `pi_…` this describes. */
-  payment_intent_id: string;
+  /** The `pi_…` this describes, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
+  payment_intent: string | PaymentIntent;
   /**
    *  - `available` — settled; these figures are final.
    *  - `pending`   — a settlement record exists and is not final yet.
@@ -235,7 +236,8 @@ export interface Refund {
   /** `null` on an IMPORTED refund; see {@link RefundOrigin}. */
   external_ref: string | null;
   origin: RefundOrigin;
-  payment_intent_id: string;
+  /** The refunded payment's `pi_…`, or the {@link PaymentIntent} with `expand[]=payment_intent`. */
+  payment_intent: string | PaymentIntent;
   amount: string;
   currency: CurrencyCode | string;
   status: RefundStatus;

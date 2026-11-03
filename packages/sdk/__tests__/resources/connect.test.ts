@@ -66,7 +66,7 @@ const ON_BEHALF: PaymentIntent = {
   network: 'testnet',
   address: 'tFairSellerAddress',
   merchant_id: 'merch_platform',
-  connected_account_id: 'ca_seller',
+  connected_account: 'ca_seller',
   txid: null,
   confirmations: 0,
   client_secret: 'pi_onbehalf_secret_x',
@@ -183,7 +183,7 @@ describe('payments on behalf of a seller', () => {
       { idempotencyKey: 'order_o_1' },
     );
 
-    expect(intent.connected_account_id).toBe('ca_seller');
+    expect(intent.connected_account).toBe('ca_seller');
     const request = callOf(requests);
     expect(request.headers.get('Idempotency-Key')).toBe('order_o_1');
     expect(bodyOf(request)).toMatchObject({ rail: 'faircoin', connected_account: 'ca_seller' });
@@ -201,7 +201,7 @@ describe('payments on behalf of a seller', () => {
 
   test('checkout.sessions.create sends connected_account', async () => {
     const { fetch: fetchImpl, requests } = gateway(
-      { id: 'cs_1', connected_account_id: 'ca_seller' },
+      { id: 'cs_1', connected_account: 'ca_seller' },
       201,
     );
     await new CheckoutSessionsResource(buildTestClient(fetchImpl)).create({
@@ -255,7 +255,7 @@ describe('the platform webhook for an on-behalf payment', () => {
 
     expect(parsed.account).toBe('ca_seller');
     if (parsed.type === 'payment_intent.confirming') {
-      expect(parsed.data.object.connected_account_id).toBe('ca_seller');
+      expect(parsed.data.object.connected_account).toBe('ca_seller');
       // A broadcast/confirming payment NEVER expires: never cancel the order for it.
       expect(parsed.data.object.can_expire).toBe(false);
       expect(canExpire(parsed.data.object.status)).toBe(false);

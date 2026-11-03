@@ -1,5 +1,5 @@
-import { and, desc, eq, lt, sql } from 'drizzle-orm';
-import { paymentLinks, paymentIntents, merchants, refunds } from '../schema';
+import { and, desc, eq } from 'drizzle-orm';
+import { paymentLinks, merchants, refunds } from '../schema';
 import type { Database, DatabaseOrTransaction } from '../postgres';
 import {
   findLinkByPublicId,
@@ -41,53 +41,6 @@ export async function createContributionLink(db: Database, params: InsertPayment
       return 'expired' as const;
     return insertPaymentLink(tx, params);
   });
-}
-export async function listContributions(
-  db: DatabaseOrTransaction,
-  merchantId: string,
-  organizationId: string,
-  limit: number,
-  after?: string,
-) {
-  return db
-    .select({ publicId: paymentLinks.publicId })
-    .from(paymentLinks)
-    .where(
-      and(
-        eq(paymentLinks.merchantId, merchantId),
-        sql`${paymentLinks.contribution}->>'organizationId' = ${organizationId}`,
-        after ? lt(paymentLinks.publicId, after) : undefined,
-      ),
-    )
-    .orderBy(desc(paymentLinks.publicId))
-    .limit(limit + 1);
-}
-export async function listContributionCollections(
-  db: DatabaseOrTransaction,
-  merchantId: string,
-  paymentLinkId: string,
-  limit: number,
-  after?: string,
-) {
-  return db
-    .select({
-      id: paymentIntents.id,
-      publicId: paymentIntents.publicId,
-      amount: paymentIntents.amount,
-      currency: paymentIntents.currency,
-      status: paymentIntents.status,
-      createdAt: paymentIntents.createdAt,
-    })
-    .from(paymentIntents)
-    .where(
-      and(
-        eq(paymentIntents.merchantId, merchantId),
-        eq(paymentIntents.paymentLinkId, paymentLinkId),
-        after ? lt(paymentIntents.publicId, after) : undefined,
-      ),
-    )
-    .orderBy(desc(paymentIntents.publicId))
-    .limit(limit + 1);
 }
 export async function contributionRefunds(db: DatabaseOrTransaction, intentId: string) {
   return db

@@ -90,6 +90,7 @@ function cardIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
     network: null,
     address: null,
     merchant_id: 'merch_1',
+    connected_account: null,
     txid: null,
     confirmations: 0,
     client_secret: 'pi_card_1_secret',

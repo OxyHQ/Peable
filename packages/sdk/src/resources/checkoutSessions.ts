@@ -1,5 +1,20 @@
-import type { CheckoutSession, CreateCheckoutSessionParams } from '@peable.to/shared-types';
+import type {
+  CheckoutSession,
+  CreateCheckoutSessionParams,
+  ExpandParams,
+  List,
+  ListParams,
+  UpdateCheckoutSessionParams,
+} from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+
+export interface CheckoutSessionListParams extends ListParams {
+  /** Only the session wrapping this payment (`pi_…`). */
+  payment_intent?: string;
+}
+
+export type CheckoutSessionList = List<CheckoutSession>;
 
 export interface CreateCheckoutSessionOptions {
   /**
@@ -31,10 +46,32 @@ export class CheckoutSessionsResource {
     });
   }
 
-  retrieve(id: string): Promise<CheckoutSession> {
+  /** `expand: ['payment_intent']` returns the wrapped payment instead of its `pi_…`. */
+  retrieve(id: string, params: ExpandParams = {}): Promise<CheckoutSession> {
     return this.client.request<CheckoutSession>(
       'GET',
       `/v1/checkout_sessions/${encodeURIComponent(id)}`,
+      { query: { expand: params.expand } },
+    );
+  }
+
+  /** Your sessions, newest first; await one page or iterate them all. */
+  list(params: CheckoutSessionListParams = {}): ApiListPromise<CheckoutSession> {
+    return listPromise(
+      (page: CheckoutSessionListParams) =>
+        this.client.request<CheckoutSessionList>('GET', '/v1/checkout_sessions', {
+          query: listQuery(page, { payment_intent: page.payment_intent }),
+        }),
+      params,
+    );
+  }
+
+  /** Update the session's `metadata` — a patch (`''` removes a key). */
+  update(id: string, params: UpdateCheckoutSessionParams & ExpandParams): Promise<CheckoutSession> {
+    return this.client.request<CheckoutSession>(
+      'POST',
+      `/v1/checkout_sessions/${encodeURIComponent(id)}`,
+      { body: params },
     );
   }
 }

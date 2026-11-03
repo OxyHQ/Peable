@@ -29,6 +29,7 @@ const EVENT: WebhookEvent = {
       network: 'testnet',
       address: 'addr1',
       merchant_id: 'merch_1',
+      connected_account: null,
       txid: 'tx1',
       confirmations: 6,
       client_secret: 'pi_1_secret_x',
@@ -132,7 +133,7 @@ describe('WebhooksResource.constructEvent', () => {
 const dispute: Dispute = {
   id: 'dp_fixture',
   object: 'dispute',
-  payment_intent_id: 'pi_1',
+  payment_intent: 'pi_1',
   amount: '100',
   currency: 'EUR',
   status: 'needs_response',

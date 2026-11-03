@@ -1,5 +1,12 @@
-import type { AccountLink, ConnectedAccount, NetworkType } from '@peable.to/shared-types';
+import type {
+  AccountLink,
+  ConnectedAccount,
+  List,
+  ListParams,
+  NetworkType,
+} from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Sellers a marketplace onboards through Peable.
@@ -43,17 +50,10 @@ export type CreateConnectedAccountParams = {
   | { country?: undefined; business_type?: undefined }
 );
 
-export interface ConnectedAccountListParams {
-  limit?: number;
-  /** A `ca_…` from a previous page — the gateway resolves it, scoped to you. */
-  starting_after?: string;
-}
+/** Cursors are `ca_…` ids, resolved by the gateway inside your scope. */
+export type ConnectedAccountListParams = ListParams;
 
-export interface ConnectedAccountList {
-  object: 'list';
-  data: ConnectedAccount[];
-  has_more: boolean;
-}
+export type ConnectedAccountList = List<ConnectedAccount>;
 
 export interface AccountLinkParams {
   /** Where an EXPIRED link sends the seller, to ask you for a fresh one. */
@@ -87,10 +87,15 @@ export class ConnectedAccountsResource {
     });
   }
 
-  list(params: ConnectedAccountListParams = {}): Promise<ConnectedAccountList> {
-    return this.client.request<ConnectedAccountList>('GET', '/v1/connected_accounts', {
-      query: { limit: params.limit, starting_after: params.starting_after },
-    });
+  /** Your sellers, newest first; await one page or iterate them all. */
+  list(params: ConnectedAccountListParams = {}): ApiListPromise<ConnectedAccount> {
+    return listPromise(
+      (page: ConnectedAccountListParams) =>
+        this.client.request<ConnectedAccountList>('GET', '/v1/connected_accounts', {
+          query: listQuery(page),
+        }),
+      params,
+    );
   }
 
   retrieve(accountId: string): Promise<ConnectedAccount> {

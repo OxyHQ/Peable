@@ -300,15 +300,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
       const first = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
-        limit: 2,
+        page: { limit: 2 },
       });
       expect(first.data).toHaveLength(2);
       expect(first.hasMore).toBe(true);
 
       const second = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
-        limit: 2,
-        after: must(first.data.at(-1)).id,
+        page: { limit: 2, after: must(first.data.at(-1)).id },
       });
       expect(second.data).toHaveLength(1);
       expect(second.hasMore).toBe(false);
@@ -317,8 +316,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       // which is now simply an id that matches nothing.
       const legacyShaped = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
-        limit: 2,
-        after: '0'.repeat(24),
+        page: { limit: 2, after: '0'.repeat(24) },
       });
       expect(legacyShaped.data).toEqual([]);
     });
@@ -355,7 +353,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
 
       const page = await listDeliveriesForMerchant(must(suite).db, {
         merchantId: merchant.id,
-        limit: 10,
+        page: { limit: 10 },
       });
 
       // The join is 1:1 by construction — `payment_intent_id` is NOT NULL and
