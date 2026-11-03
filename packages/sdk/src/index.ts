@@ -90,7 +90,13 @@ import {
   WebhookEndpointsResource,
 } from './resources/webhookEndpoints';
 import { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
-import { DisputesResource, MerchantsResource } from './resources/merchants';
+import { MerchantsResource } from './resources/merchants';
+import { DisputesResource } from './resources/disputes';
+import { FilesResource } from './resources/files';
+import {
+  PaymentMethodConfigurationsResource,
+  PaymentMethodDomainsResource,
+} from './resources/paymentMethodConfigurations';
 import { RefundsResource } from './resources/refunds';
 import { RequestLogsResource } from './resources/requestLogs';
 import { TestHelpersResource } from './resources/testHelpers';
@@ -167,7 +173,7 @@ export class Peable {
   readonly setupIntents: SetupIntentsResource;
   /** Money going out to a seller, and coming back from one. */
   readonly transfers: TransfersResource;
-  /** Read-only: the network initiates these. */
+  /** The network opens these: stage evidence, submit it once, or accept (`close`). */
   readonly disputes: DisputesResource;
   /** The catalog: what you sell (`prod_…`) — archive with `active: false`. */
   readonly products: ProductsResource;
@@ -177,6 +183,12 @@ export class Peable {
   readonly coupons: CouponsResource;
   /** Customer-facing codes (`promo_…`) that redeem a coupon. */
   readonly promotionCodes: PromotionCodesResource;
+  /** Files (`file_…`) for one purpose: dispute evidence, a business logo, verification documents. */
+  readonly files: FilesResource;
+  /** Which card-rail methods payers are offered (`pmc_…`). */
+  readonly paymentMethodConfigurations: PaymentMethodConfigurationsResource;
+  /** Web domains wallets (Apple Pay, Google Pay) may run on (`pmd_…`). */
+  readonly paymentMethodDomains: PaymentMethodDomainsResource;
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
@@ -225,6 +237,9 @@ export class Peable {
     this.prices = new PricesResource(client);
     this.coupons = new CouponsResource(client);
     this.promotionCodes = new PromotionCodesResource(client);
+    this.files = new FilesResource(client);
+    this.paymentMethodConfigurations = new PaymentMethodConfigurationsResource(client);
+    this.paymentMethodDomains = new PaymentMethodDomainsResource(client);
   }
 }
 
@@ -316,12 +331,70 @@ export {
   EXPIRABLE_STATUSES,
   TERMINAL_STATUSES,
 } from '@peable.to/shared-types';
+export type { RegisterMerchantParams, UpdateMerchantParams } from './resources/merchants';
+export { DisputesResource } from './resources/disputes';
+export type { DisputeList, DisputeListParams } from './resources/disputes';
+export { FilesResource } from './resources/files';
 export type {
+  CreateFileParams,
+  CreateFileUploadParams,
+  FileList,
+  FileListParams,
+} from './resources/files';
+export {
+  PaymentMethodConfigurationsResource,
+  PaymentMethodDomainsResource,
+} from './resources/paymentMethodConfigurations';
+export type {
+  PaymentMethodConfigurationList,
+  PaymentMethodDomainList,
+  PaymentMethodDomainListParams,
+} from './resources/paymentMethodConfigurations';
+export type {
+  CardRailPaymentMethodType,
+  CreateFileFromOxyParams,
+  CreatePaymentMethodConfigurationParams,
+  CreatePaymentMethodDomainParams,
+  Dispute,
+  DisputeEvidence,
+  DisputeEvidenceDetails,
+  DisputeEvidenceField,
   DisputeEvidenceParams,
-  DisputeList,
-  RegisterMerchantParams,
-  UpdateMerchantParams,
-} from './resources/merchants';
+  DisputeFileEvidenceField,
+  DisputeReason,
+  DisputeStatus,
+  DisputeTextEvidenceField,
+  FileObject,
+  FilePurpose,
+  FileStatus,
+  FileType,
+  FiatCurrencyCode,
+  PaymentMethodConfiguration,
+  PaymentMethodConfigurationEntry,
+  PaymentMethodConfigurationEntryParams,
+  PaymentMethodConfigurationType,
+  PaymentMethodDisplayPreference,
+  PaymentMethodDomain,
+  PaymentMethodDomainWalletStatus,
+  PaymentMethodType,
+  PaymentMethodUnavailableReason,
+  UpdateDisputeParams,
+  UpdatePaymentMethodConfigurationParams,
+  UpdatePaymentMethodDomainParams,
+} from '@peable.to/shared-types';
+export {
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
+  CURRENCY_CODES,
+  CURRENCY_DECIMALS,
+  DISPUTE_FILE_EVIDENCE_FIELDS,
+  DISPUTE_REASONS,
+  DISPUTE_TEXT_EVIDENCE_FIELDS,
+  FIAT_CURRENCY_CODES,
+  FILE_PURPOSE_POLICIES,
+  FILE_PURPOSES,
+  PAYMENT_METHOD_CONFIGURATION_TYPES,
+  PAYMENT_METHOD_CURRENCIES,
+} from '@peable.to/shared-types';
 export type { CreateRefundParams, RefundList } from './resources/refunds';
 export { ChargesResource } from './resources/charges';
 export type { ChargeList, ChargeListParams } from './resources/charges';

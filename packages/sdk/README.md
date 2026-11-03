@@ -148,8 +148,88 @@ const charge = await peable.charges.retrieve(intent.latest_charge as string);
 
 Events are Stripe's names: `payment_intent.created|requires_action|processing|
 amount_capturable_updated|succeeded|payment_failed|canceled`, `charge.refunded`,
-`charge.dispute.created|updated|closed`, `refund.created|updated|failed`,
-`customer.*`, `payment_method.*` and `setup_intent.*`.
+`charge.dispute.created|updated|closed|funds_withdrawn|funds_reinstated`,
+`refund.created|updated|failed`, `customer.*`, `payment_method.*` and
+`setup_intent.*`.
+
+### Files (0.16.0)
+
+A file (`file_…`) is bytes given to Orbit for ONE purpose, stored in Oxy Files.
+The purpose sets the policy, and the format is recognised from the bytes:
+
+| `purpose` | Formats | Max | Visibility |
+|---|---|---|---|
+| `dispute_evidence` | PDF, PNG, JPEG | 5 MiB | private — attach to a dispute |
+| `business_logo` | PNG, JPEG | 512 KiB | public — `merchants.update({ business_logo })` |
+| `identity_document`, `additional_verification` | PDF, PNG, JPEG | 10 MiB | private |
+
+```ts
+const receipt = await peable.files.create({
+  purpose: 'dispute_evidence',
+  file: await readFile('receipt.pdf'), // Blob, Uint8Array or ArrayBuffer
+  filename: 'receipt.pdf',
+});
+// An Oxy file you already own, without uploading it again:
+const logo = await peable.files.create({ purpose: 'business_logo', oxy_file: 'oxy_file_id' });
+await peable.merchants.update({ business_logo: logo.id }); // beside avatar_file_id
+for await (const file of peable.files.list({ purpose: 'dispute_evidence' })) console.log(file.id);
+```
+
+The upload is `multipart/form-data` and still carries an `Idempotency-Key`; a
+retry under the same key with the same bytes answers the stored file.
+`url` is set only on an available `business_logo`; evidence and documents are
+never addressable by URL.
+
+### Disputes: stage, submit once, or accept (0.16.0)
+
+```ts
+// Stage — text goes to the provider as a draft; files attach by id.
+await peable.disputes.update(dispute.id, {
+  evidence: { product_description: 'Blue enamel mug', receipt: receipt.id },
+});
+// Submit — the attached files are uploaded to the provider now, and the
+// response is sent. ONE shot: a second submission is refused.
+await peable.disputes.update(dispute.id, { submit: true });
+// Or accept the dispute (it becomes `lost`):
+await peable.disputes.close(dispute.id);
+```
+
+Peable stores none of the evidence text: the draft lives at the provider, and
+`dispute.evidence` is read live on `retrieve`, `update` and `close` only —
+lists and webhook events never carry it. What Peable keeps is the `file_…` ids
+you attached and `evidence_details` (`due_by`, `has_evidence`, `past_due`,
+`submission_count`, `submitted_at`). An empty string unsets a field. `reason`
+is Stripe's enum; `charge` is expandable.
+
+### Payment methods: configurations and wallet domains (0.16.0)
+
+`paymentMethodConfigurations` (`pmc_…`) say which card-rail methods payers are
+offered: `card`, `apple_pay`, `google_pay`, `sepa_debit`, `ideal`,
+`bancontact`, `eps` (and `bizum`, reported `unavailable_reason:
+'provider_unsupported'`). Each method carries `available`,
+`display_preference`, `unavailable_reason` and the `currencies` it is offered
+in. A card PaymentIntent uses the default configuration unless it names
+`payment_method_configuration` or explicit `payment_method_types`.
+
+```ts
+const [config] = (await peable.paymentMethodConfigurations.list()).data;
+await peable.paymentMethodConfigurations.update(config.id, {
+  ideal: { display_preference: { preference: 'on' } },
+});
+await peable.paymentIntents.create({
+  amount: '2500', rail: 'card', currency: 'EUR',
+  payment_method_types: ['card', 'sepa_debit'],
+});
+
+// Apple Pay / Google Pay on your own pages (Peable's hosted checkout needs none):
+const domain = await peable.paymentMethodDomains.create({ domain_name: 'shop.example.com' });
+if (domain.apple_pay.status === 'inactive') await peable.paymentMethodDomains.validate(domain.id);
+```
+
+Card data and bank credentials are entered in the provider's hosted fields and
+never reach Peable. Currencies: FAIR, EUR, USD, GBP, CHF, SEK, NOK, DKK, PLN,
+CZK, CAD, AUD and JPY — JPY is zero-decimal (`CURRENCY_DECIMALS.JPY === 0`),
+so `amount: '1500'` is ¥1,500.
 
 ### Catalog: products, prices, coupons, promotion codes (0.14.0)
 

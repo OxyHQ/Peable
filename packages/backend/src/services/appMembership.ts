@@ -25,7 +25,7 @@ export interface AppMembershipResult {
   /**
    * The Oxy account that owns the application, from the same response — the
    * account a member acts for. Read only by the merchant-avatar ownership check
-   * (`services/oxyFiles/merchantAvatar.ts`); absent when not allowed or when
+   * (`services/oxyFiles/fileOwnership.ts`); absent when not allowed or when
    * oxy-api did not say.
    */
   ownerAccountId?: string;

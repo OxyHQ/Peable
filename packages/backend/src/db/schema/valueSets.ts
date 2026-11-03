@@ -282,6 +282,8 @@ export const WEBHOOK_EVENT_SCOPES = {
   'charge.dispute.created': 'intent',
   'charge.dispute.updated': 'intent',
   'charge.dispute.closed': 'intent',
+  'charge.dispute.funds_withdrawn': 'intent',
+  'charge.dispute.funds_reinstated': 'intent',
   'refund.created': 'intent',
   'refund.updated': 'intent',
   'refund.failed': 'intent',
@@ -454,14 +456,23 @@ export const BASE_UNIT_STRING_PATTERN = '^(0|[1-9][0-9]*)$';
  * `entityType` of every reference this application registers with Oxy, and the
  * unit `OxyServer.assets.references.reconcile` is run per.
  *
- * One member today. A merchant's avatar is the only Oxy file Peable stores — a
- * person's profile avatar is Oxy's own, shown through `profile.avatar` and never
- * written here. A new use is a new member AND a branch in
- * `db/oxyFiles/referenceSyncRepository.ts`'s `isReferenceWanted` and in
- * `services/oxyFiles/referenceReconciliation.ts`'s inventory, which switch on
- * this tuple exhaustively so a member without them does not compile.
+ *  - `merchant_avatar` — a merchant's square identity image, an Oxy file the
+ *    merchant owns (`merchants.avatar_file_id`, entity = `merch_…`).
+ *  - `file` — an Orbit File (`files`, entity = `file_…`): bytes Peable stored
+ *    for a merchant, or an Oxy file a merchant owns imported as one. EVERY live
+ *    `files` row holds its reference — an application-owned file nothing
+ *    references is collected by Oxy — and whatever uses a File (a dispute's
+ *    evidence, the merchant's `business_logo`) uses the row, never the Oxy
+ *    file directly, so it needs no reference of its own.
+ *
+ * A person's profile avatar is Oxy's own, shown through `profile.avatar` and
+ * never written here. A new use is a new member AND a branch in
+ * `db/oxyFiles/referenceSyncRepository.ts`'s `isReferenceWanted`, in
+ * `services/oxyFiles/referenceReconciliation.ts`'s inventory and in
+ * `services/oxyFiles/fileEvents.ts`, which switch on this tuple exhaustively
+ * so a member without them does not compile.
  */
-export const OXY_FILE_ENTITY_TYPES = ['merchant_avatar'] as const;
+export const OXY_FILE_ENTITY_TYPES = ['merchant_avatar', 'file'] as const;
 export type OxyFileEntityType = (typeof OXY_FILE_ENTITY_TYPES)[number];
 
 /**
@@ -490,6 +501,45 @@ export type MerchantAvatarWithheldReason = (typeof MERCHANT_AVATAR_WITHHELD_REAS
 /** What a file event did to a merchant's avatar — `merchant_avatar_audit.action`. */
 export const MERCHANT_AVATAR_AUDIT_ACTIONS = ['cleared', 'withheld', 'released'] as const;
 export type MerchantAvatarAuditAction = (typeof MERCHANT_AVATAR_AUDIT_ACTIONS)[number];
+
+/**
+ * What a File is for, its stored format and its standing — re-exported from the
+ * wire contract, which owns the sets and the per-purpose upload policy.
+ */
+export { FILE_PURPOSES, FILE_STATUSES, FILE_TYPES } from '@peable.to/shared-types';
+
+/**
+ * Why a File is stored but not SERVED — the same two reversible reasons as an
+ * avatar's, for the same file events. A deleted, taken-down or lost file sets
+ * `files.removed_at` instead: it can never come back.
+ */
+export const FILE_WITHHELD_REASONS = MERCHANT_AVATAR_WITHHELD_REASONS;
+export type FileWithheldReason = MerchantAvatarWithheldReason;
+
+/** The Oxy events that remove a File for good — `files.removed_by`. */
+export const FILE_REMOVAL_EVENT_TYPES = ['file.deleted', 'file.blocked', 'file.lost'] as const;
+export type FileRemovalEventType = (typeof FILE_REMOVAL_EVENT_TYPES)[number];
+
+/**
+ * The dispute evidence fields that name a File — re-exported from the wire
+ * contract, so the CHECK on `dispute_evidence_files.field` cannot drift from the
+ * fields the route accepts and the adapter forwards.
+ */
+export { DISPUTE_FILE_EVIDENCE_FIELDS } from '@peable.to/shared-types';
+
+/**
+ * The methods a payment method configuration can turn on, and the card-rail
+ * types a PaymentIntent can carry — the wire contract's sets.
+ */
+export {
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
+  PAYMENT_METHOD_CONFIGURATION_TYPES,
+} from '@peable.to/shared-types';
+
+/** A wallet's standing on a payment method domain. */
+export const PAYMENT_METHOD_DOMAIN_WALLET_STATUSES = ['active', 'inactive'] as const;
+export type PaymentMethodDomainWalletStatus =
+  (typeof PAYMENT_METHOD_DOMAIN_WALLET_STATUSES)[number];
 
 /** Where one scheduled reconciliation run stands — `oxy_file_reconciliation_runs.status`. */
 export const OXY_FILE_RECONCILIATION_STATUSES = [

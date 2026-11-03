@@ -432,7 +432,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the catalog', () => {
       await refused(
         'POST',
         '/v1/prices',
-        { ...base, currency: 'GBP', unit_amount: '1' },
+        { ...base, currency: 'BRL', unit_amount: '1' },
         'currency',
       );
       await refused(

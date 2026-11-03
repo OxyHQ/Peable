@@ -13,6 +13,7 @@ export function paymentIntentFixture(overrides: Partial<PaymentIntent> = {}): Pa
     status: 'requires_action',
     rail: 'faircoin',
     payment_method_types: ['faircoin'],
+    payment_method_configuration_details: null,
     amount: '100000',
     amount_capturable: '0',
     amount_received: '0',

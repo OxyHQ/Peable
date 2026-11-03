@@ -65,6 +65,7 @@ import { kickWebhookOutbox } from '../webhookOutbox';
 import { findDisputeByProviderObject, upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
+import { toDisputeStatus } from './disputeStatus';
 import { redactProviderMessage } from './redact';
 import { providerModeOf, type ProviderId } from './provider';
 import { providerModeConfigured } from './registry';
@@ -171,67 +172,37 @@ function toRefundStatus(status: unknown): RefundStatus | null {
 }
 
 /**
- * Dispute events, and the gateway status each one means.
+ * Dispute events, and the gateway status each one means when the payload
+ * carries none.
  *
  * A CLOSED map from the provider's seven-state vocabulary to the gateway's
  * four (ADR 0001 D3: the acquirer stays invisible, so its vocabulary does not
- * reach the wire). `warning_*` collapses onto the state it is a warning ABOUT,
- * because a merchant's only useful question is whether evidence is due.
+ * reach the wire). The payload's own `status` decides first
+ * (`toDisputeStatus`, `providers/disputeStatus.ts`); this is only the fallback.
  *
- * `charge.dispute.funds_withdrawn` and `funds_reinstated` are deliberately
- * ABSENT. They describe money moving, which on this gateway is a refund row's
- * job, and mapping them to a dispute status would make the money movement and
- * the dispute outcome two names for one thing — so the network reinstating
- * funds on a dispute it later lost would silently mark it `won`.
+ * `charge.dispute.closed` maps to `needs_response` on purpose — never to an
+ * outcome: it closes a dispute the merchant may have WON or LOST, and a close
+ * whose outcome cannot be read is refused rather than guessed (it used to
+ * answer `won`, and a merchant told they won does not reconcile).
+ *
+ * `funds_withdrawn` and `funds_reinstated` are the money MOVING, not the
+ * dispute's outcome — the network can reinstate funds on a dispute it later
+ * decides — so they never change the status by their type: they keep what the
+ * payload or the row says, and are told to the merchant as what they are.
  */
-const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
+const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus | null>> = {
   'charge.dispute.created': 'needs_response',
   'charge.dispute.updated': 'under_review',
-  // `charge.dispute.closed` is deliberately ABSENT from the values here and
-  // present as a key with no default — it closes a dispute the merchant may
-  // have WON or LOST, and the two are only distinguishable from the payload's
-  // own `status`. This map used to answer `won` for it, so every close whose
-  // status could not be read told the merchant they had won. That is the wrong
-  // half of a coin flip to land on by default: a merchant told they won a
-  // dispute they lost does not reconcile, does not re-bill, and finds out from
-  // their balance.
   'charge.dispute.closed': 'needs_response',
+  'charge.dispute.funds_withdrawn': null,
+  'charge.dispute.funds_reinstated': null,
 };
 
-/**
- * The PROVIDER's dispute vocabulary, mapped onto the gateway's four states.
- *
- * Stripe distinguishes `warning_needs_response` from `needs_response`, and
- * `warning_closed` from `won`/`lost`, because it is describing an inquiry that
- * has not become a formal chargeback yet. A merchant on this gateway needs to
- * know only whether evidence is DUE, whether it is being looked at, and how it
- * ended — so a warning collapses onto the state it is a warning ABOUT (ADR 0001
- * D3: the acquirer's vocabulary does not reach the wire).
- *
- * `warning_closed` maps to `under_review` rather than to an outcome: an inquiry
- * closing is not a dispute being won, and calling it one would report a result
- * the network never gave.
- *
- * `null` for anything unrecognised, which the handler treats as "the event type
- * decides" — a provider adding a state must not silently become an outcome.
- */
-function toDisputeStatus(status: unknown): DisputeStatus | null {
-  switch (status) {
-    case 'warning_needs_response':
-    case 'needs_response':
-      return 'needs_response';
-    case 'warning_under_review':
-    case 'under_review':
-    case 'warning_closed':
-      return 'under_review';
-    case 'won':
-      return 'won';
-    case 'lost':
-      return 'lost';
-    default:
-      return null;
-  }
-}
+/** The money-movement events, told to the merchant every time they arrive. */
+const DISPUTE_FUNDS_EVENTS = new Set([
+  'charge.dispute.funds_withdrawn',
+  'charge.dispute.funds_reinstated',
+] as const);
 
 /** Transfer events that carry a cumulative reversed total. */
 const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
@@ -824,7 +795,9 @@ async function handleDisputeEvent(
    * finds out from their balance.
    */
   const closing = event.type === 'charge.dispute.closed';
-  const status = detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? 'needs_response';
+  const known = await findDisputeByProviderObject(db, provider, disputeObjectId);
+  const status =
+    detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? known?.status ?? 'needs_response';
 
   if (closing && status !== 'won' && status !== 'lost') {
     // A close with no readable outcome is recorded and left VISIBLE rather than
@@ -863,19 +836,30 @@ async function handleDisputeEvent(
       status,
       ...(detail.reason === null ? {} : { reason: detail.reason }),
       evidenceDueAt: closed ? null : detail.evidenceDueAt,
+      ...(detail.isChargeRefundable === null
+        ? {}
+        : { isChargeRefundable: detail.isChargeRefundable }),
     });
 
     // The DISPUTE is the payload, not the intent. `created` is a deadline, and
     // a merchant who has to make a second call to learn when evidence is due is
     // a merchant who can miss it while their integration works as documented.
     // `updated` only when the status moved — a redelivery is not news.
+    // `closed` only when the outcome is NEWS: the merchant's own `…/close`
+    // already recorded it (and told them) before the provider's event arrived.
+    const changed = before !== null && before.status !== upserted.dispute.status;
+    const funds = DISPUTE_FUNDS_EVENTS.has(event.type as 'charge.dispute.funds_withdrawn')
+      ? (event.type as 'charge.dispute.funds_withdrawn' | 'charge.dispute.funds_reinstated')
+      : null;
     const eventType = upserted.created
       ? ('charge.dispute.created' as const)
-      : closed
-        ? ('charge.dispute.closed' as const)
-        : before !== null && before.status !== upserted.dispute.status
-          ? ('charge.dispute.updated' as const)
-          : null;
+      : funds !== null
+        ? funds
+        : closed && changed
+          ? ('charge.dispute.closed' as const)
+          : changed
+            ? ('charge.dispute.updated' as const)
+            : null;
     if (eventType !== null) {
       await recordDisputeEvent(
         tx,
@@ -898,6 +882,8 @@ interface DisputeDetail {
   readonly evidenceDueAt: Date | null;
   /** The provider's own status, mapped — `null` when it said nothing readable. */
   readonly status: DisputeStatus | null;
+  /** `is_charge_refundable`, or `null` when the payload did not say. */
+  readonly isChargeRefundable: boolean | null;
 }
 
 /**
@@ -951,6 +937,8 @@ function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | nu
     // states fell through to the event type — which is how a close with no
     // readable outcome became `won`.
     status: toDisputeStatus(fields.status),
+    isChargeRefundable:
+      typeof fields.is_charge_refundable === 'boolean' ? fields.is_charge_refundable : null,
   };
 }
 

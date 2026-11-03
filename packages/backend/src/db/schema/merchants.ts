@@ -1,6 +1,17 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  foreignKey,
+  integer,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { files } from './files';
 import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS } from './valueSets';
 
 /**
@@ -12,6 +23,16 @@ import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS }
  * carries a private key, so a merchant handing over an `xprv` is rejected
  * rather than silently granting the gateway the ability to spend their funds.
  */
+/**
+ * The File columns the logo reference points at, behind an explicit return
+ * type: `files` references `merchants` too, and two tables whose types infer
+ * from each other's are a cycle `tsc` cannot resolve (the same device as
+ * `paymentMethodColumns` in `customers.ts`).
+ */
+function fileColumns(): { id: AnyPgColumn; merchantId: AnyPgColumn } {
+  return { id: files.id, merchantId: files.merchantId };
+}
+
 export const merchants = pgTable(
   'merchants',
   {
@@ -76,7 +97,7 @@ export const merchants = pgTable(
      * Bare Oxy file id for the merchant's logo — the canonical media chokepoint.
      *
      * Accepted only for a file the caller owns or acts for
-     * (`services/oxyFiles/merchantAvatar.ts`), and every write of it queues the
+     * (`services/oxyFiles/fileOwnership.ts`), and every write of it queues the
      * matching Oxy file reference in the same transaction
      * (`db/merchants/merchantRepository.ts`), so Oxy knows Peable uses it and
      * tells Peable when it goes away (ADR 0043).
@@ -96,6 +117,15 @@ export const merchants = pgTable(
      * followed it, or one about the file before it was set again) is ignored.
      */
     avatarFileEventAt: timestamptz(),
+    /**
+     * The wordmark payer surfaces show in their header — a File of purpose
+     * `business_logo` (`files`), beside the avatar and never instead of it: the
+     * avatar is the square identity image (Stripe's branding `icon`), this is
+     * the wide logo (Stripe's branding `logo`). The File holds its own Oxy
+     * reference, so this column needs none; whether it is SHOWN is the File's
+     * status, read when the display is built.
+     */
+    businessLogoFileId: text(),
     description: text(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -146,6 +176,12 @@ export const merchants = pgTable(
       table.oxyAppId,
       table.environment,
     ),
+    /** The logo is one of THIS merchant's Files. Its purpose is the one writer's rule. */
+    foreignKey({
+      name: 'merchants_business_logo_file_fkey',
+      columns: [table.businessLogoFileId, table.id],
+      foreignColumns: [fileColumns().id, fileColumns().merchantId],
+    }).onDelete('restrict'),
     check(
       'merchants_environment_check',
       sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`),

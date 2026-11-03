@@ -23,7 +23,13 @@ export { providerEvents } from './providerEvents';
 export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
-export { disputes } from './disputes';
+export { disputeEvidenceFiles, disputes } from './disputes';
+export { files } from './files';
+export {
+  paymentMethodConfigurationBindings,
+  paymentMethodConfigurations,
+  paymentMethodDomains,
+} from './paymentMethodConfigurations';
 export { idempotencyKeys } from './idempotency';
 export { couponProducts, coupons, prices, products, promotionCodes } from './catalog';
 export { apiRequestLogs } from './requestLogs';

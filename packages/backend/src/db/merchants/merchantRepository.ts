@@ -41,6 +41,13 @@ export interface MerchantRow {
   readonly avatarFileId: string | null;
   /** Why the avatar is not shown to a payer right now, or `null` when it is. */
   readonly avatarWithheld: MerchantAvatarWithheldReason | null;
+  /** The logo File's PUBLIC `file_…`, or `null`. */
+  readonly businessLogo: string | null;
+  /**
+   * The logo's Oxy file id, ONLY while the File is available (not withheld,
+   * not removed) — what a payer surface may render. `null` otherwise.
+   */
+  readonly businessLogoOxyFileId: string | null;
   readonly description: string | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -58,6 +65,15 @@ const MERCHANT_COLUMNS = {
   displayName: merchants.displayName,
   avatarFileId: merchants.avatarFileId,
   avatarWithheld: merchants.avatarWithheld,
+  // Table-qualified raw SQL: drizzle renders RETURNING columns unqualified, and
+  // an unqualified `"id"` inside a subquery over `files` would bind to the
+  // FILE's id (CONVENTIONS.md §Payments core).
+  businessLogo: sql<
+    string | null
+  >`(select "files"."public_id" from "files" where "files"."id" = "merchants"."business_logo_file_id")`,
+  businessLogoOxyFileId: sql<
+    string | null
+  >`(select "files"."oxy_file_id" from "files" where "files"."id" = "merchants"."business_logo_file_id" and "files"."removed_at" is null and "files"."withheld" is null)`,
   description: merchants.description,
   createdAt: merchants.createdAt,
   updatedAt: merchants.updatedAt,
@@ -246,6 +262,12 @@ export interface MerchantPatch {
    */
   readonly displayName?: string | null | undefined;
   readonly avatarFileId?: string | null | undefined;
+  /**
+   * The INTERNAL id of a File of purpose `business_logo` owned by this
+   * merchant — resolved and checked by the one writer
+   * (`routes/merchants.ts`'s `applyMerchantPatch`); `null` clears it.
+   */
+  readonly businessLogoFileId?: string | null | undefined;
   readonly description?: string | null | undefined;
 }
 
@@ -275,6 +297,7 @@ export async function updateMerchantSettings(
   }
   if (patch.displayName !== undefined) values.displayName = patch.displayName;
   if (patch.avatarFileId !== undefined) values.avatarFileId = patch.avatarFileId;
+  if (patch.businessLogoFileId !== undefined) values.businessLogoFileId = patch.businessLogoFileId;
   if (patch.description !== undefined) values.description = patch.description;
   if (Object.keys(values).length === 0) {
     return findMerchantById(db, id);

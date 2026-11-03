@@ -22,11 +22,19 @@ export interface ProviderFieldEvent {
   empty?: boolean;
   error?: { message?: string };
   brand?: string;
+  /**
+   * The Express Checkout element's `ready`: which wallets this device and
+   * browser can actually run, by the provider's own probe. `undefined` when it
+   * can run none — the only truthful signal that the wallet slot is empty.
+   */
+  availablePaymentMethods?: Readonly<Record<string, boolean>>;
+  /** The Express Checkout element's `confirm`: tells the wallet sheet the attempt failed. */
+  paymentFailed?(options?: { reason?: 'fail' | 'invalid_shipping_address' }): void;
 }
 export interface ProviderElement {
   mount(selector: string | HTMLElement): void;
   on?(
-    event: 'ready' | 'loaderror' | 'change' | 'focus' | 'blur',
+    event: 'ready' | 'loaderror' | 'change' | 'focus' | 'blur' | 'confirm',
     callback: (event?: ProviderFieldEvent) => void,
   ): void;
   update?(options: Record<string, unknown>): void;
@@ -38,10 +46,10 @@ export interface ProviderElement {
 export interface ProviderElements {
   update?(options: Record<string, unknown>): void;
   create(
-    type: 'payment' | 'cardNumber' | 'cardExpiry' | 'cardCvc',
+    type: 'payment' | 'expressCheckout' | 'cardNumber' | 'cardExpiry' | 'cardCvc',
     options?: Record<string, unknown>,
   ): ProviderElement;
-  getElement(type: 'payment'): ProviderElement | null;
+  getElement(type: 'payment' | 'expressCheckout'): ProviderElement | null;
 }
 
 export interface ProviderConfirmResult {

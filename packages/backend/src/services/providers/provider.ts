@@ -33,8 +33,12 @@
 import type {
   BillingDetails,
   CardDetails,
+  CardRailPaymentMethodType,
   CurrencyCode,
-  DisputeEvidence,
+  DisputeFileEvidenceField,
+  DisputeStatus,
+  DisputeTextEvidenceField,
+  PaymentMethodConfigurationType,
   PaymentIntentCaptureMethod,
   PaymentIntentSetupFutureUsage,
   SetupIntentCancellationReason,
@@ -82,6 +86,11 @@ export type ProviderStage =
   // merchant's response did not reach the network before a deadline, which is
   // the one failure on this surface that cannot be retried later.
   | 'dispute'
+  // Uploading an evidence file to the provider, before a submission.
+  | 'file'
+  // A payment method configuration or a wallet domain.
+  | 'paymentMethodConfiguration'
+  | 'paymentMethodDomain'
   // Customers, saved payment methods and SetupIntents (ADR 0016).
   | 'customer'
   | 'paymentMethod'
@@ -217,6 +226,10 @@ export interface CreatePaymentRequest {
   readonly statementDescriptorSuffix?: string;
   /** With `confirm`: where a redirect-based challenge returns the payer. */
   readonly returnUrl?: string;
+  /** Exactly these methods — the merchant named them. Exclusive with the configuration. */
+  readonly paymentMethodTypes?: readonly CardRailPaymentMethodType[];
+  /** The provider configuration (a binding of a `pmc_…`) whose methods to offer. */
+  readonly paymentMethodConfigurationObjectId?: string;
 }
 
 export interface ProviderPaymentResult {
@@ -495,69 +508,71 @@ export interface AccountHoldingProvider extends PaymentProvider {
 }
 
 /**
- * A merchant's response to a dispute — TEXT ONLY, and passed straight through.
+ * A merchant's evidence as it crosses to the provider: the text fields in the
+ * merchant's own words, and the file fields as the PROVIDER's file ids — the
+ * bytes uploaded with `uploadDisputeEvidenceFile` at submission time. An empty
+ * string unsets a field at the provider.
  *
- * Every field is the merchant's own words or their own record, in the
- * provider's vocabulary, because these end up in front of a card network that
- * has its own field names and a gateway paraphrase would be the words the
- * merchant quotes while the acquirer holds different ones.
- *
- * **None of it is stored.** It contains exactly what evidence contains — a
- * customer's name, their email, a billing address, correspondence — and
- * `provider_events`' whole redaction posture exists because this gateway does
- * not keep that. It is forwarded and forgotten; what is recorded is THAT a
- * response was submitted and when.
- *
- * FILE attachments are deliberately absent. They need the provider's upload
- * API, a size and type policy, and somewhere for the bytes to live on the way
- * through — a different piece of work, and offering half of it would let a
- * merchant submit a response missing the receipt it depends on.
+ * **None of it is stored here.** The text carries a customer's name, email,
+ * address and correspondence; it is forwarded and forgotten, and a draft lives
+ * at the provider (`submit: false`), which is the store of a response in
+ * progress. What Peable records is THAT evidence was staged
+ * (`disputes.has_evidence`) and when it was submitted.
  */
-/**
- * Re-exported from the wire contract, which is where the set is declared.
- *
- * The port used to carry its own copy of these seventeen fields, and so did the
- * route's schema, the Stripe adapter's name map and the SDK. A field added to
- * three of the four is one a merchant sends, the gateway accepts, and the
- * network never sees — they find out when the dispute is decided against them.
- */
-export type { DisputeEvidence };
+export type ProviderDisputeEvidence = Partial<
+  Record<DisputeTextEvidenceField | DisputeFileEvidenceField, string>
+>;
 
-export interface SubmitDisputeEvidenceRequest {
+/** What the provider says about a dispute after an operation on it — never prose. */
+export interface ProviderDisputeSnapshot {
+  /** Mapped onto Orbit's four; `null` when the provider said nothing readable. */
+  readonly status: DisputeStatus | null;
+  readonly hasEvidence: boolean;
+  readonly submissionCount: number;
+  readonly isChargeRefundable: boolean;
+  /** The staged or submitted TEXT, read back from the provider — the draft's one home. */
+  readonly evidence: Readonly<Record<DisputeTextEvidenceField, string | null>>;
+}
+
+export interface UpdateDisputeEvidenceRequest {
   /** The provider's own id for the dispute. */
   readonly providerObjectId: string;
-  readonly evidence: DisputeEvidence;
+  readonly evidence: ProviderDisputeEvidence;
+  /** `true` submits — one-way at the network. */
+  readonly submit: boolean;
+  /** Required with `submit`, derived from the dispute: a retry is the same submission. */
+  readonly idempotencyKey?: string;
+}
+
+export interface UploadDisputeEvidenceFileRequest {
+  readonly bytes: Uint8Array;
+  readonly filename: string;
+  readonly mime: string;
+  /** Derived from the dispute, the field and the File: a retry uploads once. */
   readonly idempotencyKey: string;
 }
 
 /**
- * A provider whose disputes can be RESPONDED to.
+ * A provider whose disputes can be answered: drafts, files, one submission,
+ * and acceptance.
  *
  * Optional, like settling and account-holding, and for the same reason: the
- * FairCoin rail has no card network behind it and therefore no dispute to
- * answer. A method every rail had to implement would make that a lie.
- *
- * One method and not two. A "save a draft" step exists at the provider, and
- * exposing it would need a durable identity per draft so a retry does not
- * become a second one — and the merchant-facing value is small next to the
- * cost of getting that wrong. Responding is a one-shot act here: it submits.
+ * FairCoin rail has no card network behind it and therefore no dispute.
  */
 export interface DisputeHandlingProvider extends PaymentProvider {
-  /**
-   * Returns NOTHING, deliberately.
-   *
-   * It returned the provider's dispute id and status, and no caller read
-   * either — nor could one usefully: the status a provider reports immediately
-   * after a submission is `under_review`, which is not news, and the outcome
-   * arrives later as a `charge.dispute.closed` event that goes through
-   * `handleDisputeEvent` like every other network-initiated fact. A return
-   * value here would be a second, earlier, less reliable source for something
-   * this system already has one path for.
-   *
-   * What the caller needs is whether the submission REACHED the network, and
-   * that is carried by resolving rather than throwing.
-   */
-  submitDisputeEvidence(request: SubmitDisputeEvidenceRequest): Promise<void>;
+  /** Stage (`submit: false`) or submit evidence. */
+  updateDisputeEvidence(request: UpdateDisputeEvidenceRequest): Promise<ProviderDisputeSnapshot>;
+  /** Read the dispute — the staged text included. No idempotency key. */
+  getDispute(providerObjectId: string): Promise<ProviderDisputeSnapshot>;
+  /** Accept the dispute: it is lost, and nothing more can be submitted. */
+  closeDispute(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderDisputeSnapshot>;
+  /** Upload one evidence file; returns the provider's file id, used once and not kept. */
+  uploadDisputeEvidenceFile(
+    request: UploadDisputeEvidenceFileRequest,
+  ): Promise<{ readonly providerFileId: string }>;
 }
 
 /** Whether this rail can answer a dispute. */
@@ -565,7 +580,93 @@ export function isDisputeHandlingProvider(
   provider: PaymentProvider,
 ): provider is DisputeHandlingProvider {
   const candidate = provider as Partial<DisputeHandlingProvider>;
-  return typeof candidate.submitDisputeEvidence === 'function';
+  return (
+    typeof candidate.updateDisputeEvidence === 'function' &&
+    typeof candidate.getDispute === 'function' &&
+    typeof candidate.closeDispute === 'function' &&
+    typeof candidate.uploadDisputeEvidenceFile === 'function'
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payment method breadth: configurations and wallet domains
+// ---------------------------------------------------------------------------
+
+/**
+ * The methods each provider can offer at all. A configuration's
+ * `unavailable_reason: 'provider_unsupported'` is read from here, so the
+ * merchant is told the truth instead of a toggle that does nothing.
+ */
+export const PROVIDER_PAYMENT_METHODS: Readonly<
+  Record<ProviderId, readonly PaymentMethodConfigurationType[]>
+> = Object.freeze({
+  stripe: ['card', 'apple_pay', 'google_pay', 'sepa_debit', 'ideal', 'bancontact', 'eps'],
+});
+
+export interface SavePaymentMethodConfigurationRequest {
+  /** The binding, when the provider already holds one; absent creates it. */
+  readonly providerObjectId?: string;
+  /** Orbit's `pmc_…` — the provider-side name and the idempotency basis. */
+  readonly configurationId: string;
+  /** Every method this provider supports, on or off. */
+  readonly methods: Readonly<Partial<Record<PaymentMethodConfigurationType, 'on' | 'off'>>>;
+  readonly idempotencyKey: string;
+}
+
+/** A provider that holds payment method configurations (ADR 0016 binding). */
+export interface PaymentMethodConfiguringProvider extends PaymentProvider {
+  savePaymentMethodConfiguration(
+    request: SavePaymentMethodConfigurationRequest,
+  ): Promise<{ readonly providerObjectId: string }>;
+}
+
+export function isPaymentMethodConfiguringProvider(
+  provider: PaymentProvider,
+): provider is PaymentMethodConfiguringProvider {
+  return (
+    typeof (provider as Partial<PaymentMethodConfiguringProvider>)
+      .savePaymentMethodConfiguration === 'function'
+  );
+}
+
+/** A wallet's standing on a domain, in Peable's words. */
+export interface ProviderWalletStanding {
+  readonly status: 'active' | 'inactive';
+  /** Peable's explanation while inactive; `null` when active or nothing was said. */
+  readonly error: string | null;
+}
+
+export interface ProviderPaymentMethodDomain {
+  readonly providerObjectId: string;
+  readonly enabled: boolean;
+  readonly applePay: ProviderWalletStanding;
+  readonly googlePay: ProviderWalletStanding;
+}
+
+/** A provider that registers web domains for its wallets. */
+export interface DomainRegisteringProvider extends PaymentProvider {
+  createPaymentMethodDomain(request: {
+    readonly domainName: string;
+    readonly enabled: boolean;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPaymentMethodDomain>;
+  updatePaymentMethodDomain(request: {
+    readonly providerObjectId: string;
+    readonly enabled: boolean;
+  }): Promise<ProviderPaymentMethodDomain>;
+  /** Ask the wallets to verify the domain again, and read the result. */
+  validatePaymentMethodDomain(providerObjectId: string): Promise<ProviderPaymentMethodDomain>;
+}
+
+export function isDomainRegisteringProvider(
+  provider: PaymentProvider,
+): provider is DomainRegisteringProvider {
+  const candidate = provider as Partial<DomainRegisteringProvider>;
+  return (
+    typeof candidate.createPaymentMethodDomain === 'function' &&
+    typeof candidate.updatePaymentMethodDomain === 'function' &&
+    typeof candidate.validatePaymentMethodDomain === 'function'
+  );
 }
 
 /**

@@ -66,6 +66,8 @@ import { createCustomersRouter } from './routes/customers';
 import { createPaymentMethodsRouter } from './routes/paymentMethods';
 import { createSetupIntentsRouter } from './routes/setupIntents';
 import { createDisputesRouter } from './routes/disputes';
+import { createFilesRouter } from './routes/files';
+import { createPaymentMethodConfigurationsRouter } from './routes/paymentMethodConfigurations';
 import { SettlementWatcher } from './services/settlementWatcher';
 import type { PaymentIntentRow } from './db/payments/paymentIntentRepository';
 import { getTransaction } from './services/explorer';
@@ -132,7 +134,7 @@ export interface GatewayDeps {
   getTransaction?: typeof getTransaction;
   /** SSRF-safe fetch used for webhook delivery (default the real one). */
   safeFetch?: SafeFetchFn;
-  /** Oxy Files, for the merchant avatar ownership check (default the real client). */
+  /** Oxy Files: avatar ownership, File uploads and evidence reads (default the real client). */
   oxyFiles?: OxyFilesClient;
 }
 
@@ -297,7 +299,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createCustomersRouter({ requireMerchant }));
   app.use(createPaymentMethodsRouter({ requireMerchant }));
   app.use(createSetupIntentsRouter({ requireMerchant, optionalServiceAuth }));
-  app.use(createDisputesRouter({ requireMerchant }));
+  app.use(createDisputesRouter({ requireMerchant, files: deps.oxyFiles }));
+  app.use(createFilesRouter({ requireMerchant, files: deps.oxyFiles }));
+  app.use(createPaymentMethodConfigurationsRouter({ requireMerchant }));
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
   app.use(createWebhookEndpointsRouter({ requireMerchant, safeFetch: deps.safeFetch }));
   app.use(createEventsRouter({ requireMerchant }));

@@ -61,7 +61,7 @@ const SESSION: CheckoutSessionPublic = {
   object: 'checkout_session',
   livemode: false,
   success_url: 'https://merchant.example/thanks',
-  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
+  merchant: { name: 'Test Merchant', avatar_url: null, logo_url: null, description: null },
   payment_intent: makeIntent(),
 };
 

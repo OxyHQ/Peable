@@ -13,7 +13,15 @@ import { timeoutSignal } from './timeoutSignal';
 const HTTP_UNAUTHORIZED = 401;
 
 export interface RestClientRequestOptions {
+  /** JSON-encoded. Mutually exclusive with `form`. */
   body?: unknown;
+  /**
+   * Sent as `multipart/form-data` — a file upload. `fetch` writes the
+   * `Content-Type` with its boundary, so none is set here; `Idempotency-Key`
+   * is still sent, and the gateway binds it to the purpose and the bytes'
+   * hash.
+   */
+  form?: FormData;
   /** Arrays encode as `key[]=v`, objects as `key[sub]=v` — see `encodeQuery`. */
   query?: Readonly<Record<string, QueryValue>>;
   /**
@@ -95,6 +103,9 @@ export function createRestClient(
   ): Promise<T> {
     const token = await tokenProvider?.getToken();
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    if (opts.body !== undefined && opts.form !== undefined) {
+      throw new PeableApiError('A request carries a JSON body or a form, never both');
+    }
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.idempotencyKey !== undefined) headers['Idempotency-Key'] = opts.idempotencyKey;
     if (opts.headers) Object.assign(headers, opts.headers);
@@ -109,7 +120,7 @@ export function createRestClient(
           method,
           headers,
           ...(deadline === undefined ? {} : { signal: deadline.signal }),
-          body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+          body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
         });
       } catch (cause) {
         throw new PeableApiError(

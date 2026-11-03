@@ -6,7 +6,7 @@ import type {
   ServiceReferenceReconcileResult,
 } from '@oxy.so/core';
 import { ServiceAssetMetadataError } from '@oxy.so/core';
-import type { OxyFilesClient } from '../../services/oxyFiles/client';
+import type { LinkedDownload, OxyFilesClient } from '../../services/oxyFiles/client';
 
 /** One file the fake Oxy knows. */
 export interface FakeOxyFile {
@@ -25,6 +25,8 @@ export interface FakeOxyFilesOptions {
   failMetadata?: boolean;
   failReferences?: boolean;
   failReconcile?: boolean;
+  /** `storeAppFile` throws, as an unreachable Oxy would. */
+  failStore?: boolean;
 }
 
 export interface FakeOxyFiles extends OxyFilesClient {
@@ -39,6 +41,10 @@ export interface FakeOxyFiles extends OxyFilesClient {
   /** The references the fake Oxy currently holds, as `file|type|entity`. */
   readonly held: Set<string>;
   readonly options: FakeOxyFilesOptions;
+  /** The bytes Peable stored, by the Oxy id the fake minted. */
+  readonly stored: Map<string, { bytes: Uint8Array; mime: string; visibility: string }>;
+  /** Make a known file report another status or visibility (as a file event would describe it). */
+  setStatus(id: string, status: 'active' | 'trash'): void;
 }
 
 export const referenceKey = (ref: ServiceFileReference): string =>
@@ -58,6 +64,9 @@ export function createFakeOxyFiles(
   const removed: ServiceFileReference[] = [];
   const reconciliations: FakeOxyFiles['reconciliations'] = [];
   const held = new Set<string>();
+  const stored = new Map<string, { bytes: Uint8Array; mime: string; visibility: string }>();
+  const statuses = new Map<string, 'active' | 'trash'>();
+  let minted = 0;
 
   return {
     added,
@@ -65,6 +74,36 @@ export function createFakeOxyFiles(
     reconciliations,
     held,
     options,
+    stored,
+    setStatus(id, status) {
+      statuses.set(id, status);
+    },
+    async storeAppFile(request) {
+      if (options.failStore) throw new Error('Oxy is unreachable');
+      minted += 1;
+      const id = `oxyapp${String(minted).padStart(18, '0')}`;
+      stored.set(id, { bytes: request.bytes, mime: request.mime, visibility: request.visibility });
+      byId.set(id, { id, ownerApplicationId: 'peable' });
+      const ref = { fileId: id, ...request.reference };
+      added.push(ref);
+      held.add(referenceKey(ref));
+      return { id, referenced: true };
+    },
+    async linkedDownloadUrls(ids): Promise<LinkedDownload[]> {
+      return ids.flatMap((id) => {
+        const file = stored.get(id);
+        if (!file || statuses.get(id) === 'trash') return [];
+        return [
+          {
+            id,
+            // A data: URL, so a suite fetches the bytes with no network.
+            url: `data:${file.mime};base64,${Buffer.from(file.bytes).toString('base64')}`,
+            mime: file.mime,
+            size: file.bytes.byteLength,
+          },
+        ];
+      });
+    },
     async metadataByIds(ids) {
       if (options.failMetadata) throw new ServiceAssetMetadataError(ids, [503]);
       return ids.flatMap((id): ServiceAssetMetadata[] => {
@@ -76,7 +115,7 @@ export function createFakeOxyFiles(
             sha256: 'a'.repeat(64),
             mime: 'image/png',
             size: 1,
-            status: file.status ?? 'active',
+            status: statuses.get(id) ?? file.status ?? 'active',
             ...(options.hideOwner
               ? {}
               : {

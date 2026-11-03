@@ -11,6 +11,7 @@ import { and, eq, lte, or, sql } from 'drizzle-orm';
 import { merchants, oxyFileReferenceSyncs } from '../schema';
 import type { OxyFileEntityType } from '../schema/valueSets';
 import type { DatabaseOrTransaction } from '../postgres';
+import { isFileReferenceWanted } from '../files/fileRepository';
 
 /** One use of one Oxy file by one Peable entity — Oxy's reference identity. */
 export interface FileReferenceKey {
@@ -175,6 +176,8 @@ export async function isReferenceWanted(
         .where(and(eq(merchants.publicId, key.entityId), eq(merchants.avatarFileId, key.fileId)));
       return row !== undefined;
     }
+    case 'file':
+      return isFileReferenceWanted(db, key.fileId, key.entityId);
     default: {
       const unhandled: never = key.entityType;
       throw new Error(`no reference rule for entity type ${String(unhandled)}`);

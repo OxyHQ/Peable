@@ -456,6 +456,46 @@ file references. Decisions a reader would otherwise undo:
   expires an undelivered event after 30, so an older row dedupes nothing.
   `merchant_avatar_audit.event_id` therefore carries no foreign key to it.
 
+### Files (`files`) and dispute evidence
+
+- **A File is never deleted and never re-pointed.** Submitted evidence and the
+  merchant's logo reference it; what Oxy says afterwards is its standing:
+  `withheld` (reversible) or `removed_at`/`removed_by` (final) —
+  `files_removed_agrees_check` makes the pair one fact and
+  `files_removed_not_withheld_check` keeps a removed file from reading as
+  withheld. `oxy_file_event_at` orders Oxy's unordered events, as
+  `merchants.avatar_file_event_at` does.
+- **The purpose is part of the reference.** `dispute_evidence_files` points at
+  `files (id, merchant_id, purpose)` with a `file_purpose` pinned to
+  `dispute_evidence` by a CHECK, so another merchant's file — or the merchant's
+  own identity document — cannot be attached by naming its id.
+  `merchants_business_logo_file_fkey` points at `files (id, merchant_id)`; the
+  logo's purpose is the one writer's check (`applyMerchantPatch`).
+- **The size CHECK is the largest purpose's ceiling**; per-purpose type and size
+  are the upload's one writer (`services/files.ts`, `FILE_PURPOSE_POLICIES`).
+- **`dispute_evidence_files` holds ids, never words.** The draft text is at the
+  provider; `disputes.has_evidence` is the provider's boolean answer.
+
+### Payment method breadth
+
+- **`payment_method_configurations.preferences` holds only explicit choices**
+  (`{type: 'on'|'off'}`), merged in SQL (`||`), so a default Orbit changes later
+  reaches every merchant who never chose. `version` moves with every change and
+  is the compare half of `payment_method_configuration_bindings.synced_version`,
+  which only moves forward (`greatest`).
+- **One default per merchant** is a partial unique index (`… where is_default`),
+  which is also what converges two racing lazy creates;
+  `…_default_is_active_check` keeps the default usable.
+- **`payment_intents.payment_method_types` is fixed at creation** and checked
+  against the card-rail set; `payment_intents_payment_method_types_rail_check`
+  is one-directional (`rail = 'card' or types is null`) on purpose: rows from
+  before breadth hold none until the post-phase backfill (`0051`), and the
+  outgoing image keeps writing them without during the rollout.
+- **`payment_method_domains`** is unique per `(merchant_id, domain_name)` and per
+  `(provider, provider_object_id)`: one provider account per mode registers a
+  domain once, so a second merchant naming it is refused rather than sharing
+  wallets. The domain CHECK is the writer's hostname rule.
+
 ## Events and webhook endpoints (ADR 0014 D4)
 
 `events`, `webhook_endpoints` and `webhook_deliveries` (`schema/events.ts`,

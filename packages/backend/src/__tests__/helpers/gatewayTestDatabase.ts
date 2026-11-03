@@ -309,6 +309,8 @@ export async function seedIntent(
     // that has one.
     provider: values.provider !== undefined ? values.provider : rail === 'card' ? 'stripe' : null,
     status: values.status ?? (rail === 'faircoin' ? 'requires_action' : 'requires_payment_method'),
+    // What the writer always sets on a card payment: what it offers.
+    paymentMethodTypes: rail === 'card' ? ['card'] : null,
     clientSecret: values.clientSecret ?? `pi_${unique}_secret_${unique.slice(0, 8)}`,
     idempotencyKey: values.idempotencyKey ?? unique,
     metadata: values.metadata ?? {},

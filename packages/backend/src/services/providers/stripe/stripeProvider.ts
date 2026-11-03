@@ -12,7 +12,13 @@
  */
 
 import type Stripe from 'stripe';
-import type { CurrencyCode } from '@peable.to/shared-types';
+import {
+  type CurrencyCode,
+  DISPUTE_TEXT_EVIDENCE_FIELDS,
+  type DisputeFileEvidenceField,
+  type DisputeTextEvidenceField,
+  type PaymentMethodConfigurationType,
+} from '@peable.to/shared-types';
 import { config } from '../../../config';
 import {
   cancelStripePaymentIntent,
@@ -37,7 +43,16 @@ import {
   retrieveStripePaymentIntent,
   retrieveStripeTransfer,
   updateStripeDispute,
+  retrieveStripeDispute,
+  closeStripeDispute,
+  createStripeDisputeFile,
+  createStripePaymentMethodConfiguration,
+  updateStripePaymentMethodConfiguration,
+  createStripePaymentMethodDomain,
+  updateStripePaymentMethodDomain,
+  validateStripePaymentMethodDomain,
 } from './client';
+import { toDisputeStatus } from '../disputeStatus';
 import {
   ProviderError,
   type AccountHoldingProvider,
@@ -51,12 +66,19 @@ import {
   type ProviderSetupResult,
   type SetupHoldingProvider,
   type CustomerHoldingProvider,
-  type DisputeEvidence,
   type DisputeHandlingProvider,
+  type DomainRegisteringProvider,
+  type PaymentMethodConfiguringProvider,
+  type ProviderDisputeEvidence,
+  type ProviderDisputeSnapshot,
+  type ProviderPaymentMethodDomain,
+  type ProviderWalletStanding,
+  type SavePaymentMethodConfigurationRequest,
+  type UpdateDisputeEvidenceRequest,
+  type UploadDisputeEvidenceFileRequest,
   type ProviderSettlement,
   UNKNOWN_SETTLEMENT,
   type SettlementReportingProvider,
-  type SubmitDisputeEvidenceRequest,
   type AccountLinkRequest,
   type CreateAccountRequest,
   type CreatePaymentRequest,
@@ -123,52 +145,149 @@ function readChargeId(latestCharge: Stripe.PaymentIntent['latest_charge']): stri
 }
 
 /**
- * The gateway's evidence field names in Stripe's spelling.
+ * The gateway's evidence field names in Stripe's spelling — text and file.
  *
- * The wire spells them as Stripe does today, and they are still written out
- * rather than passed through: a field Stripe renames (or one the gateway names
- * differently) is a compile-time edit here instead of a silently dropped piece
- * of a merchant's defence.
- *
- * TOTAL over `DisputeEvidence` — that is what makes it safe. A field added to
- * the wire contract and not to this map is a field a merchant sends, the
- * gateway accepts, and the network never sees; they would find out when the
- * dispute is decided against them. As a `Record` it fails to compile instead.
+ * Written out rather than passed through: a field Stripe renames (or one the
+ * gateway names differently) is a compile-time edit here instead of a silently
+ * dropped piece of a merchant's defence. TOTAL over the wire contract's field
+ * sets: a field added there and not here is a field a merchant sends, the
+ * gateway accepts, and the network never sees — as a `Record` it fails to
+ * compile instead.
  */
 const STRIPE_EVIDENCE_FIELDS: Record<
-  keyof DisputeEvidence,
+  DisputeTextEvidenceField | DisputeFileEvidenceField,
   keyof Stripe.DisputeUpdateParams.Evidence
 > = {
-  product_description: 'product_description',
-  customer_name: 'customer_name',
-  customer_email_address: 'customer_email_address',
-  customer_purchase_ip: 'customer_purchase_ip',
+  access_activity_log: 'access_activity_log',
   billing_address: 'billing_address',
+  cancellation_policy_disclosure: 'cancellation_policy_disclosure',
+  cancellation_rebuttal: 'cancellation_rebuttal',
+  customer_email_address: 'customer_email_address',
+  customer_name: 'customer_name',
+  customer_purchase_ip: 'customer_purchase_ip',
+  duplicate_charge_explanation: 'duplicate_charge_explanation',
+  product_description: 'product_description',
+  refund_policy_disclosure: 'refund_policy_disclosure',
+  refund_refusal_explanation: 'refund_refusal_explanation',
+  service_date: 'service_date',
   shipping_address: 'shipping_address',
   shipping_carrier: 'shipping_carrier',
   shipping_date: 'shipping_date',
   shipping_tracking_number: 'shipping_tracking_number',
-  service_date: 'service_date',
-  access_activity_log: 'access_activity_log',
-  cancellation_policy_disclosure: 'cancellation_policy_disclosure',
-  cancellation_rebuttal: 'cancellation_rebuttal',
-  duplicate_charge_explanation: 'duplicate_charge_explanation',
-  refund_policy_disclosure: 'refund_policy_disclosure',
-  refund_refusal_explanation: 'refund_refusal_explanation',
   uncategorized_text: 'uncategorized_text',
+  cancellation_policy: 'cancellation_policy',
+  customer_communication: 'customer_communication',
+  customer_signature: 'customer_signature',
+  duplicate_charge_documentation: 'duplicate_charge_documentation',
+  receipt: 'receipt',
+  refund_policy: 'refund_policy',
+  service_documentation: 'service_documentation',
+  shipping_documentation: 'shipping_documentation',
+  uncategorized_file: 'uncategorized_file',
 };
 
 /**
  * An omitted key is omitted from the request too — sending `undefined` would
- * clear a field the merchant had already provided.
+ * clear a field the merchant had already staged. `""` is sent as itself: it is
+ * how a merchant unsets a field.
  */
-function toStripeEvidence(evidence: DisputeEvidence): Stripe.DisputeUpdateParams.Evidence {
+function toStripeEvidence(evidence: ProviderDisputeEvidence): Stripe.DisputeUpdateParams.Evidence {
   const out: Record<string, string> = {};
   for (const [ours, theirs] of Object.entries(STRIPE_EVIDENCE_FIELDS)) {
-    const value = evidence[ours as keyof DisputeEvidence];
+    const value = evidence[ours as keyof ProviderDisputeEvidence];
     if (value !== undefined) out[theirs] = value;
   }
   return out;
+}
+
+/** What a Stripe dispute says, in the port's vocabulary: no prose, no file ids. */
+function toDisputeSnapshot(dispute: Stripe.Dispute): ProviderDisputeSnapshot {
+  const evidence = dispute.evidence as unknown as Record<string, unknown> | null;
+  const text = Object.fromEntries(
+    DISPUTE_TEXT_EVIDENCE_FIELDS.map((field) => {
+      const value = evidence?.[STRIPE_EVIDENCE_FIELDS[field]];
+      return [field, typeof value === 'string' && value.length > 0 ? value : null];
+    }),
+  ) as Record<DisputeTextEvidenceField, string | null>;
+  return {
+    status: toDisputeStatus(dispute.status),
+    hasEvidence: dispute.evidence_details?.has_evidence === true,
+    submissionCount: dispute.evidence_details?.submission_count ?? 0,
+    isChargeRefundable: dispute.is_charge_refundable === true,
+    evidence: text,
+  };
+}
+
+/**
+ * Stripe's configuration keys for Orbit's methods. Methods Orbit does not
+ * offer are switched OFF explicitly on every save (`STRIPE_METHODS_ORBIT_OMITS`):
+ * a configuration created without them inherits the account's defaults, and a
+ * payer would be offered a method the merchant never saw a toggle for.
+ */
+const STRIPE_METHOD_KEYS = {
+  card: 'card',
+  apple_pay: 'apple_pay',
+  google_pay: 'google_pay',
+  sepa_debit: 'sepa_debit',
+  ideal: 'ideal',
+  bancontact: 'bancontact',
+  eps: 'eps',
+} as const satisfies Partial<
+  Record<PaymentMethodConfigurationType, keyof Stripe.PaymentMethodConfigurationCreateParams>
+>;
+
+const STRIPE_METHODS_ORBIT_OMITS = [
+  'link',
+  'klarna',
+  'affirm',
+  'afterpay_clearpay',
+  'cashapp',
+  'amazon_pay',
+  'paypal',
+  'revolut_pay',
+  'mobilepay',
+  'twint',
+  'p24',
+  'blik',
+  'multibanco',
+  'alipay',
+  'wechat_pay',
+  'giropay',
+] as const satisfies readonly (keyof Stripe.PaymentMethodConfigurationCreateParams)[];
+
+function toStripeConfigurationParams(
+  methods: Readonly<Partial<Record<PaymentMethodConfigurationType, 'on' | 'off'>>>,
+): Stripe.PaymentMethodConfigurationCreateParams {
+  const params: Record<string, { display_preference: { preference: 'on' | 'off' } }> = {};
+  for (const key of STRIPE_METHODS_ORBIT_OMITS) {
+    params[key] = { display_preference: { preference: 'off' } };
+  }
+  for (const [ours, theirs] of Object.entries(STRIPE_METHOD_KEYS)) {
+    const value = methods[ours as keyof typeof STRIPE_METHOD_KEYS];
+    if (value !== undefined) params[theirs] = { display_preference: { preference: value } };
+  }
+  return params as Stripe.PaymentMethodConfigurationCreateParams;
+}
+
+/** A wallet's standing on a Stripe domain, in Peable's words. */
+function toWalletStanding(
+  wallet: { status: string } | undefined,
+  name: 'Apple Pay' | 'Google Pay',
+): ProviderWalletStanding {
+  if (wallet?.status === 'active') return { status: 'active', error: null };
+  return {
+    status: 'inactive',
+    error: `${name} has not verified this domain yet. Serve the domain association file it requires, then validate the domain again.`,
+  };
+}
+
+function toDomainSnapshot(domain: Stripe.PaymentMethodDomain): ProviderPaymentMethodDomain {
+  return {
+    providerObjectId: domain.id,
+    enabled: domain.enabled,
+    applePay: toWalletStanding(domain.apple_pay, 'Apple Pay'),
+    googlePay: toWalletStanding(domain.google_pay, 'Google Pay'),
+  };
 }
 
 /** Stripe wants a lowercase ISO code; the gateway's set is uppercase. */
@@ -212,7 +331,9 @@ export class StripePaymentProvider
     SettlementReportingProvider,
     ChargeReadingProvider,
     CustomerHoldingProvider,
-    SetupHoldingProvider
+    SetupHoldingProvider,
+    PaymentMethodConfiguringProvider,
+    DomainRegisteringProvider
 {
   readonly id = 'stripe' as const;
   readonly mode: ProviderMode;
@@ -243,14 +364,29 @@ export class StripePaymentProvider
       // payment can offer are a dashboard decision an operator changes without a
       // deploy, and hard-coding them here would make that dashboard lie. A
       // saved card being charged names its own type.
+      //
+      // Precedence, most specific first: a saved card charges as a card; types
+      // the merchant NAMED are exactly those; otherwise the merchant's
+      // configuration (its binding) decides, with the provider filtering by
+      // currency; the adapter-wide options are what remains for an operator
+      // script that names neither.
       ...(request.paymentMethodObjectId !== undefined
         ? { payment_method_types: ['card'] }
-        : this.allowedPaymentMethodTypes
-          ? { allowed_payment_method_types: [...this.allowedPaymentMethodTypes] }
-          : { automatic_payment_methods: { enabled: true } }),
-      ...(this.paymentMethodConfiguration && request.paymentMethodObjectId === undefined
-        ? { payment_method_configuration: this.paymentMethodConfiguration }
-        : {}),
+        : request.paymentMethodTypes !== undefined
+          ? { payment_method_types: [...request.paymentMethodTypes] }
+          : request.paymentMethodConfigurationObjectId !== undefined
+            ? {
+                automatic_payment_methods: { enabled: true },
+                payment_method_configuration: request.paymentMethodConfigurationObjectId,
+              }
+            : this.allowedPaymentMethodTypes
+              ? { allowed_payment_method_types: [...this.allowedPaymentMethodTypes] }
+              : {
+                  automatic_payment_methods: { enabled: true },
+                  ...(this.paymentMethodConfiguration
+                    ? { payment_method_configuration: this.paymentMethodConfiguration }
+                    : {}),
+                }),
       metadata: { ...request.metadata, peable_intent_id: request.intentId },
       // Ties every movement of one checkout together at Stripe, so a support
       // conversation can find the charge and its transfers from one id.
@@ -483,25 +619,100 @@ export class StripePaymentProvider
   // -------------------------------------------------------------------------
 
   /**
-   * Submit a merchant's response.
-   *
-   * `submit: true`, always. Stripe's update call doubles as a draft save, and
-   * the draft is one-way once submitted — so a gateway offering both would owe
-   * every draft a durable identity to keep a retry from becoming a second
-   * write. `services/disputeEvidence.ts` records that decision; this is where
-   * it becomes a literal.
-   *
-   * The evidence is CONVERTED here and nowhere else: Stripe's field names are
-   * snake_case and the gateway's are not, and an adapter is exactly the place
-   * that difference belongs.
+   * Stage or submit evidence — Stripe's `disputes.update`, whose `submit` flag
+   * is the whole difference and is one-way. The draft lives at Stripe; the
+   * answer is read back so the caller learns `has_evidence` without storing
+   * a word of it.
    */
-  async submitDisputeEvidence(request: SubmitDisputeEvidenceRequest): Promise<void> {
-    await updateStripeDispute(
+  async updateDisputeEvidence(
+    request: UpdateDisputeEvidenceRequest,
+  ): Promise<ProviderDisputeSnapshot> {
+    const dispute = await updateStripeDispute(
       this.mode,
       request.providerObjectId,
-      { evidence: toStripeEvidence(request.evidence), submit: true },
+      { evidence: toStripeEvidence(request.evidence), submit: request.submit },
       request.idempotencyKey,
     );
+    return toDisputeSnapshot(dispute);
+  }
+
+  async getDispute(providerObjectId: string): Promise<ProviderDisputeSnapshot> {
+    return toDisputeSnapshot(await retrieveStripeDispute(this.mode, providerObjectId));
+  }
+
+  async closeDispute(request: {
+    readonly providerObjectId: string;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderDisputeSnapshot> {
+    return toDisputeSnapshot(
+      await closeStripeDispute(this.mode, request.providerObjectId, request.idempotencyKey),
+    );
+  }
+
+  async uploadDisputeEvidenceFile(
+    request: UploadDisputeEvidenceFileRequest,
+  ): Promise<{ readonly providerFileId: string }> {
+    const file = await createStripeDisputeFile(
+      this.mode,
+      { data: request.bytes, name: request.filename, type: request.mime },
+      request.idempotencyKey,
+    );
+    return { providerFileId: file.id };
+  }
+
+  // -------------------------------------------------------------------------
+  // Payment method configurations and wallet domains
+  // -------------------------------------------------------------------------
+
+  async savePaymentMethodConfiguration(
+    request: SavePaymentMethodConfigurationRequest,
+  ): Promise<{ readonly providerObjectId: string }> {
+    const params = toStripeConfigurationParams(request.methods);
+    if (request.providerObjectId === undefined) {
+      const created = await createStripePaymentMethodConfiguration(
+        this.mode,
+        { ...params, name: request.configurationId },
+        request.idempotencyKey,
+      );
+      return { providerObjectId: created.id };
+    }
+    const updated = await updateStripePaymentMethodConfiguration(
+      this.mode,
+      request.providerObjectId,
+      params as Stripe.PaymentMethodConfigurationUpdateParams,
+    );
+    return { providerObjectId: updated.id };
+  }
+
+  async createPaymentMethodDomain(request: {
+    readonly domainName: string;
+    readonly enabled: boolean;
+    readonly idempotencyKey: string;
+  }): Promise<ProviderPaymentMethodDomain> {
+    return toDomainSnapshot(
+      await createStripePaymentMethodDomain(
+        this.mode,
+        { domain_name: request.domainName, enabled: request.enabled },
+        request.idempotencyKey,
+      ),
+    );
+  }
+
+  async updatePaymentMethodDomain(request: {
+    readonly providerObjectId: string;
+    readonly enabled: boolean;
+  }): Promise<ProviderPaymentMethodDomain> {
+    return toDomainSnapshot(
+      await updateStripePaymentMethodDomain(this.mode, request.providerObjectId, {
+        enabled: request.enabled,
+      }),
+    );
+  }
+
+  async validatePaymentMethodDomain(
+    providerObjectId: string,
+  ): Promise<ProviderPaymentMethodDomain> {
+    return toDomainSnapshot(await validateStripePaymentMethodDomain(this.mode, providerObjectId));
   }
 
   // -------------------------------------------------------------------------

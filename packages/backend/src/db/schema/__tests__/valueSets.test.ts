@@ -61,8 +61,8 @@ describe('closed value sets', () => {
    * to.
    */
   it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
-    // 28 of ADR 0019 + the catalog's ten (ADR 0018).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(38);
+    // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair.
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(40);
     for (const retired of [
       'payment_intent.settled',
       'payment_intent.confirming',
@@ -105,6 +105,8 @@ describe('closed value sets', () => {
         'charge.dispute.created',
         'charge.dispute.updated',
         'charge.dispute.closed',
+        'charge.dispute.funds_withdrawn',
+        'charge.dispute.funds_reinstated',
         'refund.created',
         'refund.updated',
         'refund.failed',
@@ -180,6 +182,8 @@ describe('the base-unit amount pattern', () => {
     // `prices.unit_amount`, `coupons.amount_off` and
     // `promotion_codes.minimum_amount` (ADR 0018). A tiered price's tier amounts
     // live inside `prices.tiers` (jsonb) and are checked by its one writer.
-    expect(occurrences).toBe(14);
+    // Plus two RE-ADDED: `0049` re-adds the coupon and promotion-code CHECKs
+    // (their currency set widened), and each carries the pattern again.
+    expect(occurrences).toBe(16);
   });
 });

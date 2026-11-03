@@ -43,7 +43,10 @@ export function newId(
     | 'taxcalc'
     | 'taxtxn'
     | 'we'
-    | 'req',
+    | 'req'
+    | 'file'
+    | 'pmc'
+    | 'pmd',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

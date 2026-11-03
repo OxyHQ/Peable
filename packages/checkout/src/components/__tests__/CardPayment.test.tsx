@@ -47,29 +47,45 @@ mock.module('../../lib/intentClient', () => ({
 }));
 
 /** What the provider's SDK was asked to do. */
-const mounted: HTMLElement[] = [];
+const mounted: { type: string; node: HTMLElement }[] = [];
 let confirmResult: { error?: { message?: string } } = {};
 const confirmMock = mock(async () => confirmResult);
 const destroyMock = mock(() => undefined);
 let factoryKeys: string[] = [];
 let elementsOptions: Record<string, unknown>[] = [];
+/** The element events a test can fire, keyed `type:event`. */
+const elementHandlers = new Map<string, (event?: Record<string, unknown>) => void>();
 
+// The REAL card surface (`mountCardElements` and the redirect helpers) over a
+// fake provider SDK: what is asserted is this page's behaviour, not a mock of it.
+const realProviderJs = await import('@peable.to/sdk/checkout');
 mock.module('../../lib/providerJs', () => ({
+  mountCardElements: realProviderJs.mountCardElements,
+  readRedirectReturn: realProviderJs.readRedirectReturn,
+  withoutRedirectParams: realProviderJs.withoutRedirectParams,
+  delayedProcessingNotice: realProviderJs.delayedProcessingNotice,
   loadProviderSdk: async () => (key: string) => {
     factoryKeys.push(key);
     return {
       elements: (options: Record<string, unknown>) => {
         elementsOptions.push(options);
-        const element = {
-          mount: (node: HTMLElement) => {
-            mounted.push(node);
-          },
-          unmount: () => undefined,
-          destroy: destroyMock,
-        };
+        const byType = new Map<string, unknown>();
         return {
-          create: () => element,
-          getElement: () => element,
+          create: (type: string) => {
+            const element = {
+              mount: (node: HTMLElement) => {
+                mounted.push({ type, node });
+              },
+              on: (event: string, callback: (event?: Record<string, unknown>) => void) => {
+                elementHandlers.set(`${type}:${event}`, callback);
+              },
+              unmount: () => undefined,
+              destroy: destroyMock,
+            };
+            byType.set(type, element);
+            return element;
+          },
+          getElement: (type: string) => byType.get(type) ?? null,
         };
       },
       confirmPayment: confirmMock,
@@ -107,6 +123,8 @@ beforeEach(() => {
   };
   confirmResult = {};
   mounted.length = 0;
+  elementHandlers.clear();
+  window.history.replaceState(null, '', '/i/pi_card_1');
   factoryKeys = [];
   elementsOptions = [];
   getClientActionMock.mockClear();
@@ -123,7 +141,7 @@ test('fetches the credential from the resume operation and mounts the provider f
   render(<CardPayment intent={intent} />);
 
   await waitFor(() => {
-    expect(mounted).toHaveLength(1);
+    expect(mounted.map((entry) => entry.type)).toEqual(['expressCheckout', 'payment']);
   });
 
   // The credential comes from `POST …/client_action`, authorized by the
@@ -200,7 +218,7 @@ test('says so when the credential cannot be obtained', async () => {
 test('tears down the provider element when it unmounts', async () => {
   const { unmount } = render(<CardPayment intent={cardIntent()} />);
   await waitFor(() => {
-    expect(mounted).toHaveLength(1);
+    expect(mounted).toHaveLength(2);
   });
 
   unmount();
@@ -260,4 +278,84 @@ test("shows the gateway's last_payment_error on a declined payment", async () =>
   );
   const alert = await screen.findByRole('alert');
   expect(alert.textContent).toContain('insufficient funds');
+});
+
+/**
+ * The wallet slot is shown only when the provider says this device runs a
+ * wallet. An empty box above the form reads to a payer as a broken page.
+ */
+test('shows the wallets only once the provider reports one this device can run', async () => {
+  render(<CardPayment intent={cardIntent()} />);
+  await waitFor(() => {
+    expect(mounted).toHaveLength(2);
+  });
+  const slot = screen.getByTestId('wallet-fields');
+  expect(slot.hidden).toBe(true);
+
+  await act(async () => {
+    elementHandlers.get('expressCheckout:ready')?.({});
+  });
+  expect(slot.hidden).toBe(true);
+
+  await act(async () => {
+    elementHandlers.get('expressCheckout:ready')?.({
+      availablePaymentMethods: { applePay: true, googlePay: false },
+    });
+  });
+  expect(slot.hidden).toBe(false);
+  expect(screen.getByText('Or pay another way')).toBeDefined();
+});
+
+/** A wallet confirmation goes through the same path, and is not success either. */
+test('confirms a wallet payment through the same path, without announcing success', async () => {
+  render(<CardPayment intent={cardIntent()} />);
+  await waitFor(() => {
+    expect(mounted).toHaveLength(2);
+  });
+  await act(async () => {
+    elementHandlers.get('expressCheckout:confirm')?.({ paymentFailed: () => undefined });
+    await Promise.resolve();
+  });
+  await waitFor(() => {
+    expect(screen.getByRole('button', { name: 'Confirming…' })).toBeDefined();
+  });
+  expect(confirmMock).toHaveBeenCalledTimes(1);
+  expect(screen.queryByText(/succeeded|paid/i)).toBeNull();
+});
+
+/**
+ * Back from a bank's page (iDEAL, Bancontact, EPS): the payer CAME BACK, which
+ * is not a payment. The page waits for the gateway instead of mounting a fresh
+ * form that would invite a second attempt — and the provider's client secret
+ * leaves the address bar.
+ */
+test('waits for the gateway after a bank redirect, and drops the secret from the URL', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/i/pi_card_1?payment_intent=pi_p&payment_intent_client_secret=pi_p_secret_s&redirect_status=succeeded',
+  );
+  render(<CardPayment intent={cardIntent({ status: 'requires_action' })} />);
+
+  expect(screen.getByRole('button', { name: 'Confirming…' })).toBeDefined();
+  expect(screen.getByText('Confirming your payment…')).toBeDefined();
+  await waitFor(() => {
+    expect(window.location.search).toBe('');
+  });
+  expect(getClientActionMock).not.toHaveBeenCalled();
+  expect(mounted).toHaveLength(0);
+});
+
+/** A failed redirect offers the form again on the same payment. */
+test('offers the form again after a redirect the bank failed', async () => {
+  window.history.replaceState(
+    null,
+    '',
+    '/i/pi_card_1?payment_intent_client_secret=pi_p_secret_s&redirect_status=failed',
+  );
+  render(<CardPayment intent={cardIntent()} />);
+  expect(screen.getByRole('alert').textContent).toContain('not completed');
+  await waitFor(() => {
+    expect(mounted).toHaveLength(2);
+  });
 });

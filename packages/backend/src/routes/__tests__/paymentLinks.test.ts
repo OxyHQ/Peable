@@ -58,7 +58,12 @@ interface PublicPaymentLinkResponse {
   rail: string;
   network: string;
   active: boolean;
-  merchant: { name: string; avatar_url: string | null; description: string | null };
+  merchant: {
+    name: string;
+    avatar_url: string | null;
+    logo_url: string | null;
+    description: string | null;
+  };
   error?: { type: string; message: string };
 }
 
@@ -346,6 +351,7 @@ describe('GET /v1/payment_links/:id/public', () => {
       merchant: {
         name: 'Paylinks Co',
         avatar_url: null,
+        logo_url: null,
         description: null,
       },
     });

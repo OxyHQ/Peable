@@ -50,8 +50,10 @@ export interface BillingObservation {
  * Refunds are not PaymentIntent statuses: `refund.created|updated|failed` carry
  * the Refund, and `charge.refunded` the Charge whose `amount_refunded` moved.
  * A dispute is the network's process beside a payment that stays `succeeded`:
- * `charge.dispute.created` is a DEADLINE (evidence is due), `closed` carries
- * the outcome.
+ * `charge.dispute.created` is a DEADLINE (evidence is due), `updated` follows
+ * a staged or submitted response, `closed` carries the outcome, and
+ * `funds_withdrawn` / `funds_reinstated` the money's movement — never the
+ * evidence, which is not stored and so is never in an event.
  */
 export interface WebhookEventPayload {
   'payment_intent.created': PaymentIntent;
@@ -65,6 +67,10 @@ export interface WebhookEventPayload {
   'charge.dispute.created': Dispute;
   'charge.dispute.updated': Dispute;
   'charge.dispute.closed': Dispute;
+  /** The network took the disputed amount from the balance. */
+  'charge.dispute.funds_withdrawn': Dispute;
+  /** The network returned it (the dispute was won, or withdrawn by the cardholder). */
+  'charge.dispute.funds_reinstated': Dispute;
   'refund.created': Refund;
   'refund.updated': Refund;
   'refund.failed': Refund;

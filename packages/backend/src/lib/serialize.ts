@@ -1,5 +1,7 @@
 import { buildFairCoinURI } from '@fairco.in/core';
 import type {
+  CurrencyCode,
+  DisputeEvidence,
   Charge,
   CheckoutSession,
   Customer,
@@ -21,7 +23,7 @@ import type {
   WebhookEndpoint,
   WebhookEvent,
 } from '@peable.to/shared-types';
-import { UNITS_PER_COIN, canExpire } from '@peable.to/shared-types';
+import { UNITS_PER_COIN, canExpire, normalizeDisputeReason } from '@peable.to/shared-types';
 import type { ContributionDetails } from '@peable.to/contracts';
 import { config } from '../config';
 import { toUnix, toUnixOrNull } from './time';
@@ -95,7 +97,13 @@ export function toPaymentIntentDTO(row: PaymentIntentRow): PaymentIntent {
     livemode: row.livemode,
     status: row.status,
     rail: row.rail,
-    payment_method_types: [row.rail],
+    // A card row written before payment method breadth carries no types until
+    // the post-phase backfill sets them to the only thing it offered: card.
+    payment_method_types: card ? (row.paymentMethodTypes ?? ['card']) : ['faircoin'],
+    payment_method_configuration_details:
+      card && row.paymentMethodConfigurationPublicId !== null
+        ? { id: row.paymentMethodConfigurationPublicId }
+        : null,
     amount: row.amount,
     amount_capturable: row.status === 'requires_capture' ? row.amount : '0',
     amount_received: row.amountReceived,
@@ -216,6 +224,7 @@ export function toMerchantDTO(row: MerchantRow): Merchant {
     required_confirmations: row.requiredConfirmations,
     display_name: row.displayName ?? undefined,
     avatar_file_id: row.avatarFileId ?? undefined,
+    business_logo: row.businessLogo ?? undefined,
     description: row.description ?? undefined,
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
@@ -468,18 +477,40 @@ export function toRefundDTO(row: RefundRow, paymentIntentPublicId: string): Refu
  * something integrations start depending on — which is the coupling ADR 0001 D3
  * exists to prevent.
  */
-export function toDisputeDTO(row: DisputeRow, paymentIntentPublicId: string): Dispute {
+export function toDisputeDTO(
+  row: DisputeRow,
+  paymentIntentPublicId: string,
+  /**
+   * The evidence, on a LIVE read only (`services/disputeEvidence.ts`). An event
+   * payload and a list item are built without it: an event is stored, and
+   * evidence carries a customer's personal data this gateway does not keep.
+   */
+  evidence?: DisputeEvidence,
+  now: Date = new Date(),
+): Dispute {
+  const submitted = row.evidenceSubmittedAt !== null;
   return {
     id: row.publicId,
     object: 'dispute',
     livemode: row.livemode,
-    payment_intent: paymentIntentPublicId,
     amount: row.amount,
-    currency: row.currency,
+    currency: row.currency as CurrencyCode,
+    charge: row.chargePublicId,
+    payment_intent: paymentIntentPublicId,
     status: row.status,
-    reason: row.reason,
-    evidence_due_at: toUnixOrNull(row.evidenceDueAt),
-    evidence_submitted_at: toUnixOrNull(row.evidenceSubmittedAt),
+    // The provider's word stays on the row; the wire speaks Stripe's enum.
+    reason: normalizeDisputeReason(row.reason),
+    is_charge_refundable: row.isChargeRefundable,
+    evidence_details: {
+      due_by: toUnixOrNull(row.evidenceDueAt),
+      has_evidence: row.hasEvidence || submitted,
+      past_due:
+        !submitted && row.evidenceDueAt !== null && row.evidenceDueAt.getTime() <= now.getTime(),
+      submission_count: submitted ? 1 : 0,
+      submitted_at: toUnixOrNull(row.evidenceSubmittedAt),
+    },
+    ...(evidence === undefined ? {} : { evidence }),
+    metadata: row.metadata,
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
   };

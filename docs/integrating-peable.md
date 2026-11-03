@@ -677,25 +677,88 @@ Three things that are easy to get wrong and expensive:
 ### Answering a dispute
 
 ```ts
-await peable.disputes.submitEvidence(disputeId, {
-  uncategorized_text: 'Collected in person on the 3rd.',
-  shipping_tracking_number: 'TRACK-1',
+// 1. Upload what you have (PDF, PNG or JPEG, at most 5 MB each).
+const receipt = await peable.files.create({ purpose: 'dispute_evidence', file: pdfBytes, filename: 'receipt.pdf' });
+
+// 2. Stage a draft — as often as you like, until you submit.
+await peable.disputes.update(disputeId, {
+  evidence: { receipt: receipt.id, uncategorized_text: 'Collected in person on the 3rd.' },
 });
+
+// 3. Submit — ONCE.
+await peable.disputes.update(disputeId, { evidence: { shipping_tracking_number: 'TRACK-1' }, submit: true });
+
+// Or accept it: the dispute is lost, and nothing more can be submitted.
+await peable.disputes.close(disputeId);
 ```
 
-**One shot.** Submitting is one-way at the card network, so this cannot be
-revised and a second call answers 200 with the dispute as it stands rather than
-sending a second response. Send everything you have the first time.
+**A draft lives at the provider, not here.** `submit` omitted (or `false`)
+forwards the text to the provider's own draft; Peable records only that
+evidence exists (`evidence_details.has_evidence`). `retrieve` reads the draft
+back live — `evidence` is on `retrieve` and on the answers of `update` and
+`close`, never on a list item or a webhook event. An empty string unsets a
+field.
 
-Text only — **file attachments are not supported**. An unknown field name is
-refused (400, with `param` naming it) rather than dropped, so a misspelling is an
-error now instead of a missing argument discovered when the dispute is decided.
-A response after `evidence_due_at` is refused by the gateway (409), so you learn
-it was the clock and not your request.
+**Files are attached by id**, a `file_…` of purpose `dispute_evidence` that you
+uploaded. Their bytes go to the provider when you submit, and only then; the
+combined files of one response are at most 5 MB.
 
-Peable stores **none** of the evidence. It is forwarded to the acquirer and
-forgotten; `evidence_submitted_at` on the dispute records that you responded and
-when.
+**One shot.** `submit: true` is one-way at the card network: a second
+submission — or a draft after one — answers **409** `dispute_already_submitted`
+and sends nothing. A retry under the same `Idempotency-Key` replays the first
+answer. A response after `evidence_details.due_by` is refused (409), so you learn
+it was the clock and not your request; an unknown field name is a 400 naming it.
+
+Peable stores **none** of the evidence text. `evidence_details.submitted_at`
+records that you responded and when.
+
+### Files
+
+`peable.files.create({ purpose, file })` uploads bytes (`multipart/form-data`);
+`peable.files.create({ purpose: 'business_logo', oxy_file })` makes an Oxy file
+you own your logo. The type is read from the bytes:
+
+| Purpose | Types | Max |
+|---|---|---|
+| `dispute_evidence` | PDF, PNG, JPEG | 5 MB |
+| `business_logo` | PNG, JPEG | 512 KB |
+| `identity_document` | PDF, PNG, JPEG | 10 MB |
+| `additional_verification` | PDF, PNG, JPEG | 10 MB |
+
+Only an available `business_logo` has a `url`. `status` is `available`,
+`withheld` (its owner hid it; it can come back) or `removed` (deleted or taken
+down). Set the logo with `peable.merchants.update({ business_logo: file.id })`:
+it is the wordmark the hosted checkout shows, beside your avatar (the square
+icon), not instead of it.
+
+### Payment methods and wallets
+
+Card-rail payments offer what your **payment method configuration** offers in
+the payment's currency: cards, Apple Pay and Google Pay are on by default;
+SEPA Debit, iDEAL, Bancontact and EPS (EUR only) are yours to turn on. Every
+method says whether it is `available` and, when not, why (`unavailable_reason`:
+`provider_unsupported` — Bizum today — or `requires_card` for a wallet with
+cards off).
+
+```ts
+const [config] = (await peable.paymentMethodConfigurations.list()).data; // the default
+await peable.paymentMethodConfigurations.update(config.id, {
+  sepa_debit: { display_preference: { preference: 'on' } },
+});
+// Or name the methods of one payment exactly:
+await peable.paymentIntents.create({ amount: '1500', rail: 'card', currency: 'EUR', payment_method_types: ['card', 'ideal'] });
+```
+
+A PaymentIntent keeps the `payment_method_types` it was created with. SEPA Debit
+stays `processing` for days; wait for `payment_intent.succeeded`, never a
+browser callback. To run Apple Pay and Google Pay on **your own** pages,
+register each domain: `peable.paymentMethodDomains.create({ domain_name:
+'shop.example.com' })`, serve the wallet's domain association file, then
+`validate(id)`. The hosted checkout's domain is Peable's and needs nothing.
+
+Card currencies: EUR, USD, GBP, CHF, SEK, NOK, DKK, PLN, CZK, CAD, AUD and JPY.
+Amounts are base-unit strings in each currency's ISO 4217 minor unit — JPY has
+none, so `'1500'` is ¥1,500 (`CURRENCY_DECIMALS`).
 
 ### What you actually kept — `settlement`
 

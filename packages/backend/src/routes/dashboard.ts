@@ -22,7 +22,25 @@ import {
   applyMerchantPatch,
   sendMerchantWriteError,
 } from './merchants';
-import type { AvatarActor } from '../services/oxyFiles/merchantAvatar';
+import type { FileActor } from '../services/oxyFiles/fileOwnership';
+import {
+  answerDisputeList,
+  closeDisputeCore,
+  retrieveDispute,
+  updateDisputeCore,
+} from './disputes';
+import { answerFileList, createFile, parseFileUpload, retrieveFile } from './files';
+import {
+  answerConfigurationList,
+  answerDomainList,
+  createConfiguration,
+  createDomain,
+  retrieveConfiguration,
+  retrieveDomain,
+  updateConfigurationCore,
+  updateDomain,
+  validateDomain,
+} from './paymentMethodConfigurations';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import {
   answerPaymentIntentList,
@@ -80,11 +98,12 @@ export interface DashboardAccess {
   userId: string;
   membership: AppMembershipResult;
   /**
-   * Who may own a file this caller makes the merchant's avatar: the
+   * Who may own an Oxy file this caller makes the merchant's (an avatar, an
+   * imported File): the
    * application itself, the signed-in user, and the account that owns the
    * application — which oxy-api just confirmed the user is a member of.
    */
-  avatarActor: AvatarActor;
+  avatarActor: FileActor;
 }
 
 /**
@@ -352,6 +371,102 @@ export function createDashboardRouter(deps?: {
 
   /** Orbit's catalog: products, prices, coupons and promotion codes. */
   mountCatalogDashboardRoutes(router, CATALOG_ROUTES, { base, requireOxyUser, asMember });
+  // Disputes, Files and payment methods — the same cores as the merchant API.
+  router.get(
+    `${base}/disputes`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerDisputeList(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/disputes/:disputeId`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveDispute(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/disputes/:disputeId`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember((req, res, merchant) => updateDisputeCore(req, res, merchant, files)),
+  );
+  router.post(
+    `${base}/disputes/:disputeId/close`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(closeDisputeCore),
+  );
+  router.post(
+    `${base}/files`,
+    requireOxyUser,
+    requestContextMiddleware,
+    parseFileUpload,
+    wrap(async (req, res) => {
+      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
+      if (!access) return;
+      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
+      if (!merchant) return;
+      await createFile(req, res, merchant, { files, actor: access.avatarActor });
+    }),
+  );
+  router.get(
+    `${base}/files`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerFileList(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/files/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveFile(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/payment_method_configurations`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerConfigurationList(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/payment_method_configurations`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(createConfiguration),
+  );
+  router.get(
+    `${base}/payment_method_configurations/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveConfiguration(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/payment_method_configurations/:id`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(updateConfigurationCore),
+  );
+  router.get(
+    `${base}/payment_method_domains`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerDomainList(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/payment_method_domains`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(createDomain),
+  );
+  router.get(
+    `${base}/payment_method_domains/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveDomain(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/payment_method_domains/:id`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(updateDomain),
+  );
+  router.post(
+    `${base}/payment_method_domains/:id/validate`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(validateDomain),
+  );
 
   router.get(
     `${base}/events`,

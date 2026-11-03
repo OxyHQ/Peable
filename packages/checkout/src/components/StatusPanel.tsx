@@ -1,4 +1,5 @@
 import type { PaymentIntent } from '@peable.to/shared-types';
+import { delayedProcessingNotice } from '@peable.to/sdk/checkout';
 
 interface StatusVisual {
   title: string;
@@ -23,9 +24,11 @@ function describeStatus(intent: PaymentIntent): StatusVisual {
     case 'processing': {
       const chain = intent.faircoin;
       if (chain === null) {
+        // A SEPA Debit is `processing` for days, and a payer told "being
+        // processed..." with a spinner would assume it is stuck.
         return {
           title: 'Processing',
-          subtitle: 'Your payment is being processed...',
+          subtitle: delayedProcessingNotice(intent) ?? 'Your payment is being processed...',
           tone: 'primary',
           showSpinner: true,
         };
