@@ -8,6 +8,10 @@ import { startRecurringRelay } from './services/recurring/recurring-relay-worker
 import { createBillingRouter } from './routes/billing';
 import type { BillingService } from './services/billing/billingService';
 import { createDashboardTaxRouter, createTaxRouter } from './routes/tax';
+import {
+  createDashboardTaxComplianceRouter,
+  createTaxComplianceRouter,
+} from './routes/taxCompliance';
 import type { TaxService } from './services/tax/taxService';
 import {
   configuredTaxProviders,
@@ -350,6 +354,8 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
   app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
   app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser: deps.requireOxyUser }));
+  app.use(createTaxComplianceRouter({ requireMerchant }));
+  app.use(createDashboardTaxComplianceRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(
     createDashboardRouter({
       requireOxyUser: deps.requireOxyUser,

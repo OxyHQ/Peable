@@ -84,6 +84,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // merges.
   '0068_report_types_itemized_validate':
     'released with #205; deployed before 0069 (provider event arrival order) merges',
+  // Provider events' arrival-order validate half ships with #208; it must be
+  // DEPLOYED (its post phase applied) before business compliance's
+  // `0073`–`0074` (ADR 0020) merge.
+  '0072_provider_events_received_seq_validate':
+    'released with #208; deployed before 0073 (tax compliance) merges',
 };
 
 interface Migration {

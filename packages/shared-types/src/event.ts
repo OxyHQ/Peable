@@ -14,6 +14,7 @@ import type { PaymentMethod } from './paymentMethod';
 import type { ReportRun } from './reporting';
 import type { ConnectedAccount, Refund } from './settlement';
 import type { SetupIntent } from './setupIntent';
+import type { TaxAssessment, TaxReviewItem } from './taxCompliance';
 import type { WebhookEndpoint } from './webhookEndpoint';
 import type { Subscription } from './subscription';
 import type { CreditNote, Invoice, InvoiceItem } from './invoice';
@@ -210,6 +211,14 @@ export interface WebhookEventPayload {
   /** A report run could not be produced; `error` says why. */
   'reporting.report_run.failed': ReportRun;
   'billing.observation.updated': BillingObservation;
+  /**
+   * Peable Tax business compliance (ADR 0020). An assessment was run; a finding
+   * opened a review item; the owner decided one (or a later assessment found
+   * it again). None of them means anything was registered, filed or collected.
+   */
+  'tax.assessment.created': TaxAssessment;
+  'tax.review_item.created': TaxReviewItem;
+  'tax.review_item.updated': TaxReviewItem;
   /**
    * A synthetic event sent to ONE endpoint when its owner asks to test it
    * (Orbit's "send test event"). Stored like any other event, but it never fans

@@ -45,8 +45,10 @@ function filenameOf(params: CreateFileUploadParams): string {
  * The purpose sets the policy: `dispute_evidence` (PDF, PNG, JPEG ≤ 5 MiB,
  * private — attach it to a dispute with `disputes.update`), `business_logo`
  * (PNG, JPEG ≤ 512 KiB, public — set it with `merchants.update({ business_logo })`),
- * `identity_document` and `additional_verification` (PDF, PNG, JPEG ≤ 10 MiB,
- * private). The format is recognised from the bytes, not from a content type.
+ * `identity_document`, `additional_verification` and `tax_document` (PDF, PNG,
+ * JPEG ≤ 10 MiB, private — a `tax_document` is attached with
+ * `tax.documents.create`). The format is recognised from the bytes, not from a
+ * content type.
  *
  * `create({ purpose, oxy_file })` makes a file from an Oxy file you already own
  * instead of uploading it again; its ownership is checked once, there.

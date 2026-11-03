@@ -22,7 +22,7 @@ import { formatInstant, nowSeconds } from '@/format/time';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { Section } from '@/ui/OrbitScreen';
 
 const upper = (value: string) => value.trim().toUpperCase();
 const firstOfMonth = () => {
@@ -37,8 +37,11 @@ const today = () => new Date().toISOString().slice(0, 10);
  * filing report. Registering with a government stays the seller's job; this
  * records it. Ported from the wallet's `app/tax.tsx` onto the same routes; the
  * organization, application and Test / Live choice now come from Orbit's shell.
+ *
+ * This is the ONLY place collection is turned on (ADR 0011): the compliance
+ * sections beside it (ADR 0020) record and assess, and never reach these routes.
  */
-function TaxWorkspace({ scope }: { scope: DashboardScope }) {
+export function CollectionSettings({ scope }: { scope: DashboardScope }) {
   const [settings, setSettings] = useState<TaxSettings | null>(null);
   const [registrations, setRegistrations] = useState<TaxRegistration[]>([]);
   const [codes, setCodes] = useState<TaxCode[]>([]);
@@ -446,15 +449,5 @@ function TaxWorkspace({ scope }: { scope: DashboardScope }) {
         </>
       ) : null}
     </View>
-  );
-}
-
-export default function TaxScreen() {
-  return (
-    <OrbitScreen title={t('tax.heading')} description={t('tax.intro')}>
-      {({ scope }) => (
-        <TaxWorkspace key={`${scope.applicationId}:${scope.environment}`} scope={scope} />
-      )}
-    </OrbitScreen>
   );
 }

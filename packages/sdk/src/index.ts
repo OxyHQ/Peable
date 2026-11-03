@@ -12,6 +12,7 @@ import {
 } from './resources/billingEngine';
 import { TaxResource } from './resources/tax';
 export { TaxResource } from './resources/tax';
+export { TaxComplianceResource } from './resources/taxCompliance';
 export type {
   BillingRequestOptions,
   RetrieveFinalInvoiceAuthorityOptions,

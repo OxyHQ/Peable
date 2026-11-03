@@ -57,6 +57,16 @@ export function newId(
     | 'taxloc'
     | 'taxcalc'
     | 'taxtxn'
+    // Peable Tax business compliance (ADR 0020): operating locations, sales
+    // destinations, registration declarations, documents, assessments, review
+    // items and the action history.
+    | 'taxol'
+    | 'taxdest'
+    | 'taxrd'
+    | 'taxdoc'
+    | 'taxasm'
+    | 'taxrev'
+    | 'taxact'
     | 'we'
     | 'req'
     | 'file'

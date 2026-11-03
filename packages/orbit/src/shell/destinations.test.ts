@@ -125,10 +125,21 @@ describe('navModel', () => {
       'billing',
       'connect',
       'reports',
-      'tax',
+      'tax-group',
       'contributions',
     ]);
     expect(products?.rows[0]?.children?.map((row) => row.key)).toEqual(['disputes', 'links']);
+    // The Tax workspace (ADR 0020): its overview first, collection last.
+    expect(products?.rows[4]?.children?.map((row) => row.key)).toEqual([
+      'tax',
+      'tax-business',
+      'tax-registrations',
+      'tax-documents',
+      'tax-review',
+      'tax-deadlines',
+      'tax-history',
+      'tax-collection',
+    ]);
     expect(products?.rows[1]?.children?.map((row) => row.key)).toEqual([
       'subscriptions',
       'invoices',
@@ -163,7 +174,13 @@ describe('navModel', () => {
   it('knows which group holds a page', () => {
     expect(groupOf('disputes')).toBe('payments-group');
     expect(groupOf('invoices')).toBe('billing');
-    expect(groupOf('tax')).toBeUndefined();
+    expect(groupOf('tax')).toBe('tax-group');
+    expect(groupOf('tax-review')).toBe('tax-group');
+    // Each Tax page is its own destination: the sidebar lights it, no trail.
+    expect(activeDestination('/tax')?.key).toBe('tax');
+    expect(activeDestination('/tax/review')?.key).toBe('tax-review');
+    expect(breadcrumbTrail('/tax/review', 'Review')).toEqual([]);
+    expect(groupOf('reports')).toBeUndefined();
     expect(groupOf(undefined)).toBeUndefined();
   });
 });

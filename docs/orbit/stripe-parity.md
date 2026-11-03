@@ -110,6 +110,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Test clocks | ✅ | `clock_` create/advance/delete; customers attached at creation; the engine reads the clock for them | |
 | Entitlements | ✅ | `feat_` features, product attachments, `active_entitlements`, `entitlements.active_entitlement_summary.updated`; one feature granted by several products is one entitlement | |
 | Tax on invoices | ✅ | Peable Tax computed before finalize, fail closed (`automatic_tax.status`); proxy keeps renewal repricing until migrated | |
+| Tax registrations monitoring | 🟡 | Business compliance (ADR 0020): onboarding facts, declared registration statuses, `tax_document` files, a versioned rule set (EU VAT OSS B2C, Texas remote-seller safe harbor; everything else `unsupported`), replayable assessments with threshold measurement from Peable Tax transactions, a review queue with owner decisions, deadlines where a rule computes them, action history, `tax.assessment.*` / `tax.review_item.*` events | More jurisdictions (each a reviewed rule-set version); registration submission, returns and remittance are not available |
 
 ## Phase 5 — Connect and money (ADR 0015)
 
