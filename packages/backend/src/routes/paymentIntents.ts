@@ -6,7 +6,6 @@ import { verifySecret } from '@oxy.so/core/server';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import {
   PAYMENT_INTENT_STATUSES,
-  canStillBePaid,
   type CreatePaymentIntentParams,
   type PaymentIntentStatus,
 } from '@peable.to/shared-types';
@@ -476,7 +475,7 @@ export function createPaymentIntentsRouter(deps: {
          * keeps a copy.
          */
         const action =
-          intent.rail === 'card' && canStillBePaid(intent.status)
+          intent.rail === 'card'
             ? await resolveClientAction(intent)
             : { kind: 'not_applicable' as const };
         if (action.kind === 'ok') res.setHeader('Cache-Control', 'no-store');
