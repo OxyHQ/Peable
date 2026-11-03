@@ -32,7 +32,6 @@ function fixture() {
     id: 'il_one',
     invoice: 'in_one',
     livemode: false,
-    subscription: 'sub_one',
     quantity: 1,
     amount: 2500,
     parent: {
@@ -117,6 +116,7 @@ it('rejects unrelated customer/subscription/price, partial/prorated/refunded/dis
     (f: ReturnType<typeof fixture>) => (f.invoice.customer = 'cus_other'),
     (f) => (f.invoice.parent.subscription_details.subscription = 'sub_other'),
     (f) => (f.line.pricing.price_details.price = 'price_other'),
+    (f) => (f.line.parent.subscription_item_details.subscription = 'sub_other'),
     (f) => (f.invoice.amount_paid = 100),
     (f) => (f.invoice.post_payment_credit_notes_amount = 1),
     (f) => (f.line.parent.subscription_item_details.proration = true),

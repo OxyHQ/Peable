@@ -57,7 +57,19 @@ async function run() {
     await disconnectPostgres();
   }
 }
-void run().catch(() => {
+void run().catch((error: unknown) => {
+  const detail = error as {
+    name?: string;
+    code?: string;
+    issues?: { path?: unknown; code?: string }[];
+  };
+  console.error(
+    JSON.stringify({
+      name: detail.name,
+      code: detail.code,
+      issues: detail.issues?.map((issue) => ({ path: issue.path, code: issue.code })),
+    }),
+  );
   console.error(
     'Local recurring readback failed. Check the test account, secure artifact, and Accounts/Checkout Sessions/Subscriptions/Invoices/Charges read permissions. Provider payloads are not logged.',
   );
