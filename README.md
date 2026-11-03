@@ -1,17 +1,38 @@
 # Peable
 
 Peable is a payments platform, a personal payment app, and the tools that connect
-payments to other websites and applications.
+payments to other websites and applications. Peable is the public product for
+fiat and FairCoin payments: its merchant workspace, APIs, SDKs and checkout share one
+payment lifecycle.
 
 ## Product direction
 
 ### Peable Platform
 
-Businesses and platforms use Peable to accept and manage payments through a
-merchant dashboard, APIs and services. The product covers payment requests,
+Businesses and platforms use Peable to accept and manage payments through
+**Orbit by Peable**, the central merchant workspace, alongside APIs and services. The product covers payment requests,
 payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
 disputes, payment status and webhook notifications. The API foundation exists;
-the complete merchant dashboard remains to be built.
+Orbit is a separate merchant application, not a screen inside the personal wallet.
+Its unfinished workspace is deferred and excluded from this payment release.
+Orbit will bring payment operations, customers, subscriptions, refunds,
+disputes, settlement, reports and developer tools into one place. Developer tools
+include application credentials and webhook configuration/diagnostics, with the
+same authority checks as the APIs.
+
+### Payment methods and internal providers
+
+Buyers and merchants interact with **Peable**, regardless of the payment method.
+Peable owns the public payment resources, checkout experience, payment status and
+merchant notifications. Fiat payments use configured provider integrations;
+FairCoin payments use the self-custodial rail. A provider is an internal processing
+integration, not the platform's identity or a separate merchant-facing product.
+
+The current implementation includes one card provider. Supporting additional fiat
+providers and their payment methods is part of the architecture and roadmap, not a
+claim that multiple providers, every bank method or every market are enabled today.
+Available methods must come from the configured provider and merchant capabilities;
+merchant preferences can restrict that set but cannot invent availability or approval.
 
 ### Peable App
 
@@ -39,8 +60,12 @@ Opening or closing a window is never proof of payment.
 
 Today the browser SDK supplies an embeddable button, a QR payment window, app
 handoff and realtime status. The separate app payment sheet supports payments to
-people from Oxy apps. These are existing building blocks; a unified commercial
-payment window with the complete buyer flow is still a delivery target.
+people from Oxy apps. The unified merchant checkout composes reusable Bloom UI
+with the optional `@peable.to/sdk/checkout/ui` entry and Mention as its first
+consumer. Server imports remain independent of UI dependencies. Buyers use one
+checkout; test or live processing is determined by the configured environment.
+Development fixtures are separate from that buyer journey. Publication and
+production acceptance must be verified for the exact release.
 
 ### First integration: Mention Plus
 
@@ -54,14 +79,21 @@ is not the only way to subscribe.** Users with Plus through One must keep that
 access without purchasing Plus again. Both routes rely on authoritative backend
 entitlements; cancellation, failed payment and pending confirmation remain distinct.
 
-The standalone flow must use an approved offer with its actual price, cadence and
-supported payment methods. These commercial values and catalogue activation remain
-pending; the payment sheet must show unavailable rather than invent an offer.
-The earlier integration used a One-only offer and a dialog; adapting it to the
-standalone offer and detached sheet is implementation work, not a live release.
-Payment authorization may continue through authoritative hosted checkout. Closing
-the sheet or checkout window never grants Plus. The full cross-device/payment
-acceptance remains a release requirement.
+The approved standalone catalogue prices are **USD 5.99 monthly** and **USD 57.50
+annually** (20% below twelve monthly payments, rounded to cents). Catalogue prices
+and purchase availability are separate: an offer can be visible while purchasing
+remains disabled. Oxy One continues to be another source of Plus access.
+
+The local unified checkout has completed actual **test-environment monthly and
+annual subscriptions**, with paid invoices and signed settlement notifications.
+Card fields use secure provider frames within the shared Bloom form; Continue
+prepares authorization and a separate Pay action confirms it. Authentication
+challenges and declined-payment retry have also been verified.
+
+These tests do **not** grant production Plus access or establish live availability.
+Production still uses the hosted, gated integration; the embedded public billing
+binding, authoritative entitlement delivery and fiscal readiness require completion
+and acceptance. Closing the sheet or checkout window never grants Plus.
 
 ### FairCoin is a payment method, not an exchange product
 
@@ -88,18 +120,18 @@ are separate states. This table describes source capability, not production read
 | Area | Implemented foundation | Remaining work or verification |
 |---|---|---|
 | Payments | Intents, links, sessions, idempotency, FairCoin settlement, card provider integration, signed webhooks and realtime status | End-to-end acceptance on the exact release and enabled environment |
-| Merchant operations | Administrative APIs; specific tax and contribution screens | Complete merchant dashboard and credential-management experience |
+| Merchant operations | Administrative APIs; specific tax and contribution screens | Complete centralized merchant workspace and credential-management experience |
 | Marketplace payments | Connected sellers, onboarding, transfers, reversals, refunds and disputes | Full provider/device acceptance; dispute attachments; bank payout tracking |
 | Billing and tax | Customers, subscription checkout, portal, invoice reads, cancellation, tax calculation/reporting and native FairCoin periods | Broad self-service billing management and activation per approved offer; FairCoin renewal requires payment authorization |
 | Personal app | Identity, wallet, activity, sending/receiving, profiles, QR, payment approval and pockets | Physical-device acceptance and recovery/rotation verification |
-| Embedded payments | Browser button/QR/app handoff; separate app payment sheet | Unified merchant payment window; Mention Plus as the first target |
+| Embedded payments | Browser button/QR/app handoff; separate person-payment sheet; reusable merchant checkout in the local Mention integration | Publish and accept the unified commercial checkout; activate standalone Plus with authoritative access |
 | Financial operations | Per-payment provider settlement reads | Per-merchant ledger, fiat balances, reserves, bank payouts and reconciliation |
 | In-person payments | No terminal product | Terminal and contactless payment experience |
 
 Historical evidence includes real provider test-mode subscription checkout and
 lifecycle tests, plus deployment receipts. It does not verify today's deployment
 or all payment flows. See the [roadmap](docs/PEABLE-ROADMAP.md) for evidence,
-limitations and delivery priorities.
+limitations and delivery priorities. The [provider architecture and local test record](docs/integrations/payment-provider-boundary.md) describes the internal processing boundary.
 
 ---
 
@@ -135,7 +167,7 @@ environment is refused before any call reaches the acquirer.
 
 Amounts are canonical base unit strings and never floats, on both rails.
 
-Merchants supply no Stripe key. Peable holds the provider credentials
+Merchants supply no provider credentials. Peable holds the provider credentials
 ([ADR 0009](docs/adr/0009-peable-holds-the-provider-credentials.md)); a merchant's whole
 authentication is their Oxy application credential.
 

@@ -6,10 +6,14 @@
 
 ## Product and boundaries
 
-Peable has three connected surfaces: the business payments platform (dashboard,
+Peable has three connected surfaces: the business payments platform (Orbit by Peable,
 APIs and services), the personal payment app, and SDKs that bring payment
 management and the **Pay with Peable** experience into other websites and apps.
-The [README](../README.md) defines their purpose and relationship.
+The [README](../README.md) defines their purpose and relationship. Peable is the
+public platform for fiat and FairCoin payments; processing providers are internal
+integrations. One card provider is implemented today. Additional providers are a
+planned extension, with method availability constrained by real provider and
+merchant capabilities. See the [provider boundary](integrations/payment-provider-boundary.md).
 
 FairCoin is a payment rail for sending, receiving and paying for goods or services.
 Peable, Oxy and Oxy ecosystem applications do not buy or sell FairCoin or offer
@@ -46,12 +50,12 @@ receipt cannot establish that today's user journey works in production.
 | Cards | Creation, confirmation, cancellation, expiry and reconciliation through the implemented provider | Full payment and marketplace lifecycle acceptance; current live enablement unverified |
 | Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
 | Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
-| Merchant dashboard | Merchant/payment/webhook APIs; tax administration and contribution screens in the app | Complete merchant dashboard, credential UI over Oxy authority, broad resource management |
+| Orbit by Peable | Merchant/payment/webhook APIs; existing tax administration and contribution screens | Separate merchant application; unfinished workspace deferred outside this payment release, credential UI over Oxy authority and broad resource management |
 | Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
 | FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
 | Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
 | Personal app | Identity, self-custodial wallet, activity, social send/receive, profiles, QR, pockets and checkout approval | Physical-device/recovery acceptance |
-| Browser integration | `@peable.to/sdk/checkout`: button, QR window, mobile app handoff and status events | Unified commercial payment-window experience |
+| Browser integration | `@peable.to/sdk/checkout` payer client and optional `@peable.to/sdk/checkout/ui` unified Bloom checkout, locally tested in Mention | Published release acceptance and production embedded billing binding |
 | App integration | `@peable.to/pay` execution and separate `@peable.to/pay/ui` payment-to-person sheet | Commercial checkout integration; do not equate a person-payment sheet with a subscription checkout |
 | In-person payments | No terminal implementation | Terminal/contactless product |
 
@@ -89,9 +93,24 @@ A read-only check on 2026-11-02 of Oxy's public
 `GET https://api.oxy.so/billing/personal-plans` returned HTTP 200 with
 `state: "unconfigured"`, `purchase: "unavailable"` and an empty `plans` list.
 That observation covers the then-current personal-plan catalogue, not availability
-of a standalone Mention Plus offer. Standalone Plus price, cadence, payment methods
-and catalogue activation remain pending. An unavailable catalogue must never fall
-back to an invented price or grant Plus locally.
+of a standalone Mention Plus offer. Subsequent approved standalone catalogue
+configuration records USD 599 minor units monthly and USD 5750 annually, with
+purchase unavailable. The earlier observation is historical, not the current
+standalone price. Visible prices do not authorize a payment or an access grant.
+
+The November 3 local implementation adds a reusable Bloom checkout, an optional
+Peable SDK UI adapter and Mention integration. Normal Mention Plus has one buyer
+checkout, with processing environment selected by configuration. Actual monthly
+USD 599 and annual USD 5750 test subscriptions reached active status with paid
+invoices and signed Peable settlement. Issuer authentication completed through the
+challenge's pointer action; decline and retry reused the same payment intent and
+subscription. Secure provider fields remain inside the canonical Bloom form.
+
+These observations do not grant production Plus access or prove live activation.
+Development fixtures are confined to a separate playground, not a buyer mode.
+Production retains the hosted, gated integration until the authoritative embedded
+billing binding and entitlement lifecycle are accepted. See the dated
+[local test record](integrations/payment-provider-boundary.md#local-verification-2026-11-03).
 
 ## Delivery order
 
@@ -110,7 +129,8 @@ back to an invented price or grant Plus locally.
    confirmation and recovery after interrupted responses. Verify entitlement
    updates and renewals/cancellation against authoritative backend state. Use the
    same payment implementation for subsequent integrations.
-4. **Build the merchant dashboard.** Bring onboarding, payments, links, checkout,
+4. **Build Orbit by Peable as a separate merchant application.** This unfinished
+   phase is paused and excluded from the payment release. Bring onboarding, payments, links, checkout,
    sellers, refunds/disputes, billing, tax and webhook diagnostics into a coherent
    administrative interface over existing authority and services.
 5. **Complete financial operations and later products.** Define accounting and
@@ -118,13 +138,11 @@ back to an invented price or grant Plus locally.
    Terminal/contactless, commerce adapters, coordinated shared pockets, broader
    analytics and additional providers remain separate future work.
 
-The previous Mention source integration bound a One-only offer and rendered a
-dialog. The product requirement now explicitly supersedes that assumption:
-standalone Mention Plus checkout, presented in a Bloom detached bottom sheet,
-with One remaining an additional source of Plus access. Updating the offer binding,
-backend entitlement flow and sheet is work in progress, not a claim of live purchase
-availability. The standalone price, cadence and supported rails must be approved
-before activation; no existing One price is a substitute.
+Standalone Mention Plus checkout now has local source and actual recurring test
+payment evidence. Oxy One remains an additional source of Plus access, not a
+substitute offer or price. Live purchase availability, embedded billing authority,
+fiscal configuration and the complete subscription/access lifecycle still require
+acceptance. A successful test subscription is not a production entitlement.
 
 The payment flow must retain a scoped operation key for interrupted-request
 recovery, open only authoritative checkout destinations when a hosted authorization
