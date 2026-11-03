@@ -166,3 +166,20 @@ configuration does. Stripe rejects combining a configuration with an explicit
 production startup retains dynamic methods. Production selection of a specific
 Peable method still needs its own reviewed dispatch/configuration wiring; this
 local policy does not claim that platform-wide work is complete.
+
+For this isolated account, set
+`PEABLE_TEST_STRIPE_API_VERSION=2026-09-30.endive` to match its signed CLI snapshot
+events. Only that reviewed alternate version is accepted, and only under the
+complete local test boundary. Without it, the production pin remains
+`2026-07-29.dahlia`. SDK requests, Billing bindings, recurring readers and event
+validation use one active version; mismatched events still fail closed. The
+installed SDK's default-version type requires one explicit typing boundary for
+this reviewed alternate release; both runtime schemas and real account readbacks
+are verified. This does not change the account default or rewrite stored events.
+
+The local cohort sets `observationTimeoutMs: 10000`, within the existing hard
+upper bound. The original 2000ms default remains unchanged for other cohorts;
+the real owned invoice proof needed2242ms for its multiple provider reads. With
+the reviewed version and bound, the already-stored signed monthly subscription
+and invoice events produced active/paid snapshots locally. No external webhook
+target or production entitlement consumer is configured.

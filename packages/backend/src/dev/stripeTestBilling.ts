@@ -31,6 +31,8 @@ export function localTestBillingConfiguration(
     deployment: { provider: 'stripe' as const, platformAccountId: accountId, livemode: false },
     portalConfigurationRef: LOCAL_TEST_PORTAL,
     observationsEnabled: true,
+    // The owned invoice proof makes several bounded provider reads.
+    observationTimeoutMs: 10_000,
     cohorts: [
       {
         merchantId: merchant.id,

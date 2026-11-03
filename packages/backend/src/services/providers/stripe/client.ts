@@ -22,6 +22,7 @@
  */
 
 import Stripe from 'stripe';
+import { selectStripeApiVersion } from './apiVersion';
 import { config } from '../../../config';
 import { ProviderError, type ProviderStage } from '../provider';
 
@@ -32,7 +33,7 @@ import { ProviderError, type ProviderStage } from '../provider';
  * shapes while the migration is in flight. Changing it means re-verifying every
  * event fixture, deliberately.
  */
-export const STRIPE_API_VERSION = '2026-07-29.dahlia' as const;
+export const STRIPE_API_VERSION = selectStripeApiVersion(process.env);
 
 let client: Stripe | undefined;
 
@@ -54,10 +55,10 @@ export function getStripeClient(): Stripe {
     );
   }
   client = new Stripe(secretKey, {
-    // `as any` is not needed and not used: the pinned literal is the SDK's own
-    // union member, so a version the installed SDK does not know is a COMPILE
-    // error rather than a runtime surprise.
-    apiVersion: STRIPE_API_VERSION,
+    // The SDK types name its default release. The only alternate release is
+    // explicitly reviewed and restricted to the isolated TEST runtime; readers,
+    // bindings and signed-event validation share this same version value.
+    apiVersion: STRIPE_API_VERSION as Stripe.LatestApiVersion,
     // Named so a Stripe support conversation can identify this integration in
     // their request logs without the operator guessing.
     appInfo: { name: 'Peable Gateway', url: 'https://peable.to' },
