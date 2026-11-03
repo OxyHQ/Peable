@@ -240,3 +240,20 @@ On the local test account, measured fresh bootstrap latency fell from 7.8 second
 to 5.7 seconds cold / 5.1 seconds warm after removing duplicate proof reads.
 These are observations, not an SLA: provider creation and ownership verification
 still require network round trips. No subscription is created on page view.
+
+`GET /__local/checkout-test/config` is a read-only preparation endpoint with the
+same loopback Host, allowed Origin and `X-Peable-Local-Test: 1` boundary. It
+returns the test publishable key, public merchant/product scope, validated
+monthly/annual catalogue amounts, method capabilities and a 60-second expiry.
+It creates no customer, subscription or payment. Account, method configuration
+and both prices are read in parallel; concurrent page warmups share the public
+configuration for at most 60 seconds. Credential/configuration changes refuse
+cached preparation and require restarting the local runner.
+
+A host may warm this public configuration on its checkout page and mount secure
+card fields before subscription creation finishes. It must match the eventual
+intent's merchant, price, currency and provider action's publishable key before
+confirmation. Preparation supplies no tax quote, payment capability or proof of
+payment; the real binding and signed paid-readiness checks remain mandatory.
+Measured local preparation was 459ms cold and below 1ms warm, with only four
+provider GETs cold and no provider writes.

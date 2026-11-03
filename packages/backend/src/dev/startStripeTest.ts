@@ -38,9 +38,12 @@ async function run() {
   const { readLocalSubscription, withLocalSubscriptionBootstrap } = await import(
     './stripeTestEmbeddedSubscription'
   );
+  const { createLocalPreparationReader } = await import('./stripeTestPreparation');
+  const prepare = createLocalPreparationReader();
   gateway.app.use(
     createLocalStripeTestCheckoutRouter({
       read: readLocalSubscription,
+      prepare,
       create: (key, interval) =>
         withLocalSubscriptionBootstrap(async () => {
           const { created } = await createLocalStripeTestIntent(key, interval);
