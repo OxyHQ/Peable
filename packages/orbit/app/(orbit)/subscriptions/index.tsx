@@ -13,7 +13,8 @@ import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitSc
 
 type Filter = SubscriptionStatus | 'all' | null;
 const CURRENT = 'current';
-const OPTIONS = [
+// Built at render: the language can change while Orbit is open.
+const options = () => [
   { value: CURRENT, label: t('subscriptions.filter.current') },
   { value: 'all', label: t('subscriptions.filter.all') },
   ...ORBIT_SUBSCRIPTION_STATUSES.map((status) => ({
@@ -62,7 +63,7 @@ export default function SubscriptionsScreen() {
             size="sm"
             label={t('subscriptions.filter')}
             value={filter ?? CURRENT}
-            options={OPTIONS}
+            options={options()}
             onChange={(next) => setFilter(next === CURRENT ? null : (next as Filter))}
           />
         </View>

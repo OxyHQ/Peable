@@ -1,7 +1,9 @@
 /**
  * The Reports screen's decisions, pure (`runs.test.ts`): turning the form into
- * a `POST …/reporting/report_runs` body, wording a run, and whether the list
- * must keep refreshing.
+ * the ONE request both ways of getting a report take — a run
+ * (`POST …/reporting/report_runs`) and a download
+ * (`GET …/reporting/report_types/:id/csv`) — the period presets, wording a run,
+ * and whether the list must keep refreshing.
  */
 import type {
   CreateReportRunParams,
@@ -22,6 +24,8 @@ export interface ReportRunForm {
   end: string;
   /** `''` for every currency. */
   currency: CurrencyCode | '';
+  /** The columns to write, in the layout's order; absent for the report's default columns. */
+  columns?: readonly string[];
 }
 
 export type ReportRunFormError = 'type' | 'start' | 'end' | 'order' | 'future';
@@ -64,6 +68,7 @@ export function buildReportRunBody(
         interval_start: start,
         interval_end: end,
         ...(form.currency ? { currency: form.currency } : {}),
+        ...(form.columns ? { columns: [...form.columns] } : {}),
       },
     },
   };
@@ -118,4 +123,36 @@ export function intervalLabel(run: Pick<ReportRun, 'parameters'>): string {
   // An end at midnight closes the day before it; one inside a day closes that day.
   const last = end % DAY === 0 ? end - DAY : end;
   return `${day(start)} – ${day(Math.max(start, last))}`;
+}
+
+export const REPORT_PRESETS = ['last7', 'last30', 'thisMonth', 'lastMonth'] as const;
+export type ReportPreset = (typeof REPORT_PRESETS)[number];
+
+const dayOf = (seconds: number) => new Date(seconds * 1000).toISOString().slice(0, 10);
+
+/** A preset's first and last day (both inclusive, UTC), relative to `now` — today included. */
+export function presetDays(preset: ReportPreset, now: number): { start: string; end: string } {
+  const today = new Date(now * 1000);
+  const year = today.getUTCFullYear();
+  const month = today.getUTCMonth();
+  switch (preset) {
+    case 'last7':
+      return { start: dayOf(now - 6 * DAY), end: dayOf(now) };
+    case 'last30':
+      return { start: dayOf(now - 29 * DAY), end: dayOf(now) };
+    case 'thisMonth':
+      return { start: dayOf(Date.UTC(year, month, 1) / 1000), end: dayOf(now) };
+    case 'lastMonth':
+      return {
+        start: dayOf(Date.UTC(year, month - 1, 1) / 1000),
+        end: dayOf(Date.UTC(year, month, 1) / 1000 - DAY),
+      };
+  }
+}
+
+/** What a downloaded report is saved as: `payments.itemized.1_2026-10-01_2026-10-31.csv`. */
+export function downloadFilename(
+  form: Pick<ReportRunForm, 'reportType' | 'start' | 'end'>,
+): string {
+  return `${form.reportType}_${form.start.trim()}_${form.end.trim()}.csv`;
 }

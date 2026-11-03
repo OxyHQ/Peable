@@ -1,8 +1,15 @@
 import { describe, expect, it } from 'bun:test';
 import type { FileObject, ReportRun, ReportType } from '@peable.to/shared-types';
+import { REPORT_TYPE_IDS, REPORT_TYPE_LAYOUTS } from '@peable.to/shared-types/reporting';
+import {
+  REPORT_TYPE_IDS as ROOT_REPORT_TYPE_IDS,
+  REPORT_TYPE_LAYOUTS as ROOT_REPORT_TYPE_LAYOUTS,
+} from '@peable.to/shared-types';
 import {
   buildReportRunBody,
   downloadableFile,
+  downloadFilename,
+  presetDays,
   hasPendingRuns,
   intervalLabel,
   type ReportRunForm,
@@ -125,5 +132,53 @@ describe('a run on screen', () => {
     const types = [{ id: 'balance.summary.1', name: 'Balance summary' }] as ReportType[];
     expect(reportTypeName(types, 'balance.summary.1')).toBe('Balance summary');
     expect(reportTypeName(types, 'payouts.itemized.1')).toBe('payouts.itemized.1');
+  });
+});
+
+describe('one request for a run and a download', () => {
+  it('carries the chosen columns, or none for the defaults', () => {
+    const form: ReportRunForm = {
+      reportType: 'refunds.itemized.1',
+      start: '2026-10-01',
+      end: '2026-10-31',
+      currency: '',
+    };
+    expect(buildReportRunBody(form, NOW)).toEqual({
+      ok: true,
+      body: {
+        report_type: 'refunds.itemized.1',
+        parameters: { interval_start: OCT_1, interval_end: NOV_1 },
+      },
+    });
+    const columns = REPORT_TYPE_LAYOUTS['refunds.itemized.1'].columns;
+    expect(buildReportRunBody({ ...form, columns }, NOW)).toEqual({
+      ok: true,
+      body: {
+        report_type: 'refunds.itemized.1',
+        parameters: { interval_start: OCT_1, interval_end: NOV_1, columns: [...columns] },
+      },
+    });
+    expect(downloadFilename(form)).toBe('refunds.itemized.1_2026-10-01_2026-10-31.csv');
+  });
+
+  it('reads the layouts from the browser-safe subpath, the same as the root', () => {
+    expect(REPORT_TYPE_IDS).toEqual(ROOT_REPORT_TYPE_IDS);
+    expect(REPORT_TYPE_LAYOUTS).toEqual(ROOT_REPORT_TYPE_LAYOUTS);
+  });
+});
+
+describe('presetDays', () => {
+  it('counts today in the last N days', () => {
+    expect(presetDays('last7', NOW)).toEqual({ start: '2026-10-28', end: '2026-11-03' });
+    expect(presetDays('last30', NOW)).toEqual({ start: '2026-10-05', end: '2026-11-03' });
+  });
+
+  it('spans calendar months in UTC, across a year boundary too', () => {
+    expect(presetDays('thisMonth', NOW)).toEqual({ start: '2026-11-01', end: '2026-11-03' });
+    expect(presetDays('lastMonth', NOW)).toEqual({ start: '2026-10-01', end: '2026-10-31' });
+    expect(presetDays('lastMonth', Date.UTC(2027, 0, 10) / 1000)).toEqual({
+      start: '2026-12-01',
+      end: '2026-12-31',
+    });
   });
 });

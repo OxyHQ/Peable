@@ -3,6 +3,7 @@ import type {
   PaymentIntentStatus,
   WebhookDeliveryStatus,
 } from '@peable.to/shared-types';
+import { labelFor, t } from '../i18n';
 
 /**
  * Every payment status, in lifecycle order — Stripe's seven (ADR 0019).
@@ -37,32 +38,13 @@ export function paymentStatusTone(status: PaymentIntentStatus): StatusTone {
   return PAYMENT_TONES[status] ?? 'neutral';
 }
 
-const PAYMENT_LABELS: Record<PaymentIntentStatus, string> = {
-  requires_payment_method: 'Awaiting payment method',
-  requires_confirmation: 'Awaiting confirmation',
-  requires_action: 'Awaiting payer',
-  processing: 'Processing',
-  requires_capture: 'Authorized',
-  succeeded: 'Succeeded',
-  canceled: 'Canceled',
-};
-
 export function paymentStatusLabel(status: PaymentIntentStatus): string {
-  return PAYMENT_LABELS[status] ?? status;
+  return labelFor('paymentStatus', status);
 }
-
-const CANCELLATION_LABELS: Record<PaymentIntentCancellationReason, string> = {
-  abandoned: 'Expired unpaid',
-  automatic: 'Canceled by the provider',
-  duplicate: 'Duplicate',
-  fraudulent: 'Fraudulent',
-  requested_by_customer: 'Requested by the customer',
-  underpaid: 'Underpaid',
-};
 
 /** Why a canceled payment ended, in the merchant's words; `null` when nobody said. */
 export function cancellationReasonLabel(reason: PaymentIntentCancellationReason | null): string {
-  return reason === null ? 'No reason given' : (CANCELLATION_LABELS[reason] ?? reason);
+  return reason === null ? t('cancellation.none') : labelFor('cancellation', reason);
 }
 
 const DELIVERY_TONES: Record<WebhookDeliveryStatus, StatusTone> = {
@@ -76,13 +58,6 @@ export function deliveryStatusTone(status: WebhookDeliveryStatus): StatusTone {
   return DELIVERY_TONES[status] ?? 'neutral';
 }
 
-const DELIVERY_LABELS: Record<WebhookDeliveryStatus, string> = {
-  pending: 'Pending',
-  delivered: 'Delivered',
-  failed: 'Refused',
-  dead: 'Gave up',
-};
-
 export function deliveryStatusLabel(status: WebhookDeliveryStatus): string {
-  return DELIVERY_LABELS[status] ?? status;
+  return labelFor('deliveryStatus', status);
 }

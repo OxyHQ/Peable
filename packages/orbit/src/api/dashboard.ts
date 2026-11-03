@@ -74,6 +74,13 @@ import type {
   WebhookDelivery,
   WebhookEndpoint,
   WebhookEvent,
+  ConnectedAccount,
+  RequestLog,
+  RequestLogMethod,
+  RequestLogStatusFilter,
+  Transfer,
+  TransferReversal,
+  TransferWithReversal,
 } from '@peable.to/shared-types';
 import { isOrbitApiError, type OrbitTransport, type Query, withQuery } from './transport';
 
@@ -104,9 +111,58 @@ export interface PageParams {
   starting_after?: string;
 }
 
+/** `created[gte|gt|lte|lt]`, Unix seconds. */
+export type CreatedFilter = {
+  gte?: number;
+  gt?: number;
+  lte?: number;
+  lt?: number;
+};
+
 export interface EventListParams extends PageParams {
   /** An exact type, or a prefix ending in `.*`. */
   type?: string;
+  /** Only the events about this payment (`pi_…`). */
+  payment_intent?: string;
+  created?: CreatedFilter;
+}
+
+export interface RequestLogListParams extends PageParams {
+  /** One code (`404`) or a class (`4xx`). */
+  status?: RequestLogStatusFilter;
+  method?: RequestLogMethod;
+  created?: CreatedFilter;
+}
+
+export interface TransferListParams extends PageParams {
+  /** Only what this seller (`ca_…`) was paid. */
+  connected_account?: string;
+  /** Only what this payment (`pi_…`) settled. */
+  payment_intent?: string;
+}
+
+/** `POST …/connected_accounts`: mirrors the gateway's `createAccountBodySchema` (strict). */
+export interface CreateConnectedAccountBody {
+  /** The marketplace's own id for the seller. */
+  external_ref: string;
+  /** The card half: both or neither. */
+  country?: string;
+  business_type?: 'individual' | 'company';
+  /** The FairCoin half: the seller's Oxy user registers their own key (ADR 0012). */
+  faircoin?: { network: 'mainnet' | 'testnet'; oxy_user_id: string };
+}
+
+/** `POST …/connected_accounts/:id/account_links`. */
+export interface SellerAccountLinkBody {
+  refresh_url: string;
+  return_url: string;
+  rail: 'card' | 'faircoin';
+}
+
+/** `POST …/transfers/:id/reversals`. `external_ref` is the reversal's durable identity. */
+export interface ReverseTransferBody {
+  amount: string;
+  external_ref: string;
 }
 
 export interface DeliveryListParams extends PageParams {
@@ -615,6 +671,22 @@ export function createDashboardApi(transport: OrbitTransport) {
         list<ReportRun>(dashboardPath(scope, '/reporting/report_runs', { ...params })),
       retrieve: (scope: DashboardScope, runId: string) =>
         get<ReportRun>(dashboardPath(scope, `/reporting/report_runs/${id(runId)}`)),
+      /**
+       * The same report a run would store, streamed at once
+       * (`GET …/reporting/report_types/:id/csv`); a refusal is the gateway's
+       * JSON error, thrown before any file.
+       */
+      download: (scope: DashboardScope, body: CreateReportRunParams) =>
+        transport.request<Blob>(
+          'GET',
+          dashboardPath(scope, `/reporting/report_types/${id(body.report_type)}/csv`, {
+            interval_start: body.parameters.interval_start,
+            interval_end: body.parameters.interval_end,
+            columns: body.parameters.columns,
+            currency: body.parameters.currency,
+          }),
+          { responseType: 'blob' },
+        ),
       /** `idempotencyKey` is kept by the form across retries of the same request. */
       create: (scope: DashboardScope, body: CreateReportRunParams, idempotencyKey?: string) =>
         transport.request<ReportRun>('POST', dashboardPath(scope, '/reporting/report_runs'), {
@@ -759,6 +831,70 @@ export function createDashboardApi(transport: OrbitTransport) {
     events: {
       list: (scope: DashboardScope, params: EventListParams = {}) =>
         list<WebhookEvent>(dashboardPath(scope, '/events', { ...params })),
+      retrieve: (scope: DashboardScope, eventId: string) =>
+        get<WebhookEvent>(dashboardPath(scope, `/events/${id(eventId)}`)),
+    },
+
+    /** The merchant's own API requests of the last 30 days (`req_…`, the `Request-Id`). */
+    requestLogs: {
+      list: (scope: DashboardScope, params: RequestLogListParams = {}) =>
+        list<RequestLog>(dashboardPath(scope, '/request_logs', { ...params })),
+      retrieve: (scope: DashboardScope, requestId: string) =>
+        get<RequestLog>(dashboardPath(scope, `/request_logs/${id(requestId)}`)),
+    },
+
+    /**
+     * A marketplace's sellers (`ca_…`, role seller). The merchant's own
+     * account is `account` above, never one of these.
+     */
+    connectedAccounts: {
+      list: (scope: DashboardScope, params: PageParams = {}) =>
+        list<ConnectedAccount>(dashboardPath(scope, '/connected_accounts', { ...params })),
+      retrieve: (scope: DashboardScope, accountId: string) =>
+        get<ConnectedAccount>(dashboardPath(scope, `/connected_accounts/${id(accountId)}`)),
+      /** 201 for a new seller, 200 for the one this `external_ref` already names. */
+      create: (scope: DashboardScope, body: CreateConnectedAccountBody, idempotencyKey?: string) =>
+        transport.request<ConnectedAccount>('POST', dashboardPath(scope, '/connected_accounts'), {
+          body,
+          ...(idempotencyKey ? { idempotencyKey } : {}),
+        }),
+      /** Re-read the seller's account from the provider now. */
+      refresh: (scope: DashboardScope, accountId: string) =>
+        transport.request<ConnectedAccount>(
+          'POST',
+          dashboardPath(scope, `/connected_accounts/${id(accountId)}/refresh`),
+          { body: {} },
+        ),
+      /** A single-use onboarding link for the SELLER to open — share it, never store it. */
+      createLink: (scope: DashboardScope, accountId: string, body: SellerAccountLinkBody) =>
+        transport.request<AccountLink>(
+          'POST',
+          dashboardPath(scope, `/connected_accounts/${id(accountId)}/account_links`),
+          { body },
+        ),
+    },
+
+    /** Settlements paid to sellers (`tr_…`) and their reversals (`trr_…`). */
+    transfers: {
+      list: (scope: DashboardScope, params: TransferListParams = {}) =>
+        list<Transfer>(dashboardPath(scope, '/transfers', { ...params })),
+      retrieve: (scope: DashboardScope, transferId: string) =>
+        get<Transfer>(dashboardPath(scope, `/transfers/${id(transferId)}`)),
+      /** A complete list: a settlement is reversed at most down to zero. */
+      reversals: (scope: DashboardScope, transferId: string) =>
+        list<TransferReversal>(dashboardPath(scope, `/transfers/${id(transferId)}/reversals`)),
+      /** `idempotencyKey` is kept by the form across retries of the same reversal. */
+      reverse: (
+        scope: DashboardScope,
+        transferId: string,
+        body: ReverseTransferBody,
+        idempotencyKey?: string,
+      ) =>
+        transport.request<TransferWithReversal>(
+          'POST',
+          dashboardPath(scope, `/transfers/${id(transferId)}/reversals`),
+          { body, ...(idempotencyKey ? { idempotencyKey } : {}) },
+        ),
     },
 
     webhookDeliveries: {

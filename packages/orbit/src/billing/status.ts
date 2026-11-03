@@ -4,6 +4,7 @@ import type {
   Subscription,
   SubscriptionStatus,
 } from '@peable.to/shared-types';
+import { labelFor } from '../i18n';
 import type { StatusTone } from '../payments/status';
 
 /**
@@ -42,23 +43,12 @@ const SUBSCRIPTION_TONES: Record<SubscriptionStatus, StatusTone> = {
   paused: 'neutral',
 };
 
-const SUBSCRIPTION_LABELS: Record<SubscriptionStatus, string> = {
-  incomplete: 'Incomplete',
-  incomplete_expired: 'Expired unpaid',
-  trialing: 'Trialing',
-  active: 'Active',
-  past_due: 'Past due',
-  unpaid: 'Unpaid',
-  canceled: 'Canceled',
-  paused: 'Paused',
-};
-
 export function subscriptionStatusTone(status: SubscriptionStatus): StatusTone {
   return SUBSCRIPTION_TONES[status] ?? 'neutral';
 }
 
 export function subscriptionStatusLabel(status: SubscriptionStatus): string {
-  return SUBSCRIPTION_LABELS[status] ?? status;
+  return labelFor('subscriptionStatus', status);
 }
 
 const INVOICE_TONES: Record<InvoiceStatus, StatusTone> = {
@@ -69,20 +59,12 @@ const INVOICE_TONES: Record<InvoiceStatus, StatusTone> = {
   uncollectible: 'danger',
 };
 
-const INVOICE_LABELS: Record<InvoiceStatus, string> = {
-  draft: 'Draft',
-  open: 'Open',
-  paid: 'Paid',
-  void: 'Void',
-  uncollectible: 'Uncollectible',
-};
-
 export function invoiceStatusTone(status: InvoiceStatus): StatusTone {
   return INVOICE_TONES[status] ?? 'neutral';
 }
 
 export function invoiceStatusLabel(status: InvoiceStatus): string {
-  return INVOICE_LABELS[status] ?? status;
+  return labelFor('invoiceStatus', status);
 }
 
 export type InvoiceAction = 'finalize' | 'send' | 'void' | 'mark_uncollectible';

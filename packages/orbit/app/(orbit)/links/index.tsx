@@ -16,7 +16,7 @@ import { type LinkFilter, useLinkPages } from '@/links/useLinks';
 import { Choice } from '@/ui/Choice';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
-const FILTER_OPTIONS = [
+const filterOptions = () => [
   { value: 'active', label: t('links.filter.active') },
   { value: 'inactive', label: t('links.filter.inactive') },
   { value: 'all', label: t('links.filter.all') },
@@ -117,7 +117,7 @@ export default function PaymentLinksScreen() {
               size="sm"
               label={t('links.filter')}
               value={filterValue(filter)}
-              options={FILTER_OPTIONS}
+              options={filterOptions()}
               onChange={(next) => setFilter(next === 'all' ? null : next === 'active')}
             />
           </View>

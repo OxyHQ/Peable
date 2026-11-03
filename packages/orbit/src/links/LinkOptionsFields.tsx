@@ -28,18 +28,20 @@ export function errorHint(errors: LinkFormErrors, field: string, fallback?: stri
   return code ? t(`links.error.${code}`) : fallback;
 }
 
-const SUBMIT_OPTIONS = ORBIT_SUBMIT_TYPES.map((value) => ({
-  value,
-  label: t(`links.submit.${value}`),
-}));
-const LOCALE_OPTIONS = [
+const submitOptions = () =>
+  ORBIT_SUBMIT_TYPES.map((value) => ({
+    value,
+    label: t(`links.submit.${value}`),
+  }));
+const localeOptions = () => [
   { value: 'auto', label: t('links.locale.auto') },
   ...ORBIT_CHECKOUT_LOCALES.map((value) => ({ value, label: t(`links.locale.${value}`) })),
 ];
-const FIELD_TYPE_OPTIONS = ORBIT_CUSTOM_FIELD_TYPES.map((value) => ({
-  value,
-  label: t(`links.customField.type.${value}`),
-}));
+const fieldTypeOptions = () =>
+  ORBIT_CUSTOM_FIELD_TYPES.map((value) => ({
+    value,
+    label: t(`links.customField.type.${value}`),
+  }));
 
 function CustomFieldEditor({
   index,
@@ -99,7 +101,7 @@ function CustomFieldEditor({
           <Choice
             label={t('links.customField.type')}
             value={field.type}
-            options={FIELD_TYPE_OPTIONS}
+            options={fieldTypeOptions()}
             onChange={(type) => set('type', type as CustomFieldForm['type'])}
             disabled={disabled}
           />
@@ -352,7 +354,7 @@ export function LinkOptionsFields({
           <Choice
             label={t('links.options.submitType')}
             value={form.submitType}
-            options={SUBMIT_OPTIONS}
+            options={submitOptions()}
             onChange={(value) => set('submitType')(value as LinkOptionsForm['submitType'])}
             disabled={disabled}
           />
@@ -361,7 +363,7 @@ export function LinkOptionsFields({
           <Choice
             label={t('links.options.locale')}
             value={form.locale}
-            options={LOCALE_OPTIONS}
+            options={localeOptions()}
             onChange={(value) => set('locale')(value as LinkOptionsForm['locale'])}
             disabled={disabled}
           />

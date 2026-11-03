@@ -53,18 +53,20 @@ import {
 } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
-const STATUS_OPTIONS = [
+const statusOptions = () => [
   { value: ALL, label: t('payouts.allStatuses') },
   ...ORBIT_PAYOUT_STATUSES.map((status) => ({ value: status, label: payoutStatusLabel(status) })),
 ];
-const INTERVAL_OPTIONS = ORBIT_PAYOUT_INTERVALS.map((interval) => ({
-  value: interval,
-  label: payoutIntervalLabel(interval),
-}));
-const WEEKDAY_OPTIONS = ORBIT_WEEKLY_ANCHORS.map((day) => ({
-  value: day,
-  label: weekdayLabel(day),
-}));
+const intervalOptions = () =>
+  ORBIT_PAYOUT_INTERVALS.map((interval) => ({
+    value: interval,
+    label: payoutIntervalLabel(interval),
+  }));
+const weekdayOptions = () =>
+  ORBIT_WEEKLY_ANCHORS.map((day) => ({
+    value: day,
+    label: weekdayLabel(day),
+  }));
 
 const SCHEDULE_ERRORS: Record<ScheduleFormError, string> = {
   delay: 'schedule.invalid.delay',
@@ -109,7 +111,7 @@ function PayoutSchedule({ scope, account }: { scope: DashboardScope; account: Ac
           <Choice
             label={t('schedule.interval')}
             value={form.interval}
-            options={INTERVAL_OPTIONS}
+            options={intervalOptions()}
             disabled={busy}
             onChange={(interval) =>
               setForm((prior) => ({ ...prior, interval: interval as ScheduleForm['interval'] }))
@@ -121,7 +123,7 @@ function PayoutSchedule({ scope, account }: { scope: DashboardScope; account: Ac
             <Choice
               label={t('schedule.weeklyAnchor')}
               value={form.weeklyAnchor || null}
-              options={WEEKDAY_OPTIONS}
+              options={weekdayOptions()}
               disabled={busy}
               onChange={(day) =>
                 setForm((prior) => ({
@@ -359,7 +361,7 @@ function PayoutList({ scope }: { scope: DashboardScope }) {
             size="sm"
             label={t('payouts.filter')}
             value={status ?? ALL}
-            options={STATUS_OPTIONS}
+            options={statusOptions()}
             onChange={(next) => setStatus(next === ALL ? null : (next as PayoutStatus))}
           />
         </View>

@@ -1,5 +1,6 @@
 import type { PaymentIntent, PaymentIntentStatus } from '@peable.to/shared-types';
 import { formatAmount } from '../format/money';
+import { t } from '../i18n';
 import { cancellationReasonLabel, paymentStatusLabel } from './status';
 
 export type TimelineState = 'done' | 'current' | 'upcoming' | 'failed';
@@ -47,10 +48,14 @@ function detailFor(intent: PaymentIntent, status: PaymentIntentStatus): string |
   const chain = intent.faircoin;
   if (status === 'processing' && chain?.txid) {
     const { confirmations, required_confirmations: required } = chain;
-    return `Transaction ${chain.txid} · ${confirmations} of ${required} confirmation${required === 1 ? '' : 's'}`;
+    return t(required === 1 ? 'timeline.chain.one' : 'timeline.chain.other', {
+      txid: chain.txid,
+      confirmations,
+      required,
+    });
   }
   if (status === 'requires_payment_method' && intent.last_payment_error) {
-    return `Last attempt failed: ${intent.last_payment_error.message}`;
+    return t('timeline.lastError', { message: intent.last_payment_error.message });
   }
   return undefined;
 }
@@ -114,16 +119,18 @@ export function paymentTimeline(intent: PaymentIntent): TimelineStep[] {
     const full = intent.amount_refunded === intent.amount_received;
     steps.push({
       key: 'refunded',
-      label: full ? 'Refunded' : 'Partially refunded',
+      label: t(full ? 'timeline.refunded' : 'timeline.partiallyRefunded'),
       state: 'done',
-      detail: `${formatAmount(intent.amount_refunded, intent.currency)} refunded`,
+      detail: t('timeline.refundedAmount', {
+        amount: formatAmount(intent.amount_refunded, intent.currency),
+      }),
     });
   }
 
   if (EXPIRABLE.has(intent.status) && intent.can_expire !== false) {
     steps.push({
       key: 'expires',
-      label: 'Expires if unpaid',
+      label: t('timeline.expires'),
       state: 'upcoming',
       at: intent.expires_at,
     });

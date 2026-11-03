@@ -1,4 +1,5 @@
 import type { CurrencyCode } from '@peable.to/shared-types';
+import { t } from '../i18n';
 
 /**
  * Decimal places of each currency's smallest unit.
@@ -59,7 +60,7 @@ export function formatAmountValue(amount: string, currency: string): string | nu
 /** `12.50 EUR`; an amount that cannot be read is shown as its raw base units. */
 export function formatAmount(amount: string, currency: string): string {
   const value = formatAmountValue(amount, currency);
-  return value === null ? `${amount} (base units) ${currency}` : `${value} ${currency}`;
+  return value === null ? t('money.baseUnits', { amount, currency }) : `${value} ${currency}`;
 }
 
 /**
@@ -81,7 +82,7 @@ export function formatSignedAmount(amount: string, currency: string): string {
   const negative = amount.startsWith('-');
   const magnitude = negative ? amount.slice(1) : amount;
   const value = magnitude === '0' && negative ? null : formatAmountValue(magnitude, code);
-  if (value === null) return `${amount} (base units) ${code}`;
+  if (value === null) return t('money.baseUnits', { amount, currency: code });
   return `${negative ? '-' : ''}${value} ${code}`;
 }
 

@@ -22,6 +22,7 @@ import {
   deliveryStatusTone,
   paymentStatusLabel,
   paymentStatusTone,
+  type StatusTone,
 } from '../payments/status';
 
 export function PayoutStatusBadge({ status }: { status: PayoutStatus }) {
@@ -100,4 +101,9 @@ export function DisputeStatusBadge({ status }: { status: DisputeStatus }) {
       content={disputeStatusLabel(status)}
     />
   );
+}
+
+/** A badge in one of Orbit's status tones, for a vocabulary with its own label function. */
+export function ToneBadge({ tone, label }: { tone: StatusTone; label: string }) {
+  return <Badge appearance="subtle" tone={tone} size="label-small" content={label} />;
 }

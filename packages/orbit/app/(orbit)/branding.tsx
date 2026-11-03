@@ -36,11 +36,11 @@ import { Toggle } from '@/ui/Toggle';
 
 const DEFAULT = 'default';
 
-const FONT_OPTIONS = [
+const fontOptions = () => [
   { value: DEFAULT, label: t('branding.default') },
   ...ORBIT_BRANDING_FONTS.map((value) => ({ value, label: t(`branding.font.${value}`) })),
 ];
-const BORDER_OPTIONS = [
+const borderOptions = () => [
   { value: DEFAULT, label: t('branding.default') },
   ...ORBIT_BORDER_STYLES.map((value) => ({ value, label: t(`branding.border.${value}`) })),
 ];
@@ -185,7 +185,7 @@ function BrandingEditor({
               <Choice
                 label={t('branding.font')}
                 value={form.font ?? DEFAULT}
-                options={FONT_OPTIONS}
+                options={fontOptions()}
                 onChange={(value) =>
                   set('font')(value === DEFAULT ? null : (value as BrandingForm['font']))
                 }
@@ -196,7 +196,7 @@ function BrandingEditor({
               <Choice
                 label={t('branding.borderStyle')}
                 value={form.borderStyle ?? DEFAULT}
-                options={BORDER_OPTIONS}
+                options={borderOptions()}
                 onChange={(value) =>
                   set('borderStyle')(
                     value === DEFAULT ? null : (value as BrandingForm['borderStyle']),

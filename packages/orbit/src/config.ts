@@ -25,3 +25,9 @@ export const OXY_AUTH_REDIRECT_URI =
 
 /** The Peable gateway. Its `/v1/dashboard/*` routes take the signed-in user's Oxy bearer. */
 export const GATEWAY_API_URL = process.env.EXPO_PUBLIC_GATEWAY_API_URL ?? 'https://api.peable.to';
+
+/**
+ * Oxy Console, where an organization's members, roles and permissions are
+ * managed. Orbit's Team page reads them and links here for every change.
+ */
+export const OXY_CONSOLE_URL = process.env.EXPO_PUBLIC_OXY_CONSOLE_URL ?? 'https://console.oxy.so';

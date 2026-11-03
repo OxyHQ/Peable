@@ -1,3 +1,5 @@
+import { getLocale, t } from '../i18n';
+
 /**
  * Instants on the wire are integer Unix SECONDS (ADR 0014 D1). Every conversion
  * to a `Date` goes through here, so no screen multiplies by 1000 twice or not
@@ -7,8 +9,14 @@ export function fromUnixSeconds(seconds: number): Date {
   return new Date(seconds * 1000);
 }
 
-/** A readable local date and time, or an em dash for a missing instant. */
-export function formatInstant(seconds: number | null | undefined, locale?: string): string {
+/**
+ * A readable local date and time, or an em dash for a missing instant — in
+ * Orbit's active language unless `locale` says otherwise.
+ */
+export function formatInstant(
+  seconds: number | null | undefined,
+  locale: string = getLocale(),
+): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '—';
   return fromUnixSeconds(seconds).toLocaleString(locale, {
     dateStyle: 'medium',
@@ -31,8 +39,8 @@ export function formatRelative(seconds: number, now: number): string {
         : magnitude < 86_400
           ? [Math.round(magnitude / 3600), 'h']
           : [Math.round(magnitude / 86_400), 'd'];
-  if (value === 0) return 'now';
-  return delta >= 0 ? `in ${value} ${unit}` : `${value} ${unit} ago`;
+  if (value === 0) return t('time.now');
+  return t(delta >= 0 ? 'time.future' : 'time.past', { value, unit });
 }
 
 /** `YYYY-MM-DD` (UTC) of a Unix-seconds instant — the format date fields take. */

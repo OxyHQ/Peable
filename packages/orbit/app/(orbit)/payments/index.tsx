@@ -13,7 +13,7 @@ import { Choice } from '@/ui/Choice';
 import { ErrorNotice, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
-const STATUS_OPTIONS = [
+const statusOptions = () => [
   { value: ALL, label: t('payments.allStatuses') },
   ...ORBIT_PAYMENT_STATUSES.map((status) => ({ value: status, label: paymentStatusLabel(status) })),
 ];
@@ -31,7 +31,7 @@ function StatusFilter({
         size="sm"
         label={t('payments.filter')}
         value={value ?? ALL}
-        options={STATUS_OPTIONS}
+        options={statusOptions()}
         onChange={(next) => onChange(next === ALL ? null : (next as PaymentIntentStatus))}
       />
     </View>
