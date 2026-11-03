@@ -62,9 +62,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: bash .github/scripts/deploy-scope.sh gate
-      # Orbit bundles shared-types, `@peable.to/contracts` and
-      # `@peable.to/sdk/contributions` (built below) and resolves through the
-      # root manifests.
+      # Orbit bundles shared-types and `@peable.to/contracts` (built below) and
+      # resolves through the root manifests.
       - name: Decide whether anything Orbit's web export builds from changed
         id: orbit
         if: steps.gate.outputs.current == 'true'
@@ -72,7 +71,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: >-
           bash .github/scripts/deploy-scope.sh target orbit include
-          '^(packages/orbit/|packages/shared-types/|packages/contracts/|packages/sdk/|package\.json$|bun\.lock$|bunfig\.toml$|\.github/workflows/deploy-orbit\.yml$)'
+          '^(packages/orbit/|packages/shared-types/|packages/contracts/|package\.json$|bun\.lock$|bunfig\.toml$|\.github/workflows/deploy-orbit\.yml$)'
           peable-release-orbit-
 
   deploy:
@@ -107,10 +106,9 @@ jobs:
 
       # Every workspace package Orbit imports is consumed from its `dist`.
       # Stated rather than left to `postinstall`: a job should not depend on a
-      # side effect of installing. contracts first, the SDK compiles against it.
+      # side effect of installing. contracts first, shared-types compiles against it.
       - run: bun run build:contracts
       - run: bun run build:shared-types
-      - run: bun run --filter @peable.to/sdk build
 
       - run: bun run build:orbit
         env:

@@ -8,7 +8,7 @@
 //   const all = await peable.refunds.list().autoPagingToArray({ limit: 500 });
 
 import type { List, ListParams, SearchParams, SearchResult } from '@peable.to/shared-types';
-import { PeableApiError } from './errors';
+import { PeableAPIError } from './errors';
 
 /** The most `autoPagingToArray` will collect — an upper bound, so a typo is not an OOM. */
 export const AUTO_PAGING_ARRAY_MAX = 10_000;
@@ -75,8 +75,8 @@ function autoPaging<P extends Promise<unknown>, T>(
 }
 
 /** A gateway answering the same cursor twice would loop forever; say so. */
-function stalled(cursor: string): PeableApiError {
-  return new PeableApiError(`Pagination did not advance past ${cursor}`, {
+function stalled(cursor: string): PeableAPIError {
+  return new PeableAPIError(`Pagination did not advance past ${cursor}`, {
     code: 'invalid_response',
   });
 }

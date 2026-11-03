@@ -25,7 +25,9 @@ Every response carries a
 `{ error: { type, code?, param?, message, request_id } }` — a well-formed but
 invalid request is a `400`, never a `422`. The SDK passes your params and returns
 objects exactly in that shape; only its own options stay camelCase JavaScript
-(`new Peable({ publicKey, secret })`, `{ idempotencyKey }`, `toleranceSec`).
+(`new Peable({ publicKey, secret })`, `{ idempotencyKey }`, `timeout`,
+`maxNetworkRetries`). The SDK's methods are generated from the route contracts,
+so their parameter and return types are the gateway's own.
 The conventions are [ADR 0014](adr/0014-orbit-api-conventions-and-versioning.md).
 
 ## Idempotency — retrying a POST safely
@@ -886,7 +888,8 @@ Every non-2xx maps to a typed error — catch what you need:
 ```ts
 import {
   PeableError, PeableAuthenticationError, PeableInvalidRequestError,
-  PeablePermissionError, PeableApiError, PeableSignatureVerificationError,
+  PeablePermissionError, PeableAPIError, PeableCardError, PeableIdempotencyError,
+  PeableRateLimitError, PeableConnectionError, PeableSignatureVerificationError,
 } from '@peable.to/sdk';
 
 try {
@@ -894,7 +897,8 @@ try {
 } catch (err) {
   if (err instanceof PeableInvalidRequestError) {
     err.statusCode; // 400
-    err.code;       // 'parameter_invalid' — the specific reason, else the broad type
+    err.code;       // 'parameter_invalid' — the specific reason (undefined when none)
+    err.docUrl;     // where that code is documented
     err.param;      // 'amount' — the offending field, in bracket notation
     err.requestId;  // the response's Request-Id; quote it to Peable support
   }
@@ -1266,8 +1270,10 @@ SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ ac
 
 ## Organization contribution links (FairCoin)
 
-The `ContributionsResource` SDK uses a **human Oxy linked-client transport**, not
-an application credential. Its scope is `{ organizationId, applicationId,
+Contribution links are managed with a **human Oxy linked-client transport**, not
+an application credential, so they are not part of the server SDK: Orbit calls
+them over its own transport (`packages/orbit/src/api/contributions.ts`), validating
+every request and answer against `@peable.to/contracts`. Its scope is `{ organizationId, applicationId,
 environment }`; Oxy must currently report an organization owner, admin or editor,
 and the active application must belong to that organization. Peable stores no
 membership copy. Register the application's existing watch-only FairCoin merchant
@@ -1280,9 +1286,8 @@ first. The merchant fixes the network; the contribution amount is always FAIR.
 immutable; use `setActive` to withdraw a link. `list` and `collections` return
 only that organization's contribution records as `{ object: 'list', data,
 has_more, url }`, newest first, with the [list parameters](#lists-expand-and-metadata)
-(`limit`, `starting_after`/`ending_before`, `created`); iterating the returned
-list (`for await`) walks every page. `setActive` is a `POST`.
-The app's Settings → Organization contributions screen uses this SDK.
+(`limit`, `starting_after`/`ending_before`, `created`). `setActive` is a `POST`.
+Orbit's Contributions screen is the one client.
 
 Payers open the existing anonymous `https://checkout.peable.to/l/<id>` page.
 Since Orbit Phase 3 a contribution link is a payment link whose one line is the

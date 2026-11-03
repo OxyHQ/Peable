@@ -33,7 +33,7 @@ function resource(reply: unknown, status = 200) {
           getToken: async () => 'synthetic-owner-token',
           invalidate() {},
         },
-        { fetch: fakeFetch },
+        { fetch: fakeFetch, sleep: async () => {} },
       ),
     ),
   };
@@ -73,10 +73,16 @@ describe('checkout operation recovery official SDK transport', () => {
     }
   });
   it('propagates provider uncertainty and foreign-owner failures with no fallback request', async () => {
-    for (const status of [404, 503]) {
+    // A 404 is answered once; a 503 is the SAME read retried (the default
+    // two retries), never another request.
+    for (const [status, attempts] of [
+      [404, 1],
+      [503, 3],
+    ] as const) {
       const fixture = resource({ error: { message: 'synthetic_recovery_unavailable' } }, status);
       await expect(fixture.billing.retrieveCheckoutOperation(params)).rejects.toThrow();
-      expect(fixture.calls).toHaveLength(1);
+      expect(fixture.calls).toHaveLength(attempts);
+      expect(new Set(fixture.calls.map((call) => `${call.init.method} ${call.url}`)).size).toBe(1);
     }
   });
 });

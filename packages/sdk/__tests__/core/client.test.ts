@@ -1,10 +1,13 @@
 import { createServer } from 'node:http';
 import { describe, expect, test } from 'bun:test';
 import { createRestClient } from '../../src/core/client';
+import { PEABLE_API_VERSION } from '@peable.to/contracts/vocabulary';
 import {
-  PeableApiError,
   PeableAuthenticationError,
+  PeableConnectionError,
+  PeableIdempotencyError,
   PeableInvalidRequestError,
+  PeableRateLimitError,
 } from '../../src/core/errors';
 import type { ServiceTokenProvider } from '../../src/core/serviceToken';
 import { createMockFetch } from '../support/mockFetch';
@@ -30,6 +33,9 @@ function fakeTokenProvider(tokens: string[]): {
     invalidateCalls,
   };
 }
+
+/** No backoff wait. */
+const instant = { sleep: async () => {} };
 
 describe('createRestClient', () => {
   test('attaches the bearer token and omits Content-Type/Idempotency-Key when absent', async () => {
@@ -236,16 +242,22 @@ describe('createRestClient', () => {
     expect(invalidateCalls).toHaveLength(1);
   });
 
-  test('wraps a network-level fetch failure as PeableApiError', async () => {
-    const failingFetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
+  test('a network failure is a PeableConnectionError, after the default 2 retries', async () => {
+    let attempts = 0;
+    const failingFetch = (() => {
+      attempts += 1;
+      return Promise.reject(new Error('ECONNRESET'));
+    }) as unknown as typeof fetch;
     const { provider } = fakeTokenProvider(['tok_1']);
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, {
       fetch: failingFetch,
+      ...instant,
     });
 
     await expect(client.request('GET', '/v1/payment_intents/pi_1')).rejects.toBeInstanceOf(
-      PeableApiError,
+      PeableConnectionError,
     );
+    expect(attempts).toBe(3);
   });
 });
 
@@ -270,18 +282,23 @@ describe('createRestClient real HTTP response integrity', () => {
       });
       try {
         const { provider } = fakeTokenProvider(['synthetic-token']);
-        const client = createRestClient({ baseURL: `http://127.0.0.1:${server.port}` }, provider);
+        const client = createRestClient(
+          { baseURL: `http://127.0.0.1:${server.port}` },
+          provider,
+          instant,
+        );
         await expect(
           client.request('POST', '/v1/billing/checkout_sessions', {
             body: {},
             idempotencyKey: 'same-intent',
           }),
         ).rejects.toMatchObject({
-          name: 'PeableApiError',
+          name: 'PeableAPIError',
           statusCode: status,
           code: 'invalid_response',
         });
-        expect(keys).toEqual(['same-intent']); // No hidden POST retry.
+        // A 2xx that is not JSON is not a transport failure: not retried.
+        expect(keys).toEqual(['same-intent']);
       } finally {
         await server.stop(true);
       }
@@ -301,13 +318,17 @@ describe('createRestClient real HTTP response integrity', () => {
     });
     try {
       const { provider } = fakeTokenProvider(['synthetic-token']);
-      const client = createRestClient({ baseURL: `http://127.0.0.1:${server.port}` }, provider);
+      const client = createRestClient(
+        { baseURL: `http://127.0.0.1:${server.port}` },
+        provider,
+        instant,
+      );
       expect(await client.request<{ id: string }>('GET', '/valid')).toEqual({
         id: 'synthetic-result',
       });
       expect(await client.request<void>('DELETE', '/empty')).toBeUndefined();
       await expect(client.request('GET', '/failure')).rejects.toMatchObject({
-        name: 'PeableApiError',
+        name: 'PeableAPIError',
         statusCode: 503,
       });
     } finally {
@@ -319,7 +340,7 @@ describe('createRestClient real HTTP response integrity', () => {
 // Actual TCP body interruption after flushed headers; no mocked Response.text.
 describe('createRestClient interrupted HTTP body', () => {
   for (const status of [200, 201, 503]) {
-    test(`keeps status ${status}, one POST, and the original key for explicit recovery`, async () => {
+    test(`a body cut off after ${status} is retried under the original key, and runs once`, async () => {
       const keys: Array<string | undefined> = [];
       let effects = 0;
       const server = createServer((request, response) => {
@@ -342,20 +363,16 @@ describe('createRestClient interrupted HTTP body', () => {
         const address = server.address();
         if (!address || typeof address === 'string') throw new Error('Missing fixture port');
         const { provider, invalidateCalls } = fakeTokenProvider(['synthetic-token']);
-        const client = createRestClient({ baseURL: `http://127.0.0.1:${address.port}` }, provider);
+        const client = createRestClient(
+          { baseURL: `http://127.0.0.1:${address.port}` },
+          provider,
+          instant,
+        );
         const intent = { body: { storeId: 'synthetic-store' }, idempotencyKey: 'original-intent' };
-        await expect(
-          client.request('POST', '/v1/billing/checkout_sessions', intent),
-        ).rejects.toMatchObject({
-          name: 'PeableApiError',
-          statusCode: status,
-          code: 'invalid_response',
-        });
-        expect(keys).toEqual(['original-intent']);
-        expect(invalidateCalls).toEqual([]);
         expect(
           await client.request<{ id: string }>('POST', '/v1/billing/checkout_sessions', intent),
         ).toEqual({ id: 'same-committed-result' });
+        expect(invalidateCalls).toEqual([]);
         expect(keys).toEqual(['original-intent', 'original-intent']);
         expect(effects).toBe(1);
       } finally {
@@ -367,4 +384,176 @@ describe('createRestClient interrupted HTTP body', () => {
       }
     });
   }
+});
+
+describe('createRestClient retries', () => {
+  function scripted(
+    answers: Array<{ status: number; json?: unknown; headers?: Record<string, string> }>,
+  ) {
+    let index = 0;
+    return createMockFetch(() => {
+      const answer = answers[Math.min(index, answers.length - 1)];
+      index += 1;
+      return answer ?? { status: 500 };
+    });
+  }
+  const error = (type: string, code?: string) => ({
+    error: { type, message: `${type} happened`, request_id: 'req_1', ...(code ? { code } : {}) },
+  });
+
+  test('retries 5xx, 429 and an in-flight 409 under ONE idempotency key', async () => {
+    const { fetch: fetchImpl, requests } = scripted([
+      { status: 503, json: error('api_error') },
+      { status: 429, json: error('rate_limit_error', 'rate_limited') },
+      { status: 409, json: error('idempotency_error', 'idempotency_error') },
+      { status: 200, json: { id: 'pi_1' } },
+    ]);
+    const delays: number[] = [];
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL, maxNetworkRetries: 3 }, provider, {
+      fetch: fetchImpl,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+      random: () => 1,
+    });
+
+    expect(await client.request('POST', '/v1/payment_intents', { body: {} })).toEqual({
+      id: 'pi_1',
+    });
+    expect(requests).toHaveLength(4);
+    const keys = new Set(requests.map((r) => r.headers.get('Idempotency-Key')));
+    expect(keys.size).toBe(1);
+    expect([...keys][0]).toMatch(/^[0-9a-f-]{36}$/);
+    // Exponential: 500, 1000, 2000 ms (the jitter source pinned to its top).
+    expect(delays).toEqual([500, 1000, 2000]);
+  });
+
+  test('honours Retry-After when it is longer than the backoff, capped at 60 s', async () => {
+    const { fetch: fetchImpl } = scripted([
+      { status: 429, json: error('rate_limit_error'), headers: { 'Retry-After': '3' } },
+      { status: 429, json: error('rate_limit_error'), headers: { 'Retry-After': '3600' } },
+      { status: 200, json: { ok: true } },
+    ]);
+    const delays: number[] = [];
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, {
+      fetch: fetchImpl,
+      sleep: async (ms) => {
+        delays.push(ms);
+      },
+      random: () => 0,
+    });
+    await client.request('GET', '/v1/balance');
+    expect(delays).toEqual([3000, 60_000]);
+  });
+
+  test('never retries another 4xx', async () => {
+    for (const [status, body, ErrorClass] of [
+      [400, error('invalid_request_error', 'parameter_invalid'), PeableInvalidRequestError],
+      [400, error('idempotency_error', 'idempotency_error'), PeableIdempotencyError],
+      [404, error('invalid_request_error', 'resource_missing'), PeableInvalidRequestError],
+      [409, error('invalid_request_error', 'resource_conflict'), PeableInvalidRequestError],
+    ] as const) {
+      const { fetch: fetchImpl, requests } = scripted([{ status, json: body }]);
+      const { provider } = fakeTokenProvider(['tok_1']);
+      const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, {
+        fetch: fetchImpl,
+        ...instant,
+      });
+      await expect(client.request('POST', '/v1/customers', { body: {} })).rejects.toBeInstanceOf(
+        ErrorClass,
+      );
+      expect(requests).toHaveLength(1);
+    }
+  });
+
+  test('maxNetworkRetries applies per client and per request; the last error is thrown', async () => {
+    const { fetch: fetchImpl, requests } = scripted([
+      { status: 429, json: error('rate_limit_error') },
+    ]);
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL, maxNetworkRetries: 0 }, provider, {
+      fetch: fetchImpl,
+      ...instant,
+    });
+    await expect(client.request('GET', '/v1/balance')).rejects.toBeInstanceOf(PeableRateLimitError);
+    expect(requests).toHaveLength(1);
+    await expect(
+      client.request('GET', '/v1/balance', { maxNetworkRetries: 4 }),
+    ).rejects.toMatchObject({ statusCode: 429, requestId: 'req_1' });
+    expect(requests).toHaveLength(6);
+  });
+
+  test('a per-request timeout is a retried PeableConnectionError with code timeout', async () => {
+    let attempts = 0;
+    const hanging = ((_url: string, init?: RequestInit) => {
+      attempts += 1;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal?.reason));
+      });
+    }) as unknown as typeof fetch;
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL, maxNetworkRetries: 1 }, provider, {
+      fetch: hanging,
+      ...instant,
+    });
+    await expect(client.request('GET', '/v1/balance', { timeout: 10 })).rejects.toMatchObject({
+      name: 'PeableConnectionError',
+      code: 'timeout',
+    });
+    expect(attempts).toBe(2);
+  });
+
+  test("a caller's abort ends the call at once, with the caller's reason", async () => {
+    const controller = new AbortController();
+    const { fetch: fetchImpl, requests } = scripted([{ status: 503, json: error('api_error') }]);
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, {
+      fetch: fetchImpl,
+      sleep: async () => {
+        controller.abort(new Error('caller gave up'));
+        throw controller.signal.reason;
+      },
+    });
+    await expect(
+      client.request('GET', '/v1/balance', { signal: controller.signal }),
+    ).rejects.toThrow('caller gave up');
+    expect(requests).toHaveLength(1);
+  });
+});
+
+describe('createRestClient headers', () => {
+  test('sends Peable-Version: the contracts wire date by default, or the one asked for', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({ status: 200, json: {} }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
+    await client.request('GET', '/v1/customers');
+    await client.request('GET', '/v1/customers', { apiVersion: PEABLE_API_VERSION });
+    expect(requests.map((r) => r.headers.get('Peable-Version'))).toEqual([
+      PEABLE_API_VERSION,
+      PEABLE_API_VERSION,
+    ]);
+  });
+
+  test("the client's peableAccount goes only to routes that accept it; a request's own wins", async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch(() => ({ status: 200, json: {} }));
+    const { provider } = fakeTokenProvider(['tok_1']);
+    const client = createRestClient(
+      { baseURL: TEST_GATEWAY_URL, peableAccount: 'ca_default' },
+      provider,
+      { fetch: fetchImpl },
+    );
+    await client.request('GET', '/v1/balance', { acceptsPeableAccount: true });
+    await client.request('GET', '/v1/customers');
+    await client.request('GET', '/v1/balance', {
+      acceptsPeableAccount: true,
+      peableAccount: 'ca_other',
+    });
+    expect(requests.map((r) => r.headers.get('Peable-Account'))).toEqual([
+      'ca_default',
+      null,
+      'ca_other',
+    ]);
+  });
 });

@@ -20,7 +20,7 @@ function recordingTransport(answer: unknown) {
 }
 
 describe('createContributionsApi', () => {
-  it('reads a page through the SDK resource with its has_more intact', async () => {
+  it('reads a page with its has_more intact', async () => {
     const { transport, calls } = recordingTransport({
       object: 'list',
       data: [],
@@ -36,8 +36,6 @@ describe('createContributionsApi', () => {
         path: '/v1/organizations/org_1/applications/app_1/contributions',
         options: {
           query: { environment: 'development', starting_after: 'plink_1' },
-          body: undefined,
-          idempotencyKey: undefined,
         },
       },
     ]);

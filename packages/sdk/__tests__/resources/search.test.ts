@@ -7,10 +7,10 @@
 import { describe, expect, test } from 'bun:test';
 import type { SearchResult } from '@peable.to/shared-types';
 import { Peable } from '../../src';
-import { PeableApiError } from '../../src/core/errors';
+import { PeableAPIError } from '../../src/core/errors';
 import { InvoicesResource, SubscriptionsResource } from '../../src/resources/billingEngine';
 import { ChargesResource } from '../../src/resources/charges';
-import { CustomersResource } from '../../src/resources/customers';
+import { GeneratedClient } from '../../src/generated/resources';
 import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
 import { PricesResource, ProductsResource } from '../../src/resources/catalog';
 import { RefundsResource } from '../../src/resources/refunds';
@@ -47,7 +47,7 @@ describe('search', () => {
     const params = { query: 'created>0' };
     await new PaymentIntentsResource(client).search(params);
     await new ChargesResource(client).search(params);
-    await new CustomersResource(client).search(params);
+    await new GeneratedClient(client).customers.search(params);
     await new ProductsResource(client).search(params);
     await new PricesResource(client).search(params);
     await new RefundsResource(client).search(params);
@@ -72,7 +72,7 @@ describe('search', () => {
         : { status: 200, json: result([], null) },
     );
     const query = `email:"jenny@example.com" AND metadata['order']:'6735'`;
-    await new CustomersResource(buildTestClient(mock.fetch)).search({
+    await new GeneratedClient(buildTestClient(mock.fetch)).customers.search({
       query,
       limit: 3,
       page: 'tok_1',
@@ -99,7 +99,7 @@ describe('search', () => {
       const page = queryOf(req).get('page') ?? 'first';
       return { status: 200, json: pages[page] };
     });
-    const customers = new CustomersResource(buildTestClient(mock.fetch));
+    const customers = new GeneratedClient(buildTestClient(mock.fetch)).customers;
     const all = await customers.search({ query: 'name~"jen"', limit: 2 }).autoPagingToArray({
       limit: 100,
     });
@@ -134,7 +134,7 @@ describe('search', () => {
     const charges = new ChargesResource(buildTestClient(mock.fetch));
     await expect(
       charges.search({ query: 'refunded:true' }).autoPagingToArray({ limit: 100 }),
-    ).rejects.toBeInstanceOf(PeableApiError);
+    ).rejects.toBeInstanceOf(PeableAPIError);
   });
 
   test('is wired on the client', () => {

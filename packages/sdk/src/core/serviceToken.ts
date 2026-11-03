@@ -5,7 +5,7 @@
 // reactively when `RestClient` sees a 401 (see `client.ts`).
 
 import { resolveConfig, type PeableCredentialConfig } from './config';
-import { errorFromResponse, PeableApiError } from './errors';
+import { errorFromResponse, PeableAPIError, PeableConnectionError } from './errors';
 import { timeoutSignal } from './timeoutSignal';
 
 /** Path (relative to `oxyApiUrl`) of oxy-api's service-token mint endpoint. */
@@ -64,10 +64,7 @@ export function createServiceTokenProvider(
 
   async function mint(): Promise<string> {
     // One deadline over the headers AND the body, released once both are in.
-    const deadline =
-      resolved.requestTimeoutMs === undefined
-        ? undefined
-        : timeoutSignal(resolved.requestTimeoutMs);
+    const deadline = timeoutSignal(resolved.timeout);
     let response: Response;
     let body: unknown;
     try {
@@ -79,30 +76,33 @@ export function createServiceTokenProvider(
           body: JSON.stringify({ apiKey: resolved.publicKey, apiSecret: resolved.secret }),
         });
       } catch (cause) {
-        throw new PeableApiError(
-          `Failed to reach ${resolved.oxyApiUrl} to mint an Peable service token: ${
+        throw new PeableConnectionError(
+          `Failed to reach ${resolved.oxyApiUrl} to mint a Peable service token: ${
             cause instanceof Error ? cause.message : String(cause)
           }`,
+          { ...(deadline.signal.aborted ? { code: 'timeout' } : {}), raw: cause },
         );
       }
 
       try {
         body = await readJsonBody(response);
-      } catch {
-        throw new PeableApiError('The Oxy service-token response body could not be read', {
+      } catch (cause) {
+        throw new PeableConnectionError('The Oxy service-token response body could not be read', {
           statusCode: response.status,
-          code: 'invalid_response',
+          code: 'response_interrupted',
+          raw: cause,
         });
       }
     } finally {
-      deadline?.dispose();
+      deadline.dispose();
     }
     if (!response.ok) {
       throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
     }
     if (!isServiceTokenMintEnvelope(body)) {
-      throw new PeableApiError(
+      throw new PeableAPIError(
         'Peable: the service-token mint response was missing `data.token`/`data.expiresIn`',
+        { statusCode: response.status, code: 'invalid_response' },
       );
     }
 

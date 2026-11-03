@@ -24,7 +24,7 @@ import {
 } from './cardElements';
 import { loadProviderSdk } from './providerJs';
 import { mountCheckout } from './embeddedCheckout';
-import { PeableApiError, PeableError, PeableInvalidRequestError } from '../core/errors';
+import { PeableAPIError, PeableError, PeableInvalidRequestError } from '../core/errors';
 
 // ---------------------------------------------------------------------------
 // Intent id derivation (pure, unit-tested independently of the DOM).
@@ -100,7 +100,7 @@ export class PeableRailUnsupportedError extends PeableError {
   constructor(rail: string) {
     // Extends `PeableError`, not `Error`: the widget reports everything through
     // its `error` event, whose payload type is `PeableError`, and a bare `Error`
-    // would arrive there only after being flattened into a `PeableApiError`
+    // would arrive there only after being flattened into a `PeableAPIError`
     // that a caller cannot tell apart from a network failure.
     // `invalid_request_error`, because that is what it is: the caller asked
     // this widget for a surface the intent does not have. Nothing went wrong
@@ -400,7 +400,7 @@ async function startCardPayment(
   ]);
   if (isDestroyed()) return null;
   if (action.kind !== 'client_secret' || !action.publishable_key) {
-    throw new PeableApiError('this payment cannot be completed in this widget');
+    throw new PeableAPIError('this payment cannot be completed in this widget');
   }
   const handle = mountCardElements({
     sdk: factory(action.publishable_key),
@@ -478,7 +478,7 @@ export interface PeableCheckoutInstance {
 
 function toPeableError(error: unknown): PeableError {
   if (error instanceof PeableError) return error;
-  return new PeableApiError(error instanceof Error ? error.message : String(error));
+  return new PeableAPIError(error instanceof Error ? error.message : String(error));
 }
 
 /**

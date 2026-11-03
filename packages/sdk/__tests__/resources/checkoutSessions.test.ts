@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test';
-import { PeableInvalidRequestError } from '../../src/core/errors';
+import { PeableIdempotencyError } from '../../src/core/errors';
 import { CheckoutResource } from '../../src/resources/checkoutSessions';
 import { checkoutSessionFixture, lineItemFixture } from '../support/checkoutFixture';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
@@ -104,9 +104,7 @@ describe('CheckoutResource.sessions', () => {
     const checkout = new CheckoutResource(buildTestClient(fetchImpl));
     const params = { line_items: [{ price: 'price_1', quantity: 1 }] };
 
-    await expect(checkout.sessions.create(params, { idempotencyKey: 'order-7' })).rejects.toThrow(
-      'Failed to reach the Peable Gateway',
-    );
+    // The lost response is retried automatically, under the same key.
     const session = await checkout.sessions.create(params, { idempotencyKey: 'order-7' });
 
     expect(session.id).toBe('cs_1');
@@ -117,14 +115,15 @@ describe('CheckoutResource.sessions', () => {
     expect(keys).toEqual(['order-7', 'order-7']);
   });
 
-  test('a key replayed with different parameters surfaces the 409 as an invalid request', async () => {
-    const { fetch: fetchImpl } = createMockFetch((req) => {
+  test('a key reused with different parameters is a PeableIdempotencyError, never retried', async () => {
+    const { fetch: fetchImpl, requests } = createMockFetch((req) => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return {
-        status: 409,
+        status: 400,
         json: {
           error: {
             type: 'idempotency_error',
+            code: 'idempotency_error',
             message: 'Idempotency-Key reused with different parameters',
           },
         },
@@ -137,8 +136,9 @@ describe('CheckoutResource.sessions', () => {
       { idempotencyKey: 'order-42' },
     );
 
-    await expect(failure).rejects.toBeInstanceOf(PeableInvalidRequestError);
-    await expect(failure).rejects.toMatchObject({ statusCode: 409 });
+    await expect(failure).rejects.toBeInstanceOf(PeableIdempotencyError);
+    await expect(failure).rejects.toMatchObject({ statusCode: 400, code: 'idempotency_error' });
+    expect(requests.filter((r) => !r.url.includes('/auth/service-token'))).toHaveLength(1);
   });
 
   test('retrieve() GETs /v1/checkout_sessions/:id', async () => {

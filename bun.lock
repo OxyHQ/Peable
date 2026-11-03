@@ -210,8 +210,7 @@
         "@oxy.so/contracts": "6.5.0",
         "@oxy.so/core": "7.13.0",
         "@oxy.so/services": "^14.1.2",
-        "@peable.to/contracts": "workspace:0.4.0",
-        "@peable.to/sdk": "workspace:0.15.0",
+        "@peable.to/contracts": "workspace:1.0.0",
         "@peable.to/shared-types": "*",
         "@react-native-async-storage/async-storage": "^2.2.0",
         "@react-native-community/netinfo": "^12.0.1",
@@ -298,10 +297,10 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.22.0",
+      "version": "1.0.0",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.4.0",
-        "@peable.to/shared-types": "workspace:0.20.0",
+        "@peable.to/contracts": "workspace:1.0.0",
+        "@peable.to/shared-types": "workspace:1.0.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
       },
@@ -311,6 +310,7 @@
         "@types/node": "^20.0.0",
         "@types/react": "^19.2.17",
         "typescript": "~5.9.2",
+        "zod": "^4.6.7",
       },
       "peerDependencies": {
         "@oxy.so/bloom": ">=16.10.0",
@@ -327,7 +327,7 @@
       "name": "@peable.to/shared-types",
       "version": "1.0.0",
       "dependencies": {
-        "@peable.to/contracts": "workspace:0.4.0",
+        "@peable.to/contracts": "workspace:1.0.0",
       },
       "devDependencies": {
         "@types/bun": "latest",

@@ -98,6 +98,6 @@ export class FilesResource {
    * identity documents leave Peable only to their provider.
    */
   contents(id: string): Promise<DownloadedBytes> {
-    return this.client.download(`/v1/files/${encodeURIComponent(id)}/contents`);
+    return this.client.download('GET', `/v1/files/${encodeURIComponent(id)}/contents`);
   }
 }

@@ -89,9 +89,10 @@ import {
   PEABLE_SERVICE_AUDIENCE,
   type PeableConfig,
   type PeableWorkloadConfig,
+  type ResolvedPeableConfig,
 } from './core/config';
 import { createServiceTokenProvider } from './core/serviceToken';
-import { createRestClient } from './core/client';
+import { createRestClient, type GatewayClient } from './core/client';
 import { PaymentIntentsResource } from './resources/paymentIntents';
 import { PaymentLinksResource } from './resources/paymentLinks';
 import { CheckoutResource } from './resources/checkoutSessions';
@@ -113,9 +114,8 @@ import { RefundsResource } from './resources/refunds';
 import { RequestLogsResource } from './resources/requestLogs';
 import { TestHelpersResource } from './resources/testHelpers';
 import { ChargesResource } from './resources/charges';
-import { CustomersResource } from './resources/customers';
-import { PaymentMethodsResource } from './resources/paymentMethods';
 import { SetupIntentsResource } from './resources/setupIntents';
+import { GeneratedClient } from './generated/resources';
 import { TransfersResource } from './resources/transfers';
 import {
   CouponsResource,
@@ -129,6 +129,33 @@ import { PayoutsResource } from './resources/payouts';
 import { ApplicationFeesResource } from './resources/applicationFees';
 import { ReportsResource } from './resources/reports';
 import { ReportingResource } from './resources/reporting';
+
+/** The gateway client a `Peable` speaks through, and how to release its transport. */
+function createClient(
+  config: PeableConfig,
+  resolved: ResolvedPeableConfig,
+): { gateway: GatewayClient; dispose: () => void } {
+  const transport = config.oxy?.createServiceClient({
+    baseURL: resolved.baseURL,
+    audience: PEABLE_SERVICE_AUDIENCE,
+    ...(config.requester ? { requester: { ...config.requester } } : {}),
+  });
+  const tokenProvider = config.oxy
+    ? undefined
+    : (config.tokenProvider ?? createServiceTokenProvider(config));
+  const gateway = createRestClient(
+    {
+      baseURL: resolved.baseURL,
+      apiVersion: resolved.apiVersion,
+      ...(resolved.peableAccount === undefined ? {} : { peableAccount: resolved.peableAccount }),
+      maxNetworkRetries: resolved.maxNetworkRetries,
+      timeout: resolved.timeout,
+    },
+    tokenProvider,
+    transport ? { fetch: transport.fetch } : {},
+  );
+  return { gateway, dispose: () => transport?.dispose() };
+}
 
 /**
  * The merchant-authed client.
@@ -145,8 +172,17 @@ import { ReportingResource } from './resources/reporting';
  *
  * An SDK that covers less than the API it wraps does not reduce surface, it
  * relocates it.
+ *
+ * ## Generated, and not yet generated
+ *
+ * Every namespace a route contract declares (`customers`, `paymentMethods`, …)
+ * is inherited from `GeneratedClient` (`./generated/resources.ts`), its types
+ * the contracts' own. The namespaces declared below are hand-written until
+ * their routes are contracted; each is deleted when its generated twin lands
+ * (`__tests__/generated/types.test.ts` refuses the two side by side). `webhooks` stays: verifying a
+ * delivery is local, not a route.
  */
-export class Peable {
+export class Peable extends GeneratedClient {
   /** Release requester-bound shared transport resources after the operation. */
   readonly dispose: () => void;
   /**
@@ -204,10 +240,6 @@ export class Peable {
   readonly refunds: RefundsResource;
   /** Read-only: the authorization a card payment obtained (`ch_…`). */
   readonly charges: ChargesResource;
-  /** Customers (`cus_…`, ADR 0016). */
-  readonly customers: CustomersResource;
-  /** A customer's saved cards (`pm_…`), born attached by a SetupIntent. */
-  readonly paymentMethods: PaymentMethodsResource;
   /** Saving a card for later without charging it (`seti_…`). */
   readonly setupIntents: SetupIntentsResource;
   /** Money going out to a seller, and coming back from one. */
@@ -249,70 +281,58 @@ export class Peable {
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
-    const transport = config.oxy?.createServiceClient({
-      baseURL: resolved.baseURL,
-      audience: PEABLE_SERVICE_AUDIENCE,
-      ...(config.requester ? { requester: { ...config.requester } } : {}),
-    });
-    const tokenProvider = config.oxy
-      ? undefined
-      : (config.tokenProvider ?? createServiceTokenProvider(config));
-    this.dispose = () => transport?.dispose();
-    const client = createRestClient(
-      { baseURL: resolved.baseURL, requestTimeoutMs: resolved.requestTimeoutMs },
-      tokenProvider,
-      transport ? { fetch: transport.fetch } : {},
-    );
+    const client = createClient(config, resolved);
+    super(client.gateway);
+    this.dispose = client.dispose;
 
+    const gateway = client.gateway;
     this.billing = new BillingNamespace(
-      client,
+      gateway,
       resolved.invoiceAuthorityKeys,
       resolved.taxQuoteAuthorityKeys,
     );
-    this.tax = new TaxResource(client);
-    this.paymentIntents = new PaymentIntentsResource(client);
-    this.paymentLinks = new PaymentLinksResource(client);
-    this.checkout = new CheckoutResource(client);
+    this.tax = new TaxResource(gateway);
+    this.paymentIntents = new PaymentIntentsResource(gateway);
+    this.paymentLinks = new PaymentLinksResource(gateway);
+    this.checkout = new CheckoutResource(gateway);
     this.webhooks = new WebhooksResource();
-    this.webhookEndpoints = new WebhookEndpointsResource(client);
-    this.events = new EventsResource(client);
-    this.requestLogs = new RequestLogsResource(client);
-    this.testHelpers = new TestHelpersResource(client);
-    this.webhookDeliveries = new WebhookDeliveriesResource(client);
-    this.merchants = new MerchantsResource(client);
-    this.connectedAccounts = new ConnectedAccountsResource(client);
+    this.webhookEndpoints = new WebhookEndpointsResource(gateway);
+    this.events = new EventsResource(gateway);
+    this.requestLogs = new RequestLogsResource(gateway);
+    this.testHelpers = new TestHelpersResource(gateway);
+    this.webhookDeliveries = new WebhookDeliveriesResource(gateway);
+    this.merchants = new MerchantsResource(gateway);
+    this.connectedAccounts = new ConnectedAccountsResource(gateway);
     this.accounts = this.connectedAccounts;
-    this.account = new AccountResource(client);
+    this.account = new AccountResource(gateway);
     this.accountLinks = new AccountLinksResource(this.connectedAccounts, this.account);
-    this.balance = new BalanceResource(client);
-    this.balanceTransactions = new BalanceTransactionsResource(client);
-    this.payouts = new PayoutsResource(client);
-    this.applicationFees = new ApplicationFeesResource(client);
-    this.reports = new ReportsResource(client);
-    this.reporting = new ReportingResource(client);
-    this.refunds = new RefundsResource(client);
-    this.charges = new ChargesResource(client);
-    this.customers = new CustomersResource(client);
-    this.paymentMethods = new PaymentMethodsResource(client);
-    this.setupIntents = new SetupIntentsResource(client);
-    this.transfers = new TransfersResource(client);
-    this.disputes = new DisputesResource(client);
-    this.products = new ProductsResource(client);
-    this.prices = new PricesResource(client);
-    this.coupons = new CouponsResource(client);
-    this.promotionCodes = new PromotionCodesResource(client);
-    this.files = new FilesResource(client);
-    this.paymentMethodConfigurations = new PaymentMethodConfigurationsResource(client);
-    this.paymentMethodDomains = new PaymentMethodDomainsResource(client);
-    this.subscriptions = new SubscriptionsResource(client);
-    this.subscriptionItems = new SubscriptionItemsResource(client);
-    this.invoices = new InvoicesResource(client);
-    this.invoiceItems = new InvoiceItemsResource(client);
-    this.creditNotes = new CreditNotesResource(client);
-    this.customerBalanceTransactions = new CustomerBalanceTransactionsResource(client);
-    this.billingSettings = new BillingSettingsResource(client);
-    this.entitlements = new EntitlementsResource(client);
-    this.billingPortal = new BillingPortalResource(client);
+    this.balance = new BalanceResource(gateway);
+    this.balanceTransactions = new BalanceTransactionsResource(gateway);
+    this.payouts = new PayoutsResource(gateway);
+    this.applicationFees = new ApplicationFeesResource(gateway);
+    this.reports = new ReportsResource(gateway);
+    this.reporting = new ReportingResource(gateway);
+    this.refunds = new RefundsResource(gateway);
+    this.charges = new ChargesResource(gateway);
+    this.setupIntents = new SetupIntentsResource(gateway);
+    this.transfers = new TransfersResource(gateway);
+    this.disputes = new DisputesResource(gateway);
+    this.products = new ProductsResource(gateway);
+    this.prices = new PricesResource(gateway);
+    this.coupons = new CouponsResource(gateway);
+    this.promotionCodes = new PromotionCodesResource(gateway);
+    this.files = new FilesResource(gateway);
+    this.paymentMethodConfigurations = new PaymentMethodConfigurationsResource(gateway);
+    this.paymentMethodDomains = new PaymentMethodDomainsResource(gateway);
+    this.subscriptions = new SubscriptionsResource(gateway);
+    this.subscriptionItems = new SubscriptionItemsResource(gateway);
+    this.invoices = new InvoicesResource(gateway);
+    this.invoiceItems = new InvoiceItemsResource(gateway);
+    this.creditNotes = new CreditNotesResource(gateway);
+    this.customerBalanceTransactions = new CustomerBalanceTransactionsResource(gateway);
+    this.billingSettings = new BillingSettingsResource(gateway);
+    this.entitlements = new EntitlementsResource(gateway);
+    this.billingPortal = new BillingPortalResource(gateway);
   }
 }
 
@@ -326,23 +346,43 @@ export { DEFAULT_GATEWAY_BASE_URL, DEFAULT_OXY_API_URL } from './core/config';
 
 export {
   PeableError,
+  PeableAPIError,
   PeableAuthenticationError,
+  PeableCardError,
+  PeableConnectionError,
+  PeableIdempotencyError,
   PeableInvalidRequestError,
   PeablePermissionError,
-  PeableApiError,
-  PeableCardError,
+  PeableRateLimitError,
   PeableSignatureVerificationError,
 } from './core/errors';
 export type { PeableErrorType, PeableErrorDetails } from './core/errors';
 
 export type {
+  AccountOptions,
   DownloadedBytes,
   GatewayClient,
+  IdempotencyOptions,
   PeableRequestOptions,
+  RequestOptions,
   RestClient,
   RestClientRequestOptions,
   RestClientStreamOptions,
 } from './core/client';
+export type {
+  ListPromiseOf,
+  RouteKind,
+  RouteSpec,
+  SearchPromiseOf,
+  StreamOptions,
+} from './core/routeMethods';
+/** The generated namespaces (`CustomersResource`, …) and their specs. */
+export type * from './generated/resources';
+export {
+  DEFAULT_MAX_NETWORK_RETRIES,
+  DEFAULT_TIMEOUT_MS,
+} from './core/config';
+export { PEABLE_API_VERSION, type PeableApiVersion } from '@peable.to/contracts/vocabulary';
 export type { LiveStreamOptions } from './core/liveStream';
 export { RequestLogsResource } from './resources/requestLogs';
 export type { RequestLogStreamParams } from './resources/requestLogs';
@@ -566,7 +606,7 @@ export {
   type SearchResult,
   type SearchableResource,
 } from '@peable.to/shared-types';
-export type { ApiSearchPromise, AutoPaging } from './core/list';
+export type { ApiListPromise, ApiSearchPromise, AutoPaging } from './core/list';
 /** The money wire shapes (ADR 0015): the account, the balance and its ledger, payouts, fees. */
 export type {
   Account,
@@ -619,16 +659,15 @@ export type {
   CreateSetupIntentParams,
   Customer,
   DeletedCustomer,
+  DetachPaymentMethodParams,
+  ListCustomersParams,
+  ListPaymentMethodsParams,
   PaymentMethod,
   SetupIntent,
   SetupIntentStatus,
   UpdateCustomerParams,
   UpdatePaymentMethodParams,
 } from '@peable.to/shared-types';
-export { CustomersResource } from './resources/customers';
-export type { CustomerList, CustomerListParams } from './resources/customers';
-export { PaymentMethodsResource } from './resources/paymentMethods';
-export type { PaymentMethodList, PaymentMethodListParams } from './resources/paymentMethods';
 export { SetupIntentsResource } from './resources/setupIntents';
 export type { SetupIntentList, SetupIntentListParams } from './resources/setupIntents';
 export type {
@@ -644,7 +683,11 @@ export type {
   UpdatePaymentLinkParams,
 } from './resources/paymentLinks';
 export { PaymentLinksResource } from './resources/paymentLinks';
-export { WEBHOOK_SIGNATURE_HEADER, WebhooksResource } from './resources/webhooks';
+export {
+  DEFAULT_WEBHOOK_TOLERANCE_SEC,
+  WEBHOOK_SIGNATURE_HEADER,
+  WebhooksResource,
+} from './resources/webhooks';
 export {
   EventsResource,
   WebhookDeliveriesResource,
@@ -668,7 +711,6 @@ export type {
   WebhookEndpointStatus,
   WebhookEventRequest,
 } from '@peable.to/shared-types';
-export type { ConstructEventOptions } from './resources/webhooks';
 export {
   CouponsResource,
   PricesResource,
@@ -814,13 +856,6 @@ export type {
   UpdateProductParams,
   UpdatePromotionCodeParams,
 } from '@peable.to/shared-types';
-export { ContributionsResource } from './resources/contributions';
-export type {
-  ContributionScope,
-  CreateContribution,
-  ContributionLink,
-  ContributionDetails,
-} from './resources/contributions';
 
 export type { BillingFaircoinFxQuote } from '@peable.to/shared-types';
 

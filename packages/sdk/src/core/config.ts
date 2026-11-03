@@ -3,6 +3,11 @@
 // The Gateway resolves the merchant from the verified application/environment
 // and applies merchant and finance rules independently of authentication.
 
+import {
+  PEABLE_API_VERSION,
+  PEABLE_API_VERSIONS,
+  type PeableApiVersion,
+} from '@peable.to/contracts/vocabulary';
 import type { ServiceTokenProvider } from './serviceToken';
 
 /** Oxy owns workload mint, proof binding and authenticated HTTP transport. */
@@ -28,6 +33,12 @@ export const DEFAULT_GATEWAY_BASE_URL = 'https://api.peable.to';
 /** Default oxy-api host used to mint the short-lived service token. */
 export const DEFAULT_OXY_API_URL = 'https://api.oxy.so';
 
+/** The deadline of one HTTP attempt, headers and body together, unless a request says otherwise. */
+export const DEFAULT_TIMEOUT_MS = 80_000;
+
+/** How many times a failed request is retried, unless a request says otherwise. */
+export const DEFAULT_MAX_NETWORK_RETRIES = 2;
+
 /** Options shared by the supported authentication methods. */
 export interface PeableConfigOptions {
   /** Gateway base URL. Default `https://api.peable.to`. */
@@ -35,8 +46,27 @@ export interface PeableConfigOptions {
   /** oxy-api host used to mint the service token. Default `https://api.oxy.so`.
    * Unused with `tokenProvider`, which mints its own. */
   oxyApiUrl?: string;
-  /** Optional deadline per HTTP attempt, including body consumption. */
-  requestTimeoutMs?: number;
+  /**
+   * The wire date, sent as `Peable-Version` on every request. Default
+   * `PEABLE_API_VERSION` — the wire this SDK's types describe.
+   */
+  apiVersion?: PeableApiVersion;
+  /**
+   * A connected account (`ca_…`) to act on by default, sent as
+   * `Peable-Account` on every route that accepts it (and on no other: the
+   * gateway refuses the header elsewhere). A request's own `peableAccount`
+   * replaces it.
+   */
+  peableAccount?: string;
+  /**
+   * Retries of a request that failed on the network, timed out, or was answered
+   * 5xx, 429, or 409 `idempotency_error` (its first attempt still running).
+   * Exponential backoff with jitter, honouring `Retry-After`. Every attempt of a
+   * `POST` carries the same `Idempotency-Key`. Default 2; 0 disables.
+   */
+  maxNetworkRetries?: number;
+  /** Milliseconds one attempt may take, headers and body together. Default 80 000. */
+  timeout?: number;
   /** Pinned Ed25519 authority keys, obtained from trusted deployment configuration. */
   invoiceAuthorityKeys?: Readonly<Record<string, string>>;
   taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
@@ -80,7 +110,10 @@ export type PeableConfig =
 interface ResolvedPeableConfigOptions {
   baseURL: string;
   oxyApiUrl: string;
-  requestTimeoutMs?: number;
+  apiVersion: PeableApiVersion;
+  peableAccount?: string;
+  maxNetworkRetries: number;
+  timeout: number;
   invoiceAuthorityKeys?: Readonly<Record<string, string>>;
   taxQuoteAuthorityKeys?: Readonly<Record<string, string>>;
 }
@@ -109,13 +142,40 @@ export type ResolvedPeableConfig =
   | ResolvedPeableTokenProviderConfig
   | (PeableWorkloadConfig & ResolvedPeableConfigOptions);
 
-export function resolveRequestTimeout(value: number | undefined): number | undefined {
-  if (value === undefined) return undefined;
-  const timeout = value;
-  if (!Number.isSafeInteger(timeout) || timeout < 1 || timeout > 2_147_483_647) {
-    throw new Error('Peable: requestTimeoutMs must be a positive32-bit integer');
+/** A timeout in milliseconds: a positive 32-bit integer (what `setTimeout` can hold). */
+export function resolveTimeout(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || value < 1 || value > 2_147_483_647) {
+    throw new Error('Peable: `timeout` must be a positive 32-bit integer of milliseconds');
   }
-  return timeout;
+  return value;
+}
+
+/** A retry count: a non-negative integer. */
+export function resolveMaxNetworkRetries(value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error('Peable: `maxNetworkRetries` must be a non-negative integer');
+  }
+  return value;
+}
+
+function resolveApiVersion(value: string | undefined): PeableApiVersion {
+  if (value === undefined) return PEABLE_API_VERSION;
+  if (!(PEABLE_API_VERSIONS as readonly string[]).includes(value)) {
+    throw new Error(
+      `Peable: \`apiVersion\` must be one of ${PEABLE_API_VERSIONS.join(', ')}; got ${value}`,
+    );
+  }
+  return value as PeableApiVersion;
+}
+
+function resolvePeableAccount(value: string | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error('Peable: `peableAccount` must be a connected account id (`ca_…`)');
+  }
+  return value;
 }
 
 function stripTrailingSlash(url: string): string {
@@ -178,8 +238,15 @@ export function resolveConfig(config: PeableConfig): ResolvedPeableConfig {
       throw new Error('Peable: `secret` is required');
     }
   }
+  const peableAccount = resolvePeableAccount(config.peableAccount);
   const options: ResolvedPeableConfigOptions = {
-    requestTimeoutMs: resolveRequestTimeout(config.requestTimeoutMs),
+    apiVersion: resolveApiVersion(config.apiVersion),
+    ...(peableAccount === undefined ? {} : { peableAccount }),
+    maxNetworkRetries: resolveMaxNetworkRetries(
+      config.maxNetworkRetries,
+      DEFAULT_MAX_NETWORK_RETRIES,
+    ),
+    timeout: resolveTimeout(config.timeout, DEFAULT_TIMEOUT_MS),
     taxQuoteAuthorityKeys: config.taxQuoteAuthorityKeys
       ? Object.freeze({ ...config.taxQuoteAuthorityKeys })
       : undefined,

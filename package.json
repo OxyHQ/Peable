@@ -35,7 +35,9 @@
     "build:contracts": "bun run --filter @peable.to/contracts build",
     "build:sdk": "bun run --filter @peable.to/sdk build",
     "generate:openapi": "bun scripts/openapi.ts",
-    "check:openapi": "bun scripts/openapi.ts --check"
+    "check:openapi": "bun scripts/openapi.ts --check",
+    "generate:sdk-resources": "bun run --filter @peable.to/sdk generate",
+    "check:sdk-resources": "bun run --filter @peable.to/sdk check:generated"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

@@ -254,9 +254,12 @@ describe('the platform webhook for an on-behalf payment', () => {
     const raw = JSON.stringify(event);
     const header = signWebhook('whsec_platform', raw, 1_760_000_000);
 
-    const parsed = new WebhooksResource().constructEvent(raw, header, 'whsec_platform', {
-      toleranceSec: Number.MAX_SAFE_INTEGER,
-    });
+    const parsed = new WebhooksResource().constructEvent(
+      raw,
+      header,
+      'whsec_platform',
+      Number.MAX_SAFE_INTEGER,
+    );
 
     expect(parsed.account).toBe('ca_seller');
     if (parsed.type === 'payment_intent.processing') {
