@@ -388,7 +388,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             id: 'il_one',
             invoice: 'in_one',
             livemode: false,
-            subscription: 'sub_one',
             quantity: 1,
             amount: 2500,
             parent: {
@@ -1946,7 +1945,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             id: 'il_one',
             invoice: 'in_one',
             livemode: false,
-            subscription: 'sub_one',
             quantity: 1,
             parent: {
               type: 'subscription_item_details',

@@ -70,7 +70,6 @@ export async function readOwnedInvoiceState(
       id: ref,
       invoice: z.literal(expected.invoiceId),
       livemode: z.literal(expected.livemode),
-      subscription: z.literal(expected.subscriptionId),
       quantity: z.literal(1),
       amount: amount,
       parent: z.object({

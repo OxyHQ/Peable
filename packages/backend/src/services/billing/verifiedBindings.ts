@@ -141,7 +141,6 @@ export function createVerifiedBillingBindings(options: {
                 id: billingReference,
                 invoice: z.literal(invoiceId),
                 livemode: z.literal(deployment.livemode),
-                subscription: z.literal(subscriptionRef),
                 quantity: z.literal(1),
                 parent: z.object({
                   type: z.literal('subscription_item_details'),
