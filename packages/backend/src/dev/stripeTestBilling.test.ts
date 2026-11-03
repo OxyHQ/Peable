@@ -16,6 +16,7 @@ it('configures a test-only recurring observer without a production entitlement t
   expect(result.deployment.livemode).toBe(false);
   expect(result.cohorts[0]?.environment).toBe('development');
   expect(result.observationsEnabled).toBe(true);
+  expect(result.observationTimeoutMs).toBe(10_000);
 });
 for (const patch of [
   { livemode: true },

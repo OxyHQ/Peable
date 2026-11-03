@@ -66,6 +66,7 @@ const cohortConfiguration = z
       .max(20)
       .optional(),
     observationsEnabled: z.boolean().default(false),
+    observationTimeoutMs: z.number().int().min(1).max(10_000).default(2000),
     taxQuoteAdapterRef: billingReference.optional(),
     taxCheckoutAdapterRef: billingReference.optional(),
     finalInvoiceAuthorityAdapterRef: billingReference.optional(),
@@ -493,6 +494,7 @@ async function configureStripeRail({ db, body, injectedClient, adapters }: RailC
     rail,
     renewals,
     observations: {
+      timeoutMs: parsed.observationTimeoutMs,
       deployment: { ...parsed.deployment, environment, apiVersion: STRIPE_API_VERSION },
       reader: createOwnedBillingRecurringReader({ db, bindings: verifiedBindings, client }),
       bindOwnedInvoice: createOwnedBillingInvoiceResolver({

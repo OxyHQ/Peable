@@ -1431,6 +1431,30 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       );
       expect(enabled?.observations?.deployment.environment).toBe(owner.environment);
       expect(enabled?.observations?.bindOwnedInvoice).toBeFunction();
+      expect(enabled?.observations?.timeoutMs).toBe(2000);
+      const bounded = await configureBillingRuntime(
+        gatewayDb(),
+        JSON.stringify({
+          ...configuration,
+          observationsEnabled: true,
+          observationTimeoutMs: 10_000,
+        }),
+        client,
+      );
+      expect(bounded?.observations?.timeoutMs).toBe(10_000);
+      for (const observationTimeoutMs of [0, 10_001]) {
+        await expect(
+          configureBillingRuntime(
+            gatewayDb(),
+            JSON.stringify({
+              ...configuration,
+              observationsEnabled: true,
+              observationTimeoutMs,
+            }),
+            client,
+          ),
+        ).rejects.toThrow();
+      }
       expect(enabled?.relay?.enabled).toBe(true);
       expect(enabled?.relay?.cohorts).toEqual([
         { ...owner, ...deployment, evidenceRef: 'fixture:cohort', requireTaxQuote: false },
