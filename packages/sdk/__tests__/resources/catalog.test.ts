@@ -196,8 +196,8 @@ describe('products', () => {
         ? list([second], false, '/v1/products')
         : list([PRODUCT], true, '/v1/products'),
     }));
-    const all = await resources(client).products
-      .list({ limit: 1 })
+    const all = await resources(client)
+      .products.list({ limit: 1 })
       .autoPagingToArray({ limit: 10 });
     expect(all.map((product) => product.id)).toEqual(['prod_1', 'prod_2']);
     expect(gateway).toHaveLength(2);
@@ -296,8 +296,8 @@ describe('coupons', () => {
 
   test('list pages with the shared parameters', async () => {
     const { client, gateway } = harness(list([COUPON]));
-    const all = await resources(client).coupons
-      .list({ created: { gte: 1 } })
+    const all = await resources(client)
+      .coupons.list({ created: { gte: 1 } })
       .autoPagingToArray({ limit: 5 });
     expect(all).toEqual([COUPON]);
     expect(query(last(gateway))).toEqual(['created[gte]=1']);

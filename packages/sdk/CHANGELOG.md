@@ -18,7 +18,9 @@ Added:
   nothing in it is required. Lists and searches answer the auto-paging page
   promise, bytes answer `{ bytes, contentType, filename }`, live tails answer
   the reconnecting async iterable, uploads are sent as `multipart/form-data`.
-  Generated now: `customers` and `paymentMethods`.
+  Every merchant route is generated: 255 methods in 44 namespaces. Payer
+  (`public`) and Oxy-session (`user`) routes are never server-SDK methods,
+  whatever `sdk` name their contract carries.
 - **Retries.** `maxNetworkRetries` (default **2**, client and per request):
   network failures, timeouts, interrupted bodies, 5xx, 429 and 409
   `idempotency_error` are retried with exponential backoff and jitter
@@ -103,25 +105,57 @@ Integrating the low-level client (`createRestClient`, `GatewayClient`):
 - `RestClientRequestOptions` gains `apiVersion`, `maxNetworkRetries`,
   `timeout`, `signal` and `acceptsPeableAccount`.
 
-#### Method names once every route is generated — TO FILL
+#### Every resource is generated
 
-> **TO FILL when all contract groups are merged and `bun run
-> generate:sdk-resources` has replaced the remaining hand-written resources.**
-> Every hand-written resource (`paymentIntents`, `paymentLinks`, `checkout`,
-> `refunds`, `transfers`, `disputes`, `files`, `products`, `prices`, `coupons`,
-> `promotionCodes`, `subscriptions`, `invoices`, `billing`, `tax`, `account`,
-> `balance`, `payouts`, `reporting`, `webhookEndpoints`, `events`,
-> `requestLogs`, `testHelpers`, …) is replaced by the generated namespace its
-> routes' `sdk` paths name. List here every method whose name, argument order or
-> options moved, as for customers and payment methods above:
->
-> | 0.x | 1.0 |
-> |---|---|
-> | _(to fill)_ | _(to fill)_ |
->
-> Known already: a live tail's controls move from `params` to `options`
-> (`events.stream({ types }, { signal, onConnect, onDisconnect })`), and a
-> method whose route accepts no body loses its `params` argument.
+All 255 merchant (`service`) routes are generated, in 44 namespaces. Every
+0.x resource class (`PaymentIntentsResource`, `BillingNamespace`,
+`TaxResource`, …) is gone; the generated interface of the same namespace
+replaces it (`import type { PaymentIntentsResource } from '@peable.to/sdk'` is
+now an interface). The SDK's own aliases of wire types (`PaymentIntentList`,
+`CustomerListParams`, `CreatePaymentIntentOptions`, `BillingRequestOptions`, …)
+are removed — use the contract's types (`List<T>`, `List…Params`, `Create…Params`)
+and `RequestOptions & IdempotencyOptions`.
+
+The shape is the same everywhere: `(…pathParams, params?, options?)`. Where 0.x
+put options where `params` now goes, or named a method differently:
+
+| 0.x | 1.0 |
+|---|---|
+| `peable.accounts.*` (alias) | `peable.connectedAccounts.*` |
+| `account.createLink(params, options)` | `accountLinks.create(params, options)` |
+| `accountLinks.create({ account, … })` (a seller) | `connectedAccounts.createAccountLink(account, { … })`; `accountLinks.create` is the merchant's own account (or a seller's with `{ peableAccount }`) |
+| `account.retrieve({ peableAccount })` | `account.retrieve(params?, { peableAccount })` |
+| `balance.retrieve({ peableAccount })` | `balance.retrieve(params?, { peableAccount })` |
+| `balanceTransactions.retrieve(id, options)` | `balanceTransactions.retrieve(id, params?, options?)` |
+| `payouts.retrieve(id, options)` / `payouts.cancel(id, options)` | `payouts.retrieve(id, params?, options?)` / `payouts.cancel(id, params?, options?)` |
+| `disputes.close(id, { idempotencyKey })` | `disputes.close(id, params?, { idempotencyKey })` |
+| `paymentMethods.detach(id, options)` | `paymentMethods.detach(id, params?, options?)` |
+| `paymentMethodDomains.validate(id, options)` | `paymentMethodDomains.validate(id, params?, options?)` |
+| `testHelpers.checkoutSessions.expire(id, options)` | `testHelpers.checkoutSessions.expire(id, params?, options?)` |
+| `tax.products.setTaxCode(productRef, taxCode)` | `tax.products.setTaxCode(productRef, { tax_code })` |
+| `billing.cancelAtPeriodEnd(ref, { idempotencyKey })` | `billing.cancelAtPeriodEnd(ref, params?, options?)` |
+| `billing.retrieveCheckoutOperation({ idempotency_key, …identity })` | `billing.retrieveCheckoutOperation(idempotency_key, { …identity })` |
+| `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: ['tax_lines'] })` | `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: 'tax_lines' })` |
+| `billing.*` writes: `{ idempotencyKey }` required | optional — the SDK sends one on every `POST`; pass your own to recover the operation later with `retrieveCheckoutOperation` |
+| `events.stream({ types: [...], signal, onConnect, onDisconnect })` | `events.stream({ types: 'a.*,b' }, { signal, onConnect, onDisconnect })` — `types` is the wire's comma-separated string |
+| `requestLogs.stream({ status, method, signal, … })` | `requestLogs.stream({ status, method }, { signal, … })` |
+| `reporting.reportTypes.download(id, params)` → a streamed `Response` | → `{ bytes, contentType, filename }` (the whole CSV) |
+| `files.create({ purpose, file: Uint8Array, filename })` | `files.create({ purpose, file: new File([bytes], filename) })`; `{ purpose, oxy_file }` is unchanged |
+| `applicationFees.list({ charge })` | not a filter of the route; `payment_intent` is |
+
+Lists that answered one plain page — `billing.listRails`, `tax.products.list`,
+`reporting.reportTypes.list`, `billing.meters.listEventSummaries` — now answer
+the auto-paging page promise like every list (still awaitable to the page).
+
+New in 1.0: `invoices.retrievePdf`, `setupIntents.clientAction`,
+`tax.compliance.retrieveDocument` / `retrieveOperatingLocation` /
+`retrieveRegistrationDeclaration` / `retrieveSalesDestination`.
+
+Still written by hand, because no route describes them: `webhooks.constructEvent`;
+the verification of `billing.createTaxQuote` and
+`billing.retrieveFinalInvoiceAuthority` against your pinned keys (same signature
+as the generated methods); and the `files.create` type, widened to also take the
+JSON `{ purpose, oxy_file }` form the route's contract documents as a second schema.
 
 ## 0.22.0 — Peable Tax business compliance (ADR 0020)
 

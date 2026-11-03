@@ -246,10 +246,11 @@ it('asks for tax lines only when requested, and verifies them against the tax', 
     },
   ];
   resign(authority);
-  const withLines = await BillingOver(
-    recording(authority),
-    pinned,
-  ).retrieveFinalInvoiceAuthority('sub_fixture', 'in_fixture', { include: 'tax_lines' });
+  const withLines = await BillingOver(recording(authority), pinned).retrieveFinalInvoiceAuthority(
+    'sub_fixture',
+    'in_fixture',
+    { include: 'tax_lines' },
+  );
   expect(queries.at(-1)).toEqual({ include: 'tax_lines' });
   expect(withLines.invoice.tax_lines?.[0]?.tax_minor_units).toBe(500);
   // Lines that do not add up to the tax are refused even when signed.

@@ -143,7 +143,10 @@ describe('requestLogs', () => {
     expect(urls[0]).toBe('/v1/request_logs?status=4xx&method=POST&limit=5');
 
     const controller = new AbortController();
-    for await (const log of peable.requestLogs.stream({ status: 404 }, { signal: controller.signal })) {
+    for await (const log of peable.requestLogs.stream(
+      { status: 404 },
+      { signal: controller.signal },
+    )) {
       expect(log).toMatchObject({ id: 'req_1', status: 404 });
       controller.abort();
     }

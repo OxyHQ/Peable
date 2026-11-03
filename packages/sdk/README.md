@@ -309,8 +309,7 @@ The purpose sets the policy, and the format is recognised from the bytes:
 ```ts
 const receipt = await peable.files.create({
   purpose: 'dispute_evidence',
-  file: await readFile('receipt.pdf'), // Blob, Uint8Array or ArrayBuffer
-  filename: 'receipt.pdf',
+  file: new File([await readFile('receipt.pdf')], 'receipt.pdf'),
 });
 // An Oxy file you already own, without uploading it again:
 const logo = await peable.files.create({ purpose: 'business_logo', oxy_file: 'oxy_file_id' });
@@ -693,12 +692,12 @@ Pay a marketplace's sellers in FairCoin straight to their own wallets
 (ADR 0012, guide in `docs/connect-faircoin.md`):
 
 ```ts
-const seller = await peable.accounts.create({
+const seller = await peable.connectedAccounts.create({
   external_ref: store.id,
   faircoin: { network: 'testnet', oxy_user_id: store.ownerOxyUserId },
 });
-const link = await peable.accountLinks.create({
-  account: seller.id, rail: 'faircoin', return_url: returnUrl, refresh_url: refreshUrl,
+const link = await peable.connectedAccounts.createAccountLink(seller.id, {
+  rail: 'faircoin', return_url: returnUrl, refresh_url: refreshUrl,
 });
 // the seller registers their key at link.url, signed in with Oxy;
 // you receive connected_account.updated with faircoin.status === 'active'
@@ -708,8 +707,7 @@ const intent = await peable.paymentIntents.create(
 );
 ```
 
-`peable.accounts` is `peable.connectedAccounts` under its Stripe name. Events for
-an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
+Events for an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
 payer has broadcast, so never cancel an order on `expires_at` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
 
@@ -757,15 +755,16 @@ const fees = await peable.applicationFees.list({ payment_intent: 'pi_…' });
 await peable.applicationFees.listRefunds(fees.data[0].id);
 ```
 
-**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`
-(without `account`), `balance`, `balanceTransactions`, `payouts` and
-`reports.payoutReconciliation` take a last `{ peableAccount: 'ca_…' }` option,
-sent as the `Peable-Account` header, to read or act on one of the platform's
-connected accounts with the platform's own credential. Every other route refuses
-the header with a 400.
+**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`,
+`balance`, `balanceTransactions`, `payouts` and `reports.payoutReconciliation`
+take `{ peableAccount: 'ca_…' }` in their last (options) argument — or the
+client's `peableAccount` default — sent as the `Peable-Account` header, to read
+or act on one of the platform's connected accounts with the platform's own
+credential. No other method has the option: the gateway refuses the header
+elsewhere.
 
 ```ts
-await peable.balance.retrieve({ peableAccount: seller.id });
+await peable.balance.retrieve({}, { peableAccount: seller.id });
 await peable.payouts.create(
   { amount: '5000', currency: 'EUR' },
   { peableAccount: seller.id, idempotencyKey: `payout:${seller.id}:${day}` },

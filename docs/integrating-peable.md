@@ -948,7 +948,7 @@ Three things that are easy to get wrong and expensive:
 
 ```ts
 // 1. Upload what you have (PDF, PNG or JPEG, at most 5 MB each).
-const receipt = await peable.files.create({ purpose: 'dispute_evidence', file: pdfBytes, filename: 'receipt.pdf' });
+const receipt = await peable.files.create({ purpose: 'dispute_evidence', file: new File([pdfBytes], 'receipt.pdf') });
 
 // 2. Stage a draft — as often as you like, until you submit.
 await peable.disputes.update(disputeId, {
@@ -1087,9 +1087,9 @@ const quote = await peable.billing.createTaxQuote({
 - `peable.tax.calculations.create({ currency, customer_location_evidence_id,
   line_items })` prices anything else (inclusive or exclusive); the answer is
   frozen and retrievable by id.
-- `peable.tax.products.setTaxCode(planId, 'txcd_10103000')` sets a product tax
+- `peable.tax.products.setTaxCode(planId, { tax_code: 'txcd_10103000' })` sets a product tax
   code (codes: `peable.tax.listCodes()`).
-- `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: ['tax_lines'] })`
+- `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: 'tax_lines' })`
   returns the signed invoice with its tax lines inside the signature.
 - On the card rail (`rail: 'stripe'`, configured with
   `taxQuoteAdapterRef: "peable_tax"`) pass the quote to
@@ -1249,7 +1249,7 @@ expanded); optional in the published types: `PaymentIntent.can_expire`,
 `ConnectedAccount.country` is now `string | null` (a FairCoin-only seller has
 none) and `ConnectedAccount.rails` / `.faircoin` are new.
 
-SDK: `peable.accounts` (= `connectedAccounts`), `peable.accountLinks.create({ account, rail, … })`,
+SDK: `peable.connectedAccounts`, `peable.connectedAccounts.createAccountLink(account, { rail, … })`,
 `paymentIntents.create({ …, connected_account })`, `checkout.sessions.create({ …, connected_account })`,
 `paymentIntents.list({ connected_account })`, and `can_expire` / `EXPIRABLE_STATUSES`.
 

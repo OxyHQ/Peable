@@ -116,8 +116,8 @@ describe('reporting.reportRuns', () => {
       served += 1;
       return { status: 200, json: page };
     });
-    const ids = await resources(buildTestClient(many.fetch)).reporting.reportRuns
-      .list({ report_type: 'payments.itemized.1' })
+    const ids = await resources(buildTestClient(many.fetch))
+      .reporting.reportRuns.list({ report_type: 'payments.itemized.1' })
       .autoPagingToArray({ limit: 10 });
     expect(ids.map((run) => run.id)).toEqual(['frr_1', 'frr_0']);
     const urls = many.requests

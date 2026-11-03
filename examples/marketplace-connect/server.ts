@@ -70,8 +70,7 @@ async function createSeller(request: Request): Promise<Response> {
  */
 async function onboard(ref: string): Promise<Response> {
   const seller = await peable.connectedAccounts.retrieveByRef(ref);
-  const link = await peable.accountLinks.create({
-    account: seller.id,
+  const link = await peable.connectedAccounts.createAccountLink(seller.id, {
     rail: 'card',
     refresh_url: `${BASE_URL}/sellers/${encodeURIComponent(ref)}/onboard`,
     return_url: `${BASE_URL}/sellers/${encodeURIComponent(ref)}/return`,
@@ -147,7 +146,7 @@ async function settle(order: Order): Promise<void> {
 async function sellerBalance(ref: string): Promise<Response> {
   const seller = await peable.connectedAccounts.retrieveByRef(ref);
   const [balance, transfers] = await Promise.all([
-    peable.balance.retrieve({ peableAccount: seller.id }),
+    peable.balance.retrieve({}, { peableAccount: seller.id }),
     peable.transfers.list({ connected_account: seller.id, limit: 10 }),
   ]);
   return Response.json({

@@ -48,7 +48,9 @@ describe('checkout operation recovery official SDK transport', () => {
       checkout: { id: 'cs_test_fixture', expires_at: 1790812800 },
     };
     const fixture = resource(expected);
-    expect(await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).toEqual(expected);
+    expect(await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).toEqual(
+      expected,
+    );
     expect(fixture.calls).toHaveLength(1);
     const request = fixture.calls[0];
     if (!request) throw new Error('Expected request');
@@ -68,7 +70,9 @@ describe('checkout operation recovery official SDK transport', () => {
   it('preserves absent/pending/indeterminate observations without cancellation or another write', async () => {
     for (const state of ['not_found', 'pending', 'indeterminate'] as const) {
       const fixture = resource({ state, source });
-      expect((await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).state).toBe(state);
+      expect(
+        (await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).state,
+      ).toBe(state);
       expect(fixture.calls).toHaveLength(1);
       expect(fixture.calls.every((call) => call.init.method === 'GET')).toBe(true);
     }
@@ -81,7 +85,9 @@ describe('checkout operation recovery official SDK transport', () => {
       [503, 3],
     ] as const) {
       const fixture = resource({ error: { message: 'synthetic_recovery_unavailable' } }, status);
-      await expect(fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).rejects.toThrow();
+      await expect(
+        fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery),
+      ).rejects.toThrow();
       expect(fixture.calls).toHaveLength(attempts);
       expect(new Set(fixture.calls.map((call) => `${call.init.method} ${call.url}`)).size).toBe(1);
     }

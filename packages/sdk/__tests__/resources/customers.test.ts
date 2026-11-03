@@ -176,12 +176,9 @@ describe('SetupIntentsResource', () => {
     );
 
     const canceled = gateway({ ...SETUP, status: 'canceled', cancellation_reason: 'abandoned' });
-    const answer = await resources(buildTestClient(canceled.fetch)).setupIntents.cancel(
-      'seti_1',
-      {
-        cancellation_reason: 'abandoned',
-      },
-    );
+    const answer = await resources(buildTestClient(canceled.fetch)).setupIntents.cancel('seti_1', {
+      cancellation_reason: 'abandoned',
+    });
     expect(answer.status).toBe('canceled');
     expect(callOf(canceled.requests)?.url).toBe(
       `${TEST_GATEWAY_URL}/v1/setup_intents/seti_1/cancel`,

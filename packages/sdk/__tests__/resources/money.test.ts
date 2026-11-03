@@ -102,8 +102,8 @@ describe('account', () => {
       },
       404,
     );
-    const error = await resources(buildTestClient(fetchImpl)).account
-      .retrieve()
+    const error = await resources(buildTestClient(fetchImpl))
+      .account.retrieve()
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PeableInvalidRequestError);
     expect((error as PeableInvalidRequestError).code).toBe('account_missing');

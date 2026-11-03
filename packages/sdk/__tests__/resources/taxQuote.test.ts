@@ -6,7 +6,10 @@ import { withBillingAuthority } from '../../src/overlays/billingAuthority';
 import { resources } from '../support/testGateway';
 
 /** `peable.billing` over `client`, verifying with `taxQuoteAuthorityKeys`. */
-function QuoteBilling(client: RestClient, taxQuoteAuthorityKeys?: Readonly<Record<string, string>>) {
+function QuoteBilling(
+  client: RestClient,
+  taxQuoteAuthorityKeys?: Readonly<Record<string, string>>,
+) {
   return withBillingAuthority(resources(client as GatewayClient).billing, {
     ...(taxQuoteAuthorityKeys === undefined ? {} : { taxQuoteAuthorityKeys }),
   });
@@ -80,11 +83,9 @@ describe('pinned SDK tax quote authority', () => {
       'unconfigured',
     );
     expect(value.paths).toHaveLength(0);
-    expect(
-      await QuoteBilling(value.client, value.pinned).createTaxQuote(
-        value.request,
-      ),
-    ).toEqual(value.result);
+    expect(await QuoteBilling(value.client, value.pinned).createTaxQuote(value.request)).toEqual(
+      value.result,
+    );
     expect(value.paths).toEqual(['/v1/billing/tax_quotes']);
   });
   it('rejects pinned-signature tampering, foreign evidence and expired signed quotations', async () => {

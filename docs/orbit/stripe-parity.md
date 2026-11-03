@@ -149,7 +149,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 
 | Capability | State | Today | Target |
 |---|---|---|---|
-| Server SDK | 🟡 | `@peable.to/sdk` 1.0: resource methods generated from the route contracts (`scripts/generate-resources.ts`, CI drift gate `check:sdk-resources`), types are the contracts' `BodyOf`/`QueryOf`/`ResponseOf`; generated so far: `customers`, `paymentMethods` (the rest hand-written until their routes are contracted); one error class per `error.type`; `constructEvent` with rolling secrets | Every route generated |
+| Server SDK | ✅ | `@peable.to/sdk` 1.0: resource methods generated from the route contracts (`scripts/generate-resources.ts`, CI drift gate `check:sdk-resources`), types are the contracts' `BodyOf`/`QueryOf`/`ResponseOf`; every merchant route generated (255 methods, 44 namespaces); hand-written only `webhooks.constructEvent` and the pinned-key verification of the two signed billing documents; one error class per `error.type`; `constructEvent` with rolling secrets | |
 | Auto-pagination | ✅ | `list()` is a page promise and an async iterable on every list; `autoPagingEach`, `autoPagingToArray({ limit })`; `expand` option | |
 | Auto idempotency keys / retries / default timeout | ✅ | A uuid key on every POST, reused by every retry; `maxNetworkRetries` (default 2): network, timeout, 5xx, 429, 409 `idempotency_error`, exponential backoff with jitter honouring `Retry-After`; `timeout` default 80 s; one 401 re-attempt with a fresh token | |
 | Version pinning in SDK | ✅ | `apiVersion` (default `PEABLE_API_VERSION`) sent as `Peable-Version` | |

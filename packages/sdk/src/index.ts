@@ -12,13 +12,13 @@
 // Deliberately never imports `socket.io-client` or `./browser/*` — the server
 // bundle stays lean and holds no browser-only code.
 
-import type {
-  BodyOf,
-  CreateFileFromOxyParams,
-  FileObject,
-  RouteMap,
-} from '@peable.to/contracts';
-import { createRestClient, type GatewayClient, type IdempotencyOptions, type RequestOptions } from './core/client';
+import type { BodyOf, CreateFileFromOxyParams, FileObject, RouteMap } from '@peable.to/contracts';
+import {
+  createRestClient,
+  type GatewayClient,
+  type IdempotencyOptions,
+  type RequestOptions,
+} from './core/client';
 import {
   PEABLE_SERVICE_AUDIENCE,
   type PeableConfig,

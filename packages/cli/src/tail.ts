@@ -1,9 +1,4 @@
-import type {
-  Peable,
-  RequestLogMethod,
-  RequestLogStatusFilter,
-  WebhookEvent,
-} from '@peable.to/sdk';
+import type { Peable, RequestLogMethod, RequestLogStatusFilter } from '@peable.to/sdk';
 import { forwardEvent, generateSessionSecret } from './forward.js';
 import type { Io } from './io.js';
 import { timestamp } from './output.js';
@@ -40,28 +35,28 @@ export async function runListen(options: ListenOptions): Promise<void> {
   const { io } = options;
   const secret = options.secret ?? generateSessionSecret();
   let connected = false;
-  const stream = options.peable.events.stream({
-    ...(options.events && options.events.length > 0
-      ? { types: options.events as `${string}.*`[] }
-      : {}),
-    signal: options.signal,
-    onConnect: () => {
-      if (connected) {
-        io.err(`${timestamp()}   Reconnected.`);
-        return;
-      }
-      connected = true;
-      io.err(`Ready! Your webhook signing secret is ${secret} (^C to quit)`);
-      if (options.forwardTo) io.err(`Forwarding events to ${options.forwardTo}`);
+  const stream = options.peable.events.stream(
+    options.events && options.events.length > 0 ? { types: options.events.join(',') } : {},
+    {
+      signal: options.signal,
+      onConnect: () => {
+        if (connected) {
+          io.err(`${timestamp()}   Reconnected.`);
+          return;
+        }
+        connected = true;
+        io.err(`Ready! Your webhook signing secret is ${secret} (^C to quit)`);
+        if (options.forwardTo) io.err(`Forwarding events to ${options.forwardTo}`);
+      },
+      onDisconnect: (error) => {
+        if (error !== undefined) {
+          io.err(
+            `${timestamp()}   Connection lost (${error instanceof Error ? error.message : String(error)}); reconnecting…`,
+          );
+        }
+      },
     },
-    onDisconnect: (error) => {
-      if (error !== undefined) {
-        io.err(
-          `${timestamp()}   Connection lost (${error instanceof Error ? error.message : String(error)}); reconnecting…`,
-        );
-      }
-    },
-  });
+  );
 
   for await (const event of stream) {
     printEvent(io, event, options.printJson === true);
@@ -75,7 +70,11 @@ export async function runListen(options: ListenOptions): Promise<void> {
   }
 }
 
-function printEvent(io: Io, event: WebhookEvent, json: boolean): void {
+function printEvent(
+  io: Io,
+  event: { readonly id: string; readonly type: string; readonly created: number },
+  json: boolean,
+): void {
   io.out(`${timestamp(new Date(event.created * 1000))}   --> ${event.type} [${event.id}]`);
   if (json) io.out(JSON.stringify(event, null, 2));
 }
@@ -93,15 +92,19 @@ export interface LogsTailOptions {
 export async function runLogsTail(options: LogsTailOptions): Promise<void> {
   const { io } = options;
   let connected = false;
-  const stream = options.peable.requestLogs.stream({
-    ...(options.status !== undefined ? { status: options.status } : {}),
-    ...(options.method !== undefined ? { method: options.method } : {}),
-    signal: options.signal,
-    onConnect: () => {
-      if (!connected) io.err('Getting ready... tailing your request log (^C to quit)');
-      connected = true;
+  const stream = options.peable.requestLogs.stream(
+    {
+      ...(options.status !== undefined ? { status: options.status } : {}),
+      ...(options.method !== undefined ? { method: options.method } : {}),
     },
-  });
+    {
+      signal: options.signal,
+      onConnect: () => {
+        if (!connected) io.err('Getting ready... tailing your request log (^C to quit)');
+        connected = true;
+      },
+    },
+  );
   for await (const log of stream) {
     if (options.json === true) {
       io.out(JSON.stringify(log));

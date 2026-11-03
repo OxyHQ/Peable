@@ -99,7 +99,10 @@ type AtPath<T, P extends string> = P extends `${infer Head}.${infer Rest}`
     : never;
 
 /** The `sdk` path of a generated operation: a `service` route that names one. */
-type SdkOf<K extends OperationId> = RouteMap[K] extends { auth: 'service'; sdk: infer S extends string }
+type SdkOf<K extends OperationId> = RouteMap[K] extends {
+  auth: 'service';
+  sdk: infer S extends string;
+}
   ? S
   : never;
 

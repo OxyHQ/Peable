@@ -106,8 +106,8 @@ describe('list() auto-pagination', () => {
 
   test('autoPagingToArray stops at limit without fetching further pages', async () => {
     const { fetch, requests } = pagingGateway();
-    const ids = await resources(buildTestClient(fetch)).paymentIntents
-      .list({ limit: 2 })
+    const ids = await resources(buildTestClient(fetch))
+      .paymentIntents.list({ limit: 2 })
       .autoPagingToArray({ limit: 3 });
     expect(ids.map((row) => row.id)).toEqual(['pi_5', 'pi_4', 'pi_3']);
     expect(requests.filter((r) => r.url.startsWith(TEST_GATEWAY_URL))).toHaveLength(2);
@@ -123,8 +123,8 @@ describe('list() auto-pagination', () => {
   test('autoPagingEach stops when the callback returns false', async () => {
     const { fetch } = pagingGateway();
     const seen: string[] = [];
-    await resources(buildTestClient(fetch)).paymentIntents
-      .list({ limit: 2 })
+    await resources(buildTestClient(fetch))
+      .paymentIntents.list({ limit: 2 })
       .autoPagingEach((intent) => {
         seen.push(intent.id);
         return seen.length < 3;
