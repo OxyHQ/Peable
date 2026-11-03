@@ -154,3 +154,15 @@ test, not a recurring subscription or an access grant. The response contains
 only `{ intentId, clientSecret }`, is `no-store`, and belongs in component memory;
 never put it in browser storage, query strings or application logs. Use the
 separate hosted subscription harness above to test recurring billing.
+
+Local card entry uses the dedicated non-default TEST payment method configuration
+`pmc_1UXZRQAofUef123L4QGpwlFQ`. Only card is enabled there; Link enrollment and
+other processor method selection are disabled in that configuration, without
+changing the account default. Startup reads and verifies that configuration
+before selecting the adapter's immutable policy. An allowlist by itself did not
+remove Link's card-funded enrollment UI in the Payment Element; the isolated
+configuration does. Stripe rejects combining a configuration with an explicit
+`allowed_payment_method_types`, so the adapter enforces that exclusivity. Normal
+production startup retains dynamic methods. Production selection of a specific
+Peable method still needs its own reviewed dispatch/configuration wiring; this
+local policy does not claim that platform-wide work is complete.

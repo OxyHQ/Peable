@@ -4,6 +4,8 @@ import { LOCAL_TEST_APP, localTestBillingConfiguration } from './stripeTestBilli
 let stage = 'local configuration';
 async function run() {
   assertLocalStripeTestEnvironment(process.env);
+  const { configureLocalStripeCardEntry } = await import('./stripeTestCardPolicy');
+  await configureLocalStripeCardEntry();
   if (process.env.PORT !== '4310') throw new Error('Local Stripe test requires port4310');
   // This local runner does not publish workload telemetry or activate fiscal cohorts.
   delete process.env.AWS_REGION;

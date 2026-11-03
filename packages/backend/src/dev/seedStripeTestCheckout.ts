@@ -7,6 +7,8 @@ import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
 let stage = 'local configuration';
 async function run() {
   assertLocalStripeTestEnvironment(process.env);
+  const { configureLocalStripeCardEntry } = await import('./stripeTestCardPolicy');
+  await configureLocalStripeCardEntry();
   const { connectPostgres, disconnectPostgres } = await import('../db/postgres');
   const { toPaymentIntentDTO } = await import('../lib/serialize');
   const { createLocalStripeTestIntent } = await import('./stripeTestCheckout');
