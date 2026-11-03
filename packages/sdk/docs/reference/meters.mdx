@@ -1,0 +1,441 @@
+---
+title: "Meters"
+description: "The Meters endpoints of the Peable API."
+order: 926
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Meters
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/billing/meter_events`](#record-a-meter-event) | Record a meter event |
+| [`POST /v1/billing/meters`](#create-a-meter) | Create a meter |
+| [`GET /v1/billing/meters`](#list-meters) | List meters |
+| [`GET /v1/billing/meters/{id}`](#retrieve-a-meter) | Retrieve a meter |
+| [`POST /v1/billing/meters/{id}`](#update-a-meter) | Update a meter |
+| [`POST /v1/billing/meters/{id}/deactivate`](#deactivate-a-meter) | Deactivate a meter |
+| [`GET /v1/billing/meters/{id}/event_summaries`](#a-customers-usage-over-a-window) | A customer's usage over a window |
+| [`POST /v1/billing/meters/{id}/reactivate`](#reactivate-a-meter) | Reactivate a meter |
+
+## Record a meter event
+
+`POST /v1/billing/meter_events`
+
+The customer must be yours and the value a non-negative integer. A repeated `identifier` answers the stored event.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billing.meterEvents.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `event_name` **required** | string | Matches `^[A-Za-z0-9_.:-]{1,100}$`. |
+| `payload` **required** | map of string |  |
+| `identifier` | string | Default: a fresh one — pass your own so a retry is not counted twice. 1–100 characters. |
+| `timestamp` | integer | Default now. At most 35 days in the past, 5 minutes in the future. Between 0 and 253402300799. |
+
+**Response `200`**
+
+Returns [BillingMeterEvent](/reference/objects/billing-meter-event).
+
+```json
+{
+  "object": "billing.meter_event",
+  "livemode": false,
+  "identifier": "req_8f3a2c",
+  "event_name": "api_call",
+  "payload": {
+    "peable_customer_id": "cus_0193b8f2c1a87d3e9f4a",
+    "value": "25"
+  },
+  "timestamp": 1793750400,
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a meter
+
+`POST /v1/billing/meters`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billing.meters.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `display_name` **required** | string | 1–250 characters. |
+| `event_name` **required** | string | Matches `^[A-Za-z0-9_.:-]{1,100}$`. |
+| `default_aggregation` **required** | object |  |
+| `default_aggregation[formula]` **required** | string | One of `sum`, `count`, `last`. |
+| `customer_mapping` | object | Default `{ type: 'by_id', event_payload_key: 'peable_customer_id' }`. |
+| `customer_mapping[type]` **required** | `"by_id"` |  |
+| `customer_mapping[event_payload_key]` **required** | string | Matches `^[A-Za-z0-9_]{1,100}$`. |
+| `value_settings` | object | Default `{ event_payload_key: 'value' }`. |
+| `value_settings[event_payload_key]` **required** | string | Matches `^[A-Za-z0-9_]{1,100}$`. |
+
+**Response `200`**
+
+Returns [BillingMeter](/reference/objects/billing-meter).
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List meters
+
+`GET /v1/billing/meters`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.billing.meters.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `status` | query | string | One of `active`, `inactive`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [BillingMeter](/reference/objects/billing-meter) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [BillingMeter](/reference/objects/billing-meter) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "mtr_0193b8f2c1a87d3e9f4e",
+      "object": "billing.meter",
+      "livemode": false,
+      "display_name": "API calls",
+      "event_name": "api_call",
+      "default_aggregation": {
+        "formula": "sum"
+      },
+      "customer_mapping": {
+        "type": "by_id",
+        "event_payload_key": "peable_customer_id"
+      },
+      "value_settings": {
+        "event_payload_key": "value"
+      },
+      "status": "active",
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/billing/meters"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a meter
+
+`GET /v1/billing/meters/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.billing.meters.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The meter (`mtr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [BillingMeter](/reference/objects/billing-meter).
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a meter
+
+`POST /v1/billing/meters/{id}`
+
+Only `display_name` changes.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billing.meters.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The meter (`mtr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `display_name` | string | 1–250 characters. |
+
+**Response `200`**
+
+Returns [BillingMeter](/reference/objects/billing-meter).
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Deactivate a meter
+
+`POST /v1/billing/meters/{id}/deactivate`
+
+An inactive meter accepts no events.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billing.meters.deactivate()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The meter (`mtr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [BillingMeter](/reference/objects/billing-meter).
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## A customer's usage over a window
+
+`GET /v1/billing/meters/{id}/event_summaries`
+
+One summary: the aggregate of the window `[start_time, end_time)`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.billing.meters.listEventSummaries()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The meter (`mtr_…`). |
+| `customer` **required** | query | string | The customer (`cus_…`) whose usage is aggregated. 1–255 characters. |
+| `start_time` **required** | query | integer | The window start (inclusive). Between 0 and 253402300799. |
+| `end_time` **required** | query | integer | The window end (exclusive), after `start_time`. Between 0 and 253402300799. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [BillingMeterEventSummary](/reference/objects/billing-meter-event-summary) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [BillingMeterEventSummary](/reference/objects/billing-meter-event-summary) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "mtrsum_0193b8f2c1a87d3e9f4e_1793750400",
+      "object": "billing.meter_event_summary",
+      "livemode": false,
+      "meter": "mtr_0193b8f2c1a87d3e9f4e",
+      "aggregated_value": "1250",
+      "start_time": 1793750400,
+      "end_time": 1796342400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/billing/meters/{id}/event_summaries"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Reactivate a meter
+
+`POST /v1/billing/meters/{id}/reactivate`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billing.meters.reactivate()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The meter (`mtr_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [BillingMeter](/reference/objects/billing-meter).
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

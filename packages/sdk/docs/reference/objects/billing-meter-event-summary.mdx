@@ -1,0 +1,40 @@
+---
+title: "BillingMeterEventSummary"
+description: "The billing.meter_event_summary object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingMeterEventSummary
+
+Object type: `billing.meter_event_summary`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"billing.meter_event_summary"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `meter` | string | The meter (`mtr_…`). |
+| `aggregated_value` | string | The aggregate, as an integer string (it can exceed a JS number). |
+| `start_time` | integer | Unix seconds. |
+| `end_time` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "mtrsum_0193b8f2c1a87d3e9f4e_1793750400",
+  "object": "billing.meter_event_summary",
+  "livemode": false,
+  "meter": "mtr_0193b8f2c1a87d3e9f4e",
+  "aggregated_value": "1250",
+  "start_time": 1793750400,
+  "end_time": 1796342400
+}
+```
+
+## Returned by
+
+- [`GET /v1/billing/meters/{id}/event_summaries`](/reference/meters#a-customers-usage-over-a-window) — A customer's usage over a window

@@ -1,0 +1,66 @@
+---
+title: "CheckoutLineItem"
+description: "The item object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CheckoutLineItem
+
+Object type: `item`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"item"` |  |
+| `description` | string | The product's name, or the inline `product_data.name`. |
+| `price` | string \| [Price](/reference/objects/price) \| null | The catalog price (`price_…`, or the Price with `expand[]=data.price`); `null` for an inline `price_data` line, which is a snapshot on the line and never a stored price. Expandable. |
+| `product` | string \| [Product](/reference/objects/product) \| null | The catalog product (`prod_…`, expandable); `null` for `product_data`. Expandable. |
+| `images` | array of string | Images to show beside the line (the product's, or `product_data.images`). |
+| `quantity` | integer | At least -9007199254740991. |
+| `adjustable_quantity` | [CheckoutAdjustableQuantity](/reference/objects/checkout-adjustable-quantity) \| null |  |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `unit_amount` | string \| null | The per-unit amount for a per-unit price; `null` for a tiered one. Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_subtotal` | string | Before discount and tax. Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_discount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_tax` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_total` | string | `amount_subtotal - amount_discount + amount_tax` (exclusive tax only). Matches `^(0\|[1-9][0-9]*)$`. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `price` → [Price](/reference/objects/price)
+- `product` → [DeletedProduct](/reference/objects/deleted-product)
+
+## Example
+
+```json
+{
+  "id": "li_0193b8f2c1a87d3e9f4a",
+  "object": "item",
+  "description": "Pro plan",
+  "price": "price_0193b8f2c1a87d3e9f4b",
+  "product": "prod_0193b8f2c1a87d3e9f4c",
+  "images": [],
+  "quantity": 1,
+  "adjustable_quantity": null,
+  "currency": "EUR",
+  "unit_amount": "1999",
+  "amount_subtotal": "1999",
+  "amount_discount": "0",
+  "amount_tax": "0",
+  "amount_total": "1999"
+}
+```
+
+## Returned by
+
+- [`GET /v1/checkout_sessions/{id}/line_items`](/reference/checkout-sessions#list-a-checkout-sessions-line-items) — List a Checkout Session's line items
+- [`GET /v1/payment_links/{id}/line_items`](/reference/payment-links#list-a-payment-links-line-items) — List a payment link's line items
+
+## Used in
+
+[CheckoutSessionPublic](/reference/objects/checkout-session-public) · [PaymentLink](/reference/objects/payment-link) · [PublicPaymentLink](/reference/objects/public-payment-link)

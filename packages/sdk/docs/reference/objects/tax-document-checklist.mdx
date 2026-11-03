@@ -1,0 +1,22 @@
+---
+title: "TaxDocumentChecklist"
+description: "The tax.document_checklist object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxDocumentChecklist
+
+Object type: `tax.document_checklist`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.document_checklist"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `items` | array of [TaxDocumentChecklistItem](/reference/objects/tax-document-checklist-item) |  |
+
+## Returned by
+
+- [`GET /v1/tax/document_checklist`](/reference/tax-compliance#retrieve-the-document-checklist) — Retrieve the document checklist

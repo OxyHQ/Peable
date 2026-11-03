@@ -1,0 +1,27 @@
+---
+title: "EmailSettings"
+description: "The email_settings object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# EmailSettings
+
+Object type: `email_settings`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"email_settings"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `payment_receipts` | boolean | A receipt when a payment succeeds and has a `receipt_email` (or a collected one). |
+| `refund_notices` | boolean | A notice when a refund succeeds. |
+| `checkout_confirmations` | boolean | A confirmation when a checkout session completes. |
+| `support_email` | string \| null | The reply-to address shown on emails, or `null` for none. |
+| `updated_at` | integer \| null | Unix seconds. |
+
+## Returned by
+
+- [`GET /v1/merchants/me/email_settings`](/reference/merchants#retrieve-your-customer-email-settings) — Retrieve your customer email settings
+- [`POST /v1/merchants/me/email_settings`](/reference/merchants#update-your-customer-email-settings) — Update your customer email settings

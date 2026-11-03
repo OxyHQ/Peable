@@ -1,0 +1,24 @@
+---
+title: "ClientAction"
+description: "The client_action object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ClientAction
+
+Object type: `client_action`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"client_action"` |  |
+| `kind` | string | `client_secret`: confirm with the provider; `redirect`: send the payer to `value`. |
+| `value` | string | Opaque and provider-specific: a confirmation credential or a redirect target. Never store, log or put it in a URL. |
+| `publishable_key` | string | The provider's PUBLIC key for this payment's mode, when the deployment has one. |
+
+## Returned by
+
+- [`POST /v1/payment_intents/{id}/client_action`](/reference/payment-intents#retrieve-a-card-payments-client-action) — Retrieve a card payment's client action
+- [`POST /v1/setup_intents/{id}/client_action`](/reference/setup-intents#retrieve-a-setup-intents-client-action) — Retrieve a setup intent's client action

@@ -1,0 +1,51 @@
+---
+title: "PublicInvoice"
+description: "The public_invoice object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PublicInvoice
+
+Object type: `public_invoice`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"public_invoice"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `number` | string \| null |  |
+| `status` | string | One of `draft`, `open`, `paid`, `void`, `uncollectible`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `merchant` | object |  |
+| `merchant.name` | string \| null |  |
+| `merchant.avatar_url` | string \| null |  |
+| `customer_name` | string \| null |  |
+| `customer_email` | string \| null |  |
+| `description` | string \| null |  |
+| `lines` | array of object |  |
+| `lines[].description` | string \| null |  |
+| `lines[].quantity` | integer \| null | At least -9007199254740991. |
+| `lines[].amount` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `lines[].period` | object |  |
+| `lines[].period.start` | integer | Unix seconds. |
+| `lines[].period.end` | integer | Unix seconds. |
+| `lines[].proration` | boolean |  |
+| `subtotal` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total_discount` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `tax` | string \| null | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `amount_due` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_paid` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_remaining` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `due_date` | integer \| null | Unix seconds. |
+| `created` | integer | Unix seconds. |
+| `finalized_at` | integer \| null | Unix seconds. |
+| `paid_at` | integer \| null | Unix seconds. |
+| `payment_method_types` | array of string | Which rail pays it: a card through the provider's fields, FairCoin from the payer's wallet. |
+| `invoice_pdf` | string |  |
+
+## Returned by
+
+- [`GET /v1/invoices/public/{token}`](/reference/hosted-invoices#retrieve-a-hosted-invoice) — Retrieve a hosted invoice

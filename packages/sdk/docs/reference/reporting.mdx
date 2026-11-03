@@ -1,0 +1,309 @@
+---
+title: "Reporting"
+description: "The Reporting endpoints of the Peable API."
+order: 938
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Reporting
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/reporting/report_runs`](#create-a-report-run) | Create a report run |
+| [`GET /v1/reporting/report_runs`](#list-report-runs) | List report runs |
+| [`GET /v1/reporting/report_runs/{id}`](#retrieve-a-report-run) | Retrieve a report run |
+| [`GET /v1/reporting/report_types`](#list-report-types) | List report types |
+| [`GET /v1/reporting/report_types/{id}`](#retrieve-a-report-type) | Retrieve a report type |
+| [`GET /v1/reporting/report_types/{id}/csv`](#download-a-report) | Download a report |
+
+## Create a report run
+
+`POST /v1/reporting/report_runs`
+
+Answers `pending` at once; the CSV is produced in the background and announced with `reporting.report_run.succeeded` (or `.failed`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportRuns.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `report_type` **required** | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `parameters` **required** | object |  |
+| `parameters[interval_start]` **required** | integer | Inclusive, Unix seconds. Between 0 and 253402300799. |
+| `parameters[interval_end]` **required** | integer | Exclusive, Unix seconds; after `interval_start` and not in the future. Between 0 and 253402300799. |
+| `parameters[columns]` | array of string | Columns of the report type's layout, each once. At most 64 items. At least 1 item. |
+| `parameters[currency]` | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+
+**Response `200`**
+
+Returns [ReportRun](/reference/objects/report-run).
+
+```json
+{
+  "id": "frr_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_run",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {
+    "interval_start": 1790985600,
+    "interval_end": 1793577600
+  },
+  "status": "pending",
+  "error": null,
+  "result": null,
+  "succeeded_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List report runs
+
+`GET /v1/reporting/report_runs`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportRuns.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `report_type` | query | string | One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ReportRun](/reference/objects/report-run) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ReportRun](/reference/objects/report-run) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "frr_0193b8f34d1e4a6b8c27",
+      "object": "reporting.report_run",
+      "livemode": false,
+      "created": 1793750400,
+      "report_type": "balance.summary.1",
+      "parameters": {
+        "interval_start": 1790985600,
+        "interval_end": 1793577600
+      },
+      "status": "pending",
+      "error": null,
+      "result": null,
+      "succeeded_at": null
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/reporting/report_runs"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a report run
+
+`GET /v1/reporting/report_runs/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportRuns.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report run (`frr_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ReportRun](/reference/objects/report-run).
+
+```json
+{
+  "id": "frr_0193b8f34d1e4a6b8c27",
+  "object": "reporting.report_run",
+  "livemode": false,
+  "created": 1793750400,
+  "report_type": "balance.summary.1",
+  "parameters": {
+    "interval_start": 1790985600,
+    "interval_end": 1793577600
+  },
+  "status": "pending",
+  "error": null,
+  "result": null,
+  "succeeded_at": null
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List report types
+
+`GET /v1/reporting/report_types`
+
+Every report Peable produces (a complete set), with the interval data exists for.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportTypes.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ReportType](/reference/objects/report-type) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ReportType](/reference/objects/report-type) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "balance.summary.1",
+      "object": "reporting.report_type",
+      "livemode": false,
+      "name": "Balance summary",
+      "version": 1,
+      "columns": [
+        "category",
+        "description",
+        "currency",
+        "net_amount",
+        "transaction_count",
+        "net_amount_decimal"
+      ],
+      "default_columns": [
+        "category",
+        "description",
+        "currency",
+        "net_amount"
+      ],
+      "data_available_start": 1790000000,
+      "data_available_end": 1793750400,
+      "updated": 1793664000
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/reporting/report_types"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a report type
+
+`GET /v1/reporting/report_types/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportTypes.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report type (`payments.itemized.1`, …). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ReportType](/reference/objects/report-type).
+
+```json
+{
+  "id": "balance.summary.1",
+  "object": "reporting.report_type",
+  "livemode": false,
+  "name": "Balance summary",
+  "version": 1,
+  "columns": [
+    "category",
+    "description",
+    "currency",
+    "net_amount",
+    "transaction_count",
+    "net_amount_decimal"
+  ],
+  "default_columns": [
+    "category",
+    "description",
+    "currency",
+    "net_amount"
+  ],
+  "data_available_start": 1790000000,
+  "data_available_end": 1793750400,
+  "updated": 1793664000
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Download a report
+
+`GET /v1/reporting/report_types/{id}/csv`
+
+The same report a run produces, with the same parameters, streamed at once as CSV instead of stored. Every refusal is the JSON error before the first byte; a read that fails afterwards aborts the response, so a truncated file never ends cleanly.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.reporting.reportTypes.download()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The report type (`payments.itemized.1`, …). |
+| `interval_start` **required** | query | integer | Inclusive, Unix seconds. |
+| `interval_end` **required** | query | integer | Exclusive, Unix seconds. |
+| `columns[]` | query | array of string | Columns of the report type's layout, each once. At most 64 items. At least 1 item. |
+| `currency` | query | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+The bytes, as `text/csv`.
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,21 @@
+---
+title: "PriceRecurring"
+description: "The PriceRecurring shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PriceRecurring
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `interval` | string | One of `day`, `week`, `month`, `year`. |
+| `interval_count` | integer | Intervals between billings: `interval: 'month', interval_count: 3` is quarterly. At most three years. At least -9007199254740991. |
+| `usage_type` | string | One of `licensed`, `metered`. |
+| `meter` | string \| null | The meter (`mtr_…`) a `metered` price bills; `null` when `licensed`. |
+
+## Used in
+
+[Price](/reference/objects/price)

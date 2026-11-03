@@ -1,0 +1,23 @@
+---
+title: "CardDetails"
+description: "The CardDetails shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CardDetails
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `brand` | string \| null |  |
+| `last4` | string \| null |  |
+| `exp_month` | integer \| null | At least -9007199254740991. |
+| `exp_year` | integer \| null | At least -9007199254740991. |
+| `country` | string \| null | ISO 3166-1 alpha-2 of the issuer. |
+| `funding` | string \| null | `credit`, `debit`, `prepaid` or `unknown`. |
+
+## Used in
+
+[Charge](/reference/objects/charge) · [PaymentMethod](/reference/objects/payment-method)

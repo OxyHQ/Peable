@@ -1,0 +1,51 @@
+---
+title: "TaxComplianceAction"
+description: "The tax.compliance_action object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxComplianceAction
+
+Object type: `tax.compliance_action`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.compliance_action"` |  |
+| `id` | string | `taxact_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `action` | string | e.g. `business_profile.updated`, `review_item.resolved`. |
+| `actor` | object |  |
+| `actor.type` | string | One of `user`, `service`, `system`. |
+| `actor.id` | string \| null |  |
+| `object_type` | string |  |
+| `object_id` | string \| null |  |
+| `details` | map of string or number or boolean or null | Field names and statuses that changed — never the values of a document or a number. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.compliance_action",
+  "id": "taxact_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "action": "review_item.resolved",
+  "actor": {
+    "type": "user",
+    "id": "user_42"
+  },
+  "object_type": "tax.review_item",
+  "object_id": "taxrev_0193b8f2c1a87d3e9f4a",
+  "details": {
+    "decision": "will_register"
+  },
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/compliance_actions`](/reference/tax-compliance#list-compliance-actions) — List compliance actions

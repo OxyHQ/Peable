@@ -1,0 +1,33 @@
+---
+title: "TaxAssessmentResult"
+description: "The TaxAssessmentResult shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxAssessmentResult
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `rule` | string \| null | The rule applied, or `null` for an unsupported jurisdiction. |
+| `country` | string \| null |  |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `tax_type` | string \| null | One of `vat`, `sales_tax`. |
+| `outcome` | string | One of `registration_declared`, `likely_required`, `approaching_threshold`, `not_indicated`, `uncertain`, `unsupported`. |
+| `reasons` | array of [TaxAssessmentReason](/reference/objects/tax-assessment-reason) |  |
+| `measured` | [TaxAssessmentMeasured](/reference/objects/tax-assessment-measured) \| null | Net sales measured against the threshold, when the rule has one. |
+| `threshold` | object \| null |  |
+| `threshold.amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `threshold.currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `deadline` | object \| null | A deadline the rule itself sets (a Texas permit after crossing). |
+| `deadline.kind` | `"registration"` |  |
+| `deadline.due` | integer | Unix seconds. |
+| `deadline.source` | [TaxRuleSource](/reference/objects/tax-rule-source) |  |
+| `coverage_limits` | array of [TaxCoverageLimit](/reference/objects/tax-coverage-limit) |  |
+| `review_items` | array of string | The review items (`taxrev_…`) this result opened or kept open. |
+
+## Used in
+
+[TaxAssessment](/reference/objects/tax-assessment) · [TaxAssessmentReplay](/reference/objects/tax-assessment-replay)

@@ -1,0 +1,27 @@
+---
+title: "CreditNoteLineItem"
+description: "The credit_note_line_item object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CreditNoteLineItem
+
+Object type: `credit_note_line_item`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"credit_note_line_item"` |  |
+| `type` | string | One of `invoice_line_item`, `custom_line_item`. |
+| `invoice_line_item` | string \| null | The invoice line (`il_…`) it credits. |
+| `description` | string \| null |  |
+| `quantity` | integer \| null | At least -9007199254740991. |
+| `amount` | string | Before tax; tax-inclusive when the invoice line is. Matches `^(0\|[1-9][0-9]*)$`. |
+| `tax_amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+
+## Used in
+
+[CreditNote](/reference/objects/credit-note)

@@ -1,0 +1,73 @@
+---
+title: "BalanceTransaction"
+description: "The balance_transaction object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BalanceTransaction
+
+Object type: `balance_transaction`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `txn_…` |
+| `object` | `"balance_transaction"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `amount` | string | Gross, signed. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `fee` | string \| null | What was taken, or `null` when the source gave no figure (never `0` for unknown). Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `net` | string \| null | `amount - fee`, as the provider reports it, or `null` with `fee`. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string | Upper-case ISO 4217 code, or `FAIR`. |
+| `type` | string | One of `charge`, `payment`, `refund`, `payment_refund`, `adjustment`, `application_fee`, `application_fee_refund`, `payout`, `payout_cancel`, `payout_failure`, `transfer`, `transfer_refund`, `dispute`, `dispute_reversal`, `processing_fee`, `faircoin_payment`, `faircoin_payment_reversal`, `other`. |
+| `reporting_category` | string | A coarser grouping for reports (`charge`, `refund`, `payout`, `fee`, …). |
+| `status` | string | One of `available`, `pending`, `informational`. |
+| `available_on` | integer \| null | When the funds became (or become) available; `null` for an informational entry. |
+| `created` | integer | When it happened at its source. |
+| `description` | string \| null |  |
+| `exchange_rate` | number \| null |  |
+| `fee_details` | array of [BalanceTransactionFeeDetail](/reference/objects/balance-transaction-fee-detail) |  |
+| `source` | string \| null | The Orbit object that caused it (`ch_…`, `re_…`, `po_…`, `fee_…`, `tr_…`, `pi_…`), or `null` when the provider's source is not an object Orbit holds. |
+| `payout` | string \| null | The payout (`po_…`) that paid this transaction out, once known. |
+| `account` | string \| null | The account (`ca_…`) whose balance it moved; `null` for a first-party merchant. |
+
+## Example
+
+```json
+{
+  "id": "txn_0193b8f30a6c4e21b7d9",
+  "object": "balance_transaction",
+  "livemode": false,
+  "amount": "2000",
+  "fee": "88",
+  "net": "1912",
+  "currency": "EUR",
+  "type": "charge",
+  "reporting_category": "charge",
+  "status": "available",
+  "available_on": 1794355200,
+  "created": 1793750400,
+  "description": "Order 6735",
+  "exchange_rate": null,
+  "fee_details": [
+    {
+      "amount": "88",
+      "currency": "EUR",
+      "type": "processing_fee"
+    }
+  ],
+  "source": "ch_0193b8f2f7c94b1d8e02",
+  "payout": null,
+  "account": "ca_0193b8f2c1a87d3e9f4a"
+}
+```
+
+## Returned by
+
+- [`GET /v1/balance_transactions`](/reference/balance-transactions#list-balance-transactions) — List balance transactions
+- [`GET /v1/balance_transactions/{id}`](/reference/balance-transactions#retrieve-a-balance-transaction) — Retrieve a balance transaction
+
+## Used in
+
+[PayoutReconciliationReport](/reference/objects/payout-reconciliation-report)

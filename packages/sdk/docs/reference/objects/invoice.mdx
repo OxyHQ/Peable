@@ -1,0 +1,190 @@
+---
+title: "Invoice"
+description: "The invoice object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Invoice
+
+Object type: `invoice`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"invoice"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `number` | string \| null | `null` while a draft; `PREFIX-0001` once finalized — gapless per merchant. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `customer_email` | string \| null |  |
+| `customer_name` | string \| null |  |
+| `subscription` | string \| [Subscription](/reference/objects/subscription) \| null | `sub_…`, or the Subscription with `expand[]=subscription`. Expandable. |
+| `status` | string | One of `draft`, `open`, `paid`, `void`, `uncollectible`. |
+| `billing_reason` | string | One of `manual`, `subscription_create`, `subscription_cycle`, `subscription_update`, `subscription_cancel`, `upcoming`. |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `description` | string \| null |  |
+| `auto_advance` | boolean |  |
+| `automatically_finalizes_at` | integer \| null | When a draft with `auto_advance` will finalize. |
+| `lines` | object | Every line, on one page. |
+| `lines.object` | `"list"` |  |
+| `lines.data` | array of [InvoiceLineItem](/reference/objects/invoice-line-item) |  |
+| `lines.has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `lines.url` | string | The path that was listed. |
+| `subtotal` | string | SIGNED. Sum of the lines before discounts. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `subtotal_excluding_tax` | string | SIGNED. `subtotal` less the tax included in it (inclusive prices). Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total_discount_amounts` | array of object |  |
+| `total_discount_amounts[].amount` | string | SIGNED: a discount on a credit line is negative. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total_discount_amounts[].discount` | string | The discount it comes from. |
+| `discount` | [Discount](/reference/objects/discount) \| null |  |
+| `tax` | string \| null | SIGNED; `null` on a draft whose tax is not calculated yet. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total` | string | SIGNED. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `total_excluding_tax` | string | SIGNED. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `starting_balance` | string | SIGNED: the customer's balance applied when it finalized. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `ending_balance` | string \| null | SIGNED: what the customer's balance became; `null` until finalized. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `amount_due` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_paid` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount_remaining` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `pre_payment_credit_notes_amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `post_payment_credit_notes_amount` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `attempt_count` | integer |  |
+| `attempted` | boolean |  |
+| `next_payment_attempt` | integer \| null | Unix seconds. |
+| `due_date` | integer \| null | Unix seconds. |
+| `days_until_due` | integer \| null | At least -9007199254740991. |
+| `period_start` | integer | Unix seconds. |
+| `period_end` | integer | Unix seconds. |
+| `payment_intent` | string \| [PaymentIntent](/reference/objects/payment-intent) \| null | `pi_…`, or the PaymentIntent with `expand[]=payment_intent`. Expandable. |
+| `default_payment_method` | string \| [PaymentMethod](/reference/objects/payment-method) \| null | `pm_…`, or the PaymentMethod with `expand[]=default_payment_method`. Expandable. |
+| `automatic_tax` | object |  |
+| `automatic_tax.enabled` | boolean |  |
+| `automatic_tax.status` | string \| null | One of `requires_location_inputs`, `failed`, `complete`. |
+| `automatic_tax.tax_calculation` | string \| null | The Peable Tax calculation (`taxcalc_…`) the invoice finalized with. |
+| `hosted_invoice_url` | string \| null | The payer-facing page (anonymous, an unguessable token); `null` while a draft. |
+| `invoice_pdf` | string \| null | The PDF of the same; `null` while a draft. |
+| `last_finalization_error` | object \| null |  |
+| `last_finalization_error.code` | string |  |
+| `last_finalization_error.message` | string |  |
+| `status_transitions` | object |  |
+| `status_transitions.finalized_at` | integer \| null | Unix seconds. |
+| `status_transitions.paid_at` | integer \| null | Unix seconds. |
+| `status_transitions.voided_at` | integer \| null | Unix seconds. |
+| `status_transitions.marked_uncollectible_at` | integer \| null | Unix seconds. |
+| `paid_out_of_band` | boolean |  |
+| `test_clock` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+| `effective_at` | integer \| null | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `subscription` → [Subscription](/reference/objects/subscription)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `default_payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+## Example
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/invoices`](/reference/invoices#create-an-invoice) — Create an invoice
+- [`GET /v1/invoices`](/reference/invoices#list-invoices) — List invoices
+- [`GET /v1/invoices/{id}`](/reference/invoices#retrieve-an-invoice) — Retrieve an invoice
+- [`POST /v1/invoices/{id}`](/reference/invoices#update-an-invoice) — Update an invoice
+- [`POST /v1/invoices/{id}/finalize`](/reference/invoices#finalize-a-draft-invoice) — Finalize a draft invoice
+- [`POST /v1/invoices/{id}/mark_uncollectible`](/reference/invoices#mark-an-invoice-uncollectible) — Mark an invoice uncollectible
+- [`POST /v1/invoices/{id}/pay`](/reference/invoices#pay-an-invoice) — Pay an invoice
+- [`POST /v1/invoices/{id}/send`](/reference/invoices#send-an-invoice-to-its-customer) — Send an invoice to its customer
+- [`POST /v1/invoices/{id}/void`](/reference/invoices#void-an-invoice) — Void an invoice
+- [`GET /v1/invoices/search`](/reference/invoices#search-invoices) — Search invoices
+- [`GET /v1/invoices/upcoming`](/reference/invoices#preview-the-upcoming-invoice) — Preview the upcoming invoice
+
+## Events
+
+- [`invoice.created`](/reference/webhook-events#invoicecreated)
+- [`invoice.deleted`](/reference/webhook-events#invoicedeleted)
+- [`invoice.finalized`](/reference/webhook-events#invoicefinalized)
+- [`invoice.marked_uncollectible`](/reference/webhook-events#invoicemarked_uncollectible)
+- [`invoice.paid`](/reference/webhook-events#invoicepaid)
+- [`invoice.payment_action_required`](/reference/webhook-events#invoicepayment_action_required)
+- [`invoice.payment_failed`](/reference/webhook-events#invoicepayment_failed)
+- [`invoice.sent`](/reference/webhook-events#invoicesent)
+- [`invoice.upcoming`](/reference/webhook-events#invoiceupcoming)
+- [`invoice.updated`](/reference/webhook-events#invoiceupdated)
+- [`invoice.voided`](/reference/webhook-events#invoicevoided)
+
+## Used in
+
+[CreditNote](/reference/objects/credit-note) · [CustomerBalanceTransaction](/reference/objects/customer-balance-transaction) · [Error](/reference/objects/error) · [Event](/reference/objects/event) · [InvoiceItem](/reference/objects/invoice-item) · [Subscription](/reference/objects/subscription)

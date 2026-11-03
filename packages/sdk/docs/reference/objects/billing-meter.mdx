@@ -1,0 +1,75 @@
+---
+title: "BillingMeter"
+description: "The billing.meter object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingMeter
+
+Object type: `billing.meter`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"billing.meter"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `display_name` | string |  |
+| `event_name` | string | The `event_name` of the meter events it counts. |
+| `default_aggregation` | object |  |
+| `default_aggregation.formula` | string | How a period's events combine into the quantity billed. One of `sum`, `count`, `last`. |
+| `customer_mapping` | object |  |
+| `customer_mapping.type` | `"by_id"` |  |
+| `customer_mapping.event_payload_key` | string | The payload key carrying the customer (`cus_…`). |
+| `value_settings` | object |  |
+| `value_settings.event_payload_key` | string | The payload key carrying the value. |
+| `status` | string | One of `active`, `inactive`. |
+| `created` | integer | Unix seconds. |
+| `updated` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "mtr_0193b8f2c1a87d3e9f4e",
+  "object": "billing.meter",
+  "livemode": false,
+  "display_name": "API calls",
+  "event_name": "api_call",
+  "default_aggregation": {
+    "formula": "sum"
+  },
+  "customer_mapping": {
+    "type": "by_id",
+    "event_payload_key": "peable_customer_id"
+  },
+  "value_settings": {
+    "event_payload_key": "value"
+  },
+  "status": "active",
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/billing/meters`](/reference/meters#create-a-meter) — Create a meter
+- [`GET /v1/billing/meters`](/reference/meters#list-meters) — List meters
+- [`GET /v1/billing/meters/{id}`](/reference/meters#retrieve-a-meter) — Retrieve a meter
+- [`POST /v1/billing/meters/{id}`](/reference/meters#update-a-meter) — Update a meter
+- [`POST /v1/billing/meters/{id}/deactivate`](/reference/meters#deactivate-a-meter) — Deactivate a meter
+- [`POST /v1/billing/meters/{id}/reactivate`](/reference/meters#reactivate-a-meter) — Reactivate a meter
+
+## Events
+
+- [`billing.meter.created`](/reference/webhook-events#billingmetercreated)
+- [`billing.meter.deactivated`](/reference/webhook-events#billingmeterdeactivated)
+- [`billing.meter.reactivated`](/reference/webhook-events#billingmeterreactivated)
+- [`billing.meter.updated`](/reference/webhook-events#billingmeterupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

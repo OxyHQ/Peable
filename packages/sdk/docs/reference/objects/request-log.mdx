@@ -1,0 +1,46 @@
+---
+title: "RequestLog"
+description: "The request_log object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# RequestLog
+
+Object type: `request_log`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | The request's `Request-Id` (`req_…`). |
+| `object` | `"request_log"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `method` | string | One of `GET`, `POST`, `DELETE`, `PATCH`, `PUT`. |
+| `path` | string | The path that was requested, without its query string. |
+| `status` | integer | The HTTP status it was answered with. At least -9007199254740991. |
+| `duration_ms` | integer | How long the gateway took to answer, in milliseconds. |
+| `idempotency_key` | string \| null | The `Idempotency-Key` the request carried, if it carried a valid one. |
+| `created` | integer | When it was answered. |
+
+## Example
+
+```json
+{
+  "id": "req_0193b8f35e9c4f2a7b18",
+  "object": "request_log",
+  "livemode": false,
+  "method": "POST",
+  "path": "/v1/payment_intents",
+  "status": 201,
+  "duration_ms": 84,
+  "idempotency_key": "5f1d3c2e-8a4b-4f6e-9d2c-1b7a0e3f4c5d",
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/request_logs`](/reference/request-logs#list-request-logs) — List request logs
+- [`GET /v1/request_logs/{id}`](/reference/request-logs#retrieve-a-request-log) — Retrieve a request log
+- [`GET /v1/request_logs/stream`](/reference/request-logs#stream-request-logs) — Stream request logs

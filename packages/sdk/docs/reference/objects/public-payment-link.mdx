@@ -1,0 +1,32 @@
+---
+title: "PublicPaymentLink"
+description: "The payment_link object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PublicPaymentLink
+
+Object type: `payment_link`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_link"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `active` | boolean |  |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `rail` | string | One of `faircoin`, `card`. |
+| `network` | string \| null | One of `mainnet`, `testnet`. |
+| `line_items` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) | The link's prices (`GET /v1/payment_links/{id}/line_items` lists them in full). |
+| `contribution` | [ContributionDetails](/reference/objects/contribution-details) | Present on an organization contribution link (FairCoin). |
+| `locale` | string \| null | One of `en`, `es`, `fr`, `de`, `it`, `pt`. |
+| `contribution_amount` | string \| null | A fixed contribution's amount; `null` when the payer chooses (or for a price link). |
+| `merchant` | [MerchantDisplay](/reference/objects/merchant-display) |  |
+| `branding` | [CheckoutBranding](/reference/objects/checkout-branding) |  |
+
+## Returned by
+
+- [`GET /v1/payment_links/{id}/public`](/reference/payment-links#retrieve-a-payment-link-as-a-visitor) — Retrieve a payment link as a visitor

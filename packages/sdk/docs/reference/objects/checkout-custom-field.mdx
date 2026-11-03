@@ -1,0 +1,36 @@
+---
+title: "CheckoutCustomField"
+description: "The CheckoutCustomField shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CheckoutCustomField
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `key` | string |  |
+| `label` | object |  |
+| `label.type` | `"custom"` |  |
+| `label.custom` | string |  |
+| `type` | string | One of `text`, `numeric`, `dropdown`. |
+| `optional` | boolean |  |
+| `dropdown` | object \| null |  |
+| `dropdown.options` | array of object |  |
+| `dropdown.options[].label` | string |  |
+| `dropdown.options[].value` | string |  |
+| `dropdown.value` | string \| null |  |
+| `text` | object \| null |  |
+| `text.minimum_length` | integer \| null | At least -9007199254740991. |
+| `text.maximum_length` | integer \| null | At least -9007199254740991. |
+| `text.value` | string \| null | What the payer entered. |
+| `numeric` | object \| null |  |
+| `numeric.minimum_length` | integer \| null | At least -9007199254740991. |
+| `numeric.maximum_length` | integer \| null | At least -9007199254740991. |
+| `numeric.value` | string \| null | What the payer entered. |
+
+## Used in
+
+[CheckoutSession](/reference/objects/checkout-session) · [CheckoutSessionPublic](/reference/objects/checkout-session-public) · [PaymentLink](/reference/objects/payment-link)

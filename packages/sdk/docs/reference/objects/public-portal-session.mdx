@@ -1,0 +1,69 @@
+---
+title: "PublicPortalSession"
+description: "The billing_portal.public_session object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PublicPortalSession
+
+Object type: `billing_portal.public_session`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"billing_portal.public_session"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `merchant` | object |  |
+| `merchant.name` | string \| null |  |
+| `merchant.avatar_url` | string \| null |  |
+| `business_profile` | [BillingPortalBusinessProfile](/reference/objects/billing-portal-business-profile) |  |
+| `features` | [BillingPortalFeatures](/reference/objects/billing-portal-features) |  |
+| `return_url` | string \| null |  |
+| `expires_at` | integer | Unix seconds. |
+| `customer` | object |  |
+| `customer.id` | string |  |
+| `customer.email` | string \| null |  |
+| `customer.name` | string \| null |  |
+| `customer.phone` | string \| null |  |
+| `customer.address` | [Address](/reference/objects/address) \| null |  |
+| `customer.default_payment_method` | object \| null |  |
+| `customer.default_payment_method.id` | string |  |
+| `customer.default_payment_method.card` | object \| null |  |
+| `customer.default_payment_method.card.brand` | string |  |
+| `customer.default_payment_method.card.last4` | string |  |
+| `customer.default_payment_method.card.exp_month` | integer | At least -9007199254740991. |
+| `customer.default_payment_method.card.exp_year` | integer | At least -9007199254740991. |
+| `subscriptions` | array of [PublicPortalSubscription](/reference/objects/public-portal-subscription) |  |
+| `invoices` | array of object |  |
+| `invoices[].id` | string |  |
+| `invoices[].number` | string \| null |  |
+| `invoices[].status` | string | One of `draft`, `open`, `paid`, `void`, `uncollectible`. |
+| `invoices[].currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `invoices[].total` | string | Signed base units of `currency`, as an integer string. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `invoices[].amount_due` | string | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `invoices[].created` | integer | Unix seconds. |
+| `invoices[].hosted_invoice_url` | string \| null |  |
+| `invoices[].invoice_pdf` | string \| null |  |
+| `plans` | array of object | The plans `subscription_update` allows, priced. |
+| `plans[].product` | string |  |
+| `plans[].product_name` | string |  |
+| `plans[].prices` | array of object |  |
+| `plans[].prices[].id` | string |  |
+| `plans[].prices[].unit_amount` | string \| null | Base units of `currency`, as an integer string (cents for EUR, m⊜ for FAIR). Matches `^(0\|[1-9][0-9]*)$`. |
+| `plans[].prices[].currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `plans[].prices[].interval` | string \| null |  |
+| `plans[].prices[].interval_count` | integer \| null | At least -9007199254740991. |
+
+## Returned by
+
+- [`GET /v1/billing_portal/public/{token}`](/reference/hosted-portal#retrieve-the-hosted-portal) — Retrieve the hosted portal
+- [`POST /v1/billing_portal/public/{token}/cancel`](/reference/hosted-portal#cancel-a-subscription-from-the-portal) — Cancel a subscription from the portal
+- [`POST /v1/billing_portal/public/{token}/change_plan`](/reference/hosted-portal#change-plan-from-the-portal) — Change plan from the portal
+- [`POST /v1/billing_portal/public/{token}/customer`](/reference/hosted-portal#update-billing-details-from-the-portal) — Update billing details from the portal
+- [`POST /v1/billing_portal/public/{token}/renew`](/reference/hosted-portal#undo-a-cancellation-at-period-end) — Undo a cancellation at period end
+
+## Used in
+
+[PortalPaymentMethodUpdateResult](/reference/objects/portal-payment-method-update-result)

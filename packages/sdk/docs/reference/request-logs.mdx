@@ -1,0 +1,138 @@
+---
+title: "Request logs"
+description: "The Request logs endpoints of the Peable API."
+order: 939
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Request logs
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/request_logs`](#list-request-logs) | List request logs |
+| [`GET /v1/request_logs/{id}`](#retrieve-a-request-log) | Retrieve a request log |
+| [`GET /v1/request_logs/stream`](#stream-request-logs) | Stream request logs |
+
+## List request logs
+
+`GET /v1/request_logs`
+
+Your API requests of the last 30 days, newest first, filtered by `status`, `method` and `created`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.requestLogs.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `status` | query | integer \| string | One status code (`404`) or a class (`2xx`, `3xx`, `4xx`, `5xx`). Between 100 and 599. |
+| `method` | query | string | One of `GET`, `POST`, `DELETE`, `PATCH`, `PUT`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [RequestLog](/reference/objects/request-log) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [RequestLog](/reference/objects/request-log) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "req_0193b8f35e9c4f2a7b18",
+      "object": "request_log",
+      "livemode": false,
+      "method": "POST",
+      "path": "/v1/payment_intents",
+      "status": 201,
+      "duration_ms": 84,
+      "idempotency_key": "5f1d3c2e-8a4b-4f6e-9d2c-1b7a0e3f4c5d",
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/request_logs"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a request log
+
+`GET /v1/request_logs/{id}`
+
+By `Request-Id`; 404 once older than 30 days.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.requestLogs.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The `Request-Id` (`req_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [RequestLog](/reference/objects/request-log).
+
+```json
+{
+  "id": "req_0193b8f35e9c4f2a7b18",
+  "object": "request_log",
+  "livemode": false,
+  "method": "POST",
+  "path": "/v1/payment_intents",
+  "status": 201,
+  "duration_ms": 84,
+  "idempotency_key": "5f1d3c2e-8a4b-4f6e-9d2c-1b7a0e3f4c5d",
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Stream request logs
+
+`GET /v1/request_logs/stream`
+
+Server-Sent Events: each request as it is answered (`event: request_log`), after a `ready` event. Reconnect with `Last-Event-ID` to resume without a gap. Test mode only; a stream ends after 15 minutes.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.requestLogs.stream()`
+- **Mode:** Test mode only: a live credential is refused with [`test_mode_only`](/errors#test_mode_only).
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `status` | query | integer \| string | One status code (`404`) or a class (`2xx`, `3xx`, `4xx`, `5xx`). Between 100 and 599. |
+| `method` | query | string | One of `GET`, `POST`, `DELETE`, `PATCH`, `PUT`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A Server-Sent Events stream (`text/event-stream`); each event's `data` is [RequestLog](/reference/objects/request-log).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

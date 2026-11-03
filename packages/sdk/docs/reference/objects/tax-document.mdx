@@ -1,0 +1,53 @@
+---
+title: "TaxDocument"
+description: "The tax.document object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxDocument
+
+Object type: `tax.document`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.document"` |  |
+| `id` | string | `taxdoc_…`. |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `file` | string | The file (`file_…`, purpose `tax_document`). |
+| `file_status` | string | The file's standing now: a `removed` file is a document that is gone. One of `available`, `withheld`, `removed`. |
+| `filename` | string \| null |  |
+| `kind` | string | One of `registration_certificate`, `authority_correspondence`, `incorporation_record`, `filing_confirmation`, `payment_receipt`, `other`. |
+| `country` | string \| null | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `registration_declaration` | string \| null | The declaration (`taxrd_…`) it supports, when it names one. |
+| `description` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "object": "tax.document",
+  "id": "taxdoc_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "file": "file_0193b8f2c1a87d3e9f4a",
+  "file_status": "available",
+  "filename": "oss-registration.pdf",
+  "kind": "registration_certificate",
+  "country": "ES",
+  "state": null,
+  "registration_declaration": "taxrd_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/documents`](/reference/tax-compliance#list-tax-documents) — List tax documents
+- [`GET /v1/tax/documents/{id}`](/reference/tax-compliance#retrieve-a-tax-document) — Retrieve a tax document

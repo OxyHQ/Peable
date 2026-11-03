@@ -1,0 +1,26 @@
+---
+title: "Error"
+description: "The Error shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Error
+
+Every non-2xx answer. The HTTP status and `error.type` identify the failure.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `error` | object |  |
+| `error.type` | string | The broad class a caller branches on first. One of `api_error`, `authentication_error`, `card_error`, `idempotency_error`, `invalid_request_error`, `permission_error`, `rate_limit_error`. |
+| `error.code` | string | The machine-readable reason (one of 114 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`). |
+| `error.decline_code` | string | A card issuer's decline reason, on a `card_error`. |
+| `error.param` | string | The offending request field, in bracket notation (`metadata[order_id]`). |
+| `error.message` | string | A human-readable message, for a developer. |
+| `error.doc_url` | string (uri) | The documentation of `code`. |
+| `error.request_id` | string \| null | The `Request-Id` of this response, for support. |
+| `error.payment_intent` | [PaymentIntent](/reference/objects/payment-intent) | On a `card_error` from a confirm or an invoice payment: the PaymentIntent, as it now is. |
+| `error.invoice` | [Invoice](/reference/objects/invoice) | On a failed invoice payment: the invoice, as it now is. |
+| `error.refresh_url` | string (uri) | On an expired onboarding link: where the seller gets a fresh one. |

@@ -1,0 +1,1034 @@
+---
+title: "Tax compliance"
+description: "The Tax compliance endpoints of the Peable API."
+order: 945
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Tax compliance
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/tax/assessments`](#list-assessments) | List assessments |
+| [`POST /v1/tax/assessments`](#run-an-assessment) | Run an assessment |
+| [`GET /v1/tax/assessments/{id}`](#retrieve-an-assessment) | Retrieve an assessment |
+| [`GET /v1/tax/assessments/{id}/replay`](#replay-an-assessment) | Replay an assessment |
+| [`GET /v1/tax/business_profile`](#retrieve-the-business-profile) | Retrieve the business profile |
+| [`GET /v1/tax/capabilities`](#retrieve-compliance-capabilities) | Retrieve compliance capabilities |
+| [`GET /v1/tax/compliance_actions`](#list-compliance-actions) | List compliance actions |
+| [`GET /v1/tax/deadlines`](#list-tax-deadlines) | List tax deadlines |
+| [`GET /v1/tax/document_checklist`](#retrieve-the-document-checklist) | Retrieve the document checklist |
+| [`GET /v1/tax/documents`](#list-tax-documents) | List tax documents |
+| [`GET /v1/tax/documents/{id}`](#retrieve-a-tax-document) | Retrieve a tax document |
+| [`GET /v1/tax/operating_locations`](#list-operating-locations) | List operating locations |
+| [`GET /v1/tax/operating_locations/{id}`](#retrieve-an-operating-location) | Retrieve an operating location |
+| [`GET /v1/tax/registration_declarations`](#list-registration-declarations) | List registration declarations |
+| [`GET /v1/tax/registration_declarations/{id}`](#retrieve-a-registration-declaration) | Retrieve a registration declaration |
+| [`GET /v1/tax/review_items`](#list-review-items) | List review items |
+| [`GET /v1/tax/review_items/{id}`](#retrieve-a-review-item) | Retrieve a review item |
+| [`GET /v1/tax/rule_set`](#retrieve-the-current-rule-set) | Retrieve the current rule set |
+| [`GET /v1/tax/sales_destinations`](#list-sales-destinations) | List sales destinations |
+| [`GET /v1/tax/sales_destinations/{id}`](#retrieve-a-sales-destination) | Retrieve a sales destination |
+
+## List assessments
+
+`GET /v1/tax/assessments`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listAssessments()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxAssessment](/reference/objects/tax-assessment) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxAssessment](/reference/objects/tax-assessment) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.assessment",
+      "id": "taxasm_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "rule_set_version": "2026-11-03.1",
+      "as_of": 1793750400,
+      "inputs_digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "results": [
+        {
+          "rule": "us_tx_sales_tax",
+          "country": "US",
+          "state": "TX",
+          "tax_type": "sales_tax",
+          "outcome": "approaching_threshold",
+          "reasons": [
+            {
+              "code": "approaching_threshold",
+              "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+              "evidence": {
+                "measured_minor": "41000000",
+                "threshold_minor": "50000000"
+              }
+            }
+          ],
+          "measured": {
+            "amount": "41000000",
+            "currency": "USD",
+            "transactions": 812,
+            "from": 1762041600,
+            "to": 1793577600,
+            "excluded_currencies": []
+          },
+          "threshold": {
+            "amount": "50000000",
+            "currency": "USD"
+          },
+          "deadline": null,
+          "coverage_limits": [],
+          "review_items": [
+            "taxrev_0193b8f2c1a87d3e9f4a"
+          ]
+        }
+      ],
+      "summary": {
+        "registration_declared": 0,
+        "likely_required": 0,
+        "approaching_threshold": 1,
+        "not_indicated": 0,
+        "uncertain": 0,
+        "unsupported": 0
+      },
+      "created_by": {
+        "type": "service",
+        "id": "app_42"
+      },
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/assessments"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Run an assessment
+
+`POST /v1/tax/assessments`
+
+Judges the recorded facts against the current rule set, opening review items for what needs a person. Activates nothing.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.tax.compliance.createAssessment()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `as_of` | integer | Unix seconds; default now. Never in the future. Between 0 and 253402300799. |
+
+**Response `200`**
+
+Returns [TaxAssessment](/reference/objects/tax-assessment).
+
+```json
+{
+  "object": "tax.assessment",
+  "id": "taxasm_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "rule_set_version": "2026-11-03.1",
+  "as_of": 1793750400,
+  "inputs_digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "results": [
+    {
+      "rule": "us_tx_sales_tax",
+      "country": "US",
+      "state": "TX",
+      "tax_type": "sales_tax",
+      "outcome": "approaching_threshold",
+      "reasons": [
+        {
+          "code": "approaching_threshold",
+          "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+          "evidence": {
+            "measured_minor": "41000000",
+            "threshold_minor": "50000000"
+          }
+        }
+      ],
+      "measured": {
+        "amount": "41000000",
+        "currency": "USD",
+        "transactions": 812,
+        "from": 1762041600,
+        "to": 1793577600,
+        "excluded_currencies": []
+      },
+      "threshold": {
+        "amount": "50000000",
+        "currency": "USD"
+      },
+      "deadline": null,
+      "coverage_limits": [],
+      "review_items": [
+        "taxrev_0193b8f2c1a87d3e9f4a"
+      ]
+    }
+  ],
+  "summary": {
+    "registration_declared": 0,
+    "likely_required": 0,
+    "approaching_threshold": 1,
+    "not_indicated": 0,
+    "uncertain": 0,
+    "unsupported": 0
+  },
+  "created_by": {
+    "type": "service",
+    "id": "app_42"
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an assessment
+
+`GET /v1/tax/assessments/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveAssessment()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The assessment (`taxasm_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxAssessment](/reference/objects/tax-assessment).
+
+```json
+{
+  "object": "tax.assessment",
+  "id": "taxasm_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "rule_set_version": "2026-11-03.1",
+  "as_of": 1793750400,
+  "inputs_digest": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+  "results": [
+    {
+      "rule": "us_tx_sales_tax",
+      "country": "US",
+      "state": "TX",
+      "tax_type": "sales_tax",
+      "outcome": "approaching_threshold",
+      "reasons": [
+        {
+          "code": "approaching_threshold",
+          "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+          "evidence": {
+            "measured_minor": "41000000",
+            "threshold_minor": "50000000"
+          }
+        }
+      ],
+      "measured": {
+        "amount": "41000000",
+        "currency": "USD",
+        "transactions": 812,
+        "from": 1762041600,
+        "to": 1793577600,
+        "excluded_currencies": []
+      },
+      "threshold": {
+        "amount": "50000000",
+        "currency": "USD"
+      },
+      "deadline": null,
+      "coverage_limits": [],
+      "review_items": [
+        "taxrev_0193b8f2c1a87d3e9f4a"
+      ]
+    }
+  ],
+  "summary": {
+    "registration_declared": 0,
+    "likely_required": 0,
+    "approaching_threshold": 1,
+    "not_indicated": 0,
+    "uncertain": 0,
+    "unsupported": 0
+  },
+  "created_by": {
+    "type": "service",
+    "id": "app_42"
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Replay an assessment
+
+`GET /v1/tax/assessments/{id}/replay`
+
+Re-runs the stored inputs through the assessment's own rule set version; `matches` says whether the answer is the same.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.replayAssessment()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The assessment (`taxasm_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxAssessmentReplay](/reference/objects/tax-assessment-replay).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve the business profile
+
+`GET /v1/tax/business_profile`
+
+Changed by the owner in Orbit; a service credential records no onboarding fact.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveBusinessProfile()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxBusinessProfile](/reference/objects/tax-business-profile).
+
+```json
+{
+  "object": "tax.business_profile",
+  "livemode": false,
+  "legal_name": "Example Software SL",
+  "entity_type": "limited_liability_company",
+  "incorporation_country": "ES",
+  "incorporation_state": null,
+  "fiscal_year_end_month": 12,
+  "customer_types": "both",
+  "supply_types": [
+    "software_as_a_service"
+  ],
+  "missing": [],
+  "metadata": {},
+  "updated_by": "user_42",
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve compliance capabilities
+
+`GET /v1/tax/capabilities`
+
+What is available, limited, not available or out of scope — Peable submits, files and pays nothing with any authority.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveCapabilities()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxComplianceCapabilities](/reference/objects/tax-compliance-capabilities).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List compliance actions
+
+`GET /v1/tax/compliance_actions`
+
+The history of every compliance change, newest first.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listActions()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxComplianceAction](/reference/objects/tax-compliance-action) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxComplianceAction](/reference/objects/tax-compliance-action) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.compliance_action",
+      "id": "taxact_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "action": "review_item.resolved",
+      "actor": {
+        "type": "user",
+        "id": "user_42"
+      },
+      "object_type": "tax.review_item",
+      "object_id": "taxrev_0193b8f2c1a87d3e9f4a",
+      "details": {
+        "decision": "will_register"
+      },
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/compliance_actions"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List tax deadlines
+
+`GET /v1/tax/deadlines`
+
+Due dates the rule set computes from declared registrations and the latest assessment, soonest first.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listDeadlines()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxDeadlineList](/reference/objects/tax-deadline-list).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve the document checklist
+
+`GET /v1/tax/document_checklist`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveDocumentChecklist()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxDocumentChecklist](/reference/objects/tax-document-checklist).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List tax documents
+
+`GET /v1/tax/documents`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listDocuments()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxDocument](/reference/objects/tax-document) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxDocument](/reference/objects/tax-document) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.document",
+      "id": "taxdoc_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "file": "file_0193b8f2c1a87d3e9f4a",
+      "file_status": "available",
+      "filename": "oss-registration.pdf",
+      "kind": "registration_certificate",
+      "country": "ES",
+      "state": null,
+      "registration_declaration": "taxrd_0193b8f2c1a87d3e9f4a",
+      "description": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/documents"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a tax document
+
+`GET /v1/tax/documents/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveDocument()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The document (`taxdoc_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxDocument](/reference/objects/tax-document).
+
+```json
+{
+  "object": "tax.document",
+  "id": "taxdoc_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "file": "file_0193b8f2c1a87d3e9f4a",
+  "file_status": "available",
+  "filename": "oss-registration.pdf",
+  "kind": "registration_certificate",
+  "country": "ES",
+  "state": null,
+  "registration_declaration": "taxrd_0193b8f2c1a87d3e9f4a",
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List operating locations
+
+`GET /v1/tax/operating_locations`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listOperatingLocations()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxOperatingLocation](/reference/objects/tax-operating-location) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxOperatingLocation](/reference/objects/tax-operating-location) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.operating_location",
+      "id": "taxol_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "kind": "head_office",
+      "country": "ES",
+      "state": null,
+      "description": "Registered office, Barcelona",
+      "started": 1735689600,
+      "ended": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/operating_locations"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an operating location
+
+`GET /v1/tax/operating_locations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveOperatingLocation()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The operating location (`taxol_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxOperatingLocation](/reference/objects/tax-operating-location).
+
+```json
+{
+  "object": "tax.operating_location",
+  "id": "taxol_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "kind": "head_office",
+  "country": "ES",
+  "state": null,
+  "description": "Registered office, Barcelona",
+  "started": 1735689600,
+  "ended": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List registration declarations
+
+`GET /v1/tax/registration_declarations`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listRegistrationDeclarations()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxRegistrationDeclaration](/reference/objects/tax-registration-declaration) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxRegistrationDeclaration](/reference/objects/tax-registration-declaration) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.registration_declaration",
+      "id": "taxrd_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "country": "ES",
+      "state": null,
+      "scheme": "eu_oss_union",
+      "status": "registered",
+      "effective_from": 1767225600,
+      "effective_to": null,
+      "filing_frequency": "quarterly",
+      "collection_registration": "taxreg_0193b8f2c1a87d3e9f4a",
+      "verification": {
+        "status": "unverified",
+        "reason": "no_authority_integration"
+      },
+      "note": null,
+      "metadata": {},
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/registration_declarations"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a registration declaration
+
+`GET /v1/tax/registration_declarations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveRegistrationDeclaration()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The declaration (`taxrd_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxRegistrationDeclaration](/reference/objects/tax-registration-declaration).
+
+```json
+{
+  "object": "tax.registration_declaration",
+  "id": "taxrd_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "country": "ES",
+  "state": null,
+  "scheme": "eu_oss_union",
+  "status": "registered",
+  "effective_from": 1767225600,
+  "effective_to": null,
+  "filing_frequency": "quarterly",
+  "collection_registration": "taxreg_0193b8f2c1a87d3e9f4a",
+  "verification": {
+    "status": "unverified",
+    "reason": "no_authority_integration"
+  },
+  "note": null,
+  "metadata": {},
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List review items
+
+`GET /v1/tax/review_items`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listReviewItems()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `status` | query | string | Only items in this status. One of `open`, `resolved`, `dismissed`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxReviewItem](/reference/objects/tax-review-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxReviewItem](/reference/objects/tax-review-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.review_item",
+      "id": "taxrev_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "code": "threshold_approaching",
+      "severity": "review",
+      "status": "open",
+      "rule": "us_tx_sales_tax",
+      "country": "US",
+      "state": "TX",
+      "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+      "first_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+      "latest_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+      "decision": null,
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/review_items"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a review item
+
+`GET /v1/tax/review_items/{id}`
+
+Deciding an item is the owner's, in Orbit; a service credential only reads it.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveReviewItem()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The review item (`taxrev_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxReviewItem](/reference/objects/tax-review-item).
+
+```json
+{
+  "object": "tax.review_item",
+  "id": "taxrev_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "code": "threshold_approaching",
+  "severity": "review",
+  "status": "open",
+  "rule": "us_tx_sales_tax",
+  "country": "US",
+  "state": "TX",
+  "message": "Texas revenue is at or above 80% of the safe-harbor threshold.",
+  "first_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+  "latest_assessment": "taxasm_0193b8f2c1a87d3e9f4a",
+  "decision": null,
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve the current rule set
+
+`GET /v1/tax/rule_set`
+
+The rules assessments currently run under, with their sources and limits.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveRuleSet()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxRuleSet](/reference/objects/tax-rule-set).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List sales destinations
+
+`GET /v1/tax/sales_destinations`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.listSalesDestinations()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [TaxSalesDestination](/reference/objects/tax-sales-destination) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [TaxSalesDestination](/reference/objects/tax-sales-destination) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "object": "tax.sales_destination",
+      "id": "taxdest_0193b8f2c1a87d3e9f4a",
+      "livemode": false,
+      "country": "US",
+      "state": "TX",
+      "customer_types": "consumers",
+      "started": 1767225600,
+      "ended": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/tax/sales_destinations"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a sales destination
+
+`GET /v1/tax/sales_destinations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.tax.compliance.retrieveSalesDestination()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The sales destination (`taxdest_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [TaxSalesDestination](/reference/objects/tax-sales-destination).
+
+```json
+{
+  "object": "tax.sales_destination",
+  "id": "taxdest_0193b8f2c1a87d3e9f4a",
+  "livemode": false,
+  "country": "US",
+  "state": "TX",
+  "customer_types": "consumers",
+  "started": 1767225600,
+  "ended": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

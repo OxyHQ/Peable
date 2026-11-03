@@ -1,0 +1,24 @@
+---
+title: "Discount"
+description: "The discount object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Discount
+
+Object type: `discount`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"discount"` |  |
+| `coupon` | string | The coupon applied. |
+| `promotion_code` | string \| null | The promotion code (`promo_…`) it was redeemed through, if any. |
+| `start` | integer | When it started applying. |
+| `end` | integer \| null | When it stops (a `repeating` coupon); `null` for `once` and `forever`. |
+
+## Used in
+
+[Invoice](/reference/objects/invoice) · [Subscription](/reference/objects/subscription)

@@ -1,0 +1,91 @@
+---
+title: "Elements"
+description: "The payer-side SDK: the pay button, embedded checkout and the provider fields."
+order: 6
+---
+
+# Elements
+
+`@peable.to/sdk/checkout` is the payer-side half of the SDK: it runs in the
+payer's browser, needs no Oxy session, and never holds your credential. It
+takes a **client secret** — the public, per-payment capability your server
+gets from Peable and hands to the page — never your application secret.
+
+| You have | Use |
+|---|---|
+| A PaymentIntent and want a ready-made FairCoin pay button | [`PeableCheckout.mount`](#the-pay-button) |
+| An `embedded` Checkout Session | [`PeableCheckout.mountCheckout`](/checkout#embedded-checkout) |
+| Your own payment form | [`createPeableElements`](#elements) |
+
+A client secret can read its payment and report the payer's FairCoin
+transaction; it can never move funds. (`clientSecret` is the name of the
+JavaScript option; on the wire it is `client_secret`.)
+
+## The pay button
+
+```html
+<div id="peable-button"></div>
+<script type="module">
+  import { PeableCheckout } from '@peable.to/sdk/checkout';
+
+  const checkout = PeableCheckout.mount('#peable-button', {
+    clientSecret: 'pi_…_secret_…', // intent.client_secret or session.client_secret
+  });
+  checkout.on('processing', () => showSpinner());
+  checkout.on('succeeded', () => (window.location.href = '/thank-you'));
+  checkout.on('payment_failed', () => showError());
+  checkout.on('canceled', () => showExpired());
+  checkout.on('error', (err) => console.warn('realtime error', err));
+</script>
+```
+
+The button opens `peable://pay?…` on a phone (the payer's Peable app) or shows
+a QR code on a desktop, and streams live status over the gateway's socket. The
+events carry the PaymentIntent as the gateway sees it. Fulfil from your
+[webhook](/webhooks) all the same.
+
+## Elements
+
+Elements put the provider's secure payment fields, and Peable's own chrome
+around them, in your page:
+
+```ts
+import { createPeableElements } from '@peable.to/sdk/checkout';
+
+const elements = createPeableElements({
+  paymentIntent: { id, client_secret }, // or setupIntent: { id, client_secret }
+  appearance: {
+    theme: 'peable',
+    variables: { borderRadius: '12px' },
+    rules: { '.Input': { borderColor: '#d0d7de' } },
+  },
+  locale: 'fr',
+});
+
+elements.create('expressCheckout').mount('#wallets'); // Apple Pay, Google Pay
+elements.create('payment').mount('#payment');
+
+const result = await elements.confirmPayment({
+  paymentIntent: { id, client_secret },
+  return_url: location.href,
+});
+```
+
+`confirmPayment` (and `confirmSetup` for a SetupIntent) confirms with the
+provider and then **waits for the gateway's status** — over the socket, with a
+poll fallback — so it resolves from Peable's word, never from the provider's
+callback alone. A 3-D Secure challenge or a bank redirect (iDEAL, Bancontact,
+EPS) brings the payer back to `return_url`.
+
+## Appearance
+
+One `appearance` object styles Peable's chrome **and** is passed to the
+provider's fields, on Elements and embedded checkout alike:
+
+| Key | Values |
+|---|---|
+| `theme` | `peable`, `night`, `flat` |
+| `variables` | `colorPrimary`, `colorBackground`, `colorText`, `colorDanger`, `fontFamily`, `borderRadius`, `spacingUnit` |
+| `rules` | Styles for a fixed set of selectors (`.Input`, …) |
+
+Unknown or unsafe values are dropped rather than passed through.

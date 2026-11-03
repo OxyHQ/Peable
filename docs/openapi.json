@@ -3,10 +3,10 @@
   "info": {
     "title": "Peable API",
     "version": "2026-11-03",
-    "description": "The Peable payments API (Orbit): FairCoin and card payments, Checkout, Payment Links, Billing, Connect and Tax. Amounts are base-unit integer strings; instants are Unix seconds; every object carries `id`, `object` and `livemode`. Guides: https://docs.peable.to.",
+    "description": "The Peable payments API (Orbit): FairCoin and card payments, Checkout, Payment Links, Billing, Connect and Tax. Amounts are base-unit integer strings; instants are Unix seconds; every object carries `id`, `object` and `livemode`. Guides: https://oxy.so/developers/docs/peable/.",
     "contact": {
       "name": "Peable",
-      "url": "https://docs.peable.to"
+      "url": "https://oxy.so/developers/docs/peable/"
     },
     "license": {
       "name": "MIT",
@@ -60110,7 +60110,7 @@
               },
               "code": {
                 "type": "string",
-                "description": "The machine-readable reason (one of 114 documented at https://docs.peable.to/errors, or a card network's decline code on a `card_error`)."
+                "description": "The machine-readable reason (one of 114 documented at https://oxy.so/developers/docs/peable/errors/, or a card network's decline code on a `card_error`)."
               },
               "decline_code": {
                 "type": "string",

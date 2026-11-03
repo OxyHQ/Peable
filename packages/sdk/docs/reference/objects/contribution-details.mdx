@@ -1,0 +1,21 @@
+---
+title: "ContributionDetails"
+description: "The ContributionDetails shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ContributionDetails
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `organization_id` | string | The Oxy organization collecting. 1–200 characters. |
+| `purpose` | string | 1–500 characters. |
+| `amount_mode` | string | `fixed`: the link names the amount; `free`: the payer chooses it. |
+| `expires_at` | integer \| null |  |
+
+## Used in
+
+[ContributionLink](/reference/objects/contribution-link) · [PaymentLink](/reference/objects/payment-link) · [PublicPaymentLink](/reference/objects/public-payment-link)

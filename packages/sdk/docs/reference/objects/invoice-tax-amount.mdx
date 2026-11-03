@@ -1,0 +1,21 @@
+---
+title: "InvoiceTaxAmount"
+description: "The InvoiceTaxAmount shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# InvoiceTaxAmount
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | string | SIGNED: a credit line carries negative tax. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `inclusive` | boolean |  |
+| `tax_calculation` | string \| null | The Peable Tax calculation (`taxcalc_…`) it came from; `null` for a derived credit. |
+| `taxability_reason` | string \| null |  |
+
+## Used in
+
+[InvoiceLineItem](/reference/objects/invoice-line-item)

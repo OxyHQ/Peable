@@ -1,0 +1,27 @@
+---
+title: "BillingInvoiceAuthoritySource"
+description: "The BillingInvoiceAuthoritySource shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingInvoiceAuthoritySource
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `invoice_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `payment_intent_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `customer_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `subscription_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `price_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `plan_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `merchant_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `app_id` | string | 1–128 characters. Matches `^[A-Za-z0-9_.:-]+$`. |
+| `mode` | string | One of `test`, `live`. |
+| `environment` | string | One of `development`, `staging`, `production`. |
+
+## Used in
+
+[BillingFinalInvoiceAuthority](/reference/objects/billing-final-invoice-authority)

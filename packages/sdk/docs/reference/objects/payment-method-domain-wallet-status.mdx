@@ -1,0 +1,20 @@
+---
+title: "PaymentMethodDomainWalletStatus"
+description: "The PaymentMethodDomainWalletStatus shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PaymentMethodDomainWalletStatus
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `status` | string | `active`: the wallet can run on pages served from this domain. One of `active`, `inactive`. |
+| `status_details` | object \| null | Present while `inactive`: what the wallet's verification said. |
+| `status_details.error_message` | string |  |
+
+## Used in
+
+[PaymentMethodDomain](/reference/objects/payment-method-domain)

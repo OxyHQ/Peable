@@ -1,0 +1,147 @@
+---
+title: "Testing"
+description: "Test mode, the CLI (listen, trigger, logs tail), test helpers, test clocks and test data."
+order: 16
+---
+
+# Testing
+
+## Test mode and live mode
+
+The SDK never sends a `livemode` flag. The mode is decided entirely by the
+**environment of your credential**: `production` is live, every other
+environment (`development`, `staging`) is test. It rides inside the service
+token, so the same code runs in both — swap the credential to go live.
+
+One host, `https://api.peable.to`, serves both modes. Peable holds a test and
+a live provider key side by side: a live credential's payments, refunds,
+transfers and connected accounts go through the live key, every other
+credential's through the test key, and an operation on an existing object
+always uses the key that created it. Nothing you send can choose the other
+mode. Every object and every event carries `livemode: true | false`.
+
+A test merchant is on FairCoin **testnet**: a non-production credential cannot
+register a mainnet key.
+
+Everything below is **test mode only**: a live credential is refused with
+`403 permission_error`, code [`test_mode_only`](/errors#test_mode_only).
+
+## The CLI
+
+`@peable.to/cli` builds and tests an integration from your terminal.
+
+```sh
+npm i -g @peable.to/cli    # or: bunx @peable.to/cli --help
+peable login               # a test-environment application credential
+peable listen --forward-to http://localhost:3000/webhooks
+peable trigger payment_intent.succeeded
+peable logs tail
+```
+
+`login` checks the credential against the gateway before storing it, refuses
+a credential whose mode is not the one you asked for, and stores it in
+`~/.config/peable/config.json` (mode `0600`); the secret is never printed.
+Every command takes `--profile <name>`, `--test` / `--live` (default test) and
+`--json`.
+
+### `peable listen`
+
+```sh
+peable listen --forward-to http://localhost:3000/webhooks
+peable listen --events payment_intent.succeeded,customer.* --print-json
+```
+
+Streams every event your test merchant records, as it commits, and POSTs each
+one, in order, to `--forward-to`, printing the status your server answered.
+Each request is signed with a `whsec_…` printed for the session, with the same
+algorithm and `Peable-Signature` header as a real delivery, so
+`peable.webhooks.constructEvent` verifies it unchanged. It needs no public URL
+and registers no endpoint, and it reconnects and resumes after the last event
+it received.
+
+### `peable trigger`
+
+Creates real test objects through the public API whose changes record the
+event — never a synthetic event. `peable trigger` with no argument lists what
+it can cause:
+
+| Event | What it does |
+|---|---|
+| `payment_intent.created` | A FairCoin testnet payment intent |
+| `payment_intent.processing`, `payment_intent.succeeded` | …paid and confirmed by the test helper |
+| `payment_intent.payment_failed` | …underpaid by the test helper (also `canceled`) |
+| `payment_intent.canceled` | …then cancelled |
+| `customer.created` / `.updated` / `.deleted` | A customer, then updated or deleted |
+| `product.created` / `.updated` / `.deleted` | A catalog product, then updated or deleted |
+| `price.created` | A product and a one-time EUR 10.00 price |
+| `coupon.created` | A 10%-off, once coupon |
+| `webhook_endpoint.test` | A test event to your first enabled endpoint |
+
+Events that need a card confirmed at the provider (charges, refunds,
+disputes, setup intents) cannot be caused from the API alone: use the test
+cards below in the hosted checkout.
+
+### `peable logs tail`
+
+```sh
+peable logs tail --status 4xx --method POST
+# 2026-11-03 12:00:04 [400] POST /v1/payment_intents [req_…] 8ms
+```
+
+Your test API requests as they are answered: method, path, status, duration
+and `Idempotency-Key` — never a body, a header or a query string. The same log
+is `GET /v1/request_logs` (30 days; filters `status` such as `404` or `4xx`,
+`method`, `created`), `peable.requestLogs` in the SDK, and Orbit's
+Developers → Logs.
+
+### Resources
+
+```sh
+peable events list --type 'payment_intent.*'
+peable payment_intents create --amount 100000000 --metadata order=42   # FairCoin testnet
+peable checkout_sessions create --price price_… --quantity 2 --success-url https://shop.example/thanks
+peable webhook_endpoints create --url https://shop.example/hook --events payment_intent.succeeded
+```
+
+Exit codes: `0` success, `1` the operation failed (its error, code and request
+id are printed), `2` a usage error.
+
+## Test helpers
+
+`/v1/test_helpers/*` moves a test object the way the outside world would,
+through the gateway's real state machine — the same transitions, events and
+webhooks as a real payment:
+
+| Route | SDK | What it does |
+|---|---|---|
+| `POST /v1/test_helpers/payment_intents/{id}/simulate_faircoin_payment` | `testHelpers.paymentIntents.simulateFaircoinPayment` | A FairCoin payer broadcasts (`processing`, with a synthetic txid) and the chain confirms it (`succeeded`); with `outcome: 'underpaid'`, it is `canceled` as `underpaid` instead. **It does not touch the chain**: nothing is broadcast, and the txid names no transaction |
+| `POST /v1/test_helpers/checkout_sessions/{id}/expire` | `testHelpers.checkoutSessions.expire` | The session's clock runs out now: its payment is `canceled` as `abandoned` (a card one cancelled at the provider first), exactly as the expiry sweep does. A payment already `processing` or finished cannot expire (409) |
+
+Both take `Idempotency-Key` like every `POST`.
+
+## Test clocks
+
+A test clock moves time for the customers on it, so trials, renewals and
+dunning run in seconds:
+
+```ts
+const clock = await peable.testHelpers.testClocks.create({ frozen_time: Math.floor(Date.now() / 1000) });
+const customer = await peable.customers.create({ email: 'trial@example.com', test_clock: clock.id });
+// …create a subscription for the customer…
+await peable.testHelpers.testClocks.advance(clock.id, { frozen_time: clock.frozen_time + 15 * 86400 });
+```
+
+`advance` answers once everything that fell due has run
+(`test_helpers.test_clock.ready`). Objects on different clocks cannot be
+combined (`customer_test_clock_mismatch`).
+
+## Test data
+
+- **FairCoin**: pay a test intent from a testnet wallet to its
+  `faircoin.address`, or finish it with `simulate_faircoin_payment`. Amounts are
+  base units: 1 FAIR is `"100000000"`.
+- **Cards**: test-mode card payments run on the provider's test environment,
+  so its documented [test card numbers](https://docs.stripe.com/testing)
+  apply — successful payments, declines and 3-D Secure challenges. Enter them
+  in the hosted checkout or your own Elements; a real card is refused in test
+  mode.

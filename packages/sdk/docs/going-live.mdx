@@ -1,0 +1,42 @@
+---
+title: "Going live"
+description: "From a test credential to live payments."
+order: 17
+---
+
+# Going live
+
+The same code runs live: what changes is the credential, and on the FairCoin
+rail the network.
+
+1. **A production credential.** Issue a service credential on your Oxy
+   application in its `production` environment, with the same scopes
+   (`payments:read`, `payments:write`). Its token selects live mode; nothing
+   in your requests changes ([Testing](/testing#test-mode-and-live-mode)).
+2. **A live merchant.** Your production credential resolves to its own
+   merchant: register it as you did in test mode, with a **`mainnet`**
+   watch-only key to accept FairCoin.
+3. **A live webhook endpoint.** Endpoints, events and secrets belong to a
+   mode. Create the endpoint with the production credential, store its new
+   `whsec_…`, and keep `https` — plain `http` is refused in live mode.
+4. **A live provider account** for card payments, onboarded through Peable
+   ([Connect and money](/connect#your-account)). Until onboarding finishes,
+   card payments answer `409 account_not_ready`.
+
+## Before you switch
+
+- [ ] Every fulfilment runs from a verified webhook, never from a redirect.
+- [ ] Every `POST` that moves money carries a key you can repeat after a crash
+      (`Idempotency-Key`, or `external_ref` on refunds and transfers).
+- [ ] Stock is released on `payment_intent.canceled`, never on your own clock,
+      and never on `payment_intent.payment_failed` alone.
+- [ ] Errors are handled by `type` and `code`, and the `request_id` is logged.
+- [ ] Refunds and transfers read `status` and expect a later event to move it.
+- [ ] The whole flow passed in test mode on testnet, card and FairCoin.
+
+> **Live payments for third parties**
+>
+> Until Peable's legal release gate for third-party live payments is signed
+> off, a deployment answers `403 live_payments_gated` to a non-Oxy merchant
+> opening a live account, taking a live destination charge or instructing a
+> live payout.

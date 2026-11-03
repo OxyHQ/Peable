@@ -1,0 +1,30 @@
+---
+title: "TaxCode"
+description: "The TaxCode shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxCode
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `txcd_…`. |
+| `name` | string |  |
+| `description` | string |  |
+
+## Example
+
+```json
+{
+  "id": "txcd_10103001",
+  "name": "Software as a service (SaaS) - business use",
+  "description": "Hosted software accessed online, sold to businesses for business use."
+}
+```
+
+## Returned by
+
+- [`GET /v1/tax/codes`](/reference/tax#list-tax-codes) — List tax codes

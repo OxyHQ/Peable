@@ -1,0 +1,22 @@
+---
+title: "CheckoutAfterCompletion"
+description: "The CheckoutAfterCompletion shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# CheckoutAfterCompletion
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `type` | string | One of `redirect`, `hosted_confirmation`. |
+| `redirect` | object \| null |  |
+| `redirect.url` | string |  |
+| `hosted_confirmation` | object \| null |  |
+| `hosted_confirmation.custom_message` | string \| null |  |
+
+## Used in
+
+[PaymentLink](/reference/objects/payment-link)

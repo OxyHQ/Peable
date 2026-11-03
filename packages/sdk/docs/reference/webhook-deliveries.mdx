@@ -1,0 +1,118 @@
+---
+title: "Webhook deliveries"
+description: "The Webhook deliveries endpoints of the Peable API."
+order: 949
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Webhook deliveries
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/webhook_deliveries`](#list-webhook-deliveries) | List webhook deliveries |
+| [`POST /v1/webhook_deliveries/{id}/redeliver`](#redeliver-a-webhook-delivery) | Redeliver a webhook delivery |
+
+## List webhook deliveries
+
+`GET /v1/webhook_deliveries`
+
+The delivery log, newest first: one event's deliveries, or one endpoint's. Both filters are public ids resolved inside your scope.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.webhookDeliveries.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `event` | query | string | Only the deliveries of this event (`evt_…`). 1–255 characters. |
+| `webhook_endpoint` | query | string | Only the deliveries to this endpoint (`we_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [WebhookDelivery](/reference/objects/webhook-delivery) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [WebhookDelivery](/reference/objects/webhook-delivery) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "0193b8f2-c1a8-7d3e-9f4a-7d3e0193b8f2",
+      "object": "webhook_delivery",
+      "livemode": false,
+      "event_id": "evt_0193b8f2c1a87d3e9f4b",
+      "event_type": "payment_intent.succeeded",
+      "webhook_endpoint_id": "we_0193b8f2c1a87d3e9f4c",
+      "url": "https://example.com/peable/webhooks",
+      "attempts": 1,
+      "delivered": true,
+      "last_status": "delivered",
+      "created": 1793750400,
+      "updated_at": 1793750401
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/webhook_deliveries"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Redeliver a webhook delivery
+
+`POST /v1/webhook_deliveries/{id}/redeliver`
+
+Send the delivery's event to its endpoint again — the SAME stored event, as a NEW delivery, attempted at once; answers that new delivery. Refused while the endpoint is disabled (`webhook_endpoint_disabled`).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.webhookDeliveries.redeliver()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The webhook delivery. |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [WebhookDelivery](/reference/objects/webhook-delivery).
+
+```json
+{
+  "id": "0193b8f2-c1a8-7d3e-9f4a-7d3e0193b8f2",
+  "object": "webhook_delivery",
+  "livemode": false,
+  "event_id": "evt_0193b8f2c1a87d3e9f4b",
+  "event_type": "payment_intent.succeeded",
+  "webhook_endpoint_id": "we_0193b8f2c1a87d3e9f4c",
+  "url": "https://example.com/peable/webhooks",
+  "attempts": 1,
+  "delivered": true,
+  "last_status": "delivered",
+  "created": 1793750400,
+  "updated_at": 1793750401
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

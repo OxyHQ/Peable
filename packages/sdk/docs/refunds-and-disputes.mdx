@@ -1,0 +1,144 @@
+---
+title: "Refunds and disputes"
+description: "Refunds, settlement figures, disputes and their evidence, and files."
+order: 7
+---
+
+# Refunds and disputes
+
+A refund is **merchant-initiated**: you ask, Peable records it and asks the
+provider. A dispute is **network-initiated**: the payer's bank opens it, and
+the first thing that exists is the event. Both are card-rail operations — a
+FairCoin payment cannot be refunded or charged back through Peable, because
+Peable never held the coins (see [FairCoin refunds](#faircoin)).
+
+## Refunds
+
+```ts
+await peable.refunds.create({
+  payment_intent: 'pi_…',
+  external_ref: 'refund:order-123', // YOUR id: the refund's idempotency
+  amount: '1500',                   // base units; required, never zero
+  reason: 'requested_by_customer',
+  metadata: { ticket: '42' },
+});
+
+await peable.refunds.retrieve('re_…');
+await peable.refunds.list({ payment_intent: 'pi_…' }); // also carries remaining_refundable
+await peable.refunds.update('re_…', { metadata: { ticket: '43' } });
+await peable.refunds.cancel('re_…'); // only while the provider still allows it
+```
+
+- **`external_ref` is the identity, and it is durable.** Unlike a header key
+  you cannot lose it, so a retry after a timeout converges on the first refund
+  instead of paying the payer twice. The `Idempotency-Key` header is the
+  request-retry layer on top ([Idempotency](/idempotency)).
+- **A refund's `status` is not always `succeeded`.** The provider can report
+  one `pending`, and a bank can reject it days later (`refund.failed`). Read
+  `status`, and expect a later event to move it. `remaining_refundable` on the
+  list already reserves pending refunds.
+- A refunded payment stays `succeeded`; its `amount_refunded` grows, and
+  `charge.refunded` and `refund.*` events follow.
+- Refunding a destination charge can also refund your application fee
+  (`refund_application_fee`) and pull the seller's funds back
+  (`reverse_transfer`) — [Connect and money](/connect#charges-and-fees).
+
+### FairCoin
+
+A FairCoin refund is a payment from the receiving wallet back to the payer.
+Peable never held the coins and cannot return them, so `refunds.create`
+refuses the FairCoin rail. If you refund a FairCoin sale from your own wallet,
+record it for tax with `peable.tax.transactions.createReversal`
+([Tax](/tax#refunds)).
+
+## What you kept: `settlement`
+
+```ts
+const s = await peable.refunds.settlement('pi_…');
+// { status: 'available' | 'pending' | 'unknown', gross, fee, net, currency, available_on, exchange_rate }
+```
+
+**A missing figure is `null` with a `status`, never `0`.** `unknown` means
+there is nothing to read — an uncaptured payment, a FairCoin one, a provider
+that could not be reached — and treating it as zero is how a reconciliation
+silently gains money that was never there. It reports what the provider took;
+it does not say which entity bears that cost. Your balance and every movement
+are in [Connect and money](/connect#balance-and-payouts).
+
+## Disputes
+
+```ts
+await peable.disputes.list({ payment_intent: 'pi_…' });
+await peable.disputes.retrieve('dp_…');
+```
+
+`charge.dispute.created`, `.updated`, `.closed`, `.funds_withdrawn` and
+`.funds_reinstated` carry the `Dispute`.
+
+### Answer a dispute
+
+```ts
+// 1. Upload what you have (PDF, PNG or JPEG, at most 5 MB each).
+const receipt = await peable.files.create({
+  purpose: 'dispute_evidence',
+  file: pdfBytes,
+  filename: 'receipt.pdf',
+});
+
+// 2. Stage a draft — as often as you like, until you submit.
+await peable.disputes.update('dp_…', {
+  evidence: { receipt: receipt.id, uncategorized_text: 'Collected in person on the 3rd.' },
+});
+
+// 3. Submit — once.
+await peable.disputes.update('dp_…', {
+  evidence: { shipping_tracking_number: 'TRACK-1' },
+  submit: true,
+});
+
+// Or accept it: the dispute is lost, and nothing more can be submitted.
+await peable.disputes.close('dp_…');
+```
+
+- **A draft lives at the provider, not in Peable.** Without `submit` (or with
+  `submit: false`) the evidence goes to the provider's own draft, and Peable
+  records only that evidence exists (`evidence_details.has_evidence`).
+  `retrieve` reads the draft back live; `evidence` is on `retrieve` and on the
+  answers of `update` and `close`, never on a list item or an event. An empty
+  string unsets a field.
+- **Files are attached by id** — a `file_…` of purpose `dispute_evidence`.
+  Their bytes go to the provider when you submit, and only then; one
+  response's files total at most 5 MB.
+- **One shot.** `submit: true` is one-way at the card network: a second
+  submission, or a draft after one, answers `409 dispute_already_submitted`
+  and sends nothing. A retry under the same `Idempotency-Key` replays the first
+  answer. A response after `evidence_details.due_by` is refused (`409`), so you
+  learn it was the clock and not your request.
+- Peable stores **none** of the evidence text — a customer's name, address or
+  correspondence is forwarded and forgotten. `evidence_details.submitted_at`
+  records that you responded, and when.
+
+## Files
+
+`peable.files.create({ purpose, file })` uploads bytes
+(`multipart/form-data`); `peable.files.create({ purpose: 'business_logo',
+oxy_file })` makes an Oxy file you own your logo. The type is read from the
+bytes, not the name:
+
+| Purpose | Types | At most |
+|---|---|---|
+| `dispute_evidence` | PDF, PNG, JPEG | 5 MB |
+| `business_logo` | PNG, JPEG | 512 KB |
+| `identity_document` | PDF, PNG, JPEG | 10 MB |
+| `additional_verification` | PDF, PNG, JPEG | 10 MB |
+| `finance_report_run` | CSV | 64 MB — written by [report runs](/reporting) only; cannot be uploaded |
+
+An available `business_logo` has a public `url`; an available
+`finance_report_run` has `url` = `https://api.peable.to/v1/files/<id>/contents`,
+which answers the CSV to your own credential (`peable.files.contents(id)`). No
+other purpose has a `url`. `status` is `available`, `withheld` (its owner hid
+it; it can come back) or `removed` (deleted or taken down).
+
+Set your logo with `peable.merchants.update({ business_logo: file.id })`: it
+is the wordmark the hosted checkout shows beside your avatar (the square
+icon), not instead of it.

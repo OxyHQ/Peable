@@ -1,0 +1,183 @@
+---
+title: "Payment method configurations"
+description: "The Payment method configurations endpoints of the Peable API."
+order: 929
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Payment method configurations
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/payment_method_configurations`](#list-payment-method-configurations) | List payment method configurations |
+| [`POST /v1/payment_method_configurations`](#create-a-payment-method-configuration) | Create a payment method configuration |
+| [`GET /v1/payment_method_configurations/{id}`](#retrieve-a-payment-method-configuration) | Retrieve a payment method configuration |
+| [`POST /v1/payment_method_configurations/{id}`](#update-a-payment-method-configuration) | Update a payment method configuration |
+
+## List payment method configurations
+
+`GET /v1/payment_method_configurations`
+
+The default configuration is created on first read.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethodConfigurations.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [PaymentMethodConfiguration](/reference/objects/payment-method-configuration) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [PaymentMethodConfiguration](/reference/objects/payment-method-configuration) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a payment method configuration
+
+`POST /v1/payment_method_configurations`
+
+An additional, non-default configuration. Turning `on` a method the processing provider does not offer is refused.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethodConfigurations.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | 1–100 characters. |
+| `card` | object |  |
+| `card[display_preference]` **required** | object |  |
+| `card[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `apple_pay` | object |  |
+| `apple_pay[display_preference]` **required** | object |  |
+| `apple_pay[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `google_pay` | object |  |
+| `google_pay[display_preference]` **required** | object |  |
+| `google_pay[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `sepa_debit` | object |  |
+| `sepa_debit[display_preference]` **required** | object |  |
+| `sepa_debit[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `ideal` | object |  |
+| `ideal[display_preference]` **required** | object |  |
+| `ideal[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `bancontact` | object |  |
+| `bancontact[display_preference]` **required** | object |  |
+| `bancontact[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `eps` | object |  |
+| `eps[display_preference]` **required** | object |  |
+| `eps[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `bizum` | object |  |
+| `bizum[display_preference]` **required** | object |  |
+| `bizum[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+
+**Response `200`**
+
+Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment method configuration
+
+`GET /v1/payment_method_configurations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethodConfigurations.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The configuration (`pmc_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a payment method configuration
+
+`POST /v1/payment_method_configurations/{id}`
+
+Method settings are merged; the default configuration is always active.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethodConfigurations.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The configuration (`pmc_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | 1–100 characters. |
+| `active` | boolean |  |
+| `card` | object |  |
+| `card[display_preference]` **required** | object |  |
+| `card[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `apple_pay` | object |  |
+| `apple_pay[display_preference]` **required** | object |  |
+| `apple_pay[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `google_pay` | object |  |
+| `google_pay[display_preference]` **required** | object |  |
+| `google_pay[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `sepa_debit` | object |  |
+| `sepa_debit[display_preference]` **required** | object |  |
+| `sepa_debit[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `ideal` | object |  |
+| `ideal[display_preference]` **required** | object |  |
+| `ideal[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `bancontact` | object |  |
+| `bancontact[display_preference]` **required** | object |  |
+| `bancontact[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `eps` | object |  |
+| `eps[display_preference]` **required** | object |  |
+| `eps[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+| `bizum` | object |  |
+| `bizum[display_preference]` **required** | object |  |
+| `bizum[display_preference][preference]` **required** | string | One of `on`, `off`, `none`. |
+
+**Response `200`**
+
+Returns [PaymentMethodConfiguration](/reference/objects/payment-method-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

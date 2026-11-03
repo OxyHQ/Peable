@@ -1,0 +1,25 @@
+---
+title: "TaxAssessmentReplay"
+description: "The tax.assessment_replay object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxAssessmentReplay
+
+Object type: `tax.assessment_replay`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.assessment_replay"` |  |
+| `assessment` | string | The assessment replayed (`taxasm_…`). |
+| `rule_set_version` | string |  |
+| `inputs_digest` | string |  |
+| `matches` | boolean | `true` when the replayed results are identical to the stored ones. |
+| `results` | array of [TaxAssessmentResult](/reference/objects/tax-assessment-result) | A replay opens no review items: every `review_items` is empty. |
+
+## Returned by
+
+- [`GET /v1/tax/assessments/{id}/replay`](/reference/tax-compliance#replay-an-assessment) — Replay an assessment

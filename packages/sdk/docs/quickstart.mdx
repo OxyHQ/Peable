@@ -1,0 +1,174 @@
+---
+title: "Quickstart"
+description: "Take a first test payment: a Checkout Session, the hosted page and a signed webhook."
+order: 1
+---
+
+# Quickstart
+
+Take a first test payment through Peable: create a Checkout Session on your
+server, send the payer to Peable's hosted page, and fulfil the order from a
+signed webhook. Everything here runs in **test mode** first; going live is a
+credential swap (see [Going live](/going-live)).
+
+Peable is **non-custodial** on the FairCoin rail: the payer pays from their own
+wallet straight to an address derived from your **watch-only** key, and your
+server never holds a private key. Card payments go through Peable's provider;
+card data is collected by the provider's own fields in the payer's browser and
+never reaches Peable or you.
+
+## 1. Get a credential
+
+Peable authenticates your server with an **Oxy application credential**. There
+is no separate Peable API key.
+
+1. Register an **Oxy application** for your business in Oxy Console
+   (`third_party` is fine).
+2. Issue a **service credential** on it (`type: 'service'`) with the scopes
+   `payments:read` and `payments:write`. You get `{ publicKey, secret }`
+   (`publicKey` looks like `oxy_dk_…`).
+3. Keep `secret` on your server. The browser never sees it.
+
+The credential's **environment** decides the mode: a `production` credential
+is live, every other environment (`development`, `staging`) is test. Nothing
+you send can choose the other mode.
+
+**You never supply a payment-provider key.** Peable holds the provider
+credentials and calls the acquirer itself.
+
+> **Oxy's own products**
+>
+> An Oxy product running as a registered Oxy workload does not use an
+> application credential: it builds the client with `peableForOxyService`. See
+> [The SDK](/sdk#own-oxy-applications).
+
+## 2. Install the SDK
+
+```sh
+bun add @peable.to/sdk    # npm and yarn work too
+```
+
+Node 18 or later (it uses the global `fetch`). The server entry has no runtime
+dependencies; the browser entry, `@peable.to/sdk/checkout`, adds
+`socket.io-client` for live payment status.
+
+```ts
+import { Peable } from '@peable.to/sdk';
+
+const peable = new Peable({
+  publicKey: process.env.PEABLE_PUBLIC_KEY, // oxy_dk_…
+  secret: process.env.PEABLE_SECRET,
+});
+```
+
+## 3. Register as a merchant (once)
+
+Your application becomes a merchant with one call. What you send decides
+which rails you accept:
+
+```ts
+// FairCoin and cards: a WATCH-ONLY account extended public key and its network.
+await peable.merchants.register({ network: 'testnet', xpub: 'tpub…' });
+
+// Cards only: send neither.
+await peable.merchants.register();
+```
+
+`network` and `xpub` are two halves of one capability; the gateway refuses
+one without the other. Peable derives a fresh receive address per payment
+from the key and **refuses any key that can spend** (`watch_only_violation`):
+an `xprv` is never accepted. A test credential can only register a `testnet`
+key. Registering twice answers `409`; read your merchant with
+`peable.merchants.retrieve()` (`GET /v1/merchants/me`).
+
+## 4. Create a Checkout Session
+
+A Checkout Session is an order — line items, discounts, tax, what to collect
+from the payer — completed on Peable's hosted page:
+
+```ts
+const session = await peable.checkout.sessions.create({
+  line_items: [
+    {
+      price_data: { currency: 'FAIR', unit_amount: '250000000', product_data: { name: 'T-shirt' } },
+      quantity: 1,
+    },
+  ],
+  success_url: 'https://shop.example/thanks?cs={CHECKOUT_SESSION_ID}',
+  cancel_url: 'https://shop.example/cart',
+  metadata: { order_id: 'ORDER-123' },
+});
+
+redirect(session.url); // https://checkout.peable.to/c/<id>#cs=<session secret>
+```
+
+Amounts are **base-unit strings**: 1 FAIR is `"100000000"`, €25.00 is
+`"2500"`. A `FAIR` order is paid on the FairCoin rail, a `EUR` or `USD` one by
+card — the line items' currency decides. The [Checkout guide](/checkout)
+covers every option.
+
+## 5. Fulfil from the webhook
+
+The redirect to `success_url` is a convenience, never proof of payment. Create
+a webhook endpoint once and store the secret it answers with:
+
+```ts
+const endpoint = await peable.webhookEndpoints.create({
+  url: 'https://shop.example/webhooks/peable',
+  enabled_events: ['checkout.session.completed', 'checkout.session.async_payment_succeeded'],
+});
+// endpoint.secret (whsec_…) is shown only now: store it as PEABLE_WEBHOOK_SECRET.
+```
+
+Then verify every delivery against the raw body and fulfil:
+
+```ts
+import express from 'express';
+
+app.post('/webhooks/peable', express.raw({ type: 'application/json' }), (req, res) => {
+  let event;
+  try {
+    event = peable.webhooks.constructEvent(
+      req.body.toString('utf8'),
+      req.header('Peable-Signature'),
+      process.env.PEABLE_WEBHOOK_SECRET,
+    );
+  } catch {
+    return res.status(400).send('bad signature');
+  }
+  const session = event.data.object;
+  if (event.type === 'checkout.session.completed' && session.payment_status === 'paid') {
+    fulfil(session.metadata.order_id);
+  }
+  if (event.type === 'checkout.session.async_payment_succeeded') fulfil(session.metadata.order_id);
+  res.json({ received: true });
+});
+```
+
+A FairCoin session completes when the payer's transaction is **broadcast**
+(`payment_status: 'unpaid'`), and `checkout.session.async_payment_succeeded`
+follows once the chain confirms it. [Webhooks and events](/webhooks) has the
+whole model.
+
+## 6. Test it
+
+- Forward test events to your machine without a public URL:
+  `peable listen --forward-to http://localhost:3000/webhooks/peable`
+  ([Testing](/testing#the-cli)).
+- Finish a FairCoin test payment without touching the chain with the
+  `simulate_faircoin_payment` test helper, or pay it from a testnet wallet.
+- Pay by card with the provider's documented
+  [test cards](https://docs.stripe.com/testing).
+
+## Integration checklist
+
+- [ ] A test-environment service credential with `payments:read` and
+      `payments:write`; `PEABLE_PUBLIC_KEY`, `PEABLE_SECRET` and
+      `PEABLE_WEBHOOK_SECRET` in your server's environment.
+- [ ] Merchant registered (a watch-only `testnet` key to accept FairCoin).
+- [ ] Checkout Session created at checkout; the payer redirected to
+      `session.url`, or the checkout [embedded](/checkout#embedded-checkout).
+- [ ] A webhook endpoint registered, `Peable-Signature` verified on every
+      delivery, orders fulfilled from events only.
+- [ ] The whole flow tested end to end in test mode.
+- [ ] [Going live](/going-live): a production credential and a `mainnet` key.

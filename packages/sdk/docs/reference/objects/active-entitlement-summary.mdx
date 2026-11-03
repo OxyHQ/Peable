@@ -1,0 +1,31 @@
+---
+title: "ActiveEntitlementSummary"
+description: "The entitlements.active_entitlement_summary object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ActiveEntitlementSummary
+
+Object type: `entitlements.active_entitlement_summary`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"entitlements.active_entitlement_summary"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `customer` | string | The customer (`cus_…`). |
+| `entitlements` | object | The complete set: never paged. |
+| `entitlements.object` | `"list"` |  |
+| `entitlements.data` | array of [ActiveEntitlement](/reference/objects/active-entitlement) |  |
+| `entitlements.has_more` | `false` |  |
+| `entitlements.url` | string |  |
+
+## Events
+
+- [`entitlements.active_entitlement_summary.updated`](/reference/webhook-events#entitlementsactive_entitlement_summaryupdated)
+
+## Used in
+
+[Event](/reference/objects/event)

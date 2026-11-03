@@ -1,0 +1,182 @@
+---
+title: "Invoice items"
+description: "The Invoice items endpoints of the Peable API."
+order: 923
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Invoice items
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/invoiceitems`](#create-an-invoice-item) | Create an invoice item |
+| [`GET /v1/invoiceitems`](#list-invoice-items) | List invoice items |
+| [`GET /v1/invoiceitems/{id}`](#retrieve-an-invoice-item) | Retrieve an invoice item |
+| [`POST /v1/invoiceitems/{id}`](#update-an-invoice-item) | Update an invoice item |
+| [`DELETE /v1/invoiceitems/{id}`](#delete-an-invoice-item) | Delete an invoice item |
+
+## Create an invoice item
+
+`POST /v1/invoiceitems`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoiceItems.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` **required** | string | 1–255 characters. |
+| `invoice` | string | A draft to put it on; absent, it is pending. 1–255 characters. |
+| `subscription` | string | 1–255 characters. |
+| `price` | string | 1–255 characters. |
+| `price_data` | object | A one-off per-unit price of an existing product, for an item that names no stored price. |
+| `price_data[currency]` **required** | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `price_data[unit_amount]` **required** | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `price_data[recurring]` | object |  |
+| `price_data[recurring][interval]` **required** | string | One of `day`, `week`, `month`, `year`. |
+| `price_data[recurring][interval_count]` | integer | Default 1. Between 1 and 2147483647. |
+| `price_data[tax_behavior]` | string | One of `inclusive`, `exclusive`, `unspecified`. |
+| `price_data[product]` **required** | string | The `prod_…` it prices. 1–255 characters. |
+| `quantity` | integer | Between 0 and 1000000000. |
+| `amount` | string |  |
+| `currency` | string | One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `description` | string | 1–500 characters. |
+| `discountable` | boolean |  |
+| `period` | object |  |
+| `period[start]` **required** | integer | Between 0 and 253402300799. |
+| `period[end]` **required** | integer | Between 0 and 253402300799. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [InvoiceItem](/reference/objects/invoice-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List invoice items
+
+`GET /v1/invoiceitems`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoiceItems.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` | query | string | 1–255 characters. |
+| `invoice` | query | string | 1–255 characters. |
+| `pending` | query | boolean | Only items not on any invoice yet. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [InvoiceItem](/reference/objects/invoice-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [InvoiceItem](/reference/objects/invoice-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an invoice item
+
+`GET /v1/invoiceitems/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoiceItems.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice item (`ii_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [InvoiceItem](/reference/objects/invoice-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update an invoice item
+
+`POST /v1/invoiceitems/{id}`
+
+While it is pending or on a draft.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoiceItems.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice item (`ii_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `description` | string \| `""` | 1–500 characters. |
+| `quantity` | integer | Between 0 and 1000000000. |
+| `discountable` | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [InvoiceItem](/reference/objects/invoice-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete an invoice item
+
+`DELETE /v1/invoiceitems/{id}`
+
+While it is pending or on a draft.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoiceItems.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice item (`ii_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedInvoiceItem](/reference/objects/deleted-invoice-item).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

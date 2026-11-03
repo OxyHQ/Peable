@@ -1,0 +1,61 @@
+---
+title: "Balance"
+description: "The balance object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Balance
+
+Object type: `balance`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"balance"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `available` | array of [BalanceAmount](/reference/objects/balance-amount) | Payable now: the provider has made these funds available. |
+| `pending` | array of [BalanceAmount](/reference/objects/balance-amount) | Not yet available at the provider. |
+| `informational` | array of [BalanceAmount](/reference/objects/balance-amount) | FairCoin received straight into the merchant's own wallet (ADR 0015 §5): recorded for the books only. Orbit never held it, so it is never payable. |
+| `account` | string \| null | The account (`ca_…`) this balance mirrors; `null` for an Oxy first-party merchant. |
+
+## Example
+
+```json
+{
+  "object": "balance",
+  "livemode": false,
+  "available": [
+    {
+      "amount": "184250",
+      "currency": "EUR"
+    }
+  ],
+  "pending": [
+    {
+      "amount": "12900",
+      "currency": "EUR"
+    }
+  ],
+  "informational": [
+    {
+      "amount": "250000000",
+      "currency": "FAIR"
+    }
+  ],
+  "account": "ca_0193b8f2c1a87d3e9f4a"
+}
+```
+
+## Returned by
+
+- [`GET /v1/balance`](/reference/balance#retrieve-the-balance) — Retrieve the balance
+
+## Events
+
+- [`balance.available`](/reference/webhook-events#balanceavailable)
+
+## Used in
+
+[Event](/reference/objects/event)

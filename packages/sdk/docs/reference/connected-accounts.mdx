@@ -1,0 +1,391 @@
+---
+title: "Connected accounts"
+description: "The Connected accounts endpoints of the Peable API."
+order: 910
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Connected accounts
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/connected_accounts`](#open-a-connected-account) | Open a connected account |
+| [`GET /v1/connected_accounts`](#list-connected-accounts) | List connected accounts |
+| [`GET /v1/connected_accounts/{accountId}`](#retrieve-a-connected-account) | Retrieve a connected account |
+| [`POST /v1/connected_accounts/{accountId}/account_links`](#create-a-sellers-onboarding-link) | Create a seller's onboarding link |
+| [`POST /v1/connected_accounts/{accountId}/refresh`](#refresh-a-connected-account) | Refresh a connected account |
+| [`GET /v1/connected_accounts/by_ref/{externalRef}`](#retrieve-a-connected-account-by-your-id) | Retrieve a connected account by your id |
+
+## Open a connected account
+
+`POST /v1/connected_accounts`
+
+Opens the account for one seller (201), or answers the one this `external_ref` already opened (200) — a provider account cannot be deleted, so a converged retry says so.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.connectedAccounts.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `external_ref` **required** | string | Your own id for the seller. Opening the same `external_ref` again answers that account (200). 1–255 characters. |
+| `country` | string | The card half: ISO 3166-1 alpha-2 (case-insensitive). With `business_type`. Exactly 2 characters. |
+| `business_type` | string | The card half: with `country`. One of `individual`, `company`. |
+| `faircoin` | object | The FairCoin half (ADR 0012 D2): the chain the seller is paid on, and who they are. |
+| `faircoin[network]` **required** | string | One of `mainnet`, `testnet`. |
+| `faircoin[oxy_user_id]` **required** | string | The seller's Oxy user id — the only person who may register the key. 1–128 characters. |
+
+**Response `201`**
+
+Returns [ConnectedAccount](/reference/objects/connected-account).
+
+```json
+{
+  "id": "ca_0193b8f2d4e1aa07c3b2",
+  "object": "connected_account",
+  "livemode": false,
+  "external_ref": "seller_4821",
+  "rails": [
+    "card",
+    "faircoin"
+  ],
+  "faircoin": {
+    "network": "mainnet",
+    "status": "active",
+    "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+    "registered_at": 1793751000
+  },
+  "country": "DE",
+  "default_currency": "EUR",
+  "payable": true,
+  "payouts_enabled": true,
+  "charges_enabled": true,
+  "transfers_capability": "active",
+  "card_payments_capability": "active",
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "last_synced_at": 1793751060,
+  "created": 1793750400,
+  "updated_at": 1793751060
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List connected accounts
+
+`GET /v1/connected_accounts`
+
+Every seller this merchant has onboarded, newest first.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.connectedAccounts.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ConnectedAccount](/reference/objects/connected-account) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ConnectedAccount](/reference/objects/connected-account) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "ca_0193b8f2d4e1aa07c3b2",
+      "object": "connected_account",
+      "livemode": false,
+      "external_ref": "seller_4821",
+      "rails": [
+        "card",
+        "faircoin"
+      ],
+      "faircoin": {
+        "network": "mainnet",
+        "status": "active",
+        "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+        "registered_at": 1793751000
+      },
+      "country": "DE",
+      "default_currency": "EUR",
+      "payable": true,
+      "payouts_enabled": true,
+      "charges_enabled": true,
+      "transfers_capability": "active",
+      "card_payments_capability": "active",
+      "requirements": {
+        "currently_due": [],
+        "eventually_due": [],
+        "past_due": [],
+        "pending_verification": [],
+        "disabled_reason": null
+      },
+      "last_synced_at": 1793751060,
+      "created": 1793750400,
+      "updated_at": 1793751060
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/connected_accounts"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a connected account
+
+`GET /v1/connected_accounts/{accountId}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.connectedAccounts.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `accountId` **required** | path | string | The connected account (`ca_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ConnectedAccount](/reference/objects/connected-account).
+
+```json
+{
+  "id": "ca_0193b8f2d4e1aa07c3b2",
+  "object": "connected_account",
+  "livemode": false,
+  "external_ref": "seller_4821",
+  "rails": [
+    "card",
+    "faircoin"
+  ],
+  "faircoin": {
+    "network": "mainnet",
+    "status": "active",
+    "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+    "registered_at": 1793751000
+  },
+  "country": "DE",
+  "default_currency": "EUR",
+  "payable": true,
+  "payouts_enabled": true,
+  "charges_enabled": true,
+  "transfers_capability": "active",
+  "card_payments_capability": "active",
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "last_synced_at": 1793751060,
+  "created": 1793750400,
+  "updated_at": 1793751060
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a seller's onboarding link
+
+`POST /v1/connected_accounts/{accountId}/account_links`
+
+Minted on demand and never stored: single-use and short-lived. A visit to `return_url` proves nothing about verification — read the account back.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.connectedAccounts.createAccountLink()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `accountId` **required** | path | string | The connected account (`ca_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `refresh_url` **required** | string (uri) | Where the seller goes when the link has expired. |
+| `return_url` **required** | string (uri) | Where the seller returns when they leave the flow. |
+| `rail` | string | Which half to onboard: `card` (the default) is the provider's hosted onboarding; `faircoin` is Peable's own page where the SELLER registers their watch-only key. |
+
+**Response `201`**
+
+Returns [AccountLink](/reference/objects/account-link).
+
+```json
+{
+  "object": "account_link",
+  "livemode": false,
+  "url": "https://connect.peable.to/onboarding/Zk3s9v…",
+  "expires_at": 1793750700
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Refresh a connected account
+
+`POST /v1/connected_accounts/{accountId}/refresh`
+
+Re-reads the account from the provider now. The sweep and the inbound event keep it fresh on their own; this is for a seller watching a screen.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.connectedAccounts.refresh()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `accountId` **required** | path | string | The connected account (`ca_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [ConnectedAccount](/reference/objects/connected-account).
+
+```json
+{
+  "id": "ca_0193b8f2d4e1aa07c3b2",
+  "object": "connected_account",
+  "livemode": false,
+  "external_ref": "seller_4821",
+  "rails": [
+    "card",
+    "faircoin"
+  ],
+  "faircoin": {
+    "network": "mainnet",
+    "status": "active",
+    "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+    "registered_at": 1793751000
+  },
+  "country": "DE",
+  "default_currency": "EUR",
+  "payable": true,
+  "payouts_enabled": true,
+  "charges_enabled": true,
+  "transfers_capability": "active",
+  "card_payments_capability": "active",
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "last_synced_at": 1793751060,
+  "created": 1793750400,
+  "updated_at": 1793751060
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a connected account by your id
+
+`GET /v1/connected_accounts/by_ref/{externalRef}`
+
+By `external_ref`, the durable address you already hold — so a create whose answer never arrived is recoverable without a list scan.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.connectedAccounts.retrieveByRef()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `externalRef` **required** | path | string | Your own id for the seller. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ConnectedAccount](/reference/objects/connected-account).
+
+```json
+{
+  "id": "ca_0193b8f2d4e1aa07c3b2",
+  "object": "connected_account",
+  "livemode": false,
+  "external_ref": "seller_4821",
+  "rails": [
+    "card",
+    "faircoin"
+  ],
+  "faircoin": {
+    "network": "mainnet",
+    "status": "active",
+    "oxy_user_id": "665f1c0e9a1b2c3d4e5f6a7b",
+    "registered_at": 1793751000
+  },
+  "country": "DE",
+  "default_currency": "EUR",
+  "payable": true,
+  "payouts_enabled": true,
+  "charges_enabled": true,
+  "transfers_capability": "active",
+  "card_payments_capability": "active",
+  "requirements": {
+    "currently_due": [],
+    "eventually_due": [],
+    "past_due": [],
+    "pending_verification": [],
+    "disabled_reason": null
+  },
+  "last_synced_at": 1793751060,
+  "created": 1793750400,
+  "updated_at": 1793751060
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

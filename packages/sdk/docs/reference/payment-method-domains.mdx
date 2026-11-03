@@ -1,0 +1,262 @@
+---
+title: "Payment method domains"
+description: "The Payment method domains endpoints of the Peable API."
+order: 930
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Payment method domains
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/payment_method_domains`](#list-payment-method-domains) | List payment method domains |
+| [`POST /v1/payment_method_domains`](#register-a-payment-method-domain) | Register a payment method domain |
+| [`GET /v1/payment_method_domains/{id}`](#retrieve-a-payment-method-domain) | Retrieve a payment method domain |
+| [`POST /v1/payment_method_domains/{id}`](#update-a-payment-method-domain) | Update a payment method domain |
+| [`POST /v1/payment_method_domains/{id}/validate`](#validate-a-payment-method-domain) | Validate a payment method domain |
+
+## List payment method domains
+
+`GET /v1/payment_method_domains`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethodDomains.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `domain_name` | query | string | Exact match, any case. 1–253 characters. |
+| `enabled` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [PaymentMethodDomain](/reference/objects/payment-method-domain) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [PaymentMethodDomain](/reference/objects/payment-method-domain) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "pmd_0193b8f2c1a87d3e9f4a",
+      "object": "payment_method_domain",
+      "livemode": false,
+      "domain_name": "shop.example.com",
+      "enabled": true,
+      "apple_pay": {
+        "status": "active",
+        "status_details": null
+      },
+      "google_pay": {
+        "status": "active",
+        "status_details": null
+      },
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_method_domains"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Register a payment method domain
+
+`POST /v1/payment_method_domains`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethodDomains.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `domain_name` **required** | string | 1–300 characters. |
+| `enabled` | boolean |  |
+
+**Response `200`**
+
+Returns [PaymentMethodDomain](/reference/objects/payment-method-domain).
+
+```json
+{
+  "id": "pmd_0193b8f2c1a87d3e9f4a",
+  "object": "payment_method_domain",
+  "livemode": false,
+  "domain_name": "shop.example.com",
+  "enabled": true,
+  "apple_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "google_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment method domain
+
+`GET /v1/payment_method_domains/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethodDomains.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The domain (`pmd_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PaymentMethodDomain](/reference/objects/payment-method-domain).
+
+```json
+{
+  "id": "pmd_0193b8f2c1a87d3e9f4a",
+  "object": "payment_method_domain",
+  "livemode": false,
+  "domain_name": "shop.example.com",
+  "enabled": true,
+  "apple_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "google_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a payment method domain
+
+`POST /v1/payment_method_domains/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethodDomains.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The domain (`pmd_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `enabled` | boolean |  |
+
+**Response `200`**
+
+Returns [PaymentMethodDomain](/reference/objects/payment-method-domain).
+
+```json
+{
+  "id": "pmd_0193b8f2c1a87d3e9f4a",
+  "object": "payment_method_domain",
+  "livemode": false,
+  "domain_name": "shop.example.com",
+  "enabled": true,
+  "apple_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "google_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Validate a payment method domain
+
+`POST /v1/payment_method_domains/{id}/validate`
+
+Re-runs the wallets' verification of the domain.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethodDomains.validate()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The domain (`pmd_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [PaymentMethodDomain](/reference/objects/payment-method-domain).
+
+```json
+{
+  "id": "pmd_0193b8f2c1a87d3e9f4a",
+  "object": "payment_method_domain",
+  "livemode": false,
+  "domain_name": "shop.example.com",
+  "enabled": true,
+  "apple_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "google_pay": {
+    "status": "active",
+    "status_details": null
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

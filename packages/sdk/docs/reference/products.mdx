@@ -1,0 +1,364 @@
+---
+title: "Products"
+description: "The Products endpoints of the Peable API."
+order: 934
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Products
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/products`](#create-a-product) | Create a product |
+| [`GET /v1/products`](#list-products) | List products |
+| [`GET /v1/products/{id}`](#retrieve-a-product) | Retrieve a product |
+| [`POST /v1/products/{id}`](#update-a-product) | Update a product |
+| [`DELETE /v1/products/{id}`](#delete-a-product) | Delete a product |
+| [`GET /v1/products/search`](#search-products) | Search products |
+
+## Create a product
+
+`POST /v1/products`
+
+`default_price_data` creates its default price in the same request.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.products.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` **required** | string | 1–250 characters. |
+| `active` | boolean |  |
+| `description` | string | 1–40000 characters. |
+| `images` | array of string | At most 8 items. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `tax_code` | string |  |
+| `default_price_data` | object | Create the product's default price with it. |
+| `default_price_data[currency]` **required** | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `default_price_data[unit_amount]` **required** | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `default_price_data[recurring]` | object |  |
+| `default_price_data[recurring][interval]` **required** | string | One of `day`, `week`, `month`, `year`. |
+| `default_price_data[recurring][interval_count]` | integer | Default 1. Between 1 and 2147483647. |
+| `default_price_data[tax_behavior]` | string | One of `inclusive`, `exclusive`, `unspecified`. |
+| `unit_label` | string | 1–12 characters. |
+| `url` | string | At most 2048 characters. Matches `^https?:\/\/\S+$`. |
+| `statement_descriptor` | string | 1–22 characters. Matches `[A-Za-z]`. |
+| `marketing_features` | array of object | At most 15 items. |
+| `marketing_features[][name]` **required** | string | 1–80 characters. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Product](/reference/objects/product).
+
+```json
+{
+  "id": "prod_0193b8f2c1a87d3e9f4a",
+  "object": "product",
+  "livemode": false,
+  "active": true,
+  "name": "Mention Plus",
+  "description": "Everything in Mention, plus the Plus features.",
+  "images": [],
+  "metadata": {},
+  "tax_code": "txcd_10103000",
+  "default_price": "price_0193b8f2c1a87d3e9f4b",
+  "unit_label": null,
+  "url": null,
+  "statement_descriptor": null,
+  "marketing_features": [
+    {
+      "name": "Longer posts"
+    }
+  ],
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List products
+
+`GET /v1/products`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.products.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `active` | query | boolean |  |
+| `ids[]` | query | array of string | Only these products (at most 100). At most 100 items. At least 1 item. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Product](/reference/objects/product) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Product](/reference/objects/product) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "prod_0193b8f2c1a87d3e9f4a",
+      "object": "product",
+      "livemode": false,
+      "active": true,
+      "name": "Mention Plus",
+      "description": "Everything in Mention, plus the Plus features.",
+      "images": [],
+      "metadata": {},
+      "tax_code": "txcd_10103000",
+      "default_price": "price_0193b8f2c1a87d3e9f4b",
+      "unit_label": null,
+      "url": null,
+      "statement_descriptor": null,
+      "marketing_features": [
+        {
+          "name": "Longer posts"
+        }
+      ],
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/products"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a product
+
+`GET /v1/products/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.products.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Product](/reference/objects/product).
+
+```json
+{
+  "id": "prod_0193b8f2c1a87d3e9f4a",
+  "object": "product",
+  "livemode": false,
+  "active": true,
+  "name": "Mention Plus",
+  "description": "Everything in Mention, plus the Plus features.",
+  "images": [],
+  "metadata": {},
+  "tax_code": "txcd_10103000",
+  "default_price": "price_0193b8f2c1a87d3e9f4b",
+  "unit_label": null,
+  "url": null,
+  "statement_descriptor": null,
+  "marketing_features": [
+    {
+      "name": "Longer posts"
+    }
+  ],
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a product
+
+`POST /v1/products/{id}`
+
+A field sent as `""` is cleared; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.products.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `name` | string | 1–250 characters. |
+| `active` | boolean |  |
+| `description` | string \| `""` | 1–40000 characters. |
+| `images` | array of string | At most 8 items. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `tax_code` | string \| `""` |  |
+| `default_price` | string \| `""` | One of this product's active prices; `""` clears it. 1–255 characters. |
+| `unit_label` | string \| `""` | 1–12 characters. |
+| `url` | string \| `""` | At most 2048 characters. Matches `^https?:\/\/\S+$`. |
+| `statement_descriptor` | string \| `""` | 1–22 characters. Matches `[A-Za-z]`. |
+| `marketing_features` | array of object | At most 15 items. |
+| `marketing_features[][name]` **required** | string | 1–80 characters. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Product](/reference/objects/product).
+
+```json
+{
+  "id": "prod_0193b8f2c1a87d3e9f4a",
+  "object": "product",
+  "livemode": false,
+  "active": true,
+  "name": "Mention Plus",
+  "description": "Everything in Mention, plus the Plus features.",
+  "images": [],
+  "metadata": {},
+  "tax_code": "txcd_10103000",
+  "default_price": "price_0193b8f2c1a87d3e9f4b",
+  "unit_label": null,
+  "url": null,
+  "statement_descriptor": null,
+  "marketing_features": [
+    {
+      "name": "Longer posts"
+    }
+  ],
+  "created": 1793750400,
+  "updated": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a product
+
+`DELETE /v1/products/{id}`
+
+Only a product nothing names; one with prices is archived with `active: false`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.products.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The product (`prod_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedProduct](/reference/objects/deleted-product).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search products
+
+`GET /v1/products/search`
+
+Stripe's query language over `active`, `name`, `description`, `url`, `created` and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.products.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Product](/reference/objects/product) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Product](/reference/objects/product) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "prod_0193b8f2c1a87d3e9f4a",
+      "object": "product",
+      "livemode": false,
+      "active": true,
+      "name": "Mention Plus",
+      "description": "Everything in Mention, plus the Plus features.",
+      "images": [],
+      "metadata": {},
+      "tax_code": "txcd_10103000",
+      "default_price": "price_0193b8f2c1a87d3e9f4b",
+      "unit_label": null,
+      "url": null,
+      "statement_descriptor": null,
+      "marketing_features": [
+        {
+          "name": "Longer posts"
+        }
+      ],
+      "created": 1793750400,
+      "updated": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/products/search"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

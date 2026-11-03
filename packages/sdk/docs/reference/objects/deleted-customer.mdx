@@ -1,0 +1,23 @@
+---
+title: "DeletedCustomer"
+description: "The customer object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# DeletedCustomer
+
+Object type: `customer`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"customer"` |  |
+| `deleted` | `true` |  |
+
+## Returned by
+
+- [`GET /v1/customers/{id}`](/reference/customers#retrieve-a-customer) — Retrieve a customer
+- [`DELETE /v1/customers/{id}`](/reference/customers#delete-a-customer) — Delete a customer

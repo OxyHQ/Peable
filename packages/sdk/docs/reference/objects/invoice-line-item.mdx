@@ -1,0 +1,46 @@
+---
+title: "InvoiceLineItem"
+description: "The line_item object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# InvoiceLineItem
+
+Object type: `line_item`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"line_item"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `invoice` | string | The invoice (`in_…`) it is on. |
+| `type` | string | One of `subscription`, `invoiceitem`. |
+| `amount` | string | SIGNED: before discounts; tax-inclusive when the price is. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `description` | string \| null |  |
+| `discount_amounts` | array of object |  |
+| `discount_amounts[].amount` | string | SIGNED: a discount on a credit line is negative. Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `discount_amounts[].discount` | string | The discount it comes from. |
+| `discountable` | boolean |  |
+| `period` | object |  |
+| `period.start` | integer | Unix seconds. |
+| `period.end` | integer | Unix seconds. |
+| `price` | [Price](/reference/objects/price) \| null | The Price, embedded; `null` for a fixed-amount item. |
+| `quantity` | integer \| null | At least -9007199254740991. |
+| `proration` | boolean |  |
+| `subscription` | string \| null |  |
+| `subscription_item` | string \| null |  |
+| `invoice_item` | string \| null |  |
+| `tax_amounts` | array of [InvoiceTaxAmount](/reference/objects/invoice-tax-amount) |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+
+## Returned by
+
+- [`GET /v1/invoices/{id}/lines`](/reference/invoices#list-an-invoices-lines) — List an invoice's lines
+
+## Used in
+
+[Invoice](/reference/objects/invoice)

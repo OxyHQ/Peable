@@ -34,14 +34,18 @@
     "build:pay": "bun run --filter @peable.to/pay build",
     "build:contracts": "bun run --filter @peable.to/contracts build",
     "build:sdk": "bun run --filter @peable.to/sdk build",
-    "generate:openapi": "bun scripts/openapi.ts",
+    "generate:openapi": "bun scripts/openapi.ts && bun scripts/api-docs.ts",
     "check:openapi": "bun scripts/openapi.ts --check",
+    "generate:api-docs": "bun scripts/api-docs.ts",
+    "check:api-docs": "bun scripts/api-docs.ts --check",
+    "test:api-docs": "bun test scripts/api-docs",
     "generate:sdk-resources": "bun run --filter @peable.to/sdk generate",
     "check:sdk-resources": "bun run --filter @peable.to/sdk check:generated"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
     "@types/node": "^20.0.0",
+    "github-slugger": "2.0.0",
     "typescript": "~5.9.2"
   },
   "engines": {

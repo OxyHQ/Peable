@@ -1,0 +1,1227 @@
+---
+title: "Invoices"
+description: "The Invoices endpoints of the Peable API."
+order: 924
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Invoices
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/invoices`](#create-an-invoice) | Create an invoice |
+| [`GET /v1/invoices`](#list-invoices) | List invoices |
+| [`GET /v1/invoices/{id}`](#retrieve-an-invoice) | Retrieve an invoice |
+| [`POST /v1/invoices/{id}`](#update-an-invoice) | Update an invoice |
+| [`DELETE /v1/invoices/{id}`](#delete-a-draft-invoice) | Delete a draft invoice |
+| [`POST /v1/invoices/{id}/finalize`](#finalize-a-draft-invoice) | Finalize a draft invoice |
+| [`GET /v1/invoices/{id}/lines`](#list-an-invoices-lines) | List an invoice's lines |
+| [`POST /v1/invoices/{id}/mark_uncollectible`](#mark-an-invoice-uncollectible) | Mark an invoice uncollectible |
+| [`POST /v1/invoices/{id}/pay`](#pay-an-invoice) | Pay an invoice |
+| [`GET /v1/invoices/{id}/pdf`](#download-an-invoices-pdf) | Download an invoice's PDF |
+| [`POST /v1/invoices/{id}/send`](#send-an-invoice-to-its-customer) | Send an invoice to its customer |
+| [`POST /v1/invoices/{id}/void`](#void-an-invoice) | Void an invoice |
+| [`GET /v1/invoices/search`](#search-invoices) | Search invoices |
+| [`GET /v1/invoices/upcoming`](#preview-the-upcoming-invoice) | Preview the upcoming invoice |
+
+## Create an invoice
+
+`POST /v1/invoices`
+
+A draft, for a customer; it finalizes on its own when `auto_advance` is set.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` **required** | string | 1–255 characters. |
+| `currency` | string | Default: the subscription's, else the customer's billing currency. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `subscription` | string | 1–255 characters. |
+| `auto_advance` | boolean |  |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `days_until_due` | integer | Between 0 and 365. |
+| `due_date` | integer | `send_invoice` only. Between 0 and 253402300799. |
+| `description` | string | 1–1500 characters. |
+| `default_payment_method` | string | 1–255 characters. |
+| `discounts` | array of object | At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `pending_invoice_items_behavior` | string | Pull the customer's pending invoice items in. Default `exclude` (Stripe's). One of `include`, `exclude`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List invoices
+
+`GET /v1/invoices`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` | query | string | 1–255 characters. |
+| `subscription` | query | string | 1–255 characters. |
+| `status` | query | string | One of `draft`, `open`, `paid`, `void`, `uncollectible`. |
+| `collection_method` | query | string | One of `charge_automatically`, `send_invoice`. |
+| `due_date` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `due_date[gt]` | query | integer |  |
+| `due_date[gte]` | query | integer |  |
+| `due_date[lt]` | query | integer |  |
+| `due_date[lte]` | query | integer |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Invoice](/reference/objects/invoice) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Invoice](/reference/objects/invoice) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "in_0193b8f2c1a87d3e9f4a",
+      "object": "invoice",
+      "livemode": false,
+      "number": "ACME-0001",
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "customer_email": "jenny@example.com",
+      "customer_name": "Jenny Rosen",
+      "subscription": "sub_0193b8f2c1a87d3e9f4a",
+      "status": "paid",
+      "billing_reason": "subscription_create",
+      "collection_method": "charge_automatically",
+      "currency": "EUR",
+      "description": null,
+      "auto_advance": true,
+      "automatically_finalizes_at": null,
+      "lines": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+      },
+      "subtotal": "1999",
+      "subtotal_excluding_tax": "1999",
+      "total_discount_amounts": [],
+      "discount": null,
+      "tax": "0",
+      "total": "1999",
+      "total_excluding_tax": "1999",
+      "starting_balance": "0",
+      "ending_balance": "0",
+      "amount_due": "1999",
+      "amount_paid": "1999",
+      "amount_remaining": "0",
+      "pre_payment_credit_notes_amount": "0",
+      "post_payment_credit_notes_amount": "0",
+      "attempt_count": 1,
+      "attempted": true,
+      "next_payment_attempt": null,
+      "due_date": null,
+      "days_until_due": null,
+      "period_start": 1793750400,
+      "period_end": 1793750400,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "default_payment_method": null,
+      "automatic_tax": {
+        "enabled": false,
+        "status": null,
+        "tax_calculation": null
+      },
+      "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+      "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+      "last_finalization_error": null,
+      "status_transitions": {
+        "finalized_at": 1793750400,
+        "paid_at": 1793750401,
+        "voided_at": null,
+        "marked_uncollectible_at": null
+      },
+      "paid_out_of_band": false,
+      "test_clock": null,
+      "metadata": {},
+      "created": 1793750400,
+      "effective_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/invoices"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an invoice
+
+`GET /v1/invoices/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update an invoice
+
+`POST /v1/invoices/{id}`
+
+Drafts only, except `metadata` and `auto_advance`. A field sent as `""` is cleared; `metadata` is a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `auto_advance` | boolean |  |
+| `collection_method` | string | One of `charge_automatically`, `send_invoice`. |
+| `days_until_due` | integer | Between 0 and 365. |
+| `due_date` | integer | Between 0 and 253402300799. |
+| `description` | string \| `""` | 1–1500 characters. |
+| `default_payment_method` | string \| `""` | 1–255 characters. |
+| `discounts` | array of object \| `""` | At most 20 items. |
+| `discounts[][coupon]` | string | 1–255 characters. |
+| `discounts[][promotion_code]` | string | 1–255 characters. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Delete a draft invoice
+
+`DELETE /v1/invoices/{id}`
+
+Only a draft can be deleted; a finalized invoice is voided instead.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.del()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [DeletedInvoice](/reference/objects/deleted-invoice).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Finalize a draft invoice
+
+`POST /v1/invoices/{id}/finalize`
+
+It gets its number, its tax and its payer-facing page.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.finalizeInvoice()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `auto_advance` | boolean |  |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List an invoice's lines
+
+`GET /v1/invoices/{id}/lines`
+
+Every line, on one page.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.listLineItems()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [InvoiceLineItem](/reference/objects/invoice-line-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [InvoiceLineItem](/reference/objects/invoice-line-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Mark an invoice uncollectible
+
+`POST /v1/invoices/{id}/mark_uncollectible`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.markUncollectible()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Pay an invoice
+
+`POST /v1/invoices/{id}/pay`
+
+Charge a saved card off-session, or record a payment made outside Orbit (`paid_out_of_band`). A decline is a `card_error` carrying the invoice as it now is.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.pay()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payment_method` | string | A saved `pm_…` of the customer; defaults to the invoice's, then the subscription's, then the customer's. 1–255 characters. |
+| `paid_out_of_band` | boolean | Record a payment made outside Orbit. |
+| `off_session` | boolean | Default true: the customer is not present. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Download an invoice's PDF
+
+`GET /v1/invoices/{id}/pdf`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.retrievePdf()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+The bytes, as `application/pdf`.
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Send an invoice to its customer
+
+`POST /v1/invoices/{id}/send`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.sendInvoice()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Void an invoice
+
+`POST /v1/invoices/{id}/void`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.invoices.voidInvoice()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The invoice (`in_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search invoices
+
+`GET /v1/invoices/search`
+
+Stripe's query language over the invoice's fields and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Invoice](/reference/objects/invoice) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Invoice](/reference/objects/invoice) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "in_0193b8f2c1a87d3e9f4a",
+      "object": "invoice",
+      "livemode": false,
+      "number": "ACME-0001",
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "customer_email": "jenny@example.com",
+      "customer_name": "Jenny Rosen",
+      "subscription": "sub_0193b8f2c1a87d3e9f4a",
+      "status": "paid",
+      "billing_reason": "subscription_create",
+      "collection_method": "charge_automatically",
+      "currency": "EUR",
+      "description": null,
+      "auto_advance": true,
+      "automatically_finalizes_at": null,
+      "lines": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+      },
+      "subtotal": "1999",
+      "subtotal_excluding_tax": "1999",
+      "total_discount_amounts": [],
+      "discount": null,
+      "tax": "0",
+      "total": "1999",
+      "total_excluding_tax": "1999",
+      "starting_balance": "0",
+      "ending_balance": "0",
+      "amount_due": "1999",
+      "amount_paid": "1999",
+      "amount_remaining": "0",
+      "pre_payment_credit_notes_amount": "0",
+      "post_payment_credit_notes_amount": "0",
+      "attempt_count": 1,
+      "attempted": true,
+      "next_payment_attempt": null,
+      "due_date": null,
+      "days_until_due": null,
+      "period_start": 1793750400,
+      "period_end": 1793750400,
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "default_payment_method": null,
+      "automatic_tax": {
+        "enabled": false,
+        "status": null,
+        "tax_calculation": null
+      },
+      "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+      "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+      "last_finalization_error": null,
+      "status_transitions": {
+        "finalized_at": 1793750400,
+        "paid_at": 1793750401,
+        "voided_at": null,
+        "marked_uncollectible_at": null
+      },
+      "paid_out_of_band": false,
+      "test_clock": null,
+      "metadata": {},
+      "created": 1793750400,
+      "effective_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/invoices/search"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Preview the upcoming invoice
+
+`GET /v1/invoices/upcoming`
+
+The invoice a customer's subscription will renew with — or, with `subscription_items`, the one a change would produce. Computed, never stored (its `id` is empty). 404 when the customer has no subscription that will renew.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.invoices.retrieveUpcoming()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `customer` **required** | query | string | 1–255 characters. |
+| `subscription` | query | string | Default: the customer's most recent subscription that will renew. 1–255 characters. |
+| `subscription_items[]` | query | array of object | Preview a change: the items it would have (`subscription_items[0][price]=…`). At most 20 items. |
+| `subscription_proration_behavior` | query | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `subscription_proration_date` | query | integer | Between 0 and 253402300799. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Invoice](/reference/objects/invoice).
+
+```json
+{
+  "id": "in_0193b8f2c1a87d3e9f4a",
+  "object": "invoice",
+  "livemode": false,
+  "number": "ACME-0001",
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "customer_email": "jenny@example.com",
+  "customer_name": "Jenny Rosen",
+  "subscription": "sub_0193b8f2c1a87d3e9f4a",
+  "status": "paid",
+  "billing_reason": "subscription_create",
+  "collection_method": "charge_automatically",
+  "currency": "EUR",
+  "description": null,
+  "auto_advance": true,
+  "automatically_finalizes_at": null,
+  "lines": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/invoices/in_0193b8f2c1a87d3e9f4a/lines"
+  },
+  "subtotal": "1999",
+  "subtotal_excluding_tax": "1999",
+  "total_discount_amounts": [],
+  "discount": null,
+  "tax": "0",
+  "total": "1999",
+  "total_excluding_tax": "1999",
+  "starting_balance": "0",
+  "ending_balance": "0",
+  "amount_due": "1999",
+  "amount_paid": "1999",
+  "amount_remaining": "0",
+  "pre_payment_credit_notes_amount": "0",
+  "post_payment_credit_notes_amount": "0",
+  "attempt_count": 1,
+  "attempted": true,
+  "next_payment_attempt": null,
+  "due_date": null,
+  "days_until_due": null,
+  "period_start": 1793750400,
+  "period_end": 1793750400,
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "default_payment_method": null,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null,
+    "tax_calculation": null
+  },
+  "hosted_invoice_url": "https://checkout.peable.to/invoice/inv_tok_…",
+  "invoice_pdf": "https://api.peable.to/v1/invoices/public/inv_tok_…/pdf",
+  "last_finalization_error": null,
+  "status_transitions": {
+    "finalized_at": 1793750400,
+    "paid_at": 1793750401,
+    "voided_at": null,
+    "marked_uncollectible_at": null
+  },
+  "paid_out_of_band": false,
+  "test_clock": null,
+  "metadata": {},
+  "created": 1793750400,
+  "effective_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

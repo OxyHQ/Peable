@@ -1,0 +1,52 @@
+---
+title: "File"
+description: "The file object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# File
+
+Object type: `file`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"file"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `purpose` | string | One of `dispute_evidence`, `business_logo`, `identity_document`, `additional_verification`, `finance_report_run`, `tax_document`. |
+| `filename` | string \| null | The name it was uploaded with, if it had a printable one. |
+| `size` | integer | Bytes. |
+| `type` | string | One of `pdf`, `png`, `jpg`, `csv`. |
+| `status` | string | One of `available`, `withheld`, `removed`. |
+| `url` | string \| null | Where the bytes can be read while the file is `available`: a public URL for a `business_logo`, `GET /v1/files/{id}/contents` for a `finance_report_run`. `null` for every other purpose — evidence and identity documents are never addressable by URL. |
+| `created` | integer | Unix seconds. |
+
+## Example
+
+```json
+{
+  "id": "file_0193b8f2c1a87d3e9f4a",
+  "object": "file",
+  "livemode": false,
+  "purpose": "business_logo",
+  "filename": "logo.png",
+  "size": 18432,
+  "type": "png",
+  "status": "available",
+  "url": "https://cloud.oxy.so/assets/0193b8f2c1a87d3e9f4b",
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/files`](/reference/files#upload-a-file) — Upload a file
+- [`GET /v1/files`](/reference/files#list-files) — List files
+- [`GET /v1/files/{id}`](/reference/files#retrieve-a-file) — Retrieve a file
+
+## Used in
+
+[ReportRun](/reference/objects/report-run)

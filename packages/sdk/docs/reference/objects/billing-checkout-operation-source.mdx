@@ -1,0 +1,27 @@
+---
+title: "BillingCheckoutOperationSource"
+description: "The BillingCheckoutOperationSource shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingCheckoutOperationSource
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `idempotency_key` | string |  |
+| `provider_customer_id` | string |  |
+| `provider_price_id` | string |  |
+| `store_id` | string |  |
+| `plan_id` | string |  |
+| `tax_quote_id` | string \| null |  |
+| `merchant_id` | string |  |
+| `app_id` | string |  |
+| `mode` | string | One of `test`, `live`. |
+| `environment` | string | One of `development`, `staging`, `production`. |
+
+## Used in
+
+[BillingCheckoutOperationRecovery](/reference/objects/billing-checkout-operation-recovery)

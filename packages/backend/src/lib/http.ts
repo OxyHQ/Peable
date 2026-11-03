@@ -43,7 +43,7 @@ export function sendProviderError(res: Response, error: ProviderError): void {
  *   (`account_not_ready`, `idempotency_error`, …).
  * - `param` names the offending request field in bracket notation
  *   (`metadata[order_id]`, `line_items[0][price]`), when there is one.
- * - `doc_url` is the code's entry on https://docs.peable.to/errors. `code` is
+ * - `doc_url` is the code's entry on Peable's error-code page (`ERROR_DOCS_BASE_URL`). `code` is
  *   an `ErrorCode`, the contract's closed list the errors page is rendered
  *   from, so a code without documentation does not compile.
  * - `request_id` is the `Request-Id` of this response, so support can find it.

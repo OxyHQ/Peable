@@ -234,7 +234,7 @@ amounts (base units) and `created` (Unix seconds), `-field:value` to negate,
 clauses join with spaces / `AND` or with `OR`, never both; at most 10 clauses
 and 1000 characters. A malformed query is a `PeableInvalidRequestError` with
 `param: 'query'` and the position in its message. Searchable fields per
-resource are in `docs/integrating-peable.md` › Search.
+resource are at <https://oxy.so/developers/docs/peable/lists/#searchable-fields>.
 
 ### Reporting: report runs (0.19.0)
 
@@ -689,7 +689,7 @@ identity; the key neither replaces it nor changes gateway financial semantics.
 ### Connect for FairCoin (0.4.0)
 
 Pay a marketplace's sellers in FairCoin straight to their own wallets
-(ADR 0012, guide in `docs/connect-faircoin.md`):
+(ADR 0012, guide at <https://oxy.so/developers/docs/peable/connect-faircoin/>):
 
 ```ts
 const seller = await peable.connectedAccounts.create({

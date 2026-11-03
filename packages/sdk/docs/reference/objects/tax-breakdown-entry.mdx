@@ -1,0 +1,27 @@
+---
+title: "TaxBreakdownEntry"
+description: "The TaxBreakdownEntry shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxBreakdownEntry
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `country` | string | ISO 3166-1 alpha-2. |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `level` | string \| null | The jurisdiction level (`country`, `state`, …). |
+| `display_name` | string \| null |  |
+| `tax_type` | string \| null | `vat`, `sales_tax`, …; `null` when no tax is imposed. |
+| `rate_percentage` | string \| null | Decimal string, e.g. `"20.0"`; `null` when no tax is imposed. |
+| `taxable_amount` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `amount` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `inclusive` | boolean |  |
+| `taxability_reason` | string | The provider's reason, or Peable's own `not_registered` / `product_nontaxable`. |
+
+## Used in
+
+[TaxCalculationLineItem](/reference/objects/tax-calculation-line-item)

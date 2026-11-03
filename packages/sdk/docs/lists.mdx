@@ -1,0 +1,124 @@
+---
+title: "Pagination, expand and search"
+description: "Lists, cursors, expand, metadata and the search query language."
+order: 20
+---
+
+# Pagination, expand and search
+
+## Lists
+
+Every list endpoint takes the same parameters and answers the same envelope,
+newest first:
+
+```json
+{ "object": "list", "data": [], "has_more": false, "url": "/v1/refunds" }
+```
+
+| Parameter | Meaning |
+|---|---|
+| `limit` | 1–100, default 10 |
+| `starting_after` | The id of the **last** object you saw: the next page is older |
+| `ending_before` | The id of the **first** object you saw: the page is the newer objects, still newest first. Never with `starting_after` (400, `param: 'ending_before'`) |
+| `created`, `created[gt\|gte\|lt\|lte]` | Unix seconds: one second, or a range |
+
+A cursor is resolved inside **your** scope: an id that names nothing you own —
+another merchant's included — is a `400 resource_missing` naming the
+parameter, the same answer either way. An unknown query parameter is a 400
+naming it. Each list's own filters (`status`, `customer`, `payment_intent`, …)
+are on its [reference](/reference) page.
+
+The SDK's `list()` is a promise of one page that is also an async iterator
+over every page:
+
+```ts
+const page = await peable.refunds.list({ payment_intent: 'pi_…', limit: 20 });
+
+for await (const intent of peable.paymentIntents.list({ status: 'succeeded' })) {
+  // every page, fetched as you go
+}
+
+const recent = await peable.transfers.list({ created: { gte: since } }).autoPagingToArray({ limit: 500 });
+```
+
+## Expand
+
+A reference to another object is spelled without `_id` — `payment_intent`,
+`customer`, `connected_account` — and is the id string unless you ask for the
+object with `expand[]`. Paths use dots and reach at most four levels; on a
+list, prefix them with `data.`:
+
+```ts
+await peable.checkout.sessions.retrieve('cs_…', { expand: ['payment_intent.connected_account'] });
+await peable.refunds.list({ expand: ['data.payment_intent'] });
+```
+
+Each object's expandable fields are listed on its reference page. Expansion
+resolves inside your own scope, and a path that names anything else is a 400
+with `param: 'expand'`. A payer's client-secret read cannot expand, and webhook
+payloads always carry ids.
+
+## Metadata
+
+`metadata` is your own `string → string` map on every object you can update:
+at most 50 keys, keys at most 40 characters (no `[` or `]`), values at most
+500. On an update it is a **patch**: the keys you name are set, a key sent as
+`''` is removed, the others are kept — and the 50-key limit is judged on the
+result.
+
+```ts
+await peable.paymentIntents.update('pi_…', { metadata: { order_id: '', shipped: 'yes' } });
+```
+
+## Search
+
+`GET /v1/<resource>/search?query=…` — on `payment_intents`, `charges`,
+`customers`, `products`, `prices`, `refunds`, `subscriptions` and `invoices`
+(SDK: `peable.<resource>.search({ query })`, a page that is also an async
+iterator):
+
+```ts
+const page = await peable.customers.search({ query: 'email:"jenny@example.com"' });
+for await (const charge of peable.charges.search({ query: 'refunded:true AND created>1780000000' })) {
+  // …
+}
+```
+
+The answer is `{ object: 'search_result', data, has_more, next_page, url }`.
+Pass `next_page` back as `page` **with the same query** for the next page; a
+token used with another query or resource is a 400 (`param: 'page'`).
+`limit` is 1–100 (default 10). `expand[]` takes `data.`-prefixed paths, and
+`total_count`, which adds the number of matches. Results are newest first —
+the same order as the list, so a search and a list never disagree — and are
+scoped to your merchant and mode. A search is read-your-writes: an object is
+searchable the moment it exists.
+
+### The query language
+
+| Clause | Meaning |
+|---|---|
+| `field:"value"` | Equals. Case-insensitive for text; a closed value (`status`, `currency`, `type`) is normalized and must be one the field takes |
+| `field~"sub"` | Contains, case-insensitive; at least 3 characters |
+| `field>100`, `<`, `>=`, `<=`, `=` | Amounts (base units, compared as numbers — beyond a JavaScript number too) and `created` (Unix seconds) |
+| `-clause` | Not. A missing value counts as "not" (`-email:"x"` keeps customers with no email) |
+| `field:null` / `-field:null` | Has no value / has one |
+| `metadata['key']:'value'` | A metadata entry; `metadata['key']:null` is "no such key" |
+
+Text values are quoted (`"` or `'`; `\` escapes); numbers, `null`, `true` and
+`false` may be bare. Clauses join with spaces or `AND` (all), or with `OR`
+(any) — never both, and there are no parentheses. At most 10 clauses and 1000
+characters. Every refusal is a 400 with `param: 'query'` and the position:
+`AND and OR cannot be combined in one query … (at position 22)`.
+
+### Searchable fields
+
+| Resource | Fields |
+|---|---|
+| `payment_intents` | `amount`, `currency`, `customer`, `status`, `created`, `metadata`, `description`, `receipt_email` |
+| `charges` | `amount`, `currency`, `customer`, `payment_intent`, `status`, `captured`, `refunded`, `disputed`, `billing_details.email`, `billing_details.name`, `billing_details.address.postal_code`, `payment_method_details.card.last4`, `payment_method_details.card.brand`, `created`, `metadata` (the intent's) |
+| `customers` | `email`, `name`, `phone`, `created`, `metadata` — deleted customers are never found |
+| `products` | `name`, `active`, `description`, `url`, `created`, `metadata` |
+| `prices` | `active`, `currency`, `product`, `type`, `lookup_key`, `created`, `metadata` |
+| `refunds` | `amount`, `currency`, `status`, `reason`, `payment_intent`, `created`, `metadata` |
+| `subscriptions` | `status` (every status, canceled included), `created`, `metadata`, `customer`, `currency`, `collection_method`, `description` |
+| `invoices` | `status`, `customer`, `subscription`, `currency`, `number` (exact), `total`, `created`, `metadata`, `customer_email`, `customer_name` |

@@ -1,0 +1,40 @@
+---
+title: "Peable"
+description: "Payments for the Oxy ecosystem: FairCoin, non-custodially, and cards — with Checkout, Billing, Connect and Tax on one API."
+order: 0
+---
+
+# Peable
+
+Peable is the payments platform of the Oxy ecosystem: one API, one SDK
+(`@peable.to/sdk`) and a hosted checkout for accepting payments on two rails.
+
+- **FairCoin, non-custodially.** The payer pays from their own wallet straight
+  to an address derived from your **watch-only** key. Peable watches the chain
+  and never holds the coins — it cannot spend, refund or move them.
+- **Cards**, through Peable's payment provider: card data is collected by the
+  provider's own fields in the payer's browser and never reaches Peable or
+  your server. Peable holds the provider credentials; you supply none.
+
+Peable accepts FairCoin as a payment method. It never buys, sells or exchanges
+FairCoin.
+
+## Start here
+
+| Page | What it covers |
+|---|---|
+| [Quickstart](/quickstart) | A first test payment, end to end |
+| [The SDK](/sdk) | Credentials, request options, retries and errors |
+| [Testing](/testing) | Test mode, the CLI, test helpers and test clocks |
+| [API reference](/reference) | Every endpoint and object, generated from the OpenAPI document |
+| [Error codes](/errors) | Every error type and code an answer can carry |
+
+## Guides
+
+| Area | Guides |
+|---|---|
+| Payments | [Accept a payment](/accept-a-payment) · [Checkout](/checkout) · [Payment Links](/payment-links) · [Elements](/elements) · [Refunds and disputes](/refunds-and-disputes) |
+| Billing | [Products and prices](/catalog) · [Subscriptions and invoices](/billing) · [Tax](/tax) |
+| Connect and money | [Connect and money](/connect) · [FairCoin sellers](/connect-faircoin) · [Reporting](/reporting) · [Contribution links](/contributions) |
+| Events | [Webhooks and events](/webhooks) |
+| Conventions | [Handling errors](/handling-errors) · [Idempotency](/idempotency) · [Pagination, expand and search](/lists) · [Versioning](/versioning) · [Going live](/going-live) |

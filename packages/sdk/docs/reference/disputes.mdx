@@ -1,0 +1,355 @@
+---
+title: "Disputes"
+description: "The Disputes endpoints of the Peable API."
+order: 917
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Disputes
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/disputes`](#list-disputes) | List disputes |
+| [`GET /v1/disputes/{disputeId}`](#retrieve-a-dispute) | Retrieve a dispute |
+| [`POST /v1/disputes/{disputeId}`](#update-a-dispute) | Update a dispute |
+| [`POST /v1/disputes/{disputeId}/close`](#close-a-dispute) | Close a dispute |
+| [`GET /v1/payment_intents/{intentId}/disputes`](#list-a-payments-disputes) | List a payment's disputes |
+
+## List disputes
+
+`GET /v1/disputes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.disputes.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only this payment's disputes (`pi_…`). 1–255 characters. |
+| `charge` | query | string | Only this charge's disputes (`ch_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Dispute](/reference/objects/dispute) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Dispute](/reference/objects/dispute) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "dp_0193b8f2c1a87d3e9f4a",
+      "object": "dispute",
+      "livemode": false,
+      "amount": "2500",
+      "currency": "EUR",
+      "charge": "ch_0193b8f2c1a87d3e9f4a",
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "status": "needs_response",
+      "reason": "product_not_received",
+      "is_charge_refundable": true,
+      "evidence_details": {
+        "due_by": 1794355200,
+        "has_evidence": false,
+        "past_due": false,
+        "submission_count": 0,
+        "submitted_at": null
+      },
+      "metadata": {},
+      "created": 1793750400,
+      "updated_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/disputes"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.charge` → [Charge](/reference/objects/charge)
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a dispute
+
+`GET /v1/disputes/{disputeId}`
+
+The one read that carries `evidence`, read live from the provider.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.disputes.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `disputeId` **required** | path | string | The dispute (`dp_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Dispute](/reference/objects/dispute).
+
+```json
+{
+  "id": "dp_0193b8f2c1a87d3e9f4a",
+  "object": "dispute",
+  "livemode": false,
+  "amount": "2500",
+  "currency": "EUR",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "status": "needs_response",
+  "reason": "product_not_received",
+  "is_charge_refundable": true,
+  "evidence_details": {
+    "due_by": 1794355200,
+    "has_evidence": false,
+    "past_due": false,
+    "submission_count": 0,
+    "submitted_at": null
+  },
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `charge` → [Charge](/reference/objects/charge)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a dispute
+
+`POST /v1/disputes/{disputeId}`
+
+Metadata, a staged draft of evidence, or — with `submit: true` — the one submission. A dispute that no longer takes evidence answers 409.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.disputes.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `disputeId` **required** | path | string | The dispute (`dp_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `evidence` | object | Any subset of the fields: a text field is your words (at most 20,000 characters), a file field a `file_…` of purpose `dispute_evidence`. `""` unsets a field. |
+| `evidence[access_activity_log]` | string | At most 20000 characters. |
+| `evidence[billing_address]` | string | At most 20000 characters. |
+| `evidence[cancellation_policy_disclosure]` | string | At most 20000 characters. |
+| `evidence[cancellation_rebuttal]` | string | At most 20000 characters. |
+| `evidence[customer_email_address]` | string | At most 20000 characters. |
+| `evidence[customer_name]` | string | At most 20000 characters. |
+| `evidence[customer_purchase_ip]` | string | At most 20000 characters. |
+| `evidence[duplicate_charge_explanation]` | string | At most 20000 characters. |
+| `evidence[product_description]` | string | At most 20000 characters. |
+| `evidence[refund_policy_disclosure]` | string | At most 20000 characters. |
+| `evidence[refund_refusal_explanation]` | string | At most 20000 characters. |
+| `evidence[service_date]` | string | At most 20000 characters. |
+| `evidence[shipping_address]` | string | At most 20000 characters. |
+| `evidence[shipping_carrier]` | string | At most 20000 characters. |
+| `evidence[shipping_date]` | string | At most 20000 characters. |
+| `evidence[shipping_tracking_number]` | string | At most 20000 characters. |
+| `evidence[uncategorized_text]` | string | At most 20000 characters. |
+| `evidence[cancellation_policy]` | string | At most 255 characters. |
+| `evidence[customer_communication]` | string | At most 255 characters. |
+| `evidence[customer_signature]` | string | At most 255 characters. |
+| `evidence[duplicate_charge_documentation]` | string | At most 255 characters. |
+| `evidence[receipt]` | string | At most 255 characters. |
+| `evidence[refund_policy]` | string | At most 255 characters. |
+| `evidence[service_documentation]` | string | At most 255 characters. |
+| `evidence[shipping_documentation]` | string | At most 255 characters. |
+| `evidence[uncategorized_file]` | string | At most 255 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `submit` | boolean |  |
+
+**Response `200`**
+
+Returns [Dispute](/reference/objects/dispute).
+
+```json
+{
+  "id": "dp_0193b8f2c1a87d3e9f4a",
+  "object": "dispute",
+  "livemode": false,
+  "amount": "2500",
+  "currency": "EUR",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "status": "needs_response",
+  "reason": "product_not_received",
+  "is_charge_refundable": true,
+  "evidence_details": {
+    "due_by": 1794355200,
+    "has_evidence": false,
+    "past_due": false,
+    "submission_count": 0,
+    "submitted_at": null
+  },
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Close a dispute
+
+`POST /v1/disputes/{disputeId}/close`
+
+Accept the dispute: it is lost.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.disputes.close()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `disputeId` **required** | path | string | The dispute (`dp_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [Dispute](/reference/objects/dispute).
+
+```json
+{
+  "id": "dp_0193b8f2c1a87d3e9f4a",
+  "object": "dispute",
+  "livemode": false,
+  "amount": "2500",
+  "currency": "EUR",
+  "charge": "ch_0193b8f2c1a87d3e9f4a",
+  "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+  "status": "needs_response",
+  "reason": "product_not_received",
+  "is_charge_refundable": true,
+  "evidence_details": {
+    "due_by": 1794355200,
+    "has_evidence": false,
+    "past_due": false,
+    "submission_count": 0,
+    "submitted_at": null
+  },
+  "metadata": {},
+  "created": 1793750400,
+  "updated_at": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a payment's disputes
+
+`GET /v1/payment_intents/{intentId}/disputes`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.disputes.listForPaymentIntent()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `intentId` **required** | path | string | The payment intent (`pi_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Dispute](/reference/objects/dispute) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Dispute](/reference/objects/dispute) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "dp_0193b8f2c1a87d3e9f4a",
+      "object": "dispute",
+      "livemode": false,
+      "amount": "2500",
+      "currency": "EUR",
+      "charge": "ch_0193b8f2c1a87d3e9f4a",
+      "payment_intent": "pi_0193b8f2c1a87d3e9f4a",
+      "status": "needs_response",
+      "reason": "product_not_received",
+      "is_charge_refundable": true,
+      "evidence_details": {
+        "due_by": 1794355200,
+        "has_evidence": false,
+        "past_due": false,
+        "submission_count": 0,
+        "submitted_at": null
+      },
+      "metadata": {},
+      "created": 1793750400,
+      "updated_at": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/payment_intents/{intentId}/disputes"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.charge` → [Charge](/reference/objects/charge)
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

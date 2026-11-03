@@ -1,0 +1,31 @@
+---
+title: "TaxDeadline"
+description: "The tax.deadline object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxDeadline
+
+Object type: `tax.deadline`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"tax.deadline"` |  |
+| `kind` | string | One of `return`, `payment`, `registration`. |
+| `rule` | string | The rule that sets it. |
+| `country` | string \| null |  |
+| `state` | string \| null | ISO 3166-2 subdivision without the country prefix (`CA`, `QC`). |
+| `period_start` | integer \| null | Unix seconds. |
+| `period_end` | integer \| null | Unix seconds. |
+| `due` | integer | Unix seconds. |
+| `status` | string | One of `upcoming`, `due_soon`, `passed`. |
+| `filing_status` | `"not_tracked"` |  |
+| `description` | string |  |
+| `source` | [TaxRuleSource](/reference/objects/tax-rule-source) |  |
+
+## Used in
+
+[TaxDeadlineList](/reference/objects/tax-deadline-list)

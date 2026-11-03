@@ -1,0 +1,278 @@
+---
+title: "Setup intents"
+description: "The Setup intents endpoints of the Peable API."
+order: 940
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Setup intents
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/setup_intents`](#create-a-setup-intent) | Create a setup intent |
+| [`GET /v1/setup_intents`](#list-setup-intents) | List setup intents |
+| [`GET /v1/setup_intents/{id}`](#retrieve-a-setup-intent) | Retrieve a setup intent |
+| [`POST /v1/setup_intents/{id}/cancel`](#cancel-a-setup-intent) | Cancel a setup intent |
+| [`POST /v1/setup_intents/{id}/client_action`](#retrieve-a-setup-intents-client-action) | Retrieve a setup intent's client action |
+
+## Create a setup intent
+
+`POST /v1/setup_intents`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.setupIntents.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` | string | The customer (`cus_…`) the card is saved to. Required: a `pm_…` is born attached. 1–255 characters. |
+| `usage` | string | Defaults to `off_session`. One of `on_session`, `off_session`. |
+| `payment_method_types` | array | At most 1 items. At least 1 item. |
+| `description` | string | At most 1000 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [SetupIntent](/reference/objects/setup-intent).
+
+```json
+{
+  "id": "seti_0193b8f2c1a87d3e9f4a",
+  "object": "setup_intent",
+  "livemode": false,
+  "status": "requires_payment_method",
+  "usage": "off_session",
+  "payment_method_types": [
+    "card"
+  ],
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": null,
+  "client_secret": "seti_0193b8f2c1a87d3e9f4a_secret_9a1b2c",
+  "next_action": null,
+  "last_setup_error": null,
+  "cancellation_reason": null,
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List setup intents
+
+`GET /v1/setup_intents`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.setupIntents.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` | query | string | Only this customer's setup intents (`cus_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [SetupIntent](/reference/objects/setup-intent) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [SetupIntent](/reference/objects/setup-intent) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "seti_0193b8f2c1a87d3e9f4a",
+      "object": "setup_intent",
+      "livemode": false,
+      "status": "requires_payment_method",
+      "usage": "off_session",
+      "payment_method_types": [
+        "card"
+      ],
+      "customer": "cus_0193b8f2c1a87d3e9f4a",
+      "payment_method": null,
+      "client_secret": "seti_0193b8f2c1a87d3e9f4a_secret_9a1b2c",
+      "next_action": null,
+      "last_setup_error": null,
+      "cancellation_reason": null,
+      "description": null,
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/setup_intents"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a setup intent
+
+`GET /v1/setup_intents/{id}`
+
+With the merchant credential: reconciled with the provider when not terminal, expandable. Without one, the PAYER reads the row as stored with its `client_secret` (the `X-Peable-Client-Secret` header, or the query).
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.setupIntents.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The setup intent (`seti_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `client_secret` | query | string | Without a service credential: the object's `client_secret` (prefer the `X-Peable-Client-Secret` header). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [SetupIntent](/reference/objects/setup-intent).
+
+```json
+{
+  "id": "seti_0193b8f2c1a87d3e9f4a",
+  "object": "setup_intent",
+  "livemode": false,
+  "status": "requires_payment_method",
+  "usage": "off_session",
+  "payment_method_types": [
+    "card"
+  ],
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": null,
+  "client_secret": "seti_0193b8f2c1a87d3e9f4a_secret_9a1b2c",
+  "next_action": null,
+  "last_setup_error": null,
+  "cancellation_reason": null,
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Cancel a setup intent
+
+`POST /v1/setup_intents/{id}/cancel`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.setupIntents.cancel()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The setup intent (`seti_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `cancellation_reason` | string | One of `abandoned`, `duplicate`, `requested_by_customer`. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [SetupIntent](/reference/objects/setup-intent).
+
+```json
+{
+  "id": "seti_0193b8f2c1a87d3e9f4a",
+  "object": "setup_intent",
+  "livemode": false,
+  "status": "requires_payment_method",
+  "usage": "off_session",
+  "payment_method_types": [
+    "card"
+  ],
+  "customer": "cus_0193b8f2c1a87d3e9f4a",
+  "payment_method": null,
+  "client_secret": "seti_0193b8f2c1a87d3e9f4a_secret_9a1b2c",
+  "next_action": null,
+  "last_setup_error": null,
+  "cancellation_reason": null,
+  "description": null,
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_method` → [PaymentMethod](/reference/objects/payment-method)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a setup intent's client action
+
+`POST /v1/setup_intents/{id}/client_action`
+
+The provider credential the payer's client confirms the SetupIntent with — read fresh, `Cache-Control: no-store`, never on the object. The merchant credential, or the payer's `client_secret` (`X-Peable-Client-Secret`). A succeeded or canceled setup intent answers 409.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.setupIntents.clientAction()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The setup intent (`seti_…`). |
+| `client_secret` | query | string | Without a service credential: the object's `client_secret` (prefer the `X-Peable-Client-Secret` header). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ClientAction](/reference/objects/client-action).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,32 @@
+---
+title: "ContributionCollection"
+description: "The payment_intent object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ContributionCollection
+
+Object type: `payment_intent`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"payment_intent"` |  |
+| `amount` | string |  |
+| `currency` | `"FAIR"` |  |
+| `status` | string |  |
+| `created` | integer |  |
+| `refund_capability` | `"unsupported_non_custodial"` |  |
+| `refunds` | array of object |  |
+| `refunds[].id` | string |  |
+| `refunds[].object` | `"refund"` |  |
+| `refunds[].amount` | string |  |
+| `refunds[].status` | string |  |
+| `refunds[].created` | integer |  |
+
+## Returned by
+
+- [`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}/collections`](/reference/contributions#list-the-payments-made-through-a-contribution-link) — List the payments made through a contribution link

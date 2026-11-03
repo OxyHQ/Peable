@@ -1,0 +1,46 @@
+---
+title: "ProductFeature"
+description: "The product_feature object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ProductFeature
+
+Object type: `product_feature`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"product_feature"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `product` | string | The product (`prod_…`) that grants it. |
+| `entitlement_feature` | [EntitlementFeature](/reference/objects/entitlement-feature) |  |
+
+## Example
+
+```json
+{
+  "id": "prodft_0193b8f2c1a87d3e9f50",
+  "object": "product_feature",
+  "livemode": false,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "entitlement_feature": {
+    "id": "feat_0193b8f2c1a87d3e9f4f",
+    "object": "entitlements.feature",
+    "livemode": false,
+    "lookup_key": "mention_plus",
+    "name": "Mention Plus",
+    "active": true,
+    "metadata": {},
+    "created": 1793750400
+  }
+}
+```
+
+## Returned by
+
+- [`POST /v1/products/{id}/features`](/reference/entitlements#attach-a-feature-to-a-product) — Attach a feature to a product
+- [`GET /v1/products/{id}/features`](/reference/entitlements#list-a-products-features) — List a product's features

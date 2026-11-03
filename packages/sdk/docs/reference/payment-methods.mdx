@@ -1,0 +1,161 @@
+---
+title: "Payment methods"
+description: "The Payment methods endpoints of the Peable API."
+order: 931
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Payment methods
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/payment_methods`](#list-a-customers-payment-methods) | List a customer's payment methods |
+| [`GET /v1/payment_methods/{id}`](#retrieve-a-payment-method) | Retrieve a payment method |
+| [`POST /v1/payment_methods/{id}`](#update-a-payment-method) | Update a payment method |
+| [`POST /v1/payment_methods/{id}/detach`](#detach-a-payment-method) | Detach a payment method |
+
+## List a customer's payment methods
+
+`GET /v1/payment_methods`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethods.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `customer` **required** | query | string | The customer (`cus_…`) whose methods to list. 1–255 characters. |
+| `type` | query | `"card"` |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [PaymentMethod](/reference/objects/payment-method) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [PaymentMethod](/reference/objects/payment-method) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a payment method
+
+`GET /v1/payment_methods/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.paymentMethods.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment method (`pm_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [PaymentMethod](/reference/objects/payment-method).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a payment method
+
+`POST /v1/payment_methods/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethods.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment method (`pm_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `billing_details` | object |  |
+| `billing_details[address]` | object |  |
+| `billing_details[address][line1]` | string | At most 500 characters. |
+| `billing_details[address][line2]` | string | At most 500 characters. |
+| `billing_details[address][city]` | string | At most 500 characters. |
+| `billing_details[address][state]` | string | At most 500 characters. |
+| `billing_details[address][postal_code]` | string | At most 40 characters. |
+| `billing_details[address][country]` | string | Matches `^[A-Z]{2}$`. |
+| `billing_details[email]` | string (email) | At most 512 characters. |
+| `billing_details[name]` | string | At most 500 characters. |
+| `billing_details[phone]` | string | At most 40 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [PaymentMethod](/reference/objects/payment-method).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Detach a payment method
+
+`POST /v1/payment_methods/{id}/detach`
+
+Permanently. A second detach answers the detached method.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.paymentMethods.detach()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The payment method (`pm_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [PaymentMethod](/reference/objects/payment-method).
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

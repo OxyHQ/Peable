@@ -1,0 +1,380 @@
+---
+title: "Prices"
+description: "The Prices endpoints of the Peable API."
+order: 933
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Prices
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/prices`](#create-a-price) | Create a price |
+| [`GET /v1/prices`](#list-prices) | List prices |
+| [`GET /v1/prices/{id}`](#retrieve-a-price) | Retrieve a price |
+| [`POST /v1/prices/{id}`](#update-a-price) | Update a price |
+| [`GET /v1/prices/search`](#search-prices) | Search prices |
+
+## Create a price
+
+`POST /v1/prices`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.prices.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `currency` **required** | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `unit_amount` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `billing_scheme` | string | Default `per_unit`. One of `per_unit`, `tiered`. |
+| `tiers` | array of object | At most 250 items. At least 1 item. |
+| `tiers[][up_to]` **required** | integer \| `"inf"` | A positive integer, ascending; the last tier is `'inf'`. At least 1. |
+| `tiers[][unit_amount]` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `tiers[][flat_amount]` | string | Base units of the currency, as an integer string (`"1999"` is 19.99 EUR). |
+| `tiers_mode` | string | One of `graduated`, `volume`. |
+| `transform_quantity` | object |  |
+| `transform_quantity[divide_by]` **required** | integer | Between 1 and 2147483647. |
+| `transform_quantity[round]` **required** | string | One of `up`, `down`. |
+| `recurring` | object | Present: a recurring price. Absent: one-time. |
+| `recurring[interval]` **required** | string | One of `day`, `week`, `month`, `year`. |
+| `recurring[interval_count]` | integer | Default 1. Between 1 and 2147483647. |
+| `recurring[usage_type]` | string | Default `licensed`. One of `licensed`, `metered`. |
+| `recurring[meter]` | string | Required with `usage_type: 'metered'`: the meter (`mtr_…`) it bills. 1–255 characters. |
+| `tax_behavior` | string | Default `unspecified`. One of `inclusive`, `exclusive`, `unspecified`. |
+| `product` **required** | string | 1–255 characters. |
+| `lookup_key` | string | 1–200 characters. |
+| `transfer_lookup_key` | boolean | Move `lookup_key` here from the price that holds it. |
+| `nickname` | string | 1–250 characters. |
+| `active` | boolean |  |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Price](/reference/objects/price).
+
+```json
+{
+  "id": "price_0193b8f2c1a87d3e9f4b",
+  "object": "price",
+  "livemode": false,
+  "active": true,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "unit_amount": "999",
+  "billing_scheme": "per_unit",
+  "tiers": null,
+  "tiers_mode": null,
+  "transform_quantity": null,
+  "type": "recurring",
+  "recurring": {
+    "interval": "month",
+    "interval_count": 1,
+    "usage_type": "licensed",
+    "meter": null
+  },
+  "tax_behavior": "inclusive",
+  "lookup_key": "plus_monthly",
+  "nickname": "Plus, monthly",
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List prices
+
+`GET /v1/prices`
+
+`lookup_keys` (at most 10) finds the current price of a plan by its stable name.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.prices.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `product` | query | string | 1–255 characters. |
+| `active` | query | boolean |  |
+| `type` | query | string | One of `one_time`, `recurring`. |
+| `currency` | query | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `lookup_keys[]` | query | array of string | At most 10. At most 10 items. At least 1 item. |
+| `recurring` | query | object |  |
+| `recurring[interval]` | query | string | One of `day`, `week`, `month`, `year`. |
+| `recurring[usage_type]` | query | string | One of `licensed`, `metered`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [Price](/reference/objects/price) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [Price](/reference/objects/price) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "price_0193b8f2c1a87d3e9f4b",
+      "object": "price",
+      "livemode": false,
+      "active": true,
+      "product": "prod_0193b8f2c1a87d3e9f4a",
+      "currency": "EUR",
+      "unit_amount": "999",
+      "billing_scheme": "per_unit",
+      "tiers": null,
+      "tiers_mode": null,
+      "transform_quantity": null,
+      "type": "recurring",
+      "recurring": {
+        "interval": "month",
+        "interval_count": 1,
+        "usage_type": "licensed",
+        "meter": null
+      },
+      "tax_behavior": "inclusive",
+      "lookup_key": "plus_monthly",
+      "nickname": "Plus, monthly",
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/prices"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a price
+
+`GET /v1/prices/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.prices.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The price (`price_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [Price](/reference/objects/price).
+
+```json
+{
+  "id": "price_0193b8f2c1a87d3e9f4b",
+  "object": "price",
+  "livemode": false,
+  "active": true,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "unit_amount": "999",
+  "billing_scheme": "per_unit",
+  "tiers": null,
+  "tiers_mode": null,
+  "transform_quantity": null,
+  "type": "recurring",
+  "recurring": {
+    "interval": "month",
+    "interval_count": 1,
+    "usage_type": "licensed",
+    "meter": null
+  },
+  "tax_behavior": "inclusive",
+  "lookup_key": "plus_monthly",
+  "nickname": "Plus, monthly",
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a price
+
+`POST /v1/prices/{id}`
+
+Only `active`, `nickname`, `metadata`, `lookup_key` and — while it is `unspecified` — `tax_behavior` change. To change an amount, create a new price and archive this one.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.prices.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The price (`price_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `active` | boolean |  |
+| `nickname` | string \| `""` | 1–250 characters. |
+| `lookup_key` | string \| `""` | 1–200 characters. |
+| `transfer_lookup_key` | boolean |  |
+| `tax_behavior` | string | Only while the price's is `unspecified`. One of `inclusive`, `exclusive`, `unspecified`. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [Price](/reference/objects/price).
+
+```json
+{
+  "id": "price_0193b8f2c1a87d3e9f4b",
+  "object": "price",
+  "livemode": false,
+  "active": true,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "unit_amount": "999",
+  "billing_scheme": "per_unit",
+  "tiers": null,
+  "tiers_mode": null,
+  "transform_quantity": null,
+  "type": "recurring",
+  "recurring": {
+    "interval": "month",
+    "interval_count": 1,
+    "usage_type": "licensed",
+    "meter": null
+  },
+  "tax_behavior": "inclusive",
+  "lookup_key": "plus_monthly",
+  "nickname": "Plus, monthly",
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Search prices
+
+`GET /v1/prices/search`
+
+Stripe's query language over `active`, `currency`, `product`, `type`, `lookup_key`, `created` and `metadata['key']`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.prices.search()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `query` **required** | query | string | Stripe's search query language: `email:"jenny@example.com"`, `amount>1000 AND currency:"EUR"`, `metadata['order_id']:'6735'`, `name~"shirt"`, `-status:"canceled"`, `customer:null`. 1–1000 characters. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `page` | query | string | The `next_page` of the previous page, with the SAME query. 1–512 characters. |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A search result (`object: "search_result"`) whose `data` holds [Price](/reference/objects/price) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"search_result"` |  |
+| `data` | array of [Price](/reference/objects/price) |  |
+| `has_more` | boolean |  |
+| `next_page` | string \| null | Pass as `page` for the next page; `null` on the last one. |
+| `url` | string | The path that was searched. |
+| `total_count` | integer | Present only when asked for with `expand[]=total_count`. |
+
+```json
+{
+  "object": "search_result",
+  "data": [
+    {
+      "id": "price_0193b8f2c1a87d3e9f4b",
+      "object": "price",
+      "livemode": false,
+      "active": true,
+      "product": "prod_0193b8f2c1a87d3e9f4a",
+      "currency": "EUR",
+      "unit_amount": "999",
+      "billing_scheme": "per_unit",
+      "tiers": null,
+      "tiers_mode": null,
+      "transform_quantity": null,
+      "type": "recurring",
+      "recurring": {
+        "interval": "month",
+        "interval_count": 1,
+        "usage_type": "licensed",
+        "meter": null
+      },
+      "tax_behavior": "inclusive",
+      "lookup_key": "plus_monthly",
+      "nickname": "Plus, monthly",
+      "metadata": {},
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "next_page": null,
+  "url": "/v1/prices/search"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,151 @@
+---
+title: "Contributions"
+description: "The Contributions endpoints of the Peable API."
+order: 911
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Contributions
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions`](#create-a-contribution-link) | Create a contribution link |
+| [`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions`](#list-an-organizations-contribution-links) | List an organization's contribution links |
+| [`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}`](#enable-or-disable-a-contribution-link) | Enable or disable a contribution link |
+| [`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}/collections`](#list-the-payments-made-through-a-contribution-link) | List the payments made through a contribution link |
+
+## Create a contribution link
+
+`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions`
+
+Requires a UUID `Idempotency-Key` header: the operation key, so a retry after a lost answer returns the same link.
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `organizationId` **required** | path | string | The Oxy organization. |
+| `applicationId` **required** | path | string | The organization's Oxy application whose merchant collects. |
+| `environment` **required** | query | string | Which of the application's merchants: its Test/Live toggle. One of `development`, `staging`, `production`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `purpose` **required** | string | 1–500 characters. |
+| `amount_mode` **required** | string | `fixed`: the link names the amount; `free`: the payer chooses it. |
+| `amount` | string | Matches `^[1-9][0-9]{0,15}$`. |
+| `currency` **required** | `"FAIR"` |  |
+| `expires_at` | integer \| null |  |
+
+**Response `201`**
+
+Returns [ContributionLink](/reference/objects/contribution-link).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List an organization's contribution links
+
+`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions`
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `organizationId` **required** | path | string | The Oxy organization. |
+| `applicationId` **required** | path | string | The organization's Oxy application whose merchant collects. |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `environment` **required** | query | string | Which of the application's merchants: its Test/Live toggle. One of `development`, `staging`, `production`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ContributionLink](/reference/objects/contribution-link) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ContributionLink](/reference/objects/contribution-link) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Enable or disable a contribution link
+
+`POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}`
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `organizationId` **required** | path | string | The Oxy organization. |
+| `applicationId` **required** | path | string | The organization's Oxy application whose merchant collects. |
+| `id` **required** | path | string | The contribution link (`link_…`). |
+| `environment` **required** | query | string | Which of the application's merchants: its Test/Live toggle. One of `development`, `staging`, `production`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `active` **required** | boolean |  |
+
+**Response `200`**
+
+Returns [ContributionLink](/reference/objects/contribution-link).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List the payments made through a contribution link
+
+`GET /v1/organizations/{organizationId}/applications/{applicationId}/contributions/{id}/collections`
+
+- **Authentication:** [Oxy user session](/reference#oxy-user-session)
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `organizationId` **required** | path | string | The Oxy organization. |
+| `applicationId` **required** | path | string | The organization's Oxy application whose merchant collects. |
+| `id` **required** | path | string | The contribution link (`link_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `environment` **required** | query | string | Which of the application's merchants: its Test/Live toggle. One of `development`, `staging`, `production`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ContributionCollection](/reference/objects/contribution-collection) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ContributionCollection](/reference/objects/contribution-collection) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

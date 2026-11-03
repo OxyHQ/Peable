@@ -1,0 +1,154 @@
+---
+title: "Application fees"
+description: "The Application fees endpoints of the Peable API."
+order: 903
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Application fees
+
+| Endpoint | Summary |
+| --- | --- |
+| [`GET /v1/application_fees`](#list-application-fees) | List application fees |
+| [`GET /v1/application_fees/{id}`](#retrieve-an-application-fee) | Retrieve an application fee |
+| [`GET /v1/application_fees/{id}/refunds`](#list-an-application-fees-refunds) | List an application fee's refunds |
+
+## List application fees
+
+`GET /v1/application_fees`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.applicationFees.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Only the fee taken on this payment (`pi_…`). 1–255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [ApplicationFee](/reference/objects/application-fee) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [ApplicationFee](/reference/objects/application-fee) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "fee_0193b8f32b7f4d0e8a15",
+      "object": "application_fee",
+      "livemode": false,
+      "account": "ca_0193b8f2c1a87d3e9f4a",
+      "amount": "60",
+      "amount_refunded": "0",
+      "currency": "EUR",
+      "charge": "ch_0193b8f2f7c94b1d8e02",
+      "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+      "refunded": false,
+      "refunds": {
+        "object": "list",
+        "data": [],
+        "has_more": false,
+        "url": "/v1/application_fees/fee_0193b8f32b7f4d0e8a15/refunds"
+      },
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/application_fees"
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve an application fee
+
+`GET /v1/application_fees/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.applicationFees.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The application fee (`fee_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [ApplicationFee](/reference/objects/application-fee).
+
+```json
+{
+  "id": "fee_0193b8f32b7f4d0e8a15",
+  "object": "application_fee",
+  "livemode": false,
+  "account": "ca_0193b8f2c1a87d3e9f4a",
+  "amount": "60",
+  "amount_refunded": "0",
+  "currency": "EUR",
+  "charge": "ch_0193b8f2f7c94b1d8e02",
+  "payment_intent": "pi_0193b8f2e8a14f6c9d31",
+  "refunded": false,
+  "refunds": {
+    "object": "list",
+    "data": [],
+    "has_more": false,
+    "url": "/v1/application_fees/fee_0193b8f32b7f4d0e8a15/refunds"
+  },
+  "created": 1793750400
+}
+```
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List an application fee's refunds
+
+`GET /v1/application_fees/{id}/refunds`
+
+A complete set (`has_more: false`): one refund per partial refund of the payment.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.applicationFees.listRefunds()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The application fee (`fee_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [FeeRefund](/reference/objects/fee-refund) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [FeeRefund](/reference/objects/fee-refund) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

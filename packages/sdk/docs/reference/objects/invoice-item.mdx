@@ -1,0 +1,59 @@
+---
+title: "InvoiceItem"
+description: "The invoiceitem object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# InvoiceItem
+
+Object type: `invoiceitem`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"invoiceitem"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `customer` | string \| [Customer](/reference/objects/customer) | `cus_…`, or the Customer with `expand[]=customer`. Expandable. |
+| `invoice` | string \| [Invoice](/reference/objects/invoice) \| null | The draft it is on (`in_…`, or the Invoice with `expand[]=invoice`); `null` while pending. Expandable. |
+| `subscription` | string \| [Subscription](/reference/objects/subscription) \| null | `sub_…`, or the Subscription with `expand[]=subscription`. Expandable. |
+| `subscription_item` | string \| null |  |
+| `price` | [Price](/reference/objects/price) \| null | The Price, embedded; `null` for a fixed amount. |
+| `quantity` | integer |  |
+| `unit_amount` | string \| null | Base units per unit; `null` for a proration (an amount for a period, not per unit). Matches `^(0\|[1-9][0-9]*)$`. |
+| `amount` | string | SIGNED (an engine-made proration credit is negative). Matches `^(0\|-?[1-9][0-9]*)$`. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `description` | string \| null |  |
+| `discountable` | boolean |  |
+| `period` | object |  |
+| `period.start` | integer | Unix seconds. |
+| `period.end` | integer | Unix seconds. |
+| `proration` | boolean |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `date` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `customer` → [Customer](/reference/objects/customer)
+- `invoice` → [DeletedInvoice](/reference/objects/deleted-invoice)
+- `subscription` → [Subscription](/reference/objects/subscription)
+
+## Returned by
+
+- [`POST /v1/invoiceitems`](/reference/invoice-items#create-an-invoice-item) — Create an invoice item
+- [`GET /v1/invoiceitems`](/reference/invoice-items#list-invoice-items) — List invoice items
+- [`GET /v1/invoiceitems/{id}`](/reference/invoice-items#retrieve-an-invoice-item) — Retrieve an invoice item
+- [`POST /v1/invoiceitems/{id}`](/reference/invoice-items#update-an-invoice-item) — Update an invoice item
+
+## Events
+
+- [`invoiceitem.created`](/reference/webhook-events#invoiceitemcreated)
+- [`invoiceitem.deleted`](/reference/webhook-events#invoiceitemdeleted)
+
+## Used in
+
+[Event](/reference/objects/event)

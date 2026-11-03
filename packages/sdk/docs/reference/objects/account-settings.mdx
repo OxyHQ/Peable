@@ -1,0 +1,25 @@
+---
+title: "AccountSettings"
+description: "The AccountSettings shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# AccountSettings
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `payouts` | object |  |
+| `payouts.schedule` | [AccountPayoutSchedule](/reference/objects/account-payout-schedule) \| null |  |
+| `payouts.statement_descriptor` | string \| null | What the merchant's bank statement shows for a payout. |
+| `payments` | object |  |
+| `payments.statement_descriptor` | string \| null | What a cardholder's statement shows — the merchant is the merchant of record. |
+| `branding` | object |  |
+| `branding.primary_color` | string \| null |  |
+| `branding.secondary_color` | string \| null |  |
+
+## Used in
+
+[Account](/reference/objects/account)

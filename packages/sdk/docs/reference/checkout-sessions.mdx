@@ -1,0 +1,756 @@
+---
+title: "Checkout Sessions"
+description: "The Checkout Sessions endpoints of the Peable API."
+order: 908
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Checkout Sessions
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/checkout_sessions`](#create-a-checkout-session) | Create a Checkout Session |
+| [`GET /v1/checkout_sessions`](#list-checkout-sessions) | List Checkout Sessions |
+| [`GET /v1/checkout_sessions/{id}`](#retrieve-a-checkout-session) | Retrieve a Checkout Session |
+| [`POST /v1/checkout_sessions/{id}`](#update-a-checkout-session) | Update a Checkout Session |
+| [`POST /v1/checkout_sessions/{id}/expire`](#expire-a-checkout-session) | Expire a Checkout Session |
+| [`GET /v1/checkout_sessions/{id}/line_items`](#list-a-checkout-sessions-line-items) | List a Checkout Session's line items |
+| [`GET /v1/checkout_sessions/{id}/public`](#retrieve-a-checkout-session-as-its-payer) | Retrieve a Checkout Session as its payer |
+| [`POST /v1/checkout_sessions/{id}/public`](#update-a-checkout-session-as-its-payer) | Update a Checkout Session as its payer |
+| [`POST /v1/checkout_sessions/{id}/public/confirm`](#confirm-a-checkout-session-as-its-payer) | Confirm a Checkout Session as its payer |
+
+## Create a Checkout Session
+
+`POST /v1/checkout_sessions`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.checkout.sessions.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `mode` | string | Default `payment`. One of `payment`, `setup`, `subscription`. |
+| `line_items` | array of object | Required in `payment` and `subscription` mode; refused in `setup` mode. At most 20 items. At least 1 item. |
+| `line_items[][price]` | string | 1–255 characters. |
+| `line_items[][price_data]` | object |  |
+| `line_items[][price_data][currency]` **required** | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `line_items[][price_data][unit_amount]` **required** | string | Matches `^(0\|[1-9][0-9]*)$`. |
+| `line_items[][price_data][product]` | string | 1–255 characters. |
+| `line_items[][price_data][product_data]` | object |  |
+| `line_items[][price_data][product_data][name]` **required** | string | 1–250 characters. |
+| `line_items[][price_data][product_data][description]` | string | 1–40000 characters. |
+| `line_items[][price_data][product_data][images]` | array of string | At most 8 items. |
+| `line_items[][price_data][product_data][tax_code]` | string | A Peable Tax code (`GET /v1/tax/codes`). Matches `^txcd_[0-9]{8}$`. |
+| `line_items[][price_data][recurring]` | object |  |
+| `line_items[][price_data][recurring][interval]` **required** | string | One of `day`, `week`, `month`, `year`. |
+| `line_items[][price_data][recurring][interval_count]` | integer | Between 1 and 1095. |
+| `line_items[][price_data][tax_behavior]` | string | One of `inclusive`, `exclusive`, `unspecified`. |
+| `line_items[][quantity]` **required** | integer | Between 1 and 999999. |
+| `line_items[][adjustable_quantity]` | object |  |
+| `line_items[][adjustable_quantity][enabled]` **required** | boolean |  |
+| `line_items[][adjustable_quantity][minimum]` | integer | Between 0 and 999999. |
+| `line_items[][adjustable_quantity][maximum]` | integer | Between 1 and 999999. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `discounts` | array of object | At most one; mutually exclusive with `allow_promotion_codes`. At most 1 items. |
+| `allow_promotion_codes` | boolean |  |
+| `customer` | string | `cus_…`; mutually exclusive with `customer_email`. 1–255 characters. |
+| `customer_email` | string (email) | At most 254 characters. |
+| `customer_creation` | string | Default `if_required` (a customer is created only when something needs one). One of `always`, `if_required`. |
+| `billing_address_collection` | string | One of `auto`, `required`. |
+| `shipping_address_collection` | object |  |
+| `shipping_address_collection[allowed_countries]` **required** | array of string | At most 250 items. At least 1 item. |
+| `phone_number_collection` | object |  |
+| `phone_number_collection[enabled]` **required** | boolean |  |
+| `tax_id_collection` | object |  |
+| `tax_id_collection[enabled]` **required** | boolean |  |
+| `consent_collection` | object |  |
+| `consent_collection[terms_of_service]` | string | One of `none`, `required`. |
+| `custom_fields` | array of object | At most 3 items. |
+| `custom_fields[][key]` **required** | string | Matches `^[A-Za-z0-9_]{1,200}$`. |
+| `custom_fields[][label]` **required** | object |  |
+| `custom_fields[][label][type]` **required** | `"custom"` |  |
+| `custom_fields[][label][custom]` **required** | string | 1–50 characters. |
+| `custom_fields[][type]` **required** | string | One of `text`, `numeric`, `dropdown`. |
+| `custom_fields[][optional]` | boolean |  |
+| `custom_fields[][dropdown]` | object |  |
+| `custom_fields[][dropdown][options]` **required** | array of object | At most 200 items. At least 1 item. |
+| `custom_fields[][dropdown][options][][label]` **required** | string | 1–100 characters. |
+| `custom_fields[][dropdown][options][][value]` **required** | string | Matches `^[A-Za-z0-9]{1,100}$`. |
+| `custom_fields[][text]` | object |  |
+| `custom_fields[][text][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][text][maximum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric]` | object |  |
+| `custom_fields[][numeric][minimum_length]` | integer | Between 1 and 255. |
+| `custom_fields[][numeric][maximum_length]` | integer | Between 1 and 255. |
+| `automatic_tax` | object |  |
+| `automatic_tax[enabled]` **required** | boolean |  |
+| `payment_method_types` | array of string | `['card']` or `['faircoin']` — the rail the line items' currency allows. At most 1 items. At least 1 item. |
+| `locale` | string | `auto` follows the payer's browser. One of `en`, `es`, `fr`, `de`, `it`, `pt`, `auto`. |
+| `ui_mode` | string | One of `hosted`, `embedded`. |
+| `success_url` | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
+| `cancel_url` | string | `https` (or `http://localhost`); may carry `{CHECKOUT_SESSION_ID}`. At most 2048 characters. |
+| `expires_at` | integer | Unix seconds, 30 minutes to 24 hours from now. Default 24 hours. |
+| `client_reference_id` | string | 1–200 characters. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `submit_type` | string | One of `auto`, `pay`, `book`, `donate`. |
+| `connected_account` | string | Pay this seller (`ca_…`) rather than the merchant (ADR 0012); FairCoin only. 1–255 characters. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `201`**
+
+Returns [CheckoutSession](/reference/objects/checkout-session).
+
+```json
+{
+  "id": "cs_0193b8f2c1a87d3e9f4a",
+  "object": "checkout_session",
+  "livemode": false,
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "ui_mode": "hosted",
+  "locale": null,
+  "submit_type": "auto",
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "payment_method_types": [
+    "card"
+  ],
+  "amount_subtotal": "1999",
+  "amount_total": "1999",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_tax": "0",
+    "amount_shipping": "0"
+  },
+  "discounts": [],
+  "allow_promotion_codes": false,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null
+  },
+  "customer": null,
+  "customer_email": "jenny@example.com",
+  "customer_creation": "if_required",
+  "customer_details": null,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "shipping_details": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "consent": null,
+  "payment_intent": null,
+  "setup_intent": null,
+  "connected_account": null,
+  "payment_link": null,
+  "client_reference_id": null,
+  "metadata": {},
+  "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+  "cancel_url": null,
+  "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+  "client_secret": null,
+  "expires_at": 1793836800,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List Checkout Sessions
+
+`GET /v1/checkout_sessions`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.checkout.sessions.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `payment_intent` | query | string | Sessions that created this payment. 1–255 characters. |
+| `payment_link` | query | string | Sessions started from this link. 1–255 characters. |
+| `customer` | query | string | 1–255 characters. |
+| `status` | query | string | One of `open`, `complete`, `expired`. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CheckoutSession](/reference/objects/checkout-session) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CheckoutSession](/reference/objects/checkout-session) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "cs_0193b8f2c1a87d3e9f4a",
+      "object": "checkout_session",
+      "livemode": false,
+      "mode": "payment",
+      "status": "open",
+      "payment_status": "unpaid",
+      "ui_mode": "hosted",
+      "locale": null,
+      "submit_type": "auto",
+      "currency": "EUR",
+      "rail": "card",
+      "network": null,
+      "payment_method_types": [
+        "card"
+      ],
+      "amount_subtotal": "1999",
+      "amount_total": "1999",
+      "total_details": {
+        "amount_discount": "0",
+        "amount_tax": "0",
+        "amount_shipping": "0"
+      },
+      "discounts": [],
+      "allow_promotion_codes": false,
+      "automatic_tax": {
+        "enabled": false,
+        "status": null
+      },
+      "customer": null,
+      "customer_email": "jenny@example.com",
+      "customer_creation": "if_required",
+      "customer_details": null,
+      "billing_address_collection": "auto",
+      "shipping_address_collection": null,
+      "shipping_details": null,
+      "phone_number_collection": {
+        "enabled": false
+      },
+      "tax_id_collection": {
+        "enabled": false
+      },
+      "custom_fields": [],
+      "consent_collection": null,
+      "consent": null,
+      "payment_intent": null,
+      "setup_intent": null,
+      "connected_account": null,
+      "payment_link": null,
+      "client_reference_id": null,
+      "metadata": {},
+      "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+      "cancel_url": null,
+      "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+      "client_secret": null,
+      "expires_at": 1793836800,
+      "created": 1793750400
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/checkout_sessions"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.customer` → [Customer](/reference/objects/customer)
+- `data.payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `data.setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `data.connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a Checkout Session
+
+`GET /v1/checkout_sessions/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.checkout.sessions.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [CheckoutSession](/reference/objects/checkout-session).
+
+```json
+{
+  "id": "cs_0193b8f2c1a87d3e9f4a",
+  "object": "checkout_session",
+  "livemode": false,
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "ui_mode": "hosted",
+  "locale": null,
+  "submit_type": "auto",
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "payment_method_types": [
+    "card"
+  ],
+  "amount_subtotal": "1999",
+  "amount_total": "1999",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_tax": "0",
+    "amount_shipping": "0"
+  },
+  "discounts": [],
+  "allow_promotion_codes": false,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null
+  },
+  "customer": null,
+  "customer_email": "jenny@example.com",
+  "customer_creation": "if_required",
+  "customer_details": null,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "shipping_details": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "consent": null,
+  "payment_intent": null,
+  "setup_intent": null,
+  "connected_account": null,
+  "payment_link": null,
+  "client_reference_id": null,
+  "metadata": {},
+  "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+  "cancel_url": null,
+  "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+  "client_secret": null,
+  "expires_at": 1793836800,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a Checkout Session
+
+`POST /v1/checkout_sessions/{id}`
+
+`metadata` only, as a patch.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.checkout.sessions.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [CheckoutSession](/reference/objects/checkout-session).
+
+```json
+{
+  "id": "cs_0193b8f2c1a87d3e9f4a",
+  "object": "checkout_session",
+  "livemode": false,
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "ui_mode": "hosted",
+  "locale": null,
+  "submit_type": "auto",
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "payment_method_types": [
+    "card"
+  ],
+  "amount_subtotal": "1999",
+  "amount_total": "1999",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_tax": "0",
+    "amount_shipping": "0"
+  },
+  "discounts": [],
+  "allow_promotion_codes": false,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null
+  },
+  "customer": null,
+  "customer_email": "jenny@example.com",
+  "customer_creation": "if_required",
+  "customer_details": null,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "shipping_details": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "consent": null,
+  "payment_intent": null,
+  "setup_intent": null,
+  "connected_account": null,
+  "payment_link": null,
+  "client_reference_id": null,
+  "metadata": {},
+  "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+  "cancel_url": null,
+  "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+  "client_secret": null,
+  "expires_at": 1793836800,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Expire a Checkout Session
+
+`POST /v1/checkout_sessions/{id}/expire`
+
+An `open` session the payer has not confirmed; it can no longer be completed.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.checkout.sessions.expire()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `expand` | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+
+**Response `200`**
+
+Returns [CheckoutSession](/reference/objects/checkout-session).
+
+```json
+{
+  "id": "cs_0193b8f2c1a87d3e9f4a",
+  "object": "checkout_session",
+  "livemode": false,
+  "mode": "payment",
+  "status": "open",
+  "payment_status": "unpaid",
+  "ui_mode": "hosted",
+  "locale": null,
+  "submit_type": "auto",
+  "currency": "EUR",
+  "rail": "card",
+  "network": null,
+  "payment_method_types": [
+    "card"
+  ],
+  "amount_subtotal": "1999",
+  "amount_total": "1999",
+  "total_details": {
+    "amount_discount": "0",
+    "amount_tax": "0",
+    "amount_shipping": "0"
+  },
+  "discounts": [],
+  "allow_promotion_codes": false,
+  "automatic_tax": {
+    "enabled": false,
+    "status": null
+  },
+  "customer": null,
+  "customer_email": "jenny@example.com",
+  "customer_creation": "if_required",
+  "customer_details": null,
+  "billing_address_collection": "auto",
+  "shipping_address_collection": null,
+  "shipping_details": null,
+  "phone_number_collection": {
+    "enabled": false
+  },
+  "tax_id_collection": {
+    "enabled": false
+  },
+  "custom_fields": [],
+  "consent_collection": null,
+  "consent": null,
+  "payment_intent": null,
+  "setup_intent": null,
+  "connected_account": null,
+  "payment_link": null,
+  "client_reference_id": null,
+  "metadata": {},
+  "success_url": "https://example.com/thanks?session={CHECKOUT_SESSION_ID}",
+  "cancel_url": null,
+  "url": "https://checkout.peable.to/c/cs_0193b8f2c1a87d3e9f4a#cs=cs_0193b8f2c1a87d3e9f4a_secret_x",
+  "client_secret": null,
+  "expires_at": 1793836800,
+  "created": 1793750400
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `customer` → [Customer](/reference/objects/customer)
+- `payment_intent` → [ContributionCollection](/reference/objects/contribution-collection)
+- `setup_intent` → [SetupIntent](/reference/objects/setup-intent)
+- `connected_account` → [ConnectedAccount](/reference/objects/connected-account)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List a Checkout Session's line items
+
+`GET /v1/checkout_sessions/{id}/line_items`
+
+In their order (at most twenty); the cursor is a line's own `li_…`.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.checkout.sessions.listLineItems()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [CheckoutLineItem](/reference/objects/checkout-line-item) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [CheckoutLineItem](/reference/objects/checkout-line-item) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+```json
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "li_0193b8f2c1a87d3e9f4a",
+      "object": "item",
+      "description": "Pro plan",
+      "price": "price_0193b8f2c1a87d3e9f4b",
+      "product": "prod_0193b8f2c1a87d3e9f4c",
+      "images": [],
+      "quantity": 1,
+      "adjustable_quantity": null,
+      "currency": "EUR",
+      "unit_amount": "1999",
+      "amount_subtotal": "1999",
+      "amount_discount": "0",
+      "amount_tax": "0",
+      "amount_total": "1999"
+    }
+  ],
+  "has_more": false,
+  "url": "/v1/checkout_sessions/{id}/line_items"
+}
+```
+
+**Expandable** with `expand[]` (dot paths chain into an expanded object's own fields, at most four levels):
+
+- `data.price` → [Price](/reference/objects/price)
+- `data.product` → [DeletedProduct](/reference/objects/deleted-product)
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a Checkout Session as its payer
+
+`GET /v1/checkout_sessions/{id}/public`
+
+Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [CheckoutSessionPublic](/reference/objects/checkout-session-public).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a Checkout Session as its payer
+
+`POST /v1/checkout_sessions/{id}/public`
+
+Quantities, promotion code, the payer's details. Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `line_items` | array of object | Adjust a line's quantity, within its `adjustable_quantity` bounds. At most 20 items. |
+| `line_items[][id]` **required** | string | 1–255 characters. |
+| `line_items[][quantity]` **required** | integer | Between 0 and 999999. |
+| `promotion_code` | `""` \| string | A code to redeem (`allow_promotion_codes`), or `""` to remove the one applied. 1–64 characters. |
+| `customer_details` | object |  |
+| `customer_details[email]` | string (email) | At most 254 characters. |
+| `customer_details[name]` | string | 1–200 characters. |
+| `customer_details[phone]` | string | Matches `^\+?[0-9 ()-]{5,25}$`. |
+| `customer_details[address]` | object |  |
+| `customer_details[address][line1]` | string | 1–200 characters. |
+| `customer_details[address][line2]` | string | 1–200 characters. |
+| `customer_details[address][city]` | string | 1–200 characters. |
+| `customer_details[address][state]` | string | 1–100 characters. |
+| `customer_details[address][postal_code]` | string | 1–20 characters. |
+| `customer_details[address][country]` | string | Matches `^[A-Z]{2}$`. |
+| `customer_details[tax_ids]` | array of object | At most 1 items. |
+| `customer_details[tax_ids][][type]` **required** | string | One of `eu_vat`, `gb_vat`, `ch_vat`, `no_vat`, `us_ein`, `ca_bn`. |
+| `customer_details[tax_ids][][value]` **required** | string | Matches `^[A-Za-z0-9 .-]{2,30}$`. |
+| `shipping_details` | object \| null |  |
+| `shipping_details[name]` **required** | string | 1–200 characters. |
+| `shipping_details[address]` **required** | object |  |
+| `shipping_details[address][line1]` | string | 1–200 characters. |
+| `shipping_details[address][line2]` | string | 1–200 characters. |
+| `shipping_details[address][city]` | string | 1–200 characters. |
+| `shipping_details[address][state]` | string | 1–100 characters. |
+| `shipping_details[address][postal_code]` | string | 1–20 characters. |
+| `shipping_details[address][country]` | string | Matches `^[A-Z]{2}$`. |
+| `custom_fields` | array of object | By `key`: the payer's value for each custom field. At most 3 items. |
+| `custom_fields[][key]` **required** | string | 1–200 characters. |
+| `custom_fields[][value]` **required** | string | At most 255 characters. |
+| `consent` | object |  |
+| `consent[terms_of_service]` | `"accepted"` |  |
+
+**Response `200`**
+
+Returns [CheckoutSessionPublic](/reference/objects/checkout-session-public).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Confirm a Checkout Session as its payer
+
+`POST /v1/checkout_sessions/{id}/public/confirm`
+
+Locks the order and creates its payment (or setup): the answer carries `payment_intent` / `setup_intent`. Resolving is not completion — `complete` is only ever what the gateway says. Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.
+
+- **Authentication:** None. A payer-facing route, authorised by the unguessable id or client secret it is called with.
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The Checkout Session (`cs_…`). |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+
+
+**Response `200`**
+
+Returns [CheckoutSessionPublic](/reference/objects/checkout-session-public).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

@@ -1,0 +1,19 @@
+---
+title: "PortalPaymentMethodUpdate"
+description: "The PortalPaymentMethodUpdate shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# PortalPaymentMethodUpdate
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `setup_intent` | string | The SetupIntent (`seti_…`) to confirm. |
+| `client_secret` | string | Its payer credential. |
+
+## Returned by
+
+- [`POST /v1/billing_portal/public/{token}/payment_method_update`](/reference/hosted-portal#begin-a-card-update-from-the-portal) — Begin a card update from the portal

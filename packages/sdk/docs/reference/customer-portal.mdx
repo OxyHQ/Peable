@@ -1,0 +1,215 @@
+---
+title: "Customer portal"
+description: "The Customer portal endpoints of the Peable API."
+order: 915
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Customer portal
+
+| Endpoint | Summary |
+| --- | --- |
+| [`POST /v1/billing_portal/configurations`](#create-a-portal-configuration) | Create a portal configuration |
+| [`GET /v1/billing_portal/configurations`](#list-portal-configurations) | List portal configurations |
+| [`GET /v1/billing_portal/configurations/{id}`](#retrieve-a-portal-configuration) | Retrieve a portal configuration |
+| [`POST /v1/billing_portal/configurations/{id}`](#update-a-portal-configuration) | Update a portal configuration |
+| [`POST /v1/billing_portal/sessions`](#create-a-portal-session) | Create a portal session |
+
+## Create a portal configuration
+
+`POST /v1/billing_portal/configurations`
+
+Features not named take the safe defaults. The merchant's first configuration becomes the default.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billingPortal.configurations.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `business_profile` | object |  |
+| `business_profile[headline]` | string | 1–60 characters. |
+| `business_profile[privacy_policy_url]` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+| `business_profile[terms_of_service_url]` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+| `default_return_url` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+| `features` **required** | object |  |
+| `features[customer_update]` | object |  |
+| `features[customer_update][enabled]` | boolean |  |
+| `features[customer_update][allowed_updates]` | array of string | At most 4 items. |
+| `features[invoice_history]` | object |  |
+| `features[invoice_history][enabled]` **required** | boolean |  |
+| `features[payment_method_update]` | object |  |
+| `features[payment_method_update][enabled]` **required** | boolean |  |
+| `features[subscription_cancel]` | object |  |
+| `features[subscription_cancel][enabled]` | boolean |  |
+| `features[subscription_cancel][mode]` | string | One of `at_period_end`, `immediately`. |
+| `features[subscription_cancel][proration_behavior]` | string | One of `create_prorations`, `none`. |
+| `features[subscription_update]` | object |  |
+| `features[subscription_update][enabled]` | boolean |  |
+| `features[subscription_update][default_allowed_updates]` | array of string | At most 2 items. |
+| `features[subscription_update][proration_behavior]` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `features[subscription_update][products]` | array of object | At most 10 items. |
+| `features[subscription_update][products][][product]` **required** | string | 1–255 characters. |
+| `features[subscription_update][products][][prices]` **required** | array of string | At most 10 items. At least 1 item. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [BillingPortalConfiguration](/reference/objects/billing-portal-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## List portal configurations
+
+`GET /v1/billing_portal/configurations`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.billingPortal.configurations.list()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `limit` | query | integer | Between 1 and 100. Default `10`. |
+| `starting_after` | query | string | The id of the LAST object of the previous page: the next page is older. 1–255 characters. |
+| `ending_before` | query | string | The id of the FIRST object of the current page: the page returned is newer. 1–255 characters. |
+| `created` | query | integer \| object | Unix seconds: exactly one second, or a range with `gt`, `gte`, `lt`, `lte`. |
+| `created[gt]` | query | integer |  |
+| `created[gte]` | query | integer |  |
+| `created[lt]` | query | integer |  |
+| `created[lte]` | query | integer |  |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `active` | query | boolean |  |
+| `is_default` | query | boolean |  |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+A list (`object: "list"`) whose `data` holds [BillingPortalConfiguration](/reference/objects/billing-portal-configuration) objects, newest first.
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `object` | `"list"` |  |
+| `data` | array of [BillingPortalConfiguration](/reference/objects/billing-portal-configuration) |  |
+| `has_more` | boolean | Whether another page exists in the direction this one was read. |
+| `url` | string | The path that was listed. |
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Retrieve a portal configuration
+
+`GET /v1/billing_portal/configurations/{id}`
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:read`
+- **SDK:** `peable.billingPortal.configurations.retrieve()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The portal configuration (`bpc_…`). |
+| `expand[]` | query | array of string | Dot paths of references to replace with the objects they name (at most four levels; `data.`-prefixed on a list). At most 20 items. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Response `200`**
+
+Returns [BillingPortalConfiguration](/reference/objects/billing-portal-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Update a portal configuration
+
+`POST /v1/billing_portal/configurations/{id}`
+
+Each named feature field replaces that field; the others are kept.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billingPortal.configurations.update()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `id` **required** | path | string | The portal configuration (`bpc_…`). |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `active` | boolean | The default configuration cannot be deactivated. |
+| `business_profile` | object |  |
+| `business_profile[headline]` | string | 1–60 characters. |
+| `business_profile[privacy_policy_url]` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+| `business_profile[terms_of_service_url]` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+| `default_return_url` | string \| `""` | At most 2048 characters. Matches `^https?:\/\/`. |
+| `features` | object |  |
+| `features[customer_update]` | object |  |
+| `features[customer_update][enabled]` | boolean |  |
+| `features[customer_update][allowed_updates]` | array of string | At most 4 items. |
+| `features[invoice_history]` | object |  |
+| `features[invoice_history][enabled]` **required** | boolean |  |
+| `features[payment_method_update]` | object |  |
+| `features[payment_method_update][enabled]` **required** | boolean |  |
+| `features[subscription_cancel]` | object |  |
+| `features[subscription_cancel][enabled]` | boolean |  |
+| `features[subscription_cancel][mode]` | string | One of `at_period_end`, `immediately`. |
+| `features[subscription_cancel][proration_behavior]` | string | One of `create_prorations`, `none`. |
+| `features[subscription_update]` | object |  |
+| `features[subscription_update][enabled]` | boolean |  |
+| `features[subscription_update][default_allowed_updates]` | array of string | At most 2 items. |
+| `features[subscription_update][proration_behavior]` | string | One of `create_prorations`, `none`, `always_invoice`. |
+| `features[subscription_update][products]` | array of object | At most 10 items. |
+| `features[subscription_update][products][][product]` **required** | string | 1–255 characters. |
+| `features[subscription_update][products][][prices]` **required** | array of string | At most 10 items. At least 1 item. |
+| `metadata` | map of string | At most 50 keys; keys ≤ 40 characters, values ≤ 500. |
+
+**Response `200`**
+
+Returns [BillingPortalConfiguration](/reference/objects/billing-portal-configuration).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).
+
+## Create a portal session
+
+`POST /v1/billing_portal/sessions`
+
+A one-hour URL of the Orbit-hosted portal for one customer. The URL is a bearer credential: hand it to that customer only, right away.
+
+- **Authentication:** [Oxy service token (EdDSA JWT)](/reference#oxy-service-token-eddsa-jwt)
+- **Scope:** `payments:write`
+- **SDK:** `peable.billingPortal.sessions.create()`
+
+**Parameters**
+
+| Name | In | Type | Description |
+| --- | --- | --- | --- |
+| `Idempotency-Key` | header | string | Makes a retry safe: the same key with the same request answers the stored response for 24 hours (ADR 0014 D3). The SDK sends one on every POST. At most 255 characters. |
+| `Peable-Version` | header | string | The wire date the caller was written against. Only `2026-11-03` exists. |
+
+**Request body** (`application/json`)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `customer` **required** | string | 1–255 characters. |
+| `configuration` | string | Default: the merchant's default configuration (created on first use). 1–255 characters. |
+| `return_url` | string | At most 2048 characters. Matches `^https?:\/\/`. |
+
+**Response `200`**
+
+Returns [BillingPortalSession](/reference/objects/billing-portal-session).
+
+Errors answer the error envelope with the HTTP status and `error.type` of the failure ([error codes](/errors)).

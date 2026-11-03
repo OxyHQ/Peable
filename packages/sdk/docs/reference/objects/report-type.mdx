@@ -1,0 +1,59 @@
+---
+title: "ReportType"
+description: "The reporting.report_type object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# ReportType
+
+Object type: `reporting.report_type`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | `payments.itemized.1`, …; the trailing number is the layout version. One of `payments.itemized.1`, `balance.summary.1`, `balance_transactions.itemized.1`, `payouts.itemized.1`, `refunds.itemized.1`, `disputes.itemized.1`. |
+| `object` | `"reporting.report_type"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `name` | string |  |
+| `version` | integer | The column layout's version — the trailing number of the id. At least -9007199254740991. |
+| `columns` | array of string | Every column `parameters.columns` may name, in the order they are written. |
+| `default_columns` | array of string |  |
+| `data_available_start` | integer | The earliest `interval_start` with data. |
+| `data_available_end` | integer | The latest `interval_end` a run may ask for: now — the data is live. |
+| `updated` | integer | When the layout last changed. |
+
+## Example
+
+```json
+{
+  "id": "balance.summary.1",
+  "object": "reporting.report_type",
+  "livemode": false,
+  "name": "Balance summary",
+  "version": 1,
+  "columns": [
+    "category",
+    "description",
+    "currency",
+    "net_amount",
+    "transaction_count",
+    "net_amount_decimal"
+  ],
+  "default_columns": [
+    "category",
+    "description",
+    "currency",
+    "net_amount"
+  ],
+  "data_available_start": 1790000000,
+  "data_available_end": 1793750400,
+  "updated": 1793664000
+}
+```
+
+## Returned by
+
+- [`GET /v1/reporting/report_types`](/reference/reporting#list-report-types) — List report types
+- [`GET /v1/reporting/report_types/{id}`](/reference/reporting#retrieve-a-report-type) — Retrieve a report type

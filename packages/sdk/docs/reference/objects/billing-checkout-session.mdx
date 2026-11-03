@@ -1,0 +1,21 @@
+---
+title: "BillingCheckoutSession"
+description: "The BillingCheckoutSession shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# BillingCheckoutSession
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `url` | string |  |
+| `expires_at` | integer | At least -9007199254740991. |
+
+## Returned by
+
+- [`POST /v1/billing/checkout_sessions`](/reference/recurring-billing#create-a-subscription-checkout) — Create a subscription checkout
+- [`POST /v1/billing/subscriptions/{id}/renew`](/reference/recurring-billing#renew-a-payer-initiated-subscription) — Renew a payer-initiated subscription

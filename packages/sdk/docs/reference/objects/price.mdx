@@ -1,0 +1,88 @@
+---
+title: "Price"
+description: "The price object: its attributes, expandable fields and an example."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# Price
+
+How much a product costs, in one currency, once or per interval. Immutable once created except for `active`, `nickname`, `metadata`, `lookup_key` and — while `unspecified` — `tax_behavior`.
+
+Object type: `price`.
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string |  |
+| `object` | `"price"` |  |
+| `livemode` | boolean | `true` in live mode, `false` in test mode. |
+| `active` | boolean |  |
+| `product` | string \| [Product](/reference/objects/product) | The product it prices: `prod_…`, or the Product with `expand[]=product`. Expandable. |
+| `currency` | string | Uppercase ISO 4217 code, or `FAIR`. One of `FAIR`, `EUR`, `USD`, `GBP`, `CHF`, `SEK`, `NOK`, `DKK`, `PLN`, `CZK`, `CAD`, `AUD`, `JPY`. |
+| `unit_amount` | string \| null | Base units per unit; `null` on a tiered price. Matches `^(0\|[1-9][0-9]*)$`. |
+| `billing_scheme` | string | One of `per_unit`, `tiered`. |
+| `tiers` | array of [PriceTier](/reference/objects/price-tier) \| null | `null` unless `billing_scheme` is `tiered`. |
+| `tiers_mode` | string \| null | One of `graduated`, `volume`. |
+| `transform_quantity` | [PriceTransformQuantity](/reference/objects/price-transform-quantity) \| null |  |
+| `type` | string | One of `one_time`, `recurring`. |
+| `recurring` | [PriceRecurring](/reference/objects/price-recurring) \| null | `null` exactly when `type` is `one_time`. |
+| `tax_behavior` | string | Whether the price includes tax (Peable Tax). `unspecified` defers to the merchant default; once `inclusive` or `exclusive` it never changes. |
+| `lookup_key` | string \| null | The merchant's own stable name for this price, unique among its prices (per mode): retrieve the current price of a plan with `lookup_keys[]`. |
+| `nickname` | string \| null |  |
+| `metadata` | map of string | Your own key/value pairs: at most 50 keys, keys ≤ 40 characters, values ≤ 500. |
+| `created` | integer | Unix seconds. |
+
+## Expandable fields
+
+Each is an id unless you ask for the object with `expand[]`; expansion resolves inside your own account.
+
+- `product` → [DeletedProduct](/reference/objects/deleted-product)
+
+## Example
+
+```json
+{
+  "id": "price_0193b8f2c1a87d3e9f4b",
+  "object": "price",
+  "livemode": false,
+  "active": true,
+  "product": "prod_0193b8f2c1a87d3e9f4a",
+  "currency": "EUR",
+  "unit_amount": "999",
+  "billing_scheme": "per_unit",
+  "tiers": null,
+  "tiers_mode": null,
+  "transform_quantity": null,
+  "type": "recurring",
+  "recurring": {
+    "interval": "month",
+    "interval_count": 1,
+    "usage_type": "licensed",
+    "meter": null
+  },
+  "tax_behavior": "inclusive",
+  "lookup_key": "plus_monthly",
+  "nickname": "Plus, monthly",
+  "metadata": {},
+  "created": 1793750400
+}
+```
+
+## Returned by
+
+- [`POST /v1/prices`](/reference/prices#create-a-price) — Create a price
+- [`GET /v1/prices`](/reference/prices#list-prices) — List prices
+- [`GET /v1/prices/{id}`](/reference/prices#retrieve-a-price) — Retrieve a price
+- [`POST /v1/prices/{id}`](/reference/prices#update-a-price) — Update a price
+- [`GET /v1/prices/search`](/reference/prices#search-prices) — Search prices
+
+## Events
+
+- [`price.created`](/reference/webhook-events#pricecreated)
+- [`price.updated`](/reference/webhook-events#priceupdated)
+
+## Used in
+
+[CheckoutLineItem](/reference/objects/checkout-line-item) · [Event](/reference/objects/event) · [InvoiceItem](/reference/objects/invoice-item) · [InvoiceLineItem](/reference/objects/invoice-line-item) · [Product](/reference/objects/product) · [SubscriptionItem](/reference/objects/subscription-item)

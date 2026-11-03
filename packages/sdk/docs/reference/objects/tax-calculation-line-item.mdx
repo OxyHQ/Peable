@@ -1,0 +1,25 @@
+---
+title: "TaxCalculationLineItem"
+description: "The TaxCalculationLineItem shape of the Peable API."
+order: 1400
+generated: "by bun run generate:api-docs from docs/openapi.json; do not edit"
+---
+
+# TaxCalculationLineItem
+
+## Attributes
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `reference` | string |  |
+| `quantity` | integer | At least -9007199254740991. |
+| `tax_code` | string |  |
+| `tax_behavior` | string | One of `inclusive`, `exclusive`. |
+| `amount` | integer | As given: includes tax when inclusive. At least -9007199254740991. |
+| `amount_tax` | integer | Minor units of `currency` (cents), as an integer. At least -9007199254740991. |
+| `amount_net` | integer | Excluding tax. At least -9007199254740991. |
+| `breakdown` | array of [TaxBreakdownEntry](/reference/objects/tax-breakdown-entry) |  |
+
+## Used in
+
+[TaxCalculation](/reference/objects/tax-calculation) · [TaxTransactionReversal](/reference/objects/tax-transaction-reversal)
