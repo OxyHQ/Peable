@@ -652,7 +652,6 @@ export const checkoutSessionRoutes = [
     auth: 'public',
     params: sessionId,
     response: checkoutSessionPublicSchema,
-    sdk: 'getCheckoutSession',
   }),
   defineRoute({
     operationId: 'updateCheckoutSessionPublic',
@@ -665,7 +664,6 @@ export const checkoutSessionRoutes = [
     params: sessionId,
     body: updateCheckoutSessionPublicParams,
     response: checkoutSessionPublicSchema,
-    sdk: 'updateCheckoutSession',
   }),
   defineRoute({
     operationId: 'confirmCheckoutSessionPublic',
@@ -678,7 +676,6 @@ export const checkoutSessionRoutes = [
     params: sessionId,
     body: confirmCheckoutSessionPublicParams,
     response: checkoutSessionPublicSchema,
-    sdk: 'confirmCheckoutSession',
   }),
   defineRoute({
     operationId: 'expireCheckoutSessionTestHelper',

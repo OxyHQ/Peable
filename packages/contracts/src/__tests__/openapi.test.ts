@@ -48,6 +48,12 @@ describe('the route contracts', () => {
     expect(undocumented).toEqual([]);
   });
 
+  test('`sdk` names a server-SDK method: every service route has one, no other route does', () => {
+    expect(
+      all.filter((r) => (r.auth === 'service') !== (r.sdk !== undefined)).map((r) => r.operationId),
+    ).toEqual([]);
+  });
+
   test('a body is only declared on a write', () => {
     expect(
       all.filter((r) => r.body !== undefined && r.method === 'get').map((r) => r.operationId),

@@ -176,7 +176,6 @@ export const contributionRoutes = [
     body: createContributionSchema,
     response: contributionLinkSchema,
     status: 201,
-    sdk: 'contributions.create',
   }),
   defineRoute({
     operationId: 'listContributions',
@@ -188,7 +187,6 @@ export const contributionRoutes = [
     params: scopeParams,
     query: contributionPageQuerySchema,
     response: contributionListSchema,
-    sdk: 'contributions.list',
   }),
   defineRoute({
     operationId: 'updateContribution',
@@ -201,7 +199,6 @@ export const contributionRoutes = [
     query: contributionScopeQuerySchema,
     body: contributionPatchSchema,
     response: contributionLinkSchema,
-    sdk: 'contributions.setActive',
   }),
   defineRoute({
     operationId: 'listContributionCollections',
@@ -213,6 +210,5 @@ export const contributionRoutes = [
     params: { ...scopeParams, id: 'The contribution link (`link_…`).' },
     query: contributionPageQuerySchema,
     response: contributionCollectionListSchema,
-    sdk: 'contributions.collections',
   }),
 ] as const;

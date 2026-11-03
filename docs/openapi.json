@@ -8305,7 +8305,6 @@
         "summary": "Retrieve a Checkout Session as its payer",
         "description": "Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.",
         "security": [],
-        "x-peable-sdk": "getCheckoutSession",
         "parameters": [
           {
             "in": "path",
@@ -8389,7 +8388,6 @@
         "summary": "Update a Checkout Session as its payer",
         "description": "Quantities, promotion code, the payer's details. Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.",
         "security": [],
-        "x-peable-sdk": "updateCheckoutSession",
         "parameters": [
           {
             "in": "path",
@@ -8703,7 +8701,6 @@
         "summary": "Confirm a Checkout Session as its payer",
         "description": "Locks the order and creates its payment (or setup): the answer carries `payment_intent` / `setup_intent`. Resolving is not completion — `complete` is only ever what the gateway says. Authorized by the session's `client_secret` (or, for a session wrapping a payment, that payment's) in the `X-Peable-Client-Secret` header — never a URL. Unauthenticated and rate-limited; the answer is `Cache-Control: no-store`.",
         "security": [],
-        "x-peable-sdk": "confirmCheckoutSession",
         "parameters": [
           {
             "in": "path",
@@ -19450,7 +19447,6 @@
             "oxyUserSession": []
           }
         ],
-        "x-peable-sdk": "contributions.create",
         "parameters": [
           {
             "in": "path",
@@ -19611,7 +19607,6 @@
             "oxyUserSession": []
           }
         ],
-        "x-peable-sdk": "contributions.list",
         "parameters": [
           {
             "in": "path",
@@ -19830,7 +19825,6 @@
             "oxyUserSession": []
           }
         ],
-        "x-peable-sdk": "contributions.setActive",
         "parameters": [
           {
             "in": "path",
@@ -19970,7 +19964,6 @@
             "oxyUserSession": []
           }
         ],
-        "x-peable-sdk": "contributions.collections",
         "parameters": [
           {
             "in": "path",
@@ -23848,7 +23841,6 @@
         "summary": "Start checkout from a payment link",
         "description": "Anonymous and rate-limited. Creates a Checkout Session from the STORED link — never a payment. A contribution link requires a UUID `Idempotency-Key` header, written by the page before the request, so a lost answer recovers the same session.",
         "security": [],
-        "x-peable-sdk": "startPaymentLinkSession",
         "parameters": [
           {
             "in": "path",
@@ -24150,7 +24142,6 @@
         "summary": "Retrieve a payment link as a visitor",
         "description": "Anonymous and rate-limited: what a visitor sees before checkout starts. An inactive (or expired contribution) link answers with `active: false`, so the page can say so.",
         "security": [],
-        "x-peable-sdk": "getPaymentLink",
         "parameters": [
           {
             "in": "path",

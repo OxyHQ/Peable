@@ -389,7 +389,6 @@ export const paymentLinkRoutes = [
     auth: 'public',
     params: linkId,
     response: publicPaymentLinkSchema,
-    sdk: 'getPaymentLink',
   }),
   defineRoute({
     operationId: 'createPaymentLinkCheckoutSession',
@@ -404,6 +403,5 @@ export const paymentLinkRoutes = [
     body: createPaymentLinkSessionParams,
     response: paymentLinkSessionStartSchema,
     status: 201,
-    sdk: 'startPaymentLinkSession',
   }),
 ] as const;
