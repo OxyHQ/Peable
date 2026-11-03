@@ -62,3 +62,21 @@ contract pin. Backend and frontend types, 191 SDK tests and 9 real HTTP receiver
 tests passed against the published dependencies. The tax UI consumes complete
 Peable list envelopes through shared authenticated raw transport. Workload
 binding/environment registration must already be active before deployment.
+
+## Orbit's membership check (`/v1/dashboard/*`)
+
+`services/appMembership.ts` asks Oxy for the application with the signed-in
+user's OWN bearer, through a short-lived `OxyServices` client per check (the
+pattern Mercaria's account-graph reads use) — `apps.get`, whose
+`callerMembership` is the whole decision. It is not `OxyServer.appPermissionsFor`:
+that reads the application's own declared roles (`/roles/me`), not membership of
+the account that owns it.
+
+Never route this, or any call to Oxy, through `safeFetch`. That is the SSRF
+guard for merchant-supplied URLs (webhook endpoints) and refuses private
+addresses; inside the Oxy VPC `api.oxy.so` is split-horizon and resolves to the
+internal load balancer, so the guard refused every check and every owner was
+told "you are not a member of this application". Outcomes: 403/404 or no
+membership → 403 `application_membership_required` (cached 45 s); Oxy 401 →
+401 `session_invalid`; anything else → logged with the request id, 503
+`membership_unavailable`, never cached.

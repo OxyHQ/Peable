@@ -67,10 +67,19 @@ const stubRequireOxyUser: RequestHandler = (req, _res, next) => {
  */
 const OWNER_ACCOUNT_ID = 'acct_dashboard_owner';
 
+/** A caller whose membership oxy-api could not be asked about. */
+const OXY_DOWN_USER_ID = 'user_oxy_down';
+/** A caller whose bearer oxy-api itself refused (401). */
+const STALE_SESSION_USER_ID = 'user_stale_session';
+
 const stubAssertAppMembership = async (userId: string): Promise<AppMembershipResult> =>
   userId === MEMBER_USER_ID
     ? { allowed: true, ownerAccountId: OWNER_ACCOUNT_ID }
-    : { allowed: false };
+    : userId === OXY_DOWN_USER_ID
+      ? { allowed: false, unavailable: true }
+      : userId === STALE_SESSION_USER_ID
+        ? { allowed: false, unauthenticated: true }
+        : { allowed: false };
 
 const files = createFakeOxyFiles([
   { id: 'file_member', ownerUserId: MEMBER_USER_ID },
@@ -199,6 +208,34 @@ describe('GET /v1/dashboard/applications/:applicationId/merchant', () => {
       { userId: OUTSIDER_USER_ID },
     );
     expect(res.status).toBe(403);
+    const body = (await res.json()) as { error: { type: string; code: string } };
+    expect(body.error.type).toBe('permission_error');
+    expect(body.error.code).toBe('application_membership_required');
+  });
+
+  test('a bearer Oxy refused asks for a new sign-in (401), never "not a member"', async () => {
+    const res = await authedFetch(
+      `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
+      { userId: STALE_SESSION_USER_ID },
+    );
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: { type: string; code: string } };
+    expect(body.error.type).toBe('authentication_error');
+    expect(body.error.code).toBe('session_invalid');
+  });
+
+  test('Oxy unreachable is an outage (503), never "not a member"', async () => {
+    const res = await authedFetch(
+      `/v1/dashboard/applications/${APP_ID}/merchant?environment=development`,
+      { userId: OXY_DOWN_USER_ID },
+    );
+    expect(res.status).toBe(503);
+    const body = (await res.json()) as {
+      error: { type: string; code: string; request_id: string };
+    };
+    expect(body.error.type).toBe('api_error');
+    expect(body.error.code).toBe('membership_unavailable');
+    expect(body.error.request_id).toMatch(/^req_/);
   });
 
   test("a non-member of THIS app is still denied even for an app that doesn't exist — never leaks which (404 vs 403)", async () => {

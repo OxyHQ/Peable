@@ -94,6 +94,7 @@ import {
 } from './transfers';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
+import { requestIdOf } from '../lib/requestId';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 import { listQuerySchema, parseQuery, type QuerySurface } from '../lib/list';
@@ -200,9 +201,38 @@ export async function resolveDashboardAccess(
     userId,
     applicationId,
     accessToken,
+    { requestId: requestIdOf(res) },
   );
+  if (membership.unavailable) {
+    // Fail closed, but say what happened: an outage is not a refusal, and a
+    // member must not be told they are not one while Oxy cannot be asked.
+    sendError(
+      res,
+      503,
+      'api_error',
+      'could not verify your membership of this application with Oxy; try again',
+      'membership_unavailable',
+    );
+    return null;
+  }
+  if (membership.unauthenticated) {
+    sendError(
+      res,
+      401,
+      'authentication_error',
+      'your Oxy session is no longer valid; sign in again',
+      'session_invalid',
+    );
+    return null;
+  }
   if (!membership.allowed) {
-    sendError(res, 403, 'permission_error', 'you are not a member of this application');
+    sendError(
+      res,
+      403,
+      'permission_error',
+      'you are not a member of this application',
+      'application_membership_required',
+    );
     return null;
   }
 
