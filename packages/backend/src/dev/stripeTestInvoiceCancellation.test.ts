@@ -46,7 +46,7 @@ test('payment winning void race is reread and preserved, not canceled', async ()
   expect(reads).toBe(1);
 });
 test('unresolved cancellation fails closed', async () => {
-  expect(
+  await expect(
     voidUnpaidInitialInvoice(
       { invoiceStatus: 'open', subscriptionStatus: 'incomplete' },
       async () => {
