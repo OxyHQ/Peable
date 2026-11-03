@@ -119,10 +119,12 @@ the unused-code rules as warnings, and the count is zero. In tests, write
 regenerate-and-diff gate) are excluded from Biome on purpose.
 
 Root `postinstall` builds `contracts`, `shared-types`, `sdk` and `pay` — every workspace package
-the wallet imports — so a fresh `bun install` leaves each `dist/` present. Metro bundles those
-`dist/`s, the same output `tsc` checks the wallet against, so a package missing from that chain
-fails the Android release bundle (`Unable to resolve "@peable.to/sdk/contributions"` when `sdk`
-was not in it). The builds are `incremental: false`, so each install rewrites them whole. Both published packages build cjs + esm + types separately;
+the wallet bundles: `shared-types` and `pay` directly, `sdk` (and the `contracts` it compiles
+against) through `@oxy.so/services`' `@peable.to/sdk/display` — so a fresh `bun install` leaves
+each `dist/` present. Metro bundles those `dist/`s, the same output `tsc` checks the wallet
+against, so a package missing from that chain fails the Android release bundle (`Unable to
+resolve "@peable.to/sdk/…"` when `sdk` was not in it). The wallet has no Tax or Contributions
+screen: those are Orbit's (`packages/orbit`). The builds are `incremental: false`, so each install rewrites them whole. Both published packages build cjs + esm + types separately;
 `shared-types` also runs `scripts/fix-esm-imports.mjs` after the esm pass.
 
 ## PostgreSQL is the only store
