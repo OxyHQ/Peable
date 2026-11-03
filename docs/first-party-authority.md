@@ -35,8 +35,12 @@ Orbit Files (`file_…`, `services/files.ts`) store uploaded bytes as Peable's
 OWN application files through the same instance (`uploadAppFileLarge`, the
 `file` reference registered in the same call; private, or public for a
 `business_logo`) and read evidence bytes back with `linkedDownloadUrls` at
-dispute submission. Peable's workload binding must therefore hold the Files
-write and linked-read authority for its own application files.
+dispute submission. Both calls are covered by Peable's verified first-party
+workload authority (Oxy `hasServiceAuthority`; an application reads its own
+files) — do NOT add `files:app:write` / `files:linked:read` to the Peable
+application's scopes: those scopes only bound external keys issued under the
+application (oxy ADR 0049). A 403 here means the workload binding is inactive
+or registered for another environment.
 
 ## Validation and release gate
 
