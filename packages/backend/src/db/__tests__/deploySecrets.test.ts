@@ -3,56 +3,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/**
- * Every variable `config.ts` reads is either SYNCED by the deploy or listed here
- * with a reason.
- *
- * ## The failure this exists to stop, which already happened
- *
- * `deploy-aws.yml`'s secret-sync step carries a comment saying "the list is the
- * secrets the `peable` task definition actually consumes. Adding a new one means
- * adding it here, or it never reaches SSM." That sentence was true and nothing
- * enforced it, so when the card rail landed its six variables were not added —
- * and the rail was **unreachable in production** while every test, every build
- * and every deploy stayed green.
- *
- * The silence is not incidental, it is designed in. `resolveStripeEnabled` is a
- * conjunction: with none of the six set it returns `false` at the FIRST check,
- * so it does not even reach the branch that warns about an incomplete
- * configuration. The rail is off, `resolveProvider` answers "this rail is not
- * configured", `/v1/refunds` answers 503 — every one of which is the correct
- * behaviour for a rail nobody switched on, and indistinguishable from a rail
- * somebody meant to switch on and could not.
- *
- * ## Why an explicit ledger rather than "sync everything"
- *
- * Most of what `config.ts` reads is not a secret and does not belong in SSM as a
- * SecureString. But "not a secret" is a DECISION about each name, and a name
- * nobody has decided about is exactly what went missing. So an unlisted,
- * unsynced variable fails the build, and the fix is either a sync line or one
- * line here saying why not — the same discipline the schema gates apply to an id
- * column with no foreign key.
- *
- * ## What this does NOT prove
- *
- * Writing a parameter to SSM does not put it in the container. The `peable` task
- * definition has to reference it in `secrets[]`, and that lives in oxy-infra,
- * which this repository cannot see. This test asserts the half that is in this
- * repo; the other half is a deploy-time observation.
+/** AWS SSM owns runtime credentials. Deployment must never copy them from GitHub.
+ * Every config variable still requires an explicit infrastructure classification;
+ * actual task references and parameter existence are verified by oxy-infra rollout.
  */
-
 /** The repo root: `packages/backend/src/db/__tests__` is five deep. */
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', '..');
 const WORKFLOW = readFileSync(join(REPO_ROOT, '.github', 'workflows', 'deploy-aws.yml'), 'utf8');
 const CONFIG = readFileSync(join(REPO_ROOT, 'packages', 'backend', 'src', 'config.ts'), 'utf8');
 
-/**
- * Deliberately NOT synced, each with the reason it is not a secret.
- *
- * A name reaching this list is a decision someone took; a name reaching neither
- * this list nor the workflow is the bug.
- */
-const NOT_SYNCED: Readonly<Record<string, string>> = {
+const INFRA_CONFIGURATION: Readonly<Record<string, string>> = {
+  STRIPE_ENABLED: 'explicit infrastructure activation flag; never a secret',
+  STRIPE_ACCOUNT_ID: 'reviewed public provider account identity pinned at startup',
   PEABLE_BILLING_COHORT:
     'reviewed merchant/app/environment/platform-account cohort and Portal configuration; no credentials; absent by default and set only for the coordinated cohort activation',
   // PATHS, not secrets. The signing key itself is the SSM SecureString
@@ -112,75 +74,32 @@ function configVariables(): string[] {
   return [...found].sort();
 }
 
-/** Every name the workflow actually writes to SSM. */
-function syncedVariables(): string[] {
-  const found = new Set<string>();
-  for (const match of WORKFLOW.matchAll(/^\s*sync_secret\s+([A-Z][A-Z0-9_]*)\s/gm)) {
-    const name = match[1];
-    if (name) found.add(name);
-  }
-  return [...found].sort();
-}
+const AWS_RUNTIME_SECRETS = [
+  'DATABASE_URL',
+  'IP_HASH_SALT',
+  'STRIPE_SECRET_KEY',
+  'STRIPE_PUBLISHABLE_KEY',
+  'STRIPE_WEBHOOK_SECRET',
+  'STRIPE_CONNECT_WEBHOOK_SECRET',
+  'STRIPE_WEBHOOK_SECRET_PREVIOUS',
+  'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS',
+  'OXY_FILES_WEBHOOK_SECRET',
+  'OXY_FILES_WEBHOOK_SECRET_PREVIOUS',
+] as const;
 
-describe('the deploy syncs what the config reads', () => {
-  it('leaves no variable both unsynced and undeclared', () => {
-    const synced = new Set(syncedVariables());
-    const orphans = configVariables().filter((name) => !synced.has(name) && !(name in NOT_SYNCED));
-
-    // Named in the message, not just counted: the whole value of this gate is
-    // that the failure tells you which variable and therefore which decision is
-    // missing.
-    expect(orphans).toEqual([]);
+describe('AWS owns backend runtime credentials', () => {
+  it('forbids GitHub credential copying and SSM mutation in deployment', () => {
+    expect(WORKFLOW).not.toMatch(/secrets\.[A-Z_]+/);
+    expect(WORKFLOW).not.toContain('sync_secret');
+    expect(WORKFLOW).not.toContain('put-parameter');
   });
-
-  it('syncs every Stripe secret the card rail cannot work without', () => {
-    const synced = new Set(syncedVariables());
-
-    // Spelled out rather than left to the sweep above, because these six are the
-    // ones that were actually missing and the sweep would also pass if somebody
-    // "fixed" it by adding them to NOT_SYNCED.
-    for (const name of [
-      'STRIPE_ENABLED',
-      'STRIPE_SECRET_KEY',
-      'STRIPE_WEBHOOK_SECRET',
-      'STRIPE_CONNECT_WEBHOOK_SECRET',
-      'STRIPE_WEBHOOK_SECRET_PREVIOUS',
-      'STRIPE_CONNECT_WEBHOOK_SECRET_PREVIOUS',
-    ]) {
-      expect([name, synced.has(name)]).toEqual([name, true]);
-    }
-  });
-
-  it('still syncs the two the service already could not boot without', () => {
-    const synced = new Set(syncedVariables());
-    // A regression floor. `DATABASE_URL` in particular is what `config.ts`
-    // refuses to load without, so losing it from the sync is a crash-loop.
-    expect(synced.has('DATABASE_URL')).toBe(true);
-    expect(synced.has('IP_HASH_SALT')).toBe(true);
-  });
-
-  it('is not vacuously satisfied by parsers that match nothing', () => {
-    // Both halves are regexes over YAML and TypeScript that nothing else
-    // exercises. If either stopped matching, every assertion above would pass
-    // over two empty sets and this gate would silently stop guarding anything.
-    expect(configVariables().length).toBeGreaterThanOrEqual(10);
-    expect(syncedVariables().length).toBeGreaterThanOrEqual(10);
-  });
-
-  it('declares a reason for every variable it exempts', () => {
-    // An empty string would satisfy "is in NOT_SYNCED" while recording no
-    // decision at all, which is the shape of the omission this file exists for.
-    for (const [name, reason] of Object.entries(NOT_SYNCED)) {
-      expect([name, reason.length > 10]).toEqual([name, true]);
-    }
-  });
-
-  it('exempts nothing that is not actually read', () => {
-    // A stale exemption is a name somebody deleted from the config and left
-    // here, which quietly widens the ledger's licence for the next reader.
+  it('classifies every config read without silently losing a credential', () => {
+    const configured = new Set([...Object.keys(INFRA_CONFIGURATION), ...AWS_RUNTIME_SECRETS]);
+    expect(configVariables().filter((name) => !configured.has(name))).toEqual([]);
+    expect(configVariables().length).toBeGreaterThanOrEqual(20);
     const read = new Set(configVariables());
-    for (const name of Object.keys(NOT_SYNCED)) {
-      expect([name, read.has(name)]).toEqual([name, true]);
-    }
+    for (const name of configured) expect([name, read.has(name)]).toEqual([name, true]);
+    for (const reason of Object.values(INFRA_CONFIGURATION))
+      expect(reason.length).toBeGreaterThan(10);
   });
 });

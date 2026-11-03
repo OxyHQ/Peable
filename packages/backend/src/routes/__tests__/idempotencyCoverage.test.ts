@@ -23,6 +23,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'a READ behind POST only to keep a credential out of the URL: nothing happens twice, and storing it would keep the provider confirmation secret for 24 hours',
   'POST /v1/billing/customers':
     "billing's own leased operation ledger (billing_operations): a durable key with recovery, not a 24-hour cache",
+  'POST /v1/billing/embedded_checkout_sessions':
+    "billing's own leased operation ledger pins presentation and recovers the same session",
   'POST /v1/billing/checkout_sessions':
     "billing's own leased operation ledger (billing_operations): a durable key with recovery, not a 24-hour cache",
   'POST /v1/billing/portal_sessions':

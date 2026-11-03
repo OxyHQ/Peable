@@ -215,10 +215,8 @@ describe('pinned ECS release', () => {
     // biome-ignore lint/suspicious/noTemplateCurlyInString: a GitHub Actions expression, matched as text
     expect(must(deploy.steps[0]).with?.ref).toBe('${{ env.RELEASE_SHA }}');
     const steps = deploy.steps;
-    expect(workflow.on.workflow_dispatch.inputs.sync_secrets.default).toBe(false);
-    expect(steps.find((step) => step.name?.startsWith('Sync GitHub secrets'))?.if).toBe(
-      "github.event_name == 'workflow_dispatch' && inputs.sync_secrets == true",
-    );
+    expect(workflow.on.workflow_dispatch.inputs.sync_secrets).toBeUndefined();
+    expect(steps.find((step) => step.name?.startsWith('Sync GitHub secrets'))).toBeUndefined();
     expect(steps.find((step) => step.name?.includes('Clean up unused'))?.if).toBe('always()');
     expect(steps.find((step) => step.name?.startsWith('Migrate (post)'))?.if).not.toContain(
       'desiredCount',
