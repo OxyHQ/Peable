@@ -166,39 +166,32 @@ describe('TransfersResource', () => {
   });
 
   /**
-   * A reversal without an identity is refused HERE, before a request is made.
+   * A reversal's identity is its `external_ref`, in the body — and the
+   * `Idempotency-Key` is a separate thing beside it.
    *
    * An amount is not an identity: two reversals of one settlement for the same
-   * amount are two operations. A gateway keyed by amount answers the first to
-   * the second request, so the seller keeps money that was taken back — and
-   * nothing records that it was asked for. Failing in the caller's own process
-   * is the earliest this can be said.
+   * amount are two operations, and only the ref tells them apart for as long as
+   * they exist. The key is the 24-hour request-retry layer; this client mints
+   * one per call, so it could never stand in for the ref.
    */
-  test('refuses to reverse without an operation identity', () => {
-    const { fetch: fetchImpl, requests } = gateway(TRANSFER, 201);
-    const resource = new TransfersResource(buildTestClient(fetchImpl));
-
-    expect(() => resource.reverse('tr_1', { amount: '500' })).toThrow(TypeError);
-    // Nothing was sent.
-    expect(requests).toHaveLength(0);
-  });
-
-  test('accepts the identity as an idempotency key or as an explicit ref', async () => {
-    const withKey = gateway({ ...TRANSFER, reversal: {} }, 201);
-    await new TransfersResource(buildTestClient(withKey.fetch)).reverse(
-      'tr_1',
-      { amount: '500' },
-      { idempotencyKey: 'leg_a' },
-    );
-    const keyed = withKey.requests.find((r) => !r.url.includes('/auth/service-token'));
-    expect(keyed?.headers.get('Idempotency-Key')).toBe('leg_a');
-
-    const withRef = gateway({ ...TRANSFER, reversal: {} }, 201);
-    await new TransfersResource(buildTestClient(withRef.fetch)).reverse('tr_1', {
+  test('sends the external_ref in the body and a request key beside it', async () => {
+    const minted = gateway({ ...TRANSFER, reversal: {} }, 201);
+    await new TransfersResource(buildTestClient(minted.fetch)).reverse('tr_1', {
       amount: '500',
       external_ref: 'leg_b',
     });
-    expect(callOf(withRef.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/transfers/tr_1/reversals`);
+    const call = callOf(minted.requests);
+    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/transfers/tr_1/reversals`);
+    expect(JSON.parse(call?.body ?? '{}')).toEqual({ amount: '500', external_ref: 'leg_b' });
+    expect(call?.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
+
+    const keyed = gateway({ ...TRANSFER, reversal: {} }, 201);
+    await new TransfersResource(buildTestClient(keyed.fetch)).reverse(
+      'tr_1',
+      { amount: '500', external_ref: 'leg_a' },
+      { idempotencyKey: 'req_leg_a' },
+    );
+    expect(callOf(keyed.requests)?.headers.get('Idempotency-Key')).toBe('req_leg_a');
   });
 });
 

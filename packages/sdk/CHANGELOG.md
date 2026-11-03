@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.8.0 — generic idempotency (breaking)
+
+The gateway now answers `Idempotency-Key` on every merchant `POST` (ADR 0014
+D3): within 24 hours a retried request gets the stored response with
+`Idempotent-Replayed: true`, the same key with a different request is a 400
+`idempotency_error`, and a key still in flight is a 409 `idempotency_error`.
+
+- Every `POST` now carries an `Idempotency-Key`. Without `{ idempotencyKey }`
+  the client mints a uuid per call, reused by that call's own re-attempt, so a
+  retried call cannot run twice. Pass your own key (one per order) to make a
+  retry from another call converge.
+- `paymentIntents.create`'s `idempotencyKey` is optional; the gateway no longer
+  requires the header.
+- **Breaking:** `transfers.reverse` requires `external_ref`. The
+  `Idempotency-Key` is no longer accepted as a reversal's identity — it is the
+  24-hour retry layer, and an automatic key would give every reversal a random
+  identity.
+- A key reused with different terms on `paymentIntents.create` /
+  `checkout.sessions.create` is a 400 with `code: 'idempotency_error'` (was 409).
+
 ## 0.7.0 — the Orbit wire (breaking)
 
 The gateway now speaks one Stripe-style wire (ADR 0014), changed at the root with

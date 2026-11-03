@@ -20,6 +20,7 @@ export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
 export { disputes } from './disputes';
+export { idempotencyKeys } from './idempotency';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

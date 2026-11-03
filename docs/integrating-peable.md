@@ -26,6 +26,43 @@ objects exactly in that shape; only its own options stay camelCase JavaScript
 (`new Peable({ publicKey, secret })`, `{ idempotencyKey }`, `toleranceSec`).
 The conventions are [ADR 0014](adr/0014-orbit-api-conventions-and-versioning.md).
 
+## Idempotency — retrying a POST safely
+
+Every merchant `POST` accepts an optional `Idempotency-Key` header (1–255
+printable ASCII characters) — ADR 0014 D3. For **24 hours**, scoped to your
+merchant (application + environment; a test credential never sees a live key):
+
+| You send | You get |
+|---|---|
+| the same key, method, path and body again | the **stored** status and body, with `Idempotent-Replayed: true`; nothing runs twice |
+| the same key with a different body or path | `400`, `error.code === 'idempotency_error'` |
+| the same key while the first request is still running | `409`, `error.code === 'idempotency_error'` — retry shortly |
+
+A `2xx` or `4xx` answer is stored and replayed as-is. A `5xx` is **not** stored:
+the key is released, so retrying with it runs the request again. Bodies are
+compared canonically (key order does not matter).
+
+The SDK sends a key on every `POST` for you — a fresh uuid per call, reused by
+that call's own re-attempt. Pass `{ idempotencyKey }` yourself (one stable key
+per order, e.g. `order:${order.id}`) when a retry may come from a **different**
+call: after a crash, from a job queue.
+
+The key is a request-retry layer, not a business identity. Beneath it:
+
+- a payment intent (and so a checkout session) is unique per merchant and key
+  for as long as it exists, so a retry after the 24 hours still returns the
+  payment that key created (`200`), and different terms are a `400
+  idempotency_error`;
+- refunds, transfers and reversals take **`external_ref`** in the body, which is
+  durable and decides whether money moves twice (§ Settling sellers).
+
+Not covered: `POST /v1/merchants` (registration creates the scope a key would
+live in — a retry answers `409`, recover with `GET /v1/merchants/me`), `POST
+/v1/payment_intents/:id/client_action` (a read; nothing happens twice), the
+`/v1/billing/*` routes (their own durable operation keys, see
+[checkout operation recovery](integrations/checkout-operation-recovery.md)), and
+the anonymous payer routes.
+
 ---
 
 ## 0. Prerequisites (one-time, owner/Console)
@@ -135,7 +172,7 @@ sends the buyer to `success_url` on settlement. You confirm fulfillment from the
 ```ts
 const intent = await peable.paymentIntents.create(
   { amount: '250000000', network: 'testnet', metadata: { order_id: '123' } },
-  { idempotencyKey: 'order-123' },   // REQUIRED — safe retries, no double-charge
+  { idempotencyKey: 'order-123' },   // optional; one per order makes ANY retry converge
 );
 // intent.id, intent.client_secret, intent.address, intent.status, intent.expires_at
 new Date(intent.expires_at * 1000);              // instants are Unix seconds
@@ -354,7 +391,8 @@ Three things that are easy to get wrong and expensive:
 
 - **`external_ref` is YOUR id and it is the idempotency**, on all three. Unlike a
   header key you cannot lose it, so a retry after a timeout converges rather
-  than paying a seller — or a payer — twice. A reversal needs one too: two
+  than paying a seller — or a payer — twice. A reversal needs one too, in the
+  body (the `Idempotency-Key` header is not accepted in its place): two
   reversals of one settlement for the same amount are two operations, and an
   amount is not an identity.
 - **A refund's `status` is not always `succeeded`.** A provider can report one

@@ -145,7 +145,7 @@ Refusals you should handle:
 | 409 `code: 'account_not_ready'` | the seller has no FairCoin account or has not registered their key |
 | 422 | `rail: 'card'` with `connectedAccount` (on-behalf card charges are not offered), or a network other than the seller's |
 | 404 | the `ca_…` is not one of YOUR sellers |
-| 409 | an `Idempotency-Key` replayed for a different seller, amount or rail |
+| 400 `code: 'idempotency_error'` | an `Idempotency-Key` replayed for a different seller, amount or rail |
 
 `peable.paymentIntents.list({ connected_account: seller.id })` lists one
 seller's payments.

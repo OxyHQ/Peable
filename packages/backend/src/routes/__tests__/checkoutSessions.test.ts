@@ -5,7 +5,7 @@ import { eq, sql } from 'drizzle-orm';
 import express from 'express';
 import type { RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { merchants, paymentIntents } from '../../db/schema';
+import { idempotencyKeys, merchants, paymentIntents } from '../../db/schema';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import {
   gatewayDb,
@@ -341,11 +341,46 @@ describe('POST /v1/checkout_sessions with an Idempotency-Key', () => {
       body,
     });
 
+    // The generic layer answers the retry with the first answer, replayed.
     expect(first.status).toBe(201);
-    // 200, not 201: nothing was created, and the status code is what tells a
-    // merchant whether they just made a second checkout.
-    expect(second.status).toBe(200);
+    expect(second.status).toBe(201);
+    expect(second.headers.get('Idempotent-Replayed')).toBe('true');
 
+    const a = await readJson<CheckoutSessionResponse>(first);
+    const b = await readJson<CheckoutSessionResponse>(second);
+    expect(b).toEqual(a);
+    expect(await countIntentsForMerchant(merchantId)).toBe(before + 1);
+  });
+
+  /**
+   * The SECOND line: a retry the generic layer no longer remembers (its 24
+   * hours passed) still converges, through the intent's own unique key, on the
+   * session that key created. 200, not 201: nothing was created, and the
+   * status code is what tells a merchant whether they just made a second
+   * checkout.
+   */
+  test('converges on the same session after the generic key is gone', async () => {
+    const before = await countIntentsForMerchant(merchantId);
+    const body = JSON.stringify({ amount: '32000000', network: 'testnet' });
+    const headers = {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': 'session-retry-2',
+    };
+    const first = await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: 'POST',
+      headers,
+      body,
+    });
+    await gatewayDb().delete(idempotencyKeys).where(eq(idempotencyKeys.key, 'session-retry-2'));
+    const second = await fetch(`${baseUrl}/v1/checkout_sessions`, {
+      method: 'POST',
+      headers,
+      body,
+    });
+
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(200);
+    expect(second.headers.get('Idempotent-Replayed')).toBeNull();
     const a = await readJson<CheckoutSessionResponse>(first);
     const b = await readJson<CheckoutSessionResponse>(second);
     expect(b.id).toBe(a.id);
@@ -370,7 +405,10 @@ describe('POST /v1/checkout_sessions with an Idempotency-Key', () => {
       body: JSON.stringify({ amount: '42000000', network: 'testnet' }),
     });
 
-    expect(conflicting.status).toBe(409);
+    expect(conflicting.status).toBe(400);
+    const { error } = await readJson<{ error: { type: string; code: string } }>(conflicting);
+    expect(error.type).toBe('invalid_request_error');
+    expect(error.code).toBe('idempotency_error');
   });
 
   /**

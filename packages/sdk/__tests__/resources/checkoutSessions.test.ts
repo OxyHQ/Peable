@@ -39,7 +39,8 @@ describe('CheckoutResource.sessions', () => {
     const call = gatewayCallOf(requests);
     expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/checkout_sessions`);
-    expect(call?.headers.get('Idempotency-Key')).toBeNull();
+    // No key passed: the client mints one, so its own retry cannot run twice.
+    expect(call?.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
     expect(JSON.parse(call?.body ?? '{}')).toEqual({ amount: '100000', network: 'testnet' });
   });
 

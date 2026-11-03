@@ -30,16 +30,16 @@ export interface CreateTransferParams {
 export interface ReverseTransferParams {
   amount: string;
   /**
-   * YOUR id for THIS reversal — required, one way or the other.
+   * YOUR id for THIS reversal — required, and durable.
    *
-   * Supply it here, or as `options.idempotencyKey`, which the gateway accepts
-   * as the same identity. It cannot be omitted, and an AMOUNT IS NOT AN
-   * IDENTITY: two reversals of one settlement for the same amount are two
-   * distinct operations, and a gateway that keyed them by amount would answer
-   * the first one to the second request — leaving a seller holding money that
-   * had been taken back, with nothing recording that it was asked for.
+   * An AMOUNT IS NOT AN IDENTITY: two reversals of one settlement for the same
+   * amount are two distinct operations, and a gateway that keyed them by
+   * amount would answer the first one to the second request — leaving a
+   * seller holding money that had been taken back, with nothing recording that
+   * it was asked for. The `Idempotency-Key` is not this identity: it is the
+   * 24-hour request-retry layer, and this client mints a fresh one per call.
    */
-  external_ref?: string;
+  external_ref: string;
 }
 
 export interface TransferList {
@@ -84,14 +84,6 @@ export class TransfersResource {
     params: ReverseTransferParams,
     options: { idempotencyKey?: string } = {},
   ): Promise<TransferWithReversal> {
-    if (params.external_ref === undefined && options.idempotencyKey === undefined) {
-      // Refused HERE rather than at the gateway, because the failure it
-      // prevents is silent: without an identity a retry is a second reversal,
-      // and a seller loses the amount twice with nothing saying so.
-      throw new TypeError(
-        'a reversal needs an identity: pass external_ref, or options.idempotencyKey',
-      );
-    }
     return this.client.request<TransferWithReversal>(
       'POST',
       `/v1/transfers/${encodeURIComponent(transferId)}/reversals`,

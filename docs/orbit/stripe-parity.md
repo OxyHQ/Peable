@@ -30,7 +30,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | One wire, clean cut | ✅ | Handlers, types, SDK, checkout and app speak ADR 0014 D1; stored wire JSON migrated (`0036`) | |
 | Error envelope | 🟡 | `{type, code?, param?, message, request_id}`; 400 validation; strict bodies; no leak | + `doc_url` once docs.peable.to exists |
 | `Request-Id` | ✅ | Header on every response and `request_id` in every error | |
-| Generic idempotency | 🟡 | Required on PI create, optional on sessions, `externalRef` elsewhere; no replay | Every POST; stored response replay; 24 h |
+| Generic idempotency | ✅ | Optional `Idempotency-Key` on every merchant POST (`idempotency_keys`, `lib/idempotency.ts`): stored 2xx/4xx replayed with `Idempotent-Replayed: true` for 24 h per merchant, 400/409 `idempotency_error`, 5xx released; PI unique key and `external_ref` stay beneath it. Not on registration, `client_action` (a read) or billing (own operation ledger) | |
 | List pagination | 🟡 | `starting_after`, `limit`; three envelopes; sub-lists unpaginated | + `ending_before`, `created[...]`, `url`; one envelope everywhere |
 | `expand[]` | ❌ | — | Depth 4, merchant-scoped |
 | Metadata | 🟡 | PI/link/session create only; no limits; PI immutable | Every mutable resource; Stripe limits; updatable |
@@ -142,7 +142,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 |---|---|---|---|
 | Server SDK | 🟡 | Resources above; typed errors; `constructEvent` | 1.0 generated from OpenAPI |
 | Auto-pagination | 🟡 | Contributions only | All lists |
-| Auto idempotency keys / retries / default timeout | ❌ | One 401 retry; no default timeout | Present |
+| Auto idempotency keys / retries / default timeout | 🟡 | A uuid key on every POST (0.8.0); one 401 retry under the same key; no network retries; no default timeout | Retries with backoff; default timeout |
 | Version pinning in SDK | ❌ | — | `apiVersion` |
 | CLI (`listen`, `trigger`, `logs tail`) | ❌ | — | `@peable.to/cli` |
 | Test helpers / documented test data | ❌ | Internal scripts | `/v1/test_helpers/*`, documented cards and testnet |

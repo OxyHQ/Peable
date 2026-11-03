@@ -40,12 +40,16 @@ export interface PaymentIntentClientAction {
 
 export interface CreatePaymentIntentOptions {
   /**
-   * Required — the Gateway mandates the `Idempotency-Key` header on
-   * `POST /v1/payment_intents` (`paymentIntents.ts`'s `idempotencyKey`
-   * check). Making this a required option (not optional) means a caller
-   * cannot forget it.
+   * Sent as `Idempotency-Key`. Optional: without it the client mints one per
+   * call, so a retry of that call is answered with the first result. Pass one
+   * stable key per order to make a retry from ANOTHER call — after a crash,
+   * from a job queue — return the same payment: within 24 hours the gateway
+   * replays the stored response (`Idempotent-Replayed: true`), and after that
+   * the key still names the one payment it created. The same key with
+   * different parameters is refused (`PeableInvalidRequestError`, code
+   * `idempotency_error`).
    */
-  idempotencyKey: string;
+  idempotencyKey?: string;
 }
 
 export class PaymentIntentsResource {
@@ -61,11 +65,11 @@ export class PaymentIntentsResource {
    */
   create(
     params: CreatePaymentIntentParams,
-    options: CreatePaymentIntentOptions,
+    options: CreatePaymentIntentOptions = {},
   ): Promise<PaymentIntent> {
     return this.client.request<PaymentIntent>('POST', '/v1/payment_intents', {
       body: params,
-      idempotencyKey: options.idempotencyKey,
+      ...(options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
     });
   }
 
@@ -100,7 +104,7 @@ export class PaymentIntentsResource {
     return this.client.request<PaymentIntent>(
       'POST',
       `/v1/payment_intents/${encodeURIComponent(id)}/reject`,
-      { idempotencyKey: options.idempotencyKey },
+      options.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey },
     );
   }
 

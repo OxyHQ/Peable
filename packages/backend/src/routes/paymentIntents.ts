@@ -45,6 +45,7 @@ import {
   sendValidationError,
 } from '../lib/http';
 import { railBodyFields } from '../lib/railSchema';
+import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 
 const DEFAULT_LIST_LIMIT = 20;
 const MAX_LIST_LIMIT = 100;
@@ -311,15 +312,20 @@ export function createPaymentIntentsRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const idempotencyKey = req.header('Idempotency-Key')?.trim();
-      if (!idempotencyKey) {
-        sendError(res, 400, 'invalid_request_error', 'Idempotency-Key header is required');
-        return;
-      }
+      /**
+       * Optional, as on Stripe. A retried request is answered by the generic
+       * layer (`idempotent`, ADR 0014 D3) before this handler runs. The key
+       * ALSO keys the intent itself (`payment_intents (merchant_id,
+       * idempotency_key)`), which is the second line: it still converges a
+       * retry the generic layer let through — after a lease takeover, or after
+       * the 24-hour window — on the one payment that key created.
+       */
+      const idempotencyKey = idempotencyKeyOf(res);
 
       const parsed = createBodySchema.safeParse(req.body);
       if (!parsed.success) {
@@ -340,7 +346,7 @@ export function createPaymentIntentsRouter(deps: {
             : {}),
           metadata: params.metadata,
           expiresInSeconds: params.expires_in_seconds,
-          idempotencyKey,
+          ...(idempotencyKey !== undefined ? { idempotencyKey } : {}),
         });
         res.status(reused ? 200 : 201).json({
           ...toPaymentIntentDTO(intent),
@@ -371,12 +377,12 @@ export function createPaymentIntentsRouter(deps: {
           sendEnvironmentMismatch(res, err.message);
           return;
         }
-        // The key is in use for a DIFFERENT operation. Neither a bad request
-        // nor a success: answering 200 with the stored intent would tell the
-        // caller their new payment exists, and they would wait for money
-        // against an amount they never asked for.
+        // The key names a payment with DIFFERENT terms. Answering 200 with the
+        // stored intent would tell the caller their new payment exists, and they
+        // would wait for money against an amount they never asked for. The same
+        // answer the generic layer gives a key reused for another request.
         if (err instanceof IdempotencyConflictError) {
-          sendError(res, 409, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message, 'idempotency_error');
           return;
         }
         // 503, not 400: the caller cannot fix this by sending different fields.
@@ -627,6 +633,7 @@ export function createPaymentIntentsRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

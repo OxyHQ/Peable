@@ -51,6 +51,7 @@ import {
   sendValidationError,
   wrap,
 } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
 
@@ -92,38 +93,19 @@ const reverseTransferBodySchema = z
   .object({
     amount: baseUnitAmount,
     /**
-     * The merchant's own id for THIS reversal.
+     * The merchant's own id for THIS reversal — required, and durable.
      *
-     * Optional in the BODY and required overall: the `Idempotency-Key` header is
-     * accepted as the same identity, which is what Mercaria's adapter already
-     * sends. One of the two must be present — see `resolveReversalRef`.
+     * An amount is not an identity: two reversals of one settlement for the
+     * same amount are two operations. This field is what tells them apart, for
+     * as long as the reversal exists. It used to be satisfiable by the
+     * `Idempotency-Key` header instead; that header is now the generic
+     * 24-hour retry layer (ADR 0014 D3), which the SDK fills with a fresh uuid
+     * per call — accepting it here would hand every un-referenced reversal a
+     * random identity, and an application's own retry a second reversal.
      */
-    external_ref: z.string().min(1).max(255).optional(),
+    external_ref: z.string().min(1).max(255),
   })
   .strict();
-
-/**
- * The durable identity of a reversal operation, from the header or the body.
- *
- * The route used to take neither. The provider idempotency key was derived from
- * `trr:<transfer>:<amount>`, so two distinct reversals of one transfer for the
- * same amount presented one key and the second silently returned the first —
- * the seller kept money that had been taken back. The consumer was already
- * SENDING an operation key (`Idempotency-Key`) and this route ignored it.
- *
- * `null` when neither is present, which the route answers 400 for: a reversal
- * with no identity is one that cannot be retried safely, and inventing one here
- * would make every retry a second reversal.
- */
-function resolveReversalRef(
-  headerValue: string | undefined,
-  bodyValue: string | undefined,
-): string | null {
-  const header = headerValue?.trim();
-  if (header) return header;
-  const body = bodyValue?.trim();
-  return body && body.length > 0 ? body : null;
-}
 
 /**
  * Serialize a transfer, resolving the two PUBLIC ids it references.
@@ -192,6 +174,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -340,6 +323,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -364,22 +348,6 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         return;
       }
 
-      const externalRef = resolveReversalRef(
-        req.header('Idempotency-Key'),
-        parsed.data.external_ref,
-      );
-      if (!externalRef) {
-        sendError(
-          res,
-          400,
-          'invalid_request_error',
-          'a reversal needs an Idempotency-Key header or an externalRef: ' +
-            'two reversals of one settlement for the same amount are two operations, ' +
-            'and an amount is not an identity',
-        );
-        return;
-      }
-
       try {
         const {
           transfer: updated,
@@ -389,7 +357,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
           merchantId: merchant.id,
           environment: merchant.environment,
           transfer,
-          externalRef,
+          externalRef: parsed.data.external_ref,
           amount: parsed.data.amount,
         });
         const intent = await findIntentByPublicIdForTransfer(db, updated);

@@ -31,7 +31,12 @@ import {
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
-import { connectedAccountLinks, connectedAccounts, webhookDeliveries } from '../../db/schema';
+import {
+  connectedAccountLinks,
+  connectedAccounts,
+  idempotencyKeys,
+  webhookDeliveries,
+} from '../../db/schema';
 import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import { createFaircoinAccountLink } from '../../services/accounts/faircoinOnboarding';
 import { config } from '../../config';
@@ -547,7 +552,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     expect(foreign.status).toBe(404);
   });
 
-  test('an Idempotency-Key replayed for another seller is a 409, never their payment', async () => {
+  test('an Idempotency-Key replayed for another seller is refused, never their payment', async () => {
     const a = await onboardSeller('store_idem_a', 42);
     const b = await onboardSeller('store_idem_b', 43);
     const key = `idem_${uuidv7()}`;
@@ -564,7 +569,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { amount: '5000', network: 'testnet', connected_account: a.id },
       { 'Idempotency-Key': key },
     );
-    expect(replay.status).toBe(200);
+    expect(replay.status).toBe(201);
     expect(replay.json.id).toBe(first.json.id);
     const other = await call(
       'POST',
@@ -572,7 +577,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { amount: '5000', network: 'testnet', connected_account: b.id },
       { 'Idempotency-Key': key },
     );
-    expect(other.status).toBe(409);
+    expect(other.status).toBe(400);
+    expect((other.json.error as Record<string, string>).code).toBe('idempotency_error');
+
+    // The business layer refuses it too, once the generic one has forgotten
+    // the key: the intent's own key names seller A's payment.
+    await gatewayDb().delete(idempotencyKeys).where(eq(idempotencyKeys.key, key));
+    const afterExpiry = await call(
+      'POST',
+      '/v1/payment_intents',
+      { amount: '5000', network: 'testnet', connected_account: b.id },
+      { 'Idempotency-Key': key },
+    );
+    expect(afterExpiry.status).toBe(400);
+    expect((afterExpiry.json.error as Record<string, string>).code).toBe('idempotency_error');
+    expect(String((afterExpiry.json.error as Record<string, string>).message)).toContain(
+      String(a.id),
+    );
   });
 
   test('opens a hosted checkout on behalf of a seller', async () => {

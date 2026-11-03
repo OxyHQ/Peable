@@ -5,13 +5,15 @@ export interface CreateCheckoutSessionOptions {
   /**
    * Sent as `Idempotency-Key`. A create that timed out does not tell the caller
    * whether the session exists; retrying with the SAME key returns the session
-   * that create made (HTTP 200) instead of minting a second one and a second
-   * payment intent, and the same key with different parameters is refused with
-   * a 409 (`PeableInvalidRequestError`). Use one stable key per order, not one
-   * per attempt.
+   * that create made instead of minting a second one and a second payment
+   * intent — within 24 hours as the stored response (`Idempotent-Replayed:
+   * true`), after that through the key the session's payment carries. The same
+   * key with different parameters is refused (`PeableInvalidRequestError`,
+   * code `idempotency_error`).
    *
-   * Optional, because the gateway has never required it on this route — but an
-   * integration without it can create two live checkouts for one order.
+   * Optional: without it the client mints one per call, which covers a retry
+   * of that call only. Use one stable key per order to cover a retry from
+   * another call.
    */
   idempotencyKey?: string;
 }

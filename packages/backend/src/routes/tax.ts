@@ -3,6 +3,7 @@ import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import type { TaxReport } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { fromUnix } from '../lib/time';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
@@ -186,6 +187,7 @@ export function createTaxRouter(deps: {
   router.post(
     '/v1/tax/location_evidence',
     ...write,
+    idempotent,
     route((tax, merchant, req) => tax.recordEvidence(merchant, req.body), 201),
   );
   router.get(
@@ -196,6 +198,7 @@ export function createTaxRouter(deps: {
   router.post(
     '/v1/tax/calculations',
     ...write,
+    idempotent,
     route((tax, merchant, req) => tax.calculate(merchant, req.body, { requireActive: true }), 201),
   );
   router.get(
@@ -213,6 +216,7 @@ export function createTaxRouter(deps: {
   router.post(
     '/v1/tax/transactions/:id/reversals',
     ...write,
+    idempotent,
     route((tax, merchant, req) => tax.createReversal(merchant, req.params.id ?? '', req.body), 201),
   );
   router.get(

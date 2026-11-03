@@ -39,6 +39,7 @@ import {
   sendConnectedAccountRefusal,
 } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
+import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
 
 const createBodySchema = z
   .object({
@@ -69,6 +70,7 @@ export function createCheckoutSessionsRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -81,25 +83,16 @@ export function createCheckoutSessionsRouter(deps: {
       const params: CreateCheckoutSessionParams = parsed.data as CreateCheckoutSessionParams;
 
       /**
-       * An `Idempotency-Key` on this route is HONOURED when it is sent.
-       *
-       * The comment here used to say a session "wraps exactly ONE intent minted
-       * fresh at session-create time (Stripe Checkout Session parity) — there
-       * is nothing to replay against". Parity with Stripe's object model is not
-       * a reason to drop the caller's retry semantics: a merchant whose create
-       * timed out and retried got a SECOND session and a second payment intent,
-       * and the first one stayed alive until it expired. Two live sessions for
-       * one order is two prices a buyer can be shown and two payments they can
-       * make.
-       *
-       * No new column is needed. The key converges the INTENT
+       * A retried request is answered by the generic layer (`idempotent`, ADR
+       * 0014 D3) before this handler runs. The key also converges the INTENT
        * (`payment_intents.idempotency_key`), and `checkout_sessions` is unique
-       * on the intent it wraps — so the session that already wraps the replayed
-       * intent IS the session that key created. Optional, because the header
-       * has never been required here and making it so would break every
-       * integration that has not sent one.
+       * on the intent it wraps — so the session that already wraps the
+       * replayed intent IS the session that key created. That is the second
+       * line, for a retry the generic layer let through (a lease takeover, or
+       * after its 24 hours): one order never gets two live sessions and two
+       * prices a buyer can be shown.
        */
-      const idempotencyKey = req.header('Idempotency-Key')?.trim();
+      const idempotencyKey = idempotencyKeyOf(res);
 
       try {
         const { intent, reused } = await createIntent({
@@ -191,7 +184,7 @@ export function createCheckoutSessionsRouter(deps: {
           return;
         }
         if (err instanceof IdempotencyConflictError) {
-          sendError(res, 409, 'invalid_request_error', err.message);
+          sendError(res, 400, 'invalid_request_error', err.message, 'idempotency_error');
           return;
         }
         // 503, not 400: the rail is not configured on this deployment, which is

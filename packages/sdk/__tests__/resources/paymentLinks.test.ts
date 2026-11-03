@@ -12,7 +12,7 @@ function gatewayCallOf(requests: CapturedRequest[]): CapturedRequest | undefined
 }
 
 describe('PaymentLinksResource', () => {
-  test('create() POSTs /v1/payment_links with the params body (no idempotency key)', async () => {
+  test('create() POSTs /v1/payment_links with the params body and a minted idempotency key', async () => {
     const { fetch: fetchImpl, requests } = createMockFetch((req) => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return {
@@ -36,7 +36,9 @@ describe('PaymentLinksResource', () => {
     const call = gatewayCallOf(requests);
     expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_links`);
-    expect(call?.headers.get('Idempotency-Key')).toBeNull();
+    expect(call?.headers.get('Idempotency-Key')).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
     expect(JSON.parse(call?.body ?? '{}')).toEqual({ amount: '100000', network: 'testnet' });
   });
 

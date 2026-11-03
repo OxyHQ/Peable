@@ -85,6 +85,14 @@ Business idempotency stays where it is load-bearing and is not replaced:
 `external_ref` of refunds, transfers and reversals keeps deciding whether money
 moves twice. The generic layer sits in front of them.
 
+As built (`lib/idempotency.ts`, table `idempotency_keys`): the key is optional,
+a 2xx/4xx is stored and a 5xx releases the key, and the scope is the merchant
+the credential resolves to. A reversal's identity is its body `external_ref`
+only — the header is the retry layer, never a business identity. Three merchant
+`POST`s stay outside it, each named in `routes/__tests__/idempotencyCoverage.test.ts`:
+registration (it creates the scope), `client_action` (a read), and billing
+(its own durable operation ledger with recovery).
+
 ### D4 — Events are a resource, and webhooks render them
 
 An event is stored once (`evt_…`, queryable for 30 days via `/v1/events`) in the

@@ -223,8 +223,11 @@ Decided per relation, never defaulted:
   cannot be deleted, and losing the money record is never the right consequence
   of removing a party. Nothing deletes any of these today; `restrict` states what
   would happen rather than leaving it to whoever writes that statement.
-- `cascade` on `webhook_deliveries.payment_intent_id` alone. A delivery log is
+- `cascade` on `webhook_deliveries.payment_intent_id`. A delivery log is
   derived from its intent and has no meaning without it.
+- `cascade` on `idempotency_keys.merchant_id`, for the same reason: a stored
+  answer is derived from a request to that merchant, lives 24 hours, and is
+  not part of the money graph.
 
 ## CHECK constraints that were considered and REJECTED
 
@@ -449,3 +452,31 @@ file references. Decisions a reader would otherwise undo:
 - **`oxy_file_events` is pruned after 45 days** by the reconciliation loop: Oxy
   expires an undelivered event after 30, so an older row dedupes nothing.
   `merchant_avatar_audit.event_id` therefore carries no foreign key to it.
+
+## Generic idempotency (ADR 0014 D3)
+
+`idempotency_keys` (`schema/idempotency.ts`) holds one row per merchant and
+`Idempotency-Key`: the request it is bound to (method, path, sha256 of the
+canonical JSON body), a lease while that request runs, and then the status and
+body it answered. Decisions a reader would otherwise undo:
+
+- **It sits in FRONT of business idempotency, never instead of it.**
+  `payment_intents (merchant_id, idempotency_key)` and the `external_ref` of
+  refunds, transfers and reversals still decide whether money moves twice; they
+  are durable where this row lives 24 hours, and they absorb a lease takeover.
+- **One statement claims the key** (`claimIdempotencyKey`): `insert … on
+  conflict do update … where` the row is expired, or its lease ran out for the
+  SAME request. A read-then-insert would let two first requests both run.
+- **`id` names the claim, not the key.** A takeover rotates it, so a request
+  that outlived its lease completes or releases nothing (`where id = …` no
+  longer matches) — the compare half of the write.
+- **CHECKs**, each against the one writer: the key pattern (`^[ -~]{1,255}$`,
+  the header's own rule), the request hash shape, `method in ('POST')`,
+  `response_status between 200 and 499` (a 5xx is never stored — the row is
+  deleted so the caller can retry), `completed ⇔ a response`, and `in_progress
+  ⇔ a lease`.
+- **Every instant is the database's `now()`**, because the lease is compared
+  across tasks whose clocks may disagree.
+- **Retention is `@oxy.so/db/expiry`** (`services/idempotencySweeper.ts`), on the
+  indexed `expires_at`. Correctness does not wait on it: the read ignores an
+  expired row and the claim takes one over.

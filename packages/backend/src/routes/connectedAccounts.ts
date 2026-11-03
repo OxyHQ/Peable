@@ -43,6 +43,7 @@ import {
   sendValidationError,
   wrap,
 } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
 
@@ -130,6 +131,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -323,6 +325,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -378,6 +381,7 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

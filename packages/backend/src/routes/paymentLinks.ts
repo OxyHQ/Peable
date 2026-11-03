@@ -36,6 +36,7 @@ import {
   requireAuthenticated,
   sendValidationError,
 } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { resolveMerchant } from './paymentIntents';
 import { railBodyFields } from '../lib/railSchema';
 
@@ -84,6 +85,7 @@ export function createPaymentLinksRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

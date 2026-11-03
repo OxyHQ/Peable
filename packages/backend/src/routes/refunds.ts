@@ -40,6 +40,7 @@ import {
   sendValidationError,
   wrap,
 } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { toUnix, toUnixOrNull } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
 
@@ -97,6 +98,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

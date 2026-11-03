@@ -184,24 +184,32 @@ describe('POST /v1/payment_intents', () => {
     const first = await createIntent('idem-replay');
     const second = await createIntent('idem-replay');
 
+    // The stored answer, replayed: the same status, the same body.
     expect(first.status).toBe(201);
-    expect(second.status).toBe(200);
-    expect(second.body.id).toBe(first.body.id);
-    expect(second.body.address).toBe(first.body.address);
+    expect(second.status).toBe(201);
+    expect(second.body).toEqual(first.body);
 
     const count = await countIntentsByIdempotencyKey('idem-replay');
     expect(count).toBe(1);
   });
 
-  test('missing Idempotency-Key → 400', async () => {
-    const res = await fetch(`${baseUrl}/v1/payment_intents`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ amount: '150000000', network: 'testnet' }),
-    });
-    expect(res.status).toBe(400);
-    const body = await readJson(res);
-    expect(body.error?.type).toBe('invalid_request_error');
+  /**
+   * Optional, as on Stripe (ADR 0014 D3). A create without one is an ordinary
+   * create, and two of them are two payments.
+   */
+  test('a create without an Idempotency-Key is accepted, and is not a replay', async () => {
+    const send = () =>
+      fetch(`${baseUrl}/v1/payment_intents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: '150000000', network: 'testnet' }),
+      });
+    const first = await send();
+    const second = await send();
+    expect(first.status).toBe(201);
+    expect(second.status).toBe(201);
+    expect(second.headers.get('Idempotent-Replayed')).toBeNull();
+    expect((await readJson(second)).id).not.toBe((await readJson(first)).id);
   });
 
   test('a non-integer amount → 400', async () => {

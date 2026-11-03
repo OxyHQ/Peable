@@ -1029,12 +1029,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       amount: '5000',
     });
 
-    const reversed = await call(
-      'POST',
-      `/v1/transfers/${String(created.json.id)}/reversals`,
-      { amount: '2000' },
-      { 'Idempotency-Key': 'rev_op_1' },
-    );
+    const reversed = await call('POST', `/v1/transfers/${String(created.json.id)}/reversals`, {
+      amount: '2000',
+      external_ref: 'rev_op_1',
+    });
     expect(reversed.status).toBe(201);
     expect(reversed.json.amount_reversed).toBe('2000');
     expect(reversed.json.status).toBe('partially_reversed');
@@ -1078,30 +1076,47 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     const transferId = String(created.json.id);
     const reversalPath = `/v1/transfers/${transferId}/reversals`;
 
-    const a = await call('POST', reversalPath, { amount: '500' }, { 'Idempotency-Key': 'leg_a' });
+    const a = await call(
+      'POST',
+      reversalPath,
+      { amount: '500', external_ref: 'leg_a' },
+      { 'Idempotency-Key': 'req_leg_a' },
+    );
     expect(a.status).toBe(201);
     expect(a.json.amount_reversed).toBe('500');
 
-    const b = await call('POST', reversalPath, { amount: '500' }, { 'Idempotency-Key': 'leg_b' });
+    const b = await call('POST', reversalPath, { amount: '500', external_ref: 'leg_b' });
     expect(b.status).toBe(201);
     expect(b.json.amount_reversed).toBe('1000');
 
-    // Repeating A adds nothing, at the provider or here. 200, not 201.
+    // A retried REQUEST is answered by the generic layer: A's own answer, again.
+    const retried = await call(
+      'POST',
+      reversalPath,
+      { amount: '500', external_ref: 'leg_a' },
+      { 'Idempotency-Key': 'req_leg_a' },
+    );
+    expect(retried.status).toBe(201);
+    expect(retried.json).toEqual(a.json);
+
+    // Repeating the OPERATION under a new request key is answered by its
+    // `external_ref`, which is durable: it adds nothing, at the provider or
+    // here. 200, not 201.
     const replay = await call(
       'POST',
       reversalPath,
-      { amount: '500' },
-      { 'Idempotency-Key': 'leg_a' },
+      { amount: '500', external_ref: 'leg_a' },
+      { 'Idempotency-Key': 'req_leg_a_again' },
     );
     expect(replay.status).toBe(200);
     expect((replay.json.reversal as Record<string, string>).id).toBe(
       (a.json.reversal as Record<string, string>).id,
     );
 
-    const c = await call('POST', reversalPath, { amount: '300' }, { 'Idempotency-Key': 'leg_c' });
+    const c = await call('POST', reversalPath, { amount: '300', external_ref: 'leg_c' });
     expect(c.json.amount_reversed).toBe('1300');
 
-    // Three operations reached the provider, not four: the replay never did.
+    // Three operations reached the provider, not five: neither repeat did.
     const calls = providerCalls.filter(
       (entry) => entry.fn === 'reverseTransfer' && String(entry.request.transferId) === transferId,
     );
@@ -1115,6 +1130,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
    *
    * Inventing a key here would make every retry a second reversal, which is the
    * failure the table exists to prevent — so the refusal names what is missing.
+   * An `Idempotency-Key` is NOT that identity: it is the 24-hour request-retry
+   * layer, and an SDK mints a fresh one per call.
    */
   test('refuses a reversal that carries no operation identity', async () => {
     const accountId = await payableAccount('store_no_key');
@@ -1129,9 +1146,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       'POST',
       `/v1/transfers/${String(created.json.id)}/reversals`,
       { amount: '500' },
+      { 'Idempotency-Key': 'req_no_identity' },
     );
     expect(status).toBe(400);
-    expect(String((json.error as Record<string, string>).message)).toContain('Idempotency-Key');
+    expect((json.error as Record<string, string>).param).toBe('external_ref');
   });
 
   test('refuses a reversal larger than the transfer', async () => {
@@ -1142,12 +1160,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       external_ref: 'order_over',
       amount: '5000',
     });
-    const { status } = await call(
-      'POST',
-      `/v1/transfers/${String(created.json.id)}/reversals`,
-      { amount: '5001' },
-      { 'Idempotency-Key': 'rev_over' },
-    );
+    const { status } = await call('POST', `/v1/transfers/${String(created.json.id)}/reversals`, {
+      amount: '5001',
+      external_ref: 'rev_over',
+    });
     expect(status).toBe(400);
   });
 
@@ -1171,6 +1187,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     });
     const reverse = await call('POST', `/v1/transfers/${String(created.json.id)}/reversals`, {
       amount: '100',
+      external_ref: 'rev_cross',
     });
     const list = await call('GET', '/v1/payment_intents/pi_settled_for_transfers/transfers');
 

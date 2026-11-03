@@ -274,6 +274,13 @@ Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
 `paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`, `social`,
 `tax`, `transfers`, `webhookDeliveries`.
 
+**Every merchant `POST` mounts `idempotent` (`lib/idempotency.ts`, ADR 0014 D3)
+after its auth and scope middleware**, or is named with its reason in
+`routes/__tests__/idempotencyCoverage.test.ts`, which walks the gateway. It is
+a 24-hour request-replay layer IN FRONT of business idempotency (the intent's
+unique key, `external_ref`), never a replacement for it — so never accept the
+header as a business identity: the SDK mints a fresh one per call.
+
 **Peable Tax (ADR 0011) decides whether a sale is taxed; a provider only says
 how much.** `services/tax/` owns it for every rail. A covered sale the provider
 cannot price fails closed, never zero; an uncovered one is zero and recorded as

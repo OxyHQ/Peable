@@ -12,6 +12,7 @@ import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { runWebhookOutboxPass } from '../services/webhookOutbox';
 import { toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, wrap, requireAuthenticated } from '../lib/http';
+import { idempotent } from '../lib/idempotency';
 import { resolveMerchant } from './paymentIntents';
 
 export type RedeliverResult =
@@ -150,6 +151,7 @@ export function createWebhookDeliveriesRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
