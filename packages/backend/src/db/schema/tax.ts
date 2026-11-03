@@ -12,18 +12,17 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import {
+  TAX_BEHAVIORS,
+  TAX_CALCULATION_ACCOUNTS,
+  TAX_COLLECTIONS,
+  TAX_EVIDENCE_STATUSES,
   TAX_REGISTRATION_SCHEMES,
+  TAX_SETTINGS_STATUSES,
   type TaxAddress,
   type TaxCalculation,
   type TaxTransactionReversal,
 } from '@peable.to/shared-types';
 import { merchants } from './merchants';
-
-export const TAX_SETTINGS_STATUSES = ['draft', 'active'] as const;
-export const TAX_BEHAVIORS = ['inclusive', 'exclusive'] as const;
-export const TAX_CALCULATION_ACCOUNTS = ['platform', 'none'] as const;
-export const TAX_EVIDENCE_STATUSES = ['sufficient', 'insufficient', 'conflicting'] as const;
-export const TAX_COLLECTIONS = ['collect', 'not_registered', 'nontaxable'] as const;
 
 /** One evidence item as stored: the location it points at, never more of the
  * customer than the rule needs. An IP address is kept only as a salted hash. */

@@ -1,22 +1,44 @@
+/**
+ * Peable Tax (ADR 0011): the merchant API (`/v1/tax/*`) and the owner's
+ * dashboard surface. Every public route's request schema is the contract's
+ * (`@peable.to/contracts` `taxRoutes`): the service validates with those
+ * objects, and this file decides nothing about the wire's shape.
+ */
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import { createOxyAuthMiddleware, OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
-import { z } from 'zod';
-import type { TaxReport } from '@peable.to/shared-types';
+import { createOxyAuthMiddleware } from '@oxy.so/core/server';
+import {
+  listTaxTransactionsQuery,
+  TAX_CODES,
+  type TaxReport,
+  taxReportQuery,
+} from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { requireAuthenticated, sendError, wrap } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { fromUnix } from '../lib/time';
-import { answerList, completeList, listQuerySchema, parseQuery } from '../lib/list';
+import {
+  answerList,
+  completeList,
+  dashboardQuery,
+  parseQuery,
+  type QuerySurface,
+} from '../lib/list';
+import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
+import { resolveDashboardAccess, type DashboardAccess } from './dashboard';
+import { assertAppMembership as realAssertAppMembership } from '../services/appMembership';
+import { parseTaxRequest, TaxError, type TaxService } from '../services/tax/taxService';
 
-/** The shared list parameters; `created[...]` filters `committed_at`. */
-const listTaxTransactionsQuery = listQuerySchema({});
 /**
- * The dashboard's copy also carries `environment` (the Test/Live toggle),
- * validated by `resolveDashboardAccess` before the list runs.
+ * Each query, per surface: the API validates with the contract's schema; the
+ * dashboard's copy also carries `environment` (the Test/Live toggle),
+ * validated by `resolveDashboardAccess` before the core runs.
  */
-const dashboardListTaxTransactionsQuery = listQuerySchema({
-  environment: z.enum(OXY_SERVICE_ENVIRONMENTS),
-});
+const TRANSACTIONS_QUERY = {
+  api: listTaxTransactionsQuery,
+  dashboard: dashboardQuery(listTaxTransactionsQuery),
+} as const;
+const REPORT_QUERY = { api: taxReportQuery, dashboard: dashboardQuery(taxReportQuery) } as const;
 
 /** Both tax-transaction lists — the merchant API's and the owner dashboard's — answer here. */
 async function answerTaxTransactionList(
@@ -24,9 +46,9 @@ async function answerTaxTransactionList(
   res: Response,
   tax: TaxService,
   merchant: MerchantRow,
-  schema: typeof listTaxTransactionsQuery | typeof dashboardListTaxTransactionsQuery,
+  surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, schema);
+  const query = parseQuery(req, res, TRANSACTIONS_QUERY[surface]);
   if (!query) return;
   await answerList(req, res, {
     query,
@@ -37,12 +59,6 @@ async function answerTaxTransactionList(
     serialize: (transaction) => transaction,
   });
 }
-import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { resolveMerchant, resolveMerchantByApp } from './paymentIntents';
-import { resolveDashboardAccess, type DashboardAccess } from './dashboard';
-import { assertAppMembership as realAssertAppMembership } from '../services/appMembership';
-import { TAX_CODES } from '../services/tax/codes';
-import { TaxError, type TaxService } from '../services/tax/taxService';
 
 /** Answer a tax request: `TaxError` carries its own status and code; anything
  * else is the gateway's fault and says nothing more. */
@@ -116,11 +132,17 @@ function reportCsv(report: TaxReport): string {
 /** A Unix-seconds instant as its UTC calendar day, for a file name. */
 const day = (seconds: number) => fromUnix(seconds).toISOString().slice(0, 10);
 
-async function sendReport(req: Request, res: Response, tax: TaxService, merchant: MerchantRow) {
-  const { format, ...query } = req.query as Record<string, string | undefined>;
+async function sendReport(
+  req: Request,
+  res: Response,
+  tax: TaxService,
+  merchant: MerchantRow,
+  surface: QuerySurface,
+) {
   await answer(res, async () => {
+    const query = parseTaxRequest(REPORT_QUERY[surface], req.query);
     const report = await tax.report(merchant, query);
-    if (format !== 'csv') return report;
+    if (query.format !== 'csv') return report;
     res
       .status(200)
       .type('text/csv')
@@ -236,8 +258,7 @@ export function createTaxRouter(deps: {
     '/v1/tax/transactions',
     ...read,
     route(
-      (tax, merchant, req, res) =>
-        answerTaxTransactionList(req, res, tax, merchant, listTaxTransactionsQuery),
+      (tax, merchant, req, res) => answerTaxTransactionList(req, res, tax, merchant, 'api'),
       -1,
     ),
   );
@@ -252,7 +273,7 @@ export function createTaxRouter(deps: {
   router.get(
     '/v1/tax/reports/summary',
     ...read,
-    route((tax, merchant, req, res) => sendReport(req, res, tax, merchant), -1),
+    route((tax, merchant, req, res) => sendReport(req, res, tax, merchant, 'api'), -1),
   );
   return router;
 }
@@ -408,7 +429,7 @@ export function createDashboardTaxRouter(deps: {
     route(
       'billing:read',
       (tax, merchant, req, _access, res) =>
-        answerTaxTransactionList(req, res, tax, merchant, dashboardListTaxTransactionsQuery),
+        answerTaxTransactionList(req, res, tax, merchant, 'dashboard'),
       -1,
     ),
   );
@@ -417,7 +438,7 @@ export function createDashboardTaxRouter(deps: {
     requireOxyUser,
     route(
       'billing:read',
-      (tax, merchant, req, _access, res) => sendReport(req, res, tax, merchant),
+      (tax, merchant, req, _access, res) => sendReport(req, res, tax, merchant, 'dashboard'),
       -1,
     ),
   );

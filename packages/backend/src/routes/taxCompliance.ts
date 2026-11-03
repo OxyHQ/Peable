@@ -16,6 +16,18 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
+import type { z } from 'zod';
+import {
+  expandOnlyQuery,
+  listTaxAssessmentsQuery,
+  listTaxComplianceActionsQuery,
+  listTaxDocumentsQuery,
+  listTaxOperatingLocationsQuery,
+  listTaxRegistrationDeclarationsQuery,
+  listTaxReviewItemsQuery,
+  listTaxSalesDestinationsQuery,
+  type TaxReviewItemStatus,
+} from '@peable.to/contracts';
 import { createOxyAuthMiddleware } from '@oxy.so/core/server';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -26,16 +38,14 @@ import { parseExpand, type ExpandableType } from '../lib/expand';
 import {
   answerList,
   completeList,
+  dashboardQuery,
   parseQuery,
   type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
 } from '../lib/list';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { assertAppMembership as realAssertAppMembership } from '../services/appMembership';
 import {
   createTaxComplianceService,
-  reviewItemStatusFilter,
   TaxComplianceError,
   type TaxComplianceActor,
   type TaxComplianceCursor,
@@ -68,9 +78,17 @@ interface ComplianceRoute {
   readonly core: ComplianceCore;
 }
 
-const retrieveQuery = surfaceRetrieveQuery();
-const listQuery = surfaceListQuery({});
-const reviewListQuery = surfaceListQuery({ status: reviewItemStatusFilter.optional() });
+/**
+ * A contract's query on both surfaces: the merchant API validates with the
+ * contract's own schema, the dashboard with the same one plus `environment`.
+ */
+function surfaces<S extends z.ZodRawShape>(api: z.ZodObject<S, z.core.$strict>) {
+  return { api, dashboard: dashboardQuery(api) } as const;
+}
+
+type ListSurfaces = ReturnType<typeof surfaces<typeof listTaxReviewItemsQuery.shape>>;
+
+const RETRIEVE_QUERY = surfaces(expandOnlyQuery);
 
 function idOf(req: Request): string {
   return req.params.id ?? '';
@@ -82,36 +100,37 @@ function retrieve(
   read: (service: TaxComplianceService, merchant: MerchantRow, id: string) => Promise<object>,
 ): ComplianceCore {
   return async (req, res, merchant, ctx) => {
-    const query = parseQuery(req, res, retrieveQuery[ctx.surface]);
+    const query = parseQuery(req, res, RETRIEVE_QUERY[ctx.surface]);
     if (!query) return;
     if (!parseExpand(res, type, query.expand, { list: false })) return;
     res.status(200).json(await read(ctx.service, merchant, idOf(req)));
   };
 }
 
-function list(
+/** A list, validated with the contract's list query (`schema`) on the caller's surface. */
+function list<S extends z.ZodRawShape>(
   type: ExpandableType,
   cursor: TaxComplianceCursor,
+  schema: z.ZodObject<S, z.core.$strict>,
   fetch: (
     service: TaxComplianceService,
     merchant: MerchantRow,
     page: Parameters<TaxComplianceService['listLocations']>[1],
-    query: { status?: 'open' | 'resolved' | 'dismissed' },
+    query: { status?: TaxReviewItemStatus | undefined },
   ) => Promise<{ data: readonly object[]; hasMore: boolean }>,
-  schema: typeof listQuery | typeof reviewListQuery = listQuery,
 ): ComplianceCore {
+  // Every list query is a contract `listQuery(...)`: the shared parameters plus,
+  // for review items, `status`.
+  const schemas = surfaces(schema) as unknown as ListSurfaces;
   return async (req, res, merchant, ctx) => {
-    const query = parseQuery(req, res, schema[ctx.surface]);
+    const query = parseQuery(req, res, schemas[ctx.surface]);
     if (!query) return;
     await answerList(req, res, {
       query,
       type,
       merchantId: merchant.id,
       cursor: (publicId) => ctx.service.cursor(cursor, merchant, publicId),
-      fetch: (page) =>
-        fetch(ctx.service, merchant, page, {
-          status: reviewItemStatusFilter.safeParse((query as { status?: unknown }).status).data,
-        }),
+      fetch: (page) => fetch(ctx.service, merchant, page, { status: query.status }),
       serialize: (row) => row,
     });
   };
@@ -152,8 +171,11 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/operating_locations',
     access: 'read',
-    core: list('tax.operating_location', 'operating_location', (s, m, page) =>
-      s.listLocations(m, page),
+    core: list(
+      'tax.operating_location',
+      'operating_location',
+      listTaxOperatingLocationsQuery,
+      (s, m, page) => s.listLocations(m, page),
     ),
   },
   {
@@ -178,8 +200,11 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/sales_destinations',
     access: 'read',
-    core: list('tax.sales_destination', 'sales_destination', (s, m, page) =>
-      s.listDestinations(m, page),
+    core: list(
+      'tax.sales_destination',
+      'sales_destination',
+      listTaxSalesDestinationsQuery,
+      (s, m, page) => s.listDestinations(m, page),
     ),
   },
   {
@@ -204,8 +229,11 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/registration_declarations',
     access: 'read',
-    core: list('tax.registration_declaration', 'registration_declaration', (s, m, page) =>
-      s.listDeclarations(m, page),
+    core: list(
+      'tax.registration_declaration',
+      'registration_declaration',
+      listTaxRegistrationDeclarationsQuery,
+      (s, m, page) => s.listDeclarations(m, page),
     ),
   },
   {
@@ -230,7 +258,9 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/documents',
     access: 'read',
-    core: list('tax.document', 'document', (s, m, page) => s.listDocuments(m, page)),
+    core: list('tax.document', 'document', listTaxDocumentsQuery, (s, m, page) =>
+      s.listDocuments(m, page),
+    ),
   },
   {
     method: 'post',
@@ -281,7 +311,9 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/assessments',
     access: 'read',
-    core: list('tax.assessment', 'assessment', (s, m, page) => s.listAssessments(m, page)),
+    core: list('tax.assessment', 'assessment', listTaxAssessmentsQuery, (s, m, page) =>
+      s.listAssessments(m, page),
+    ),
   },
   {
     method: 'post',
@@ -307,11 +339,8 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/review_items',
     access: 'read',
-    core: list(
-      'tax.review_item',
-      'review_item',
-      (s, m, page, query) => s.listReviewItems(m, page, query.status),
-      reviewListQuery,
+    core: list('tax.review_item', 'review_item', listTaxReviewItemsQuery, (s, m, page, query) =>
+      s.listReviewItems(m, page, query.status),
     ),
   },
   {
@@ -341,7 +370,9 @@ export const TAX_COMPLIANCE_ROUTES: readonly ComplianceRoute[] = [
     method: 'get',
     path: '/compliance_actions',
     access: 'read',
-    core: list('tax.compliance_action', 'action', (s, m, page) => s.listActions(m, page)),
+    core: list('tax.compliance_action', 'action', listTaxComplianceActionsQuery, (s, m, page) =>
+      s.listActions(m, page),
+    ),
   },
 ];
 

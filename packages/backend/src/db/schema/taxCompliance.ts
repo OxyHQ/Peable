@@ -12,6 +12,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import {
+  TAX_ACTOR_TYPES,
   TAX_CUSTOMER_TYPES,
   TAX_DOCUMENT_KINDS,
   TAX_FILING_FREQUENCIES,
@@ -21,6 +22,7 @@ import {
   TAX_REGISTRATION_SCHEMES,
   TAX_REVIEW_DECISIONS,
   TAX_REVIEW_ITEM_STATUSES,
+  TAX_REVIEW_SEVERITIES,
   type TaxAssessmentResult,
   type TaxObligationOutcome,
   type TaxSupplyType,
@@ -35,9 +37,6 @@ import { taxRegistrations } from './tax';
  * `tax_settings` — and nothing here is read by the calculator: collection is
  * still decided only by `tax_registrations` the owner approved.
  */
-
-export const TAX_ACTOR_TYPES = ['user', 'service', 'system'] as const;
-export const TAX_REVIEW_SEVERITIES = ['action_required', 'review'] as const;
 
 const countryCheck = (name: string, column: string) =>
   check(name, sql.raw(`${column} ~ '^[A-Z]{2}$'`));
