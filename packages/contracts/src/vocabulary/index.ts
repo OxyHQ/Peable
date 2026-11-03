@@ -7,6 +7,7 @@ export * from './connect';
 export * from './catalog';
 export * from './errors';
 export * from './invoices';
+export * from './events';
 export * from './lists';
 export * from './money';
 export * from './tax';

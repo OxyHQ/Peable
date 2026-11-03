@@ -8,6 +8,7 @@ import type {
   UpdateWebhookEndpointParams,
   WebhookDelivery,
   WebhookEndpoint,
+  WebhookEndpointWithSecret,
   WebhookEvent,
   WebhookEventType,
 } from '@peable.to/shared-types';
@@ -38,8 +39,8 @@ export class WebhookEndpointsResource {
   create(
     params: CreateWebhookEndpointParams,
     options: { idempotencyKey?: string } = {},
-  ): Promise<WebhookEndpoint> {
-    return this.client.request<WebhookEndpoint>('POST', '/v1/webhook_endpoints', {
+  ): Promise<WebhookEndpointWithSecret> {
+    return this.client.request<WebhookEndpointWithSecret>('POST', '/v1/webhook_endpoints', {
       body: params,
       idempotencyKey: options.idempotencyKey,
     });
@@ -78,8 +79,11 @@ export class WebhookEndpointsResource {
    * signing beside it until then — every delivery carries a `v1=` for each —
    * so you can deploy the new secret without refusing a single event.
    */
-  rollSecret(id: string, params: RollWebhookEndpointSecretParams = {}): Promise<WebhookEndpoint> {
-    return this.client.request<WebhookEndpoint>('POST', `${path(id)}/roll_secret`, {
+  rollSecret(
+    id: string,
+    params: RollWebhookEndpointSecretParams = {},
+  ): Promise<WebhookEndpointWithSecret> {
+    return this.client.request<WebhookEndpointWithSecret>('POST', `${path(id)}/roll_secret`, {
       body: params,
     });
   }

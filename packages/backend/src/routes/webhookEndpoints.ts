@@ -1,11 +1,14 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
+  METADATA_LIMIT_MESSAGE,
   PEABLE_API_VERSION,
-  WEBHOOK_SECRET_ROLL_MAX_EXPIRES_IN_SECONDS,
-  type WebhookEnabledEvent,
-} from '@peable.to/shared-types';
+  createWebhookEndpointParams,
+  expandOnlyQuery,
+  listWebhookEndpointsQuery,
+  rollWebhookEndpointSecretParams,
+  updateWebhookEndpointParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -17,8 +20,6 @@ import {
   updateEndpoint,
 } from '../db/webhooks/webhookEndpointRepository';
 import { findDeliveryForMerchant } from '../db/webhooks/webhookDeliveryRepository';
-import { WEBHOOK_ENDPOINT_DESCRIPTION_MAX } from '../db/schema/webhooks';
-import { WEBHOOK_ENABLED_EVENTS } from '../db/schema/valueSets';
 import { recordTestEvent } from '../services/events';
 import { generateWebhookSecret, webhookUrlProblem } from '../services/webhookEndpoints';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
@@ -26,19 +27,12 @@ import { runWebhookOutboxPass } from '../services/webhookOutbox';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { idempotent } from '../lib/idempotency';
 import { newId } from '../lib/ids';
+import { answerList, dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
 import {
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
-import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
-import { toWebhookDeliveryDTO, toWebhookEndpointDTO } from '../lib/serialize';
+  toWebhookDeliveryDTO,
+  toWebhookEndpointDTO,
+  toWebhookEndpointWithSecretDTO,
+} from '../lib/serialize';
 import {
   requireAuthenticated,
   sendError,
@@ -55,50 +49,19 @@ import { resolveMerchant } from './paymentIntents';
  * service-authed routes here and the dashboard's
  * `/v1/dashboard/applications/:applicationId/webhook_endpoints*` run the same
  * validation, the same writes and the same answers against different auth.
+ *
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `webhookEndpointRoutes`).
  */
 
-const listEndpointsQuery = surfaceListQuery({});
-const retrieveEndpointQuery = surfaceRetrieveQuery();
-
-const enabledEventsSchema = z
-  .array(z.enum(WEBHOOK_ENABLED_EVENTS as [WebhookEnabledEvent, ...WebhookEnabledEvent[]]))
-  .min(1, 'enabled_events needs at least one event type, or "*"')
-  .max(WEBHOOK_ENABLED_EVENTS.length)
-  // A repeated type means nothing more than one; stored once.
-  .transform((list): WebhookEnabledEvent[] => [...new Set(list)]);
-
-const descriptionSchema = z.string().max(WEBHOOK_ENDPOINT_DESCRIPTION_MAX);
-
-const createBodySchema = z
-  .object({
-    url: z.string().min(1),
-    enabled_events: enabledEventsSchema,
-    description: descriptionSchema.min(1).optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-
-const updateBodySchema = z
-  .object({
-    url: z.string().min(1).optional(),
-    enabled_events: enabledEventsSchema.optional(),
-    disabled: z.boolean().optional(),
-    /** `''` clears it, as a metadata value does. */
-    description: descriptionSchema.optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-
-const rollBodySchema = z
-  .object({
-    expires_in_seconds: z
-      .number()
-      .int()
-      .min(0)
-      .max(WEBHOOK_SECRET_ROLL_MAX_EXPIRES_IN_SECONDS)
-      .optional(),
-  })
-  .strict();
+const listQueries = {
+  api: listWebhookEndpointsQuery,
+  dashboard: dashboardQuery(listWebhookEndpointsQuery),
+} as const;
+const retrieveQueries = {
+  api: expandOnlyQuery,
+  dashboard: dashboardQuery(expandOnlyQuery),
+} as const;
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -133,7 +96,7 @@ export async function createWebhookEndpoint(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = createBodySchema.safeParse(req.body ?? {});
+  const parsed = createWebhookEndpointParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -163,7 +126,7 @@ export async function createWebhookEndpoint(
     return;
   }
   res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json(toWebhookEndpointDTO(created, secret));
+  res.status(200).json(toWebhookEndpointWithSecretDTO(created, secret));
 }
 
 /** `GET /v1/webhook_endpoints/:id`. Never the secret. */
@@ -175,7 +138,7 @@ export async function retrieveWebhookEndpoint(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrieveEndpointQuery[surface]);
+  const query = parseQuery(req, res, retrieveQueries[surface]);
   if (!query) return;
   const expand = parseExpand(res, 'webhook_endpoint', query.expand, { list: false });
   if (!expand) return;
@@ -196,7 +159,7 @@ export async function answerWebhookEndpointList(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, listEndpointsQuery[surface]);
+  const query = parseQuery(req, res, listQueries[surface]);
   if (!query) return;
   const db = getDb();
   await answerList(req, res, {
@@ -218,7 +181,7 @@ export async function updateWebhookEndpoint(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updateWebhookEndpointParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -283,7 +246,7 @@ export async function rollWebhookEndpointSecret(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = rollBodySchema.safeParse(req.body ?? {});
+  const parsed = rollWebhookEndpointSecretParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -299,7 +262,7 @@ export async function rollWebhookEndpointSecret(
     return;
   }
   res.setHeader('Cache-Control', 'no-store');
-  res.status(200).json(toWebhookEndpointDTO(rolled, secret));
+  res.status(200).json(toWebhookEndpointWithSecretDTO(rolled, secret));
 }
 
 /**

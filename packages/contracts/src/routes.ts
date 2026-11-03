@@ -14,7 +14,19 @@ import type { RouteContract } from './route';
  * routes excepted: they are Orbit's private surface), the OpenAPI document is
  * generated from it, and the SDK's resource methods are generated from it.
  */
-export const routes = [
+export type AnyRoute =
+  | (typeof coreRoutes)[number]
+  | (typeof paymentsRoutes)[number]
+  | (typeof checkoutRoutes)[number]
+  | (typeof catalogRoutes)[number]
+  | (typeof billingEngineRoutes)[number]
+  | (typeof connectRoutes)[number]
+  | (typeof taxRoutes)[number]
+  | (typeof eventsRoutes)[number];
+
+// Annotated, not inferred: the inferred tuple of every route is larger than the
+// declaration emitter serializes. Each group's own tuple keeps its literal types.
+export const routes: readonly AnyRoute[] = [
   ...coreRoutes,
   ...paymentsRoutes,
   ...checkoutRoutes,
@@ -23,9 +35,7 @@ export const routes = [
   ...connectRoutes,
   ...taxRoutes,
   ...eventsRoutes,
-] as const satisfies readonly RouteContract[];
-
-export type AnyRoute = (typeof routes)[number];
+] satisfies readonly RouteContract[];
 
 /** Every route by its `operationId`. */
 export type RouteMap = { [R in AnyRoute as R['operationId']]: R };

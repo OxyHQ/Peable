@@ -23,31 +23,6 @@ const INFRASTRUCTURE = new Set([
   'POST /v1/webhooks/oxy/files',
 ]);
 
-/**
- * TRANSITIONAL: mounted public routes whose contract is still being written,
- * by group. Each list only ever shrinks, and the test fails on a stale entry,
- * so a route leaves this list in the change that contracts it. Empty at 1.0.
- */
-const PENDING: Record<string, readonly string[]> = {
-  payments: [],
-  catalog: [],
-  checkout: [],
-  events: [
-    'GET /v1/webhook_deliveries',
-    'POST /v1/webhook_deliveries/:id/redeliver',
-    'POST /v1/webhook_endpoints',
-    'GET /v1/webhook_endpoints',
-    'GET /v1/webhook_endpoints/:id',
-    'POST /v1/webhook_endpoints/:id',
-    'DELETE /v1/webhook_endpoints/:id',
-    'POST /v1/webhook_endpoints/:id/roll_secret',
-    'POST /v1/webhook_endpoints/:id/test',
-    'GET /v1/events',
-    'GET /v1/events/stream',
-    'GET /v1/events/:id',
-  ],
-};
-
 const gateway = createGateway();
 
 afterAll(() => {
@@ -84,14 +59,11 @@ test('every contract names a mounted route', () => {
   expect([...contracted].filter((key) => !served.has(key))).toEqual([]);
 });
 
-test('every mounted public route has a contract (or is pending, by name)', () => {
-  const pending = new Set(Object.values(PENDING).flat());
+test('every mounted public route has a contract', () => {
   const uncontracted = [...mounted()].filter(
     (key) => !INFRASTRUCTURE.has(key) && !key.includes(' /v1/dashboard/') && !contracted.has(key),
   );
-  expect(uncontracted.filter((key) => !pending.has(key))).toEqual([]);
-  // A pending entry that now has a contract (or no longer exists) is stale.
-  expect([...pending].filter((key) => !uncontracted.includes(key))).toEqual([]);
+  expect(uncontracted).toEqual([]);
 });
 
 test('no two contracts declare the same operation', () => {
