@@ -6,7 +6,7 @@
 
 ## Product and boundaries
 
-Peable has three connected surfaces: the business payments platform (dashboard,
+Peable has three connected surfaces: the business payments platform (Orbit by Peable,
 APIs and services), the personal payment app, and SDKs that bring payment
 management and the **Pay with Peable** experience into other websites and apps.
 The [README](../README.md) defines their purpose and relationship. Peable is the
@@ -50,7 +50,7 @@ receipt cannot establish that today's user journey works in production.
 | Cards | Creation, confirmation, cancellation, expiry and reconciliation through the implemented provider | Full payment and marketplace lifecycle acceptance; current live enablement unverified |
 | Marketplace | Seller onboarding, transfers/reversals, refunds, disputes and text evidence | Dispute attachments; dispute fee/funds movements; payout tracking |
 | Financial reporting | Provider gross/fee/net reads with explicit unknown values | Per-merchant journal, fiat balances, reserves, negative balances and bank reconciliation |
-| Merchant dashboard | Merchant/payment/webhook APIs; tax administration and contribution screens in the app | Complete merchant dashboard, credential UI over Oxy authority, broad resource management |
+| Orbit by Peable | Merchant/payment/webhook APIs; tax administration and contribution screens in the app | Complete merchant dashboard, credential UI over Oxy authority, broad resource management |
 | Billing | Customers, subscription checkout/portal, subscription and invoice reads, cancellation, operation recovery | General self-service catalogue and subscription administration beyond configured offers |
 | FairCoin billing | Quoted subscription periods and explicit renewals using payment intents | External funded settlement acceptance; no claim of automatic wallet debit |
 | Tax | Location evidence, calculations, owner-approved registrations, reports, renewal repricing and refund reversals | Provider/environment acceptance for enabled offers and jurisdictions |
@@ -123,7 +123,7 @@ production activation or published package availability. See the dated
    confirmation and recovery after interrupted responses. Verify entitlement
    updates and renewals/cancellation against authoritative backend state. Use the
    same payment implementation for subsequent integrations.
-4. **Build the merchant dashboard.** Bring onboarding, payments, links, checkout,
+4. **Build Orbit by Peable.** Bring onboarding, payments, links, checkout,
    sellers, refunds/disputes, billing, tax and webhook diagnostics into a coherent
    administrative interface over existing authority and services.
 5. **Complete financial operations and later products.** Define accounting and

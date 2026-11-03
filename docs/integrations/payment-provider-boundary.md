@@ -1,6 +1,6 @@
 # Peable product and provider boundary
 
-Peable is the public payments platform: merchant workspace (name undecided), APIs, services, server
+Peable is the public payments platform: Orbit by Peable merchant workspace, APIs, services, server
 SDK, payer SDK, hosted checkout and personal payment app. It supports fiat and
 FairCoin payment rails. Processing providers are implementation dependencies of
 that platform; they do not define the product name or replace Peable's public API.

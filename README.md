@@ -10,11 +10,10 @@ payment lifecycle.
 ### Peable Platform
 
 Businesses and platforms use Peable to accept and manage payments through a
-central merchant workspace, APIs and services. The product covers payment requests,
+**Orbit by Peable**, the central merchant workspace, alongside APIs and services. The product covers payment requests,
 payment links, hosted checkout, subscriptions, tax, connected sellers, refunds,
 disputes, payment status and webhook notifications. The API foundation exists;
-the complete merchant workspace remains to be built, and its product name is not
-yet decided. It will bring payment operations, customers, subscriptions, refunds,
+the complete Orbit workspace remains to be built. Orbit will bring payment operations, customers, subscriptions, refunds,
 disputes, settlement, reports and developer tools into one place. Developer tools
 include application credentials and webhook configuration/diagnostics, with the
 same authority checks as the APIs.
