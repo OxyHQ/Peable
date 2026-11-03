@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Enamel mug</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        max-width: 28rem;
+        margin: 3rem auto;
+        padding: 0 1rem;
+      }
+      #payment {
+        margin: 1rem 0;
+      }
+      button {
+        width: 100%;
+        padding: 0.75rem;
+        font-size: 1rem;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Enamel mug</h1>
+    <p id="message" role="status">Loading…</p>
+    <form id="payment-form" hidden>
+      <div id="payment"></div>
+      <button id="pay" type="submit" disabled>Pay</button>
+    </form>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
