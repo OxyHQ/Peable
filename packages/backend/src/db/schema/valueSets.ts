@@ -299,6 +299,17 @@ export const WEBHOOK_EVENT_SCOPES = {
   'setup_intent.canceled': 'merchant',
   'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
+  // The catalog (ADR 0018): about the merchant's own products and offers.
+  'product.created': 'merchant',
+  'product.updated': 'merchant',
+  'product.deleted': 'merchant',
+  'price.created': 'merchant',
+  'price.updated': 'merchant',
+  'coupon.created': 'merchant',
+  'coupon.updated': 'merchant',
+  'coupon.deleted': 'merchant',
+  'promotion_code.created': 'merchant',
+  'promotion_code.updated': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -393,6 +404,22 @@ export const TERMINAL_WEBHOOK_DELIVERY_STATUSES = ['delivered', 'failed', 'dead'
  * the API cannot describe.
  */
 export { CURRENCY_CODES } from '@peable.to/shared-types';
+
+/**
+ * The catalog's closed sets (ADR 0018), re-exported from the wire contract that
+ * types the DTOs, so a CHECK can never accept a value the API cannot name nor
+ * refuse one it publishes.
+ */
+export {
+  COUPON_DURATIONS,
+  PRICE_BILLING_SCHEMES,
+  PRICE_TAX_BEHAVIORS,
+  PRICE_TIERS_MODES,
+  PRICE_TYPES,
+  RECURRING_INTERVALS,
+  RECURRING_USAGE_TYPES,
+  TRANSFORM_QUANTITY_ROUNDS,
+} from '@peable.to/shared-types';
 
 /**
  * The highest derivation index this schema can store — `int4`'s ceiling, and

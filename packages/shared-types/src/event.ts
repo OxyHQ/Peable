@@ -2,6 +2,7 @@
 // nested under `data.object`. Stored once (`/v1/events`, 30 days) and delivered
 // HMAC-signed to every matching webhook endpoint (ADR 0014 D4).
 import type { Charge } from './charge';
+import type { Coupon, Price, Product, PromotionCode } from './catalog';
 import type { Customer } from './customer';
 import type { Dispute } from './dispute';
 import type { PaymentIntent } from './paymentIntent';
@@ -78,6 +79,26 @@ export interface WebhookEventPayload {
   'setup_intent.succeeded': SetupIntent;
   'setup_intent.setup_failed': SetupIntent;
   'setup_intent.canceled': SetupIntent;
+  /**
+   * The catalog (ADR 0018): each create, update and delete of a product,
+   * price, coupon or promotion code, carrying the object as it stands after
+   * the change (a deleted one as it stood before). An update names the moved
+   * fields in `data.previous_attributes`; an update that moved nothing records
+   * no event. Prices and promotion codes are never deleted — they are archived
+   * with `active: false` — so there is no `price.deleted` or
+   * `promotion_code.deleted`: a type that can never be sent is a promise the
+   * catalog cannot keep.
+   */
+  'product.created': Product;
+  'product.updated': Product;
+  'product.deleted': Product;
+  'price.created': Price;
+  'price.updated': Price;
+  'coupon.created': Coupon;
+  'coupon.updated': Coupon;
+  'coupon.deleted': Coupon;
+  'promotion_code.created': PromotionCode;
+  'promotion_code.updated': PromotionCode;
   /**
    * A seller's account changed — their READINESS, in practice. Emitted when the
    * fields a merchant ACTS on change, not on every refresh. It names no payment

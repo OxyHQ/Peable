@@ -160,6 +160,63 @@ describe('webhook endpoints and events', () => {
   });
 });
 
+describe('catalog', () => {
+  it('manages products and their prices under the dashboard scope', async () => {
+    answer = (call) =>
+      call.method === 'GET' && !call.path.includes('/products/prod_1')
+        ? { object: 'list', data: [], has_more: false }
+        : { id: 'prod_1' };
+    await api.products.list(scope, { active: false, limit: 25, starting_after: 'prod_0' });
+    await api.products.retrieve(scope, 'prod_1');
+    await api.products.create(scope, {
+      name: 'Plus',
+      default_price_data: { currency: 'EUR', unit_amount: '499' },
+    });
+    await api.products.update(scope, 'prod_1', { active: false, description: '' });
+    await api.products.delete(scope, 'prod_1');
+    await api.prices.list(scope, { product: 'prod_1', limit: 100 });
+    await api.prices.create(scope, {
+      product: 'prod_1',
+      currency: 'FAIR',
+      unit_amount: '100000000',
+      recurring: { interval: 'month' },
+    });
+    await api.prices.update(scope, 'price_1', { active: false });
+    const base = '/v1/dashboard/applications/app%201';
+    expect(calls.map((call) => [call.method, call.path, call.options?.body])).toEqual([
+      [
+        'GET',
+        `${base}/products?environment=development&active=false&limit=25&starting_after=prod_0`,
+        undefined,
+      ],
+      ['GET', `${base}/products/prod_1?environment=development`, undefined],
+      [
+        'POST',
+        `${base}/products?environment=development`,
+        { name: 'Plus', default_price_data: { currency: 'EUR', unit_amount: '499' } },
+      ],
+      [
+        'POST',
+        `${base}/products/prod_1?environment=development`,
+        { active: false, description: '' },
+      ],
+      ['DELETE', `${base}/products/prod_1?environment=development`, undefined],
+      ['GET', `${base}/prices?environment=development&product=prod_1&limit=100`, undefined],
+      [
+        'POST',
+        `${base}/prices?environment=development`,
+        {
+          product: 'prod_1',
+          currency: 'FAIR',
+          unit_amount: '100000000',
+          recurring: { interval: 'month' },
+        },
+      ],
+      ['POST', `${base}/prices/price_1?environment=development`, { active: false }],
+    ]);
+  });
+});
+
 describe('merchant', () => {
   it('answers null when the application has no merchant in this environment', async () => {
     answer = () => {

@@ -19,19 +19,28 @@ import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
 import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
+import { RiPriceTag3Line } from '@oxy.so/bloom/icons/RiPriceTag3Line';
 import { RiReceiptLine } from '@oxy.so/bloom/icons/RiReceiptLine';
 import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
 import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
 import { t } from '../i18n';
 
-export type OrbitTab = 'index' | 'payments' | 'developers' | 'tax' | 'contributions' | 'settings';
+export type OrbitTab =
+  | 'index'
+  | 'payments'
+  | 'products'
+  | 'developers'
+  | 'tax'
+  | 'contributions'
+  | 'settings';
 
 type Glyph = typeof RiHome5Line;
 
 const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Glyph }> = {
   index: { labelKey: 'nav.home', icon: RiHome5Line, activeIcon: RiHome5Fill },
   payments: { labelKey: 'nav.payments', icon: RiBankCardLine, activeIcon: RiBankCardLine },
+  products: { labelKey: 'nav.products', icon: RiPriceTag3Line, activeIcon: RiPriceTag3Line },
   developers: {
     labelKey: 'nav.developers',
     icon: RiTerminalBoxLine,
@@ -50,6 +59,7 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
 export const ORBIT_TABS: readonly OrbitTab[] = [
   'index',
   'payments',
+  'products',
   'developers',
   'tax',
   'contributions',

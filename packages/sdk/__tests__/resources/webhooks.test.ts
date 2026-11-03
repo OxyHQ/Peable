@@ -6,6 +6,10 @@ import {
   type WebhookEventType,
   type Charge,
   type ConnectedAccount,
+  type Coupon,
+  type Price,
+  type Product,
+  type PromotionCode,
   type Customer,
   type Dispute,
   type PaymentMethod,
@@ -285,6 +289,82 @@ const setupIntent: SetupIntent = {
   metadata: {},
   created: EVENT.created,
 };
+const product: Product = {
+  id: 'prod_fixture',
+  object: 'product',
+  livemode: false,
+  active: true,
+  name: 'Plus',
+  description: null,
+  images: [],
+  metadata: {},
+  tax_code: null,
+  default_price: 'price_fixture',
+  unit_label: null,
+  url: null,
+  statement_descriptor: null,
+  marketing_features: [],
+  created: EVENT.created,
+  updated: EVENT.created,
+};
+const price: Price = {
+  id: 'price_fixture',
+  object: 'price',
+  livemode: false,
+  active: true,
+  product: 'prod_fixture',
+  currency: 'EUR',
+  unit_amount: '999',
+  billing_scheme: 'per_unit',
+  tiers: null,
+  tiers_mode: null,
+  transform_quantity: null,
+  type: 'recurring',
+  recurring: { interval: 'month', interval_count: 1, usage_type: 'licensed' },
+  tax_behavior: 'exclusive',
+  lookup_key: 'plus_monthly',
+  nickname: null,
+  metadata: {},
+  created: EVENT.created,
+};
+const coupon: Coupon = {
+  id: 'SUMMER25',
+  object: 'coupon',
+  livemode: false,
+  name: null,
+  percent_off: 25,
+  amount_off: null,
+  currency: null,
+  duration: 'once',
+  duration_in_months: null,
+  max_redemptions: null,
+  redeem_by: null,
+  times_redeemed: 0,
+  valid: true,
+  applies_to: null,
+  metadata: {},
+  created: EVENT.created,
+};
+const promotionCode: PromotionCode = {
+  id: 'promo_fixture',
+  object: 'promotion_code',
+  livemode: false,
+  code: 'SUMMER',
+  coupon: 'SUMMER25',
+  customer: null,
+  active: true,
+  max_redemptions: null,
+  expires_at: null,
+  times_redeemed: 0,
+  restrictions: {
+    first_time_transaction: false,
+    minimum_amount: null,
+    minimum_amount_currency: null,
+  },
+  metadata: {},
+  created: EVENT.created,
+};
+
 const payloads = {
   'payment_intent.created': EVENT.data.object,
   'payment_intent.requires_action': EVENT.data.object,
@@ -319,6 +399,16 @@ const payloads = {
   'setup_intent.succeeded': setupIntent,
   'setup_intent.setup_failed': { ...setupIntent, status: 'requires_payment_method' },
   'setup_intent.canceled': { ...setupIntent, status: 'canceled' },
+  'product.created': product,
+  'product.updated': product,
+  'product.deleted': product,
+  'price.created': price,
+  'price.updated': { ...price, active: false },
+  'coupon.created': coupon,
+  'coupon.updated': { ...coupon, name: 'Summer' },
+  'coupon.deleted': { ...coupon, valid: false },
+  'promotion_code.created': promotionCode,
+  'promotion_code.updated': { ...promotionCode, active: false },
   'connected_account.updated': account,
   'billing.observation.updated': {
     object: 'billing_observation',
@@ -343,6 +433,22 @@ const payloads = {
     updated_at: EVENT.created,
   },
 } satisfies WebhookEventPayload;
+
+describe('catalog events', () => {
+  test('a signed product.created verifies and narrows to a Product', () => {
+    const raw = JSON.stringify({ ...EVENT, type: 'product.created', data: { object: product } });
+    const timestamp = Math.floor(Date.now() / 1000);
+    const event = new WebhooksResource().constructEvent(
+      raw,
+      signWebhook(SECRET, raw, timestamp),
+      SECRET,
+    );
+    if (event.type !== 'product.created') throw new Error(`narrowed to ${event.type}`);
+    // `default_price` exists on Product only: this compiles because of the narrowing.
+    expect(event.data.object.default_price).toBe('price_fixture');
+    expect(event.data.object.object).toBe('product');
+  });
+});
 
 describe('published event family parity', () => {
   for (const type of Object.keys(payloads) as WebhookEventType[]) {

@@ -55,6 +55,9 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // The contract half of events and webhook endpoints (ADR 0014 D4) ships in
   // its own release (#194), deployed before ADR 0019's `0042`–`0045` exist.
   '0041_drop_merchant_webhook_columns': 'released with #194 before 0042 (ADR 0019) was authored',
+  // ADR 0019's validate half ships in its own release (#195), deployed before
+  // the catalog's `0046`–`0047` (ADR 0018) exist.
+  '0045_orbit_payments_core_validate': 'released with #195 before 0046 (catalog) was authored',
 };
 
 interface Migration {

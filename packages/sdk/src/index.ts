@@ -97,6 +97,12 @@ import { CustomersResource } from './resources/customers';
 import { PaymentMethodsResource } from './resources/paymentMethods';
 import { SetupIntentsResource } from './resources/setupIntents';
 import { TransfersResource } from './resources/transfers';
+import {
+  CouponsResource,
+  PricesResource,
+  ProductsResource,
+  PromotionCodesResource,
+} from './resources/catalog';
 
 /**
  * The merchant-authed client.
@@ -157,6 +163,14 @@ export class Peable {
   readonly transfers: TransfersResource;
   /** Read-only: the network initiates these. */
   readonly disputes: DisputesResource;
+  /** The catalog: what you sell (`prod_…`) — archive with `active: false`. */
+  readonly products: ProductsResource;
+  /** How much a product costs (`price_…`) — immutable amounts; archive and replace. */
+  readonly prices: PricesResource;
+  /** Discounts by percentage or fixed amount. */
+  readonly coupons: CouponsResource;
+  /** Customer-facing codes (`promo_…`) that redeem a coupon. */
+  readonly promotionCodes: PromotionCodesResource;
 
   constructor(config: PeableConfig) {
     const resolved = resolveConfig(config);
@@ -199,6 +213,10 @@ export class Peable {
     this.setupIntents = new SetupIntentsResource(client);
     this.transfers = new TransfersResource(client);
     this.disputes = new DisputesResource(client);
+    this.products = new ProductsResource(client);
+    this.prices = new PricesResource(client);
+    this.coupons = new CouponsResource(client);
+    this.promotionCodes = new PromotionCodesResource(client);
   }
 }
 
@@ -336,6 +354,51 @@ export type {
   WebhookEventRequest,
 } from '@peable.to/shared-types';
 export type { ConstructEventOptions } from './resources/webhooks';
+export {
+  CouponsResource,
+  PricesResource,
+  ProductsResource,
+  PromotionCodesResource,
+} from './resources/catalog';
+export type { CatalogCreateOptions } from './resources/catalog';
+/** The catalog's wire objects and parameters (ADR 0018). */
+export type {
+  Coupon,
+  CouponDuration,
+  CouponListParams,
+  CreateCouponParams,
+  CreatePriceParams,
+  CreateProductParams,
+  CreatePromotionCodeParams,
+  DefaultPriceDataParams,
+  DeletedCoupon,
+  DeletedProduct,
+  Price,
+  PriceBillingScheme,
+  PriceDataParams,
+  PriceListParams,
+  PriceRecurring,
+  PriceTaxBehavior,
+  PriceTier,
+  PriceTierParams,
+  PriceTiersMode,
+  PriceTransformQuantity,
+  PriceType,
+  Product,
+  ProductListParams,
+  ProductMarketingFeature,
+  PromotionCode,
+  PromotionCodeListParams,
+  PromotionCodeRestrictions,
+  RecurringInterval,
+  RecurringParams,
+  RecurringUsageType,
+  TransformQuantityRound,
+  UpdateCouponParams,
+  UpdatePriceParams,
+  UpdateProductParams,
+  UpdatePromotionCodeParams,
+} from '@peable.to/shared-types';
 export { ContributionsResource } from './resources/contributions';
 export type {
   ContributionScope,
