@@ -28,7 +28,7 @@ import {
  * the payer's self-custody wallet signs and broadcasts the on-chain transaction.
  */
 import { createServer, type Server as HttpServer } from 'node:http';
-import express, { type ErrorRequestHandler, type RequestHandler } from 'express';
+import express, { type RequestHandler } from 'express';
 import { Server as SocketServer } from 'socket.io';
 import { oxy, PEABLE_SERVICE_AUDIENCE } from './oxy';
 import { createOxyCors, createOxyRateLimit, oxyTrustProxy } from '@oxy.so/core/server';
@@ -65,6 +65,11 @@ import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper'
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
 import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
+import {
+  REQUEST_ID_HEADER,
+  createInternalErrorHandler,
+  requestIdMiddleware,
+} from './lib/requestId';
 
 /** Date-based API version, echoed on every response (Stripe-parity). */
 const PEABLE_VERSION = '2026-07-18';
@@ -172,6 +177,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // trust-proxy setting; `realtime/socket.ts`'s `socketClientIp` applies the
   // same rule to the handshake request.
   app.set('trust proxy', oxyTrustProxy);
+  // Before everything else, so every answer — health probes, CORS refusals,
+  // rate-limit 429s, provider-webhook signature failures — names its request.
+  app.use(requestIdMiddleware);
   app.use(ecosystemActivityMiddleware);
 
   // Unauthenticated liveness probe for the ALB target-group health check.
@@ -205,7 +213,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   // dashboard (`dashboard.peable.to`) must be listed explicitly via
   // `config.allowedOrigins` (`PEABLE_ALLOWED_ORIGINS`) — the SAME list the
   // Socket.io `cors.origin` check below already reads.
-  app.use(createOxyCors({ appOrigins: config.allowedOrigins }));
+  app.use(
+    createOxyCors({ appOrigins: config.allowedOrigins, exposedHeaders: [REQUEST_ID_HEADER] }),
+  );
 
   // ─── MOUNTED BEFORE `express.json()` AND BEFORE THE GLOBAL RATE LIMITER ───
   //
@@ -280,11 +290,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
     }),
   );
 
-  const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
-    const message = err instanceof Error ? err.message : 'internal error';
-    res.status(500).json({ error: { type: 'api_error', message } });
-  };
-  app.use(errorHandler);
+  app.use(createInternalErrorHandler());
 
   const httpServer = createServer(app);
   const io = new SocketServer(httpServer, {
