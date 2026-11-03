@@ -247,6 +247,10 @@ describe('POST /v1/webhook_deliveries/:id/redeliver', () => {
         { method: 'POST' },
       );
       expect(res.status).toBe(403);
+      // Peable's envelope, not Oxy's `{error, code, status}` (ADR 0014 D1).
+      const body = (await res.json()) as { error: { type: string; code: string } };
+      expect(body.error.type).toBe('permission_error');
+      expect(body.error.code).toBe('insufficient_scope');
     } finally {
       await new Promise<void>((resolve, reject) => {
         noScopeServer.close((err) => (err ? reject(err) : resolve()));

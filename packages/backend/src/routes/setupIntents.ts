@@ -5,12 +5,16 @@
  * Elements, read fresh and never stored or put on the DTO.
  */
 import { Router } from 'express';
-import type { Request, RequestHandler } from 'express';
-import { z } from 'zod';
+import type { RequestHandler } from 'express';
 import { verifySecret } from '@oxy.so/core/server';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import type { CreateSetupIntentParams } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+import {
+  cancelSetupIntentParams,
+  clientSecretQuery,
+  createSetupIntentParams,
+  listSetupIntentsQuery,
+  retrieveSetupIntentQuery,
+} from '@peable.to/contracts';
 import { config } from '../config';
 import { getDb } from '../db/postgres';
 import { findLiveCustomerForMerchant } from '../db/customers/customerRepository';
@@ -37,49 +41,13 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  hasScope,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  expandParam,
-  listQuerySchema,
-  parseQuery,
-  resolveListReference,
-  retrieveQuerySchema,
-} from '../lib/list';
-import { metadataCreateSchema } from '../lib/metadata';
-import { resolveMerchant } from './paymentIntents';
-
-const createBodySchema = z
-  .object({
-    customer: z.string().min(1).max(255).optional(),
-    usage: z.enum(['on_session', 'off_session']).optional(),
-    payment_method_types: z.tuple([z.literal('card')]).optional(),
-    description: z.string().max(1000).optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CreateSetupIntentParams | 'expand', z.ZodType>)
-  .strict();
-
-const cancelBodySchema = z
-  .object({
-    cancellation_reason: z.enum(['abandoned', 'duplicate', 'requested_by_customer']).optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listSetupIntentsQuery = listQuerySchema({
-  customer: z.string().min(1).max(255).optional(),
-});
-const retrieveQuery = retrieveQuerySchema({});
-
-/** The payer's capability token, from the query or the header — as on payment intents. */
-function readClientSecret(req: Request): string | undefined {
-  const fromQuery = req.query.client_secret;
-  if (typeof fromQuery === 'string' && fromQuery.length > 0) return fromQuery;
-  return req.header('X-Peable-Client-Secret') ?? undefined;
-}
+import { answerList, parseQuery, resolveListReference } from '../lib/list';
+import { readClientSecret, resolveMerchant } from './paymentIntents';
 
 function sendSetupFailure(res: Parameters<typeof sendError>[0], error: unknown): boolean {
   if (error instanceof SetupUnavailableError || error instanceof CustomersUnavailableError) {
@@ -104,12 +72,12 @@ export function createSetupIntentsRouter(deps: {
     '/v1/setup_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      const parsed = createBodySchema.safeParse(req.body ?? {});
+      const parsed = createSetupIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -161,7 +129,7 @@ export function createSetupIntentsRouter(deps: {
     '/v1/setup_intents',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -208,14 +176,10 @@ export function createSetupIntentsRouter(deps: {
       }
       const { serviceApp } = req as OxyAuthRequest;
       if (serviceApp?.appId) {
-        let scopeGranted = false;
-        oxy.middleware.requireScope('payments:read')(req, res, () => {
-          scopeGranted = true;
-        });
-        if (!scopeGranted) return;
+        if (!hasScope(req, res, 'payments:read')) return;
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
-        const query = parseQuery(req, res, retrieveQuery);
+        const query = parseQuery(req, res, retrieveSetupIntentQuery);
         if (!query) return;
         const expand = parseExpand(res, 'setup_intent', query.expand, { list: false });
         if (!expand) return;
@@ -241,7 +205,9 @@ export function createSetupIntentsRouter(deps: {
         );
         return;
       }
-      const clientSecret = readClientSecret(req);
+      const payerQuery = parseQuery(req, res, retrieveSetupIntentQuery);
+      if (!payerQuery) return;
+      const clientSecret = readClientSecret(req, payerQuery.client_secret);
       if (!clientSecret) {
         sendError(
           res,
@@ -268,7 +234,7 @@ export function createSetupIntentsRouter(deps: {
     '/v1/setup_intents/:id/cancel',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -278,7 +244,7 @@ export function createSetupIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = cancelBodySchema.safeParse(req.body ?? {});
+      const parsed = cancelSetupIntentParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -330,19 +296,17 @@ export function createSetupIntentsRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
+      const query = parseQuery(req, res, clientSecretQuery);
+      if (!query) return;
       const { serviceApp } = req as OxyAuthRequest;
       let row: SetupIntentRow | null;
       if (serviceApp?.appId) {
-        let scopeGranted = false;
-        oxy.middleware.requireScope('payments:read')(req, res, () => {
-          scopeGranted = true;
-        });
-        if (!scopeGranted) return;
+        if (!hasScope(req, res, 'payments:read')) return;
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
         row = await findSetupIntentForMerchant(getDb(), id, merchant.id);
       } else {
-        const clientSecret = readClientSecret(req);
+        const clientSecret = readClientSecret(req, query.client_secret);
         if (!clientSecret) {
           sendError(
             res,

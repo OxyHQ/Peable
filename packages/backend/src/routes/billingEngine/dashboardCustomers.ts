@@ -1,17 +1,18 @@
-import { z } from 'zod';
+import { expandOnlyQuery, listCustomersQuery } from '@peable.to/contracts';
 import {
   findCustomerForMerchant,
   listCustomersForMerchant,
 } from '../../db/customers/customerRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery, surfaceListQuery, surfaceRetrieveQuery } from '../../lib/list';
+import { answerList, parseQuery } from '../../lib/list';
 import { toCustomerDTO, toDeletedCustomerDTO } from '../../lib/serialize';
 import { missing } from '../../services/billingEngine/errors';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, idParam } from './helpers';
+import { answerObject, bySurface, idParam } from './helpers';
 
-const listQuery = surfaceListQuery({ email: z.string().min(1).max(512).optional() });
-const retrieveQuery = surfaceRetrieveQuery();
+/** The contract's customer queries (`customerRoutes`), plus the dashboard's Test/Live toggle. */
+const listQuery = bySurface(listCustomersQuery);
+const retrieveQuery = bySurface(expandOnlyQuery);
 
 /**
  * `GET /customers` and `GET /customers/:id` for Orbit's dashboard (ADR 0016's

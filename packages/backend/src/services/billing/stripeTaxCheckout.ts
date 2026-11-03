@@ -19,6 +19,7 @@
  * Nothing here runs for a Stripe rail without that reference, so a deployment
  * that never opted in (Mercaria's I08 cohort) is untouched.
  */
+import { billingReturnUrl } from '@peable.to/contracts';
 import { createPublicKey, sign, type KeyObject } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -28,7 +29,7 @@ import {
 } from '@peable.to/shared-types';
 import type { Database } from '../../db/postgres';
 import { invoiceTaxLines } from '../tax/billingTaxQuotes';
-import { BillingError, billingReturnUrl, type BillingOwner } from './contracts';
+import { BillingError, type BillingOwner } from './contracts';
 import {
   billingTaxCheckoutSnapshotSchema,
   type billingTaxOfferSchema,

@@ -1,17 +1,31 @@
-import { billingTaxQuoteRequestSchema } from '../services/billing/tax-quote';
+/**
+ * The recurring billing transport (`/v1/billing/*`). Every request schema is
+ * the contract's (`@peable.to/contracts` `billingRoutes`): this file validates
+ * with those objects and decides nothing about the wire's shape.
+ */
+import {
+  billingCheckoutOperationParams,
+  billingIdempotencyKey,
+  cancelBillingSubscriptionParams,
+  createBillingCheckoutParams,
+  createBillingPortalParams,
+  createBillingTaxQuoteParams,
+  ensureBillingCustomerParams,
+  retrieveBillingInvoiceAuthorityQuery,
+} from '@peable.to/contracts';
 import { Router, type Request, type RequestHandler, type Response } from 'express';
 import { z } from 'zod';
-import { oxy } from '../oxy';
-import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import {
+  requireAuthenticated,
+  sendError,
+  sendValidationError,
+  wrap,
+  requireScope,
+} from '../lib/http';
 import { resolveMerchant } from './paymentIntents';
 import {
   BILLING_ERROR_MESSAGES,
   BillingError,
-  billingIdempotencyKey,
-  checkoutSchema,
-  checkoutOperationRequestSchema,
-  ensureCustomerSchema,
-  portalSchema,
   type BillingOwner,
 } from '../services/billing/contracts';
 import type { BillingService } from '../services/billing/billingService';
@@ -110,16 +124,8 @@ export function createBillingRouter(deps: {
       ]);
     return parsed.data;
   };
-  const write = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-  ];
-  const read = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const write = [deps.requireMerchant, requireAuthenticated, requireScope('payments:write')];
+  const read = [deps.requireMerchant, requireAuthenticated, requireScope('payments:read')];
   // The rails this merchant's payers can choose between, default first.
   router.get(
     '/v1/billing/rails',
@@ -133,21 +139,21 @@ export function createBillingRouter(deps: {
     '/v1/billing/tax_quotes',
     ...read,
     handle((service, owner, req) =>
-      service.createTaxQuote(owner, input(billingTaxQuoteRequestSchema, req.body)),
+      service.createTaxQuote(owner, input(createBillingTaxQuoteParams, req.body)),
     ),
   );
   router.post(
     '/v1/billing/customers',
     ...write,
     handle((service, owner, req) =>
-      service.ensureCustomer(owner, input(ensureCustomerSchema, req.body), key(req)),
+      service.ensureCustomer(owner, input(ensureBillingCustomerParams, req.body), key(req)),
     ),
   );
   router.post(
     '/v1/billing/checkout_sessions',
     ...write,
     handle((service, owner, req) =>
-      service.createCheckoutSession(owner, input(checkoutSchema, req.body), key(req)),
+      service.createCheckoutSession(owner, input(createBillingCheckoutParams, req.body), key(req)),
     ),
   );
   router.get(
@@ -165,7 +171,7 @@ export function createBillingRouter(deps: {
       if (!service.createEmbeddedCheckoutSession) throw new BillingError('not_found', 404);
       return service.createEmbeddedCheckoutSession(
         owner,
-        input(checkoutSchema, req.body),
+        input(createBillingCheckoutParams, req.body),
         key(req),
       );
     }),
@@ -182,7 +188,7 @@ export function createBillingRouter(deps: {
     '/v1/billing/portal_sessions',
     ...write,
     handle((service, owner, req) =>
-      service.createPortalSession(owner, input(portalSchema, req.body), key(req)),
+      service.createPortalSession(owner, input(createBillingPortalParams, req.body), key(req)),
     ),
   );
   router.get(
@@ -191,7 +197,7 @@ export function createBillingRouter(deps: {
     handle((service, owner, req) =>
       service.retrieveCheckoutOperation(
         owner,
-        input(checkoutOperationRequestSchema, { ...req.query, idempotency_key: req.params.key }),
+        input(billingCheckoutOperationParams, { ...req.query, idempotency_key: req.params.key }),
       ),
     ),
   );
@@ -205,9 +211,7 @@ export function createBillingRouter(deps: {
     ...read,
     handle((service, owner, req) => {
       // `?include=tax_lines`: the frozen Peable Tax lines, inside the signature.
-      const { include } = input(z.object({ include: z.literal('tax_lines').optional() }), {
-        include: req.query.include,
-      });
+      const { include } = input(retrieveBillingInvoiceAuthorityQuery, req.query);
       return service.retrieveFinalInvoiceAuthority(
         owner,
         req.params.id ?? '',
@@ -240,14 +244,19 @@ export function createBillingRouter(deps: {
     ...write,
     handle((service, owner, req) => {
       if (!service.renew) throw new BillingError('not_found', 404);
-      return service.renew(owner, req.params.id ?? '', input(checkoutSchema, req.body), key(req));
+      return service.renew(
+        owner,
+        req.params.id ?? '',
+        input(createBillingCheckoutParams, req.body),
+        key(req),
+      );
     }),
   );
   router.post(
     '/v1/billing/subscriptions/:id/cancel_at_period_end',
     ...write,
     handle((service, owner, req) => {
-      input(z.object({}).strict(), req.body);
+      input(cancelBillingSubscriptionParams, req.body);
       return service.cancelAtPeriodEnd(owner, req.params.id ?? '', key(req));
     }),
   );

@@ -303,10 +303,10 @@ describe('Peable Tax', () => {
       rail: 'faircoin',
       committedAt: new Date(),
     });
-    // Unix seconds, as a query string carries them.
+    // Unix seconds, parsed from the query string by the route (`taxReportQuery`).
     const window = {
-      from: String(Math.floor(Date.now() / 1000) - 3600),
-      to: String(Math.floor(Date.now() / 1000) + 3600),
+      from: Math.floor(Date.now() / 1000) - 3600,
+      to: Math.floor(Date.now() / 1000) + 3600,
     };
     const list = await tax.listTransactions(merchant, { limit: 100 });
     expect(list.data).toHaveLength(1);

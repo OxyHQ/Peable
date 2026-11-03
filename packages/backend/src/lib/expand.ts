@@ -129,7 +129,11 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
     payment_method: 'payment_method',
     latest_charge: 'charge',
   },
-  charge: { payment_intent: 'payment_intent' },
+  charge: {
+    payment_intent: 'payment_intent',
+    customer: 'customer',
+    payment_method: 'payment_method',
+  },
   customer: {},
   payment_method: { customer: 'customer' },
   setup_intent: { customer: 'customer', payment_method: 'payment_method' },

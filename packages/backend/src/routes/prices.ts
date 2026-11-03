@@ -4,13 +4,12 @@
  * and create another.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
-  CATALOG_LIMITS,
-  PRICE_TYPES,
-  RECURRING_INTERVALS,
-  RECURRING_USAGE_TYPES,
-} from '@peable.to/shared-types';
+  createPriceParams,
+  expandOnlyQuery,
+  listPricesQuery,
+  updatePriceParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -20,60 +19,21 @@ import {
 } from '../db/catalog/priceRepository';
 import { findProductForMerchant } from '../db/catalog/productRepository';
 import { createPrice, notFound, updatePrice } from '../services/catalog/catalogService';
-import {
-  booleanQuery,
-  createPriceBodySchema,
-  currencySchema,
-  idListQuery,
-  updatePriceFields,
-} from '../services/catalog/params';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError } from '../lib/http';
 import {
   answerList,
-  expandParam,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
+  surfaceQuery,
 } from '../lib/list';
-import { metadataUpdateSchema } from '../lib/metadata';
 import { toPriceDTO } from '../lib/serializeCatalog';
 import type { CatalogRoute } from './catalogRoutes';
 
-const updateBodySchema = z
-  .object({
-    ...updatePriceFields,
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict()
-  .superRefine((body, ctx) => {
-    if (body.transfer_lookup_key && (body.lookup_key === undefined || body.lookup_key === null)) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['transfer_lookup_key'],
-        message: 'transfer_lookup_key needs a lookup_key',
-      });
-    }
-  });
-
-const listPricesQuery = surfaceListQuery({
-  product: z.string().min(1).max(255).optional(),
-  active: booleanQuery.optional(),
-  type: z.enum(PRICE_TYPES).optional(),
-  currency: currencySchema.optional(),
-  lookup_keys: idListQuery(CATALOG_LIMITS.lookupKeysFilterMax).optional(),
-  recurring: z
-    .object({
-      interval: z.enum(RECURRING_INTERVALS).optional(),
-      usage_type: z.enum(RECURRING_USAGE_TYPES).optional(),
-    })
-    .strict()
-    .optional(),
-});
-const retrievePriceQuery = surfaceRetrieveQuery();
+// The request schemas are the contract's (`@peable.to/contracts` `priceRoutes`).
+const listQuery = surfaceQuery(listPricesQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -98,7 +58,7 @@ async function answerPrice(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
-  const parsed = createPriceBodySchema.safeParse(req.body ?? {});
+  const parsed = createPriceParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -125,7 +85,7 @@ async function retrieve(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrievePriceQuery[surface]);
+  const query = parseQuery(req, res, retrieveQuery[surface]);
   if (!query) return;
   if (!parseExpand(res, 'price', query.expand, { list: false })) return;
   const price = await findPriceForMerchant(getDb(), id, merchant.id);
@@ -136,7 +96,7 @@ async function retrieve(
 async function update(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updatePriceParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -160,7 +120,7 @@ async function list(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, listPricesQuery[surface]);
+  const query = parseQuery(req, res, listQuery[surface]);
   if (!query) return;
   const db = getDb();
   const product = await resolveListReference(

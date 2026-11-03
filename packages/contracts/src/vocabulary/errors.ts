@@ -55,6 +55,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   idempotency_error:
     'The `Idempotency-Key` was used with a different request, or its first request is still running.',
   idempotency_key_invalid: 'The `Idempotency-Key` header is not a valid key.',
+  insufficient_scope:
+    'The credential is valid but was not granted the Oxy scope this route requires (`payments:read`, `payments:write`, …); `message` names it.',
   invalid_billing_request: 'The billing request is not valid for this subscription or offer.',
   keyless_recipient: 'The recipient has no receive key, so no address can be derived for them.',
   link_not_found: 'The link does not exist or is no longer active.',
@@ -84,9 +86,10 @@ export const ERROR_CODE_DESCRIPTIONS = {
     'The merchant already has the maximum number of webhook endpoints.',
   account_not_ready:
     'The connected account cannot take this payment yet: its onboarding or a capability is incomplete.',
-  approval_incomplete: 'The tax registration has not been approved by the account owner yet.',
+  approval_incomplete:
+    'The tax settings cannot be approved yet: a legal name and head office are required, or they changed during the approval.',
   approval_requires_provider:
-    'The tax registration needs the provider to confirm it before it can be approved.',
+    'Registered sales need a tax provider, and this application has none: the approval would leave covered sales unpriceable.',
   checkout_session_expired: 'The Checkout Session has expired.',
   checkout_session_not_open: 'The Checkout Session is no longer open (complete or expired).',
   customer_location_conflicting:
@@ -94,7 +97,7 @@ export const ERROR_CODE_DESCRIPTIONS = {
   customer_location_expired: "The customer's location evidence is too old to price a sale with.",
   customer_location_insufficient:
     "There is not enough evidence of the customer's location to decide whether the sale is taxed.",
-  customer_location_invalid: "The customer's location evidence is malformed.",
+  customer_location_invalid: "The tax provider could not use the customer's location.",
   dispute_already_submitted:
     'Evidence for this dispute has already been submitted; it is one shot.',
   dispute_not_answerable: 'The dispute is in a status that no longer accepts evidence.',
@@ -121,10 +124,11 @@ export const ERROR_CODE_DESCRIPTIONS = {
   rail_unavailable: 'The payment rail this request needs is not available.',
   reconciliation_required:
     'The billing operation has an unknown outcome at the provider and is being reconciled.',
-  registration_immutable: 'An approved tax registration cannot be changed.',
+  registration_immutable:
+    'An approved or ended tax registration cannot be deleted or changed this way; end it instead.',
   resource_already_exists: 'An object with this identity already exists.',
   result_expired: 'The stored result of this operation has expired.',
-  review_item_not_open: 'The review item is already resolved.',
+  review_item_not_open: 'The review item is already resolved or dismissed.',
   rule_set_version_unavailable: 'The tax rule set version is not available.',
   subscription_line_invalid: 'A subscription line item is not valid for Checkout.',
   tax_behavior_locked: "The price's `tax_behavior` cannot change once set.",
@@ -173,6 +177,14 @@ export const ERROR_CODE_DESCRIPTIONS = {
   card_declined: 'The card was declined.',
   promotion_code_first_time_only: "The promotion code is for a customer's first purchase only.",
   network_mismatch: 'The FairCoin network differs from the one this object uses.',
+  // Connect onboarding (ADR 0012 D3): the seller-facing refusals.
+  link_expired:
+    'The onboarding link has expired or was already used; `refresh_url` is where the seller gets a fresh one.',
+  wrong_seller:
+    'The onboarding link names a different Oxy account; sign in as the seller it was minted for.',
+  already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
+  key_in_use: 'The key already receives payments for another account.',
+  no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof ERROR_CODE_DESCRIPTIONS;

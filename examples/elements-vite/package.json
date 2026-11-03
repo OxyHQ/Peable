@@ -1,0 +1,20 @@
+{
+  "name": "peable-example-elements-vite",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A custom payment page with Peable Elements; the server decides when the order is paid.",
+  "scripts": {
+    "server": "bun run server.ts",
+    "web": "vite",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.server.json"
+  },
+  "dependencies": {
+    "@peable.to/sdk": "^0.22.0"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.4.2",
+    "typescript": "~5.9.2",
+    "vite": "^8.1.5"
+  }
+}

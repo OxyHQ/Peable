@@ -1,3 +1,4 @@
+import { billingReference, billingTaxQuoteSchema } from '@peable.to/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
@@ -6,13 +7,7 @@ import {
   type CreateBillingCheckoutParams,
   type BillingFinalInvoiceAuthority,
 } from '@peable.to/shared-types';
-import {
-  BillingError,
-  billingReference,
-  billingTaxQuoteSchema,
-  type BillingOwner,
-  type BillingDeployment,
-} from './contracts';
+import { BillingError, type BillingOwner, type BillingDeployment } from './contracts';
 import {
   billingTaxProductSchema,
   billingCustomerLocationSchema,

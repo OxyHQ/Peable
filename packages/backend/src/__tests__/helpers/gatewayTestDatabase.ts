@@ -9,12 +9,11 @@ import type { ProviderId } from '../../services/providers/provider';
 import {
   PEABLE_API_VERSION,
   type CurrencyCode,
-  type PaymentIntent,
   type PaymentIntentRail,
   type SocialPaymentSource,
   type WebhookEnabledEvent,
-  type WebhookEventPayload,
   type WebhookEvent,
+  type WebhookEventObjectType,
   type WebhookEventType,
 } from '@peable.to/shared-types';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
@@ -478,7 +477,7 @@ export async function seedSession(
 
 /**
  * The event types that carry a PaymentIntent — DERIVED from the contract's own
- * `WebhookEventPayload`, not listed.
+ * `WEBHOOK_EVENT_OBJECTS` (`WebhookEventObjectType`), not listed.
  *
  * `seedDelivery` takes an intent, so it can only seed an event that carries
  * one. Before `WebhookEventPayload` existed this parameter was the whole
@@ -487,7 +486,7 @@ export async function seedSession(
  * disagrees with production while looking exactly like it.
  */
 type IntentWebhookEventType = {
-  [K in WebhookEventType]: WebhookEventPayload[K] extends PaymentIntent ? K : never;
+  [K in WebhookEventType]: WebhookEventObjectType<K> extends 'payment_intent' ? K : never;
 }[WebhookEventType];
 
 export interface SeedDeliveryValues {

@@ -220,6 +220,20 @@ jobs:
       - name: Typecheck every package
         run: bun run --filter '*' typecheck
 
+      # The examples are what integrators copy, so a change to the SDK's
+      # surface must not leave them stale. They are NOT workspace members — the
+      # backend image's frozen install needs every member's manifest, and an
+      # example is not part of it — so `--filter '*'` above does not reach them.
+      # Each resolves the workspace SDK built above through the root
+      # node_modules.
+      - name: Typecheck the examples
+        run: |
+          for example in examples/*/; do
+            echo "::group::$example"
+            (cd "$example" && bun run typecheck) || exit 1
+            echo "::endgroup::"
+          done
+
       - name: Migrations match the schema
         # A schema edited without regenerating produces DDL that never reaches
         # any database — every local test still passes, because the test harness

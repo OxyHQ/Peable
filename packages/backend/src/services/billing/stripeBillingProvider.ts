@@ -1,13 +1,9 @@
+import { billingReturnUrl } from '@peable.to/contracts';
 import type Stripe from 'stripe';
 import { z } from 'zod';
 import { BILLING_SUBSCRIPTION_STATUSES } from '@peable.to/shared-types';
 import { STRIPE_API_VERSION } from '../providers/stripe/client';
-import {
-  BillingError,
-  billingDeploymentSchema,
-  billingReturnUrl,
-  type BillingDeployment,
-} from './contracts';
+import { BillingError, billingDeploymentSchema, type BillingDeployment } from './contracts';
 import type { BillingProvider, ProviderBillingSubscription } from './provider';
 import { toUnix } from '../../lib/time';
 

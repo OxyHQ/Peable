@@ -11,9 +11,15 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
-import { isBaseUnitString, type TransferWithReversal } from '@peable.to/shared-types';
+import {
+  createTransferParams,
+  expandOnlyQuery,
+  listPaymentIntentTransfersQuery,
+  listTransfersQuery,
+  reverseTransferParams,
+  type Transfer,
+  type TransferWithReversal,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import {
   findAccountById,
@@ -42,90 +48,35 @@ import {
 import { ProviderError } from '../services/providers/provider';
 import { listReversalsForTransfer } from '../db/transfers/transferReversalRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { toTransferDTO, toTransferReversalDTO, type TransferDTO } from '../lib/serializeSettlement';
+import { toTransferDTO, toTransferReversalDTO } from '../lib/serializeSettlement';
 import {
   requireAuthenticated,
   sendError,
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
 import {
   answerList,
   completeList,
-  listQuerySchema,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
+  surfaceQuery,
 } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-/** `GET /v1/transfers`: every settlement, or those of one payment and/or one seller. */
-const listTransfersQuery = surfaceListQuery({
-  payment_intent: z.string().min(1).max(255).optional(),
-  connected_account: z.string().min(1).max(255).optional(),
-});
-/** The per-payment sub-list: the payment is in the path. */
-const listIntentTransfersQuery = listQuerySchema({});
-const retrieveTransferQuery = surfaceRetrieveQuery();
-/** A settlement's reversals are a complete, bounded set: no paging parameters. */
-const listReversalsQuery = surfaceRetrieveQuery();
-
 /**
- * A canonical base-unit integer string, validated with the SAME predicate the
- * database CHECK is rendered from. A `z.number()` here would be a silent
- * precision ceiling on a money value, which is the whole reason these are
- * strings on the wire.
+ * Request schemas: the contract's (`@peable.to/contracts` `transferRoutes`);
+ * the dashboard surface accepts the same plus its `environment` toggle.
  */
-const baseUnitAmount = z
-  .string()
-  .refine(
-    isBaseUnitString,
-    "amount must be a canonical integer string in the currency's smallest unit",
-  )
-  // `'0'` is a canonical integer string and passes the predicate above, and a
-  // zero transfer is not a transfer: it would consume the merchant's
-  // `external_ref`, so the REAL settlement of that order could never be created
-  // afterwards. The refund route refuses a zero for the same reason.
-  .refine((value) => value !== '0', 'a transfer of 0 is not a transfer');
-
-const createTransferBodySchema = z
-  .object({
-    /** The `pi_…` this settles out of. */
-    payment_intent: z.string().min(1),
-    /** Either address for the seller — their `ca_…` or the merchant's own ref. */
-    connected_account: z.string().min(1).optional(),
-    connected_account_ref: z.string().min(1).max(255).optional(),
-    /** The merchant's own id for what this settles. The idempotency. */
-    external_ref: z.string().min(1).max(255),
-    amount: baseUnitAmount,
-  })
-  .strict()
-  .refine((body) => Boolean(body.connected_account) !== Boolean(body.connected_account_ref), {
-    message: 'name the seller by exactly one of connected_account or connected_account_ref',
-  });
-
-const reverseTransferBodySchema = z
-  .object({
-    amount: baseUnitAmount,
-    /**
-     * The merchant's own id for THIS reversal — required, and durable.
-     *
-     * An amount is not an identity: two reversals of one settlement for the
-     * same amount are two operations. This field is what tells them apart, for
-     * as long as the reversal exists. It used to be satisfiable by the
-     * `Idempotency-Key` header instead; that header is now the generic
-     * 24-hour retry layer (ADR 0014 D3), which the SDK fills with a fresh uuid
-     * per call — accepting it here would hand every un-referenced reversal a
-     * random identity, and an application's own retry a second reversal.
-     */
-    external_ref: z.string().min(1).max(255),
-  })
-  .strict();
+const listTransfersQueries = surfaceQuery(listTransfersQuery);
+const retrieveTransferQuery = surfaceQuery(expandOnlyQuery);
+/** A settlement's reversals are a complete, bounded set: no paging parameters. */
+const listReversalsQuery = surfaceQuery(expandOnlyQuery);
 
 /**
  * Serialize a transfer, resolving the two PUBLIC ids it references.
@@ -140,7 +91,7 @@ async function serializeTransfer(
   transfer: TransferRow,
   intent: PaymentIntentRow,
   account?: ConnectedAccountRow,
-): Promise<TransferDTO> {
+): Promise<Transfer> {
   const seller =
     account ?? (await findAccountById(getDb(), merchantId, transfer.connectedAccountId));
   if (!seller) {
@@ -198,7 +149,7 @@ export async function answerTransferList(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, listTransfersQuery[surface]);
+  const query = parseQuery(req, res, listTransfersQueries[surface]);
   if (!query) return;
 
   const db = getDb();
@@ -290,7 +241,7 @@ export async function reverseTransferCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = reverseTransferBodySchema.safeParse(req.body);
+  const parsed = reverseTransferParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -348,17 +299,8 @@ type TransferCore = (req: Request, res: Response, merchant: MerchantRow) => Prom
 export function createTransfersRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write'), idempotent];
   const api = (core: TransferCore) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -380,7 +322,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      const parsed = createTransferBodySchema.safeParse(req.body);
+      const parsed = createTransferParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -550,7 +492,7 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
-      const query = parseQuery(req, res, listIntentTransfersQuery);
+      const query = parseQuery(req, res, listPaymentIntentTransfersQuery);
       if (!query) return;
 
       const db = getDb();

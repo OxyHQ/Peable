@@ -1,5 +1,5 @@
 /**
- * The shared price validators: one shape rule, one `param`, wherever a price
+ * The contract's price validators (`@peable.to/contracts`): one shape rule, one `param`, wherever a price
  * is described (`POST /v1/prices`, `default_price_data`, `price_data`).
  */
 import { describe, expect, test } from 'bun:test';
@@ -7,13 +7,15 @@ import { paramFromPath } from '../../../lib/http';
 import { amountForQuantity } from '../pricing';
 import { pricingPriceOfShape } from '../pricingRows';
 import {
-  createPriceBodySchema,
-  defaultPriceDataSchema,
-  generatePromotionCode,
+  createCouponParams,
+  createPriceParams,
+  defaultPriceDataParams,
   maxBaseUnits,
-  percentOffSchema,
-  priceDataSchema,
-} from '../params';
+  priceDataParams,
+} from '@peable.to/contracts';
+import { generatePromotionCode } from '../catalogService';
+
+const percentOffParam = createCouponParams.shape.percent_off.unwrap();
 
 /** The `param` the gateway would answer for the first issue (`sendValidationError`'s rule). */
 function firstParam(result: {
@@ -27,9 +29,9 @@ function firstParam(result: {
   return paramFromPath(unknownKey === undefined ? path : [...path, unknownKey]);
 }
 
-describe('createPriceBodySchema', () => {
+describe('createPriceParams', () => {
   test('a per-unit one-time price', () => {
-    const parsed = createPriceBodySchema.parse({
+    const parsed = createPriceParams.parse({
       product: 'prod_1',
       currency: 'EUR',
       unit_amount: '1999',
@@ -47,7 +49,7 @@ describe('createPriceBodySchema', () => {
   });
 
   test('a recurring price defaults to one interval, licensed', () => {
-    const parsed = createPriceBodySchema.parse({
+    const parsed = createPriceParams.parse({
       product: 'prod_1',
       currency: 'USD',
       unit_amount: '500',
@@ -63,7 +65,7 @@ describe('createPriceBodySchema', () => {
   });
 
   test('a tiered price stores its tiers with the open tier as null', () => {
-    const parsed = createPriceBodySchema.parse({
+    const parsed = createPriceParams.parse({
       product: 'prod_1',
       currency: 'EUR',
       billing_scheme: 'tiered',
@@ -84,7 +86,7 @@ describe('createPriceBodySchema', () => {
     for (const unit_amount of [1999, '19.99', '-1', '01']) {
       expect(
         firstParam(
-          createPriceBodySchema.safeParse({ product: 'prod_1', currency: 'EUR', unit_amount }),
+          createPriceParams.safeParse({ product: 'prod_1', currency: 'EUR', unit_amount }),
         ),
       ).toBe('unit_amount');
     }
@@ -94,7 +96,7 @@ describe('createPriceBodySchema', () => {
     expect(maxBaseUnits('EUR')).toBe(99_999_999_999n);
     expect(maxBaseUnits('FAIR')).toBe(99_999_999_999_999_999n);
     const over = (currency: 'EUR' | 'FAIR') =>
-      createPriceBodySchema.safeParse({
+      createPriceParams.safeParse({
         product: 'prod_1',
         currency,
         unit_amount: String(maxBaseUnits(currency) + 1n),
@@ -102,7 +104,7 @@ describe('createPriceBodySchema', () => {
     expect(firstParam(over('EUR'))).toBe('unit_amount');
     expect(firstParam(over('FAIR'))).toBe('unit_amount');
     expect(
-      createPriceBodySchema.safeParse({
+      createPriceParams.safeParse({
         product: 'prod_1',
         currency: 'FAIR',
         unit_amount: String(maxBaseUnits('FAIR')),
@@ -186,7 +188,7 @@ describe('createPriceBodySchema', () => {
       [{ unit_amount: '1', unknown: true }, 'unknown'],
     ];
     for (const [body, param] of cases) {
-      expect([body, firstParam(createPriceBodySchema.safeParse({ ...base, ...body }))]).toEqual([
+      expect([body, firstParam(createPriceParams.safeParse({ ...base, ...body }))]).toEqual([
         body,
         param,
       ]);
@@ -201,7 +203,7 @@ describe('createPriceBodySchema', () => {
       ['year', 3],
     ] as const) {
       expect(
-        createPriceBodySchema.safeParse({
+        createPriceParams.safeParse({
           product: 'prod_1',
           currency: 'EUR',
           unit_amount: '1',
@@ -214,7 +216,7 @@ describe('createPriceBodySchema', () => {
 
 describe('price_data and default_price_data', () => {
   test('price_data names its product and is per-unit only', () => {
-    const parsed = priceDataSchema.parse({
+    const parsed = priceDataParams.parse({
       product: 'prod_1',
       currency: 'EUR',
       unit_amount: '250',
@@ -223,12 +225,12 @@ describe('price_data and default_price_data', () => {
     expect(parsed.product).toBe('prod_1');
     expect(parsed.shape.recurring?.interval).toBe('year');
     expect(amountForQuantity(pricingPriceOfShape(parsed.shape), 4n)).toBe(1000n);
-    expect(firstParam(priceDataSchema.safeParse({ product: 'prod_1', currency: 'EUR' }))).toBe(
+    expect(firstParam(priceDataParams.safeParse({ product: 'prod_1', currency: 'EUR' }))).toBe(
       'unit_amount',
     );
     expect(
       firstParam(
-        priceDataSchema.safeParse({
+        priceDataParams.safeParse({
           product: 'prod_1',
           currency: 'EUR',
           unit_amount: '1',
@@ -240,11 +242,11 @@ describe('price_data and default_price_data', () => {
 
   test('default_price_data takes no product', () => {
     expect(
-      defaultPriceDataSchema.parse({ currency: 'FAIR', unit_amount: '100000000' }),
+      defaultPriceDataParams.parse({ currency: 'FAIR', unit_amount: '100000000' }),
     ).toMatchObject({ currency: 'FAIR', unitAmount: '100000000', billingScheme: 'per_unit' });
     expect(
       firstParam(
-        defaultPriceDataSchema.safeParse({ currency: 'EUR', unit_amount: '1', product: 'prod_1' }),
+        defaultPriceDataParams.safeParse({ currency: 'EUR', unit_amount: '1', product: 'prod_1' }),
       ),
     ).toBe('product');
   });
@@ -252,12 +254,12 @@ describe('price_data and default_price_data', () => {
 
 describe('percent_off', () => {
   test('is basis points with at most two decimals', () => {
-    expect(percentOffSchema.parse(12.5)).toBe(1250);
-    expect(percentOffSchema.parse(33.33)).toBe(3333);
-    expect(percentOffSchema.parse(100)).toBe(10_000);
-    expect(percentOffSchema.parse(0.01)).toBe(1);
+    expect(percentOffParam.parse(12.5)).toBe(1250);
+    expect(percentOffParam.parse(33.33)).toBe(3333);
+    expect(percentOffParam.parse(100)).toBe(10_000);
+    expect(percentOffParam.parse(0.01)).toBe(1);
     for (const bad of [0, -1, 100.01, 33.333]) {
-      expect(percentOffSchema.safeParse(bad).success).toBe(false);
+      expect(percentOffParam.safeParse(bad).success).toBe(false);
     }
   });
 });

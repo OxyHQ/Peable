@@ -13,9 +13,14 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import type { AccountLink } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+import {
+  type AccountLink,
+  createConnectedAccountLinkParams,
+  createConnectedAccountParams,
+  expandOnlyQuery,
+  listConnectedAccountsQuery,
+  refreshConnectedAccountParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import {
   findAccountByExternalRef,
@@ -44,76 +49,20 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
-import {
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-/** The shared list parameters, and no filter of its own yet. */
-const listAccountsQuery = surfaceListQuery({});
-const retrieveAccountQuery = surfaceRetrieveQuery();
-
-/** Bounded for the reason `external_ref` is: it is stored, and it is compared. */
-const OXY_USER_ID_MAX = 128;
-
-const createAccountBodySchema = z
-  .object({
-    /**
-     * The merchant's own id for the seller. Bounded because it is a key: an
-     * unbounded string here is an unbounded index entry and an unbounded response
-     * field.
-     */
-    external_ref: z.string().min(1).max(255),
-    /**
-     * The CARD half: ISO-3166-1 alpha-2 (case-insensitive in; upper-cased
-     * before storage) and the business type, both or neither. Required before
-     * ADR 0012, and still exactly what opens the card half.
-     */
-    country: z.string().length(2).optional(),
-    business_type: z.enum(['individual', 'company']).optional(),
-    /**
-     * The FAIRCOIN half (ADR 0012 D2): the chain the seller is paid on and the
-     * seller's Oxy user id — the only person who may register the key. There is
-     * deliberately no `xpub` here: the key comes from the SELLER's own session,
-     * never from the platform (D3).
-     */
-    faircoin: z
-      .object({
-        network: z.enum(['mainnet', 'testnet']),
-        oxy_user_id: z.string().min(1).max(OXY_USER_ID_MAX),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict()
-  .refine((body) => (body.country === undefined) === (body.business_type === undefined), {
-    message: 'a card account needs both country and business_type, or neither',
-  })
-  .refine((body) => body.country !== undefined || body.faircoin !== undefined, {
-    message: 'open at least one rail: country and business_type for cards, faircoin for FairCoin',
-  });
-
-const accountLinkBodySchema = z
-  .object({
-    refresh_url: z.string().url(),
-    return_url: z.string().url(),
-    /**
-     * Which half to onboard. `card` (the default, and the only answer before
-     * ADR 0012) is the provider's hosted onboarding; `faircoin` is Peable's own
-     * page where the SELLER registers their watch-only key.
-     */
-    rail: z.enum(['card', 'faircoin']).optional(),
-  })
-  .strict();
-
-const emptyBody = z.object({}).strict();
+/**
+ * Request schemas: the contract's (`@peable.to/contracts`
+ * `connectedAccountRoutes`); the dashboard surface accepts the same plus its
+ * `environment` toggle.
+ */
+const listAccountsQuery = surfaceQuery(listConnectedAccountsQuery);
+const retrieveAccountQuery = surfaceQuery(expandOnlyQuery);
 
 /** The `:accountId` of a matched route, or the 400 when Express somehow lacks it. */
 function accountIdParam(req: Request, res: Response): string | null {
@@ -175,7 +124,7 @@ export async function createConnectedAccountCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = createAccountBodySchema.safeParse(req.body);
+  const parsed = createConnectedAccountParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -297,7 +246,7 @@ export async function refreshConnectedAccountCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = emptyBody.safeParse(req.body ?? {});
+  const parsed = refreshConnectedAccountParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -325,7 +274,7 @@ export async function createConnectedAccountLinkCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = accountLinkBodySchema.safeParse(req.body);
+  const parsed = createConnectedAccountLinkParams.safeParse(req.body);
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -366,17 +315,8 @@ type SellerCore = (req: Request, res: Response, merchant: MerchantRow) => Promis
 export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write'), idempotent];
   const api = (core: SellerCore) =>
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);

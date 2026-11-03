@@ -332,7 +332,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const auth: RequestHandler = (req, _res, next) => {
         if (retry401) {
           retry401 = false;
-          _res.status(401).json({ error: { message: 'synthetic_expiry' } });
+          // The gateway's own envelope, as `requireServiceApp` answers an expired token.
+          _res.status(401).json({
+            error: { type: 'authentication_error', message: 'synthetic_expiry', request_id: null },
+          });
           return;
         }
         const token = req.header('Authorization')?.replace('Bearer ', '');

@@ -42,6 +42,7 @@ import { deriveIntentAddress } from '../../services/derivation';
 import { transitionIntent } from '../../services/intentTransition';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 import { createCheckoutSessionsRouter } from '../checkoutSessions';
+import { sendError } from '../../lib/http';
 import { createConnectRouter } from '../connect';
 import { createConnectedAccountsRouter } from '../connectedAccounts';
 import { createMerchantsRouter } from '../merchants';
@@ -154,7 +155,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     const stubUserAuth: RequestHandler = (req, res, next) => {
       const userId = req.header('X-Test-User-Id');
       if (!userId) {
-        res.status(401).json({ error: 'unauthenticated' });
+        // The error envelope every route answers with (ADR 0014 D1).
+        sendError(res, 401, 'authentication_error', 'sign in as the seller');
         return;
       }
       (req as OxyAuthRequest).userId = userId;

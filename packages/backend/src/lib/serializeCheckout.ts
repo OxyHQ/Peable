@@ -272,7 +272,8 @@ export function toCheckoutSessionPublicDTO(view: PublicSessionView): CheckoutSes
     custom_fields: row.customFields.map(toCustomFieldDTO),
     consent: row.consent,
     terms_of_service_url: row.collection?.termsOfService ? view.termsOfServiceUrl : null,
-    payment_intent: view.paymentIntent,
+    // TRANSITIONAL: a no-op once the payments contract registers `payment_intent`.
+    payment_intent: view.paymentIntent as CheckoutSessionPublic['payment_intent'],
     setup_intent: view.setupIntent,
     success_url:
       row.status === 'complete' && row.successUrl !== null

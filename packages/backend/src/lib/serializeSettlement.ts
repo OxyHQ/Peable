@@ -38,9 +38,6 @@ import type { TransferRow } from '../db/transfers/transferRepository';
 import type { TransferReversalRow } from '../db/transfers/transferReversalRepository';
 import { toUnix, toUnixOrNull } from './time';
 
-/** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
-export type ConnectedAccountDTO = ConnectedAccount;
-
 /**
  * Serialize a connected account.
  *
@@ -49,7 +46,7 @@ export type ConnectedAccountDTO = ConnectedAccount;
  * So is the seller's FairCoin `xpub` (ADR 0012 D6) — the row type does not even
  * carry it.
  */
-export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccountDTO {
+export function toConnectedAccountDTO(row: ConnectedAccountRow): ConnectedAccount {
   if (row.externalRef === null) {
     // The merchant's OWN account is an `account`, never a `connected_account`:
     // every seller read filters on the role, so reaching this is a defect.
@@ -148,9 +145,6 @@ function toFaircoinHalf(row: ConnectedAccountRow): ConnectedAccountFaircoin | nu
   };
 }
 
-/** @deprecated Prefer `Transfer` from `@peable.to/shared-types`. */
-export type TransferDTO = Transfer;
-
 /**
  * Serialize a transfer.
  *
@@ -164,7 +158,7 @@ export function toTransferDTO(
   row: TransferRow,
   connectedAccountPublicId: string,
   paymentIntentPublicId: string,
-): TransferDTO {
+): Transfer {
   return {
     id: row.publicId,
     object: 'transfer',

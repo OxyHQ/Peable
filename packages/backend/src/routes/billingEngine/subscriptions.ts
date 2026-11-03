@@ -2,15 +2,18 @@
  * Subscriptions (`sub_…`) and subscription items (`si_…`) — ADR 0018 §1.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
-  COLLECTION_METHODS,
-  PAUSE_COLLECTION_BEHAVIORS,
-  PAYMENT_BEHAVIORS,
-  PRORATION_BEHAVIORS,
-  SUBSCRIPTION_STATUSES,
-  TRIAL_END_BEHAVIORS,
-} from '@peable.to/shared-types';
+  cancelSubscriptionParams,
+  createSubscriptionItemParams,
+  createSubscriptionParams,
+  deleteSubscriptionItemParams,
+  expandOnlyQuery,
+  listSubscriptionItemsQuery,
+  listSubscriptionsQuery,
+  resumeSubscriptionParams,
+  updateSubscriptionItemParams,
+  updateSubscriptionParams,
+} from '@peable.to/contracts';
 import { findPriceForMerchant } from '../../db/catalog/priceRepository';
 import { findCustomerForMerchant } from '../../db/customers/customerRepository';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
@@ -23,16 +26,7 @@ import {
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
 import { findPricesByRowIds } from '../../db/catalog/priceRepository';
-import {
-  expandParam,
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-  resolveListReference,
-} from '../../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../../lib/metadata';
+import { answerList, parseQuery, type QuerySurface, resolveListReference } from '../../lib/list';
 import {
   renderSubscription,
   renderSubscriptions,
@@ -47,131 +41,14 @@ import {
   updateSubscription,
 } from '../../services/billingEngine/subscriptions';
 import type { CatalogRoute } from '../catalogRoutes';
-import {
-  answerObject,
-  cleared,
-  idParam,
-  idString,
-  parseBody,
-  quantity,
-  rangeQuery,
-  shortText,
-  unixSeconds,
-} from './helpers';
+import { answerObject, bySurface, cleared, idParam, parseBody } from './helpers';
 
-const discountsSchema = z
-  .array(z.object({ coupon: idString.optional(), promotion_code: idString.optional() }).strict())
-  .max(20);
-
-const createItemSchema = z
-  .object({
-    price: idString,
-    quantity: quantity.optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-
-const createBody = z
-  .object({
-    customer: idString,
-    items: z.array(createItemSchema).min(1).max(20),
-    default_payment_method: idString.optional(),
-    collection_method: z.enum(COLLECTION_METHODS).optional(),
-    days_until_due: z.number().int().min(0).max(365).optional(),
-    description: shortText(500).optional(),
-    trial_period_days: z.number().int().min(1).max(730).optional(),
-    trial_end: z.union([unixSeconds, z.literal('now')]).optional(),
-    trial_settings: z
-      .object({
-        end_behavior: z.object({ missing_payment_method: z.enum(TRIAL_END_BEHAVIORS) }).strict(),
-      })
-      .strict()
-      .optional(),
-    billing_cycle_anchor: unixSeconds.optional(),
-    proration_behavior: z.enum(['create_prorations', 'none']).optional(),
-    cancel_at_period_end: z.boolean().optional(),
-    cancel_at: unixSeconds.optional(),
-    coupon: idString.optional(),
-    promotion_code: idString.optional(),
-    discounts: discountsSchema.optional(),
-    payment_behavior: z.enum(PAYMENT_BEHAVIORS).optional(),
-    automatic_tax: z.object({ enabled: z.boolean() }).strict().optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const updateItemSchema = z
-  .object({
-    id: idString.optional(),
-    price: idString.optional(),
-    quantity: quantity.optional(),
-    deleted: z.boolean().optional(),
-    metadata: z.record(z.string().max(40), z.string().max(500)).optional(),
-  })
-  .strict();
-
-const updateBody = z
-  .object({
-    items: z.array(updateItemSchema).min(1).max(20).optional(),
-    proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-    proration_date: unixSeconds.optional(),
-    default_payment_method: z.union([idString, z.literal('')]).optional(),
-    collection_method: z.enum(COLLECTION_METHODS).optional(),
-    days_until_due: z.number().int().min(0).max(365).optional(),
-    description: z.union([shortText(500), z.literal('')]).optional(),
-    cancel_at_period_end: z.boolean().optional(),
-    cancel_at: z.union([unixSeconds, z.literal('')]).optional(),
-    pause_collection: z
-      .union([
-        z
-          .object({
-            behavior: z.enum(PAUSE_COLLECTION_BEHAVIORS),
-            resumes_at: unixSeconds.optional(),
-          })
-          .strict(),
-        z.literal(''),
-      ])
-      .optional(),
-    trial_end: z.union([unixSeconds, z.literal('now')]).optional(),
-    coupon: z.union([idString, z.literal('')]).optional(),
-    promotion_code: idString.optional(),
-    discounts: z.union([discountsSchema, z.literal('')]).optional(),
-    payment_behavior: z.enum(PAYMENT_BEHAVIORS).optional(),
-    automatic_tax: z.object({ enabled: z.boolean() }).strict().optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const cancelBody = z
-  .object({
-    invoice_now: z.boolean().optional(),
-    prorate: z.boolean().optional(),
-    cancellation_details: z
-      .object({ comment: shortText(5000).optional() })
-      .strict()
-      .optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const resumeBody = z
-  .object({
-    billing_cycle_anchor: z.enum(['now', 'unchanged']).optional(),
-    proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listQuery = surfaceListQuery({
-  customer: idString.optional(),
-  price: idString.optional(),
-  status: z.enum([...SUBSCRIPTION_STATUSES, 'all', 'ended']).optional(),
-  test_clock: idString.optional(),
-  current_period_end: rangeQuery.optional(),
-});
-const retrieveQuery = surfaceRetrieveQuery();
+/**
+ * Every request schema is the contract's (`@peable.to/contracts`
+ * `subscriptionRoutes`); the dashboard's reads add only its Test/Live toggle.
+ */
+const listQuery = bySurface(listSubscriptionsQuery);
+const retrieveQuery = bySurface(expandOnlyQuery);
 
 async function answer(
   res: Response,
@@ -194,7 +71,7 @@ async function answer(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow) {
-  const body = parseBody(req, res, createBody);
+  const body = parseBody(req, res, createSubscriptionParams);
   if (!body) return;
   const row = await createSubscription(merchant, {
     customer: body.customer,
@@ -241,7 +118,7 @@ async function retrieve(req: Request, res: Response, merchant: MerchantRow, surf
 async function update(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, updateBody);
+  const body = parseBody(req, res, updateSubscriptionParams);
   if (!body) return;
   const row = await updateSubscription(merchant, id, {
     ...(body.items
@@ -293,7 +170,7 @@ async function update(req: Request, res: Response, merchant: MerchantRow) {
 async function cancel(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, cancelBody);
+  const body = parseBody(req, res, cancelSubscriptionParams);
   if (!body) return;
   const row = await cancelSubscriptionNow(merchant, id, {
     ...(body.invoice_now !== undefined ? { invoiceNow: body.invoice_now } : {}),
@@ -306,7 +183,7 @@ async function cancel(req: Request, res: Response, merchant: MerchantRow) {
 async function resume(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, resumeBody);
+  const body = parseBody(req, res, resumeSubscriptionParams);
   if (!body) return;
   const row = await resumeSubscription(merchant, id, {
     ...(body.billing_cycle_anchor ? { billingCycleAnchor: body.billing_cycle_anchor } : {}),
@@ -362,35 +239,7 @@ async function list(req: Request, res: Response, merchant: MerchantRow, surface:
 
 // ---- Items ------------------------------------------------------------------------
 
-const createItemBody = z
-  .object({
-    subscription: idString,
-    price: idString,
-    quantity: quantity.optional(),
-    proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-    proration_date: unixSeconds.optional(),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-
-const updateItemBody = z
-  .object({
-    price: idString.optional(),
-    quantity: quantity.optional(),
-    proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-    proration_date: unixSeconds.optional(),
-    metadata: z.record(z.string().max(40), z.string().max(500)).optional(),
-  })
-  .strict();
-
-const deleteItemBody = z
-  .object({
-    proration_behavior: z.enum(PRORATION_BEHAVIORS).optional(),
-    proration_date: unixSeconds.optional(),
-  })
-  .strict();
-
-const listItemsQuery = surfaceListQuery({ subscription: idString });
+const listItemsQuery = bySurface(listSubscriptionItemsQuery);
 
 async function itemDTO(merchant: MerchantRow, publicId: string) {
   const db = getDb();
@@ -402,7 +251,7 @@ async function itemDTO(merchant: MerchantRow, publicId: string) {
 }
 
 async function createItem(req: Request, res: Response, merchant: MerchantRow) {
-  const body = parseBody(req, res, createItemBody);
+  const body = parseBody(req, res, createSubscriptionItemParams);
   if (!body) return;
   const before = await findSubscriptionForMerchant(getDb(), body.subscription, merchant.id);
   if (!before)
@@ -445,7 +294,7 @@ async function retrieveItem(
 async function updateItem(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, updateItemBody);
+  const body = parseBody(req, res, updateSubscriptionItemParams);
   if (!body) return;
   const { item } = await itemDTO(merchant, id);
   await updateSubscription(merchant, item.subscriptionPublicId, {
@@ -466,7 +315,7 @@ async function updateItem(req: Request, res: Response, merchant: MerchantRow) {
 async function deleteItem(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
   if (!id) return;
-  const body = parseBody(req, res, deleteItemBody);
+  const body = parseBody(req, res, deleteSubscriptionItemParams);
   if (!body) return;
   const { item } = await itemDTO(merchant, id);
   await updateSubscription(merchant, item.subscriptionPublicId, {

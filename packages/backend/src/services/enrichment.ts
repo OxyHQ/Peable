@@ -6,8 +6,8 @@ import { findIntentsByAddresses } from '../db/payments/paymentIntentRepository';
 import { findMerchantsByIds } from '../db/merchants/merchantRepository';
 import { findAttributionsForViewer } from '../db/social/sendAttribution';
 
-/** Hard cap on a single enrichment batch — enforced by the `POST /v1/enrich` route (Task 9). */
-export const ENRICH_MAX_ADDRESSES = 50;
+/** Hard cap on a single enrichment batch — the contract's bound on `POST /v1/enrich`. */
+export { ENRICH_MAX_ADDRESSES } from '@peable.to/contracts/vocabulary';
 
 /**
  * Resolve display identity for a batch of the CALLER's own addresses (spec

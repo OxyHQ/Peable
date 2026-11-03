@@ -1,6 +1,7 @@
+import { billingReference } from '@peable.to/contracts';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import { BillingError, billingReference } from './contracts';
+import { BillingError } from './contracts';
 import {
   assertFaircoinRenewalActor,
   faircoinRenewalExecutionSchema,

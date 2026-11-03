@@ -13,15 +13,14 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import {
-  DISPUTE_FILE_EVIDENCE_FIELDS,
-  DISPUTE_TEXT_EVIDENCE_FIELDS,
   type DisputeEvidence,
-  type DisputeFileEvidenceField,
-  type DisputeTextEvidenceField,
-} from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+  closeDisputeParams,
+  expandOnlyQuery,
+  listDisputesQuery,
+  listPaymentIntentDisputesQuery,
+  updateDisputeParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
@@ -50,66 +49,29 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { expandObjects, parseExpand } from '../lib/expand';
-import { metadataUpdateSchema } from '../lib/metadata';
 import {
   answerList,
   completeList,
-  listQuerySchema,
+  dashboardQuery,
   parseQuery,
   type QuerySurface,
   resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
 } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-const listDisputesQuery = surfaceListQuery({
-  payment_intent: z.string().min(1).max(255).optional(),
-  charge: z.string().min(1).max(255).optional(),
-});
-/** The per-payment sub-list: the payment is in the path. */
-const listIntentDisputesQuery = listQuerySchema({});
-const retrieveDisputeQuery = surfaceRetrieveQuery();
-
-/**
- * How long one TEXT evidence field may be — the provider's ceiling, restated
- * where the request is parsed, so an over-long field is refused here with its
- * name rather than at the acquirer during a one-shot submission.
- */
-const EVIDENCE_FIELD_MAX = 20_000;
-const FILE_ID_MAX = 255;
-
-/** `""` unsets a field, as on Stripe. */
-const textField = z.string().max(EVIDENCE_FIELD_MAX).optional();
-const fileField = z.string().max(FILE_ID_MAX).optional();
-
-/**
- * The evidence fields, in the network's names — a CLOSED set. Unknown keys are
- * REFUSED rather than dropped: a merchant who sent `tracking_number` instead of
- * `shipping_tracking_number` would otherwise submit, finally, a response missing
- * the field they relied on, and find out when the dispute is decided.
- */
-const evidenceSchema = z
-  .object({
-    ...(Object.fromEntries(
-      DISPUTE_TEXT_EVIDENCE_FIELDS.map((field) => [field, textField]),
-    ) as Record<DisputeTextEvidenceField, typeof textField>),
-    ...(Object.fromEntries(
-      DISPUTE_FILE_EVIDENCE_FIELDS.map((field) => [field, fileField]),
-    ) as Record<DisputeFileEvidenceField, typeof fileField>),
-  })
-  .strict();
-
-const updateBodySchema = z
-  .object({
-    evidence: evidenceSchema.optional(),
-    metadata: metadataUpdateSchema.optional(),
-    submit: z.boolean().optional(),
-  })
-  .strict();
+/** The contract's queries, and the dashboard's (the same plus its Test/Live `environment`). */
+const listDisputesQueries = {
+  api: listDisputesQuery,
+  dashboard: dashboardQuery(listDisputesQuery),
+} as const;
+const retrieveDisputeQueries = {
+  api: expandOnlyQuery,
+  dashboard: dashboardQuery(expandOnlyQuery),
+} as const;
 
 function sendNotFound(res: Response): void {
   sendError(res, 404, 'invalid_request_error', 'dispute not found', 'resource_missing', 'id');
@@ -171,7 +133,7 @@ export async function answerDisputeList(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, listDisputesQuery[surface]);
+  const query = parseQuery(req, res, listDisputesQueries[surface]);
   if (!query) return;
   const db = getDb();
   const byIntent = await resolveListReference(
@@ -221,7 +183,7 @@ export async function retrieveDispute(
   merchant: MerchantRow,
   surface: QuerySurface = 'api',
 ): Promise<void> {
-  const query = parseQuery(req, res, retrieveDisputeQuery[surface]);
+  const query = parseQuery(req, res, retrieveDisputeQueries[surface]);
   if (!query) return;
   const expand = parseExpand(res, 'dispute', query.expand, { list: false });
   if (!expand) return;
@@ -251,7 +213,7 @@ export async function updateDisputeCore(
   merchant: MerchantRow,
   files: OxyFilesClient,
 ): Promise<void> {
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updateDisputeParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -280,10 +242,7 @@ export async function closeDisputeCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = z
-    .object({})
-    .strict()
-    .safeParse(req.body ?? {});
+  const parsed = closeDisputeParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -308,16 +267,8 @@ export function createDisputesRouter(deps: {
   const router = Router();
   const { requireMerchant } = deps;
   const files = deps.files ?? oxyFilesClient;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>
@@ -336,7 +287,7 @@ export function createDisputesRouter(deps: {
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
-      const query = parseQuery(req, res, listIntentDisputesQuery);
+      const query = parseQuery(req, res, listPaymentIntentDisputesQuery);
       if (!query) return;
       const db = getDb();
       const intent = await findIntentForMerchant(db, intentId, merchant.id);

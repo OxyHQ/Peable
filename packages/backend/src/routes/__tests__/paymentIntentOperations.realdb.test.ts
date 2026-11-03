@@ -335,6 +335,21 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('card PaymentIntent operations (ADR 001
     expect(expanded.body.latest_charge.object).toBe('charge');
     expect(expanded.body.customer.object).toBe('customer');
     expect(expanded.body.payment_method.object).toBe('payment_method');
+    // A charge's `customer` and `payment_method` are spelled without `_id`, so
+    // they expand like every other such reference.
+    const chargeExpanded = await call(
+      'GET',
+      `/v1/charges/${created.body.latest_charge}?expand[]=customer&expand[]=payment_method`,
+    );
+    expect(chargeExpanded.status).toBe(200);
+    expect(chargeExpanded.body.customer).toMatchObject({
+      object: 'customer',
+      id: customer.publicId,
+    });
+    expect(chargeExpanded.body.payment_method).toMatchObject({
+      object: 'payment_method',
+      id: paymentMethod.publicId,
+    });
   });
 
   test('/confirm with a saved card; a decline answers 402 and leaves the intent payable', async () => {

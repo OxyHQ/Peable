@@ -3,6 +3,7 @@
  * `GET|POST /v1/merchants/me/branding`, `GET|POST /v1/merchants/me/email_settings`,
  * and Orbit's dashboard twins (`routes/dashboard.ts`) — the same cores.
  *
+ * Request schemas: the contract's (`@peable.to/contracts` `merchantRoutes`).
  * Every branding value is a closed set or a validated colour. The icon is the
  * merchant's avatar and the logo its `business_logo` File: both live on the
  * merchant and are written through the ONE merchant writer
@@ -11,8 +12,10 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { BRANDING_BORDER_STYLES, BRANDING_FONTS } from '@peable.to/shared-types';
+import {
+  updateMerchantBrandingParams,
+  updateMerchantEmailSettingsParams,
+} from '@peable.to/contracts';
 import {
   findBranding,
   findEmailSettings,
@@ -21,10 +24,9 @@ import {
 } from '../db/merchants/brandingRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { getDb } from '../db/postgres';
-import { requireAuthenticated, sendValidationError, wrap } from '../lib/http';
+import { requireAuthenticated, sendValidationError, wrap, requireScope } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toMerchantBrandingDTO, toMerchantEmailSettingsDTO } from '../lib/serializeCheckout';
-import { oxy } from '../oxy';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import {
   type AvatarAuthority,
@@ -33,48 +35,6 @@ import {
   serviceFileActor,
 } from './merchants';
 import { resolveMerchant } from './paymentIntents';
-
-/** `#rgb` or `#rrggbb`, any case — stored as lowercase `#rrggbb`. */
-const colorSchema = z
-  .string()
-  .regex(/^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, 'must be a #rrggbb colour')
-  .transform((value) => {
-    const hex = value.slice(1).toLowerCase();
-    return `#${hex.length === 3 ? [...hex].map((c) => c + c).join('') : hex}`;
-  });
-
-const httpsUrl = z
-  .string()
-  .max(2048)
-  .regex(/^https:\/\/\S+$/, 'must be an https URL');
-
-export const updateBrandingBodySchema = z
-  .object({
-    use_avatar_as_icon: z.boolean().optional(),
-    /** A `file_…` of purpose `business_logo`, or `null` — the merchant's `business_logo`. */
-    logo: z.string().min(1).max(255).nullable().optional(),
-    primary_color: colorSchema.nullable().optional(),
-    accent_color: colorSchema.nullable().optional(),
-    font: z.enum(BRANDING_FONTS).nullable().optional(),
-    border_style: z.enum(BRANDING_BORDER_STYLES).nullable().optional(),
-    terms_of_service_url: httpsUrl.nullable().optional(),
-  })
-  .strict();
-
-export const updateEmailSettingsBodySchema = z
-  .object({
-    payment_receipts: z.boolean().optional(),
-    refund_notices: z.boolean().optional(),
-    checkout_confirmations: z.boolean().optional(),
-    support_email: z
-      .string()
-      .trim()
-      .max(254)
-      .email('must be an email address')
-      .nullable()
-      .optional(),
-  })
-  .strict();
 
 export async function answerBranding(res: Response, merchant: MerchantRow): Promise<void> {
   res.status(200).json(toMerchantBrandingDTO(merchant, await findBranding(getDb(), merchant.id)));
@@ -86,7 +46,7 @@ export async function updateBrandingCore(
   merchant: MerchantRow,
   authority: AvatarAuthority,
 ): Promise<void> {
-  const parsed = updateBrandingBodySchema.safeParse(req.body ?? {});
+  const parsed = updateMerchantBrandingParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -123,7 +83,7 @@ export async function updateEmailSettingsCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = updateEmailSettingsBodySchema.safeParse(req.body ?? {});
+  const parsed = updateMerchantEmailSettingsParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -144,15 +104,11 @@ export function createBrandingRouter(deps: {
 }): Router {
   const files = deps.files ?? oxyFilesClient;
   const router = Router();
-  const read = [
-    deps.requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [deps.requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const write = [
     deps.requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
   ];
   const withMerchant = (

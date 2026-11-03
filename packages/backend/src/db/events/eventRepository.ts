@@ -1,5 +1,6 @@
 import { and, eq, gt, like, notExists, exists, type SQL, sql } from 'drizzle-orm';
 import type { WebhookEventType } from '@peable.to/shared-types';
+import type { EventTypeFilter } from '@peable.to/contracts';
 import { uuidv7 } from '@oxy.so/db';
 import { events, webhookDeliveries } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -149,9 +150,8 @@ export async function findEventForMerchant(
  * The `type` filter: an exact type, or a prefix followed by `*`
  * (`payment_intent.*`). `*` alone is no filter at all.
  */
-export type EventTypeFilter =
-  | { readonly kind: 'exact'; readonly type: string }
-  | { readonly kind: 'prefix'; readonly prefix: string };
+/** `type=` as the contract parses it (`@peable.to/contracts` `listEventsQuery`). */
+export type { EventTypeFilter };
 
 export interface ListEventsParams {
   readonly merchantId: string;

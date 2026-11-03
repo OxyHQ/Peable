@@ -1,17 +1,27 @@
 /**
- * Test clocks, billing settings, meters, entitlements and the customer
- * portal's merchant side — ADR 0018 §3, §5–9.
+ * Test clocks, billing settings, meters and entitlements — ADR 0018 §3, §5–8.
+ * The customer portal's merchant side is `portal.ts`.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
 import {
-  BILLING_SETTINGS_LIMITS,
-  DUNNING_FINAL_ACTIONS,
-  DUNNING_INVOICE_ACTIONS,
-  METER_AGGREGATIONS,
-  METER_STATUSES,
-  PORTAL_CUSTOMER_UPDATES,
-} from '@peable.to/shared-types';
+  advanceTestClockParams,
+  attachProductFeatureParams,
+  billingMeterEventSummariesQuery,
+  billingMeterStatusParams,
+  createBillingMeterEventParams,
+  createBillingMeterParams,
+  createEntitlementFeatureParams,
+  createTestClockParams,
+  expandOnlyQuery,
+  listActiveEntitlementsQuery,
+  listBillingMetersQuery,
+  listEntitlementFeaturesQuery,
+  listProductFeaturesQuery,
+  listTestClocksQuery,
+  updateBillingMeterParams,
+  updateBillingSettingsParams,
+  updateEntitlementFeatureParams,
+} from '@peable.to/contracts';
 import { findLiveCustomerForMerchant } from '../../db/customers/customerRepository';
 import { findProductForMerchant } from '../../db/catalog/productRepository';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
@@ -23,16 +33,10 @@ import {
   listProductFeatures,
 } from '../../db/billingEngine/entitlementRepository';
 import { findMeterForMerchant, listMeters } from '../../db/billingEngine/meterRepository';
-import {
-  findPortalConfigurationForMerchant,
-  listPortalConfigurations,
-} from '../../db/billingEngine/portalRepository';
 import { findLiveTestClockForMerchant } from '../../db/billingEngine/testClockRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery, surfaceListQuery, surfaceRetrieveQuery } from '../../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../../lib/metadata';
+import { answerList, parseQuery, surfaceQuery, surfaceRetrieveQuery } from '../../lib/list';
 import { toTestClockDTO } from '../../lib/serializeBilling';
-import { booleanQuery } from '../../services/catalog/params';
 import {
   activeEntitlements,
   attachProductFeature,
@@ -43,12 +47,6 @@ import {
   updateFeatureFields,
 } from '../../services/billingEngine/entitlements';
 import { BillingEngineError, missing } from '../../services/billingEngine/errors';
-import {
-  changePortalConfiguration,
-  createPortalConfiguration,
-  createPortalSession,
-  toPortalConfigurationDTO,
-} from '../../services/billingEngine/portal';
 import {
   changeBillingSettings,
   changeMeter,
@@ -68,33 +66,25 @@ import {
   retrieveTestClock,
 } from '../../services/billingEngine/testClocks';
 import type { CatalogRoute } from '../catalogRoutes';
-import {
-  answerObject,
-  cleared,
-  idParam,
-  idString,
-  parseBody,
-  queryUnixSeconds,
-  shortText,
-  unixSeconds,
-} from './helpers';
+import { idParam, parseBody } from './helpers';
 
-const retrieveQuery = surfaceRetrieveQuery();
+const _retrieveQuery = surfaceRetrieveQuery();
+
+// Test clocks, billing settings, meters and entitlements validate with the
+// contract's schemas (`@peable.to/contracts`); the dashboard surface adds its
+// `environment` toggle to the same schema.
+const retrieveExpandQuery = surfaceQuery(expandOnlyQuery);
 
 // ---- Test clocks ---------------------------------------------------------------------
 
-const createClockBody = z
-  .object({ frozen_time: unixSeconds, name: shortText(300).optional() })
-  .strict();
-const advanceBody = z.object({ frozen_time: unixSeconds }).strict();
-const listClocksQuery = surfaceListQuery({});
+const listClocksQuery = surfaceQuery(listTestClocksQuery);
 
 const clockRoutes: CatalogRoute[] = [
   {
     method: 'post',
     path: '/test_helpers/test_clocks',
     core: async (req, res, merchant) => {
-      const body = parseBody(req, res, createClockBody);
+      const body = parseBody(req, res, createTestClockParams);
       if (!body) return;
       const row = await createTestClock(merchant, {
         frozenTime: body.frozen_time,
@@ -126,7 +116,7 @@ const clockRoutes: CatalogRoute[] = [
     path: '/test_helpers/test_clocks/:id',
     core: async (req, res, merchant, surface) => {
       const id = idParam(req, res);
-      if (!id || !parseQuery(req, res, retrieveQuery[surface])) return;
+      if (!id || !parseQuery(req, res, retrieveExpandQuery[surface])) return;
       res.status(200).json(toTestClockDTO(await retrieveTestClock(merchant, id)));
     },
   },
@@ -136,7 +126,7 @@ const clockRoutes: CatalogRoute[] = [
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
       if (!id) return;
-      const body = parseBody(req, res, advanceBody);
+      const body = parseBody(req, res, advanceTestClockParams);
       if (!body) return;
       res.status(200).json(toTestClockDTO(await advanceTestClock(merchant, id, body.frozen_time)));
     },
@@ -155,42 +145,12 @@ const clockRoutes: CatalogRoute[] = [
 
 // ---- Billing settings ------------------------------------------------------------------
 
-const settingsBody = z
-  .object({
-    invoice_prefix: z
-      .string()
-      .regex(new RegExp(BILLING_SETTINGS_LIMITS.invoicePrefixPattern))
-      .optional(),
-    default_days_until_due: z
-      .number()
-      .int()
-      .min(0)
-      .max(BILLING_SETTINGS_LIMITS.daysUntilDueMax)
-      .optional(),
-    dunning: z
-      .object({
-        retry_schedule_days: z
-          .array(z.number().int().min(1).max(BILLING_SETTINGS_LIMITS.retryDaysMax))
-          .max(BILLING_SETTINGS_LIMITS.retriesMax)
-          .optional(),
-        final_action: z.enum(DUNNING_FINAL_ACTIONS).optional(),
-        invoice_action: z.enum(DUNNING_INVOICE_ACTIONS).optional(),
-      })
-      .strict()
-      .optional(),
-    emails: z
-      .object({ invoice_finalized: z.boolean().optional(), payment_failed: z.boolean().optional() })
-      .strict()
-      .optional(),
-  })
-  .strict();
-
 const settingsRoutes: CatalogRoute[] = [
   {
     method: 'get',
     path: '/billing_settings',
     core: async (req, res, merchant, surface) => {
-      if (!parseQuery(req, res, retrieveQuery[surface])) return;
+      if (!parseQuery(req, res, retrieveExpandQuery[surface])) return;
       res
         .status(200)
         .json(toBillingSettingsDTO(await getBillingSettings(merchant), merchant.livemode));
@@ -200,7 +160,7 @@ const settingsRoutes: CatalogRoute[] = [
     method: 'post',
     path: '/billing_settings',
     core: async (req, res, merchant) => {
-      const body = parseBody(req, res, settingsBody);
+      const body = parseBody(req, res, updateBillingSettingsParams);
       if (!body) return;
       const row = await changeBillingSettings(merchant, {
         invoicePrefix: body.invoice_prefix,
@@ -218,42 +178,8 @@ const settingsRoutes: CatalogRoute[] = [
 
 // ---- Meters ---------------------------------------------------------------------------
 
-const payloadKey = z.string().regex(/^[A-Za-z0-9_]{1,100}$/);
-const createMeterBody = z
-  .object({
-    display_name: shortText(250),
-    event_name: z.string().regex(/^[A-Za-z0-9_.:-]{1,100}$/),
-    default_aggregation: z.object({ formula: z.enum(METER_AGGREGATIONS) }).strict(),
-    customer_mapping: z
-      .object({ type: z.literal('by_id'), event_payload_key: payloadKey })
-      .strict()
-      .optional(),
-    value_settings: z.object({ event_payload_key: payloadKey }).strict().optional(),
-  })
-  .strict();
-const updateMeterBody = z.object({ display_name: shortText(250).optional() }).strict();
-const meterEventBody = z
-  .object({
-    event_name: z.string().regex(/^[A-Za-z0-9_.:-]{1,100}$/),
-    payload: z.record(z.string().max(100), z.string().max(255)),
-    identifier: z.string().min(1).max(100).optional(),
-    timestamp: unixSeconds.optional(),
-  })
-  .strict();
-const listMetersQuery = surfaceListQuery({ status: z.enum(METER_STATUSES).optional() });
-const summaryQuery = {
-  api: z
-    .object({ customer: idString, start_time: queryUnixSeconds, end_time: queryUnixSeconds })
-    .strict(),
-  dashboard: z
-    .object({
-      customer: idString,
-      start_time: queryUnixSeconds,
-      end_time: queryUnixSeconds,
-      environment: z.enum(['development', 'staging', 'production']),
-    })
-    .strict(),
-} as const;
+const listMetersQuery = surfaceQuery(listBillingMetersQuery);
+const summaryQuery = surfaceQuery(billingMeterEventSummariesQuery);
 
 async function meterOf(req: Request, res: Response, merchant: MerchantRow) {
   const id = idParam(req, res);
@@ -268,7 +194,7 @@ const meterRoutes: CatalogRoute[] = [
     method: 'post',
     path: '/billing/meters',
     core: async (req, res, merchant) => {
-      const body = parseBody(req, res, createMeterBody);
+      const body = parseBody(req, res, createBillingMeterParams);
       if (!body) return;
       const row = await createMeter(merchant, {
         displayName: body.display_name,
@@ -304,7 +230,7 @@ const meterRoutes: CatalogRoute[] = [
     method: 'get',
     path: '/billing/meters/:id',
     core: async (req, res, merchant, surface) => {
-      if (!parseQuery(req, res, retrieveQuery[surface])) return;
+      if (!parseQuery(req, res, retrieveExpandQuery[surface])) return;
       const meter = await meterOf(req, res, merchant);
       if (meter) res.status(200).json(toMeterDTO(meter));
     },
@@ -314,7 +240,7 @@ const meterRoutes: CatalogRoute[] = [
     path: '/billing/meters/:id',
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
-      const body = id ? parseBody(req, res, updateMeterBody) : null;
+      const body = id ? parseBody(req, res, updateBillingMeterParams) : null;
       if (!id || !body) return;
       res.status(200).json(
         toMeterDTO(
@@ -330,7 +256,7 @@ const meterRoutes: CatalogRoute[] = [
     path: '/billing/meters/:id/deactivate',
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
-      if (!id || !parseBody(req, res, z.object({}).strict())) return;
+      if (!id || !parseBody(req, res, billingMeterStatusParams)) return;
       res.status(200).json(toMeterDTO(await changeMeter(merchant, id, { status: 'inactive' })));
     },
   },
@@ -339,7 +265,7 @@ const meterRoutes: CatalogRoute[] = [
     path: '/billing/meters/:id/reactivate',
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
-      if (!id || !parseBody(req, res, z.object({}).strict())) return;
+      if (!id || !parseBody(req, res, billingMeterStatusParams)) return;
       res.status(200).json(toMeterDTO(await changeMeter(merchant, id, { status: 'active' })));
     },
   },
@@ -367,7 +293,7 @@ const meterRoutes: CatalogRoute[] = [
     method: 'post',
     path: '/billing/meter_events',
     core: async (req, res, merchant) => {
-      const body = parseBody(req, res, meterEventBody);
+      const body = parseBody(req, res, createBillingMeterEventParams);
       if (!body) return;
       const row = await recordMeterEvent(merchant, {
         eventName: body.event_name,
@@ -382,33 +308,16 @@ const meterRoutes: CatalogRoute[] = [
 
 // ---- Entitlements -----------------------------------------------------------------------
 
-const createFeatureBody = z
-  .object({
-    lookup_key: z.string().regex(/^[A-Za-z0-9_.:-]{1,80}$/),
-    name: shortText(80),
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const updateFeatureBody = z
-  .object({
-    name: shortText(80).optional(),
-    active: z.boolean().optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-const listFeaturesQuery = surfaceListQuery({
-  lookup_key: z.string().min(1).max(80).optional(),
-  archived: booleanQuery.optional(),
-});
-const attachBody = z.object({ entitlement_feature: idString }).strict();
-const activeQuery = surfaceListQuery({ customer: idString });
+const listFeaturesQuery = surfaceQuery(listEntitlementFeaturesQuery);
+const productFeaturesQuery = surfaceQuery(listProductFeaturesQuery);
+const activeQuery = surfaceQuery(listActiveEntitlementsQuery);
 
 const entitlementRoutes: CatalogRoute[] = [
   {
     method: 'post',
     path: '/entitlements/features',
     core: async (req, res, merchant) => {
-      const body = parseBody(req, res, createFeatureBody);
+      const body = parseBody(req, res, createEntitlementFeatureParams);
       if (!body) return;
       const row = await createFeature(merchant, {
         lookupKey: body.lookup_key,
@@ -447,7 +356,7 @@ const entitlementRoutes: CatalogRoute[] = [
     path: '/entitlements/features/:id',
     core: async (req, res, merchant, surface) => {
       const id = idParam(req, res);
-      if (!id || !parseQuery(req, res, retrieveQuery[surface])) return;
+      if (!id || !parseQuery(req, res, retrieveExpandQuery[surface])) return;
       const row = await findFeatureForMerchant(getDb(), id, merchant.id);
       if (!row) throw missing('feature');
       res.status(200).json(toFeatureDTO(row));
@@ -458,7 +367,7 @@ const entitlementRoutes: CatalogRoute[] = [
     path: '/entitlements/features/:id',
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
-      const body = id ? parseBody(req, res, updateFeatureBody) : null;
+      const body = id ? parseBody(req, res, updateEntitlementFeatureParams) : null;
       if (!id || !body) return;
       const row = await updateFeatureFields(merchant, id, {
         ...(body.name ? { name: body.name } : {}),
@@ -473,7 +382,7 @@ const entitlementRoutes: CatalogRoute[] = [
     path: '/products/:id/features',
     core: async (req, res, merchant) => {
       const id = idParam(req, res);
-      const body = id ? parseBody(req, res, attachBody) : null;
+      const body = id ? parseBody(req, res, attachProductFeatureParams) : null;
       if (!id || !body) return;
       const { attachment, feature } = await attachProductFeature(
         merchant,
@@ -488,7 +397,7 @@ const entitlementRoutes: CatalogRoute[] = [
     path: '/products/:id/features',
     core: async (req, res, merchant, surface) => {
       const id = idParam(req, res);
-      const query = id ? parseQuery(req, res, surfaceListQuery({})[surface]) : null;
+      const query = id ? parseQuery(req, res, productFeaturesQuery[surface]) : null;
       if (!id || !query) return;
       const db = getDb();
       const product = await findProductForMerchant(db, id, merchant.id);
@@ -547,170 +456,9 @@ const entitlementRoutes: CatalogRoute[] = [
   },
 ];
 
-// ---- Portal ----------------------------------------------------------------------------
-
-const url = z
-  .string()
-  .regex(/^https?:\/\//)
-  .max(2048);
-const businessProfile = z
-  .object({
-    headline: shortText(60).optional(),
-    privacy_policy_url: url.optional(),
-    terms_of_service_url: url.optional(),
-  })
-  .strict();
-const featuresSchema = z
-  .object({
-    customer_update: z
-      .object({
-        enabled: z.boolean().optional(),
-        allowed_updates: z.array(z.enum(PORTAL_CUSTOMER_UPDATES)).max(4).optional(),
-      })
-      .strict()
-      .optional(),
-    invoice_history: z.object({ enabled: z.boolean() }).strict().optional(),
-    payment_method_update: z.object({ enabled: z.boolean() }).strict().optional(),
-    subscription_cancel: z
-      .object({
-        enabled: z.boolean().optional(),
-        mode: z.enum(['at_period_end', 'immediately']).optional(),
-        proration_behavior: z.enum(['create_prorations', 'none']).optional(),
-      })
-      .strict()
-      .optional(),
-    subscription_update: z
-      .object({
-        enabled: z.boolean().optional(),
-        default_allowed_updates: z
-          .array(z.enum(['price', 'quantity']))
-          .max(2)
-          .optional(),
-        proration_behavior: z.enum(['create_prorations', 'none', 'always_invoice']).optional(),
-        products: z
-          .array(z.object({ product: idString, prices: z.array(idString).min(1).max(10) }).strict())
-          .max(10)
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-const createConfigurationBody = z
-  .object({
-    business_profile: businessProfile.optional(),
-    default_return_url: url.optional(),
-    features: featuresSchema,
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const updateConfigurationBody = z
-  .object({
-    active: z.boolean().optional(),
-    business_profile: businessProfile.optional(),
-    default_return_url: z.union([url, z.literal('')]).optional(),
-    features: featuresSchema.optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-const listConfigurationsQuery = surfaceListQuery({
-  active: booleanQuery.optional(),
-  is_default: booleanQuery.optional(),
-});
-const sessionBody = z
-  .object({ customer: idString, configuration: idString.optional(), return_url: url.optional() })
-  .strict();
-
-const portalRoutes: CatalogRoute[] = [
-  {
-    method: 'post',
-    path: '/billing_portal/configurations',
-    core: async (req, res, merchant) => {
-      const body = parseBody(req, res, createConfigurationBody);
-      if (!body) return;
-      const row = await createPortalConfiguration(merchant, {
-        ...(body.business_profile ? { businessProfile: body.business_profile } : {}),
-        ...(body.default_return_url ? { defaultReturnUrl: body.default_return_url } : {}),
-        features: body.features,
-        metadata: body.metadata ?? {},
-      });
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'get',
-    path: '/billing_portal/configurations',
-    core: async (req, res, merchant, surface) => {
-      const query = parseQuery(req, res, listConfigurationsQuery[surface]);
-      if (!query) return;
-      const db = getDb();
-      await answerList(req, res, {
-        query,
-        type: 'billing_portal.configuration',
-        merchantId: merchant.id,
-        cursor: async (publicId) =>
-          (await findPortalConfigurationForMerchant(db, publicId, merchant.id))?.id ?? null,
-        fetch: (page) =>
-          listPortalConfigurations(db, {
-            merchantId: merchant.id,
-            page,
-            active: query.active,
-            isDefault: query.is_default,
-          }),
-        serialize: toPortalConfigurationDTO,
-      });
-    },
-  },
-  {
-    method: 'get',
-    path: '/billing_portal/configurations/:id',
-    core: async (req, res, merchant, surface) => {
-      const id = idParam(req, res);
-      if (!id || !parseQuery(req, res, retrieveQuery[surface])) return;
-      const row = await findPortalConfigurationForMerchant(getDb(), id, merchant.id);
-      if (!row) throw missing('portal configuration');
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'post',
-    path: '/billing_portal/configurations/:id',
-    core: async (req, res, merchant) => {
-      const id = idParam(req, res);
-      const body = id ? parseBody(req, res, updateConfigurationBody) : null;
-      if (!id || !body) return;
-      const row = await changePortalConfiguration(merchant, id, {
-        ...(body.active !== undefined ? { active: body.active } : {}),
-        ...(body.business_profile ? { businessProfile: body.business_profile } : {}),
-        ...(body.default_return_url !== undefined
-          ? { defaultReturnUrl: cleared(body.default_return_url) ?? null }
-          : {}),
-        ...(body.features ? { features: body.features } : {}),
-        ...(body.metadata ? { metadata: body.metadata } : {}),
-      });
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'post',
-    path: '/billing_portal/sessions',
-    core: async (req, res, merchant) => {
-      const body = parseBody(req, res, sessionBody);
-      if (!body) return;
-      const session = await createPortalSession(merchant, {
-        customer: body.customer,
-        ...(body.configuration ? { configuration: body.configuration } : {}),
-        ...(body.return_url ? { returnUrl: body.return_url } : {}),
-      });
-      await answerObject(res, merchant, 'billing_portal.session', session, undefined);
-    },
-  },
-];
-
 export const PLATFORM_ROUTES: readonly CatalogRoute[] = [
   ...clockRoutes,
   ...settingsRoutes,
   ...meterRoutes,
   ...entitlementRoutes,
-  ...portalRoutes,
 ];

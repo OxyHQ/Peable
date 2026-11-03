@@ -1,4 +1,14 @@
-// Contracts of this group: one module per resource, re-exported here, and
-// their routes concatenated into `eventsRoutes`.
+import { eventRoutes } from './events';
+import { webhookDeliveryRoutes } from './webhookDeliveries';
+import { webhookEndpointRoutes } from './webhookEndpoints';
 
-export const eventsRoutes = [] as const;
+export * from './events';
+export * from './webhookDeliveries';
+export * from './webhookEndpoints';
+
+/** Events, the webhook endpoints they are sent to, and the deliveries of them. */
+export const eventsRoutes = [
+  ...eventRoutes,
+  ...webhookEndpointRoutes,
+  ...webhookDeliveryRoutes,
+] as const;

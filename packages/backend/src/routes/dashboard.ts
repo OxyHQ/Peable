@@ -2,6 +2,7 @@ import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
+import { registerMerchantParams, updateMerchantParams } from '@peable.to/contracts';
 import {
   createOxyAuthMiddleware,
   getRequiredOxyUserId,
@@ -15,13 +16,7 @@ import {
   type AppMembershipResult,
 } from '../services/appMembership';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
-import {
-  createMerchantBodySchema,
-  patchMerchantBodySchema,
-  registerMerchant,
-  applyMerchantPatch,
-  sendMerchantWriteError,
-} from './merchants';
+import { registerMerchant, applyMerchantPatch, sendMerchantWriteError } from './merchants';
 import type { FileActor } from '../services/oxyFiles/fileOwnership';
 import {
   answerDisputeList,
@@ -48,11 +43,8 @@ import {
   validateDomain,
 } from './paymentMethodConfigurations';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
-import {
-  answerPaymentIntentList,
-  paymentIntentListFilters,
-  resolveMerchantByApp,
-} from './paymentIntents';
+import { listPaymentIntentsQuery } from '@peable.to/contracts';
+import { answerPaymentIntentList, resolveMerchantByApp } from './paymentIntents';
 import { answerWebhookDeliveryList, redeliverWebhookDelivery } from './webhookDeliveries';
 import {
   answerWebhookEndpointList,
@@ -96,7 +88,7 @@ import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import { listQuerySchema, parseQuery, type QuerySurface } from '../lib/list';
+import { dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
 import { runIdempotent } from '../lib/idempotency';
 import {
   answerBalanceTransactionList,
@@ -216,16 +208,10 @@ export async function resolveDashboardAccess(
 }
 
 /**
- * The dashboard's lists take `environment` beside the list parameters (the
- * Test/Live toggle); it is validated by `resolveDashboardAccess` and declared
- * here only so the strict list schema does not refuse it.
+ * The dashboard's payment-intent list is the contract's (`listPaymentIntentsQuery`)
+ * plus `environment` (the Test/Live toggle), validated by `resolveDashboardAccess`.
  */
-const dashboardScope = { environment: z.enum(OXY_SERVICE_ENVIRONMENTS) } as const;
-
-const paymentIntentsListQuery = listQuerySchema({
-  ...paymentIntentListFilters,
-  ...dashboardScope,
-});
+const paymentIntentsListQuery = dashboardQuery(listPaymentIntentsQuery);
 
 /**
  * Build the `/v1/dashboard/*` router (F2.5 Phase 0 Task 2) — a human Oxy
@@ -286,7 +272,7 @@ export function createDashboardRouter(deps?: {
       const access = await resolveDashboardAccess(req, res, { assertAppMembership });
       if (!access) return;
 
-      const parsed = createMerchantBodySchema.safeParse(req.body);
+      const parsed = registerMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -314,7 +300,7 @@ export function createDashboardRouter(deps?: {
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
       if (!merchant) return;
 
-      const parsed = patchMerchantBodySchema.safeParse(req.body);
+      const parsed = updateMerchantParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -738,7 +724,7 @@ export function createDashboardRouter(deps?: {
       }
       const result = await redeliverWebhookDelivery(merchant, deliveryId, { safeFetch });
       if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
+        sendError(res, result.status, 'invalid_request_error', result.message, result.code);
         return;
       }
       res.status(200).json(toWebhookDeliveryDTO(result.delivery));

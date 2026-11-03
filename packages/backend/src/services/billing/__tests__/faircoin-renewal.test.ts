@@ -1,7 +1,7 @@
+import { billingFaircoinRenewalConsentSchema } from '@peable.to/contracts';
 import { describe, expect, it } from 'bun:test';
 import {
   createFaircoinRenewalAuthorization,
-  faircoinRenewalConsentSchema,
   type FaircoinRenewalActor,
   type FaircoinRenewalRecord,
   type FaircoinRenewalRepository,
@@ -105,20 +105,25 @@ describe('Faircoin renewal scheduling authorization', () => {
   it('requires verified explicit consent, bounded positive amount and monthly cadence', async () => {
     const { service, actor, consent, repository } = fixture();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, explicit_consent: false }),
+      billingFaircoinRenewalConsentSchema.parse({ ...consent, explicit_consent: false }),
     ).toThrow();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, maximum_amount_base_units: '0' }),
+      billingFaircoinRenewalConsentSchema.parse({ ...consent, maximum_amount_base_units: '0' }),
     ).toThrow();
-    expect(() => faircoinRenewalConsentSchema.parse({ ...consent, interval_count: 2 })).toThrow();
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, expires_at: consent.starts_at }),
+      billingFaircoinRenewalConsentSchema.parse({ ...consent, interval_count: 2 }),
+    ).toThrow();
+    expect(() =>
+      billingFaircoinRenewalConsentSchema.parse({ ...consent, expires_at: consent.starts_at }),
     ).toThrow();
     // The wire's instants are Unix seconds; an ISO string is refused.
     expect(() =>
-      faircoinRenewalConsentSchema.parse({ ...consent, starts_at: '2026-10-01T00:00:00.000Z' }),
+      billingFaircoinRenewalConsentSchema.parse({
+        ...consent,
+        starts_at: '2026-10-01T00:00:00.000Z',
+      }),
     ).toThrow();
-    expect(() => faircoinRenewalConsentSchema.parse({ ...consent, mode: 'live' })).toThrow();
+    expect(() => billingFaircoinRenewalConsentSchema.parse({ ...consent, mode: 'live' })).toThrow();
     const denied = createFaircoinRenewalAuthorization({
       repository,
       verifyConsent: async () => false,

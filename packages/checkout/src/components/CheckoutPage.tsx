@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { CheckoutSessionPublic } from '@peable.to/shared-types';
+import type { CheckoutSessionPublic, PaymentIntent } from '@peable.to/shared-types';
 import { type Translate, useI18n } from '../i18n';
 import { type FieldError, fieldErrorOf } from '../lib/apiError';
 import { type Appearance, brandingStyle, providerAppearance } from '../lib/branding';
@@ -341,7 +341,8 @@ export function CheckoutPage({
                   />
                 ) : session.payment_intent ? (
                   <CheckoutView
-                    intent={session.payment_intent}
+                    // TRANSITIONAL: a no-op once the payments contract registers `payment_intent`.
+                    intent={session.payment_intent as unknown as PaymentIntent}
                     billingQuote={session.billing_quote}
                     providerAppearance={appearance}
                     submitLabel={label}

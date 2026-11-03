@@ -92,11 +92,11 @@ export interface BillingCreateOptions {
 
 /** `/v1/<collection>/<id>`, the id encoded. */
 const path = (collection: string, id: string) => `/v1/${collection}/${encodeURIComponent(id)}`;
-const booleanParam = (value: boolean | undefined) =>
+const booleanParam = (value: boolean | 'true' | 'false' | undefined) =>
   value === undefined ? undefined : String(value);
 
 /** `X` (exactly that second) or `{ gte, lt, … }` — `key[gte]=…` on the wire. */
-function rangeParam(value: number | RangeQuery | undefined): QueryValue {
+function rangeParam(value: number | string | RangeQuery | undefined): QueryValue {
   return typeof value === 'object' ? { ...value } : value;
 }
 

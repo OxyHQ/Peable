@@ -8,14 +8,16 @@
  */
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
-import { isBaseUnitString, REFUND_REASONS, type Settlement } from '@peable.to/shared-types';
 import {
   METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
+  type Settlement,
+  cancelRefundParams,
+  createRefundParams,
+  expandOnlyQuery,
+  listPaymentIntentRefundsQuery,
+  listRefundsQuery,
+  updateRefundParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
@@ -41,64 +43,19 @@ import {
   sendProviderError,
   sendValidationError,
   wrap,
+  requireScope,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toUnixOrNull } from '../lib/time';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { toRefundDTO } from '../lib/serialize';
-import {
-  answerList,
-  listQuerySchema,
-  parseQuery,
-  resolveListReference,
-  retrieveQuerySchema,
-} from '../lib/list';
+import { answerList, parseQuery, resolveListReference } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-/** `GET /v1/refunds`: every refund of the merchant, or of one payment. */
-const listRefundsQuery = listQuerySchema({
-  payment_intent: z.string().min(1).max(255).optional(),
-});
-/** The per-payment sub-list: the payment is in the path. */
-const listIntentRefundsQuery = listQuerySchema({});
-const retrieveRefundQuery = retrieveQuerySchema({});
-
-const createRefundBodySchema = z
-  .object({
-    /** The `pi_…` being refunded. */
-    payment_intent: z.string().min(1),
-    /** The merchant's own id for this refund. The idempotency. */
-    external_ref: z.string().min(1).max(255),
-    /**
-     * Validated with the SAME predicate the CHECK is rendered from, then
-     * separately refused if zero: `'0'` is a canonical integer string and would
-     * pass, while a zero refund consumes the merchant's `external_ref` so the REAL
-     * refund for that order could never be created afterwards.
-     */
-    amount: z
-      .string()
-      .refine(isBaseUnitString, 'amount must be a canonical integer string in minor units')
-      .refine((value) => value !== '0', 'a refund of 0 is not a refund'),
-    reason: z.enum(REFUND_REASONS).optional(),
-    metadata: metadataCreateSchema.optional(),
-    // Destination charges (ADR 0015 §3): the provider refunds Orbit's fee and
-    // pulls the funds back from the destination, in proportion.
-    refund_application_fee: z.boolean().optional(),
-    reverse_transfer: z.boolean().optional(),
-  })
-  .strict();
-
-const updateRefundBodySchema = z.object({ metadata: metadataUpdateSchema.optional() }).strict();
-const cancelRefundBodySchema = z.object({}).strict();
-
 /**
- * The wire shape, published in `@peable.to/shared-types` — the provider's own
- * refund id never appears in it.
- *
- * Declared there rather than here so the SDK and an integrator's own adapter
- * describe this response ONCE. Two private copies of a wire format in two
- * repositories is how a renamed field becomes a runtime failure somebody else
- * discovers.
+ * Every request schema and the wire shape are the contract's
+ * (`@peable.to/contracts` `refundRoutes`) — the provider's own refund id never
+ * appears in it.
  */
 export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
@@ -108,12 +65,12 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/refunds',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
-      const parsed = createRefundBodySchema.safeParse(req.body);
+      const parsed = createRefundParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -196,7 +153,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/refunds',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -234,7 +191,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/refunds/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -243,7 +200,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const query = parseQuery(req, res, retrieveRefundQuery);
+      const query = parseQuery(req, res, expandOnlyQuery);
       if (!query) return;
       const expand = parseExpand(res, 'refund', query.expand, { list: false });
       if (!expand) return;
@@ -271,7 +228,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/refunds/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -281,7 +238,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = updateRefundBodySchema.safeParse(req.body);
+      const parsed = updateRefundParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -319,7 +276,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/refunds/:id/cancel',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
@@ -329,7 +286,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const parsed = cancelRefundBodySchema.safeParse(req.body ?? {});
+      const parsed = cancelRefundParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -375,7 +332,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/payment_intents/:intentId/refunds',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -385,7 +342,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
-      const query = parseQuery(req, res, listIntentRefundsQuery);
+      const query = parseQuery(req, res, listPaymentIntentRefundsQuery);
       if (!query) return;
 
       const db = getDb();
@@ -432,7 +389,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/payment_intents/:intentId/settlement',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -446,7 +403,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       // Scoped in the PREDICATE, not compared after the read: a payment that
       // does not exist and one belonging to another merchant are the same
       // answer, so neither the row nor its absence can confirm an id.
-      const query = parseQuery(req, res, retrieveRefundQuery);
+      const query = parseQuery(req, res, expandOnlyQuery);
       if (!query) return;
       const expand = parseExpand(res, 'settlement', query.expand, { list: false });
       if (!expand) return;
