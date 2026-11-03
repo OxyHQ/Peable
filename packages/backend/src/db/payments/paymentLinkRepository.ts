@@ -1,148 +1,239 @@
-import { and, eq, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import type { OxyServiceEnvironment } from '@oxy.so/core/server';
-import type { CurrencyCode, PaymentIntentRail } from '@peable.to/shared-types';
+import type {
+  CheckoutCustomerCreation,
+  CheckoutLocale,
+  CheckoutSubmitType,
+  CurrencyCode,
+  PaymentIntentRail,
+} from '@peable.to/shared-types';
 import { uuidv7 } from '@oxy.so/db';
-import { paymentLinks } from '../schema';
-import type { StoredContribution } from '../schema/payments';
+import { paymentLinkLineItems, paymentLinks } from '../schema';
+import type {
+  StoredCheckoutCollection,
+  StoredContribution,
+  StoredCustomField,
+} from '../schema/payments';
+import type { AfterCompletionType } from '../schema/valueSets';
 import type { DatabaseOrTransaction } from '../postgres';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 
 /**
- * Reads and writes for `payment_links` — a shareable, reusable generator of
- * payment intents.
+ * Reads and writes for `payment_links` and their line items (Orbit Phase 3).
  *
- * NOT WIRED TO ANY ROUTE YET; see `db/merchants/merchantRepository.ts`'s header.
+ * A link's line items are written once, with the link, and never changed: a
+ * payer may already hold a session priced from them. Everything else on a
+ * link is an option the next session copies.
  */
 
 export interface PaymentLinkRow {
-  /**
-   * The mode this row lives in — its merchant's, read in the same statement
-   * (`merchantLivemodeOf`, ADR 0017). Selects the provider key any operation on
-   * it is sent with, and is what the wire calls `livemode`.
-   */
   readonly livemode: boolean;
   readonly id: string;
-  readonly contribution?: StoredContribution | null;
-  readonly contributionKey?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  readonly amount: string;
+  readonly contribution: StoredContribution | null;
+  readonly contributionKey: string | null;
+  /** Contribution links only (`payment_links_amount_shape_check`). */
+  readonly amount: string | null;
   readonly currency: CurrencyCode;
   readonly rail: PaymentIntentRail;
-  /** FairCoin rail only — `null` on a card link (ADR 0001 D6). */
   readonly network: NetworkType | null;
   readonly active: boolean;
   readonly metadata: Record<string, string>;
-  readonly successUrl: string | null;
+  readonly allowPromotionCodes: boolean;
+  readonly collection: StoredCheckoutCollection | null;
+  readonly customFields: StoredCustomField[];
+  readonly automaticTax: boolean;
+  readonly customerCreation: CheckoutCustomerCreation;
+  readonly submitType: CheckoutSubmitType;
+  readonly locale: CheckoutLocale | null;
+  readonly afterCompletionType: AfterCompletionType;
+  readonly afterCompletionUrl: string | null;
+  readonly afterCompletionMessage: string | null;
+  readonly completedSessionsLimit: number | null;
+  readonly completedSessionsCount: number;
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
 
 const LINK_COLUMNS = {
   livemode: merchantLivemodeOf(paymentLinks.merchantId),
-  contribution: paymentLinks.contribution,
-  contributionKey: paymentLinks.contributionKey,
   id: paymentLinks.id,
   publicId: paymentLinks.publicId,
   merchantId: paymentLinks.merchantId,
   oxyAppId: paymentLinks.oxyAppId,
   environment: paymentLinks.environment,
+  contribution: paymentLinks.contribution,
+  contributionKey: paymentLinks.contributionKey,
   amount: paymentLinks.amount,
   currency: paymentLinks.currency,
   rail: paymentLinks.rail,
   network: paymentLinks.network,
   active: paymentLinks.active,
   metadata: paymentLinks.metadata,
-  successUrl: paymentLinks.successUrl,
+  allowPromotionCodes: paymentLinks.allowPromotionCodes,
+  collection: paymentLinks.collection,
+  customFields: paymentLinks.customFields,
+  automaticTax: paymentLinks.automaticTax,
+  customerCreation: paymentLinks.customerCreation,
+  submitType: paymentLinks.submitType,
+  locale: paymentLinks.locale,
+  afterCompletionType: paymentLinks.afterCompletionType,
+  afterCompletionUrl: paymentLinks.afterCompletionUrl,
+  afterCompletionMessage: paymentLinks.afterCompletionMessage,
+  completedSessionsLimit: paymentLinks.completedSessionsLimit,
+  completedSessionsCount: paymentLinks.completedSessionsCount,
   createdAt: paymentLinks.createdAt,
   updatedAt: paymentLinks.updatedAt,
 } as const;
 
-function toLinkRow(row: {
-  environment: string;
-  currency: string;
-  rail: string;
-  network: string | null;
-  [key: string]: unknown;
-}): PaymentLinkRow {
-  return {
-    ...row,
-    environment: row.environment as OxyServiceEnvironment,
-    currency: row.currency as CurrencyCode,
-    rail: row.rail as PaymentIntentRail,
-    network: row.network as NetworkType | null,
-  } as unknown as PaymentLinkRow;
+/** The text columns are CHECK-constrained to these sets; the cast only restates it. */
+function toLinkRow(row: Record<string, unknown>): PaymentLinkRow {
+  return row as unknown as PaymentLinkRow;
 }
 
+export interface PaymentLinkLineItemRow {
+  readonly id: string;
+  readonly linkId: string;
+  readonly position: number;
+  /** INTERNAL price id. */
+  readonly priceId: string;
+  readonly quantity: number;
+  readonly adjustableEnabled: boolean;
+  readonly adjustableMinimum: number | null;
+  readonly adjustableMaximum: number | null;
+}
+
+const LINE_COLUMNS = {
+  id: paymentLinkLineItems.id,
+  linkId: paymentLinkLineItems.linkId,
+  position: paymentLinkLineItems.position,
+  priceId: paymentLinkLineItems.priceId,
+  quantity: paymentLinkLineItems.quantity,
+  adjustableEnabled: paymentLinkLineItems.adjustableEnabled,
+  adjustableMinimum: paymentLinkLineItems.adjustableMinimum,
+  adjustableMaximum: paymentLinkLineItems.adjustableMaximum,
+} as const;
+
+/** The options a link carries for the sessions it creates. */
+export interface PaymentLinkOptions {
+  readonly allowPromotionCodes: boolean;
+  readonly collection: StoredCheckoutCollection | null;
+  readonly customFields: readonly StoredCustomField[];
+  readonly automaticTax: boolean;
+  readonly customerCreation: CheckoutCustomerCreation;
+  readonly submitType: CheckoutSubmitType;
+  readonly locale: CheckoutLocale | null;
+  readonly afterCompletionType: AfterCompletionType;
+  readonly afterCompletionUrl: string | null;
+  readonly afterCompletionMessage: string | null;
+  readonly completedSessionsLimit: number | null;
+}
+
+export const DEFAULT_LINK_OPTIONS: PaymentLinkOptions = {
+  allowPromotionCodes: false,
+  collection: null,
+  customFields: [],
+  automaticTax: false,
+  customerCreation: 'if_required',
+  submitType: 'auto',
+  locale: null,
+  afterCompletionType: 'hosted_confirmation',
+  afterCompletionUrl: null,
+  afterCompletionMessage: null,
+  completedSessionsLimit: null,
+};
+
 export interface InsertPaymentLinkParams {
-  readonly contribution?: StoredContribution | null;
-  readonly contributionKey?: string | null;
   readonly publicId: string;
   readonly merchantId: string;
   readonly oxyAppId: string;
   readonly environment: OxyServiceEnvironment;
-  readonly amount: string;
   readonly currency: CurrencyCode;
   readonly rail: PaymentIntentRail;
   /** FairCoin rail only; `null` on a card link. */
   readonly network: NetworkType | null;
   readonly metadata: Record<string, string>;
-  readonly successUrl?: string | undefined;
+  readonly options?: PaymentLinkOptions;
+  /** A price link's lines (INTERNAL price ids, already the merchant's). */
+  readonly lineItems?: readonly {
+    readonly priceId: string;
+    readonly quantity: number;
+    readonly adjustable: { readonly minimum: number; readonly maximum: number } | null;
+  }[];
+  /** A contribution link's amount and details — and then no line items. */
+  readonly amount?: string | null;
+  readonly contribution?: StoredContribution | null;
+  readonly contributionKey?: string | null;
 }
 
 /**
- * Create a link.
+ * Create a link and its line items, in the caller's transaction.
  *
- * `oxy_app_id`, `environment` and `network` are supplied by the caller from the
- * merchant it already resolved — and cannot disagree with it, because
- * `payment_links_merchant_identity_fkey` references all four columns together.
- * A caller that passed a mismatched triple is refused by the database rather
- * than silently creating a link that claims the wrong application.
- *
- * On a CARD link `network` is null, which switches that four-column reference
- * off (`MATCH SIMPLE`); `payment_links_merchant_identity_no_network_fkey` is
- * what keeps the other three guaranteed. ADR 0001 D6.
+ * `oxy_app_id`, `environment` and `network` come from the merchant the caller
+ * resolved and cannot disagree with it: `payment_links_merchant_identity_fkey`
+ * references all four together (ADR 0001 D6 for the card half).
  */
 export async function insertPaymentLink(
-  db: DatabaseOrTransaction,
+  tx: DatabaseOrTransaction,
   params: InsertPaymentLinkParams,
 ): Promise<PaymentLinkRow> {
-  const [row] = await db
+  const options = params.options ?? DEFAULT_LINK_OPTIONS;
+  const [row] = await tx
     .insert(paymentLinks)
     .values({
       id: uuidv7(),
       publicId: params.publicId,
-      contribution: params.contribution ?? null,
-      contributionKey: params.contributionKey ?? null,
       merchantId: params.merchantId,
       oxyAppId: params.oxyAppId,
       environment: params.environment,
-      amount: params.amount,
+      contribution: params.contribution ?? null,
+      contributionKey: params.contributionKey ?? null,
+      amount: params.amount ?? null,
       currency: params.currency,
       rail: params.rail,
       network: params.network,
       metadata: params.metadata,
-      successUrl: params.successUrl ?? null,
+      allowPromotionCodes: options.allowPromotionCodes,
+      collection: options.collection,
+      customFields: [...options.customFields],
+      automaticTax: options.automaticTax,
+      customerCreation: options.customerCreation,
+      submitType: options.submitType,
+      locale: options.locale,
+      afterCompletionType: options.afterCompletionType,
+      afterCompletionUrl: options.afterCompletionUrl,
+      afterCompletionMessage: options.afterCompletionMessage,
+      completedSessionsLimit: options.completedSessionsLimit,
     })
     .returning(LINK_COLUMNS);
   if (!row) throw new Error('payment link insert returned no row');
-  return toLinkRow(row);
+  const link = toLinkRow(row);
+  const lines = params.lineItems ?? [];
+  if (lines.length > 0) {
+    await tx.insert(paymentLinkLineItems).values(
+      lines.map((line, position) => ({
+        id: uuidv7(),
+        linkId: link.id,
+        merchantId: link.merchantId,
+        position,
+        priceId: line.priceId,
+        quantity: line.quantity,
+        adjustableEnabled: line.adjustable !== null,
+        adjustableMinimum: line.adjustable?.minimum ?? null,
+        adjustableMaximum: line.adjustable?.maximum ?? null,
+      })),
+    );
+  }
+  return link;
 }
 
-/**
- * The PUBLIC checkout-page read: `link_…` alone, no owner.
- *
- * A payer visiting `/l/:id` has no Oxy session at all, so there is nothing to
- * scope by. Kept as a separate function from {@link findLinkForMerchant} for
- * the same reason the payment-intent reads are split: the difference is who may
- * see the row, and a flag would let a merchant-authed handler pass the wrong
- * one and return another merchant's link.
- */
+/** The PAYER read: `link_…` alone — an anonymous visitor has nothing to scope by. */
 export async function findLinkByPublicId(
   db: DatabaseOrTransaction,
   publicId: string,
@@ -154,7 +245,7 @@ export async function findLinkByPublicId(
   return row ? toLinkRow(row) : null;
 }
 
-/** The MERCHANT read: ownership in the WHERE clause, so a foreign link 404s exactly like a missing one. */
+/** The MERCHANT read: ownership in the WHERE clause, so a foreign link 404s like a missing one. */
 export async function findLinkForMerchant(
   db: DatabaseOrTransaction,
   publicId: string,
@@ -167,18 +258,23 @@ export async function findLinkForMerchant(
   return row ? toLinkRow(row) : null;
 }
 
+export async function findLinkById(
+  db: DatabaseOrTransaction,
+  id: string,
+): Promise<PaymentLinkRow | null> {
+  const [row] = await db.select(LINK_COLUMNS).from(paymentLinks).where(eq(paymentLinks.id, id));
+  return row ? toLinkRow(row) : null;
+}
+
 export interface ListLinksParams {
   readonly merchantId: string;
   readonly active?: boolean | undefined;
-  /**
-   * Only the contribution links of this organization (`payment_links.contribution
-   * ->> 'organizationId'`). Absent: every link, contribution or not.
-   */
+  /** Only this organization's contribution links. Absent: every link. */
   readonly contributionOrganizationId?: string | undefined;
   readonly page: KeysetPage;
 }
 
-/** One page, newest first. Same ordering contract as `listIntentsForMerchant` — read its note. */
+/** One page, newest first (`db/keyset.ts`). */
 export async function listLinksForMerchant(
   db: DatabaseOrTransaction,
   params: ListLinksParams,
@@ -202,25 +298,48 @@ export async function listLinksForMerchant(
   return walk.finish(rows.map(toLinkRow));
 }
 
+/** A link's lines, in order. */
+export async function listLinkLineItems(
+  db: DatabaseOrTransaction,
+  linkId: string,
+): Promise<PaymentLinkLineItemRow[]> {
+  return db
+    .select(LINE_COLUMNS)
+    .from(paymentLinkLineItems)
+    .where(eq(paymentLinkLineItems.linkId, linkId))
+    .orderBy(asc(paymentLinkLineItems.position));
+}
+
+/** The lines of several links (one query for a page). */
+export async function listLineItemsForLinks(
+  db: DatabaseOrTransaction,
+  linkIds: readonly string[],
+): Promise<Map<string, PaymentLinkLineItemRow[]>> {
+  const map = new Map<string, PaymentLinkLineItemRow[]>();
+  if (linkIds.length === 0) return map;
+  const rows = await db
+    .select(LINE_COLUMNS)
+    .from(paymentLinkLineItems)
+    .where(inArray(paymentLinkLineItems.linkId, [...linkIds]))
+    .orderBy(asc(paymentLinkLineItems.position));
+  for (const row of rows) {
+    const list = map.get(row.linkId) ?? [];
+    list.push(row);
+    map.set(row.linkId, list);
+  }
+  return map;
+}
+
 export interface PaymentLinkPatch {
   readonly active?: boolean | undefined;
-  /** A patch, merged in the statement — see `db/metadata.ts`. */
   readonly metadata?: MetadataPatch | undefined;
-  readonly successUrl?: string | null | undefined;
+  readonly options?: Partial<PaymentLinkOptions> | undefined;
 }
 
 /**
- * Apply the mutable link fields, and only those.
- *
- * `amount` and `network` are absent from the parameter type rather than
- * filtered out of it: a link's price is immutable once shared, because a payer
- * who was quoted one amount must not be charged another when they follow the
- * same URL. There is no way to express that change through this function, which
- * is stronger than validating against it.
- *
- * Scoped to the merchant in the same statement, so a patch cannot reach a link
- * the caller does not own. `limit_exceeded` is a metadata patch whose MERGED
- * bag would pass 50 keys — a different answer from a missing link (400, not 404).
+ * Apply the mutable link fields — never the line items, which are not in the
+ * parameter type at all. Scoped to the merchant in the statement.
+ * `limit_exceeded` is a metadata patch whose MERGED bag would pass 50 keys.
  */
 export async function updatePaymentLink(
   db: DatabaseOrTransaction,
@@ -228,18 +347,21 @@ export async function updatePaymentLink(
   merchantId: string,
   patch: PaymentLinkPatch,
 ): Promise<PaymentLinkRow | 'missing' | 'limit_exceeded'> {
-  const values: Record<string, unknown> = {};
+  const values: Record<string, unknown> = { ...(patch.options ?? {}) };
+  if ('customFields' in values && values.customFields !== undefined) {
+    values.customFields = [...(values.customFields as StoredCustomField[])];
+  }
   if (patch.active !== undefined) values.active = patch.active;
-  if (patch.successUrl !== undefined) values.successUrl = patch.successUrl;
   const merged =
     patch.metadata === undefined
       ? undefined
       : mergedMetadata(paymentLinks.metadata, patch.metadata);
   if (merged !== undefined) values.metadata = merged;
+  for (const key of Object.keys(values)) if (values[key] === undefined) delete values[key];
   if (Object.keys(values).length === 0) {
     return (await findLinkForMerchant(db, publicId, merchantId)) ?? 'missing';
   }
-
+  values.updatedAt = sql`date_trunc('milliseconds', now())`;
   const scope = and(eq(paymentLinks.publicId, publicId), eq(paymentLinks.merchantId, merchantId));
   const [row] = await db
     .update(paymentLinks)
@@ -249,4 +371,34 @@ export async function updatePaymentLink(
   if (row) return toLinkRow(row);
   if (merged === undefined) return 'missing';
   return (await findLinkForMerchant(db, publicId, merchantId)) ? 'limit_exceeded' : 'missing';
+}
+
+/**
+ * One more session of this link completed — in the completion's transaction.
+ * The count and the deactivation at `restrictions.completed_sessions.limit`
+ * are ONE statement, so two completions racing to the limit both count and
+ * the link is deactivated once.
+ */
+export async function countLinkCompletion(
+  tx: DatabaseOrTransaction,
+  linkId: string,
+): Promise<{ row: PaymentLinkRow; deactivated: boolean } | null> {
+  const [before] = await tx
+    .select({ active: paymentLinks.active })
+    .from(paymentLinks)
+    .where(eq(paymentLinks.id, linkId))
+    .for('update');
+  if (!before) return null;
+  const [row] = await tx
+    .update(paymentLinks)
+    .set({
+      completedSessionsCount: sql`${paymentLinks.completedSessionsCount} + 1`,
+      active: sql`case when ${paymentLinks.completedSessionsLimit} is not null and ${paymentLinks.completedSessionsCount} + 1 >= ${paymentLinks.completedSessionsLimit} then false else ${paymentLinks.active} end`,
+      updatedAt: sql`date_trunc('milliseconds', now())`,
+    })
+    .where(eq(paymentLinks.id, linkId))
+    .returning(LINK_COLUMNS);
+  if (!row) return null;
+  const link = toLinkRow(row);
+  return { row: link, deactivated: before.active && !link.active };
 }

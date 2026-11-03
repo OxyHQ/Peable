@@ -32,5 +32,5 @@ test('keeps the ordinary copy for a card payment', () => {
       intent={intentFixture({ rail: 'card', status: 'processing', payment_method_types: ['card'] })}
     />,
   );
-  expect(screen.getByText('Your payment is being processed...')).toBeDefined();
+  expect(screen.getByText('Your payment is being processed…')).toBeDefined();
 });

@@ -26,6 +26,7 @@ import {
   payoutFixture,
   requirementsFixture,
 } from '../support/moneyFixtures';
+import { checkoutSessionFixture, paymentLinkFixture } from '../support/checkoutFixture';
 
 const SECRET = 'whsec_test_secret';
 const TIMESTAMP = 1700000000;
@@ -432,6 +433,25 @@ const payloads = {
   'coupon.deleted': { ...coupon, valid: false },
   'promotion_code.created': promotionCode,
   'promotion_code.updated': { ...promotionCode, active: false },
+  'checkout.session.completed': {
+    ...checkoutSessionFixture,
+    status: 'complete',
+    payment_status: 'paid',
+    payment_intent: 'pi_fixture',
+  },
+  'checkout.session.expired': { ...checkoutSessionFixture, status: 'expired' },
+  'checkout.session.async_payment_succeeded': {
+    ...checkoutSessionFixture,
+    status: 'complete',
+    payment_status: 'paid',
+  },
+  'checkout.session.async_payment_failed': {
+    ...checkoutSessionFixture,
+    status: 'complete',
+    payment_status: 'unpaid',
+  },
+  'payment_link.created': paymentLinkFixture,
+  'payment_link.updated': { ...paymentLinkFixture, active: false },
   'connected_account.updated': account,
   'account.updated': accountFixture(),
   'application_fee.created': applicationFeeFixture(),

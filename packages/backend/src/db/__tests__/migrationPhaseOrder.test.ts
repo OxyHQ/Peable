@@ -65,6 +65,9 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // phase applied) before Orbit money's `0052`–`0057` (ADR 0015) merge.
   '0051_orbit_disputes_methods_validate':
     'released with #199; deployed before 0052 (Orbit money) merges',
+  // Orbit money's contract half ships with #200; it must be DEPLOYED (its post
+  // phase applied) before checkout v2 (Orbit Phase 3) merges behind it.
+  '0057_orbit_money_contract': 'released with #200; deployed before checkout v2 merges',
 };
 
 interface Migration {

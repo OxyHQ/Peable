@@ -6,11 +6,13 @@ import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
-import { findSessionForMerchant } from '../db/payments/checkoutSessionRepository';
+import { findSessionById, findSessionForMerchant } from '../db/payments/checkoutSessionRepository';
 import { idempotent } from '../lib/idempotency';
 import { refuseLivemode } from '../lib/liveStream';
 import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
-import { toCheckoutSessionDTO, toPaymentIntentDTO } from '../lib/serialize';
+import { toPaymentIntentDTO } from '../lib/serialize';
+import { toCheckoutSessionDTO } from '../lib/serializeCheckout';
+import { expireSessionNow } from '../services/checkout/sessionService';
 import { expireIntentNow } from '../services/expirySweeper';
 import { simulateFaircoinPayment } from '../services/testHelpers';
 import { resolveMerchant } from './paymentIntents';
@@ -86,15 +88,28 @@ async function expireCheckoutSessionRoute(
     sendError(res, 404, 'invalid_request_error', 'checkout session not found', 'resource_missing');
     return;
   }
+  // A session nobody confirmed has no payment: its deadline is its own.
+  if (session.paymentIntentId === null) {
+    const expired = await expireSessionNow(session);
+    if (!expired) {
+      sendError(res, 409, 'invalid_request_error', `this checkout session is ${session.status}`);
+      return;
+    }
+    res.status(200).json(toCheckoutSessionDTO(expired));
+    return;
+  }
   const intent = await findIntentById(db, session.paymentIntentId);
   if (!intent) {
     sendError(res, 404, 'invalid_request_error', 'checkout session not found', 'resource_missing');
     return;
   }
+  // The session expires WITH its payment, in that transition (`completion.ts`).
   const result = await expireIntentNow(intent);
   switch (result.kind) {
     case 'expired':
-      res.status(200).json(toCheckoutSessionDTO(session, result.row));
+      res
+        .status(200)
+        .json(toCheckoutSessionDTO((await findSessionById(db, session.id)) ?? session));
       return;
     case 'not_expirable':
       sendError(

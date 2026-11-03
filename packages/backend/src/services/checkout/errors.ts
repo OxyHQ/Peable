@@ -1,0 +1,30 @@
+import type { Response } from 'express';
+import { sendError } from '../../lib/http';
+
+/**
+ * A checkout refusal naming the field at fault (ADR 0014 D1). Every refusal a
+ * payer can act on carries the `param` the hosted checkout shows it beside.
+ */
+export class CheckoutError extends Error {
+  constructor(
+    readonly status: 400 | 404 | 409 | 502 | 503,
+    readonly code: string,
+    message: string,
+    readonly param?: string,
+    readonly type: 'invalid_request_error' | 'api_error' = status >= 500
+      ? 'api_error'
+      : 'invalid_request_error',
+  ) {
+    super(message);
+    this.name = 'CheckoutError';
+  }
+}
+
+export const invalid = (code: string, message: string, param?: string) =>
+  new CheckoutError(400, code, message, param);
+
+/** The ADR 0014 answer for a {@link CheckoutError}; anything else is rethrown. */
+export function sendCheckoutError(res: Response, error: unknown): void {
+  if (!(error instanceof CheckoutError)) throw error;
+  sendError(res, error.status, error.type, error.message, error.code, error.param);
+}

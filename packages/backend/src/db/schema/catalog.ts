@@ -186,6 +186,8 @@ export const prices = pgTable(
     unique('prices_public_id_key').on(table.publicId),
     /** The target of `products_default_price_fkey`: a default price is the product's own. */
     unique('prices_id_product_id_key').on(table.id, table.productId),
+    /** The target of the line-item references: a line names its own merchant's price. */
+    unique('prices_id_merchant_id_key').on(table.id, table.merchantId),
     /** A price and its product belong to one merchant. */
     foreignKey({
       name: 'prices_product_merchant_fkey',
@@ -390,6 +392,8 @@ export const promotionCodes = pgTable(
   },
   (table) => [
     unique('promotion_codes_public_id_key').on(table.publicId),
+    /** The target of `checkout_sessions_promotion_code_fkey`. */
+    unique('promotion_codes_id_merchant_id_key').on(table.id, table.merchantId),
     foreignKey({
       name: 'promotion_codes_coupon_fkey',
       columns: [table.couponId, table.merchantId],

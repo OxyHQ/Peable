@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.18.0 — checkout v2, payment links v2, Elements, branding (Orbit Phase 3, breaking)
+
+Requires `@peable.to/shared-types` 0.16.0.
+
+**Breaking** (the next minor; one wire, ADR 0014 D2):
+
+- `checkout.sessions.create` takes the v2 session contract: `mode`
+  (`payment` | `setup` | `subscription`), `line_items` (`price` or `price_data`
+  with `product` / `product_data`, `quantity`, `adjustable_quantity`),
+  `discounts` / `allow_promotion_codes`, `customer` / `customer_email` /
+  `customer_creation`, address / shipping / phone / tax id / custom field /
+  terms collection, `automatic_tax`, `locale`, `ui_mode`, `expires_at`,
+  `client_reference_id`, `submit_type`. The single `amount` / `rail` /
+  `network` session is gone.
+- `CheckoutSession` is Stripe's shape: `status`, `payment_status`,
+  `amount_subtotal`, `amount_total`, `total_details`, `customer_details`,
+  `shipping_details`, `payment_intent` / `setup_intent` (`null` until the payer
+  confirms), `url` (hosted) or `client_secret` (embedded, the SESSION's secret).
+- `paymentLinks.create` takes `line_items` over catalog prices and the
+  session options (`after_completion`, `restrictions.completed_sessions`,
+  `custom_fields`, …); `PaymentLink` carries them instead of `amount`. A link
+  starts a Checkout Session; it never mints a payment.
+
+Added:
+
+- `checkout.sessions.expire(id)`, `checkout.sessions.listLineItems(id)`,
+  `list({ payment_link, customer, status })`; `paymentLinks.listLineItems(id)`
+  and `retrieve(id, { expand })`.
+- `merchants.branding.retrieve/update` and `merchants.emailSettings.retrieve/update`.
+- Events accepted by `constructEvent`: `checkout.session.completed|expired|
+  async_payment_succeeded|async_payment_failed`, `payment_link.created|updated`.
+- `@peable.to/sdk/checkout`: `PeableCheckout.mountCheckout` (embedded checkout,
+  origin-checked postMessage), `createPeableElements` (`payment`,
+  `expressCheckout`, `address`; `confirmPayment` / `confirmSetup` that wait for
+  the gateway's status), the `appearance` API (`resolveAppearance`,
+  `toProviderAppearance`, `toCssVariables`, `appearanceFromBranding`), the embed
+  protocol helpers, and payer calls for sessions, links and SetupIntents
+  (`getCheckoutSession`, `updateCheckoutSession`, `confirmCheckoutSession`,
+  `getPaymentLink`, `startPaymentLinkSession`, `getSetupIntent`,
+  `getSetupClientAction`).
 ## 0.17.0 — Connect, fees, ledger, balance and payouts (breaking, ADR 0015)
 
 Requires `@peable.to/shared-types` 0.15.0.

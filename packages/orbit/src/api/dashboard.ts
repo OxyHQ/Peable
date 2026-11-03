@@ -1,6 +1,14 @@
 import type {
   CreatePaymentMethodConfigurationParams,
   CreatePaymentMethodDomainParams,
+  CheckoutLineItem,
+  CreatePaymentLinkParams,
+  MerchantBranding,
+  MerchantEmailSettings,
+  PaymentLink,
+  UpdateMerchantBrandingParams,
+  UpdateMerchantEmailSettingsParams,
+  UpdatePaymentLinkParams,
   CreatePriceParams,
   CreateProductParams,
   Account,
@@ -94,6 +102,11 @@ export interface ProductListParams extends PageParams {
 export interface PriceListParams extends PageParams {
   /** Only this product's prices (`prod_…`). */
   product?: string;
+  active?: boolean;
+}
+
+export interface PaymentLinkListParams extends PageParams {
+  /** `true` active, `false` deactivated; absent for both. */
   active?: boolean;
 }
 
@@ -431,6 +444,46 @@ export function createDashboardApi(transport: OrbitTransport) {
           'POST',
           dashboardPath(scope, `/payment_method_domains/${id(domainId)}/validate`),
         ),
+    },
+
+    /**
+     * Payment Links over catalog prices (Orbit Phase 3). The line items are
+     * fixed once created; `update` changes options and `active` only.
+     */
+    paymentLinks: {
+      list: (scope: DashboardScope, params: PaymentLinkListParams = {}) =>
+        list<PaymentLink>(dashboardPath(scope, '/payment_links', { ...params })),
+      retrieve: (scope: DashboardScope, linkId: string) =>
+        get<PaymentLink>(dashboardPath(scope, `/payment_links/${id(linkId)}`)),
+      create: (scope: DashboardScope, body: CreatePaymentLinkParams) =>
+        transport.request<PaymentLink>('POST', dashboardPath(scope, '/payment_links'), { body }),
+      update: (scope: DashboardScope, linkId: string, body: UpdatePaymentLinkParams) =>
+        transport.request<PaymentLink>(
+          'POST',
+          dashboardPath(scope, `/payment_links/${id(linkId)}`),
+          { body },
+        ),
+      lineItems: (scope: DashboardScope, linkId: string, params: PageParams = {}) =>
+        list<CheckoutLineItem>(
+          dashboardPath(scope, `/payment_links/${id(linkId)}/line_items`, { ...params }),
+        ),
+    },
+
+    /** How hosted checkout, embedded checkout and receipts look for this merchant. */
+    branding: {
+      retrieve: (scope: DashboardScope) => get<MerchantBranding>(dashboardPath(scope, '/branding')),
+      update: (scope: DashboardScope, body: UpdateMerchantBrandingParams) =>
+        transport.request<MerchantBranding>('POST', dashboardPath(scope, '/branding'), { body }),
+    },
+
+    /** Which customer emails Peable sends for this merchant. */
+    emailSettings: {
+      retrieve: (scope: DashboardScope) =>
+        get<MerchantEmailSettings>(dashboardPath(scope, '/email_settings')),
+      update: (scope: DashboardScope, body: UpdateMerchantEmailSettingsParams) =>
+        transport.request<MerchantEmailSettings>('POST', dashboardPath(scope, '/email_settings'), {
+          body,
+        }),
     },
 
     /**

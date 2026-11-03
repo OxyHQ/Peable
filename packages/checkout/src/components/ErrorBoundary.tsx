@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
+import { browserLanguages, queryLocale, resolveLocale, translator } from '../i18n';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -28,7 +29,11 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.state.hasError) {
       return (
         <main className="checkout-page">
-          <p className="checkout-page__pending">Something went wrong. Please refresh the page.</p>
+          <p className="checkout-page__pending" role="alert">
+            {translator(resolveLocale({ override: queryLocale(), browser: browserLanguages() }))(
+              'somethingWrong',
+            )}
+          </p>
         </main>
       );
     }

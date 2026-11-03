@@ -15,6 +15,7 @@ import { paymentLinks } from '../../db/schema';
 import { findIntentByPublicId } from '../../db/payments/paymentIntentRepository';
 const { createContributionsRouter } = await import('../contributions');
 const { createPaymentLinksRouter } = await import('../paymentLinks');
+const { createCheckoutSessionsRouter } = await import('../checkoutSessions');
 useGatewayDatabase();
 let server: Server, base: string;
 let allowed = true;
@@ -50,6 +51,12 @@ beforeAll(async () => {
     }),
   );
   app.use(
+    createCheckoutSessionsRouter({
+      requireMerchant: auth,
+      publicRateLimit: (_req, _res, next) => next(),
+    }),
+  );
+  app.use(
     (_err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) =>
       res.status(500).json({ error: { type: 'api_error', message: 'Unexpected failure' } }),
   );
@@ -71,6 +78,42 @@ async function request(path: string, method = 'GET', body?: unknown, key?: strin
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
 }
+/**
+ * A donor contributing (Orbit Phase 3): the visit starts a Checkout Session
+ * under the operation key, and confirming it creates the payment. Answers the
+ * start's refusal as it is, or the confirmed payment (201) — the shape the
+ * pre-Phase-3 mint answered, so the assertions read the same facts.
+ */
+async function contribute(linkId: string, body: unknown, key: string | undefined) {
+  const start = await request(
+    `/v1/payment_links/${linkId}/checkout_sessions`,
+    'POST',
+    body,
+    key,
+    false,
+  );
+  if (start.status !== 201) return start;
+  const session = (await start.json()) as { id: string; client_secret: string };
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-Peable-Client-Secret': session.client_secret,
+  };
+  await fetch(`${base}/v1/checkout_sessions/${session.id}/public`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ customer_details: { email: 'donor@example.com' } }),
+  });
+  const confirmed = await fetch(`${base}/v1/checkout_sessions/${session.id}/public/confirm`, {
+    method: 'POST',
+    headers,
+    body: '{}',
+  });
+  const json = (await confirmed.json()) as { payment_intent?: unknown };
+  return new Response(JSON.stringify(json.payment_intent ?? json), {
+    status: confirmed.status === 200 ? 201 : confirmed.status,
+  });
+}
+
 async function make(amountMode: 'fixed' | 'free' = 'fixed') {
   const r = await request(
     `${root}?environment=development`,
@@ -137,52 +180,22 @@ test('anonymous fixed amount cannot be overridden and purpose is public without 
   expect(data.contribution?.purpose).toBe('Community kitchen');
   expect(data.contributionKey).toBeUndefined();
   expect(data.metadata).toBeUndefined();
-  expect(
-    (
-      await request(
-        `/v1/payment_links/${link.id}/payment_intent`,
-        'POST',
-        { amount: '800' },
-        crypto.randomUUID(),
-        false,
-      )
-    ).status,
-  ).toBe(400);
+  expect((await contribute(link.id, { amount: '800' }, crypto.randomUUID())).status).toBe(400);
 });
 test('free amount canonical bounds and missing operation keys fail before money is created', async () => {
   const link = await make('free');
   for (const amount of ['0', '050', '1.5', '-1', '9007199254740992', '1e3'])
-    expect(
-      (
-        await request(
-          `/v1/payment_links/${link.id}/payment_intent`,
-          'POST',
-          { amount },
-          crypto.randomUUID(),
-          false,
-        )
-      ).status,
-    ).toBe(400);
-  expect(
-    (
-      await request(
-        `/v1/payment_links/${link.id}/payment_intent`,
-        'POST',
-        { amount: '500' },
-        undefined,
-        false,
-      )
-    ).status,
-  ).toBe(400);
+    expect((await contribute(link.id, { amount }, crypto.randomUUID())).status).toBe(400);
+  expect((await contribute(link.id, { amount: '500' }, undefined)).status).toBe(400);
 });
 test('lost HTTP reply and concurrent retries converge on one FairCoin intent/address', async () => {
   const link = await make('free'),
     key = crypto.randomUUID(),
-    path = `/v1/payment_links/${link.id}/payment_intent`;
+    path = link.id;
   // The first result is deliberately discarded, as on a lost transport reply.
-  expect((await request(path, 'POST', { amount: '700' }, key, false)).status).toBe(201);
+  expect((await contribute(path, { amount: '700' }, key)).status).toBe(201);
   const responses = await Promise.all(
-    Array.from({ length: 5 }, () => request(path, 'POST', { amount: '700' }, key, false)),
+    Array.from({ length: 5 }, () => contribute(path, { amount: '700' }, key)),
   );
   expect(responses.every((r) => r.status === 201)).toBe(true);
   const values = await Promise.all(
@@ -191,7 +204,7 @@ test('lost HTTP reply and concurrent retries converge on one FairCoin intent/add
   expect(new Set(values.map((r) => r.id)).size).toBe(1);
   expect(new Set(values.map((r) => r.address)).size).toBe(1);
   expect(values[0]?.rail).toBe('faircoin');
-  expect((await request(path, 'POST', { amount: '800' }, key, false)).status).toBe(409);
+  expect((await contribute(path, { amount: '800' }, key)).status).toBe(409);
   const first = values[0];
   if (!first) throw new Error('No successful response');
   const stored = await findIntentByPublicId(gatewayDb(), first.id);
@@ -218,17 +231,7 @@ test('expired or disabled links refuse new contributions', async () => {
   expect(
     (await request(`${root}/${link.id}?environment=development`, 'POST', { active: false })).status,
   ).toBe(200);
-  expect(
-    (
-      await request(
-        `/v1/payment_links/${link.id}/payment_intent`,
-        'POST',
-        {},
-        crypto.randomUUID(),
-        false,
-      )
-    ).status,
-  ).toBe(400);
+  expect((await contribute(link.id, {}, crypto.randomUUID())).status).toBe(400);
   await gatewayDb()
     .update(paymentLinks)
     .set({
@@ -241,17 +244,7 @@ test('expired or disabled links refuse new contributions', async () => {
       },
     })
     .where(eq(paymentLinks.publicId, link.id));
-  expect(
-    (
-      await request(
-        `/v1/payment_links/${link.id}/payment_intent`,
-        'POST',
-        {},
-        crypto.randomUUID(),
-        false,
-      )
-    ).status,
-  ).toBe(400);
+  expect((await contribute(link.id, {}, crypto.randomUUID())).status).toBe(400);
   expect(
     (
       (await (
@@ -291,15 +284,9 @@ test('contribution confirmations use the existing non-custodial watcher and CAS 
   const { SettlementWatcher } = await import('../../services/settlementWatcher');
   const { transitionIntent } = await import('../../services/intentTransition');
   const link = await make();
-  const minted = (await (
-    await request(
-      `/v1/payment_links/${link.id}/payment_intent`,
-      'POST',
-      {},
-      crypto.randomUUID(),
-      false,
-    )
-  ).json()) as { id: string };
+  const minted = (await (await contribute(link.id, {}, crypto.randomUUID())).json()) as {
+    id: string;
+  };
   const intent = await findIntentByPublicId(gatewayDb(), minted.id);
   if (!intent?.address) throw new Error('Expected watch-only address');
   await transitionIntent(intent.id, {
@@ -339,13 +326,13 @@ test('contribution confirmations use the existing non-custodial watcher and CAS 
 test('disabled links recover a previously minted attempt but refuse a new operation', async () => {
   const link = await make(),
     key = crypto.randomUUID(),
-    path = `/v1/payment_links/${link.id}/payment_intent`;
-  const first = (await (await request(path, 'POST', {}, key, false)).json()) as { id: string };
+    path = link.id;
+  const first = (await (await contribute(path, {}, key)).json()) as { id: string };
   expect(
     (await request(`${root}/${link.id}?environment=development`, 'POST', { active: false })).status,
   ).toBe(200);
-  const replay = await request(path, 'POST', {}, key, false);
+  const replay = await contribute(path, {}, key);
   expect(replay.status).toBe(201);
   expect(((await replay.json()) as { id: string }).id).toBe(first.id);
-  expect((await request(path, 'POST', {}, crypto.randomUUID(), false)).status).toBe(400);
+  expect((await contribute(path, {}, crypto.randomUUID())).status).toBe(400);
 });

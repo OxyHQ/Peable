@@ -176,6 +176,8 @@ let baseUrl: string;
 let restoreModes: () => void = () => undefined;
 
 interface Body {
+  readonly id?: string;
+  readonly url?: string;
   readonly livemode?: boolean;
   readonly error?: { readonly type: string; readonly message: string };
 }
@@ -276,14 +278,29 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('test and live in one deployment', () =
       expect(providerCalls).toEqual(['test:createPayment']);
     });
 
-    test('creating a card checkout session', async () => {
+    test('creating a card checkout session, and the payment its payer confirms', async () => {
       const { status, body } = await post('/v1/checkout_sessions', {
-        amount: '5000',
-        rail: 'card',
-        currency: 'EUR',
+        line_items: [
+          {
+            price_data: { currency: 'EUR', unit_amount: '5000', product_data: { name: 'Seat' } },
+            quantity: 1,
+          },
+        ],
+        success_url: 'https://shop.example/ok',
       });
       expect(status).toBe(201);
       expect(body.livemode).toBe(false);
+      // An order is not a payment: nothing reaches the provider until the payer confirms.
+      expect(providerCalls).toEqual([]);
+      const secret = decodeURIComponent(String(body.url).split('#cs=')[1] ?? '');
+      const headers = { 'X-Peable-Client-Secret': secret };
+      await post(
+        `/v1/checkout_sessions/${body.id}/public`,
+        { customer_details: { email: 'p@example.com' } },
+        headers,
+      );
+      const confirmed = await post(`/v1/checkout_sessions/${body.id}/public/confirm`, {}, headers);
+      expect(confirmed.status).toBe(200);
       expect(providerCalls).toEqual(['test:createPayment']);
     });
 

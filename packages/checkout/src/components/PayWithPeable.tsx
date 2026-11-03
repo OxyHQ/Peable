@@ -3,6 +3,7 @@ import { formatFair } from '@fairco.in/core';
 import { buildPayDeepLink } from '../lib/deepLink';
 import { Qr } from './Qr';
 import { DisplayCurrency } from './DisplayCurrency';
+import { useI18n } from '../i18n';
 
 // Heuristic, not a hard guarantee — good enough to decide "can this device
 // plausibly handle a custom URL scheme via a same-tab navigation" for the
@@ -33,6 +34,7 @@ export function isChainIntent(intent: PaymentIntent): intent is ChainPaymentInte
 // deep link directly; desktop shows a QR of the same link for the payer to
 // scan with their phone.
 export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
+  const { t } = useI18n();
   const deepLink = buildPayDeepLink({
     intentId: intent.id,
     clientSecret: intent.client_secret,
@@ -53,12 +55,12 @@ export function PayWithPeable({ intent }: { intent: ChainPaymentIntent }) {
             window.location.href = deepLink;
           }}
         >
-          Pay with Peable
+          {t('payWithPeable')}
         </button>
       ) : (
         <div className="pay-with-peable__qr">
           <Qr text={deepLink} size={200} />
-          <p className="pay-with-peable__hint">Scan with the Peable app</p>
+          <p className="pay-with-peable__hint">{t('scanWithPeable')}</p>
         </div>
       )}
     </div>

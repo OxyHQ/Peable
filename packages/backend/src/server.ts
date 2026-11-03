@@ -45,6 +45,16 @@ import { createTestHelpersRouter } from './routes/testHelpers';
 import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
+import { createBrandingRouter } from './routes/branding';
+import {
+  startSessionExpirySweeper,
+  stopSessionExpirySweeper,
+} from './services/checkout/sessionSweeper';
+import { configureMailer, mailerFromEnv } from './services/email/mailer';
+import {
+  startCustomerEmailDispatcher,
+  stopCustomerEmailDispatcher,
+} from './services/email/dispatcher';
 import { createSocialRouter } from './routes/social';
 import { createEnrichRouter } from './routes/enrich';
 import { createContributionsRouter } from './routes/contributions';
@@ -314,8 +324,11 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createTestHelpersRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
-  app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
-  app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit }));
+  // Checkout (Orbit Phase 3): sessions price with Peable Tax when asked to.
+  const checkout = { tax: deps.taxService };
+  app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit, checkout }));
+  app.use(createCheckoutSessionsRouter({ requireMerchant, publicRateLimit, checkout }));
+  app.use(createBrandingRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createBillingRouter({ requireMerchant, service: deps.billingService }));
   app.use(createTaxRouter({ requireMerchant, tax: deps.taxService }));
   app.use(createDashboardTaxRouter({ tax: deps.taxService, requireOxyUser: deps.requireOxyUser }));
@@ -324,6 +337,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
       requireOxyUser: deps.requireOxyUser,
       safeFetch: deps.safeFetch,
       files: deps.oxyFiles,
+      checkout,
     }),
   );
 
@@ -419,6 +433,8 @@ export async function start(
     stopEventSweeper();
     stopRequestLogSweeper();
     stopMoneyReconciliation();
+    stopSessionExpirySweeper();
+    stopCustomerEmailDispatcher();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -447,6 +463,12 @@ export async function start(
   startEventSweeper();
   startRequestLogSweeper();
   startMoneyReconciliation();
+  startSessionExpirySweeper();
+  // Customer emails: the transport is injected. With none configured the
+  // outbox keeps what is owed (and expires it after its window) — see
+  // `services/email/mailer.ts` for the production wiring.
+  configureMailer(mailerFromEnv());
+  startCustomerEmailDispatcher();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

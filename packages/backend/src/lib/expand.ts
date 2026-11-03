@@ -4,6 +4,7 @@ import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentR
 import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
 import { findCustomersForMerchantByPublicIds } from '../db/customers/customerRepository';
 import { findPaymentMethodsForMerchantByPublicIds } from '../db/customers/paymentMethodRepository';
+import { findSetupIntentsForMerchantByPublicIds } from '../db/customers/setupIntentRepository';
 import { findCouponsByPublicIds } from '../db/catalog/couponRepository';
 import { findPricesByPublicIds } from '../db/catalog/priceRepository';
 import { findProductsByPublicIds } from '../db/catalog/productRepository';
@@ -16,6 +17,7 @@ import {
   toDeletedCustomerDTO,
   toPaymentIntentDTO,
   toPaymentMethodDTO,
+  toSetupIntentDTO,
 } from './serialize';
 import { toConnectedAccountDTO } from './serializeSettlement';
 
@@ -77,7 +79,8 @@ export type ExpandableType =
   | 'balance_transaction'
   | 'payout'
   | 'application_fee'
-  | 'reconciliation_mismatch';
+  | 'reconciliation_mismatch'
+  | 'item';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -88,7 +91,8 @@ type TargetType =
   | 'payment_method'
   | 'product'
   | 'price'
-  | 'coupon';
+  | 'coupon'
+  | 'setup_intent';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -103,7 +107,12 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   customer: {},
   payment_method: { customer: 'customer' },
   setup_intent: { customer: 'customer', payment_method: 'payment_method' },
-  checkout_session: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
+  checkout_session: {
+    payment_intent: 'payment_intent',
+    setup_intent: 'setup_intent',
+    customer: 'customer',
+    connected_account: 'connected_account',
+  },
   refund: { payment_intent: 'payment_intent' },
   transfer: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
   dispute: { payment_intent: 'payment_intent', charge: 'charge' },
@@ -127,6 +136,8 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   payout: {},
   application_fee: {},
   reconciliation_mismatch: {},
+  // A checkout session's or payment link's line (`object: 'item'`).
+  item: { price: 'price', product: 'product' },
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -181,6 +192,13 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findCouponsByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toCouponDTO(row),
+      ]),
+    ),
+  setup_intent: async (merchantId, ids) =>
+    new Map(
+      (await findSetupIntentsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toSetupIntentDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

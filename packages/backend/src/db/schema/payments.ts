@@ -12,12 +12,30 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
-import type { PaymentIntentLastPaymentError, Shipping } from '@peable.to/shared-types';
+import type {
+  CheckoutConsent,
+  CheckoutCustomerDetails,
+  CheckoutShippingDetails,
+  PaymentIntentLastPaymentError,
+  Shipping,
+} from '@peable.to/shared-types';
+import { coupons, promotionCodes } from './catalog';
 import { connectedAccounts } from './connectedAccounts';
 import { customers, paymentMethods } from './customers';
 import { merchants } from './merchants';
 import { paymentMethodConfigurations } from './paymentMethodConfigurations';
+import { setupIntents } from './setupIntents';
 import {
+  AFTER_COMPLETION_TYPES,
+  AUTOMATIC_TAX_STATUSES,
+  type CHECKOUT_BILLING_ADDRESS_COLLECTIONS,
+  CHECKOUT_CUSTOMER_CREATIONS,
+  CHECKOUT_LOCALES,
+  CHECKOUT_PAYMENT_STATUSES,
+  CHECKOUT_SESSION_MODES,
+  CHECKOUT_SESSION_STATUSES,
+  CHECKOUT_SUBMIT_TYPES,
+  CHECKOUT_UI_MODES,
   BASE_UNIT_STRING_PATTERN,
   CARD_RAIL_PAYMENT_METHOD_TYPES,
   CANCELLATION_REASON_VALUES,
@@ -551,12 +569,46 @@ export const paymentIntents = pgTable(
 );
 
 /**
- * A hosted-checkout session wrapping exactly ONE payment intent.
+ * What a session (or a payment link, for the sessions it creates) collects
+ * from the payer, AS STORED. Validated by the one writer
+ * (`services/checkout/params.ts`); the wire's shapes are rendered from it by
+ * `lib/serializeCheckout.ts`, so a wire change never reaches storage.
+ */
+export interface StoredCheckoutCollection {
+  readonly billingAddressCollection: (typeof CHECKOUT_BILLING_ADDRESS_COLLECTIONS)[number];
+  /** ISO 3166-1 alpha-2 codes; `null` when no shipping address is collected. */
+  readonly shippingCountries: readonly string[] | null;
+  readonly phoneNumber: boolean;
+  readonly taxId: boolean;
+  readonly termsOfService: boolean;
+}
+
+/** A custom field as stored: its definition and, on a session, the payer's value. */
+export interface StoredCustomField {
+  readonly key: string;
+  readonly label: string;
+  readonly type: 'text' | 'numeric' | 'dropdown';
+  readonly optional: boolean;
+  readonly options: readonly { readonly label: string; readonly value: string }[] | null;
+  readonly minimumLength: number | null;
+  readonly maximumLength: number | null;
+  readonly value: string | null;
+}
+
+/**
+ * A Checkout Session — an ORDER the payer completes (Orbit Phase 3).
  *
- * Immutable after creation: there is no PATCH route, and a merchant needing a
- * different amount creates a new session. The wrapped intent's `client_secret`
- * is deliberately not duplicated here — `toCheckoutSessionDTO` reads it off the
- * intent, so there is exactly one place a client secret is ever persisted.
+ * The session prices its line items (`checkout_session_line_items`) and owns
+ * the totals; the payment it needs is created when the payer CONFIRMS
+ * (`payment_intent_id`, or `setup_intent_id` in setup mode), so both are NULL
+ * on an open session nobody has confirmed. `amount` is the session's
+ * `amount_total`: the column kept its name so the image that predates the
+ * order model could keep serving while this one rolled out.
+ *
+ * The client secret is the payer's capability over the SESSION — hosted
+ * checkout's `#cs=` fragment and embedded mode's `client_secret`. A session
+ * that wraps a payment also accepts that payment's secret, which already
+ * authorizes paying it (`routes/checkoutSessions.ts`).
  */
 export const checkoutSessions = pgTable(
   'checkout_sessions',
@@ -568,39 +620,93 @@ export const checkoutSessions = pgTable(
     /** Denormalized from the merchant at creation time — held true by the composite reference below. */
     oxyAppId: text().notNull(),
     environment: text().notNull(),
-    paymentIntentId: text()
-      .notNull()
-      .references(() => paymentIntents.id, { onDelete: 'restrict' }),
+    mode: text().notNull().default('payment'),
+    status: text().notNull().default('open'),
+    paymentStatus: text().notNull().default('unpaid'),
+    uiMode: text().notNull().default('hosted'),
+    /** `null` follows the payer's browser. */
+    locale: text(),
+    submitType: text().notNull().default('auto'),
+    /** `cs_…_secret_…`. NULL only on a row that predates the order model, until its backfill. */
+    clientSecret: text(),
+    /** The payment, once the payer confirmed; never in setup mode. */
+    paymentIntentId: text().references(() => paymentIntents.id, { onDelete: 'restrict' }),
+    /** Setup mode: the SetupIntent, once the payer confirmed. */
+    setupIntentId: text().references(() => setupIntents.id, { onDelete: 'restrict' }),
+    /** The session's `amount_total` (see the table comment for the name). */
     amount: text().notNull(),
+    amountSubtotal: text().notNull().default('0'),
+    amountDiscount: text().notNull().default('0'),
+    amountTax: text().notNull().default('0'),
+    amountShipping: text().notNull().default('0'),
     currency: text().notNull().default('FAIR'),
-    /** Which rail the wrapped intent uses. Denormalized from it at creation. */
+    /** Which rail the session's payment uses — decided by its currency. */
     rail: text().notNull().default('faircoin'),
     /** FairCoin rail only — NULL on a card session. See ADR 0001 D6. */
     network: text(),
-    /** The seller the wrapped intent pays (ADR 0012). Copied from the intent at creation. */
+    /** The seller the session's payment pays (ADR 0012). */
     connectedAccountId: text(),
     /** `network` on a session for the merchant itself; NULL on an on-behalf one. See `payment_intents.merchant_network`. */
     merchantNetwork: text().generatedAlwaysAs(
       sql.raw('case when connected_account_id is null then network end'),
     ),
+    /** The customer it is for (given on create) or that completion created. */
+    customerId: text(),
+    customerEmail: text(),
+    customerCreation: text().notNull().default('if_required'),
+    customerDetails: jsonb().$type<CheckoutCustomerDetails>(),
+    shippingDetails: jsonb().$type<CheckoutShippingDetails>(),
+    collection: jsonb().$type<StoredCheckoutCollection>(),
+    customFields: jsonb().$type<StoredCustomField[]>().notNull().default(sql`'[]'::jsonb`),
+    consent: jsonb().$type<CheckoutConsent>(),
+    allowPromotionCodes: boolean().notNull().default(false),
+    couponId: text(),
+    promotionCodeId: text(),
+    automaticTax: boolean().notNull().default(false),
+    automaticTaxStatus: text(),
+    /** The Peable Tax calculation (`taxcalc_…`) the total includes; committed at completion. */
+    taxCalculationId: text(),
+    clientReferenceId: text(),
+    /** The payment link this session was created from. */
+    paymentLinkId: text().references((): AnyPgColumn => paymentLinks.id, { onDelete: 'restrict' }),
+    /** A payment link's hosted confirmation, copied when the session is made from it. */
+    confirmationMessage: text(),
+    /**
+     * The payer's operation key (`Idempotency-Key`) of the link visit that
+     * created this session — unique per link, so a retried visit returns the
+     * same session instead of a second order (a contribution's write-before-
+     * network key). Never on a DTO.
+     */
+    linkOperationKey: text(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
     successUrl: text(),
     cancelUrl: text(),
+    /** NULL only on a row that predates the order model, until its backfill. */
+    expiresAt: timestamptz(),
+    completedAt: timestamptz(),
+    expiredAt: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
   (table) => [
     uniqueIndex('checkout_sessions_public_id_key').on(table.publicId),
     /**
-     * "Wraps exactly ONE payment intent" in the only form that cannot be
-     * violated. Every session mints a fresh intent today (`createIntent`
-     * without a caller `Idempotency-Key`), so this refuses nothing that
-     * happens; what it refuses is a future change that lets two sessions share
-     * one intent, which is the bug the sentence above exists to prevent.
+     * A session's payment is its own: two sessions never share one. NULLs are
+     * distinct, so an open session with none yet constrains nothing.
      */
     uniqueIndex('checkout_sessions_payment_intent_id_key').on(table.paymentIntentId),
+    uniqueIndex('checkout_sessions_setup_intent_id_key').on(table.setupIntentId),
     index('checkout_sessions_oxy_app_id_environment_idx').on(table.oxyAppId, table.environment),
     index('checkout_sessions_merchant_id_idx').on(table.merchantId),
+    /** The expiry sweeper's claim: open sessions by deadline. */
+    index('checkout_sessions_open_expires_at_idx')
+      .on(table.expiresAt)
+      .where(sql`${table.status} = 'open'`),
+    index('checkout_sessions_payment_link_id_idx').on(table.paymentLinkId),
+    uniqueIndex('checkout_sessions_link_operation_key').on(
+      table.paymentLinkId,
+      table.linkOperationKey,
+    ),
     // Denormalization that cannot drift: the three copied fields are carried
     // by the reference itself, so they are the merchant's values or the row
     // does not exist. See `payment_intents`' equivalent for the network half.
@@ -623,6 +729,22 @@ export const checkoutSessions = pgTable(
       name: 'checkout_sessions_connected_account_merchant_fkey',
       columns: [table.connectedAccountId, table.merchantId],
       foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    /** The session's customer is this merchant's (`MATCH SIMPLE`: vacuous without one). */
+    foreignKey({
+      name: 'checkout_sessions_customer_fkey',
+      columns: [table.customerId, table.merchantId],
+      foreignColumns: [customers.id, customers.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'checkout_sessions_coupon_fkey',
+      columns: [table.couponId, table.merchantId],
+      foreignColumns: [coupons.id, coupons.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'checkout_sessions_promotion_code_fkey',
+      columns: [table.promotionCodeId, table.merchantId],
+      foreignColumns: [promotionCodes.id, promotionCodes.merchantId],
     }).onDelete('restrict'),
     check(
       'checkout_sessions_connected_account_is_faircoin_check',
@@ -664,9 +786,78 @@ export const checkoutSessions = pgTable(
     ),
     check('checkout_sessions_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
     check(
+      'checkout_sessions_amounts_check',
+      sql.raw(
+        ['amount_subtotal', 'amount_discount', 'amount_tax', 'amount_shipping']
+          .map((column) => `${column} ~ '${BASE_UNIT_STRING_PATTERN}'`)
+          .join(' and '),
+      ),
+    ),
+    check(
       'checkout_sessions_metadata_object_check',
       sql`jsonb_typeof(${table.metadata}) = 'object'`,
     ),
+    check('checkout_sessions_mode_check', sql.raw(`mode in (${inList(CHECKOUT_SESSION_MODES)})`)),
+    check(
+      'checkout_sessions_status_check',
+      sql.raw(`status in (${inList(CHECKOUT_SESSION_STATUSES)})`),
+    ),
+    check(
+      'checkout_sessions_payment_status_check',
+      sql.raw(`payment_status in (${inList(CHECKOUT_PAYMENT_STATUSES)})`),
+    ),
+    check('checkout_sessions_ui_mode_check', sql.raw(`ui_mode in (${inList(CHECKOUT_UI_MODES)})`)),
+    check(
+      'checkout_sessions_locale_check',
+      sql.raw(`locale is null or locale in (${inList(CHECKOUT_LOCALES)})`),
+    ),
+    check(
+      'checkout_sessions_submit_type_check',
+      sql.raw(`submit_type in (${inList(CHECKOUT_SUBMIT_TYPES)})`),
+    ),
+    check(
+      'checkout_sessions_customer_creation_check',
+      sql.raw(`customer_creation in (${inList(CHECKOUT_CUSTOMER_CREATIONS)})`),
+    ),
+    check(
+      'checkout_sessions_automatic_tax_status_check',
+      sql.raw(
+        `automatic_tax_status is null or automatic_tax_status in (${inList(AUTOMATIC_TAX_STATUSES)})`,
+      ),
+    ),
+    check(
+      'checkout_sessions_custom_fields_check',
+      sql`jsonb_typeof(${table.customFields}) = 'array' and jsonb_array_length(${table.customFields}) <= 3`,
+    ),
+    /** A setup session has no payment, and a payment session no setup. */
+    check(
+      'checkout_sessions_mode_objects_check',
+      sql`(${table.mode} <> 'setup' or ${table.paymentIntentId} is null) and (${table.mode} = 'setup' or ${table.setupIntentId} is null)`,
+    ),
+    /**
+     * `complete` ⇔ `completed_at`, `expired` ⇔ `expired_at`: one fact each,
+     * stamped by the one writer of each transition.
+     */
+    check(
+      'checkout_sessions_status_instants_check',
+      sql`(${table.status} = 'complete') = (${table.completedAt} is not null) and (${table.status} = 'expired') = (${table.expiredAt} is not null)`,
+    ),
+    /**
+     * A setup session never has a payment to make. A priced one may also need
+     * none — a discount took its total to zero — which is the only other way to
+     * `no_payment_required`, and that only on completion.
+     */
+    check(
+      'checkout_sessions_payment_status_agrees_check',
+      sql`(${table.mode} <> 'setup' or ${table.paymentStatus} = 'no_payment_required') and (${table.paymentStatus} <> 'no_payment_required' or ${table.mode} = 'setup' or (${table.status} = 'complete' and ${table.amount} = '0'))`,
+    ),
+    /** A discount is a coupon; a promotion code only ever redeems one. */
+    check(
+      'checkout_sessions_discount_check',
+      sql`${table.promotionCodeId} is null or ${table.couponId} is not null`,
+    ),
+    check('checkout_sessions_client_secret_check', sql`${table.clientSecret} is not null`),
+    check('checkout_sessions_expires_at_check', sql`${table.expiresAt} is not null`),
   ],
 );
 
@@ -688,10 +879,18 @@ export interface StoredContribution {
 }
 
 /**
- * A shareable, reusable generator of payment intents.
+ * A payment link (Orbit Phase 3) — a shareable URL over catalog prices
+ * (`payment_link_line_items`). A payer visiting it creates a Checkout Session
+ * with its line items and options; nothing about a link mints a payment.
  *
- * A link's price is immutable once shared: only `active`, `metadata` and
- * `success_url` are mutable through `PATCH /v1/payment_links/:id`.
+ * A CONTRIBUTION link (an Oxy organization's FairCoin collection) is the one
+ * kind with no line items: its single line is the contribution, a fixed
+ * `amount` or (`'0'`, the free sentinel) one the payer chooses. `amount` is
+ * therefore set exactly on contribution links
+ * (`payment_links_amount_shape_check`).
+ *
+ * The line items are immutable once shared; the options, `active` and
+ * `metadata` may change.
  */
 export const paymentLinks = pgTable(
   'payment_links',
@@ -703,9 +902,10 @@ export const paymentLinks = pgTable(
     /** Denormalized from the merchant at creation time — held true by the composite reference below. */
     oxyAppId: text().notNull(),
     environment: text().notNull(),
-    amount: text().notNull(),
+    /** Contribution links only — see the table comment. */
+    amount: text(),
     currency: text().notNull().default('FAIR'),
-    /** Which rail the intents this link mints will use. */
+    /** Which rail the sessions this link creates will pay on — decided by its currency. */
     rail: text().notNull().default('faircoin'),
     /** FairCoin rail only — NULL on a card link. See ADR 0001 D6. */
     network: text(),
@@ -713,7 +913,20 @@ export const paymentLinks = pgTable(
     contributionKey: text(),
     active: boolean().notNull().default(true),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
-    successUrl: text(),
+    allowPromotionCodes: boolean().notNull().default(false),
+    collection: jsonb().$type<StoredCheckoutCollection>(),
+    customFields: jsonb().$type<StoredCustomField[]>().notNull().default(sql`'[]'::jsonb`),
+    automaticTax: boolean().notNull().default(false),
+    customerCreation: text().notNull().default('if_required'),
+    submitType: text().notNull().default('auto'),
+    locale: text(),
+    afterCompletionType: text().notNull().default('hosted_confirmation'),
+    /** `after_completion.redirect.url`; may carry `{CHECKOUT_SESSION_ID}`. */
+    afterCompletionUrl: text(),
+    afterCompletionMessage: text(),
+    /** `restrictions.completed_sessions.limit`; the link deactivates on reaching it. */
+    completedSessionsLimit: integer(),
+    completedSessionsCount: integer().notNull().default(0),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -768,7 +981,35 @@ export const paymentLinks = pgTable(
       'payment_links_rail_currency_agrees_check',
       sql`(${table.rail} = 'faircoin') = (${table.currency} = 'FAIR')`,
     ),
-    check('payment_links_amount_check', sql.raw(`amount ~ '${BASE_UNIT_STRING_PATTERN}'`)),
+    check(
+      'payment_links_amount_check',
+      sql.raw(`amount is null or amount ~ '${BASE_UNIT_STRING_PATTERN}'`),
+    ),
+    /** The amount is a contribution's; a price link's amounts are its prices'. */
+    check(
+      'payment_links_amount_shape_check',
+      sql`(${table.contribution} is null) = (${table.amount} is null)`,
+    ),
     check('payment_links_metadata_object_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
+    check(
+      'payment_links_after_completion_check',
+      sql.raw(
+        `after_completion_type in (${inList(AFTER_COMPLETION_TYPES)}) and ((after_completion_type = 'redirect') = (after_completion_url is not null)) and (after_completion_type = 'hosted_confirmation' or after_completion_message is null)`,
+      ),
+    ),
+    check(
+      'payment_links_completed_sessions_check',
+      sql`(${table.completedSessionsLimit} is null or ${table.completedSessionsLimit} >= 1) and ${table.completedSessionsCount} >= 0`,
+    ),
+    check(
+      'payment_links_custom_fields_check',
+      sql`jsonb_typeof(${table.customFields}) = 'array' and jsonb_array_length(${table.customFields}) <= 3`,
+    ),
+    check(
+      'payment_links_options_check',
+      sql.raw(
+        `customer_creation in (${inList(CHECKOUT_CUSTOMER_CREATIONS)}) and submit_type in (${inList(CHECKOUT_SUBMIT_TYPES)}) and (locale is null or locale in (${inList(CHECKOUT_LOCALES)}))`,
+      ),
+    ),
   ],
 );

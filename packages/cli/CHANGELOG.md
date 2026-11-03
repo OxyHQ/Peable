@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.0 — checkout v2
+
+- `checkout_sessions create` creates an ORDER (Orbit Phase 3): `--price <price_…>`
+  (repeatable) or an inline `--amount [--currency] [--name]` line, `--quantity`,
+  and a required `--success-url`. `--rail` / `--network` are gone: the line
+  items' currency decides the rail.
+- Requires `@peable.to/sdk` 0.18.0.
+
 ## 0.1.0 — first release
 
 - `peable login` / `logout` / `whoami`: an Oxy application credential per

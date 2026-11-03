@@ -39,7 +39,7 @@ not an internal refactor.
 | `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
 | `packages/cli/` | **`@peable.to/cli`** | The `peable` command, to be published (`private` until the owner configures its npm trusted publisher) (ESM bin, `dist/bin.js`): `login` (Oxy application credential per profile and mode, 0600 config), `listen` (test-mode events from `GET /v1/events/stream`, signed with a per-session `whsec_` by the SDK's own `signWebhook`, forwarded to localhost), `trigger` (fixtures over the public API and `/v1/test_helpers/*`), `logs tail`, resource commands. Built on `@peable.to/sdk` and `shared-types`; see `packages/cli/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
-| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `merchants.branding` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core (sessions, `mountCheckout`, `createPeableElements`, `appearance`) |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
@@ -278,7 +278,7 @@ a wire object stores the wire shape (migration `0036` converted them).
 
 ## Backend surface
 
-Routes (`src/routes/`): `charges`, `checkoutSessions`, `connect`,
+Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `connectedAccounts`, `coupons`, `customers`, `dashboard`, `disputes`, `enrich`,
 `files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
 `paymentMethodConfigurations` (configurations and wallet domains),
@@ -301,6 +301,59 @@ invoices and renewals must call it, never re-derive. A coupon id is never
 reused (deleted coupons are tombstones), a promotion code is unique among
 ACTIVE codes case-insensitively, and there is no `price.deleted` /
 `promotion_code.deleted` — those objects are archived, not deleted.
+
+### Checkout Sessions, Payment Links, branding and emails (Orbit Phase 3)
+
+A Checkout Session is an ORDER (`services/checkout/`): priced lines
+(`checkout_session_line_items`, each keeping a snapshot of the price it was
+priced with), at most one discount, Peable Tax and the fields to collect. Its
+rules, each of which is easy to undo:
+
+- **The payment exists only once the payer confirms** (`POST
+  /v1/checkout_sessions/:id/public/confirm`), created with the amount the
+  session computed and the idempotency key `checkout:<cs>:<amount>`, so a
+  retried confirm finds the same payment and a re-priced order a new one.
+  Nothing about creating a session, or visiting a payment link, mints a payment
+  or reserves an address.
+- **Completion is the payment's, never a client's.** `recordIntentEvent` calls
+  `followIntentForCheckout` (and `applySetupResult` calls
+  `followSetupIntentForCheckout`) in the transition's transaction: succeeded →
+  `complete`/`paid`; manual-capture authorized → `complete`/`unpaid`; FairCoin
+  `processing` → `complete`/`unpaid`, then `async_payment_succeeded|failed`;
+  cancelled → open session `expired`. Hosted/embedded checkout redirect or post
+  `complete` only after re-reading the session — never on a provider callback.
+- **Totals come from `services/checkout/totals.ts` over `pricing.ts`** — the
+  discount is the order's, a percentage rounded per line, an amount off
+  allocated in proportion; tax is priced on the discounted line. Tax fails
+  CLOSED: `automatic_tax.status: failed` blocks confirm, never zero.
+- **A promotion code's redemption is reserved at confirm and counted at
+  completion.** The confirm links the payment in ONE transaction under the
+  code's (and coupon's) row lock, counting the open sessions already holding
+  it; completion increments `times_redeemed` in one guarded `UPDATE`. A
+  read-then-write here gives the last redemption to two payers.
+- **Every session write is a compare-and-swap** — the payer's edit on
+  `updated_at` and "no payment yet", completion and expiry on `status`.
+- **Payer routes are anonymous** (`…/public`, `…/public/confirm`, `GET
+  /v1/payment_links/:id/public`, `POST /v1/payment_links/:id/checkout_sessions`):
+  authorized by the session's `client_secret` in `X-Peable-Client-Secret` (or
+  the wrapped payment's, for the FairCoin billing invoice's session), never an
+  Oxy session, never a URL. A checkout event is merchant-scoped and carries no
+  `payment_intent_id` (`events_intent_event_has_intent_check`).
+- **`mode: 'subscription'`** is validated and refused with 400 `param: mode`
+  until the billing engine calls `registerSubscriptionCheckoutFulfiller`.
+- **Payment links are over prices**; their lines are fixed once shared and only
+  contribution links keep an `amount` (`payment_links_amount_shape_check`). A
+  link visit's `Idempotency-Key` is unique per link
+  (`checkout_sessions_link_operation_key`).
+- **Branding** is a closed set or a validated colour (`merchant_branding`);
+  the icon is the avatar and the logo the merchant's `business_logo` File —
+  written through `applyMerchantPatch`, never a second copy.
+- **Emails are an outbox** (`customer_emails`, enqueued in the change's
+  transaction, deduplicated per subject) rendered at send time and handed to
+  the INJECTED `Mailer` (`services/email/mailer.ts`); no shared Oxy mail
+  client exists, so production registers an adapter over the outbound relay
+  (`~/Oxy/docs/outbound-mail-relay.md`). Receipt numbers are claimed by one
+  upsert (`claimReceiptNumber`), the derivation index's pattern.
 
 ### The PaymentIntent is Stripe's (ADR 0019)
 

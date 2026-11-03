@@ -1,418 +1,297 @@
-import { findIntentByIdempotencyKey } from '../db/payments/paymentIntentRepository';
-import { createHash } from 'node:crypto';
-import { contributionMintSchema, contributionOperationKeySchema } from '@peable.to/contracts';
+/**
+ * Payment Links v2 (Orbit Phase 3).
+ *
+ * The merchant routes are DATA (`paymentLinkRoutes`), mounted on
+ * `/v1/payment_links` here and on Orbit's dashboard from the same list. The
+ * payer routes are anonymous and rate-limited: `GET …/public` shows the link,
+ * and `POST …/checkout_sessions` starts checkout — it creates a Checkout
+ * Session (Stripe's semantics), never a payment; the payment exists only once
+ * the payer confirms that session.
+ */
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import { oxy } from '../oxy';
-import type { CreatePaymentLinkParams, UpdatePaymentLinkParams } from '@peable.to/shared-types';
-import { getDb } from '../db/postgres';
-import { findMerchantById } from '../db/merchants/merchantRepository';
+import { contributionAmountSchema, contributionOperationKeySchema } from '@peable.to/contracts';
+import { findBranding } from '../db/merchants/brandingRepository';
+import { findMerchantById, type MerchantRow } from '../db/merchants/merchantRepository';
 import {
   findLinkByPublicId,
   findLinkForMerchant,
-  insertPaymentLink,
   listLinksForMerchant,
-  updatePaymentLink,
+  type PaymentLinkRow,
 } from '../db/payments/paymentLinkRepository';
+import { getDb } from '../db/postgres';
+import { expandObjects, parseExpand } from '../lib/expand';
+import { sendError, sendValidationError, wrap } from '../lib/http';
 import {
-  createIntent,
-  IdempotencyConflictError,
-  NetworkMismatchError,
-  RailMismatchError,
-  RailUnavailableError,
-  assertRailAvailable,
-  resolveRail,
-  type ResolvedRail,
-} from '../services/createIntent';
+  answerList,
+  completeList,
+  parseQuery,
+  surfaceListQuery,
+  surfaceRetrieveQuery,
+} from '../lib/list';
+import {
+  hostedCheckoutUrl,
+  toCheckoutBranding,
+  toPublicPaymentLinkDTO,
+} from '../lib/serializeCheckout';
+import { booleanQuery } from '../services/catalog/params';
+import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
+import {
+  createLinkBodySchema,
+  createPaymentLink,
+  linkLines,
+  toLinkDTO,
+  toLinkDTOs,
+  updateLinkBodySchema,
+  updatePaymentLinkOptions,
+} from '../services/checkout/linkService';
+import { type CheckoutDeps, createSessionFromLink } from '../services/checkout/sessionService';
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
-import { newId } from '../lib/ids';
-import { toPaymentLinkDTO, toPublicPaymentLinkDTO, toPaymentIntentDTO } from '../lib/serialize';
-import { sendError, wrap, requireAuthenticated, sendValidationError } from '../lib/http';
-import { idempotent } from '../lib/idempotency';
-import { resolveMerchant } from './paymentIntents';
-import { railBodyFields } from '../lib/railSchema';
-import { answerList, listQuerySchema, parseQuery } from '../lib/list';
-import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../lib/metadata';
+import { type CatalogRoute, createCatalogApiRouter } from './catalogRoutes';
 
-const listLinksQuery = listQuerySchema({
-  active: z
-    .enum(['true', 'false'])
-    .transform((value) => value === 'true')
-    .optional(),
-});
+const listLinksQuery = surfaceListQuery({ active: booleanQuery.optional() });
+const retrieveLinkQuery = surfaceRetrieveQuery();
+const lineItemsQuery = surfaceListQuery({});
 
-const createBodySchema = z
+function idParam(req: Request, res: Response): string | null {
+  const { id } = req.params;
+  if (!id) {
+    sendError(res, 400, 'invalid_request_error', 'id is required');
+    return null;
+  }
+  return id;
+}
+
+async function linkOr404(id: string, merchant: MerchantRow): Promise<PaymentLinkRow> {
+  const row = await findLinkForMerchant(getDb(), id, merchant.id);
+  if (!row) throw new CheckoutError(404, 'resource_missing', 'payment link not found');
+  return row;
+}
+
+async function answerLink(
+  res: Response,
+  merchant: MerchantRow,
+  row: PaymentLinkRow,
+  status = 200,
+): Promise<void> {
+  const dto = await toLinkDTO(getDb(), row);
+  await expandObjects([dto], 'payment_link', {}, merchant.id);
+  res.status(status).json(dto);
+}
+
+/** The merchant's link routes, as data. */
+export function paymentLinkRoutes(deps: CheckoutDeps): CatalogRoute[] {
+  return [
+    {
+      method: 'post',
+      path: '/payment_links',
+      core: async (req, res, merchant) => {
+        const parsed = createLinkBodySchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+          sendValidationError(res, parsed.error);
+          return;
+        }
+        if (!parseExpand(res, 'payment_link', parsed.data.expand, { list: false })) return;
+        await answerLink(res, merchant, await createPaymentLink(merchant, parsed.data, deps), 201);
+      },
+    },
+    {
+      method: 'get',
+      path: '/payment_links',
+      core: async (req, res, merchant, surface) => {
+        const query = parseQuery(req, res, listLinksQuery[surface]);
+        if (!query) return;
+        const db = getDb();
+        await answerList(req, res, {
+          query,
+          type: 'payment_link',
+          merchantId: merchant.id,
+          cursor: async (publicId) =>
+            (await findLinkForMerchant(db, publicId, merchant.id))?.id ?? null,
+          fetch: async (page) => {
+            const links = await listLinksForMerchant(db, {
+              merchantId: merchant.id,
+              active: query.active,
+              page,
+            });
+            // One read of every line on the page, not one per link.
+            const dtos = await toLinkDTOs(db, merchant.id, links.data);
+            return { data: dtos, hasMore: links.hasMore };
+          },
+          serialize: (dto) => dto,
+        });
+      },
+    },
+    {
+      method: 'get',
+      path: '/payment_links/:id',
+      core: async (req, res, merchant, surface) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const query = parseQuery(req, res, retrieveLinkQuery[surface]);
+        if (!query) return;
+        if (!parseExpand(res, 'payment_link', query.expand, { list: false })) return;
+        await answerLink(res, merchant, await linkOr404(id, merchant));
+      },
+    },
+    {
+      method: 'post',
+      path: '/payment_links/:id',
+      core: async (req, res, merchant) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const parsed = updateLinkBodySchema.safeParse(req.body ?? {});
+        if (!parsed.success) {
+          sendValidationError(res, parsed.error);
+          return;
+        }
+        if (!parseExpand(res, 'payment_link', parsed.data.expand, { list: false })) return;
+        await answerLink(
+          res,
+          merchant,
+          await updatePaymentLinkOptions(merchant, id, parsed.data, deps),
+        );
+      },
+    },
+    {
+      method: 'get',
+      path: '/payment_links/:id/line_items',
+      core: async (req, res, merchant, surface) => {
+        const id = idParam(req, res);
+        if (!id) return;
+        const query = parseQuery(req, res, lineItemsQuery[surface]);
+        if (!query) return;
+        const tree = parseExpand(res, 'item', query.expand, { list: true });
+        if (!tree) return;
+        // At most twenty lines: a complete set (`has_more: false`).
+        const lines = await linkLines(await linkOr404(id, merchant));
+        await expandObjects(lines, 'item', tree, merchant.id);
+        res.status(200).json(completeList(req, lines));
+      },
+    },
+  ];
+}
+
+// `@peable.to/contracts` is Zod 4, this router Zod 3: the contract's own rule, applied by value.
+const startBodySchema = z
   .object({
-    ...railBodyFields,
-    metadata: metadataCreateSchema.optional(),
-    success_url: z.string().url().optional(),
-  } satisfies Record<keyof CreatePaymentLinkParams, z.ZodType>)
+    amount: z
+      .string()
+      .refine(
+        (value) => contributionAmountSchema.safeParse(value).success,
+        'Enter a positive FairCoin base-unit amount within the supported range',
+      )
+      .optional(),
+  })
   .strict();
 
-// Only `active`/`metadata`/`success_url` are mutable — a link's price must be
-// immutable once shared, so `amount`/`network` are deliberately absent here.
-const updateBodySchema = z
-  .object({
-    active: z.boolean().optional(),
-    metadata: metadataUpdateSchema.optional(),
-    success_url: z.string().url().nullable().optional(),
-  } satisfies Record<keyof UpdatePaymentLinkParams, z.ZodType>)
-  .strict();
-
-/**
- * Build the payment-link REST router (F2.3). Merchant CRUD routes follow the
- * exact auth/scope chain as `paymentIntents.ts`/`merchants.ts`; the two
- * `/public` and `/payment_intent` routes are UNAUTHENTICATED payer paths,
- * gated only by the injected `publicRateLimit` — never a service token, since
- * an anonymous checkout-page visitor has none.
- */
+/** Build the payment-link router: merchant API + payer routes. */
 export function createPaymentLinksRouter(deps: {
   requireMerchant: RequestHandler;
   publicRateLimit: RequestHandler;
+  checkout?: CheckoutDeps;
 }): Router {
-  const { requireMerchant, publicRateLimit } = deps;
+  const checkoutDeps = deps.checkout ?? {};
   const router = Router();
-
-  router.post(
-    '/v1/payment_links',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      const parsed = createBodySchema.safeParse(req.body);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const params: CreatePaymentLinkParams = parsed.data as CreatePaymentLinkParams;
-
-      // Same data-integrity firewall as `createIntent`'s network check
-      // (F2.0 task 1a): a link's `network` must match the merchant it was
-      // created under, since every intent it later mints derives its
-      // watch-only address from THIS merchant's xpub.
-      //
-      // Delegated to `resolveRail` rather than re-checked here, because the
-      // rules a link must satisfy are exactly the rules its future intents must
-      // satisfy — and a link storing a combination `createIntent` would refuse
-      // is a price a payer can see and can never pay.
-      let resolved: ResolvedRail;
-      try {
-        resolved = resolveRail(merchant, params);
-        // ...and the same argument one step further: a link is a URL a merchant
-        // SENDS to customers, so a rail this deployment cannot serve has to be
-        // refused here, to the merchant, rather than at mint time to a payer
-        // who is already looking at the price.
-        assertRailAvailable(resolved.rail, merchant.environment);
-      } catch (err) {
-        if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 400, 'invalid_request_error', err.message);
-          return;
-        }
-        if (err instanceof RailUnavailableError) {
-          sendError(res, 503, 'api_error', err.message);
-          return;
-        }
-        throw err;
-      }
-
-      // Explicit field whitelist — never spread `req.body`. `active` takes its
-      // column default of true rather than being passed: a caller does not get
-      // to mint a link that is already disabled.
-      const link = await insertPaymentLink(getDb(), {
-        publicId: newId('link'),
-        merchantId: merchant.id,
-        oxyAppId: merchant.oxyAppId,
-        environment: merchant.environment,
-        amount: params.amount,
-        currency: resolved.currency,
-        rail: resolved.rail,
-        network: resolved.network,
-        metadata: params.metadata ?? {},
-        successUrl: params.success_url,
-      });
-
-      res.status(201).json(toPaymentLinkDTO(link));
+  router.use(
+    createCatalogApiRouter(paymentLinkRoutes(checkoutDeps), {
+      requireMerchant: deps.requireMerchant,
     }),
   );
 
+  // Anonymous: what a visitor sees before checkout starts. An inactive link is
+  // answered (not 404'd) so the page can say it is inactive.
   router.get(
-    '/v1/payment_links',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    '/v1/payment_links/:id/public',
+    deps.publicRateLimit,
     wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      const query = parseQuery(req, res, listLinksQuery);
-      if (!query) return;
-
+      const id = idParam(req, res);
+      if (!id) return;
       const db = getDb();
-      await answerList(req, res, {
-        query,
-        type: 'payment_link',
-        merchantId: merchant.id,
-        // The cursor arrives as a public `link_…`, resolved ownership-scoped —
-        // a cursor naming another merchant's link is a 400 like an unknown one.
-        cursor: async (publicId) =>
-          (await findLinkForMerchant(db, publicId, merchant.id))?.id ?? null,
-        fetch: (page) =>
-          listLinksForMerchant(db, { merchantId: merchant.id, active: query.active, page }),
-        serialize: toPaymentLinkDTO,
-      });
-    }),
-  );
-
-  router.get(
-    '/v1/payment_links/:id',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-    wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-
-      const link = await findLinkForMerchant(getDb(), id, merchant.id);
-      if (!link) {
+      const link = await findLinkByPublicId(db, id);
+      const merchant = link ? await findMerchantById(db, link.merchantId) : null;
+      if (!link || !merchant) {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
-      res.status(200).json(toPaymentLinkDTO(link));
+      const [display, branding, lines] = await Promise.all([
+        resolveMerchantDisplay(merchant),
+        findBranding(db, merchant.id),
+        link.contribution ? Promise.resolve([]) : linkLines(link),
+      ]);
+      const expired =
+        link.contribution?.expiresAt != null &&
+        Date.parse(link.contribution.expiresAt) <= Date.now();
+      res
+        .status(200)
+        .json(
+          toPublicPaymentLinkDTO(
+            expired ? { ...link, active: false } : link,
+            lines,
+            display,
+            toCheckoutBranding(merchant, branding),
+          ),
+        );
     }),
   );
 
-  /**
-   * Update a link — `POST`, as every update on this API is (Stripe's verb).
-   * There is no PATCH: one verb per operation, so an integration written
-   * against either spelling cannot half-work.
-   */
+  // Anonymous: start checkout. Every value comes from the STORED link; a
+  // payer may only choose a free contribution's amount. A contribution start
+  // needs a UUID `Idempotency-Key`, written by the page BEFORE the request, so
+  // a lost answer recovers the same session even after the link is disabled.
   router.post(
-    '/v1/payment_links/:id',
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-    idempotent,
+    '/v1/payment_links/:id/checkout_sessions',
+    deps.publicRateLimit,
     wrap(async (req, res) => {
-      const merchant = await resolveMerchant(req, res);
-      if (!merchant) return;
-
-      const parsed = updateBodySchema.safeParse(req.body ?? {});
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-      const params = parsed.data;
-
-      // The patch is scoped to the merchant in the SAME statement that applies
-      // it, so a link the caller does not own is never read and never written;
-      // `null` covers both "no such link" and "not yours", which is why both
-      // answer 404.
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-
-      const link = await updatePaymentLink(getDb(), id, merchant.id, {
-        active: params.active,
-        metadata: params.metadata,
-        successUrl: params.success_url,
-      });
-      if (link === 'missing') {
+      const id = idParam(req, res);
+      if (!id) return;
+      const db = getDb();
+      const link = await findLinkByPublicId(db, id);
+      const merchant = link ? await findMerchantById(db, link.merchantId) : null;
+      if (!link || !merchant) {
         sendError(res, 404, 'invalid_request_error', 'payment link not found');
         return;
       }
-      if (link === 'limit_exceeded') {
+      const body = startBodySchema.safeParse(req.body ?? {});
+      if (!body.success) {
+        sendValidationError(res, body.error);
+        return;
+      }
+      const rawKey = req.header('Idempotency-Key');
+      const key =
+        rawKey === undefined ? undefined : contributionOperationKeySchema.safeParse(rawKey);
+      if ((link.contribution && !key?.success) || (key && !key.success)) {
         sendError(
           res,
           400,
           'invalid_request_error',
-          METADATA_LIMIT_MESSAGE,
-          'parameter_invalid',
-          'metadata',
+          'A UUID Idempotency-Key header is required',
+          'idempotency_key_invalid',
         );
         return;
       }
-      res.status(200).json(toPaymentLinkDTO(link));
-    }),
-  );
-
-  // Public payer path — UNAUTHENTICATED, rate-limited. Returns only
-  // payer-safe fields (no metadata/success_url/internal ids). Still returns
-  // `active: false` links (never 404s an inactive link) so the checkout page
-  // can render a "link disabled" state instead of a generic not-found.
-  router.get(
-    '/v1/payment_links/:id/public',
-    publicRateLimit,
-    wrap(async (req, res) => {
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-
-      const db = getDb();
-      const link = await findLinkByPublicId(db, id);
-      if (!link) {
-        sendError(res, 404, 'invalid_request_error', 'payment link not found');
-        return;
-      }
-      const merchant = await findMerchantById(db, link.merchantId);
-      if (!merchant) {
-        sendError(res, 404, 'invalid_request_error', 'payment link not found');
-        return;
-      }
-      const merchantDisplay = await resolveMerchantDisplay(merchant);
-      res.status(200).json(toPublicPaymentLinkDTO(link, merchantDisplay));
-    }),
-  );
-
-  // Public payer path — UNAUTHENTICATED, rate-limited. Mints a FRESH intent
-  // every call (the checkout page owns reuse-if-open via sessionStorage); every
-  // value comes from the STORED link, never the caller, so a public caller can
-  // never mint an intent for an amount/network/merchant it doesn't control.
-  router.post(
-    '/v1/payment_links/:id/payment_intent',
-    publicRateLimit,
-    wrap(async (req, res) => {
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here. The
-      // repositories take a `string`, so the guard is explicit rather than a
-      // non-null assertion.
-      const { id } = req.params;
-      if (!id) {
-        sendError(res, 400, 'invalid_request_error', 'id is required');
-        return;
-      }
-
-      const db = getDb();
-      const link = await findLinkByPublicId(db, id);
-      if (!link) {
-        sendError(res, 404, 'invalid_request_error', 'payment link not found');
-        return;
-      }
-      const merchant = await findMerchantById(db, link.merchantId);
-      if (!merchant) {
-        sendError(res, 404, 'invalid_request_error', 'payment link not found');
-        return;
-      }
-
-      let amount = link.amount;
-      let idempotencyKey: string | undefined;
-      if (link.contribution) {
-        const body = contributionMintSchema.safeParse(req.body ?? {});
-        const key = contributionOperationKeySchema.safeParse(req.header('Idempotency-Key'));
-        if (!body.success) {
-          sendValidationError(res, body.error);
-          return;
-        }
-        if (!key.success) {
-          sendError(
-            res,
-            400,
-            'invalid_request_error',
-            'A UUID Idempotency-Key header is required',
-            'idempotency_key_invalid',
-          );
-          return;
-        }
-        if (link.contribution.amountMode === 'free') {
-          if (!body.data.amount) {
-            sendError(res, 400, 'invalid_request_error', 'Choose a contribution amount');
-            return;
-          }
-          amount = body.data.amount;
-        } else if (body.data.amount !== undefined && body.data.amount !== link.amount) {
-          sendError(res, 400, 'invalid_request_error', 'This contribution has a fixed amount');
-          return;
-        }
-        idempotencyKey = `contribution:${createHash('sha256')
-          .update(`${link.publicId}:${key.data}`)
-          .digest('hex')}`;
-      }
-      // Disabling/expiry prevents new attempts, but a lost response can still
-      // recover the already-created payment using its unguessable operation key.
-      const existing = idempotencyKey
-        ? await findIntentByIdempotencyKey(db, merchant.id, idempotencyKey)
-        : null;
-      if (
-        !existing &&
-        (!link.active ||
-          (link.contribution?.expiresAt && Date.parse(link.contribution.expiresAt) <= Date.now()))
-      ) {
-        sendError(res, 400, 'invalid_request_error', 'payment link is no longer active');
-        return;
-      }
       try {
-        const { intent, clientAction } = await createIntent({
-          paymentLinkId: link.id,
-          ...(idempotencyKey ? { idempotencyKey } : {}),
+        const session = await createSessionFromLink(
+          link,
           merchant,
-          amount,
-          rail: link.rail,
-          currency: link.currency,
-          // `?? undefined` rather than passing the null through: `createIntent`
-          // distinguishes "no network given" (legal on the card rail) from a
-          // network it must validate, and a null would be neither.
-          ...(link.network !== null ? { network: link.network } : {}),
-          metadata: link.metadata,
-        });
+          {
+            ...(body.data.amount !== undefined ? { amount: body.data.amount } : {}),
+            ...(key?.success ? { operationKey: key.data } : {}),
+          },
+          checkoutDeps,
+        );
+        const url = hostedCheckoutUrl(session);
+        if (!url || session.clientSecret === null) throw new Error('a link session is hosted');
+        res.setHeader('Cache-Control', 'no-store');
         res.status(201).json({
-          ...toPaymentIntentDTO(intent),
-          client_secret: intent.clientSecret,
-          // The payer is anonymous here and this is their only chance to be
-          // handed the card rail's next step — there is no authenticated read
-          // they could make later to fetch it.
-          ...(clientAction ? { client_action: clientAction } : {}),
+          object: 'checkout_session_start',
+          id: session.publicId,
+          client_secret: session.clientSecret,
+          url,
         });
-      } catch (err) {
-        if (err instanceof IdempotencyConflictError) {
-          sendError(res, 409, 'invalid_request_error', err.message);
-          return;
-        }
-        // Structurally unreachable today (a link's `network` is validated
-        // against its merchant at creation, and `Merchant.network` has no
-        // mutation route) — kept as a defensive translation, same as every
-        // other `createIntent` caller, rather than letting it fall through
-        // to a bare 500 if that invariant is ever loosened.
-        if (err instanceof NetworkMismatchError || err instanceof RailMismatchError) {
-          sendError(res, 400, 'invalid_request_error', err.message);
-          return;
-        }
-        // 503, not 400: the rail is not configured on this deployment, which is
-        // not something the caller can fix by sending different fields.
-        if (err instanceof RailUnavailableError) {
-          sendError(res, 503, 'api_error', err.message);
-          return;
-        }
-        throw err;
+      } catch (error) {
+        sendCheckoutError(res, error);
       }
     }),
   );

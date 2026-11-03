@@ -1,72 +1,88 @@
 import { useEffect, useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import type { CheckoutSessionPublic } from '@peable.to/shared-types';
-import { gatewayGet } from '../lib/gatewayFetch';
+import { CheckoutPage } from '../components/CheckoutPage';
+import { browserLanguages, I18nProvider, queryLocale, resolveLocale, useI18n } from '../i18n';
 import type { LoadState } from '../lib/loadState';
-import { CheckoutView } from '../components/CheckoutView';
+import { getCheckoutSession } from '../lib/sessionClient';
 
-// `/c/:sessionId` — wraps exactly one `PaymentIntent` (Stripe Checkout
-// Session parity). The client secret travels in the URL FRAGMENT
-// (`#cs=<secret>`), not the query string, so it never reaches server/CDN
-// access logs; the app forwards it to the Gateway via the
-// `X-Peable-Client-Secret` header rather than a query param, so it never
-// lands in the Gateway's own access logs either.
+function Pending({ message }: { message: string }) {
+  return (
+    <main className="checkout-page">
+      <p className="checkout-page__pending" role="status">
+        {message}
+      </p>
+    </main>
+  );
+}
+
+function PendingKey({ messageKey }: { messageKey: 'loading' | 'missingParams' }) {
+  const { t } = useI18n();
+  return <Pending message={t(messageKey)} />;
+}
+
+/**
+ * `/c/:sessionId#cs=<secret>` — the hosted checkout. The secret travels in the
+ * URL FRAGMENT, never the query string, so it reaches no server or CDN access
+ * log; the app sends it to the gateway in the `X-Peable-Client-Secret` header.
+ */
 export function SessionRoute() {
   const { sessionId } = useParams<{ sessionId: string }>();
+  const { hash } = useLocation();
+  const clientSecret = new URLSearchParams(hash.slice(1)).get('cs');
   const [state, setState] = useState<LoadState<CheckoutSessionPublic>>({ status: 'loading' });
+  const override = queryLocale();
 
   useEffect(() => {
-    const clientSecret = new URLSearchParams(window.location.hash.slice(1)).get('cs');
     if (!sessionId || !clientSecret) {
-      setState({ status: 'error', message: 'This checkout link is missing required parameters.' });
+      setState({ status: 'error', message: '' });
       return;
     }
     let cancelled = false;
-    gatewayGet<CheckoutSessionPublic>(`/v1/checkout_sessions/${sessionId}/public`, {
-      headers: { 'X-Peable-Client-Secret': clientSecret },
-    })
+    setState({ status: 'loading' });
+    getCheckoutSession(sessionId, clientSecret)
       .then((session) => {
         if (!cancelled) setState({ status: 'ready', data: session });
       })
       .catch((error: unknown) => {
         if (cancelled) return;
-        const message = error instanceof Error ? error.message : 'Failed to load checkout session.';
-        setState({ status: 'error', message });
+        setState({ status: 'error', message: error instanceof Error ? error.message : '' });
       });
     return () => {
       cancelled = true;
     };
-  }, [sessionId]);
+  }, [sessionId, clientSecret]);
 
-  if (state.status === 'loading') {
-    return (
-      <main className="checkout-page">
-        <p className="checkout-page__pending">Loading checkout session {sessionId}…</p>
-      </main>
-    );
-  }
-  if (state.status === 'error') {
-    return (
-      <main className="checkout-page">
-        <p className="checkout-page__pending">{state.message}</p>
-      </main>
-    );
-  }
+  const locale = resolveLocale({
+    override,
+    merchant: state.status === 'ready' ? state.data.locale : null,
+    browser: browserLanguages(),
+  });
 
-  const {
-    payment_intent: paymentIntent,
-    merchant,
-    success_url: successUrl,
-    billing_quote: billingQuote,
-  } = state.data;
+  return (
+    <I18nProvider locale={locale}>
+      {!sessionId || !clientSecret ? (
+        <PendingKey messageKey="missingParams" />
+      ) : state.status === 'loading' ? (
+        <PendingKey messageKey="loading" />
+      ) : state.status === 'error' ? (
+        <LoadError message={state.message} />
+      ) : (
+        <main className="checkout-page">
+          <CheckoutPage initialSession={state.data} clientSecret={clientSecret} />
+        </main>
+      )}
+    </I18nProvider>
+  );
+}
+
+export function LoadError({ message }: { message: string }) {
+  const { t } = useI18n();
   return (
     <main className="checkout-page">
-      <CheckoutView
-        intent={paymentIntent}
-        merchant={merchant}
-        successUrl={successUrl}
-        billingQuote={billingQuote}
-      />
+      <p className="checkout-page__pending" role="alert">
+        {message || t('loadFailed')}
+      </p>
     </main>
   );
 }

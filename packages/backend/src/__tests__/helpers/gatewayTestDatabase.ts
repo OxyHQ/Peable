@@ -26,7 +26,14 @@ import {
   insertPaymentIntent,
   type PaymentIntentRow,
 } from '../../db/payments/paymentIntentRepository';
-import { insertPaymentLink, type PaymentLinkRow } from '../../db/payments/paymentLinkRepository';
+import {
+  DEFAULT_LINK_OPTIONS,
+  insertPaymentLink,
+  type PaymentLinkOptions,
+  type PaymentLinkRow,
+} from '../../db/payments/paymentLinkRepository';
+import { insertPrice, type PriceRow } from '../../db/catalog/priceRepository';
+import { insertProduct } from '../../db/catalog/productRepository';
 import { insertSendAttribution } from '../../db/social/sendAttribution';
 import type { SocialSendAttributionRow } from '../../db/social/sendAttribution';
 import {
@@ -322,37 +329,108 @@ export async function seedIntent(
   return row;
 }
 
+export interface SeedPriceValues {
+  readonly currency?: CurrencyCode;
+  readonly unitAmount?: string;
+  readonly name?: string;
+  readonly active?: boolean;
+  readonly taxCode?: string | null;
+  /** A recurring price (`interval`), for the subscription-mode refusals. */
+  readonly recurring?: 'day' | 'week' | 'month' | 'year';
+  readonly tiers?: {
+    up_to: number | null;
+    unit_amount: string | null;
+    flat_amount: string | null;
+  }[];
+  readonly tiersMode?: 'graduated' | 'volume';
+}
+
+/** A product and one price of it, through the catalog's own repositories. */
+export async function seedPrice(
+  merchant: MerchantRow,
+  values: SeedPriceValues = {},
+): Promise<PriceRow> {
+  return gatewayDb().transaction(async (tx) => {
+    const product = await insertProduct(tx, {
+      publicId: newId('prod'),
+      merchantId: merchant.id,
+      active: true,
+      name: values.name ?? 'Widget',
+      description: null,
+      images: [],
+      metadata: {},
+      taxCode: values.taxCode ?? null,
+      unitLabel: null,
+      url: null,
+      statementDescriptor: null,
+      marketingFeatures: [],
+    });
+    const tiered = values.tiers !== undefined;
+    const written = await insertPrice(tx, {
+      publicId: newId('price'),
+      merchantId: merchant.id,
+      productId: product.id,
+      shape: {
+        currency: values.currency ?? (merchant.network ? 'FAIR' : 'EUR'),
+        unitAmount: tiered ? null : (values.unitAmount ?? '1000'),
+        billingScheme: tiered ? 'tiered' : 'per_unit',
+        tiers: values.tiers ?? null,
+        tiersMode: tiered ? (values.tiersMode ?? 'volume') : null,
+        transformQuantity: null,
+        recurring: values.recurring
+          ? { interval: values.recurring, intervalCount: 1, usageType: 'licensed' }
+          : null,
+        taxBehavior: 'unspecified',
+      },
+      active: values.active ?? true,
+      lookupKey: null,
+      transferLookupKey: false,
+      nickname: null,
+      metadata: {},
+    });
+    if (written === 'lookup_key_taken') throw new Error('seedPrice: unreachable lookup key clash');
+    return written.row;
+  });
+}
+
 export interface SeedLinkValues {
   readonly publicId?: string;
   readonly rail?: PaymentIntentRail;
+  /** The one price's per-unit amount. */
   readonly amount?: string;
   readonly currency?: CurrencyCode;
-  readonly network?: NetworkType | null;
   readonly metadata?: Record<string, string>;
-  readonly successUrl?: string;
+  readonly options?: Partial<PaymentLinkOptions>;
 }
 
+/** A payment link over one freshly seeded price. */
 export async function seedLink(
   merchant: MerchantRow,
   values: SeedLinkValues = {},
 ): Promise<PaymentLinkRow> {
   const unique = uuidv7();
-  const rail = values.rail ?? 'faircoin';
-  return insertPaymentLink(gatewayDb(), {
-    publicId: values.publicId ?? `link_${unique}`,
-    merchantId: merchant.id,
-    // The identity triple comes from the merchant, never from a literal — the
-    // composite reference refuses any other combination.
-    oxyAppId: merchant.oxyAppId,
-    environment: merchant.environment,
-    rail,
-    amount: values.amount ?? '100000000',
-    currency: values.currency ?? (rail === 'faircoin' ? 'FAIR' : 'EUR'),
-    network:
-      values.network !== undefined ? values.network : rail === 'faircoin' ? merchant.network : null,
-    metadata: values.metadata ?? {},
-    successUrl: values.successUrl,
+  const rail = values.rail ?? (merchant.network ? 'faircoin' : 'card');
+  const currency = values.currency ?? (rail === 'faircoin' ? 'FAIR' : 'EUR');
+  const price = await seedPrice(merchant, {
+    currency,
+    unitAmount: values.amount ?? (currency === 'FAIR' ? '100000000' : '1000'),
   });
+  return gatewayDb().transaction((tx) =>
+    insertPaymentLink(tx, {
+      publicId: values.publicId ?? `link_${unique}`,
+      merchantId: merchant.id,
+      // The identity triple comes from the merchant, never from a literal — the
+      // composite reference refuses any other combination.
+      oxyAppId: merchant.oxyAppId,
+      environment: merchant.environment,
+      rail,
+      currency,
+      network: rail === 'faircoin' ? merchant.network : null,
+      metadata: values.metadata ?? {},
+      options: { ...DEFAULT_LINK_OPTIONS, ...values.options },
+      lineItems: [{ priceId: price.id, quantity: 1, adjustable: null }],
+    }),
+  );
 }
 
 export interface SeedSessionValues {
@@ -382,6 +460,7 @@ export async function seedSession(
     currency: intent.currency,
     rail: intent.rail,
     network: intent.network,
+    connectedAccountId: intent.connectedAccountId ?? null,
     metadata: values.metadata ?? {},
     successUrl: values.successUrl,
     cancelUrl: values.cancelUrl,

@@ -324,6 +324,14 @@ export const WEBHOOK_EVENT_SCOPES = {
   'payout.failed': 'merchant',
   'payout.canceled': 'merchant',
   'balance.available': 'merchant',
+  // Checkout (Orbit Phase 3): about an order, which names a payment only once
+  // the payer confirmed — and never in `setup` mode.
+  'checkout.session.completed': 'merchant',
+  'checkout.session.expired': 'merchant',
+  'checkout.session.async_payment_succeeded': 'merchant',
+  'checkout.session.async_payment_failed': 'merchant',
+  'payment_link.created': 'merchant',
+  'payment_link.updated': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -639,3 +647,35 @@ export type FeePaymentMethodType = (typeof FEE_PAYMENT_METHOD_TYPES)[number];
  * no leading zero.
  */
 export const SIGNED_BASE_UNIT_STRING_PATTERN = '^(0|-?[1-9][0-9]*)$';
+// ---- Checkout (Orbit Phase 3) ------------------------------------------------
+
+export {
+  BRANDING_BORDER_STYLES,
+  BRANDING_FONTS,
+  CHECKOUT_BILLING_ADDRESS_COLLECTIONS,
+  CHECKOUT_CUSTOMER_CREATIONS,
+  CHECKOUT_LOCALES,
+  CHECKOUT_PAYMENT_STATUSES,
+  CHECKOUT_SESSION_MODES,
+  CHECKOUT_SESSION_STATUSES,
+  CHECKOUT_SUBMIT_TYPES,
+  CHECKOUT_UI_MODES,
+} from '@peable.to/shared-types';
+
+/** `checkout_sessions.automatic_tax_status` — Peable Tax's answer for the order. */
+export const AUTOMATIC_TAX_STATUSES = ['complete', 'requires_location_inputs', 'failed'] as const;
+export type AutomaticTaxStatus = (typeof AUTOMATIC_TAX_STATUSES)[number];
+
+export const AFTER_COMPLETION_TYPES = ['redirect', 'hosted_confirmation'] as const;
+export type AfterCompletionType = (typeof AFTER_COMPLETION_TYPES)[number];
+
+/** The customer emails Peable sends (`customer_emails.kind`). */
+export const CUSTOMER_EMAIL_KINDS = [
+  'payment_receipt',
+  'refund_notice',
+  'checkout_confirmation',
+] as const;
+export type CustomerEmailKind = (typeof CUSTOMER_EMAIL_KINDS)[number];
+
+export const CUSTOMER_EMAIL_STATUSES = ['pending', 'sent', 'failed', 'expired'] as const;
+export type CustomerEmailStatus = (typeof CUSTOMER_EMAIL_STATUSES)[number];

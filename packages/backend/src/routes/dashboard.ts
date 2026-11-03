@@ -61,6 +61,15 @@ import { answerEventList, retrieveEvent } from './events';
 import { CATALOG_ROUTES } from './catalog';
 import { mountCatalogDashboardRoutes } from './catalogRoutes';
 import { answerRequestLogList, retrieveRequestLog } from './requestLogs';
+import { checkoutSessionRoutes } from './checkoutSessions';
+import { paymentLinkRoutes } from './paymentLinks';
+import {
+  answerBranding,
+  answerEmailSettings,
+  updateBrandingCore,
+  updateEmailSettingsCore,
+} from './branding';
+import type { CheckoutDeps } from '../services/checkout/sessionService';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
@@ -213,6 +222,8 @@ export function createDashboardRouter(deps?: {
   safeFetch?: SafeFetchFn;
   /** Oxy Files, for the avatar ownership check. Default: the real client. */
   files?: OxyFilesClient;
+  /** Peable Tax for checkout sessions and links created from Orbit. */
+  checkout?: CheckoutDeps;
 }): Router {
   const files = deps?.files ?? oxyFilesClient;
   const requireOxyUser: RequestHandler = deps?.requireOxyUser ?? createOxyAuthMiddleware(oxy);
@@ -393,6 +404,42 @@ export function createDashboardRouter(deps?: {
 
   /** Orbit's catalog: products, prices, coupons and promotion codes. */
   mountCatalogDashboardRoutes(router, CATALOG_ROUTES, { base, requireOxyUser, asMember });
+  // Checkout (Orbit Phase 3): the same session and payment-link cores as the API.
+  mountCatalogDashboardRoutes(
+    router,
+    [...checkoutSessionRoutes(deps?.checkout ?? {}), ...paymentLinkRoutes(deps?.checkout ?? {})],
+    { base, requireOxyUser, asMember },
+  );
+  // Branding and customer emails — the same cores as `/v1/merchants/me/*`.
+  router.get(
+    `${base}/branding`,
+    requireOxyUser,
+    asMember((_req, res, merchant) => answerBranding(res, merchant)),
+  );
+  // The logo is written through the merchant writer, with the caller's file authority.
+  router.post(
+    `${base}/branding`,
+    requireOxyUser,
+    requestContextMiddleware,
+    wrap(async (req, res) => {
+      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
+      if (!access) return;
+      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
+      if (!merchant) return;
+      await updateBrandingCore(req, res, merchant, { actor: access.avatarActor, files });
+    }),
+  );
+  router.get(
+    `${base}/email_settings`,
+    requireOxyUser,
+    asMember((_req, res, merchant) => answerEmailSettings(res, merchant)),
+  );
+  router.post(
+    `${base}/email_settings`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMember(updateEmailSettingsCore),
+  );
   // Disputes, Files and payment methods — the same cores as the merchant API.
   router.get(
     `${base}/disputes`,

@@ -48,9 +48,10 @@ export function useProduct(scope: DashboardScope, id: string) {
   });
 }
 
-export function useProductPrices(scope: DashboardScope, productId: string) {
+export function useProductPrices(scope: DashboardScope, productId: string, enabled = true) {
   return useInfiniteQuery({
     queryKey: catalogKeys.prices(scope, productId),
+    enabled,
     initialPageParam: undefined as string | undefined,
     queryFn: ({ pageParam }) =>
       dashboardApi.prices.list(scope, {

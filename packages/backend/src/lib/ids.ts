@@ -33,6 +33,7 @@ export function newId(
     | 'merch'
     | 'link'
     | 'cs'
+    | 'li'
     | 'ca'
     | 'tr'
     | 'trr'

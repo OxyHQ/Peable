@@ -175,19 +175,81 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('checkout_sessions/:id/expire', () => {
     merchant = await seedMerchant({ oxyAppId: APP_ID });
   });
 
-  test("cancels the session's payment as abandoned, with payment_intent.canceled", async () => {
+  /** A session its payer confirmed: the order now has its FairCoin payment. */
+  async function confirmedSession() {
     const session = await call('POST', '/v1/checkout_sessions', {
-      amount: '100000000',
-      network: 'testnet',
+      line_items: [
+        {
+          price_data: {
+            currency: 'FAIR',
+            unit_amount: '100000000',
+            product_data: { name: 'Item' },
+          },
+          quantity: 1,
+        },
+      ],
+      success_url: 'https://shop.example/ok',
     });
     expect(session.status).toBe(201);
+    const secret = {
+      'X-Peable-Client-Secret': decodeURIComponent(String(session.json.url).split('#cs=')[1] ?? ''),
+    };
+    await call(
+      'POST',
+      `/v1/checkout_sessions/${String(session.json.id)}/public`,
+      { customer_details: { email: 'p@example.com' } },
+      secret,
+    );
+    const confirmed = await call(
+      'POST',
+      `/v1/checkout_sessions/${String(session.json.id)}/public/confirm`,
+      {},
+      secret,
+    );
+    const paymentIntent = (confirmed.json.payment_intent as { id: string }).id;
+    return {
+      session: { ...session, json: { ...session.json, payment_intent: paymentIntent } as Json },
+    };
+  }
+
+  test('expires a session nobody confirmed, with checkout.session.expired', async () => {
+    const session = await call('POST', '/v1/checkout_sessions', {
+      line_items: [
+        {
+          price_data: { currency: 'FAIR', unit_amount: '5', product_data: { name: 'Item' } },
+          quantity: 1,
+        },
+      ],
+      success_url: 'https://shop.example/ok',
+    });
     const expired = await call(
       'POST',
       `/v1/test_helpers/checkout_sessions/${String(session.json.id)}/expire`,
       {},
     );
     expect(expired.status).toBe(200);
-    expect(expired.json).toMatchObject({ id: session.json.id, object: 'checkout_session' });
+    expect(expired.json.status).toBe('expired');
+    const twice = await call(
+      'POST',
+      `/v1/test_helpers/checkout_sessions/${String(session.json.id)}/expire`,
+      {},
+    );
+    expect(twice.status).toBe(409);
+  });
+
+  test("cancels the session's payment as abandoned, with payment_intent.canceled", async () => {
+    const { session } = await confirmedSession();
+    const expired = await call(
+      'POST',
+      `/v1/test_helpers/checkout_sessions/${String(session.json.id)}/expire`,
+      {},
+    );
+    expect(expired.status).toBe(200);
+    expect(expired.json).toMatchObject({
+      id: session.json.id,
+      object: 'checkout_session',
+      status: 'expired',
+    });
 
     const intent = await call('GET', `/v1/payment_intents/${String(session.json.payment_intent)}`);
     expect(intent.json).toMatchObject({ status: 'canceled', cancellation_reason: 'abandoned' });
@@ -207,10 +269,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('checkout_sessions/:id/expire', () => {
   });
 
   test('a session whose payment is already processing cannot expire', async () => {
-    const session = await call('POST', '/v1/checkout_sessions', {
-      amount: '100000000',
-      network: 'testnet',
-    });
+    const { session } = await confirmedSession();
     // Broadcast only: what a real payer pressing send does.
     const intent = must(
       await findIntentForMerchant(gatewayDb(), String(session.json.payment_intent), merchant.id),

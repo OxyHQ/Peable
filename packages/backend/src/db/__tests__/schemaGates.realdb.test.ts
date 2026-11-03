@@ -240,6 +240,15 @@ describe('id-column classification', () => {
           column: 'promotion_codes.public_id',
           reason: "this row's own promo_… identifier, not a reference",
         },
+        {
+          column: 'checkout_sessions.tax_calculation_id',
+          reason:
+            "the PUBLIC taxcalc_… the session's total includes; commitTaxTransaction resolves it inside the merchant at completion, and a calculation is a frozen quote, not a parent row",
+        },
+        {
+          column: 'checkout_sessions.client_reference_id',
+          reason: "the merchant's own opaque reference for the order, in their key space",
+        },
         // `provider_events` holds a PROVIDER's numbering, not this database's.
         // None of these can carry a foreign key: the rows they name live at
         // Stripe, and a reference to them is not expressible here.
