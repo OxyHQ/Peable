@@ -41,7 +41,7 @@ test('SocialPayment is assignable with and without a source', () => {
     address: 'TAbC123',
     direction: 'received',
     counterparty: { kind: 'user', username: 'alice' },
-    createdAt: '2026-07-19T00:00:00.000Z',
+    created: 1784419200,
   } as const;
   const withSource: SocialPayment = { ...base, source: { app: 'mention', ref: 'post_1' } };
   const without: SocialPayment = { ...base };

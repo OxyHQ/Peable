@@ -29,15 +29,11 @@ export const PAYMENT_METHOD_CONFIGURATION_TYPES = [
 ] as const;
 export type PaymentMethodConfigurationType = (typeof PAYMENT_METHOD_CONFIGURATION_TYPES)[number];
 
-/** The card-rail types a PaymentIntent can carry in `payment_method_types`. */
-export const CARD_RAIL_PAYMENT_METHOD_TYPES = [
-  'card',
-  'sepa_debit',
-  'ideal',
-  'bancontact',
-  'eps',
-] as const;
-export type CardRailPaymentMethodType = (typeof CARD_RAIL_PAYMENT_METHOD_TYPES)[number];
+/** The card-rail types a PaymentIntent can carry in `payment_method_types` (the payments vocabulary). */
+export {
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
+  type CardRailPaymentMethodType,
+} from '@peable.to/contracts/vocabulary';
 
 /**
  * Why a method cannot be offered whatever the merchant chooses.

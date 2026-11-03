@@ -5,27 +5,15 @@
  */
 import { Router } from 'express';
 import type { RequestHandler } from 'express';
-import { z } from 'zod';
-import { oxy } from '../oxy';
+import { expandOnlyQuery, listChargesQuery } from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import { findChargeForMerchant, listChargesForMerchant } from '../db/payments/chargeRepository';
 import { toChargeDTO } from '../lib/serialize';
-import { requireAuthenticated, sendError, wrap } from '../lib/http';
+import { requireAuthenticated, sendError, wrap, requireScope } from '../lib/http';
 import { expandObjects, parseExpand } from '../lib/expand';
-import {
-  answerList,
-  listQuerySchema,
-  parseQuery,
-  resolveListReference,
-  retrieveQuerySchema,
-} from '../lib/list';
+import { answerList, parseQuery, resolveListReference } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
-
-const listChargesQuery = listQuerySchema({
-  payment_intent: z.string().min(1).max(255).optional(),
-});
-const retrieveChargeQuery = retrieveQuerySchema({});
 
 export function createChargesRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
@@ -35,7 +23,7 @@ export function createChargesRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/charges',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -70,7 +58,7 @@ export function createChargesRouter(deps: { requireMerchant: RequestHandler }): 
     '/v1/charges/:id',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
+    requireScope('payments:read'),
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
@@ -79,7 +67,7 @@ export function createChargesRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'id is required');
         return;
       }
-      const query = parseQuery(req, res, retrieveChargeQuery);
+      const query = parseQuery(req, res, expandOnlyQuery);
       if (!query) return;
       const expand = parseExpand(res, 'charge', query.expand, { list: false });
       if (!expand) return;

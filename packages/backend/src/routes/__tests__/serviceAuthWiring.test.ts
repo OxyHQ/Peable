@@ -8,6 +8,7 @@ import { peableForOxyService, Peable } from '@peable.to/sdk';
 import { PEABLE_SERVICE_AUDIENCE } from '../../oxy';
 import { seedMerchant, useGatewayDatabase } from '../../__tests__/helpers/gatewayTestDatabase';
 import { createPaymentIntentsRouter } from '../paymentIntents';
+import { oxyGuard } from '../../lib/http';
 
 // Real TESTNET account xpub for the canonical all-"abandon" + "art" mnemonic —
 // public-key-only, cannot spend. Same fixture used across the rest of the suite.
@@ -151,13 +152,13 @@ beforeAll(async () => {
     baseURL: oxyApi,
     workloadCredentials: temporaryCredentials('ASIA_PEABLE_RECEIVER'),
   });
-  const requireMerchant = receiverOxy.middleware.service({
-    expectedAudience: PEABLE_SERVICE_AUDIENCE,
-  });
-  const optionalServiceAuth = receiverOxy.middleware.auth({
-    optional: true,
-    expectedAudience: PEABLE_SERVICE_AUDIENCE,
-  });
+  // Composed exactly as `server.ts` composes them: refusals in the ONE error envelope.
+  const requireMerchant = oxyGuard(
+    receiverOxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE }),
+  );
+  const optionalServiceAuth = oxyGuard(
+    receiverOxy.middleware.auth({ optional: true, expectedAudience: PEABLE_SERVICE_AUDIENCE }),
+  );
 
   const app = express();
   app.use(express.json());

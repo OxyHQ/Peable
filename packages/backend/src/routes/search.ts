@@ -11,8 +11,7 @@ import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { SEARCHABLE_RESOURCES } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
-import { requireAuthenticated, wrap } from '../lib/http';
+import { requireAuthenticated, wrap, requireScope } from '../lib/http';
 import { answerGlobalSearch, answerSearch } from '../lib/search/answer';
 import { SEARCH_RESOURCES } from '../lib/search/resources';
 import { resolveMerchant } from './paymentIntents';
@@ -25,7 +24,7 @@ export function createSearchRouter(deps: { requireMerchant: RequestHandler }): R
       `/v1/${name}/search`,
       deps.requireMerchant,
       requireAuthenticated,
-      oxy.middleware.requireScope('payments:read'),
+      requireScope('payments:read'),
       wrap(async (req, res) => {
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
