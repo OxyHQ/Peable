@@ -49,6 +49,9 @@ export interface PriceRow {
   readonly recurringInterval: RecurringInterval | null;
   readonly recurringIntervalCount: number | null;
   readonly recurringUsageType: RecurringUsageType | null;
+  /** The meter a `metered` price bills (ADR 0018 §7), internal and public. */
+  readonly meterId: string | null;
+  readonly meterPublicId: string | null;
   readonly taxBehavior: PriceTaxBehavior;
   readonly lookupKey: string | null;
   readonly nickname: string | null;
@@ -78,6 +81,10 @@ const PRICE_COLUMNS = {
   recurringInterval: prices.recurringInterval,
   recurringIntervalCount: prices.recurringIntervalCount,
   recurringUsageType: prices.recurringUsageType,
+  meterId: prices.meterId,
+  meterPublicId: sql<string | null>`(${sql.raw(
+    'select m.public_id from billing_meters m where m.id = "prices"."meter_id"',
+  )})`,
   taxBehavior: prices.taxBehavior,
   lookupKey: prices.lookupKey,
   nickname: prices.nickname,
@@ -112,6 +119,10 @@ export interface PriceShape {
     interval: RecurringInterval;
     intervalCount: number;
     usageType: RecurringUsageType;
+    /** INTERNAL id of the meter, exactly when `usageType` is `metered` (set by the service). */
+    meterId?: string | null;
+    /** The `mtr_…` a request named, before the service resolved it. */
+    meterPublicId?: string;
   } | null;
   readonly taxBehavior: PriceTaxBehavior;
 }
@@ -193,6 +204,7 @@ export async function insertPrice(
       recurringInterval: shape.recurring?.interval ?? null,
       recurringIntervalCount: shape.recurring?.intervalCount ?? null,
       recurringUsageType: shape.recurring?.usageType ?? null,
+      meterId: shape.recurring?.meterId ?? null,
       taxBehavior: shape.taxBehavior,
       lookupKey: params.lookupKey,
       nickname: params.nickname,
@@ -217,6 +229,22 @@ export async function findPriceForMerchant(
     .from(prices)
     .where(and(eq(prices.publicId, publicId), eq(prices.merchantId, merchantId)));
   return row ? toPriceRow(row) : null;
+}
+
+/**
+ * Prices by INTERNAL id, whatever merchant — what a subscription item or an
+ * invoice line already names (its own composite reference proved the merchant).
+ */
+export async function findPricesByRowIds(
+  db: DatabaseOrTransaction,
+  ids: readonly string[],
+): Promise<PriceRow[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select(PRICE_COLUMNS)
+    .from(prices)
+    .where(inArray(prices.id, [...new Set(ids)]));
+  return rows.map(toPriceRow);
 }
 
 export async function findPricesByPublicIds(

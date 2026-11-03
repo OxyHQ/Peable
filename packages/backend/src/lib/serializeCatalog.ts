@@ -59,6 +59,7 @@ export function toPriceDTO(row: PriceRow): Price {
             interval: row.recurringInterval,
             interval_count: row.recurringIntervalCount,
             usage_type: row.recurringUsageType,
+            meter: row.meterPublicId,
           }
         : null,
     tax_behavior: row.taxBehavior,

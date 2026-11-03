@@ -453,6 +453,9 @@ export function toCustomerDTO(row: CustomerRow): Customer {
     shipping: row.shipping,
     invoice_settings: { default_payment_method: row.defaultPaymentMethodPublicId },
     metadata: row.metadata,
+    balance: row.balance,
+    currency: row.currency,
+    test_clock: row.testClockPublicId,
     created: toUnix(row.createdAt),
   };
 }

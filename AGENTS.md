@@ -284,7 +284,10 @@ Routes (`src/routes/`): `branding`, `charges`, `checkoutSessions`, `connect`,
 `paymentMethodConfigurations` (configurations and wallet domains),
 `paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
 `refunds`, `reporting`, `search`, `setupIntents`, `social`, `tax`, `transfers`,
-`webhookDeliveries`, `webhookEndpoints`.
+`webhookDeliveries`, `webhookEndpoints`, and the billing engine's
+`billingEngine/*` (subscriptions, invoices, credit notes, test clocks, settings,
+meters, entitlements, portal, and its anonymous `public` invoice and portal
+pages).
 
 ### Search and report runs (Orbit Phase 8)
 
@@ -297,9 +300,10 @@ repository's own list function (`search?: SQL`) and serializer. Caller text only
 ever enters SQL as a bound parameter (substring is `strpos`, not `LIKE`), and the
 merchant predicate is the repository's. `routes/search.ts` is mounted BEFORE the
 resource routers on both surfaces — `/v1/charges/search` must not reach
-`/v1/charges/:id`. **Adding `subscriptions` / `invoices` search is one fields map
-and one registry entry** (plus `SEARCHABLE_RESOURCES` in shared-types); the
-parser, page token, routes, dashboard box and SDK need nothing. The `page` token
+`/v1/charges/:id`. **Adding a resource is one fields map and one registry entry**
+(plus `SEARCHABLE_RESOURCES` in shared-types) — `subscriptions` and `invoices`
+(billing engine) were added that way; the parser, page token, routes, dashboard
+box and SDK need nothing. The `page` token
 is bound to its query and carries the keyset position, never the merchant.
 No extensions: no `pg_trgm`, no full-text search.
 
@@ -381,6 +385,37 @@ rules, each of which is easy to undo:
   client exists, so production registers an adapter over the outbound relay
   (`~/Oxy/docs/outbound-mail-relay.md`). Receipt numbers are claimed by one
   upsert (`claimReceiptNumber`), the derivation index's pattern.
+
+### The billing engine (ADR 0018)
+
+Native subscriptions, invoices, credit notes, customer balances, test clocks,
+dunning settings, meters, entitlements and the customer portal
+(`services/billingEngine/*`, routes in `routes/billingEngine/*`, mounted on the
+API and the dashboard from one list) — BESIDE the Stripe-Billing proxy
+(`/v1/billing/*`, `services/billing/*`), which stays until its subscriptions
+are migrated (ADR 0018 "as built" has the plan). Invariants:
+
+- **Every status change is `transitionSubscription` / `transitionInvoice`**
+  (`transitions.ts`): state machine, CAS on the status read, event and
+  entitlement refresh in the caller's transaction. Never write `status` any
+  other way.
+- **An invoice moves WITH its payment**: `transitionIntent` calls
+  `onInvoicePaymentTransition` in the intent's transaction. Link a card intent
+  to its invoice BEFORE confirming it (`collect.ts`), or the hook misses it.
+- **Tax is computed before finalize and fails closed** (`invoiceTax.ts`); a
+  subscription's first invoice is priced and taxed before any row is written.
+  Never finalize at zero because a calculation failed.
+- **Never `new Date()` in the engine**: `engineNow(db, testClockId)` is the
+  customer's clock (a test clock's frozen time in test mode).
+- **FairCoin is never debited**: FAIR subscriptions and invoices are
+  `send_invoice` (CHECKed) and paid by the payer on the hosted invoice page.
+- **Entitlements are the access answer**: features attached to products,
+  active while a granting product is on a `trialing`/`active`/`past_due`
+  subscription — Mention Plus through Plus OR Oxy One is one entitlement.
+- Amounts only from `services/catalog/pricing.ts` + `invoiceMath.ts`; proration
+  from `periods.ts`. Mail only through Orbit's email outbox (`services/email`,
+  owed in the change's transaction; `invoice.sent` only once the relay took it).
+  Checkout's `mode: 'subscription'` is the engine's (`checkoutFulfiller.ts`).
 
 ### The PaymentIntent is Stripe's (ADR 0019)
 

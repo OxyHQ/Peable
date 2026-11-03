@@ -71,6 +71,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // Checkout v2's data half shipped with #202, whose deploy (1f247b9) applied
   // its post phase in production before search and report runs' `0062`–`0064`.
   '0061_checkout_v2_data': 'released with #202; applied in production by the 1f247b9 deploy',
+  // Search and report runs' validate half ships with #203; it must be DEPLOYED
+  // (its post phase applied) before the billing engine's `0065`–`0066` (ADR
+  // 0018) merge.
+  '0064_orbit_search_reporting_validate':
+    'released with #203; deployed before 0065 (billing engine) merges',
 };
 
 interface Migration {

@@ -335,6 +335,43 @@ export const WEBHOOK_EVENT_SCOPES = {
   // Reporting: a report run finished, about the merchant's own report.
   'reporting.report_run.succeeded': 'merchant',
   'reporting.report_run.failed': 'merchant',
+  // The native billing engine (ADR 0018): about subscriptions, invoices and
+  // their satellites — a payment an invoice is collected with carries its own
+  // `payment_intent.*` events.
+  'customer.subscription.created': 'merchant',
+  'customer.subscription.updated': 'merchant',
+  'customer.subscription.deleted': 'merchant',
+  'customer.subscription.trial_will_end': 'merchant',
+  'customer.subscription.paused': 'merchant',
+  'customer.subscription.resumed': 'merchant',
+  'invoice.created': 'merchant',
+  'invoice.updated': 'merchant',
+  'invoice.deleted': 'merchant',
+  'invoice.finalized': 'merchant',
+  'invoice.paid': 'merchant',
+  'invoice.payment_failed': 'merchant',
+  'invoice.payment_action_required': 'merchant',
+  'invoice.voided': 'merchant',
+  'invoice.marked_uncollectible': 'merchant',
+  'invoice.upcoming': 'merchant',
+  'invoice.sent': 'merchant',
+  'invoiceitem.created': 'merchant',
+  'invoiceitem.deleted': 'merchant',
+  'credit_note.created': 'merchant',
+  'credit_note.updated': 'merchant',
+  'credit_note.voided': 'merchant',
+  'test_helpers.test_clock.created': 'merchant',
+  'test_helpers.test_clock.advancing': 'merchant',
+  'test_helpers.test_clock.ready': 'merchant',
+  'test_helpers.test_clock.deleted': 'merchant',
+  'billing.meter.created': 'merchant',
+  'billing.meter.updated': 'merchant',
+  'billing.meter.deactivated': 'merchant',
+  'billing.meter.reactivated': 'merchant',
+  'entitlements.active_entitlement_summary.updated': 'merchant',
+  'billing_portal.configuration.created': 'merchant',
+  'billing_portal.configuration.updated': 'merchant',
+  'billing_portal.session.created': 'merchant',
   // Sent to ONE endpoint on request; about the endpoint, never about a payment.
   'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
@@ -445,6 +482,36 @@ export {
   RECURRING_USAGE_TYPES,
   TRANSFORM_QUANTITY_ROUNDS,
 } from '@peable.to/shared-types';
+
+/**
+ * The billing engine's closed sets (ADR 0018), re-exported from the wire
+ * contract for the same reason as the catalog's.
+ */
+export {
+  COLLECTION_METHODS,
+  CREDIT_NOTE_REASONS,
+  CREDIT_NOTE_STATUSES,
+  CREDIT_NOTE_TYPES,
+  CUSTOMER_BALANCE_TRANSACTION_TYPES,
+  DUNNING_FINAL_ACTIONS,
+  DUNNING_INVOICE_ACTIONS,
+  INVOICE_BILLING_REASONS,
+  INVOICE_STATUSES,
+  METER_AGGREGATIONS,
+  METER_STATUSES,
+  PAUSE_COLLECTION_BEHAVIORS,
+  SUBSCRIPTION_CANCELLATION_REASONS,
+  SUBSCRIPTION_STATUSES,
+  TEST_CLOCK_STATUSES,
+  TRIAL_END_BEHAVIORS,
+} from '@peable.to/shared-types';
+
+/** The kinds of invoice line (`invoice_line_items.type`). */
+export const INVOICE_LINE_TYPES = ['subscription', 'invoiceitem'] as const;
+export type InvoiceLineType = (typeof INVOICE_LINE_TYPES)[number];
+
+/** The kinds of credit note line. */
+export const CREDIT_NOTE_LINE_TYPES = ['invoice_line_item', 'custom_line_item'] as const;
 
 /**
  * The highest derivation index this schema can store — `int4`'s ceiling, and
@@ -646,8 +713,9 @@ export type FeePaymentMethodType = (typeof FEE_PAYMENT_METHOD_TYPES)[number];
 
 /**
  * A SIGNED canonical base-unit integer string: a balance transaction and a
- * ledger entry move money out as well as in. One spelling per value — no `-0`,
- * no leading zero.
+ * ledger entry move money out as well as in — and so do the billing engine's
+ * proration credits, invoice totals below zero and customer balances (ADR 0018;
+ * negative is credit). One spelling per value — no `-0`, no leading zero.
  */
 export const SIGNED_BASE_UNIT_STRING_PATTERN = '^(0|-?[1-9][0-9]*)$';
 // ---- Checkout (Orbit Phase 3) ------------------------------------------------
@@ -665,7 +733,11 @@ export {
   CHECKOUT_UI_MODES,
 } from '@peable.to/shared-types';
 
-/** `checkout_sessions.automatic_tax_status` — Peable Tax's answer for the order. */
+/**
+ * `automatic_tax_status` of a checkout session AND of an invoice (ADR 0018) —
+ * Peable Tax's answer for the order; the same three as the wire's
+ * `AUTOMATIC_TAX_STATUSES`.
+ */
 export const AUTOMATIC_TAX_STATUSES = ['complete', 'requires_location_inputs', 'failed'] as const;
 export type AutomaticTaxStatus = (typeof AUTOMATIC_TAX_STATUSES)[number];
 
@@ -677,6 +749,10 @@ export const CUSTOMER_EMAIL_KINDS = [
   'payment_receipt',
   'refund_notice',
   'checkout_confirmation',
+  // The billing engine (ADR 0018): an invoice sent for its customer to pay,
+  // and a failed automatic payment (dunning).
+  'invoice',
+  'invoice_payment_failed',
 ] as const;
 export type CustomerEmailKind = (typeof CUSTOMER_EMAIL_KINDS)[number];
 

@@ -9,6 +9,9 @@ import { findCouponsByPublicIds } from '../db/catalog/couponRepository';
 import { findPricesByPublicIds } from '../db/catalog/priceRepository';
 import { findProductsByPublicIds } from '../db/catalog/productRepository';
 import { toCouponDTO, toPriceDTO, toProductDTO } from './serializeCatalog';
+import { findInvoicesByPublicIds } from '../db/billingEngine/invoiceRepository';
+import { findSubscriptionsByPublicIds } from '../db/billingEngine/subscriptionRepository';
+import { renderInvoices, renderSubscriptions } from './serializeBilling';
 import { getDb } from '../db/postgres';
 import { sendError } from './http';
 import {
@@ -81,7 +84,20 @@ export type ExpandableType =
   | 'application_fee'
   | 'reconciliation_mismatch'
   | 'item'
-  | 'reporting.report_run';
+  | 'reporting.report_run'
+  | 'subscription'
+  | 'subscription_item'
+  | 'invoice'
+  | 'invoiceitem'
+  | 'credit_note'
+  | 'customer_balance_transaction'
+  | 'test_helpers.test_clock'
+  | 'billing.meter'
+  | 'entitlements.feature'
+  | 'entitlements.active_entitlement'
+  | 'product_feature'
+  | 'billing_portal.configuration'
+  | 'billing_portal.session';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -93,7 +109,9 @@ type TargetType =
   | 'product'
   | 'price'
   | 'coupon'
-  | 'setup_intent';
+  | 'setup_intent'
+  | 'invoice'
+  | 'subscription';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -141,6 +159,29 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   item: { price: 'price', product: 'product' },
   // The result File is embedded, as on Stripe; nothing on a run expands.
   'reporting.report_run': {},
+  // The billing engine (ADR 0018).
+  subscription: {
+    customer: 'customer',
+    default_payment_method: 'payment_method',
+    latest_invoice: 'invoice',
+  },
+  subscription_item: {},
+  invoice: {
+    customer: 'customer',
+    subscription: 'subscription',
+    payment_intent: 'payment_intent',
+    default_payment_method: 'payment_method',
+  },
+  invoiceitem: { customer: 'customer', invoice: 'invoice', subscription: 'subscription' },
+  credit_note: { invoice: 'invoice', customer: 'customer' },
+  customer_balance_transaction: { customer: 'customer', invoice: 'invoice' },
+  'test_helpers.test_clock': {},
+  'billing.meter': {},
+  'entitlements.feature': {},
+  'entitlements.active_entitlement': {},
+  product_feature: {},
+  'billing_portal.configuration': {},
+  'billing_portal.session': {},
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -204,6 +245,16 @@ const LOADERS: Record<TargetType, Loader> = {
         toSetupIntentDTO(row),
       ]),
     ),
+  invoice: async (merchantId, ids) => {
+    const rows = await findInvoicesByPublicIds(getDb(), merchantId, ids);
+    const dtos = await renderInvoices(getDb(), rows);
+    return new Map(dtos.map((dto) => [dto.id, dto]));
+  },
+  subscription: async (merchantId, ids) => {
+    const rows = await findSubscriptionsByPublicIds(getDb(), merchantId, ids);
+    const dtos = await renderSubscriptions(getDb(), rows);
+    return new Map(dtos.map((dto) => [dto.id, dto]));
+  },
   connected_account: async (merchantId, ids) =>
     new Map(
       (await findAccountsByPublicIds(getDb(), merchantId, ids)).map((row) => [

@@ -178,9 +178,10 @@ describe('createPriceBodySchema', () => {
       ],
       [
         { unit_amount: '1', recurring: { interval: 'month', usage_type: 'metered' } },
-        'recurring[usage_type]',
+        'recurring[meter]',
       ],
       [{ unit_amount: '1', currency: 'BRL' }, 'currency'],
+      [{ unit_amount: '1', recurring: { interval: 'month', meter: 'mtr_x' } }, 'recurring[meter]'],
       [{ unit_amount: '1', transfer_lookup_key: true }, 'transfer_lookup_key'],
       [{ unit_amount: '1', unknown: true }, 'unknown'],
     ];

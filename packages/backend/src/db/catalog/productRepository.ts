@@ -121,6 +121,18 @@ export async function findProductForMerchant(
 }
 
 /** The merchant's products among `publicIds` (any order; unknown ids are absent). */
+/** Products by INTERNAL id — what a price names. */
+export async function findProductsByIds(
+  db: DatabaseOrTransaction,
+  ids: readonly string[],
+): Promise<ProductRow[]> {
+  if (ids.length === 0) return [];
+  return db
+    .select(PRODUCT_COLUMNS)
+    .from(products)
+    .where(inArray(products.id, [...new Set(ids)]));
+}
+
 export async function findProductsByPublicIds(
   db: DatabaseOrTransaction,
   merchantId: string,

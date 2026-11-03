@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.20.0 — native billing engine: subscriptions, invoices, credit notes, entitlements (ADR 0018)
+
+Additive. Requires `@peable.to/shared-types` 0.18.0.
+
+- New `peable.subscriptions` (`create` / `retrieve` / `update` / `cancel` /
+  `resume` / `list`) and `peable.subscriptionItems`: `sub_…` / `si_…` with
+  trials, billing cycle anchors, proration (`create_prorations | none |
+  always_invoice`), `pause_collection`, `cancel_at_period_end` / `cancel_at`,
+  discounts, `payment_behavior` and `automatic_tax`.
+- New `peable.invoices` (`create` / `retrieve` / `update` / `del` / `list` /
+  `finalizeInvoice` / `pay` / `sendInvoice` / `voidInvoice` /
+  `markUncollectible` / `listLineItems` / `retrieveUpcoming`) and
+  `peable.invoiceItems`.
+- New `peable.creditNotes` (`create` / `preview` / `retrieve` / `list` /
+  `voidCreditNote`) and `peable.customerBalanceTransactions`.
+- New `peable.testHelpers.testClocks` (`create` / `retrieve` / `list` /
+  `advance` / `del`) and `peable.billingSettings` (numbering and dunning).
+- `peable.billing` gains `meters` and `meterEvents`; every existing
+  `billing.*` method is unchanged.
+- New `peable.entitlements` (`features`, `productFeatures`,
+  `activeEntitlements`) and `peable.billingPortal` (`configurations`,
+  `sessions`).
+- `Customer` gains `balance`, `currency` and `test_clock`; `PriceRecurring`
+  gains `meter`.
+- 34 new event types accepted by `webhooks.constructEvent`:
+  `customer.subscription.*`, `invoice.*`, `invoiceitem.*`, `credit_note.*`,
+  `test_helpers.test_clock.*`, `billing.meter.*`,
+  `entitlements.active_entitlement_summary.updated`, `billing_portal.*`.
+- `subscriptions.search` and `invoices.search` (`GET /v1/subscriptions/search`,
+  `GET /v1/invoices/search`): `SEARCHABLE_RESOURCES` gains both.
+
 ## 0.19.0 — Search and report runs (Orbit Phase 8)
 
 Requires `@peable.to/shared-types` 0.17.0.

@@ -29,6 +29,20 @@ export function newId(
     | 'price'
     | 'coupon'
     | 'promo'
+    | 'sub'
+    | 'si'
+    | 'in'
+    | 'il'
+    | 'ii'
+    | 'cn'
+    | 'cnli'
+    | 'cbtxn'
+    | 'clock'
+    | 'mtr'
+    | 'feat'
+    | 'prodft'
+    | 'bpc'
+    | 'bps'
     | 'evt'
     | 'merch'
     | 'link'
@@ -63,4 +77,13 @@ export function newId(
 
 export function clientSecretFor(id: string): string {
   return `${id}_secret_${randomHex(SECRET_ENTROPY_BYTES)}`;
+}
+
+/**
+ * A bearer token for an anonymous payer page (a hosted invoice, a portal
+ * session): 32 random bytes, hex. Unguessable like a payment link id, and long
+ * enough that it is never the thing an attacker enumerates.
+ */
+export function newBearerToken(prefix: 'inv' | 'bps'): string {
+  return `${prefix}_tok_${randomHex(32)}`;
 }

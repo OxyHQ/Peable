@@ -13,7 +13,8 @@ import {
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import type { Address, BillingDetails, CardDetails, Shipping } from '@peable.to/shared-types';
 import { merchants } from './merchants';
-import { PROVIDER_IDS } from './valueSets';
+import { testClocks } from './testClocks';
+import { CURRENCY_CODES, PROVIDER_IDS, SIGNED_BASE_UNIT_STRING_PATTERN } from './valueSets';
 
 const emptyMetadata = sql`'{}'::jsonb`;
 
@@ -54,6 +55,16 @@ export const customers = pgTable(
     /** `invoice_settings.default_payment_method` — one of THIS customer's attached methods. */
     defaultPaymentMethodId: text(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
+    /**
+     * SIGNED base units (ADR 0018): negative is credit the customer holds.
+     * Written only by `recordBalanceTransaction`, which appends the ledger row
+     * (`customer_balance_transactions`) in the same statement's transaction.
+     */
+    balance: text().notNull().default('0'),
+    /** The billing currency, fixed by the first balance movement, subscription or invoice. */
+    currency: text(),
+    /** Test mode only; set at creation and never changed. */
+    testClockId: text(),
     deletedAt: timestamptz(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -82,6 +93,18 @@ export const customers = pgTable(
       foreignColumns: [paymentMethodColumns().id, paymentMethodColumns().customerId],
     }).onDelete('restrict'),
     check('customers_metadata_object_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
+    foreignKey({
+      name: 'customers_test_clock_fkey',
+      columns: [table.testClockId, table.merchantId],
+      foreignColumns: [testClocks.id, testClocks.merchantId],
+    }).onDelete('restrict'),
+    /** A balance has a currency; a currency is one the gateway denominates in. */
+    check(
+      'customers_balance_check',
+      sql.raw(
+        `balance ~ '${SIGNED_BASE_UNIT_STRING_PATTERN}' and (balance = '0' or currency is not null) and (currency is null or currency in (${CURRENCY_CODES.map((code) => `'${code}'`).join(', ')}))`,
+      ),
+    ),
     check(
       'customers_address_object_check',
       sql`${table.address} is null or jsonb_typeof(${table.address}) = 'object'`,

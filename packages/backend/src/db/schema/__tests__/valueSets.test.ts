@@ -63,8 +63,9 @@ describe('closed value sets', () => {
   it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
     // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair
     // + Orbit money's nine (ADR 0015) + checkout's four and payment links'
-    // two (Orbit Phase 3) + reporting's report run pair (Phase 8).
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(57);
+    // two (Orbit Phase 3) + reporting's report run pair (Phase 8) + the billing
+    // engine's 34 (ADR 0018).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(91);
     for (const retired of [
       'payment_intent.settled',
       'payment_intent.confirming',
@@ -193,6 +194,11 @@ describe('the base-unit amount pattern', () => {
     // Orbit Phase 3: the four amounts of `checkout_session_line_items`, the
     // re-added `payment_links_amount_check` (now nullable) and the session's
     // four totals (`checkout_sessions_amounts_check`).
-    expect(occurrences).toBe(31);
+    // The billing engine's (ADR 0018) unsigned amounts: an invoice's
+    // `amount_due`, `amount_paid` and its two credit-note totals; an invoice
+    // item's `unit_amount`; a credit note's six totals and its lines' `amount`
+    // and `tax_amount`; a meter event's `value`. (Its SIGNED amounts carry
+    // `SIGNED_BASE_UNIT_STRING_PATTERN` instead.)
+    expect(occurrences).toBe(45);
   });
 });

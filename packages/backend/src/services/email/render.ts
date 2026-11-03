@@ -30,6 +30,8 @@ import { eq } from 'drizzle-orm';
 import { toCheckoutBranding } from '../../lib/serializeCheckout';
 import type { OutboundEmail } from './mailer';
 import type { OwedEmailRow } from './outbox';
+import { findInvoiceById, listLines } from '../../db/billingEngine/invoiceRepository';
+import { hostedInvoiceUrl } from '../../lib/serializeBilling';
 
 type Strings = {
   receiptSubject: (merchant: string) => string;
@@ -51,6 +53,16 @@ type Strings = {
   confirming: string;
   questions: string;
   receiptNumber: string;
+  invoiceSubject: (merchant: string, number: string) => string;
+  paymentFailedSubject: (merchant: string) => string;
+  invoice: string;
+  paymentFailed: string;
+  invoiceNumber: string;
+  amountDue: string;
+  dueDate: string;
+  nextAttempt: string;
+  payInvoice: string;
+  paymentFailedNote: string;
 };
 
 const STRINGS: Record<CheckoutLocale, Strings> = {
@@ -74,6 +86,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'Your payment is being confirmed.',
     questions: 'Questions? Reply to this email.',
     receiptNumber: 'Receipt number',
+    invoiceSubject: (m, n) => `Invoice ${n} from ${m}`,
+    paymentFailedSubject: (m) => `Your payment to ${m} failed`,
+    invoice: 'Invoice',
+    paymentFailed: 'Payment failed',
+    invoiceNumber: 'Invoice number',
+    amountDue: 'Amount due',
+    dueDate: 'Due date',
+    nextAttempt: 'Next attempt',
+    payInvoice: 'View and pay the invoice',
+    paymentFailedNote:
+      'We could not collect this payment. Update your payment method or pay the invoice now.',
   },
   es: {
     receiptSubject: (m) => `Tu recibo de ${m}`,
@@ -95,6 +118,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'Tu pago se está confirmando.',
     questions: '¿Dudas? Responde a este correo.',
     receiptNumber: 'Número de recibo',
+    invoiceSubject: (m, n) => `Factura ${n} de ${m}`,
+    paymentFailedSubject: (m) => `Tu pago a ${m} no se ha podido cobrar`,
+    invoice: 'Factura',
+    paymentFailed: 'Pago fallido',
+    invoiceNumber: 'Número de factura',
+    amountDue: 'Importe pendiente',
+    dueDate: 'Vencimiento',
+    nextAttempt: 'Próximo intento',
+    payInvoice: 'Ver y pagar la factura',
+    paymentFailedNote:
+      'No hemos podido cobrar este pago. Actualiza tu método de pago o paga la factura ahora.',
   },
   fr: {
     receiptSubject: (m) => `Votre reçu de ${m}`,
@@ -116,6 +150,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'Votre paiement est en cours de confirmation.',
     questions: 'Des questions ? Répondez à cet e-mail.',
     receiptNumber: 'Numéro de reçu',
+    invoiceSubject: (m, n) => `Facture ${n} de ${m}`,
+    paymentFailedSubject: (m) => `Votre paiement à ${m} a échoué`,
+    invoice: 'Facture',
+    paymentFailed: 'Paiement échoué',
+    invoiceNumber: 'Numéro de facture',
+    amountDue: 'Montant dû',
+    dueDate: 'Échéance',
+    nextAttempt: 'Prochaine tentative',
+    payInvoice: 'Voir et payer la facture',
+    paymentFailedNote:
+      "Nous n'avons pas pu encaisser ce paiement. Mettez à jour votre moyen de paiement ou payez la facture maintenant.",
   },
   de: {
     receiptSubject: (m) => `Ihre Quittung von ${m}`,
@@ -137,6 +182,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'Ihre Zahlung wird bestätigt.',
     questions: 'Fragen? Antworten Sie auf diese E-Mail.',
     receiptNumber: 'Quittungsnummer',
+    invoiceSubject: (m, n) => `Rechnung ${n} von ${m}`,
+    paymentFailedSubject: (m) => `Ihre Zahlung an ${m} ist fehlgeschlagen`,
+    invoice: 'Rechnung',
+    paymentFailed: 'Zahlung fehlgeschlagen',
+    invoiceNumber: 'Rechnungsnummer',
+    amountDue: 'Fälliger Betrag',
+    dueDate: 'Fällig am',
+    nextAttempt: 'Nächster Versuch',
+    payInvoice: 'Rechnung ansehen und bezahlen',
+    paymentFailedNote:
+      'Wir konnten diese Zahlung nicht einziehen. Aktualisieren Sie Ihre Zahlungsmethode oder bezahlen Sie die Rechnung jetzt.',
   },
   it: {
     receiptSubject: (m) => `La tua ricevuta da ${m}`,
@@ -158,6 +214,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'Il tuo pagamento è in fase di conferma.',
     questions: 'Domande? Rispondi a questa email.',
     receiptNumber: 'Numero di ricevuta',
+    invoiceSubject: (m, n) => `Fattura ${n} da ${m}`,
+    paymentFailedSubject: (m) => `Il tuo pagamento a ${m} non è riuscito`,
+    invoice: 'Fattura',
+    paymentFailed: 'Pagamento non riuscito',
+    invoiceNumber: 'Numero fattura',
+    amountDue: 'Importo dovuto',
+    dueDate: 'Scadenza',
+    nextAttempt: 'Prossimo tentativo',
+    payInvoice: 'Visualizza e paga la fattura',
+    paymentFailedNote:
+      'Non siamo riusciti a incassare questo pagamento. Aggiorna il metodo di pagamento o paga ora la fattura.',
   },
   pt: {
     receiptSubject: (m) => `O seu recibo de ${m}`,
@@ -179,6 +246,17 @@ const STRINGS: Record<CheckoutLocale, Strings> = {
     confirming: 'O seu pagamento está a ser confirmado.',
     questions: 'Dúvidas? Responda a este e-mail.',
     receiptNumber: 'Número do recibo',
+    invoiceSubject: (m, n) => `Fatura ${n} de ${m}`,
+    paymentFailedSubject: (m) => `O seu pagamento a ${m} falhou`,
+    invoice: 'Fatura',
+    paymentFailed: 'Pagamento falhado',
+    invoiceNumber: 'Número da fatura',
+    amountDue: 'Montante em dívida',
+    dueDate: 'Vencimento',
+    nextAttempt: 'Próxima tentativa',
+    payInvoice: 'Ver e pagar a fatura',
+    paymentFailedNote:
+      'Não conseguimos cobrar este pagamento. Atualize o seu método de pagamento ou pague a fatura agora.',
   },
 };
 
@@ -230,6 +308,8 @@ interface Rendered {
     readonly amount: string;
   }[];
   readonly note: string | null;
+  /** A call to action (an invoice's hosted page). */
+  readonly action?: { readonly label: string; readonly url: string } | undefined;
 }
 
 function toEmail(
@@ -255,6 +335,7 @@ function toEmail(
     ...(view.lines.length > 0 ? [''] : []),
     ...view.rows.map(([label, value]) => `${label}: ${value}`),
     ...(view.note ? ['', view.note] : []),
+    ...(view.action ? ['', `${view.action.label}: ${view.action.url}`] : []),
     ...(brand.replyTo ? ['', brand.questions] : []),
   ].join('\n');
   const cell = 'padding:6px 0;font-size:14px;';
@@ -284,6 +365,7 @@ ${
     )
     .join('')}</table>
 ${view.note ? `<p style="font-size:14px">${escapeHtml(view.note)}</p>` : ''}
+${view.action ? `<p style="padding-top:8px"><a href="${escapeHtml(view.action.url)}" style="display:inline-block;background:${brand.primary};color:#ffffff;text-decoration:none;padding:10px 16px;border-radius:6px;font-size:14px">${escapeHtml(view.action.label)}</a></p>` : ''}
 ${brand.replyTo ? `<p style="font-size:12px;color:#57606a">${escapeHtml(brand.questions)}</p>` : ''}
 </td></tr></table></td></tr></table></body></html>`;
   return { to: row.recipient, replyTo: brand.replyTo, subject: view.subject, text, html, headers };
@@ -384,6 +466,41 @@ export async function renderOwedEmail(
             [t.paidWith, railLabel(intent.rail)],
           ],
           note: null,
+        },
+        brand,
+      );
+    }
+    case 'invoice':
+    case 'invoice_payment_failed': {
+      if (!row.invoiceId) return null;
+      const invoice = await findInvoiceById(db, row.invoiceId);
+      if (!invoice?.number || !invoice.hostedToken) return null;
+      const money = (amount: string) => formatAmount(amount, invoice.currency, locale);
+      const due =
+        BigInt(invoice.amountDue) -
+        BigInt(invoice.amountPaid) -
+        BigInt(invoice.prePaymentCreditNotesAmount);
+      const failed = row.kind === 'invoice_payment_failed';
+      return toEmail(
+        row,
+        {
+          subject: failed ? t.paymentFailedSubject(name) : t.invoiceSubject(name, invoice.number),
+          heading: failed ? t.paymentFailed : `${t.invoice} ${invoice.number}`,
+          lines: (await listLines(db, invoice.id)).map((line) => ({
+            description: line.description ?? '',
+            quantity: line.quantity ?? 1,
+            amount: formatAmount(line.amount, line.currency, locale),
+          })),
+          rows: [
+            [t.invoiceNumber, invoice.number],
+            [t.amountDue, money((due > 0n ? due : 0n).toString())],
+            ...(invoice.dueDate ? ([[t.dueDate, dateOf(invoice.dueDate)]] as const) : []),
+            ...(failed && invoice.nextPaymentAttempt
+              ? ([[t.nextAttempt, dateOf(invoice.nextPaymentAttempt)]] as const)
+              : []),
+          ],
+          note: failed ? t.paymentFailedNote : null,
+          action: { label: t.payInvoice, url: hostedInvoiceUrl(invoice.hostedToken) },
         },
         brand,
       );

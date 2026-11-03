@@ -128,7 +128,7 @@ await peable.paymentIntents.update('pi_…', { metadata: { order_id: '', shipped
 
 ### Search
 
-Stripe's Search API: `GET /v1/{payment_intents,charges,customers,products,prices,refunds}/search?query=…`
+Stripe's Search API: `GET /v1/{payment_intents,charges,customers,products,prices,refunds,subscriptions,invoices}/search?query=…`
 (SDK: `peable.<resource>.search({ query })`, a page that is also an async
 iterable). The answer is `{object: 'search_result', data, has_more, next_page,
 url}`; pass `next_page` back as `page` **with the same query** for the next
@@ -164,6 +164,8 @@ characters. Every refusal is a 400 with `param: 'query'` and the position:
 | `products` | `name`, `active`, `description`, `url`, `created`, `metadata` |
 | `prices` | `active`, `currency`, `product` (`prod_…`), `type`, `lookup_key`, `created`, `metadata` |
 | `refunds` | `amount`, `currency`, `status`, `reason`, `payment_intent`, `created`, `metadata` — a Peable addition; Stripe has no refund search |
+| `subscriptions` | `status` (every status, canceled included), `created`, `metadata`; plus `customer`, `currency`, `collection_method`, `description` |
+| `invoices` | `status`, `customer`, `subscription` (`sub_…`/`null`), `currency`, `number` (exact), `total`, `created`, `metadata`; plus `customer_email`, `customer_name` |
 
 ```ts
 const page = await peable.customers.search({ query: 'email:"jenny@example.com"' });
@@ -370,9 +372,9 @@ naming the field.
 
 What you sell is an Orbit object, not a provider's: products (`prod_…`),
 prices (`price_…`), coupons (your own id, or `coupon_…`) and promotion codes
-(`promo_…`). Checkout line items, invoices and subscriptions will price from
-them; today they are managed through the API, the SDK and Orbit's Products
-screen. Every create, update and delete emits its event (`product.created`,
+(`promo_…`). Checkout line items, payment links, invoices and subscriptions
+price from them; they are managed through the API, the SDK and Orbit's
+Products screen. Every create, update and delete emits its event (`product.created`,
 `price.updated`, `coupon.deleted`, `promotion_code.created`, …).
 
 ```ts
@@ -436,6 +438,84 @@ Lists filter Stripe's way: products by `active` and `ids[]`; prices by
 `recurring[interval]`; promotion codes by `code`, `coupon`, `customer` and
 `active`. `expand[]` reaches `product.default_price`, `price.product` and
 `promotion_code.coupon` / `customer`.
+
+### Billing: subscriptions, invoices, credit notes, entitlements (ADR 0018)
+
+Orbit runs its own billing engine on the catalog above: subscriptions
+(`sub_…`), invoices (`in_…`) with gapless numbers, credit notes (`cn_…`), a
+customer balance, dunning, usage meters, entitlements and an Orbit-hosted
+customer portal. The provider only collects: a card invoice is charged
+off-session against the customer's saved `pm_…`; a FairCoin invoice is paid by
+the payer from their wallet on the hosted invoice page — never debited.
+
+```ts
+// A monthly plan with a 14-day trial, charged automatically after it.
+const sub = await peable.subscriptions.create({
+  customer: 'cus_…', // with invoice_settings.default_payment_method set
+  items: [{ price: 'price_plus_monthly' }],
+  trial_period_days: 14,
+  automatic_tax: { enabled: true }, // Peable Tax before every invoice finalizes
+  expand: ['latest_invoice'],
+});
+
+// Upgrade now, prorated by the second and invoiced at once.
+await peable.subscriptions.update(sub.id, {
+  items: [{ id: sub.items.data[0].id, price: 'price_pro_monthly' }],
+  proration_behavior: 'always_invoice',
+});
+
+// Access is the active entitlements — whichever product grants the feature.
+const { data } = await peable.entitlements.activeEntitlements.list({ customer: 'cus_…' });
+const hasPlus = data.some((e) => e.lookup_key === 'mention_plus');
+```
+
+- **Statuses** are Stripe's: `incomplete`, `incomplete_expired`, `trialing`,
+  `active`, `past_due`, `unpaid`, `canceled`, `paused`. Listen for
+  `customer.subscription.*`, `invoice.paid`, `invoice.payment_failed`,
+  `invoice.payment_action_required` and
+  `entitlements.active_entitlement_summary.updated` — then re-read the object.
+- **First payment**: `payment_behavior: 'allow_incomplete'` (default) charges at
+  once; `'default_incomplete'` leaves `latest_invoice.payment_intent` for the
+  payer to confirm on-session; `'error_if_incomplete'` answers 402.
+- **Checkout**: `checkout.sessions.create({ mode: 'subscription', customer,
+  line_items: [{ price: 'price_…' }] })` sells a subscription on the hosted
+  page — stored, licensed recurring prices of one currency and interval, with
+  a non-zero first invoice. When the payer confirms, the subscription and its
+  first (taxed) invoice are created and the session collects that invoice's
+  payment; a card is saved for the renewals. The subscription is `active` once
+  that payment succeeds (`checkout.session.completed`, `invoice.paid`).
+- **FairCoin**: a `FAIR` price makes a `send_invoice` subscription; each
+  period's invoice is paid on its `hosted_invoice_url`. `collection_method:
+  'charge_automatically'` is refused (`faircoin_cannot_debit`).
+- **Tax** (`automatic_tax.enabled`) is calculated before finalization from the
+  customer's billing address and card country; an invoice that cannot be taxed
+  stays a draft (`automatic_tax.status: requires_location_inputs | failed`),
+  it is never finalized untaxed. Uncovered customers are `not_registered`.
+- **Invoices**: `invoices.create` + `invoiceItems.create` + `finalizeInvoice`,
+  then `pay` (card, off-session; 402 on a decline), `sendInvoice` (email), or
+  let the payer pay on the hosted page; `voidInvoice`, `markUncollectible`,
+  `retrieveUpcoming({ customer, subscription })` for a preview.
+- **Credit notes**: `creditNotes.create({ invoice, amount | lines })` — on an
+  open invoice it reduces what is due; on a paid one it refunds (card), credits
+  the customer balance or is recorded out of band; tax is reversed, never
+  deleted.
+- **Dunning**: `billingSettings.update({ dunning: { retry_schedule_days: [1, 3,
+  5, 7], final_action: 'cancel' } })` — the defaults, shown.
+- **Usage**: create a meter (`billing.meters.create`), a metered price
+  (`recurring: { interval: 'month', usage_type: 'metered', meter: 'mtr_…' }`),
+  and report usage with `billing.meterEvents.create({ event_name, payload: {
+  peable_customer_id: 'cus_…', value: '42' }, identifier })` — the identifier
+  makes a retry the same event.
+- **Portal**: `billingPortal.sessions.create({ customer, return_url })` answers
+  a one-hour URL for that customer (cancel, change plan, billing details,
+  invoices, card update) — hand it to them right away.
+- **Test clocks** (test mode): `testHelpers.testClocks.create({ frozen_time })`,
+  create the customer with `test_clock`, then `advance` — trials, renewals and
+  dunning run in seconds, and `advance` answers once everything due has run.
+
+The Stripe-Billing proxy (`peable.billing.*` checkout sessions, embedded
+checkout, portal sessions) keeps serving its existing subscribers until they
+are migrated onto these objects (ADR 0018, "as built").
 
 ### Payment Links (a shareable URL over your prices)
 

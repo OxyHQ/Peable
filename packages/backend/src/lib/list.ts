@@ -184,7 +184,10 @@ export interface AnswerListArgs<Row> {
   /** Public id → internal primary key, inside the caller's scope AND this list's filter. */
   readonly cursor: (publicId: string) => Promise<string | null>;
   readonly fetch: (page: KeysetPage) => Promise<{ data: readonly Row[]; hasMore: boolean }>;
-  readonly serialize: (row: Row) => object | Promise<object>;
+  /** One row to its wire object — or {@link serializeAll}, for rows rendered in a batch. */
+  readonly serialize?: (row: Row) => object | Promise<object>;
+  /** All the page's rows at once (one read per related kind, not per row). */
+  readonly serializeAll?: (rows: readonly Row[]) => Promise<object[]>;
   /** Fields a specific list carries beside the envelope (`remaining_refundable`). */
   readonly extra?: Record<string, unknown>;
 }
@@ -225,7 +228,14 @@ export async function answerList<Row>(
     before: before.id,
     created: args.query.created,
   });
-  const data = await Promise.all(page.data.map((row) => args.serialize(row)));
+  const data = args.serializeAll
+    ? await args.serializeAll(page.data)
+    : await Promise.all(
+        page.data.map((row) => {
+          if (!args.serialize) throw new Error('a list needs serialize or serializeAll');
+          return args.serialize(row);
+        }),
+      );
   await expandObjects(data, args.type, tree, args.merchantId);
   res.status(200).json({
     object: 'list',

@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'bun:test';
-import type { Charge, Customer, Price, Product, Refund } from '@peable.to/shared-types';
+import type {
+  Charge,
+  Customer,
+  Invoice,
+  Price,
+  Product,
+  Refund,
+  Subscription,
+} from '@peable.to/shared-types';
 import type { DashboardSearchGroup } from '../api/dashboard';
 import { cardIntentFixture } from '../payments/fixtures';
 import { searchGroupTitle, searchRows, searchTerm } from './results';
@@ -45,7 +53,7 @@ describe('searchRows', () => {
     expect(refundRow?.label).toBe('1.00 EUR');
   });
 
-  it('gives a customer no link, and names it by name, then email, then id', () => {
+  it('opens a customer on itself, and names it by name, then email, then id', () => {
     const rows = searchRows(
       group('customers', [
         { id: 'cus_1', name: 'Jenny Rosen', email: 'jenny@example.com', phone: null },
@@ -53,9 +61,51 @@ describe('searchRows', () => {
         { id: 'cus_3', name: null, email: null, phone: null },
       ] as Partial<Customer>[]),
     );
-    expect(rows.map((row) => row.href)).toEqual([null, null, null]);
+    expect(rows.map((row) => row.href?.pathname)).toEqual([
+      '/customers/[id]',
+      '/customers/[id]',
+      '/customers/[id]',
+    ]);
+    expect(rows[2]?.href?.params.id).toBe('cus_3');
     expect(rows.map((row) => row.label)).toEqual(['Jenny Rosen', 'only@example.com', 'cus_3']);
     expect(rows[0]?.sublabel).toBe('jenny@example.com · cus_1');
+  });
+
+  it('opens a subscription and an invoice on themselves', () => {
+    const [subscriptionRow] = searchRows(
+      group('subscriptions', [
+        {
+          id: 'sub_1',
+          status: 'past_due',
+          customer: { id: 'cus_1' },
+          description: null,
+        } as unknown as Partial<Subscription>,
+      ]),
+    );
+    expect(subscriptionRow?.href).toEqual({
+      pathname: '/subscriptions/[id]',
+      params: { id: 'sub_1' },
+    });
+    expect(subscriptionRow?.label).toBe('sub_1');
+    expect(subscriptionRow?.sublabel).toContain('cus_1');
+
+    const [invoiceRow] = searchRows(
+      group('invoices', [
+        {
+          id: 'in_1',
+          number: 'ABCD-0001',
+          status: 'open',
+          total: '1250',
+          currency: 'EUR',
+          customer_email: 'jenny@example.com',
+        } as Partial<Invoice>,
+      ]),
+    );
+    expect(invoiceRow?.href).toEqual({ pathname: '/invoices/[id]', params: { id: 'in_1' } });
+    expect(invoiceRow?.label).toBe('ABCD-0001');
+    expect(invoiceRow?.sublabel).toContain('12.50 EUR');
+    expect(invoiceRow?.sublabel).toContain('jenny@example.com');
+    expect(invoiceRow?.sublabel).toContain('in_1');
   });
 
   it('opens a product on itself and a price on its product', () => {
@@ -118,6 +168,8 @@ describe('searchGroupTitle', () => {
       'products',
       'prices',
       'refunds',
+      'subscriptions',
+      'invoices',
     ] as const) {
       expect(searchGroupTitle(resource)).not.toBe(`search.group.${resource}`);
     }

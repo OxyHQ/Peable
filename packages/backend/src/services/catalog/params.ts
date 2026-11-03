@@ -107,6 +107,8 @@ const recurringInputSchema = z
     interval: z.enum(RECURRING_INTERVALS),
     interval_count: safeCount.optional(),
     usage_type: z.enum(RECURRING_USAGE_TYPES).optional(),
+    /** A metered price's meter (`mtr_…`), resolved by the service. */
+    meter: z.string().min(1).max(255).optional(),
   })
   .strict();
 
@@ -190,13 +192,19 @@ export function priceShapeOf(input: PriceShapeInput, ctx: z.RefinementCtx): Pric
       );
     }
     const usageType = input.recurring.usage_type ?? 'licensed';
-    if (usageType === 'metered') {
-      issue(
-        ['recurring', 'usage_type'],
-        'a metered price needs a meter, and meters are not available yet',
-      );
+    const meter = 'meter' in input.recurring ? input.recurring.meter : undefined;
+    if (usageType === 'metered' && meter === undefined) {
+      issue(['recurring', 'meter'], 'a metered price names the meter (mtr_…) it bills');
     }
-    recurring = { interval: input.recurring.interval, intervalCount: count, usageType };
+    if (usageType === 'licensed' && meter !== undefined) {
+      issue(['recurring', 'meter'], 'only a metered price has a meter');
+    }
+    recurring = {
+      interval: input.recurring.interval,
+      intervalCount: count,
+      usageType,
+      ...(meter !== undefined ? { meterPublicId: meter } : {}),
+    };
   }
 
   if (failed()) return null;
@@ -257,7 +265,7 @@ const nicknameSchema = z.string().min(1).max(CATALOG_LIMITS.priceNicknameMax);
 const inlinePriceFields = {
   currency: currencySchema,
   unit_amount: amountSchema,
-  recurring: recurringInputSchema.omit({ usage_type: true }).optional(),
+  recurring: recurringInputSchema.omit({ usage_type: true, meter: true }).optional(),
   tax_behavior: z.enum(PRICE_TAX_BEHAVIORS).optional(),
 };
 

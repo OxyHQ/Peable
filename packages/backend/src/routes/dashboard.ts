@@ -78,6 +78,7 @@ import {
   updateEmailSettingsCore,
 } from './branding';
 import type { CheckoutDeps } from '../services/checkout/sessionService';
+import { BILLING_ENGINE_ROUTES, DASHBOARD_CUSTOMER_ROUTES } from './billingEngine';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
@@ -556,6 +557,13 @@ export function createDashboardRouter(deps?: {
     requestContextMiddleware,
     asMember(validateDomain),
   );
+  // The native billing engine (ADR 0018), and the customers its screens read.
+  mountCatalogDashboardRoutes(router, BILLING_ENGINE_ROUTES, { base, requireOxyUser, asMember });
+  mountCatalogDashboardRoutes(router, DASHBOARD_CUSTOMER_ROUTES, {
+    base,
+    requireOxyUser,
+    asMember,
+  });
 
   router.get(
     `${base}/events`,

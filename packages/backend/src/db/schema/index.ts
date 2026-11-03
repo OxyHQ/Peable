@@ -49,6 +49,25 @@ export {
   merchantEmailSettings,
   paymentLinkLineItems,
 } from './checkout';
+export { testClocks } from './testClocks';
+export { billingMeters } from './meters';
+export {
+  billingMeterEvents,
+  billingPortalConfigurations,
+  billingPortalSessions,
+  billingSettings,
+  creditNoteLines,
+  creditNotes,
+  customerBalanceTransactions,
+  customerEntitlementSummaries,
+  entitlementFeatures,
+  invoiceItems,
+  invoiceLineItems,
+  invoices,
+  productFeatures,
+  subscriptionItems,
+  subscriptions,
+} from './billingEngine';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

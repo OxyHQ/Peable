@@ -3,6 +3,7 @@
 // first attached; it is never serialized.
 import type { Address, AddressParams, Shipping, ShippingParams } from './paymentIntent';
 import type { PaymentMethod } from './paymentMethod';
+import type { CurrencyCode } from './money';
 
 export interface Customer {
   id: string;
@@ -19,6 +20,15 @@ export interface Customer {
     default_payment_method: string | PaymentMethod | null;
   };
   metadata: Record<string, string>;
+  /**
+   * SIGNED base units in `currency` (ADR 0018): negative is credit the customer
+   * holds, positive is owed. Applied to the next invoice when it finalizes.
+   */
+  balance: string;
+  /** The customer's billing currency, set by its first balance movement, subscription or invoice. */
+  currency: CurrencyCode | null;
+  /** The test clock (`clock_…`) it lives on; test mode only. */
+  test_clock: string | null;
   created: number;
 }
 
@@ -38,7 +48,9 @@ export interface CreateCustomerParams {
   shipping?: ShippingParams;
   invoice_settings?: { default_payment_method?: string };
   metadata?: Record<string, string>;
+  /** Create only, test mode only: attach the customer to a test clock (`clock_…`). */
+  test_clock?: string;
 }
 
 /** `POST /v1/customers/:id`. A field sent as `""` is cleared; `metadata` is a patch. */
-export type UpdateCustomerParams = CreateCustomerParams;
+export type UpdateCustomerParams = Omit<CreateCustomerParams, 'test_clock'>;

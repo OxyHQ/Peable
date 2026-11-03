@@ -8,6 +8,7 @@ import { describe, expect, test } from 'bun:test';
 import type { SearchResult } from '@peable.to/shared-types';
 import { Peable } from '../../src';
 import { PeableApiError } from '../../src/core/errors';
+import { InvoicesResource, SubscriptionsResource } from '../../src/resources/billingEngine';
 import { ChargesResource } from '../../src/resources/charges';
 import { CustomersResource } from '../../src/resources/customers';
 import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
@@ -50,6 +51,8 @@ describe('search', () => {
     await new ProductsResource(client).search(params);
     await new PricesResource(client).search(params);
     await new RefundsResource(client).search(params);
+    await new SubscriptionsResource(client).search(params);
+    await new InvoicesResource(client).search(params);
     expect(callsOf(mock.requests).map((r) => new URL(r.url).pathname)).toEqual([
       '/v1/payment_intents/search',
       '/v1/charges/search',
@@ -57,6 +60,8 @@ describe('search', () => {
       '/v1/products/search',
       '/v1/prices/search',
       '/v1/refunds/search',
+      '/v1/subscriptions/search',
+      '/v1/invoices/search',
     ]);
   });
 

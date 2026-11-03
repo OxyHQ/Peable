@@ -1,5 +1,5 @@
 import { and, count, eq, inArray, isNull, type SQL } from 'drizzle-orm';
-import type { Address, Shipping } from '@peable.to/shared-types';
+import type { Address, CurrencyCode, Shipping } from '@peable.to/shared-types';
 import { customerProviderBindings, customers, paymentMethods } from '../schema';
 import { merchantLivemodeOf } from '../merchants/merchantLivemode';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -27,6 +27,11 @@ export interface CustomerRow {
   /** The default method's public `pm_…`, read in the same statement. */
   readonly defaultPaymentMethodPublicId: string | null;
   readonly metadata: Record<string, string>;
+  /** SIGNED base units; negative is credit (ADR 0018). */
+  readonly balance: string;
+  readonly currency: CurrencyCode | null;
+  readonly testClockId: string | null;
+  readonly testClockPublicId: string | null;
   readonly deletedAt: Date | null;
   readonly createdAt: Date;
   readonly updatedAt: Date;
@@ -48,6 +53,13 @@ export const CUSTOMER_COLUMNS = {
     string | null
   >`(select ${paymentMethods.publicId} from ${paymentMethods} where ${paymentMethods.id} = ${customers.defaultPaymentMethodId})`,
   metadata: customers.metadata,
+  balance: customers.balance,
+  currency: sql<CurrencyCode | null>`${customers.currency}`,
+  testClockId: customers.testClockId,
+  // Raw and table-qualified: RETURNING renders column refs unqualified.
+  testClockPublicId: sql<string | null>`(${sql.raw(
+    'select tc.public_id from test_clocks tc where tc.id = "customers"."test_clock_id"',
+  )})`,
   deletedAt: customers.deletedAt,
   createdAt: customers.createdAt,
   updatedAt: customers.updatedAt,
@@ -190,6 +202,7 @@ export async function insertCustomer(
     readonly publicId: string;
     readonly merchantId: string;
     readonly metadata: Record<string, string>;
+    readonly testClockId?: string | null;
   },
 ): Promise<CustomerRow> {
   const [row] = await db
@@ -199,6 +212,7 @@ export async function insertCustomer(
       publicId: params.publicId,
       merchantId: params.merchantId,
       metadata: params.metadata,
+      testClockId: params.testClockId ?? null,
       ...fieldValues(params),
     })
     .returning(CUSTOMER_COLUMNS);
