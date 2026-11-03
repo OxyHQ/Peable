@@ -27,7 +27,7 @@ on:
 # main gets a group of its own through the run id, since a shared group would
 # still let a newer pending run replace an older pending one even with
 # cancel-in-progress off.
-# The three deploys start on this workflow's completed run for the pushed
+# The four deploys start on this workflow's completed run for the pushed
 # commit (`workflow_run`) and release only on `success`, so a main run must
 # never be cancelled.
 concurrency:
@@ -130,7 +130,7 @@ jobs:
         run: python3 -B .github/scripts/reviewed-image.py check
       - name: Prove the base-image digest bump works
         run: python3 -B -m unittest discover -s .github/scripts -p test_bump_base_digests.py
-      # The three deploys release through deploy-scope.sh; its fixtures drive
+      # The four deploys release through deploy-scope.sh; its fixtures drive
       # every hold and release decision both ways.
       - name: Prove the deploy scope decisions
         run: bash .github/scripts/test-deploy-scope.sh
@@ -170,6 +170,10 @@ jobs:
       # inline). See packages/frontend/eslint.config.js.
       - name: Expo ESLint (env-var inlining rules)
         run: bun run --filter @peable.to/frontend lint
+
+      # Orbit (packages/orbit) carries the same minimal Expo ESLint config.
+      - name: Orbit Expo ESLint (env-var inlining rules)
+        run: bun run --filter @peable.to/orbit lint
 
       # `--frozen-lockfile` above fails only when a range resolves to nothing, so
       # it exits 0 on the shapes that actually ship. A plain install plus a diff
@@ -230,6 +234,14 @@ jobs:
       # job, so the backend's real-database suites run here and refuse to be
       # skipped.
       - run: bun run --filter '*' test
+
+      # Orbit's typecheck and tests ran with every package above; this proves
+      # its web export, which is what deploy-orbit.yml ships. A Metro resolution
+      # failure (a workspace `dist` missing, a native-only import on web) only
+      # shows up here, never in `tsc`. The frontend's export is proved by its
+      # own deploy instead; Orbit's is cheap enough to prove on every PR.
+      - name: Orbit web export
+        run: bun run build:orbit
 
   # ── The release candidate is the IMAGE, not the source tree ────────────────
   #
@@ -322,7 +334,7 @@ jobs:
               -o -path "*/node_modules/typescript" -o -path "*/node_modules/electron" -o -path "*/node_modules/react" \
               -o -path "*/node_modules/drizzle-kit" -o -path "*/node_modules/@biomejs" -o -path "*/node_modules/@expo" \) -print)
             if [ -n "$found" ]; then echo "::error::the runtime image ships packages the backend does not load:"; echo "$found"; exit 1; fi
-            for p in frontend checkout sdk pay; do
+            for p in frontend checkout sdk pay orbit; do
               if [ -e "/app/packages/$p" ]; then echo "::error::packages/$p is in the runtime image"; exit 1; fi
             done
             for f in /app/bun.lock /app/bunfig.toml /app/package.json; do

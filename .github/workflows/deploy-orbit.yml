@@ -1,0 +1,142 @@
+# Deploy Orbit by Peable (@peable.to/orbit), the merchant dashboard, to
+# Cloudflare Pages at orbit.peable.to.
+#
+# Modelled on deploy-frontend.yml and separate from it on purpose: Orbit and the
+# wallet are two apps in two Pages projects on two hostnames, and one's build
+# breaking must not withhold the other's release.
+#
+# Orbit is a single-page export (`web.output: "single"`) with no top-level
+# 404.html, so Pages serves index.html for every path and a deep link such as
+# /payments/pi_123 loads the app. `packages/orbit/public/_headers` ships with it.
+name: Deploy Orbit to Cloudflare Pages
+
+on:
+  # After CI passes on a push to main, never alongside it. `workflow_run` takes
+  # no `paths:`; the `scope` job below puts the path filter back, measured from
+  # the last commit this workflow released.
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Releases main's head, and only once CI succeeded on a push for it.
+  workflow_dispatch:
+
+# Checkout and Pages need nothing more: wrangler authenticates with the
+# Cloudflare credentials below, never with the job token. `scope` adds
+# `actions: read` for itself.
+permissions:
+  contents: read
+
+env:
+  # The commit under release: the one CI tested on `workflow_run`, main's head
+  # on a dispatch. Never `github.sha` alone, which on `workflow_run` is
+  # whatever main points at when CI finished.
+  RELEASE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+
+jobs:
+  # Whether this run releases anything, decided outside the release lane by
+  # deploy-scope.sh, exactly as in deploy-frontend.yml.
+  scope:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository &&
+       github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      orbit: ${{ steps.orbit.outputs.orbit }}
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          sparse-checkout: .github/scripts
+          persist-credentials: false
+      - name: Release only a CI-green main commit nothing newer carries
+        id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash .github/scripts/deploy-scope.sh gate
+      # Orbit bundles shared-types, `@peable.to/contracts` and
+      # `@peable.to/sdk/contributions` (built below) and resolves through the
+      # root manifests.
+      - name: Decide whether anything Orbit's web export builds from changed
+        id: orbit
+        if: steps.gate.outputs.current == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          bash .github/scripts/deploy-scope.sh target orbit include
+          '^(packages/orbit/|packages/shared-types/|packages/contracts/|packages/sdk/|package\.json$|bun\.lock$|bunfig\.toml$|\.github/workflows/deploy-orbit\.yml$)'
+          peable-release-orbit-
+
+  deploy:
+    needs: scope
+    if: needs.scope.outputs.orbit == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # One Pages upload at a time, never cancelled mid-upload. On the job, not
+    # the workflow, so only a run `scope` admitted ever enters the lane.
+    concurrency:
+      group: deploy-peable-orbit
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      deployments: write
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_SHA }}
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version-file: package.json
+
+      # Expo SDK 58's CLI runs under Node 22.13+ / 24.3+ only.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - run: bun install --frozen-lockfile
+
+      # Every workspace package Orbit imports is consumed from its `dist`.
+      # Stated rather than left to `postinstall`: a job should not depend on a
+      # side effect of installing. contracts first, the SDK compiles against it.
+      - run: bun run build:contracts
+      - run: bun run build:shared-types
+      - run: bun run --filter @peable.to/sdk build
+
+      - run: bun run build:orbit
+        env:
+          # Each has a correct production default in `packages/orbit/src/config.ts`
+          # and is injected anyway: a default that happens to be right is
+          # indistinguishable from a variable that silently stopped being set.
+          EXPO_PUBLIC_OXY_BASE_URL: https://api.oxy.so
+          EXPO_PUBLIC_GATEWAY_API_URL: https://api.peable.to
+          # Must stay EXACTLY equal to a redirect URI registered on the Oxy
+          # OAuth client, or sign-in fails at the redirect.
+          EXPO_PUBLIC_OXY_AUTH_REDIRECT_URI: https://orbit.peable.to
+
+      # `bunx wrangler@4` DIRECTLY, never `cloudflare/wrangler-action` (forbidden
+      # fleet-wide; see deploy-frontend.yml for the failed run that is why).
+      - name: Deploy to Cloudflare Pages
+        run: bunx wrangler@4 pages deploy packages/orbit/dist --project-name=peable-orbit --branch=main
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+
+      # The scope job's base for the next release. Only a successful deploy on
+      # main reaches this; lost or evicted, the next run releases.
+      - name: Write the release marker
+        run: printf '%s\n' "$RELEASE_SHA" >"$RUNNER_TEMP/release-marker"
+      - name: Record this release for the next scope decision
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/release-marker
+          key: peable-release-orbit-${{ env.RELEASE_SHA }}

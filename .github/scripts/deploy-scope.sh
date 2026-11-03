@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # What a CI-gated deploy releases, decided OUTSIDE its rollout lane.
 #
-# Ported from OxyHQ/Alia (.github/scripts/deploy-scope.sh). Peable's three
-# deploys (deploy-aws.yml, deploy-frontend.yml, deploy-checkout.yml) all run it
-# from a `scope` job on ubuntu-latest, so a run with nothing to release never
+# Ported from OxyHQ/Alia (.github/scripts/deploy-scope.sh). Peable's four
+# deploys (deploy-aws.yml, deploy-frontend.yml, deploy-checkout.yml,
+# deploy-orbit.yml) all run it from a `scope` job on ubuntu-latest, so a run with nothing to release never
 # starts the arm64 build runner or a Pages build at all.
 #
 # The deploys run on `workflow_run` of CI, so they start after CI passed on a
