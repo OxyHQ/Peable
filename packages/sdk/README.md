@@ -141,6 +141,13 @@ The split hosted Elements are an explicit compatibility choice for this layout;
 they remain supported, while Payment Element is the provider's preferred general
 integration. This choice never routes raw card values through React or Peable.
 
+A host may supply `cardConfiguration: { publishableKey }` before `action` exists.
+This read-only configuration mounts the secure fields immediately; it is not
+payment authority. Supplying a matching verified `client_secret` action later
+preserves the mounted fields and entered data. Until then, or if the keys differ,
+no preparation callback is exposed. The host must validate the exact order,
+account/session and offer binding, and unmount/dispose on a scope change.
+
 Completeness publishes a **preparation** callback. Continue tokenizes the secure
 fields without charging, returning masked metadata and an opaque, in-memory
 prepared authorization. The host may then unmount the input fields and show its
