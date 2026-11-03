@@ -5,13 +5,11 @@ import * as Clipboard from 'expo-clipboard';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { AccountLink, ConnectedAccount } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { type DashboardScope, isMerchantMissing } from '@/api/dashboard';
-import { describeError, isOrbitApiError } from '@/api/transport';
+import type { DashboardScope } from '@/api/dashboard';
+import { describeError } from '@/api/transport';
 import { sellerLinkBody, sellerReadiness } from '@/connect/forms';
 import { Transfers } from '@/connect/Transfers';
 import { connectKeys, useSeller } from '@/connect/useConnect';
@@ -27,6 +25,7 @@ import {
 import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { orbitOrigin } from '@/ui/origin';
 import { CapabilityBadge, EnabledBadge, ToneBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 type Rail = 'card' | 'faircoin';
 
@@ -258,19 +257,11 @@ function SellerDetail({ scope, seller }: { scope: DashboardScope; seller: Connec
 
 function SellerLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useSeller(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('connect.seller')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('connect.seller')} />;
   if (query.isError) {
-    if (
-      isMerchantMissing(query.error) ||
-      (isOrbitApiError(query.error) && query.error.status === 404)
-    ) {
-      return (
-        <EmptyState
-          title={t('connect.notFound')}
-          description={describeError(query.error, t('connect.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('connect.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <SellerDetail scope={scope} seller={query.data} />;

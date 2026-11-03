@@ -13,7 +13,6 @@ import type {
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -48,6 +47,7 @@ import {
   type EndpointForm,
   ROLL_OVERLAP_SECONDS,
 } from '@/webhooks/endpointForm';
+import { PageSkeleton } from '@/ui/states';
 
 const PAGE_SIZE = 25;
 
@@ -289,7 +289,8 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
       ...(startingAfter ? { starting_after: startingAfter } : {}),
     }),
   );
-  if (pages.isPending) return <Loading accessibilityLabel={t('developers.endpoints')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('developers.endpoints')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
@@ -366,7 +367,8 @@ function Events({ scope }: { scope: DashboardScope }) {
     if (parsed.ok) setType(parsed.type);
   };
   let body: ReactNode;
-  if (pages.isPending) body = <Loading accessibilityLabel={t('developers.events')} />;
+  if (pages.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('developers.events')} />;
   else if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
@@ -459,7 +461,8 @@ function RequestLogs({ scope }: { scope: DashboardScope }) {
     }),
   );
   let body: ReactNode;
-  if (pages.isPending) body = <Loading accessibilityLabel={t('developers.logs')} />;
+  if (pages.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('developers.logs')} />;
   else if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     body = <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
@@ -585,7 +588,8 @@ function Deliveries({ scope }: { scope: DashboardScope }) {
     },
   });
 
-  if (pages.isPending) return <Loading accessibilityLabel={t('developers.webhooks')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('developers.webhooks')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return null;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;

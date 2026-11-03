@@ -10,17 +10,17 @@ import {
 } from '@oxy.so/bloom/table';
 import { Text } from '@oxy.so/bloom/typography';
 import { formatOptionalAmount, formatSignedAmount } from '../format/money';
-import { formatInstant } from '../format/time';
 import { t } from '../i18n';
 import { BalanceTransactionStatusBadge } from '../ui/StatusBadge';
 import { balanceTransactionTypeLabel } from './vocabulary';
+import { Timestamp } from '../ui/data';
 
 /** Columns, shared by header and rows so the two cannot disagree. */
 const COLUMNS = {
   type: { flex: 2, minWidth: 150 },
-  amount: { flex: 2, minWidth: 130 },
-  fee: { flex: 2, minWidth: 120 },
-  net: { flex: 2, minWidth: 130 },
+  amount: { flex: 2, minWidth: 130, align: 'end' },
+  fee: { flex: 2, minWidth: 120, align: 'end' },
+  net: { flex: 2, minWidth: 130, align: 'end' },
   status: { flex: 2, minWidth: 130 },
   availableOn: { flex: 2, minWidth: 150 },
   created: { flex: 2, minWidth: 150 },
@@ -68,8 +68,12 @@ export function BalanceTransactionsTable({
             <TableCell {...COLUMNS.status}>
               <BalanceTransactionStatusBadge status={txn.status} />
             </TableCell>
-            <TableCell {...COLUMNS.availableOn}>{formatInstant(txn.available_on)}</TableCell>
-            <TableCell {...COLUMNS.created}>{formatInstant(txn.created)}</TableCell>
+            <TableCell {...COLUMNS.availableOn}>
+              <Timestamp seconds={txn.available_on} muted />
+            </TableCell>
+            <TableCell {...COLUMNS.created}>
+              <Timestamp seconds={txn.created} muted />
+            </TableCell>
             <TableCell {...COLUMNS.source}>
               <Text variant="body-2-regular" selectable className="font-mono">
                 {txn.source ?? '—'}

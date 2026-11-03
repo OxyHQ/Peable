@@ -305,7 +305,14 @@ export function createDashboardTaxRouter(deps: {
         !permissions.includes(permission) &&
         !(permission === 'billing:read' && permissions.includes('billing:manage'))
       ) {
-        sendError(res, 403, 'permission_error', `${permission} is required for tax settings`);
+        sendError(
+          res,
+          403,
+          'permission_error',
+          `${permission} is required for tax settings`,
+          'permission_required',
+          permission,
+        );
         return;
       }
       const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);

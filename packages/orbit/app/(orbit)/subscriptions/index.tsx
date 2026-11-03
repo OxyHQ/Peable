@@ -1,15 +1,16 @@
 import { useState } from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import type { SubscriptionStatus } from '@peable.to/shared-types';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { SubscriptionRow } from '@/billing/BillingParts';
+import { SubscriptionsTable } from '@/billing/BillingParts';
 import { ORBIT_SUBSCRIPTION_STATUSES, subscriptionStatusLabel } from '@/billing/status';
 import { useSubscriptionPages } from '@/billing/useBilling';
 import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 type Filter = SubscriptionStatus | 'all' | null;
 const CURRENT = 'current';
@@ -24,26 +25,41 @@ const options = () => [
 ];
 
 function SubscriptionList({ scope, filter }: { scope: DashboardScope; filter: Filter }) {
+  const router = useRouter();
   const pages = useSubscriptionPages(scope, filter);
-  if (pages.isPending) return <Loading accessibilityLabel={t('subscriptions.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('subscriptions.title')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   }
   const rows = pages.data.pages.flatMap((page) => page.data);
   return (
-    <Section title={t('subscriptions.title')}>
-      {rows.length ? (
-        rows.map((row) => <SubscriptionRow key={row.id} subscription={row} />)
-      ) : (
-        <EmptyState
-          variant="compact"
-          title={t('subscriptions.empty.title')}
-          description={t('subscriptions.empty.body')}
-        />
-      )}
+    <View className="gap-4">
+      <SubscriptionsTable
+        subscriptions={rows}
+        empty={
+          filter && filter !== 'all' ? (
+            <EmptyState
+              variant="compact"
+              title={t('subscriptions.empty.title')}
+              description={t('subscriptions.empty.body')}
+            />
+          ) : (
+            <ListEmpty
+              title={t('subscriptions.empty.firstTitle')}
+              description={t('subscriptions.empty.firstBody')}
+              action={{
+                label: t('subscriptions.empty.addProduct'),
+                onPress: () => router.navigate('/products'),
+              }}
+              docs="billing"
+            />
+          )
+        }
+      />
       <ListFooter pages={pages} />
-    </Section>
+    </View>
   );
 }
 

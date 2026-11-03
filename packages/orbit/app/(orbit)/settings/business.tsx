@@ -3,7 +3,6 @@ import { View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Account, UpdateAccountParams } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import {
   type BusinessField,
@@ -25,6 +24,7 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 const PROFILE_FIELDS: readonly {
   field: BusinessField;
@@ -116,7 +116,8 @@ function BusinessDetails({ scope, account }: { scope: DashboardScope; account: A
 
 function BusinessLoader({ scope }: { scope: DashboardScope }) {
   const query = useAccount(scope);
-  if (query.isPending) return <Loading accessibilityLabel={t('business.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="form" accessibilityLabel={t('business.title')} />;
   if (query.isError) {
     if (isMerchantMissing(query.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;

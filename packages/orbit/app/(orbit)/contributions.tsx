@@ -15,7 +15,6 @@ import type { ContributionScope } from '@/api/contributions';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -29,6 +28,7 @@ import { utcDay } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
 import { OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 type Pending = { key: string; body: CreateContribution };
 const NO_COLLECTIONS: ContributionCollectionList = {
@@ -138,7 +138,8 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
     });
   }
 
-  if (!loaded) return <Loading accessibilityLabel={t('contributions.heading')} />;
+  if (!loaded)
+    return <PageSkeleton variant="form" accessibilityLabel={t('contributions.heading')} />;
 
   return (
     <View className="gap-6">
@@ -355,7 +356,11 @@ function ContributionsWorkspace({ scope }: { scope: ContributionScope }) {
 
 export default function ContributionsScreen() {
   return (
-    <OrbitScreen title={t('contributions.heading')} description={t('contributions.intro')}>
+    <OrbitScreen
+      title={t('contributions.heading')}
+      description={t('contributions.intro')}
+      merchant="optional"
+    >
       {({ contributionScope }) =>
         contributionScope ? (
           <ContributionsWorkspace

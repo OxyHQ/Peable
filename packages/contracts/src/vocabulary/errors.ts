@@ -190,6 +190,16 @@ export const ERROR_CODE_DESCRIPTIONS = {
   already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
   key_in_use: 'The key already receives payments for another account.',
   no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
+  // The dashboard routes (`/v1/dashboard/*`, Orbit): the signed-in person, not a credential.
+  merchant_missing:
+    'The application has no merchant in this environment yet; register one (Orbit shows "Set up payments").',
+  application_membership_required:
+    'The signed-in Oxy account is not a member of the account that owns this application.',
+  permission_required:
+    'The member lacks an Oxy permission this needs; `param` names it (`billing:read`, `billing:manage`). An owner grants it in Oxy Console.',
+  membership_unavailable:
+    'Oxy could not be asked whether the signed-in person is a member of this application; retry.',
+  session_invalid: 'Oxy no longer accepts the signed-in session; sign in again.',
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof ERROR_CODE_DESCRIPTIONS;

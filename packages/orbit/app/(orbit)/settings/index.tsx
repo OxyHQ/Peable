@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { Merchant } from '@peable.to/shared-types';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -29,13 +28,10 @@ import { modeForEnvironment } from '@/scope/scope';
 import { FormField } from '@/ui/FormField';
 import { LanguageSettings } from '@/ui/LanguageSettings';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
+import { merchantQueryKey } from '@/merchant/useMerchant';
 
-const merchantKey = (scope: DashboardScope) => [
-  'orbit',
-  scope.applicationId,
-  scope.environment,
-  'merchant',
-];
+const merchantKey = merchantQueryKey;
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
@@ -236,7 +232,8 @@ function MerchantLoader({ scope }: { scope: DashboardScope }) {
     queryKey: merchantKey(scope),
     queryFn: () => dashboardApi.merchant.retrieve(scope),
   });
-  if (query.isPending) return <Loading accessibilityLabel={t('settings.merchant')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="form" accessibilityLabel={t('settings.merchant')} />;
   if (query.isError) {
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
@@ -262,7 +259,7 @@ function MoreSettings() {
 
 export default function SettingsScreen() {
   return (
-    <OrbitScreen title={t('settings.title')}>
+    <OrbitScreen title={t('settings.title')} merchant="optional">
       {({ scope }) => (
         <View className="gap-6">
           <MoreSettings />

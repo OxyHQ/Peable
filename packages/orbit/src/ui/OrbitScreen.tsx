@@ -2,17 +2,20 @@ import { createContext, useContext, type ReactNode } from 'react';
 import { ScrollView, View } from 'react-native';
 import { usePathname, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useQueryClient } from '@tanstack/react-query';
 import { Breadcrumb, BreadcrumbItem } from '@oxy.so/bloom/breadcrumb';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
-import { describeError } from '../api/transport';
 import { t } from '../i18n';
-import { modeForEnvironment } from '../scope/scope';
 import { useOrbitScope, type OrbitScopeValue } from '../scope/ScopeProvider';
 import { breadcrumbTrail, type Crumb } from '../shell/destinations';
 import { DETAIL_ASIDE_WIDTH, DETAIL_MAIN_MIN_WIDTH } from '../shell/layout';
+import { errorState } from './errorState';
+import { pageGate } from './pageGate';
+import { CopyableId } from './data';
+import { FailureBanner, PageFailureContext, PageSkeleton, SetupPayments, StateFor } from './states';
+import { useMerchant } from '../merchant/useMerchant';
 
 /**
  * The page template every Orbit screen renders in, Stripe's: a breadcrumb
@@ -24,6 +27,13 @@ import { DETAIL_ASIDE_WIDTH, DETAIL_MAIN_MIN_WIDTH } from '../shell/layout';
  *
  * `children` is a function of the selected scope and is called only once an
  * application is chosen; until then the frame explains what is missing.
+ *
+ * A page that works on the merchant (`merchant="required"`, the default) is
+ * gated ONCE here on whether the application has a merchant in this mode: a
+ * first run is the "Set up payments" state for the whole page, a membership
+ * or permission refusal is one explanation for the whole page, and only a
+ * genuine failure of that probe is a banner — over the page, which still
+ * renders. Settings, where the merchant is registered, is `"optional"`.
  */
 export function OrbitScreen({
   title,
@@ -31,6 +41,7 @@ export function OrbitScreen({
   actions,
   filters,
   breadcrumbs,
+  merchant = 'required',
   children,
 }: {
   title: string;
@@ -41,6 +52,8 @@ export function OrbitScreen({
   filters?: ReactNode;
   /** Overrides the trail derived from the route. */
   breadcrumbs?: Crumb[];
+  /** Whether the page needs the application's merchant in this mode. */
+  merchant?: 'required' | 'optional';
   children: (
     scope: OrbitScopeValue & { scope: NonNullable<OrbitScopeValue['scope']> },
   ) => ReactNode;
@@ -49,12 +62,17 @@ export function OrbitScreen({
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const trail = breadcrumbs ?? breadcrumbTrail(pathname, title);
+  const merchantProbe = useMerchant(merchant === 'required' ? scope.scope : null);
+  const queryClient = useQueryClient();
 
   let body: ReactNode;
+  // Header actions and filters act on the merchant's objects: hidden while
+  // the page explains why there are none.
+  let ready = false;
   if (scope.error) {
-    body = <ErrorNotice error={scope.error} onRetry={scope.retry} />;
+    body = <ScopeFailure error={scope.error} onRetry={scope.retry} />;
   } else if (scope.organizationsLoading) {
-    body = <Loading accessibilityLabel={t('scope.loading')} />;
+    body = <PageSkeleton accessibilityLabel={t('scope.loading')} />;
   } else if (!scope.organizations.length) {
     body = (
       <EmptyState
@@ -63,7 +81,7 @@ export function OrbitScreen({
       />
     );
   } else if (scope.applicationsLoading) {
-    body = <Loading accessibilityLabel={t('scope.loading')} />;
+    body = <PageSkeleton accessibilityLabel={t('scope.loading')} />;
   } else if (!scope.scope) {
     body = (
       <EmptyState
@@ -72,7 +90,38 @@ export function OrbitScreen({
       />
     );
   } else {
-    body = children({ ...scope, scope: scope.scope });
+    const gate = pageGate(merchant, merchantProbe);
+    const retry = () => void merchantProbe.refetch();
+    const { applicationId, environment } = scope.scope;
+    // The page's banner stands for every section that failed with it: Retry reloads them all.
+    const retryPage = () =>
+      void queryClient.invalidateQueries({ queryKey: ['orbit', applicationId, environment] });
+    switch (gate.kind) {
+      case 'loading':
+        body = <PageSkeleton accessibilityLabel={title} />;
+        break;
+      case 'setup':
+        body = <SetupPayments environment={scope.environment} />;
+        break;
+      case 'state':
+        body = <StateFor state={gate.state} onRetry={retry} />;
+        break;
+      case 'degraded':
+        ready = true;
+        body = (
+          <>
+            <FailureBanner state={gate.state} onRetry={retryPage} page />
+            <PageFailureContext.Provider value={true}>
+              {children({ ...scope, scope: scope.scope })}
+            </PageFailureContext.Provider>
+          </>
+        );
+        break;
+      case 'page':
+        ready = true;
+        body = children({ ...scope, scope: scope.scope });
+        break;
+    }
   }
 
   return (
@@ -82,12 +131,29 @@ export function OrbitScreen({
       keyboardShouldPersistTaps="handled"
     >
       <View className="w-full max-w-7xl self-center px-4 pt-5 gap-6 md:px-8 md:pt-8">
-        <PageHeading title={title} description={description} actions={actions} trail={trail} />
-        {filters ? <FilterBar>{filters}</FilterBar> : null}
+        <PageHeading
+          title={title}
+          description={description}
+          actions={ready ? actions : undefined}
+          trail={trail}
+        />
+        {filters && ready ? <FilterBar>{filters}</FilterBar> : null}
         {body}
       </View>
     </ScrollView>
   );
+}
+
+/**
+ * Oxy could not list the organizations or applications. A session that ended
+ * is its own state; anything else is a banner naming Oxy, with Retry.
+ */
+function ScopeFailure({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+  const state = errorState(error);
+  if (state.kind !== 'failure' && state.kind !== 'invalid') {
+    return <StateFor state={state} onRetry={onRetry} />;
+  }
+  return <FailureBanner state={state} sentence={t('state.scope.failure')} onRetry={onRetry} />;
 }
 
 function PageHeading({
@@ -218,50 +284,66 @@ const DETAIL_MAIN_STYLE = {
 } as const;
 const DETAIL_ASIDE_STYLE = { flexGrow: 1, flexShrink: 1, flexBasis: DETAIL_ASIDE_WIDTH } as const;
 
-/** A refusal or failure, in the gateway's own words and with its request id. */
-export function ErrorNotice({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
-  return (
-    <EmptyState
-      variant="compact"
-      title={t('error.generic')}
-      description={describeError(error, t('error.generic'))}
-      {...(onRetry ? { action: { label: t('action.retry'), onPress: onRetry } } : {})}
-    />
-  );
-}
-
-/** What a merchant-scoped screen shows before the application has a merchant in this mode. */
-export function MerchantMissing({ environment }: { environment: OrbitScopeValue['environment'] }) {
-  const router = useRouter();
-  return (
-    <EmptyState
-      title={t('merchant.missing.title')}
-      description={t('merchant.missing.body', {
-        mode: t(modeForEnvironment(environment) === 'live' ? 'scope.live' : 'scope.test'),
-      })}
-      action={{ label: t('merchant.missing.action'), onPress: () => router.navigate('/settings') }}
-    />
-  );
-}
+export {
+  AccountMissing,
+  ErrorNotice,
+  FailureBanner,
+  ListEmpty,
+  MerchantMissing,
+  PageSkeleton,
+  PermissionNotice,
+  SetupPayments,
+} from './states';
 
 /**
- * What a money screen shows when the merchant has no fiat account in this
- * mode (`account_missing`): an explanation and the way to open one — never a
- * zero balance.
+ * A detail page's header, Stripe's: the object's headline (an amount, a
+ * name), its status, its id to copy, then a strip of its key facts divided
+ * by hairlines. Actions stay in the page header's end edge.
  */
-export function AccountMissing({ environment }: { environment: OrbitScopeValue['environment'] }) {
-  const router = useRouter();
+export function DetailHeader({
+  headline,
+  status,
+  id,
+  facts = [],
+}: {
+  headline: string;
+  status?: ReactNode;
+  id: string;
+  facts?: ReadonlyArray<{ label: string; value: ReactNode }>;
+}) {
   return (
-    <EmptyState
-      title={t('money.accountMissing.title')}
-      description={t('money.accountMissing.body', {
-        mode: t(modeForEnvironment(environment) === 'live' ? 'scope.live' : 'scope.test'),
-      })}
-      action={{
-        label: t('money.accountMissing.action'),
-        onPress: () => router.navigate('/account'),
-      }}
-    />
+    <View className="gap-4 border-b border-border pb-5">
+      <View className="gap-1">
+        <View className="flex-row flex-wrap items-center gap-3">
+          <Text variant="title-1-bold" selectable style={{ fontVariant: ['tabular-nums'] }}>
+            {headline}
+          </Text>
+          {status}
+        </View>
+        <CopyableId id={id} />
+      </View>
+      {facts.length ? (
+        <View className="flex-row flex-wrap gap-y-3">
+          {facts.map((fact, index) => (
+            <View
+              key={fact.label}
+              className={`gap-0.5 pr-6 mr-6 ${index === facts.length - 1 ? '' : 'border-r border-border'}`}
+            >
+              <Text variant="caption-1-medium" className="text-muted-foreground">
+                {fact.label}
+              </Text>
+              {typeof fact.value === 'string' ? (
+                <Text variant="body-2-regular" selectable numberOfLines={1}>
+                  {fact.value}
+                </Text>
+              ) : (
+                fact.value
+              )}
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
   );
 }
 

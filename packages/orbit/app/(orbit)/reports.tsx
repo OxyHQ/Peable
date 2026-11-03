@@ -13,7 +13,6 @@ import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -61,6 +60,7 @@ import {
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 const ALL_CURRENCIES = 'all';
 // Built at render: the language can change while Orbit is open.
@@ -445,7 +445,8 @@ function Reports({ scope }: { scope: DashboardScope }) {
     ...presetDays('thisMonth', nowSeconds()),
     currency: '',
   }));
-  if (types.isPending || runs.isPending) return <Loading accessibilityLabel={t('reports.title')} />;
+  if (types.isPending || runs.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('reports.title')} />;
   const failure = types.error ?? runs.error;
   if (failure) {
     if (isMerchantMissing(failure)) return <MerchantMissing environment={scope.environment} />;

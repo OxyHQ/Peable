@@ -3,12 +3,10 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Invoice } from '@peable.to/shared-types';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import { formatSignedAmount } from '@/billing/amount';
 import { ExternalLink, InvoiceStatusBadge, refId } from '@/billing/BillingParts';
@@ -16,7 +14,16 @@ import { invoiceActions, type InvoiceAction } from '@/billing/status';
 import { billingKeys, useInvoice } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
-import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import {
+  DetailHeader,
+  DetailLayout,
+  ErrorNotice,
+  Field,
+  OrbitScreen,
+  Section,
+} from '@/ui/OrbitScreen';
+import { Timestamp } from '@/ui/data';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -62,12 +69,18 @@ function InvoiceDetail({ scope, invoice }: { scope: DashboardScope; invoice: Inv
   const transitions = invoice.status_transitions;
   return (
     <View className="gap-6">
-      <View className="flex-row flex-wrap items-center gap-3">
-        <Text variant="title-1-bold" selectable>
-          {invoice.number ?? t('invoice.draftNumber')}
-        </Text>
-        <InvoiceStatusBadge status={invoice.status} />
-      </View>
+      <DetailHeader
+        headline={formatSignedAmount(invoice.total, invoice.currency)}
+        status={<InvoiceStatusBadge status={invoice.status} />}
+        id={invoice.id}
+        facts={[
+          { label: t('list.column.number'), value: invoice.number ?? t('invoice.draftNumber') },
+          { label: t('list.column.created'), value: <Timestamp seconds={invoice.created} /> },
+          ...(invoice.due_date
+            ? [{ label: t('list.column.due'), value: <Timestamp seconds={invoice.due_date} /> }]
+            : []),
+        ]}
+      />
       <Actions scope={scope} invoice={invoice} />
       {invoice.last_finalization_error ? (
         <Text variant="body-2-regular" className="text-destructive">
@@ -205,16 +218,11 @@ function InvoiceDetail({ scope, invoice }: { scope: DashboardScope; invoice: Inv
 
 function InvoiceLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useInvoice(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('invoice.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('invoice.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('invoice.notFound')}
-          description={describeError(query.error, t('invoice.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('invoice.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <InvoiceDetail scope={scope} invoice={query.data} />;

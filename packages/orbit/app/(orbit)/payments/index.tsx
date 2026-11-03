@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { View } from 'react-native';
+import { useRouter } from 'expo-router';
 import type { PaymentIntentStatus } from '@peable.to/shared-types';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { t } from '@/i18n';
 import { PaymentsTable } from '@/payments/PaymentsTable';
@@ -10,6 +10,7 @@ import { ORBIT_PAYMENT_STATUSES, paymentStatusLabel } from '@/payments/status';
 import { usePaymentPages } from '@/payments/usePayments';
 import { Choice } from '@/ui/Choice';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 const statusOptions = () => [
@@ -44,8 +45,10 @@ function PaymentList({
   scope: DashboardScope;
   status: PaymentIntentStatus | null;
 }) {
+  const router = useRouter();
   const pages = usePaymentPages(scope, status);
-  if (pages.isPending) return <Loading accessibilityLabel={t('payments.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('payments.title')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
@@ -56,11 +59,23 @@ function PaymentList({
       <PaymentsTable
         payments={payments}
         empty={
-          <EmptyState
-            variant="compact"
-            title={t('payments.empty.title')}
-            description={t('payments.empty.body')}
-          />
+          status ? (
+            <EmptyState
+              variant="compact"
+              title={t('payments.empty.title')}
+              description={t('payments.empty.body')}
+            />
+          ) : (
+            <ListEmpty
+              title={t('payments.empty.firstTitle')}
+              description={t('payments.empty.firstBody')}
+              action={{
+                label: t('payments.empty.createLink'),
+                onPress: () => router.navigate('/links/new'),
+              }}
+              docs="payments"
+            />
+          )
         }
       />
       <ListFooter pages={pages} />

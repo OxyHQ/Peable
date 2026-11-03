@@ -3,12 +3,9 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { PaymentIntent } from '@peable.to/shared-types';
 import { LinkButton } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
-import { describeError } from '@/api/transport';
+import type { DashboardScope } from '@/api/dashboard';
 import { eventPath, requestLogPath } from '@/developers/requestLogs';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
@@ -16,8 +13,17 @@ import { t } from '@/i18n';
 import { cancellationReasonLabel } from '@/payments/status';
 import { paymentTimeline, type TimelineStep } from '@/payments/timeline';
 import { paymentKeys, usePayment } from '@/payments/usePayments';
-import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { Timestamp } from '@/ui/data';
+import {
+  DetailHeader,
+  DetailLayout,
+  ErrorNotice,
+  Field,
+  OrbitScreen,
+  Section,
+} from '@/ui/OrbitScreen';
 import { PaymentStatusBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 const DOT: Record<TimelineStep['state'], string> = {
   done: 'bg-primary',
@@ -71,7 +77,8 @@ function PaymentEvents({ scope, payment }: { scope: DashboardScope; payment: Pay
     queryFn: () => dashboardApi.events.list(scope, { payment_intent: payment.id, limit: 100 }),
   });
   let body: React.ReactNode;
-  if (query.isPending) body = <Loading accessibilityLabel={t('payment.events')} />;
+  if (query.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('payment.events')} />;
   else if (query.isError) {
     body = <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   } else if (!query.data.data.length) {
@@ -128,12 +135,21 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
   const metadata = Object.entries(payment.metadata ?? {});
   return (
     <View className="gap-6">
-      <View className="flex-row flex-wrap items-center gap-3">
-        <Text variant="title-1-bold" selectable>
-          {formatAmount(payment.amount, payment.currency)}
-        </Text>
-        <PaymentStatusBadge status={payment.status} />
-      </View>
+      <DetailHeader
+        headline={formatAmount(payment.amount, payment.currency)}
+        status={<PaymentStatusBadge status={payment.status} />}
+        id={payment.id}
+        facts={[
+          { label: t('payment.field.updated'), value: <Timestamp seconds={payment.updated_at} /> },
+          { label: t('payment.field.rail'), value: t(`payments.rail.${payment.rail}`) },
+          ...(payment.customer
+            ? [{ label: t('payment.field.customer'), value: idOf(payment.customer) }]
+            : []),
+          ...(payment.description
+            ? [{ label: t('payment.field.description'), value: payment.description }]
+            : []),
+        ]}
+      />
       <DetailLayout
         aside={
           <Section title={t('payment.details')}>
@@ -259,18 +275,11 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
 
 function PaymentLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = usePayment(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('payment.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('payment.title')} />;
   if (query.isError) {
-    // 404 means no payment with this id for this merchant in this mode, or no
-    // merchant in this mode at all; the gateway's own message says which.
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('payment.notFound')}
-          description={describeError(query.error, t('payment.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('payment.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <PaymentDetail scope={scope} payment={query.data} />;

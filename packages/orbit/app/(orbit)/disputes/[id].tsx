@@ -12,12 +12,10 @@ import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { AlertDialog } from '@oxy.so/bloom/alert-dialog';
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button, LinkButton } from '@oxy.so/bloom/button';
-import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
 import {
   disputeReasonLabel,
@@ -39,8 +37,16 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
-import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import {
+  DetailHeader,
+  DetailLayout,
+  ErrorNotice,
+  Field,
+  OrbitScreen,
+  Section,
+} from '@/ui/OrbitScreen';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
+import { isNotFound, NotFound, PageSkeleton } from '@/ui/states';
 
 function idOf(reference: string | { id: string } | null): string | null {
   if (reference === null) return null;
@@ -342,12 +348,11 @@ function EvidenceEditor({ scope, dispute }: { scope: DashboardScope; dispute: Di
 function DisputeDetail({ scope, dispute }: { scope: DashboardScope; dispute: Dispute }) {
   return (
     <View className="gap-6">
-      <View className="flex-row flex-wrap items-center gap-3">
-        <Text variant="title-1-bold" selectable>
-          {formatAmount(dispute.amount, dispute.currency)}
-        </Text>
-        <DisputeStatusBadge status={dispute.status} />
-      </View>
+      <DetailHeader
+        headline={formatAmount(dispute.amount, dispute.currency)}
+        status={<DisputeStatusBadge status={dispute.status} />}
+        id={dispute.id}
+      />
       <DetailLayout aside={<DisputeFacts dispute={dispute} />}>
         <EvidenceEditor scope={scope} dispute={dispute} />
       </DetailLayout>
@@ -357,16 +362,11 @@ function DisputeDetail({ scope, dispute }: { scope: DashboardScope; dispute: Dis
 
 function DisputeLoader({ scope, id }: { scope: DashboardScope; id: string }) {
   const query = useDispute(scope, id);
-  if (query.isPending) return <Loading accessibilityLabel={t('dispute.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="detail" accessibilityLabel={t('dispute.title')} />;
   if (query.isError) {
-    if (isMerchantMissing(query.error)) {
-      return (
-        <EmptyState
-          title={t('dispute.notFound')}
-          description={describeError(query.error, t('dispute.notFound'))}
-        />
-      );
-    }
+    // A 404 for this object (a first run is the page gate's): it does not exist in this mode.
+    if (isNotFound(query.error)) return <NotFound title={t('dispute.notFound')} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;
   }
   return <DisputeDetail scope={scope} dispute={query.data} />;

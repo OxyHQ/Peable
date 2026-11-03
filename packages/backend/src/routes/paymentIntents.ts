@@ -232,6 +232,9 @@ export async function resolveMerchantByApp(
       404,
       'invalid_request_error',
       'no merchant registered for this application in this environment',
+      // Orbit's first-run state keys on this code, never on the status alone:
+      // a 404 for one object (a payment, a product) is not "set up payments".
+      'merchant_missing',
     );
     return null;
   }

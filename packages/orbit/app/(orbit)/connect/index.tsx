@@ -4,10 +4,9 @@ import { useRouter } from 'expo-router';
 import * as Crypto from 'expo-crypto';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { ConnectedAccount } from '@peable.to/shared-types';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
 import { Checkbox } from '@oxy.so/bloom/checkbox';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -41,11 +40,12 @@ import {
 import { Transfers } from '@/connect/Transfers';
 import { connectKeys, useSellerPages } from '@/connect/useConnect';
 import { railLabel, readinessLabel, readinessTone } from '@/connect/vocabulary';
-import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { ToneBadge } from '@/ui/StatusBadge';
+import { PageSkeleton } from '@/ui/states';
+import { RowLink, Timestamp } from '@/ui/data';
 
 const SELLER_ERRORS: Record<SellerFormError, string> = {
   externalRef: 'connect.add.invalid.externalRef',
@@ -206,23 +206,31 @@ function SellersTable({ sellers }: { sellers: readonly ConnectedAccount[] }) {
         {sellers.map((seller) => {
           const readiness = sellerReadiness(seller);
           return (
-            <TableRow key={seller.id}>
-              <TableCell {...COLUMNS.seller}>{seller.external_ref}</TableCell>
-              <TableCell {...COLUMNS.status}>
-                <ToneBadge tone={readinessTone(readiness)} label={readinessLabel(readiness)} />
-              </TableCell>
-              <TableCell {...COLUMNS.rails}>{seller.rails.map(railLabel).join(', ')}</TableCell>
-              <TableCell {...COLUMNS.id}>
-                <LinkButton
-                  size="sm"
-                  accessibilityLabel={`${t('connect.seller')} ${seller.id}`}
-                  onPress={() => router.push(sellerPath(seller.id))}
-                >
-                  {seller.id}
-                </LinkButton>
-              </TableCell>
-              <TableCell {...COLUMNS.created}>{formatInstant(seller.created)}</TableCell>
-            </TableRow>
+            <RowLink
+              key={seller.id}
+              accessibilityLabel={`${t('connect.seller')} ${seller.id}`}
+              onPress={() => router.push(sellerPath(seller.id))}
+            >
+              <TableRow>
+                <TableCell {...COLUMNS.seller}>{seller.external_ref}</TableCell>
+                <TableCell {...COLUMNS.status}>
+                  <ToneBadge tone={readinessTone(readiness)} label={readinessLabel(readiness)} />
+                </TableCell>
+                <TableCell {...COLUMNS.rails}>{seller.rails.map(railLabel).join(', ')}</TableCell>
+                <TableCell {...COLUMNS.id}>
+                  <Text
+                    variant="body-2-regular"
+                    numberOfLines={1}
+                    className="font-mono text-muted-foreground"
+                  >
+                    {seller.id}
+                  </Text>
+                </TableCell>
+                <TableCell {...COLUMNS.created}>
+                  <Timestamp seconds={seller.created} muted />
+                </TableCell>
+              </TableRow>
+            </RowLink>
           );
         })}
       </TableBody>
@@ -232,7 +240,8 @@ function SellersTable({ sellers }: { sellers: readonly ConnectedAccount[] }) {
 
 function Sellers({ scope }: { scope: DashboardScope }) {
   const pages = useSellerPages(scope);
-  if (pages.isPending) return <Loading accessibilityLabel={t('connect.sellers')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('connect.sellers')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;

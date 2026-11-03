@@ -2,7 +2,6 @@ import { Linking, View } from 'react-native';
 import { useAuth } from '@oxy.so/services/ui/client';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   Table,
   TableBody,
@@ -20,6 +19,7 @@ import { peableAccessOf, sortMembers } from '@/team/permissions';
 import { type TeamRow, useTeam } from '@/team/useTeam';
 import { ErrorNotice, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { ToneBadge } from '@/ui/StatusBadge';
+import { PageSkeleton } from '@/ui/states';
 
 /** Members are changed in Oxy Console's account settings, never here. */
 const CONSOLE_MEMBERS_URL = `${OXY_CONSOLE_URL.replace(/\/+$/, '')}/settings/account`;
@@ -142,7 +142,7 @@ function Team({ context }: { context: OrbitScopeValue }) {
       </Text>
     );
   } else if (team.isPending) {
-    body = <Loading accessibilityLabel={t('team.members')} />;
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('team.members')} />;
   } else if (team.isError) {
     const status = (team.error as { status?: unknown } | null)?.status;
     body =
@@ -190,7 +190,7 @@ function Team({ context }: { context: OrbitScopeValue }) {
 
 export default function TeamScreen() {
   return (
-    <OrbitScreen title={t('team.title')} description={t('team.description')}>
+    <OrbitScreen title={t('team.title')} description={t('team.description')} merchant="optional">
       {(context) => <Team context={context} />}
     </OrbitScreen>
   );

@@ -5,6 +5,8 @@ import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
 import { SHELL_EN, SHELL_ES } from './shell/strings';
+import { STATES_EN, STATES_ES } from './ui/stateStrings';
+import { PARITY_EN, PARITY_ES } from './ui/parityStrings';
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -39,6 +41,8 @@ describe('catalogs', () => {
       [REPORTS_EN, REPORTS_ES],
       [SEARCH_EN, SEARCH_ES],
       [SHELL_EN, SHELL_ES],
+      [STATES_EN, STATES_ES],
+      [PARITY_EN, PARITY_ES],
     ] as const) {
       expect(Object.keys(spanish).sort()).toEqual(Object.keys(english).sort());
       for (const [key, text] of Object.entries(english)) {

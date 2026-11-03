@@ -109,7 +109,14 @@ describe('dashboard tax', () => {
 
   test('billing:read may look but not change or approve', async () => {
     expect((await call('/settings', { user: 'viewer' })).status).toBe(200);
-    expect((await call('/approve', { method: 'POST', user: 'viewer' })).status).toBe(403);
+    const refused = await call('/approve', { method: 'POST', user: 'viewer' });
+    expect(refused.status).toBe(403);
+    // Orbit names the permission and who grants it from `code` + `param`.
+    expect(((await refused.json()) as { error: unknown }).error).toMatchObject({
+      type: 'permission_error',
+      code: 'permission_required',
+      param: 'billing:manage',
+    });
     expect((await call('/settings', { user: 'stranger' })).status).toBe(403);
   });
 

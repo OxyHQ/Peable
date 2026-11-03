@@ -25,6 +25,26 @@ export function formatInstant(
 }
 
 /**
+ * A table's date, Stripe's: "Nov 3, 14:05" this year, "Nov 3, 2024" before —
+ * short enough for a column, with the full instant on hover (`Timestamp`).
+ */
+export function formatShortInstant(
+  seconds: number | null | undefined,
+  locale: string = getLocale(),
+  now: number = nowSeconds(),
+): string {
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return '—';
+  const date = fromUnixSeconds(seconds);
+  const sameYear = date.getFullYear() === fromUnixSeconds(now).getFullYear();
+  return date.toLocaleString(
+    locale,
+    sameYear
+      ? { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }
+      : { month: 'short', day: 'numeric', year: 'numeric' },
+  );
+}
+
+/**
  * "in 5 min" / "3 h ago" relative to `now` (Unix seconds), coarse on purpose:
  * it is a hint beside the exact time, never a replacement for it.
  */

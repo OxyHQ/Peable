@@ -31,3 +31,11 @@ export const GATEWAY_API_URL = process.env.EXPO_PUBLIC_GATEWAY_API_URL ?? 'https
  * managed. Orbit's Team page reads them and links here for every change.
  */
 export const OXY_CONSOLE_URL = process.env.EXPO_PUBLIC_OXY_CONSOLE_URL ?? 'https://console.oxy.so';
+
+/**
+ * Peable's integration guide — where an empty list or the first-run state
+ * sends a developer to learn the object. Public, in the repository.
+ */
+export const PEABLE_DOCS_URL =
+  process.env.EXPO_PUBLIC_PEABLE_DOCS_URL ??
+  'https://github.com/OxyHQ/Peable/blob/main/docs/integrating-peable.md';

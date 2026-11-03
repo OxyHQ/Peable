@@ -9,7 +9,6 @@ import type {
 import { Badge } from '@oxy.so/bloom/badge';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { Switch } from '@oxy.so/bloom/switch';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
@@ -32,6 +31,7 @@ import {
   unavailableReasonText,
   walletStatusText,
 } from './configuration';
+import { PageSkeleton } from '../ui/states';
 
 const scopeKey = (scope: DashboardScope) => ['orbit', scope.applicationId, scope.environment];
 const configurationKey = (scope: DashboardScope) => [
@@ -103,7 +103,8 @@ function ConfigurationSection({ scope }: { scope: DashboardScope }) {
   const [selected, setSelected] = useState<string | null>(null);
 
   let body: React.ReactNode;
-  if (query.isPending) body = <Loading accessibilityLabel={t('methods.title')} />;
+  if (query.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('methods.title')} />;
   else if (query.isError) {
     body = isMerchantMissing(query.error) ? (
       <Text variant="body-2-regular" className="text-muted-foreground">
@@ -263,7 +264,8 @@ function DomainsSection({ scope }: { scope: DashboardScope }) {
     queryFn: () => dashboardApi.paymentMethodDomains.list(scope, { limit: 100 }),
   });
   let body: React.ReactNode;
-  if (query.isPending) body = <Loading accessibilityLabel={t('domains.title')} />;
+  if (query.isPending)
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('domains.title')} />;
   else if (query.isError) {
     body = isMerchantMissing(query.error) ? (
       <Text variant="body-2-regular" className="text-muted-foreground">

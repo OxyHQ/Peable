@@ -41,7 +41,7 @@ Too many requests (429). Back off and retry.
 
 ## All codes
 
-114 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
+119 codes, alphabetically. A `card_error` can also carry the card network's own decline code, which is not listed here.
 
 ### `account_invalid`
 
@@ -62,6 +62,10 @@ The seller already registered a FairCoin key, and it cannot be changed.
 ### `amount_not_representable`
 
 The amount does not fit the currency or the rail.
+
+### `application_membership_required`
+
+The signed-in Oxy account is not a member of the account that owns this application.
 
 ### `approval_incomplete`
 
@@ -275,6 +279,14 @@ The local test checkout is not available.
 
 Another price already uses this `lookup_key`.
 
+### `membership_unavailable`
+
+Oxy could not be asked whether the signed-in person is a member of this application; retry.
+
+### `merchant_missing`
+
+The application has no merchant in this environment yet; register one (Orbit shows "Set up payments").
+
 ### `meter_event_customer_missing`
 
 The meter event names no customer of this merchant.
@@ -326,6 +338,10 @@ No payment method is available to charge.
 ### `payout_not_allowed`
 
 Payouts cannot be created for this account.
+
+### `permission_required`
+
+The member lacks an Oxy permission this needs; `param` names it (`billing:read`, `billing:manage`). An owner grants it in Oxy Console.
 
 ### `portal_feature_disabled`
 
@@ -430,6 +446,10 @@ The review item is already resolved or dismissed.
 ### `rule_set_version_unavailable`
 
 The tax rule set version is not available.
+
+### `session_invalid`
+
+Oxy no longer accepts the signed-in session; sign in again.
 
 ### `setup_intent_unexpected_state`
 

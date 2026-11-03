@@ -86,8 +86,29 @@ ADR 0014 error — `type`, `code`, `param`, `message`, `request_id` — which ev
 shows with its request id. `encodeQuery` spells a query the way the gateway reads it.
 
 `src/api/dashboard.ts` maps the dashboard routes; `src/api/contributions.ts` puts the
-contribution routes on the same transport, every answer parsed with the contract. A 404 from a merchant-scoped route
-means "no merchant in this mode", and the screens offer Settings for it.
+contribution routes on the same transport, every answer parsed with the contract.
+
+## Page states — never a generic failure
+
+`src/ui/errorState.ts` decides, once, what a thrown value means, and `ErrorNotice`
+(`src/ui/states.tsx`) draws it. Nothing the gateway answers is a bare "something went wrong":
+
+| Gateway answer | State |
+|---|---|
+| 404 `merchant_missing` | **Set up payments in test/live mode** (onboarding; test mode always usable) |
+| 404 `account_missing` | Open a payments account (never a zero balance) |
+| 404 `tax_not_enabled` | Peable Tax is not available on this deployment |
+| 403 `application_membership_required` / `permission_required` (`param` names it) | Which permission, and that an owner grants it in Oxy Console |
+| 401 | Session ended — sign in again |
+| any other 404 (a detail page) | Not found in this mode |
+| 5xx / 429 / no answer | Inline, dismissible banner: a specific sentence, the request id, Retry — over whatever else loaded |
+
+`OrbitScreen` probes the merchant ONCE per page (`src/merchant/useMerchant.ts`,
+`src/ui/pageGate.ts`), so a page with five sections shows one first-run state or one
+permission state, not five; a failed probe is one banner and sections failing with it stay
+quiet. Pages that work without a merchant pass `merchant="optional"` (Settings, Team,
+Contributions). Loading is a skeleton shaped like the page (`PageSkeleton`), never a spinner.
+`src/ui/screenStates.test.ts` walks every screen and pins its 404 and 500 outcome.
 
 Values from `@peable.to/shared-types` that a browser needs at runtime (currency
 decimals, the status list, the dispute evidence fields and reasons, the file

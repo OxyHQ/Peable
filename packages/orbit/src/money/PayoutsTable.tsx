@@ -1,7 +1,6 @@
 import type { ReactNode } from 'react';
 import { useRouter } from 'expo-router';
 import type { Payout } from '@peable.to/shared-types';
-import { LinkButton } from '@oxy.so/bloom/button';
 import {
   Table,
   TableBody,
@@ -11,12 +10,13 @@ import {
   TableRow,
 } from '@oxy.so/bloom/table';
 import { formatSignedAmount } from '../format/money';
-import { formatInstant } from '../format/time';
+import { Text } from '@oxy.so/bloom/typography';
 import { t } from '../i18n';
 import { PayoutStatusBadge } from '../ui/StatusBadge';
+import { RowLink, Timestamp } from '../ui/data';
 
 const COLUMNS = {
-  amount: { flex: 2, minWidth: 140 },
+  amount: { flex: 2, minWidth: 140, align: 'end' },
   status: { flex: 2, minWidth: 130 },
   arrival: { flex: 2, minWidth: 160 },
   method: { flex: 2, minWidth: 140 },
@@ -44,32 +44,40 @@ export function PayoutsTable({
       </TableHeader>
       <TableBody emptyState={empty}>
         {payouts.map((payout) => (
-          <TableRow key={payout.id}>
-            <TableCell {...COLUMNS.amount}>
-              {formatSignedAmount(payout.amount, payout.currency)}
-            </TableCell>
-            <TableCell {...COLUMNS.status}>
-              <PayoutStatusBadge status={payout.status} />
-            </TableCell>
-            <TableCell {...COLUMNS.arrival}>{formatInstant(payout.arrival_date)}</TableCell>
-            <TableCell {...COLUMNS.method}>
-              {`${t(`payout.method.${payout.method}`)} · ${t(
-                payout.automatic ? 'payout.origin.automatic' : 'payout.origin.manual',
-              )}`}
-            </TableCell>
-            <TableCell {...COLUMNS.id}>
-              <LinkButton
-                size="sm"
-                accessibilityLabel={`${t('payout.title')} ${payout.id}`}
-                onPress={() =>
-                  router.push({ pathname: '/payouts/[id]', params: { id: payout.id } })
-                }
-              >
-                {payout.id}
-              </LinkButton>
-            </TableCell>
-            <TableCell {...COLUMNS.created}>{formatInstant(payout.created)}</TableCell>
-          </TableRow>
+          <RowLink
+            key={payout.id}
+            accessibilityLabel={`${t('payout.title')} ${payout.id}`}
+            onPress={() => router.push({ pathname: '/payouts/[id]', params: { id: payout.id } })}
+          >
+            <TableRow>
+              <TableCell {...COLUMNS.amount}>
+                {formatSignedAmount(payout.amount, payout.currency)}
+              </TableCell>
+              <TableCell {...COLUMNS.status}>
+                <PayoutStatusBadge status={payout.status} />
+              </TableCell>
+              <TableCell {...COLUMNS.arrival}>
+                <Timestamp seconds={payout.arrival_date} muted />
+              </TableCell>
+              <TableCell {...COLUMNS.method}>
+                {`${t(`payout.method.${payout.method}`)} · ${t(
+                  payout.automatic ? 'payout.origin.automatic' : 'payout.origin.manual',
+                )}`}
+              </TableCell>
+              <TableCell {...COLUMNS.id}>
+                <Text
+                  variant="body-2-regular"
+                  numberOfLines={1}
+                  className="font-mono text-muted-foreground"
+                >
+                  {payout.id}
+                </Text>
+              </TableCell>
+              <TableCell {...COLUMNS.created}>
+                <Timestamp seconds={payout.created} muted />
+              </TableCell>
+            </TableRow>
+          </RowLink>
         ))}
       </TableBody>
     </Table>

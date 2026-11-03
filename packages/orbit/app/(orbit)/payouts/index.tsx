@@ -7,7 +7,6 @@ import type { Account, Balance, PayoutStatus } from '@peable.to/shared-types';
 import { Admonition, AdmonitionText } from '@oxy.so/bloom/admonition';
 import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
@@ -52,6 +51,7 @@ import {
   OrbitScreen,
   Section,
 } from '@/ui/OrbitScreen';
+import { PageSkeleton } from '@/ui/states';
 
 const ALL = 'all';
 const statusOptions = () => [
@@ -306,7 +306,8 @@ function PayOut({ scope, balance }: { scope: DashboardScope; balance: Balance })
 
 function ManualPayout({ scope }: { scope: DashboardScope }) {
   const balance = useBalance(scope);
-  if (balance.isPending) return <Loading accessibilityLabel={t('payoutCreate.title')} />;
+  if (balance.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('payoutCreate.title')} />;
   if (balance.isError) {
     return <ErrorNotice error={balance.error} onRetry={() => void balance.refetch()} />;
   }
@@ -319,7 +320,7 @@ function PayoutList({ scope }: { scope: DashboardScope }) {
   const pages = usePayoutPages(scope, status);
   let body: React.ReactNode;
   if (pages.isPending) {
-    body = <Loading accessibilityLabel={t('payouts.list')} />;
+    body = <PageSkeleton variant="table" rows={3} accessibilityLabel={t('payouts.list')} />;
   } else if (pages.isError) {
     body = isAccountMissing(pages.error) ? (
       <AccountMissing environment={scope.environment} />
@@ -365,7 +366,8 @@ function PayoutList({ scope }: { scope: DashboardScope }) {
 
 function Payouts({ scope }: { scope: DashboardScope }) {
   const account = useAccount(scope);
-  if (account.isPending) return <Loading accessibilityLabel={t('payouts.title')} />;
+  if (account.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('payouts.title')} />;
   if (account.isError) {
     if (isMerchantMissing(account.error))
       return <MerchantMissing environment={scope.environment} />;

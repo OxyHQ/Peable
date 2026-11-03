@@ -2,73 +2,123 @@ import { useState } from 'react';
 import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Customer } from '@peable.to/shared-types';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableColumn,
+  TableHeader,
+  TableRow,
+} from '@oxy.so/bloom/table';
 import { Text } from '@oxy.so/bloom/typography';
-import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
+import type { DashboardScope } from '@/api/dashboard';
 import { describeBalance } from '@/billing/amount';
 import { useCustomerPages } from '@/billing/useBilling';
-import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
+import { AmountText, RowLink, Timestamp } from '@/ui/data';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, OrbitScreen } from '@/ui/OrbitScreen';
+import { ListEmpty, PageSkeleton } from '@/ui/states';
 
-function CustomerRow({ customer }: { customer: Customer }) {
+const COLUMNS = {
+  name: { flex: 3, minWidth: 180 },
+  email: { flex: 3, minWidth: 200 },
+  balance: { flex: 2, minWidth: 130, align: 'end' },
+  created: { flex: 2, minWidth: 140 },
+} as const;
+
+/** Customers, Stripe's table: who, their email, what they owe or hold in credit, when; a row opens one. */
+function CustomersTable({ customers, filtered }: { customers: Customer[]; filtered: boolean }) {
   const router = useRouter();
-  const balance = describeBalance(customer.balance, customer.currency);
   return (
-    <View className="gap-1 py-3 border-b border-border">
-      <LinkButton
-        size="sm"
-        accessibilityLabel={`${t('customer.title')} ${customer.id}`}
-        onPress={() => router.push({ pathname: '/customers/[id]', params: { id: customer.id } })}
+    <Table accessibilityLabel={t('customers.title')} minWidth={680} size="sm">
+      <TableHeader>
+        <TableColumn {...COLUMNS.name}>{t('list.column.customer')}</TableColumn>
+        <TableColumn {...COLUMNS.email}>{t('list.column.email')}</TableColumn>
+        <TableColumn {...COLUMNS.balance}>{t('list.column.balance')}</TableColumn>
+        <TableColumn {...COLUMNS.created}>{t('list.column.created')}</TableColumn>
+      </TableHeader>
+      <TableBody
+        emptyState={
+          filtered ? (
+            <EmptyState
+              variant="compact"
+              title={t('customers.empty.title')}
+              description={t('customers.empty.body')}
+            />
+          ) : (
+            <ListEmpty
+              title={t('customers.empty.firstTitle')}
+              description={t('customers.empty.firstBody')}
+              docs="cards"
+            />
+          )
+        }
       >
-        {customer.name ?? customer.email ?? customer.id}
-      </LinkButton>
-      <View className="flex-row flex-wrap gap-x-4 gap-y-1">
-        <Text variant="caption-1-regular" selectable className="text-muted-foreground font-mono">
-          {customer.id}
-        </Text>
-        {customer.email ? (
-          <Text variant="caption-1-regular" selectable className="text-muted-foreground">
-            {customer.email}
-          </Text>
-        ) : null}
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {formatInstant(customer.created)}
-        </Text>
-        {balance.amount ? (
-          <Text variant="caption-1-regular" className="text-muted-foreground">
-            {t(`customer.balance.${balance.kind}`, { amount: balance.amount })}
-          </Text>
-        ) : null}
-      </View>
-    </View>
+        {customers.map((customer) => {
+          const balance = describeBalance(customer.balance, customer.currency);
+          return (
+            <RowLink
+              key={customer.id}
+              accessibilityLabel={`${t('customer.title')} ${customer.id}`}
+              onPress={() =>
+                router.push({ pathname: '/customers/[id]', params: { id: customer.id } })
+              }
+            >
+              <TableRow>
+                <TableCell {...COLUMNS.name}>
+                  <View>
+                    <Text variant="body-2-medium" numberOfLines={1}>
+                      {customer.name ?? customer.email ?? customer.id}
+                    </Text>
+                    <Text
+                      variant="caption-1-regular"
+                      numberOfLines={1}
+                      className="font-mono text-muted-foreground"
+                    >
+                      {customer.id}
+                    </Text>
+                  </View>
+                </TableCell>
+                <TableCell {...COLUMNS.email}>
+                  <Text variant="body-2-regular" numberOfLines={1}>
+                    {customer.email ?? '—'}
+                  </Text>
+                </TableCell>
+                <TableCell {...COLUMNS.balance}>
+                  <AmountText>
+                    {balance.amount
+                      ? t(`customer.balance.${balance.kind}`, { amount: balance.amount })
+                      : '—'}
+                  </AmountText>
+                </TableCell>
+                <TableCell {...COLUMNS.created}>
+                  <Timestamp seconds={customer.created} muted />
+                </TableCell>
+              </TableRow>
+            </RowLink>
+          );
+        })}
+      </TableBody>
+    </Table>
   );
 }
 
 function CustomerList({ scope, email }: { scope: DashboardScope; email: string }) {
   const pages = useCustomerPages(scope, email);
-  if (pages.isPending) return <Loading accessibilityLabel={t('customers.title')} />;
-  if (pages.isError) {
-    if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
-    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
+  if (pages.isPending) {
+    return <PageSkeleton variant="table" accessibilityLabel={t('customers.title')} />;
   }
+  if (pages.isError)
+    return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
   const customers = pages.data.pages.flatMap((page) => page.data);
   return (
-    <Section title={t('customers.title')}>
-      {customers.length ? (
-        customers.map((customer) => <CustomerRow key={customer.id} customer={customer} />)
-      ) : (
-        <EmptyState
-          variant="compact"
-          title={t('customers.empty.title')}
-          description={t('customers.empty.body')}
-        />
-      )}
+    <View className="gap-4">
+      <CustomersTable customers={customers} filtered={email !== ''} />
       <ListFooter pages={pages} />
-    </Section>
+    </View>
   );
 }
 

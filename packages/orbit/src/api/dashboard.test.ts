@@ -267,12 +267,27 @@ describe('tax', () => {
 });
 
 describe('isMerchantMissing', () => {
-  it('is a 404 from the gateway and nothing else', () => {
+  it("is the gateway's 404 merchant_missing and nothing else", () => {
     expect(
       isMerchantMissing(
-        new OrbitApiError({ status: 404, type: 'invalid_request_error', message: '' }),
+        new OrbitApiError({
+          status: 404,
+          type: 'invalid_request_error',
+          code: 'merchant_missing',
+          message: 'no merchant registered for this application in this environment',
+        }),
       ),
     ).toBe(true);
+    // A payment that does not exist is not a first run.
+    expect(
+      isMerchantMissing(
+        new OrbitApiError({
+          status: 404,
+          type: 'invalid_request_error',
+          message: 'payment intent not found',
+        }),
+      ),
+    ).toBe(false);
     expect(isMerchantMissing(new OrbitApiError({ status: 403, type: 'x', message: '' }))).toBe(
       false,
     );

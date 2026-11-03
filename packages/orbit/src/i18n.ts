@@ -23,6 +23,8 @@ import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
 import { SHELL_EN, SHELL_ES } from './shell/strings';
+import { STATES_EN, STATES_ES } from './ui/stateStrings';
+import { PARITY_EN, PARITY_ES } from './ui/parityStrings';
 import { TAX_COMPLIANCE_EN } from './tax/strings';
 import { TAX_COMPLIANCE_ES } from './tax/stringsEs';
 
@@ -35,10 +37,12 @@ const en: Record<string, string> = {
   ...SEARCH_EN,
   ...ORBIT_EN,
   ...SHELL_EN,
+  ...STATES_EN,
+  ...PARITY_EN,
   ...TAX_COMPLIANCE_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
-  'error.generic': 'Something went wrong. Try again.',
+  'error.generic': 'This action could not be completed.',
   'action.retry': 'Try again',
   'action.loadMore': 'Load more',
   'action.save': 'Save',
@@ -312,7 +316,7 @@ const en: Record<string, string> = {
   'tax.heading': 'Peable Tax',
   'tax.intro':
     'Record where your business is registered to collect tax. Peable collects only there, from customer location evidence captured at checkout, and records every other sale as not registered. Registering with a tax authority is your business’s job.',
-  'tax.error': 'Something went wrong. Try again.',
+  'tax.error': 'Peable Tax settings could not be loaded or saved.',
   'tax.badgeActive': 'Active',
   'tax.badgeDraft': 'Draft',
   'tax.statusActive': 'Tax collection is approved.',
@@ -1014,7 +1018,7 @@ const es: Record<string, string> = {
   ...TAX_COMPLIANCE_ES,
   'app.name': 'Orbit',
   'app.byline': 'de Peable',
-  'error.generic': 'Algo ha fallado. Inténtalo de nuevo.',
+  'error.generic': 'No se ha podido completar esta acción.',
   'action.retry': 'Reintentar',
   'action.loadMore': 'Cargar más',
   'action.save': 'Guardar',
@@ -1026,6 +1030,8 @@ const es: Record<string, string> = {
   'notFound.action': 'Ir a Inicio',
 
   ...SHELL_ES,
+  ...STATES_ES,
+  ...PARITY_ES,
   'nav.home': 'Inicio',
   'nav.payments': 'Pagos',
   'nav.products': 'Productos',
@@ -1295,7 +1301,7 @@ const es: Record<string, string> = {
   'tax.heading': 'Peable Tax',
   'tax.intro':
     'Indica dónde está registrado tu negocio para recaudar impuestos. Peable los recauda solo allí, según las pruebas de ubicación del cliente recogidas en el pago, y registra cualquier otra venta como no registrada. Registrarse ante una administración tributaria es tarea de tu negocio.',
-  'tax.error': 'Algo ha fallado. Inténtalo de nuevo.',
+  'tax.error': 'No se han podido cargar ni guardar los ajustes de Peable Tax.',
   'tax.badgeActive': 'Activo',
   'tax.badgeDraft': 'Borrador',
   'tax.statusActive': 'La recaudación de impuestos está aprobada.',

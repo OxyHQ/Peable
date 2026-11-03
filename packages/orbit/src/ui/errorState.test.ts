@@ -1,0 +1,177 @@
+import { describe, expect, it } from 'bun:test';
+import { OrbitApiError } from '../api/transport';
+import { errorState, isFailure } from './errorState';
+
+const api = (init: ConstructorParameters<typeof OrbitApiError>[0]) => new OrbitApiError(init);
+
+describe('errorState — what a screen shows for a thrown value', () => {
+  it('an application with no merchant in this mode is the first-run state', () => {
+    expect(
+      errorState(
+        api({
+          status: 404,
+          type: 'invalid_request_error',
+          code: 'merchant_missing',
+          message: 'no merchant registered for this application in this environment',
+          requestId: 'req_1',
+        }),
+      ),
+    ).toEqual({ kind: 'merchant_missing' });
+    // A gateway from before the code still says the same sentence.
+    expect(
+      errorState(
+        api({
+          status: 404,
+          type: 'invalid_request_error',
+          message: 'no merchant registered for this application in this environment',
+        }),
+      ).kind,
+    ).toBe('merchant_missing');
+  });
+
+  it('a 404 for one object is "not found", never the first-run state', () => {
+    expect(
+      errorState(
+        api({
+          status: 404,
+          type: 'invalid_request_error',
+          message: 'payment intent not found',
+          requestId: 'req_2',
+        }),
+      ),
+    ).toEqual({ kind: 'not_found', message: 'payment intent not found', requestId: 'req_2' });
+  });
+
+  it('no fiat account and Tax switched off are explanations, not failures', () => {
+    expect(
+      errorState(
+        api({ status: 404, type: 'invalid_request_error', code: 'account_missing', message: 'x' }),
+      ),
+    ).toEqual({ kind: 'account_missing' });
+    expect(
+      errorState(
+        api({ status: 404, type: 'invalid_request_error', code: 'tax_not_enabled', message: 'x' }),
+      ),
+    ).toEqual({ kind: 'feature_unavailable', feature: 'tax' });
+  });
+
+  it('a 403 names the missing permission from the code and param', () => {
+    expect(
+      errorState(
+        api({
+          status: 403,
+          type: 'permission_error',
+          code: 'permission_required',
+          param: 'billing:manage',
+          message: 'billing:manage is required for tax settings',
+          requestId: 'req_3',
+        }),
+      ),
+    ).toEqual({
+      kind: 'permission',
+      permission: 'billing:manage',
+      membership: false,
+      requestId: 'req_3',
+    });
+  });
+
+  it('a 403 from an older gateway still names the permission from its sentence', () => {
+    const state = errorState(
+      api({
+        status: 403,
+        type: 'permission_error',
+        message: 'billing:read is required for tax compliance',
+      }),
+    );
+    expect(state).toMatchObject({ kind: 'permission', permission: 'billing:read' });
+  });
+
+  it('not being a member of the application is its own permission state', () => {
+    for (const error of [
+      api({
+        status: 403,
+        type: 'permission_error',
+        code: 'application_membership_required',
+        message: 'you are not a member of this application',
+      }),
+      api({
+        status: 403,
+        type: 'permission_error',
+        message: 'you are not a member of this application',
+      }),
+    ]) {
+      expect(errorState(error)).toMatchObject({
+        kind: 'permission',
+        membership: true,
+        permission: null,
+      });
+    }
+  });
+
+  it('a 401 is the session state', () => {
+    expect(errorState(api({ status: 401, type: 'authentication_error', message: 'x' }))).toEqual({
+      kind: 'session',
+      requestId: null,
+    });
+  });
+
+  it('a 5xx, a 503 outage, a 429 and a 0 are failures with their request id', () => {
+    expect(
+      errorState(
+        api({
+          status: 503,
+          type: 'api_error',
+          code: 'membership_unavailable',
+          message: 'could not verify your membership of this application with Oxy; try again',
+          requestId: 'req_5',
+        }),
+      ),
+    ).toEqual({
+      kind: 'failure',
+      reason: 'server',
+      message: 'could not verify your membership of this application with Oxy; try again',
+      requestId: 'req_5',
+    });
+    expect(errorState(api({ status: 500, type: 'api_error', message: 'boom' }))).toMatchObject({
+      kind: 'failure',
+      reason: 'server',
+    });
+    expect(
+      errorState(api({ status: 429, type: 'rate_limit_error', message: 'slow down' })),
+    ).toMatchObject({ kind: 'failure', reason: 'rate_limited' });
+    expect(errorState(api({ status: 0, type: 'api_error', message: 'not JSON' }))).toMatchObject({
+      kind: 'failure',
+      reason: 'server',
+    });
+  });
+
+  it('a refused request body (400/409) is "invalid", a banner too', () => {
+    expect(
+      errorState(
+        api({ status: 400, type: 'invalid_request_error', message: 'bad', requestId: 'r' }),
+      ),
+    ).toEqual({ kind: 'invalid', message: 'bad', requestId: 'r' });
+  });
+
+  it('no answer at all is a network failure; anything else thrown is unknown', () => {
+    expect(errorState(new TypeError('Failed to fetch'))).toEqual({
+      kind: 'failure',
+      reason: 'network',
+      message: null,
+      requestId: null,
+    });
+    expect(errorState(new Error('An active Oxy session is required'))).toEqual({
+      kind: 'failure',
+      reason: 'unknown',
+      message: 'An active Oxy session is required',
+      requestId: null,
+    });
+    expect(errorState('weird')).toMatchObject({ kind: 'failure', reason: 'unknown' });
+  });
+
+  it('only failures are failures', () => {
+    expect(isFailure(errorState(new TypeError('x')))).toBe(true);
+    expect(isFailure({ kind: 'merchant_missing' })).toBe(false);
+    expect(isFailure({ kind: 'invalid', message: '', requestId: null })).toBe(false);
+  });
+});

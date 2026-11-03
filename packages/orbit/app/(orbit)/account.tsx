@@ -3,7 +3,6 @@ import { Linking, Platform, View } from 'react-native';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Account } from '@peable.to/shared-types';
 import { Button } from '@oxy.so/bloom/button';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   SegmentedControl,
   SegmentedControlItem,
@@ -35,6 +34,7 @@ import { FormField } from '@/ui/FormField';
 import { orbitOrigin } from '@/ui/origin';
 import { ErrorNotice, Field, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { CapabilityBadge, EnabledBadge } from '@/ui/StatusBadge';
+import { PageSkeleton } from '@/ui/states';
 
 const modeLabel = (scope: DashboardScope) =>
   t(modeForEnvironment(scope.environment) === 'live' ? 'scope.live' : 'scope.test');
@@ -259,7 +259,8 @@ function AccountDetail({ scope, account }: { scope: DashboardScope; account: Acc
 
 function AccountLoader({ scope }: { scope: DashboardScope }) {
   const query = useAccount(scope);
-  if (query.isPending) return <Loading accessibilityLabel={t('account.title')} />;
+  if (query.isPending)
+    return <PageSkeleton variant="form" accessibilityLabel={t('account.title')} />;
   if (query.isError) {
     if (isMerchantMissing(query.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />;

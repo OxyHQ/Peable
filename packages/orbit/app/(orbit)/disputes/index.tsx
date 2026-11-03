@@ -2,9 +2,7 @@ import { View } from 'react-native';
 import { useRouter } from 'expo-router';
 import type { Dispute } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
-import { LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
-import { Loading } from '@oxy.so/bloom/loading';
 import {
   Table,
   TableBody,
@@ -22,9 +20,11 @@ import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
+import { PageSkeleton } from '@/ui/states';
+import { RowLink } from '@/ui/data';
 
 const COLUMNS = {
-  amount: { flex: 2, minWidth: 130 },
+  amount: { flex: 2, minWidth: 130, align: 'end' },
   status: { flex: 2, minWidth: 140 },
   reason: { flex: 2, minWidth: 160 },
   due: { flex: 2, minWidth: 180 },
@@ -78,29 +78,33 @@ function DisputesTable({ disputes }: { disputes: readonly Dispute[] }) {
         }
       >
         {disputes.map((dispute) => (
-          <TableRow key={dispute.id}>
-            <TableCell {...COLUMNS.amount}>
-              {formatAmount(dispute.amount, dispute.currency)}
-            </TableCell>
-            <TableCell {...COLUMNS.status}>
-              <DisputeStatusBadge status={dispute.status} />
-            </TableCell>
-            <TableCell {...COLUMNS.reason}>{disputeReasonLabel(dispute.reason)}</TableCell>
-            <TableCell {...COLUMNS.due}>
-              <Deadline dispute={dispute} />
-            </TableCell>
-            <TableCell {...COLUMNS.id}>
-              <LinkButton
-                size="sm"
-                accessibilityLabel={`${t('dispute.title')} ${dispute.id}`}
-                onPress={() =>
-                  router.push({ pathname: '/disputes/[id]', params: { id: dispute.id } })
-                }
-              >
-                {dispute.id}
-              </LinkButton>
-            </TableCell>
-          </TableRow>
+          <RowLink
+            key={dispute.id}
+            accessibilityLabel={`${t('dispute.title')} ${dispute.id}`}
+            onPress={() => router.push({ pathname: '/disputes/[id]', params: { id: dispute.id } })}
+          >
+            <TableRow>
+              <TableCell {...COLUMNS.amount}>
+                {formatAmount(dispute.amount, dispute.currency)}
+              </TableCell>
+              <TableCell {...COLUMNS.status}>
+                <DisputeStatusBadge status={dispute.status} />
+              </TableCell>
+              <TableCell {...COLUMNS.reason}>{disputeReasonLabel(dispute.reason)}</TableCell>
+              <TableCell {...COLUMNS.due}>
+                <Deadline dispute={dispute} />
+              </TableCell>
+              <TableCell {...COLUMNS.id}>
+                <Text
+                  variant="body-2-regular"
+                  numberOfLines={1}
+                  className="font-mono text-muted-foreground"
+                >
+                  {dispute.id}
+                </Text>
+              </TableCell>
+            </TableRow>
+          </RowLink>
         ))}
       </TableBody>
     </Table>
@@ -109,7 +113,8 @@ function DisputesTable({ disputes }: { disputes: readonly Dispute[] }) {
 
 function DisputeList({ scope }: { scope: DashboardScope }) {
   const pages = useDisputePages(scope);
-  if (pages.isPending) return <Loading accessibilityLabel={t('disputes.title')} />;
+  if (pages.isPending)
+    return <PageSkeleton variant="table" accessibilityLabel={t('disputes.title')} />;
   if (pages.isError) {
     if (isMerchantMissing(pages.error)) return <MerchantMissing environment={scope.environment} />;
     return <ErrorNotice error={pages.error} onRetry={() => void pages.refetch()} />;
