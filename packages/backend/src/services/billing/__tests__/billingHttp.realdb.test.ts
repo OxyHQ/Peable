@@ -961,6 +961,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       });
       expect(calls.find((c) => c.method === 'checkout')?.params).toMatchObject({
         mode: 'subscription',
+        adaptive_pricing: { enabled: false },
         customer: 'cus_one',
         line_items: [{ price: 'price_one', quantity: 1 }],
         success_url: 'https://example.invalid/billing?from=plans&billing=complete',

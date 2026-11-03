@@ -192,6 +192,8 @@ export function createStripeBillingProvider(
           await client.createCheckout(
             {
               mode: 'subscription',
+              // Peable's bound price owns the settlement currency, not visitor location.
+              adaptive_pricing: { enabled: false },
               customer: input.providerCustomerId,
               line_items: [{ price: input.providerPriceId, quantity: 1 }],
               ...(input.trialDays > 0
