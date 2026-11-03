@@ -54,19 +54,19 @@
   },
   "overrides": {
     "@oxy.so/contracts": "6.5.0",
-    "@oxy.so/core": "7.13.0",
+    "@oxy.so/core": "7.16.0",
     "lightningcss": "1.30.1",
     "lightningcss-linux-x64-gnu": "1.30.1",
     "lightningcss-linux-x64-musl": "1.30.1",
     "@oxy.so/telemetry": "2.1.0",
     "react-native-css": "3.1.0-rc.0",
-    "@oxy.so/protocol": "1.5.1",
+    "@oxy.so/protocol": "1.6.1",
     "@peable.to/sdk": "workspace:*",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "@oxy.so/bloom": "16.10.0"
+    "@oxy.so/bloom": "17.0.0"
   },
   "dependencies": {
-    "@oxy.so/core": "7.13.0"
+    "@oxy.so/core": "7.16.0"
   }
 }
