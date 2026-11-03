@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { CheckoutSessionPublic, PaymentIntent } from '@peable.to/shared-types';
 
 // SessionRoute never touches `../lib/intentClient` directly, but
@@ -37,28 +38,22 @@ mock.module('qr-creator/dist/qr-creator.es6.min.js', () => ({
 
 const { SessionRoute } = await import('../SessionRoute');
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_wrapped456',
-    object: 'payment_intent',
-    livemode: false,
-    status: 'created',
-    rail: 'faircoin',
-    amount: '100000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: null,
-    confirmations: 0,
-    client_secret: 'session_secret_abc',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = {},
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_wrapped456',
+      rail: 'faircoin',
+      status: 'requires_action',
+      amount: '100000000',
+      client_secret: 'session_secret_abc',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 const SESSION: CheckoutSessionPublic = {
@@ -66,7 +61,7 @@ const SESSION: CheckoutSessionPublic = {
   object: 'checkout_session',
   livemode: false,
   success_url: 'https://merchant.example/thanks',
-  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
+  merchant: { name: 'Test Merchant', avatar_url: null, logo_url: null, description: null },
   payment_intent: makeIntent(),
 };
 

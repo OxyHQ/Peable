@@ -10,17 +10,24 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
-import { isBaseUnitString, type Refund, type Settlement } from '@peable.to/shared-types';
+import { isBaseUnitString, REFUND_REASONS, type Settlement } from '@peable.to/shared-types';
+import {
+  METADATA_LIMIT_MESSAGE,
+  metadataCreateSchema,
+  metadataUpdateSchema,
+} from '../lib/metadata';
 import { getDb } from '../db/postgres';
 import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
   findRefundByExternalRef,
   findRefundByPublicId,
   listRefundsForMerchant,
-  type RefundRow,
+  updateRefundMetadata,
 } from '../db/refunds/refundRepository';
 import {
+  cancelRefund,
   createRefund,
+  RefundNotCancelableError,
   PaymentNotRefundableError,
   RefundExceedsRemainingError,
   RefundsUnavailableError,
@@ -36,8 +43,9 @@ import {
   wrap,
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
-import { toUnix, toUnixOrNull } from '../lib/time';
+import { toUnixOrNull } from '../lib/time';
 import { expandObjects, parseExpand } from '../lib/expand';
+import { toRefundDTO } from '../lib/serialize';
 import {
   answerList,
   listQuerySchema,
@@ -71,8 +79,17 @@ const createRefundBodySchema = z
       .string()
       .refine(isBaseUnitString, 'amount must be a canonical integer string in minor units')
       .refine((value) => value !== '0', 'a refund of 0 is not a refund'),
+    reason: z.enum(REFUND_REASONS).optional(),
+    metadata: metadataCreateSchema.optional(),
+    // Destination charges (ADR 0015 §3): the provider refunds Orbit's fee and
+    // pulls the funds back from the destination, in proportion.
+    refund_application_fee: z.boolean().optional(),
+    reverse_transfer: z.boolean().optional(),
   })
   .strict();
+
+const updateRefundBodySchema = z.object({ metadata: metadataUpdateSchema.optional() }).strict();
+const cancelRefundBodySchema = z.object({}).strict();
 
 /**
  * The wire shape, published in `@peable.to/shared-types` — the provider's own
@@ -83,24 +100,6 @@ const createRefundBodySchema = z
  * repositories is how a renamed field becomes a runtime failure somebody else
  * discovers.
  */
-function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatus: string): Refund {
-  return {
-    id: row.publicId,
-    object: 'refund',
-    livemode: row.livemode,
-    external_ref: row.externalRef,
-    origin: row.origin,
-    payment_intent: paymentIntentPublicId,
-    amount: row.amount,
-    currency: row.currency,
-    status: row.status,
-    payment_status: paymentStatus,
-    failure_code: row.failureCode,
-    created: toUnix(row.createdAt),
-    updated_at: toUnix(row.updatedAt),
-  };
-}
-
 export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();
   const { requireMerchant } = deps;
@@ -151,18 +150,22 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
        * payer's money had not moved and no path would ever retry it.
        */
       if (existing && (existing.providerObjectId !== null || existing.status === 'failed')) {
-        res.status(200).json(toRefundDTO(existing, intent.publicId, intent.status));
+        res.status(200).json(toRefundDTO(existing, intent.publicId));
         return;
       }
 
       try {
-        const { refund, created, paymentStatus } = await createRefund({
+        const { refund, created } = await createRefund({
           merchantId: merchant.id,
           intent,
           externalRef: body.external_ref,
           amount: body.amount,
+          ...(body.reason !== undefined ? { reason: body.reason } : {}),
+          ...(body.metadata !== undefined ? { metadata: body.metadata } : {}),
+          ...(body.refund_application_fee ? { refundApplicationFee: true } : {}),
+          ...(body.reverse_transfer ? { reverseTransfer: true } : {}),
         });
-        res.status(created ? 201 : 200).json(toRefundDTO(refund, intent.publicId, paymentStatus));
+        res.status(created ? 201 : 200).json(toRefundDTO(refund, intent.publicId));
       } catch (error) {
         if (
           error instanceof PaymentNotRefundableError ||
@@ -221,7 +224,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
             paymentIntentId: intent.id,
             page,
           }),
-        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId),
       });
     }),
   );
@@ -257,9 +260,105 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         // than asserted away, so loosening it fails loudly.
         throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
       }
-      const dto = toRefundDTO(refund, intent.publicId, intent.status);
+      const dto = toRefundDTO(refund, intent.publicId);
       await expandObjects([dto], 'refund', expand, merchant.id);
       res.status(200).json(dto);
+    }),
+  );
+
+  /** The merchant's own bookkeeping on a refund (ADR 0014 D1): `metadata`, a patch. */
+  router.post(
+    '/v1/refunds/:id',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = updateRefundBodySchema.safeParse(req.body);
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const db = getDb();
+      const refund = await findRefundByPublicId(db, merchant.id, id);
+      if (!refund) {
+        sendError(res, 404, 'invalid_request_error', 'refund not found');
+        return;
+      }
+      const intent = await findIntentById(db, refund.paymentIntentId);
+      if (!intent) throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
+      if (parsed.data.metadata === undefined) {
+        res.status(200).json(toRefundDTO(refund, intent.publicId));
+        return;
+      }
+      const updated = await updateRefundMetadata(db, merchant.id, refund.id, parsed.data.metadata);
+      if (!updated) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          METADATA_LIMIT_MESSAGE,
+          'parameter_invalid',
+          'metadata',
+        );
+        return;
+      }
+      res.status(200).json(toRefundDTO(updated, intent.publicId));
+    }),
+  );
+
+  /** Cancel a refund the provider still holds (`requires_action` at the provider). */
+  router.post(
+    '/v1/refunds/:id/cancel',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = cancelRefundBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const db = getDb();
+      const refund = await findRefundByPublicId(db, merchant.id, id);
+      if (!refund) {
+        sendError(res, 404, 'invalid_request_error', 'refund not found');
+        return;
+      }
+      const intent = await findIntentById(db, refund.paymentIntentId);
+      if (!intent) throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
+      try {
+        res.status(200).json(toRefundDTO(await cancelRefund(intent, refund), intent.publicId));
+      } catch (error) {
+        if (error instanceof RefundNotCancelableError) {
+          sendError(res, 400, 'invalid_request_error', error.message, 'refund_not_cancelable');
+          return;
+        }
+        if (error instanceof RefundsUnavailableError) {
+          sendError(res, 503, 'api_error', error.message);
+          return;
+        }
+        if (error instanceof ProviderError) {
+          sendProviderError(res, error);
+          return;
+        }
+        throw error;
+      }
     }),
   );
 
@@ -308,7 +407,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
             paymentIntentId: intent.id,
             page,
           }),
-        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId),
         extra: { remaining_refundable: await remainingRefundable(intent) },
       });
     }),

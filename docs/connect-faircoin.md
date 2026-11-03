@@ -167,16 +167,15 @@ if (event.account) {
 ### Never cancel a paid order on your own clock
 
 `expiresAt` applies only while the payer has not paid. Once the payer's wallet
-reports the broadcast, the intent is `broadcast` → `confirming` → `settled` and
-it **never expires**, whatever `expiresAt` says. `intent.canExpire` (and
+reports the broadcast, the intent is `processing` until it is `succeeded` and
+it **never expires**, whatever `expires_at` says. `intent.can_expire` (and
 `canExpire(status)` from the SDK) tells you which:
 
 ```ts
 import { canExpire } from '@peable.to/sdk';
 
 // Release the seller's stock ONLY on these:
-case 'payment_intent.expired':
-case 'payment_intent.rejected':
+case 'payment_intent.canceled': // cancellation_reason: abandoned | underpaid | yours
   releaseHold(event.data.object.metadata.orderId);
 ```
 
@@ -206,5 +205,5 @@ movement of money; the options and a recommendation are in ADR 0012 §D12.
 - [ ] Seller settings → "Get paid in FairCoin" → `accountLinks.create({ account, rail: 'faircoin', … })` → redirect.
 - [ ] Webhook: on `connected_account.updated` with `faircoin.status === 'active'`, enable FairCoin at that store's checkout.
 - [ ] Checkout: one `paymentIntents.create` / `checkout.sessions.create` per seller group with `connectedAccount`, explicit `rail: 'faircoin'`.
-- [ ] Fulfil on `payment_intent.settled`; release stock only on `expired` / `rejected`.
+- [ ] Fulfil on `payment_intent.succeeded`; release stock only on `payment_intent.canceled`.
 - [ ] Testnet end to end before anything else.

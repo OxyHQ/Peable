@@ -8,6 +8,8 @@ export interface CapturedRequest {
   url: string;
   headers: Headers;
   body: string | undefined;
+  /** A non-string body as sent (a multipart `FormData`). */
+  form?: FormData;
 }
 
 export interface MockResponseSpec {
@@ -42,6 +44,7 @@ export function createMockFetch(handler: MockFetchHandler): MockFetch {
       url,
       headers: new Headers(init?.headers),
       body: toRequestBody(init),
+      ...(init?.body instanceof FormData ? { form: init.body } : {}),
     };
     requests.push(captured);
 

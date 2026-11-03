@@ -7,6 +7,7 @@ import {
   LOCAL_TEST_PRICES,
   LOCAL_TEST_PRODUCT,
   localTestBillingConfiguration,
+  localTestBillingOwner,
   requireLocalBillingReturnUrl,
 } from './stripeTestBilling';
 
@@ -60,7 +61,10 @@ async function run() {
         displayName: 'Local test checkout',
       }));
     if (!merchant) throw new Error('Local test merchant registration failed');
-    const configuration = localTestBillingConfiguration(merchant, account.id);
+    const configuration = localTestBillingConfiguration(
+      await localTestBillingOwner(db, merchant),
+      account.id,
+    );
     const cohort = configuration.cohorts[0];
     if (!cohort) throw new Error('Local billing owner is absent');
     const { evidenceRef, ...owner } = cohort;

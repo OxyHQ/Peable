@@ -11,6 +11,8 @@ import { deriveKeyFromSeed, getNetwork, mnemonicToSeed } from '@fairco.in/core';
 import { eq } from 'drizzle-orm';
 import { createSuiteDatabase, dropSuiteDatabase } from '../../db/testDatabase';
 import { insertMerchant } from '../../db/merchants/merchantRepository';
+import { insertEndpoint } from '../../db/webhooks/webhookEndpointRepository';
+import { PEABLE_API_VERSION } from '@peable.to/shared-types';
 import { findIntentById } from '../../db/payments/paymentIntentRepository';
 import { faircoinBillingInvoices } from '../../db/schema';
 import {
@@ -81,10 +83,17 @@ async function initialize(input: {
       environment: 'production',
       network: 'mainnet',
       xpub,
-      webhookUrl: 'https://example.invalid/synthetic',
-      webhookSecret: 'synthetic',
     }),
   );
+  await insertEndpoint(suite.db, {
+    publicId: `we_${randomUUID().replaceAll('-', '')}`,
+    merchantId: merchant.id,
+    url: 'https://example.invalid/synthetic',
+    enabledEvents: ['*'],
+    metadata: {},
+    apiVersion: PEABLE_API_VERSION,
+    secret: 'synthetic',
+  });
   const owner = {
     merchantId: merchant.id,
     oxyAppId: input.appId,
@@ -240,8 +249,8 @@ async function settle(checkoutId: string) {
   const invoice = must(row);
   const intent = must(await findIntentById(suite.db, must(invoice.paymentIntentId)));
   await transitionIntent(intent.id, {
-    from: 'created',
-    status: 'broadcast',
+    from: 'requires_action',
+    status: 'processing',
     txid: randomUUID().replaceAll('-', '').repeat(2),
   });
   const updated = must(await findIntentById(suite.db, intent.id));

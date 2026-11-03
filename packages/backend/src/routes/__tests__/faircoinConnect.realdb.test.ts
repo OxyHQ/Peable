@@ -17,26 +17,24 @@ import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
-import { and, eq } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 import { getNetwork } from '@fairco.in/core';
 import type { OxyAuthRequest, OxyServiceEnvironment } from '@oxy.so/core/server';
 import { uuidv7 } from '@oxy.so/db';
+import type { WebhookEventType } from '@peable.to/shared-types';
 import { must } from '../../__tests__/helpers/must';
 import {
   gatewayDb,
   POSTGRES_TESTS_ENABLED,
   seedMerchant,
+  seedWebhookEndpoint,
+  storedEvents,
   testXprvFor,
   testXpubFor,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { insertMerchant, type MerchantRow } from '../../db/merchants/merchantRepository';
-import {
-  connectedAccountLinks,
-  connectedAccounts,
-  idempotencyKeys,
-  webhookDeliveries,
-} from '../../db/schema';
+import { connectedAccountLinks, connectedAccounts, idempotencyKeys } from '../../db/schema';
 import { findAccountByPublicId } from '../../db/accounts/connectedAccountRepository';
 import { createFaircoinAccountLink } from '../../services/accounts/faircoinOnboarding';
 import { config } from '../../config';
@@ -88,15 +86,15 @@ async function seedCardOnlyPlatform(
   environment: OxyServiceEnvironment = 'development',
 ): Promise<MerchantRow> {
   const id = uuidv7();
-  return must(
+  const merchant = must(
     await insertMerchant(gatewayDb(), {
       publicId: `merch_${id}`,
       oxyAppId: `app_${id}`,
       environment,
-      webhookUrl: 'https://platform.example/peable',
-      webhookSecret: 'whsec_platform',
     }),
   );
+  await seedWebhookEndpoint(merchant, { url: 'https://platform.example/peable' });
+  return merchant;
 }
 
 /** Open a FairCoin seller, mint a link, and have the seller register `xpub`. */
@@ -126,13 +124,12 @@ async function onboardSeller(externalRef: string, account: number): Promise<Json
   return created.json;
 }
 
-async function deliveriesFor(merchantId: string, eventType: string) {
-  return gatewayDb()
-    .select({ payload: webhookDeliveries.payload, intentId: webhookDeliveries.paymentIntentId })
-    .from(webhookDeliveries)
-    .where(
-      and(eq(webhookDeliveries.merchantId, merchantId), eq(webhookDeliveries.eventType, eventType)),
-    );
+/** The merchant's stored events of one type, rendered as their deliveries carry them. */
+async function deliveriesFor(merchantId: string, eventType: WebhookEventType) {
+  return (await storedEvents({ merchantId, type: eventType })).map(({ row, event }) => ({
+    payload: event as unknown as Json,
+    intentId: row.paymentIntentId,
+  }));
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP', () => {
@@ -500,9 +497,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     expect(first.status).toBe(201);
-    expect(first.json.address).toBe(deriveIntentAddress(key, 0, 0, network));
+    expect((first.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 0, network));
     expect(first.json.connected_account).toBe(seller.id);
-    expect(first.json.network).toBe('testnet');
+    expect((first.json.faircoin as Json).network).toBe('testnet');
     expect(first.json.can_expire).toBe(true);
 
     // `rail` omitted: still FairCoin, and the next index on the SAME key.
@@ -514,7 +511,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     expect(second.status).toBe(201);
     expect(second.json.rail).toBe('faircoin');
-    expect(second.json.address).toBe(deriveIntentAddress(key, 0, 1, network));
+    expect((second.json.faircoin as Json).address).toBe(deriveIntentAddress(key, 0, 1, network));
 
     // Only this seller's payments, when the platform asks for them.
     const listed = await call('GET', `/v1/payment_intents?connected_account=${String(seller.id)}`);
@@ -624,10 +621,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
       { 'Idempotency-Key': `idem_${uuidv7()}` },
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
-    const result = await transitionIntent(intent.id, { from: 'created', status: 'expired' });
+    const result = await transitionIntent(intent.id, {
+      from: 'requires_action',
+      status: 'canceled',
+      cancellationReason: 'abandoned',
+    });
     expect(result.kind).toBe('updated');
 
-    const events = await deliveriesFor(platform.id, 'payment_intent.expired');
+    const events = await deliveriesFor(platform.id, 'payment_intent.canceled');
     const event = must(events.find((row) => row.intentId === intent.id));
     expect(event.payload.account).toBe(seller.id);
     const object = (event.payload.data as Json).object as Json;
@@ -645,12 +646,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('FairCoin connected accounts over HTTP'
     );
     const intent = must(await findIntentByPublicId(gatewayDb(), String(created.json.id)));
     await transitionIntent(intent.id, {
-      from: 'created',
-      status: 'broadcast',
+      from: 'requires_action',
+      status: 'processing',
       txid: 'a'.repeat(64),
     });
     const read = await call('GET', `/v1/payment_intents/${String(created.json.id)}`);
-    expect(read.json.status).toBe('broadcast');
+    expect(read.json.status).toBe('processing');
     expect(read.json.can_expire).toBe(false);
   });
 

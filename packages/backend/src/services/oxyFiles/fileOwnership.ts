@@ -1,8 +1,11 @@
 /**
- * Whether a caller may make an Oxy file a merchant's avatar — the ONE check
- * every avatar write goes through (`registerMerchant` and `applyMerchantPatch`
- * in `routes/merchants.ts`, which both the service routes and the dashboard
- * routes call).
+ * Whether a caller may make an Oxy file THEIRS inside Peable — the ONE
+ * ownership check. Two writes reach it: a merchant's avatar
+ * (`registerMerchant` and `applyMerchantPatch` in `routes/merchants.ts`, which
+ * both the service and the dashboard routes call), and an Orbit File imported
+ * from Oxy (`POST /v1/files` with `oxy_file`, `services/files.ts`). Bytes
+ * UPLOADED as a File need no check: Peable stores them as its own application
+ * file, so ownership is Peable's by construction.
  *
  * ## Why this exists
  *
@@ -32,42 +35,56 @@
  * owners only to verified first-party workload authority), the avatar is
  * refused with a 503: an unverifiable file is not accepted on trust.
  */
-import { ServiceAssetMetadataError } from '@oxy.so/core';
+import { type ServiceAssetMetadata, ServiceAssetMetadataError } from '@oxy.so/core';
+import type { OxyFileEntityType } from '../../db/schema/valueSets';
 import type { OxyFilesClient } from './client';
 
-/** Who is setting the avatar, as the route authenticated them. */
-export interface AvatarActor {
+/** Who is claiming the file, as the route authenticated them. */
+export interface FileActor {
   /** The Oxy application the merchant is registered for. */
   readonly applicationId: string;
   /** Every Oxy account the caller is or acts for. Empty strings are ignored. */
   readonly accountIds: readonly (string | null | undefined)[];
 }
 
-export type AvatarAcceptance =
+export type FileAcceptance =
   | { readonly ok: true }
   | { readonly ok: false; readonly status: 400 | 503; readonly message: string };
 
-const NOT_YOURS =
-  'avatarFileId must name an active Oxy file owned by you, by this application, or by the account that owns it';
-const NOT_DISPLAYABLE =
-  'avatarFileId must be a public or unlisted file: Peable shows it to every payer';
-const UNVERIFIABLE = 'the owner of avatarFileId cannot be verified right now; try again';
+/** How a refusal names the field the caller sent. */
+const notYours = (param: string) =>
+  `${param} must name an active Oxy file owned by you, by this application, or by the account that owns it`;
+const notReferenceable = (param: string) =>
+  `${param} must be a public or unlisted file, or one its owner attached to Peable`;
+const unverifiable = (param: string) =>
+  `the owner of ${param} cannot be verified right now; try again`;
+
+/** The Peable use the accepted file is registered for. */
+export interface FileUse {
+  readonly entityType: OxyFileEntityType;
+  /** The PUBLIC id of the entity (`merch_…`, `file_…`). */
+  readonly entityId: string;
+  /** The request field that named the file, for the refusal message. */
+  readonly param: string;
+}
 
 /**
- * Verify `fileId` for `actor` and register Peable's use of it by the merchant
- * whose public id is `merchantPublicId`.
+ * Verify `fileId` for `actor` and register Peable's use of it (`use`).
  *
- * The reference is registered BEFORE the merchant row is written, because the
- * refusal decides the response. If the write then fails, the caller queues a
- * sync of the pair (`enqueueReferenceSync`), which finds the file unused and
- * removes the reference; the nightly reconciliation removes any a crash left.
+ * The reference is registered BEFORE the row is written, because the refusal
+ * decides the response. If the write then fails, the caller queues a sync of
+ * the pair (`enqueueReferenceSync`), which finds the file unused and removes
+ * the reference; the nightly reconciliation removes any a crash left.
  */
-export async function acceptMerchantAvatar(
+export async function acceptOxyFile(
   files: OxyFilesClient,
   fileId: string,
-  merchantPublicId: string,
-  actor: AvatarActor,
-): Promise<AvatarAcceptance> {
+  use: FileUse,
+  actor: FileActor,
+): Promise<FileAcceptance & { readonly metadata?: ServiceAssetMetadata }> {
+  const NOT_YOURS = notYours(use.param);
+  const UNVERIFIABLE = unverifiable(use.param);
+  const NOT_DISPLAYABLE = notReferenceable(use.param);
   let metadata: Awaited<ReturnType<OxyFilesClient['metadataByIds']>>;
   try {
     metadata = await files.metadataByIds([fileId]);
@@ -97,14 +114,14 @@ export async function acceptMerchantAvatar(
   let result: string | undefined;
   try {
     const [answer] = await files.addReferences([
-      { fileId, entityType: 'merchant_avatar', entityId: merchantPublicId },
+      { fileId, entityType: use.entityType, entityId: use.entityId },
     ]);
     result = answer?.result;
   } catch (error) {
     warn(`reference registration failed: ${describe(error)}`);
     return { ok: false, status: 503, message: UNVERIFIABLE };
   }
-  if (result === 'created' || result === 'exists') return { ok: true };
+  if (result === 'created' || result === 'exists') return { ok: true, metadata: file };
   return { ok: false, status: 400, message: NOT_DISPLAYABLE };
 }
 
@@ -114,5 +131,5 @@ function describe(error: unknown): string {
 }
 
 function warn(message: string): void {
-  process.emitWarning(`Peable merchant avatar: ${message}`);
+  process.emitWarning(`Peable Oxy file ownership: ${message}`);
 }

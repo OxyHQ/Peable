@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { cleanup, render, screen } from '@testing-library/react';
+import { intentFixture } from './intentFixture';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 // App renders IntentRoute for `/i/:intentId`, which touches
@@ -41,28 +42,22 @@ mock.module('qr-creator/dist/qr-creator.es6.min.js', () => ({
 
 const { App } = await import('../App');
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_test123',
-    object: 'payment_intent',
-    livemode: false,
-    status: 'created',
-    rail: 'faircoin',
-    amount: '100000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: null,
-    confirmations: 0,
-    client_secret: 'pi_test123_secret_abc',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = {},
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_test123',
+      rail: 'faircoin',
+      status: 'requires_action',
+      amount: '100000000',
+      client_secret: 'pi_test123_secret_abc',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 beforeEach(() => {

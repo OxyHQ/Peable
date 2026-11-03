@@ -15,6 +15,7 @@ import {
   attachCardHalf,
   enableFaircoinHalf,
   findAccountByExternalRef,
+  findAccountForOnboarding,
   hasCardHalf,
   insertConnectedAccount,
   type AccountSnapshot,
@@ -24,8 +25,10 @@ import {
 } from '../../db/accounts/connectedAccountRepository';
 import { getDb } from '../../db/postgres';
 import { newId } from '../../lib/ids';
-import { toConnectedAccountDTO } from '../../lib/serializeSettlement';
-import { enqueueConnectedAccountWebhook } from '../intentTransition';
+import { toAccountDTO, toConnectedAccountDTO } from '../../lib/serializeSettlement';
+import type { DatabaseOrTransaction } from '../../db/postgres';
+import { recordEvent } from '../events';
+import { recordConnectedAccountEvent } from '../intentTransition';
 import { selectCardProvider, selectStoredProvider } from '../providers/environmentGuard';
 import {
   isAccountHoldingProvider,
@@ -111,6 +114,8 @@ export function toAccountSnapshot(snapshot: ProviderAccountSnapshot): AccountSna
     pendingVerification: snapshot.pendingVerification,
     disabledReasonCodes: snapshot.disabledReason ? [snapshot.disabledReason] : [],
     defaultCurrency: snapshot.defaultCurrency ?? null,
+    businessProfile: snapshot.businessProfile,
+    settings: snapshot.settings,
   };
 }
 
@@ -129,7 +134,7 @@ export function toAccountSnapshot(snapshot: ProviderAccountSnapshot): AccountSna
  * `connected_accounts.provider` has recorded the answer since the table
  * existed; nothing was reading it.
  */
-function requireProviderFor(account: CardConnectedAccountRow): AccountHoldingProvider {
+export function requireProviderFor(account: CardConnectedAccountRow): AccountHoldingProvider {
   return requireAccountProvider(
     selectStoredProvider(account.provider, account.livemode),
     account.provider,
@@ -147,7 +152,9 @@ function requireProviderFor(account: CardConnectedAccountRow): AccountHoldingPro
  * deleted, so one opened in the wrong mode is a real account left behind,
  * mailing requirements to a real person, forever.
  */
-function requireDefaultAccountProvider(environment: MerchantEnvironment): AccountHoldingProvider {
+export function requireDefaultAccountProvider(
+  environment: MerchantEnvironment,
+): AccountHoldingProvider {
   return requireAccountProvider(selectCardProvider(environment), 'card');
 }
 
@@ -317,6 +324,7 @@ async function openCardHalf(
     // The merchant's seller id, and nothing else. A provider's metadata is
     // readable by everyone with dashboard access.
     metadata: { peable_merchant_id: input.merchantId },
+    role: 'seller',
   });
   return { provider: provider.id, country, snapshot };
 }
@@ -370,7 +378,7 @@ async function completeHalves(
 }
 
 async function rereadAccount(account: ConnectedAccountRow): Promise<ConnectedAccountRow> {
-  const fresh = await findAccountByExternalRef(getDb(), account.merchantId, account.externalRef);
+  const fresh = await findAccountForOnboarding(getDb(), account.id);
   if (!fresh) throw new Error(`connected account ${account.publicId} disappeared`);
   return fresh;
 }
@@ -402,12 +410,16 @@ const NOTIFIES_MERCHANT = {
   chargesEnabled: true,
   transfersCapability: true,
   cardPaymentsCapability: true,
-  requirementsCurrentlyDue: true,
-  requirementsEventuallyDue: true,
-  requirementsPastDue: true,
-  requirementsPendingVerification: true,
+  currentlyDue: true,
+  eventuallyDue: true,
+  pastDue: true,
+  pendingVerification: true,
   disabledReasonCodes: true,
   defaultCurrency: true,
+  // The merchant's own account shows them in Orbit and acts on them (a payout
+  // schedule, a descriptor); a change is news.
+  businessProfile: true,
+  settings: true,
   lastSyncedAt: false,
 } satisfies Record<SnapshotWrittenField, boolean>;
 
@@ -420,10 +432,18 @@ function readinessChanged(before: ConnectedAccountRow, after: ConnectedAccountRo
   });
 }
 
-/** `disabledReasonCodes` is an array; everything else compares by identity. */
+/** Arrays and the JSON snapshots compare by value; everything else by identity. */
 function sameValue(before: unknown, after: unknown): boolean {
   if (Array.isArray(before) && Array.isArray(after)) {
     return before.length === after.length && before.every((item, i) => item === after[i]);
+  }
+  if (
+    typeof before === 'object' &&
+    typeof after === 'object' &&
+    before !== null &&
+    after !== null
+  ) {
+    return JSON.stringify(before) === JSON.stringify(after);
   }
   return before === after;
 }
@@ -446,7 +466,18 @@ export async function refreshConnectedAccount(
   if (!hasCardHalf(account)) return account;
   const provider = requireProviderFor(account);
   const snapshot = await provider.getAccount(account.providerAccountId);
+  return applyProviderSnapshot(account, snapshot);
+}
 
+/**
+ * Store what the provider just said about an account, and tell the merchant if
+ * anything it acts on changed — one transaction. Shared by the refresh above
+ * and by a settings write, which reads the account back.
+ */
+export async function applyProviderSnapshot(
+  account: ConnectedAccountRow,
+  snapshot: ProviderAccountSnapshot,
+): Promise<ConnectedAccountRow> {
   /**
    * The snapshot and the merchant's notification commit TOGETHER (ADR 0001 D7).
    *
@@ -459,17 +490,37 @@ export async function refreshConnectedAccount(
   return getDb().transaction(async (tx) => {
     const updated = await applyAccountSnapshot(tx, account.id, toAccountSnapshot(snapshot));
     if (!updated) return account;
-    if (readinessChanged(account, updated)) {
-      await enqueueConnectedAccountWebhook(tx, updated.merchantId, toConnectedAccountDTO(updated));
-    }
+    if (readinessChanged(account, updated)) await recordAccountChange(tx, updated);
     return updated;
   });
+}
+
+/**
+ * Tell the merchant its account changed, in the change's transaction: a seller
+ * is `connected_account.updated`; the merchant's OWN account is
+ * `account.updated` carrying the `account` object (ADR 0015 §1).
+ */
+export async function recordAccountChange(
+  tx: DatabaseOrTransaction,
+  account: ConnectedAccountRow,
+): Promise<void> {
+  if (account.role === 'merchant' && hasCardHalf(account)) {
+    await recordEvent(tx, {
+      merchantId: account.merchantId,
+      type: 'account.updated',
+      object: toAccountDTO(account),
+      account: account.publicId,
+    });
+    return;
+  }
+  await recordConnectedAccountEvent(tx, account.merchantId, toConnectedAccountDTO(account));
 }
 
 export interface AccountLinkInput {
   readonly account: ConnectedAccountRow;
   readonly refreshUrl: string;
   readonly returnUrl: string;
+  readonly type?: 'account_onboarding' | 'account_update';
 }
 
 /**
@@ -488,5 +539,6 @@ export async function createAccountLink(
     providerAccountId: input.account.providerAccountId,
     refreshUrl: input.refreshUrl,
     returnUrl: input.returnUrl,
+    ...(input.type !== undefined ? { type: input.type } : {}),
   });
 }

@@ -10,8 +10,8 @@
  *             build/sign/broadcast flow ({@link useWalletStore.sendTransaction},
  *             which returns the txid) → report the txid to the Gateway
  *             ({@link submitTx}) → subscribe to live status
- *             ({@link subscribeToIntent}) and render `broadcast → confirming →
- *             settled`.
+ *             ({@link subscribeToIntent}) and render `processing` (sent, then
+ *             confirming) → `succeeded` — ADR 0019's vocabulary.
  *
  * Once the transaction is broadcast we hold a txid, so no downstream failure
  * (Gateway unreachable, realtime channel unavailable, signed out) is ever
@@ -65,9 +65,7 @@ interface StatusVisual {
 
 /** Terminal statuses stop the live spinner and reveal the Done affordance. */
 function isTerminalStatus(status: PaymentIntentStatus): boolean {
-  return (
-    status === 'settled' || status === 'failed' || status === 'expired' || status === 'rejected'
-  );
+  return status === 'succeeded' || status === 'canceled';
 }
 
 function describePaymentStatus(
@@ -77,57 +75,71 @@ function describePaymentStatus(
   destructive: string,
 ): StatusVisual {
   const status = intent?.status ?? null;
+  const chain = intent?.faircoin ?? null;
   switch (status) {
-    case 'confirming':
-      return {
-        icon: 'progress-clock',
-        iconColor: primary,
-        title: t('pay.status.confirming.title'),
-        subtitle: t('pay.status.confirming.subtitle', {
-          count: intent?.confirmations ?? 0,
-        }),
-        showSpinner: true,
-      };
-    case 'settled':
+    case 'processing':
+      // Sent and not seen yet, or confirming — the watcher's count says which.
+      return chain !== null && chain.confirmations > 0
+        ? {
+            icon: 'progress-clock',
+            iconColor: primary,
+            title: t('pay.status.processing.confirming.title'),
+            subtitle: t('pay.status.processing.confirming.subtitle', {
+              count: chain.confirmations,
+              required: chain.required_confirmations,
+            }),
+            showSpinner: true,
+          }
+        : {
+            icon: 'send-circle',
+            iconColor: primary,
+            title: t('pay.status.processing.sent.title'),
+            subtitle: t('pay.status.processing.sent.subtitle'),
+            showSpinner: true,
+          };
+    case 'succeeded':
       return {
         icon: 'check-circle',
         iconColor: primary,
-        title: t('pay.status.settled.title'),
-        subtitle: t('pay.status.settled.subtitle'),
+        title: t('pay.status.succeeded.title'),
+        subtitle: t('pay.status.succeeded.subtitle'),
         showSpinner: false,
       };
-    case 'failed':
-      return {
-        icon: 'alert-circle',
-        iconColor: destructive,
-        title: t('pay.status.failed.title'),
-        subtitle: t('pay.status.failed.subtitle'),
-        showSpinner: false,
-      };
-    case 'expired':
-      return {
-        icon: 'clock-alert',
-        iconColor: warning,
-        title: t('pay.status.expired.title'),
-        subtitle: t('pay.status.expired.subtitle'),
-        showSpinner: false,
-      };
-    case 'rejected':
+    case 'canceled':
+      // Why it ended: coins that were not enough, the clock, or the merchant.
+      if (intent?.cancellation_reason === 'underpaid') {
+        return {
+          icon: 'alert-circle',
+          iconColor: destructive,
+          title: t('pay.status.canceled.underpaid.title'),
+          subtitle: t('pay.status.canceled.underpaid.subtitle'),
+          showSpinner: false,
+        };
+      }
+      if (intent?.cancellation_reason === 'abandoned') {
+        return {
+          icon: 'clock-alert',
+          iconColor: warning,
+          title: t('pay.status.canceled.abandoned.title'),
+          subtitle: t('pay.status.canceled.abandoned.subtitle'),
+          showSpinner: false,
+        };
+      }
       return {
         icon: 'close-circle',
         iconColor: destructive,
-        title: t('pay.status.rejected.title'),
-        subtitle: t('pay.status.rejected.subtitle'),
+        title: t('pay.status.canceled.merchant.title'),
+        subtitle: t('pay.status.canceled.merchant.subtitle'),
         showSpinner: false,
       };
-    // `broadcast` and any pre-broadcast status we might still observe: the tx is
-    // on the network and waiting to be seen / confirmed.
+    // `requires_action` (the frame before our own broadcast is reflected) and
+    // anything else: the tx is on its way to the network.
     default:
       return {
         icon: 'send-circle',
         iconColor: primary,
-        title: t('pay.status.broadcast.title'),
-        subtitle: t('pay.status.broadcast.subtitle'),
+        title: t('pay.status.processing.sent.title'),
+        subtitle: t('pay.status.processing.sent.subtitle'),
         showSpinner: true,
       };
   }
@@ -284,9 +296,9 @@ export default function ApprovePayScreen() {
         (updated) => {
           if (!ownsView()) return;
           setIntent(updated);
-          if (updated.status === 'settled') {
+          if (updated.status === 'succeeded') {
             hapticSuccess();
-          } else if (updated.status === 'failed') {
+          } else if (updated.status === 'canceled') {
             hapticError();
           }
         },

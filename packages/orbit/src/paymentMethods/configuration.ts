@@ -1,0 +1,128 @@
+import type {
+  PaymentMethodConfiguration,
+  PaymentMethodConfigurationEntry,
+  PaymentMethodConfigurationType,
+  PaymentMethodDomainWalletStatus,
+  PaymentMethodUnavailableReason,
+} from '@peable.to/shared-types';
+import { ORBIT_CURRENCY_DECIMALS } from '../format/money';
+
+/**
+ * Every method a configuration lists, in the order Orbit shows them. Restated
+ * from `PAYMENT_METHOD_CONFIGURATION_TYPES` (see `format/money.ts` for why) and
+ * pinned to it by `configuration.test.ts`.
+ */
+export const ORBIT_PAYMENT_METHOD_TYPES: readonly PaymentMethodConfigurationType[] = [
+  'card',
+  'apple_pay',
+  'google_pay',
+  'sepa_debit',
+  'ideal',
+  'bancontact',
+  'eps',
+  'bizum',
+];
+
+const METHOD_LABELS: Record<PaymentMethodConfigurationType, string> = {
+  card: 'Cards',
+  apple_pay: 'Apple Pay',
+  google_pay: 'Google Pay',
+  sepa_debit: 'SEPA Direct Debit',
+  ideal: 'iDEAL',
+  bancontact: 'Bancontact',
+  eps: 'EPS',
+  bizum: 'Bizum',
+};
+
+export function paymentMethodLabel(type: PaymentMethodConfigurationType): string {
+  return METHOD_LABELS[type] ?? type;
+}
+
+const REASONS: Record<PaymentMethodUnavailableReason, string> = {
+  provider_unsupported: 'Not offered by the processing provider',
+  requires_card: 'Needs card payments on',
+};
+
+/** Why a method cannot be offered, in plain words. */
+export function unavailableReasonText(reason: PaymentMethodUnavailableReason): string {
+  return REASONS[reason] ?? reason;
+}
+
+/** Every fiat currency the card rail takes — a method on all of them says so. */
+const ALL_FIAT = Object.keys(ORBIT_CURRENCY_DECIMALS).filter((code) => code !== 'FAIR');
+
+/** "All currencies", "EUR only", or "EUR, GBP". */
+export function currenciesText(currencies: readonly string[]): string {
+  if (ALL_FIAT.every((code) => currencies.includes(code))) return 'All currencies';
+  if (currencies.length === 1) return `${currencies[0]} only`;
+  return currencies.join(', ');
+}
+
+/**
+ * What the merchant chose, in one word: their own `on`/`off`, or Orbit's
+ * default (`none`) followed by the value it currently resolves to.
+ */
+export function preferenceText(entry: PaymentMethodConfigurationEntry): string {
+  const { preference, value } = entry.display_preference;
+  if (preference === 'none') return `Default (${value})`;
+  return preference === 'on' ? 'On' : 'Off';
+}
+
+/**
+ * Whether the toggle can be changed at all. A method the provider does not
+ * offer cannot be turned on, so its switch is disabled — shown, never hidden.
+ * A wallet waiting on cards can still be set: its preference takes effect when
+ * cards are on.
+ */
+export function canToggle(entry: PaymentMethodConfigurationEntry): boolean {
+  return entry.unavailable_reason !== 'provider_unsupported';
+}
+
+/** The update body that turns one method on or off, and nothing else. */
+export function preferenceUpdate(
+  type: PaymentMethodConfigurationType,
+  on: boolean,
+): {
+  [K in PaymentMethodConfigurationType]?: { display_preference: { preference: 'on' | 'off' } };
+} {
+  return { [type]: { display_preference: { preference: on ? 'on' : 'off' } } };
+}
+
+/** The configuration a screen starts on: the default, else the first. */
+export function defaultConfiguration(
+  configurations: readonly PaymentMethodConfiguration[],
+): PaymentMethodConfiguration | undefined {
+  return configurations.find((configuration) => configuration.is_default) ?? configurations[0];
+}
+
+/** A wallet's standing on a domain, in words. */
+export function walletStatusText(status: PaymentMethodDomainWalletStatus): string {
+  if (status.status === 'active') return 'Active';
+  return status.status_details?.error_message
+    ? `Inactive: ${status.status_details.error_message}`
+    : 'Inactive';
+}
+
+/**
+ * Normalise what a merchant typed into a hostname, or explain the refusal.
+ * The gateway validates again; this only catches the common slips (a scheme,
+ * a path, upper case) before a round trip.
+ */
+export function parseDomainInput(
+  input: string,
+): { ok: true; domain: string } | { ok: false; message: string } {
+  const value = input.trim().toLowerCase();
+  if (!value) return { ok: false, message: 'Enter a domain, like shop.example.com.' };
+  if (/^[a-z][a-z0-9+.-]*:\/\//.test(value)) {
+    return { ok: false, message: 'Enter the domain only, without https://.' };
+  }
+  if (/[/:?#\s@]/.test(value)) {
+    return { ok: false, message: 'Enter the domain only, without a port, path or spaces.' };
+  }
+  const labels = value.split('.');
+  const label = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+  if (value.length > 253 || labels.length < 2 || !labels.every((part) => label.test(part))) {
+    return { ok: false, message: 'That is not a valid domain name.' };
+  }
+  return { ok: true, domain: value };
+}

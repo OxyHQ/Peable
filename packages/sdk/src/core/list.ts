@@ -4,7 +4,7 @@
 // next page only when the caller gets there.
 //
 //   const page = await peable.paymentIntents.list({ limit: 20 });
-//   for await (const intent of peable.paymentIntents.list({ status: 'settled' })) { … }
+//   for await (const intent of peable.paymentIntents.list({ status: 'succeeded' })) { … }
 //   const all = await peable.refunds.list().autoPagingToArray({ limit: 500 });
 
 import type { List, ListParams } from '@peable.to/shared-types';

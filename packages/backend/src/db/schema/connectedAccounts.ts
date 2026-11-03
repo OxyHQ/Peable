@@ -5,6 +5,7 @@ import {
   foreignKey,
   index,
   integer,
+  jsonb,
   pgTable,
   text,
   unique,
@@ -12,7 +13,13 @@ import {
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
 import { merchants } from './merchants';
-import { CAPABILITY_STATUSES, NETWORK_TYPES, PROVIDER_IDS } from './valueSets';
+import type { AccountBusinessProfile, AccountSettings } from '@peable.to/shared-types';
+import {
+  CAPABILITY_STATUSES,
+  CONNECTED_ACCOUNT_ROLES,
+  NETWORK_TYPES,
+  PROVIDER_IDS,
+} from './valueSets';
 
 /**
  * A seller the merchant settles to — one row per (merchant, their own seller
@@ -69,7 +76,13 @@ export const connectedAccounts = pgTable(
      * account for store 42" and converge, rather than having to remember a
      * `ca_…` it may have lost the response to. Unique per merchant, below.
      */
-    externalRef: text().notNull(),
+    externalRef: text(),
+    /**
+     * What this account is to its merchant (ADR 0015 §1): a marketplace
+     * `seller`, or the merchant's OWN fiat account — at most one, card half
+     * only, and no `external_ref` (the merchant needs no id for itself).
+     */
+    role: text().notNull().default('seller'),
     /** The card half's acquirer. NULL on a FairCoin-only seller (ADR 0012 D1). */
     provider: text(),
     /**
@@ -124,14 +137,6 @@ export const connectedAccounts = pgTable(
      * decision and they travelled here together.
      */
     cardPaymentsCapability: text(),
-    /** Outstanding now. Non-zero means the seller has something to do. */
-    requirementsCurrentlyDue: integer().notNull().default(0),
-    /** Outstanding eventually — collected up front so payouts are never interrupted. */
-    requirementsEventuallyDue: integer().notNull().default(0),
-    /** Overdue. Non-zero is what turns a working account restricted. */
-    requirementsPastDue: integer().notNull().default(0),
-    /** Submitted and being checked — nothing for the seller to do. */
-    requirementsPendingVerification: integer().notNull().default(0),
     /**
      * Why the provider will not pay this account out, in the provider's own
      * codes.
@@ -142,6 +147,29 @@ export const connectedAccounts = pgTable(
      * of it.
      */
     disabledReasonCodes: text().array().notNull().default([]),
+    /**
+     * The requirement IDENTIFIERS the provider is waiting on — never their
+     * values. Lists, Stripe's shape (they replaced per-list counts, dropped by
+     * a post-deploy migration once no image read them).
+     */
+    currentlyDue: text().array().notNull().default([]),
+    eventuallyDue: text().array().notNull().default([]),
+    pastDue: text().array().notNull().default([]),
+    pendingVerification: text().array().notNull().default([]),
+    /**
+     * The provider's business profile and settings (payout schedule,
+     * statement descriptors, branding), in the wire's own shapes — a SNAPSHOT,
+     * written only from a provider read like every readiness field. NULL until
+     * the first read that carried them.
+     */
+    businessProfile: jsonb().$type<AccountBusinessProfile>(),
+    settings: jsonb().$type<AccountSettings>(),
+    /**
+     * The ledger's ingestion cursor (ADR 0015 §4): the `created` of the newest
+     * provider balance transaction read for this account. A sync re-reads from
+     * a margin before it, so a late-visible transaction is still found.
+     */
+    balanceSyncedThrough: timestamptz(),
     /**
      * The last successful provider read, and the reconciliation cursor: the
      * sweep refreshes the oldest first, so a missed `account.updated` converges
@@ -195,6 +223,21 @@ export const connectedAccounts = pgTable(
      * account, and the seller would have two.
      */
     unique('connected_accounts_merchant_external_ref_key').on(table.merchantId, table.externalRef),
+    /** At most ONE own account per merchant (ADR 0015 §1). */
+    uniqueIndex('connected_accounts_merchant_role_key')
+      .on(table.merchantId)
+      .where(sql`${table.role} = 'merchant'`),
+    check('connected_accounts_role_check', sql.raw(`role in (${inList(CONNECTED_ACCOUNT_ROLES)})`)),
+    /** A seller is addressed by the platform's own id; the merchant's own account by nothing. */
+    check(
+      'connected_accounts_role_external_ref_agrees_check',
+      sql`(${table.role} = 'merchant') = (${table.externalRef} is null)`,
+    ),
+    /** The merchant's own account is a provider account: card half, no FairCoin half. */
+    check(
+      'connected_accounts_merchant_role_is_card_check',
+      sql`${table.role} <> 'merchant' or (${table.provider} is not null and ${table.network} is null)`,
+    ),
     /** "Which seller is this?" — where every inbound account event starts. */
     unique('connected_accounts_provider_account_id_key').on(
       table.provider,
@@ -297,11 +340,6 @@ export const connectedAccounts = pgTable(
       sql.raw(
         `card_payments_capability is null or card_payments_capability in (${inList(CAPABILITY_STATUSES)})`,
       ),
-    ),
-    check(
-      'connected_accounts_requirements_check',
-      sql`${table.requirementsCurrentlyDue} >= 0 and ${table.requirementsEventuallyDue} >= 0
-          and ${table.requirementsPastDue} >= 0 and ${table.requirementsPendingVerification} >= 0`,
     ),
     // A code is a code — the allow-list form would be wrong, these are the
     // provider's own and their set grows on the provider's schedule. An EMPTY

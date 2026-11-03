@@ -52,6 +52,19 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // Applied well before `0010` was authored; the migrator confirmed it by
   // naming `0011`/`0012` as the stranded pair and not this one.
   '0009_fuzzy_misty_knight': 'applied in production before 0010 existed',
+  // The contract half of events and webhook endpoints (ADR 0014 D4) ships in
+  // its own release (#194), deployed before ADR 0019's `0042`–`0045` exist.
+  '0041_drop_merchant_webhook_columns': 'released with #194 before 0042 (ADR 0019) was authored',
+  // ADR 0019's validate half ships in its own release (#195), deployed before
+  // the catalog's `0046`–`0047` (ADR 0018) exist.
+  '0045_orbit_payments_core_validate': 'released with #195 before 0046 (catalog) was authored',
+  // The catalog's validation half ships with #196; it must be DEPLOYED (its
+  // post phase applied) before the request-log migration merges.
+  '0047_catalog_validate': 'released with #196; deployed before 0048 (request logs) merges',
+  // Phase 2b's validate half ships with #199; it must be DEPLOYED (its post
+  // phase applied) before Orbit money's `0052`–`0057` (ADR 0015) merge.
+  '0051_orbit_disputes_methods_validate':
+    'released with #199; deployed before 0052 (Orbit money) merges',
 };
 
 interface Migration {

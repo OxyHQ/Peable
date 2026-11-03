@@ -24,6 +24,7 @@ import { PeableInvalidRequestError, PeableApiError, PeableError } from '../../sr
 // so the round-trip test below proves byte-for-byte compatibility instead of
 // just asserting against my own possibly-mistaken re-reading of its contract.
 import { parsePaymentRequest } from '../../../frontend/src/pay/payment-request';
+import { paymentIntentFixture } from '../support/intentFixture';
 
 const ADDR = 'FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek';
 // Same fixture + same network-detection idiom as the wallet's own
@@ -32,26 +33,20 @@ const ADDR = 'FAHUJmcTfwvRYCcDXAzsu7YRiittDC8Jek';
 // be detected rather than assumed.
 const NET = validateAddress(ADDR, getNetwork('mainnet')) ? 'mainnet' : 'testnet';
 
-const INTENT: PaymentIntent = {
-  id: 'pi_0123456789abcdef01234567',
-  object: 'payment_intent',
-  livemode: false,
-  status: 'created',
-  rail: 'faircoin',
+const INTENT: PaymentIntent = paymentIntentFixture({
   amount: '150000000',
-  currency: 'FAIR',
-  network: NET,
-  address: ADDR,
-  merchant_id: 'merch_1',
-  connected_account: null,
-  txid: null,
-  confirmations: 0,
+  faircoin: {
+    network: NET,
+    address: ADDR,
+    txid: null,
+    confirmations: 0,
+    required_confirmations: 1,
+  },
   client_secret: 'pi_0123456789abcdef01234567_secret_00112233445566778899aabbccddeeff',
-  metadata: {},
   expires_at: 1784505600,
   created: 1784419200,
   updated_at: 1784419200,
-};
+});
 
 describe('deriveIntentId', () => {
   const ID = 'pi_0123456789abcdef01234567';
@@ -159,9 +154,9 @@ describe('createEmitter', () => {
   test('invokes a registered handler with the emitted payload', () => {
     const emitter = createEmitter();
     const received: PaymentIntent[] = [];
-    emitter.on('settled', (intent) => received.push(intent));
+    emitter.on('succeeded', (intent) => received.push(intent));
 
-    emitter.emit('settled', INTENT);
+    emitter.emit('succeeded', INTENT);
 
     expect(received).toEqual([INTENT]);
   });
@@ -169,33 +164,33 @@ describe('createEmitter', () => {
   test('multiple handlers on the same event all fire', () => {
     const emitter = createEmitter();
     let calls = 0;
-    emitter.on('confirming', () => {
+    emitter.on('processing', () => {
       calls += 1;
     });
-    emitter.on('confirming', () => {
+    emitter.on('processing', () => {
       calls += 1;
     });
 
-    emitter.emit('confirming', INTENT);
+    emitter.emit('processing', INTENT);
 
     expect(calls).toBe(2);
   });
 
   test('a handler registered for a different event never fires', () => {
     const emitter = createEmitter();
-    let settledCalls = 0;
-    let failedCalls = 0;
-    emitter.on('settled', () => {
-      settledCalls += 1;
+    let succeededCalls = 0;
+    let canceledCalls = 0;
+    emitter.on('succeeded', () => {
+      succeededCalls += 1;
     });
-    emitter.on('failed', () => {
-      failedCalls += 1;
+    emitter.on('canceled', () => {
+      canceledCalls += 1;
     });
 
-    emitter.emit('settled', INTENT);
+    emitter.emit('succeeded', INTENT);
 
-    expect(settledCalls).toBe(1);
-    expect(failedCalls).toBe(0);
+    expect(succeededCalls).toBe(1);
+    expect(canceledCalls).toBe(0);
   });
 
   test('emitting an event with no registered handlers does not throw', () => {
@@ -206,7 +201,7 @@ describe('createEmitter', () => {
   test('removeAll tears down every handler for every event', () => {
     const emitter = createEmitter();
     let calls = 0;
-    emitter.on('settled', () => {
+    emitter.on('succeeded', () => {
       calls += 1;
     });
     emitter.on('error', () => {
@@ -214,7 +209,7 @@ describe('createEmitter', () => {
     });
 
     emitter.removeAll();
-    emitter.emit('settled', INTENT);
+    emitter.emit('succeeded', INTENT);
     emitter.emit('error', new PeableError('api_error', 'boom'));
 
     expect(calls).toBe(0);
@@ -225,8 +220,8 @@ describe('payDeepLinkFor', () => {
   /**
    * The narrowing that stops an empty address reaching the wallet.
    *
-   * `address` and `network` became nullable with the card rail (gateway ADR
-   * 0001 D6). The tempting fix at the call site was `?? ''`, which mints
+   * A card intent's `faircoin` is `null` (gateway ADR 0001 D6, ADR 0019). The
+   * tempting fix at the call site would be `?? ''`, which mints
    * `peable://pay?...&address=&network=` — structurally a valid link, and one
    * that sends a payer nowhere. These two cases are what make that impossible.
    */
@@ -235,8 +230,7 @@ describe('payDeepLinkFor', () => {
       ...INTENT,
       rail: 'card',
       currency: 'EUR',
-      address: null,
-      network: null,
+      faircoin: null,
     } as unknown as PaymentIntent;
 
     expect(() => payDeepLinkFor(card)).toThrow(PeableRailUnsupportedError);
@@ -247,17 +241,17 @@ describe('payDeepLinkFor', () => {
       buildPayDeepLink({
         intentId: INTENT.id,
         clientSecret: INTENT.client_secret,
-        address: INTENT.address as string,
+        address: ADDR,
         amount: INTENT.amount,
-        network: INTENT.network as NonNullable<PaymentIntent['network']>,
+        network: NET,
       }),
     );
   });
 
-  /** A faircoin intent whose chain fields somehow went missing is refused too —
+  /** A faircoin intent whose chain side somehow went missing is refused too —
    *  the rail label alone is not the guarantee, the fields are. */
-  test('refuses a faircoin intent with no address', () => {
-    const broken = { ...INTENT, address: null } as unknown as PaymentIntent;
+  test('refuses a faircoin intent with no chain side', () => {
+    const broken = { ...INTENT, faircoin: null } as unknown as PaymentIntent;
     expect(() => payDeepLinkFor(broken)).toThrow(PeableRailUnsupportedError);
   });
 });

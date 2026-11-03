@@ -16,8 +16,13 @@
 import type { NetworkType } from '@fairco.in/core';
 import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
 import type {
+  PaymentIntentCancellationReason,
+  PaymentIntentCaptureMethod,
   PaymentIntentRail,
+  PaymentIntentSetupFutureUsage,
   PaymentIntentStatus,
+  WebhookEnabledEvent,
+  SetupIntentStatus,
   WebhookEventType,
 } from '@peable.to/shared-types';
 // TYPE-ONLY, and it must stay that way: the module it names imports the Stripe
@@ -49,19 +54,13 @@ export const SERVICE_ENVIRONMENTS = OXY_SERVICE_ENVIRONMENTS;
  * the same members, so the runtime source of truth still governs.
  */
 export const PAYMENT_INTENT_STATUS_VALUES = [
-  'created',
-  'awaiting_approval',
-  'approved',
-  'broadcast',
-  'confirming',
+  'requires_payment_method',
+  'requires_confirmation',
   'requires_action',
   'processing',
-  'settled',
-  'refunded',
-  'partially_refunded',
-  'expired',
-  'failed',
-  'rejected',
+  'requires_capture',
+  'canceled',
+  'succeeded',
 ] as const satisfies readonly PaymentIntentStatus[];
 export type PaymentIntentStatusesAreComplete = AssertAllListed<
   PaymentIntentStatus,
@@ -94,15 +93,60 @@ export const RAIL_VALUES = ['faircoin', 'card'] as const satisfies readonly Paym
 export type RailsAreComplete = AssertAllListed<PaymentIntentRail, (typeof RAIL_VALUES)[number]>;
 
 /**
- * The statuses only the FairCoin rail can reach, and the statuses only the card
- * rail can reach (ADR 0001 D5).
- *
- * Re-exported from the contract rather than re-listed, because a second list
- * here would be a second thing to keep in step with the transition table — and
- * the failure mode of a drift is a CHECK refusing a status the application
- * considers legal, in production, on the first payment that reaches it.
+ * The statuses only the card rail can reach (ADR 0019): a FairCoin payment
+ * requires no payment method, has nothing to confirm server-side and nothing to
+ * capture. Re-exported from the contract rather than re-listed, so the CHECK
+ * cannot drift from the transition table.
  */
-export { CHAIN_ONLY_STATUSES, CARD_ONLY_STATUSES } from '@peable.to/shared-types';
+export { CARD_ONLY_STATUSES } from '@peable.to/shared-types';
+
+/** Why an intent was cancelled (ADR 0019). NULL when nobody said. */
+export const CANCELLATION_REASON_VALUES = [
+  'abandoned',
+  'automatic',
+  'duplicate',
+  'fraudulent',
+  'requested_by_customer',
+  'underpaid',
+] as const satisfies readonly PaymentIntentCancellationReason[];
+export type CancellationReasonsAreComplete = AssertAllListed<
+  PaymentIntentCancellationReason,
+  (typeof CANCELLATION_REASON_VALUES)[number]
+>;
+
+/** When a card is captured. FairCoin is always `automatic`. */
+export const CAPTURE_METHOD_VALUES = [
+  'automatic',
+  'manual',
+] as const satisfies readonly PaymentIntentCaptureMethod[];
+export type CaptureMethodsAreComplete = AssertAllListed<
+  PaymentIntentCaptureMethod,
+  (typeof CAPTURE_METHOD_VALUES)[number]
+>;
+
+/** Card only: keep the payment method for later. */
+export const SETUP_FUTURE_USAGE_VALUES = [
+  'on_session',
+  'off_session',
+] as const satisfies readonly PaymentIntentSetupFutureUsage[];
+export type SetupFutureUsagesAreComplete = AssertAllListed<
+  PaymentIntentSetupFutureUsage,
+  (typeof SETUP_FUTURE_USAGE_VALUES)[number]
+>;
+
+/** Where a SetupIntent stands — Stripe's six. */
+export const SETUP_INTENT_STATUS_VALUES = [
+  'requires_payment_method',
+  'requires_confirmation',
+  'requires_action',
+  'processing',
+  'canceled',
+  'succeeded',
+] as const satisfies readonly SetupIntentStatus[];
+export type SetupIntentStatusesAreComplete = AssertAllListed<
+  SetupIntentStatus,
+  (typeof SETUP_INTENT_STATUS_VALUES)[number]
+>;
 
 /**
  * How a provider reports one capability on a connected account.
@@ -143,7 +187,7 @@ export const TRANSFER_STATUSES = [
  * and a payment can hold several of those. Sharing a vocabulary would make
  * "which refund failed" unaskable.
  */
-export const REFUND_STATUSES = ['pending', 'succeeded', 'failed'] as const;
+export const REFUND_STATUSES = ['pending', 'succeeded', 'failed', 'canceled'] as const;
 
 /**
  * Who created a refund.
@@ -198,11 +242,14 @@ export const DISPUTE_STATUSES = ['needs_response', 'under_review', 'won', 'lost'
 export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
 
 /**
- * What each event is ABOUT — and therefore what its delivery must name.
+ * What each event is ABOUT — and therefore what it must name. This map IS the
+ * event catalog: a new event type is an entry here (plus its payload in
+ * `WebhookEventPayload`), and the CHECKs that list types are derived from it.
  *
  * ## Declared, not inferred from the name
  *
- * `webhook_deliveries_intent_event_has_intent_check` used to key on the
+ * `events_intent_event_has_intent_check` (formerly on `webhook_deliveries`)
+ * used to key on the
  * `payment_intent.` PREFIX: an event whose type started with it had to carry a
  * `payment_intent_id`, and one that did not had to carry none. That worked for
  * the ten events that exist and made the naming convention load-bearing in a
@@ -222,19 +269,63 @@ export type DisputeStatus = (typeof DISPUTE_STATUSES)[number];
  * the constraint enforces.
  */
 export const WEBHOOK_EVENT_SCOPES = {
-  'payment_intent.confirming': 'intent',
-  'payment_intent.settled': 'intent',
-  'payment_intent.failed': 'intent',
-  'payment_intent.rejected': 'intent',
-  'payment_intent.expired': 'intent',
-  'payment_intent.refunded': 'intent',
-  'payment_intent.partially_refunded': 'intent',
-  'payment_intent.disputed': 'intent',
-  'payment_intent.dispute_closed': 'intent',
-  // The first event that is not about a payment. It is about a SELLER, so its
-  // delivery names no intent — which is why the column is nullable at all.
+  'payment_intent.created': 'intent',
+  'payment_intent.requires_action': 'intent',
+  'payment_intent.processing': 'intent',
+  'payment_intent.amount_capturable_updated': 'intent',
+  'payment_intent.succeeded': 'intent',
+  'payment_intent.payment_failed': 'intent',
+  'payment_intent.canceled': 'intent',
+  // Named for the charge, the refund or the dispute and still ABOUT a payment —
+  // the case the declared scope exists for.
+  'charge.refunded': 'intent',
+  'charge.dispute.created': 'intent',
+  'charge.dispute.updated': 'intent',
+  'charge.dispute.closed': 'intent',
+  'charge.dispute.funds_withdrawn': 'intent',
+  'charge.dispute.funds_reinstated': 'intent',
+  'refund.created': 'intent',
+  'refund.updated': 'intent',
+  'refund.failed': 'intent',
+  // About a customer, a saved card or a seller: no payment named.
+  'customer.created': 'merchant',
+  'customer.updated': 'merchant',
+  'customer.deleted': 'merchant',
+  'payment_method.attached': 'merchant',
+  'payment_method.detached': 'merchant',
+  'payment_method.updated': 'merchant',
+  'setup_intent.created': 'merchant',
+  'setup_intent.requires_action': 'merchant',
+  'setup_intent.succeeded': 'merchant',
+  'setup_intent.setup_failed': 'merchant',
+  'setup_intent.canceled': 'merchant',
   'billing.observation.updated': 'merchant',
   'connected_account.updated': 'merchant',
+  // The catalog (ADR 0018): about the merchant's own products and offers.
+  'product.created': 'merchant',
+  'product.updated': 'merchant',
+  'product.deleted': 'merchant',
+  'price.created': 'merchant',
+  'price.updated': 'merchant',
+  'coupon.created': 'merchant',
+  'coupon.updated': 'merchant',
+  'coupon.deleted': 'merchant',
+  'promotion_code.created': 'merchant',
+  'promotion_code.updated': 'merchant',
+  // Orbit money (ADR 0015): about the merchant's account, its fees, payouts
+  // and balance — never a payment's status, so no `payment_intent_id` is
+  // required of them, even the fee events that are caused by one.
+  'account.updated': 'merchant',
+  'application_fee.created': 'merchant',
+  'application_fee.refunded': 'merchant',
+  'payout.created': 'merchant',
+  'payout.updated': 'merchant',
+  'payout.paid': 'merchant',
+  'payout.failed': 'merchant',
+  'payout.canceled': 'merchant',
+  'balance.available': 'merchant',
+  // Sent to ONE endpoint on request; about the endpoint, never about a payment.
+  'webhook_endpoint.test': 'merchant',
 } as const satisfies Record<WebhookEventType, 'intent' | 'merchant'>;
 
 /**
@@ -262,6 +353,31 @@ export const WEBHOOK_EVENT_TYPES = Object.keys(WEBHOOK_EVENT_SCOPES) as readonly
 export const INTENT_WEBHOOK_EVENT_TYPES = WEBHOOK_EVENT_TYPES.filter(
   (type) => WEBHOOK_EVENT_SCOPES[type] === 'intent',
 );
+
+/**
+ * The event types never fanned out by subscription — sent only to the one
+ * endpoint they name. A webhook endpoint cannot list them in `enabled_events`.
+ */
+export const TARGETED_WEBHOOK_EVENT_TYPES = [
+  'webhook_endpoint.test',
+] as const satisfies readonly WebhookEventType[];
+
+/**
+ * What `webhook_endpoints.enabled_events` may hold: every subscribable event
+ * type, and `*` for all of them (including types added later).
+ */
+export const WEBHOOK_ENABLED_EVENTS: readonly WebhookEnabledEvent[] = [
+  '*',
+  ...WEBHOOK_EVENT_TYPES.filter(
+    (type) => !(TARGETED_WEBHOOK_EVENT_TYPES as readonly string[]).includes(type),
+  ),
+];
+
+/** Re-exported from the wire contract so the CHECK reads from the tuple the DTO is typed by. */
+export {
+  WEBHOOK_ENDPOINT_DISABLED_REASONS,
+  WEBHOOK_ENDPOINT_STATUSES,
+} from '@peable.to/shared-types';
 
 /**
  * Where one webhook delivery stands.
@@ -304,6 +420,22 @@ export const TERMINAL_WEBHOOK_DELIVERY_STATUSES = ['delivered', 'failed', 'dead'
 export { CURRENCY_CODES } from '@peable.to/shared-types';
 
 /**
+ * The catalog's closed sets (ADR 0018), re-exported from the wire contract that
+ * types the DTOs, so a CHECK can never accept a value the API cannot name nor
+ * refuse one it publishes.
+ */
+export {
+  COUPON_DURATIONS,
+  PRICE_BILLING_SCHEMES,
+  PRICE_TAX_BEHAVIORS,
+  PRICE_TIERS_MODES,
+  PRICE_TYPES,
+  RECURRING_INTERVALS,
+  RECURRING_USAGE_TYPES,
+  TRANSFORM_QUANTITY_ROUNDS,
+} from '@peable.to/shared-types';
+
+/**
  * The highest derivation index this schema can store — `int4`'s ceiling, and
  * NOT a coincidence: it is exactly the highest legal non-hardened BIP32 child
  * index, `HARDENED_OFFSET - 1`.
@@ -336,14 +468,23 @@ export const BASE_UNIT_STRING_PATTERN = '^(0|[1-9][0-9]*)$';
  * `entityType` of every reference this application registers with Oxy, and the
  * unit `OxyServer.assets.references.reconcile` is run per.
  *
- * One member today. A merchant's avatar is the only Oxy file Peable stores — a
- * person's profile avatar is Oxy's own, shown through `profile.avatar` and never
- * written here. A new use is a new member AND a branch in
- * `db/oxyFiles/referenceSyncRepository.ts`'s `isReferenceWanted` and in
- * `services/oxyFiles/referenceReconciliation.ts`'s inventory, which switch on
- * this tuple exhaustively so a member without them does not compile.
+ *  - `merchant_avatar` — a merchant's square identity image, an Oxy file the
+ *    merchant owns (`merchants.avatar_file_id`, entity = `merch_…`).
+ *  - `file` — an Orbit File (`files`, entity = `file_…`): bytes Peable stored
+ *    for a merchant, or an Oxy file a merchant owns imported as one. EVERY live
+ *    `files` row holds its reference — an application-owned file nothing
+ *    references is collected by Oxy — and whatever uses a File (a dispute's
+ *    evidence, the merchant's `business_logo`) uses the row, never the Oxy
+ *    file directly, so it needs no reference of its own.
+ *
+ * A person's profile avatar is Oxy's own, shown through `profile.avatar` and
+ * never written here. A new use is a new member AND a branch in
+ * `db/oxyFiles/referenceSyncRepository.ts`'s `isReferenceWanted`, in
+ * `services/oxyFiles/referenceReconciliation.ts`'s inventory and in
+ * `services/oxyFiles/fileEvents.ts`, which switch on this tuple exhaustively
+ * so a member without them does not compile.
  */
-export const OXY_FILE_ENTITY_TYPES = ['merchant_avatar'] as const;
+export const OXY_FILE_ENTITY_TYPES = ['merchant_avatar', 'file'] as const;
 export type OxyFileEntityType = (typeof OXY_FILE_ENTITY_TYPES)[number];
 
 /**
@@ -373,6 +514,45 @@ export type MerchantAvatarWithheldReason = (typeof MERCHANT_AVATAR_WITHHELD_REAS
 export const MERCHANT_AVATAR_AUDIT_ACTIONS = ['cleared', 'withheld', 'released'] as const;
 export type MerchantAvatarAuditAction = (typeof MERCHANT_AVATAR_AUDIT_ACTIONS)[number];
 
+/**
+ * What a File is for, its stored format and its standing — re-exported from the
+ * wire contract, which owns the sets and the per-purpose upload policy.
+ */
+export { FILE_PURPOSES, FILE_STATUSES, FILE_TYPES } from '@peable.to/shared-types';
+
+/**
+ * Why a File is stored but not SERVED — the same two reversible reasons as an
+ * avatar's, for the same file events. A deleted, taken-down or lost file sets
+ * `files.removed_at` instead: it can never come back.
+ */
+export const FILE_WITHHELD_REASONS = MERCHANT_AVATAR_WITHHELD_REASONS;
+export type FileWithheldReason = MerchantAvatarWithheldReason;
+
+/** The Oxy events that remove a File for good — `files.removed_by`. */
+export const FILE_REMOVAL_EVENT_TYPES = ['file.deleted', 'file.blocked', 'file.lost'] as const;
+export type FileRemovalEventType = (typeof FILE_REMOVAL_EVENT_TYPES)[number];
+
+/**
+ * The dispute evidence fields that name a File — re-exported from the wire
+ * contract, so the CHECK on `dispute_evidence_files.field` cannot drift from the
+ * fields the route accepts and the adapter forwards.
+ */
+export { DISPUTE_FILE_EVIDENCE_FIELDS } from '@peable.to/shared-types';
+
+/**
+ * The methods a payment method configuration can turn on, and the card-rail
+ * types a PaymentIntent can carry — the wire contract's sets.
+ */
+export {
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
+  PAYMENT_METHOD_CONFIGURATION_TYPES,
+} from '@peable.to/shared-types';
+
+/** A wallet's standing on a payment method domain. */
+export const PAYMENT_METHOD_DOMAIN_WALLET_STATUSES = ['active', 'inactive'] as const;
+export type PaymentMethodDomainWalletStatus =
+  (typeof PAYMENT_METHOD_DOMAIN_WALLET_STATUSES)[number];
+
 /** Where one scheduled reconciliation run stands — `oxy_file_reconciliation_runs.status`. */
 export const OXY_FILE_RECONCILIATION_STATUSES = [
   'running',
@@ -395,3 +575,67 @@ export type OxyFileReconciliationStatus = (typeof OXY_FILE_RECONCILIATION_STATUS
  */
 export const IDEMPOTENCY_KEY_STATUSES = ['in_progress', 'completed'] as const;
 export type IdempotencyKeyStatus = (typeof IDEMPOTENCY_KEY_STATUSES)[number];
+
+/**
+ * The HTTP methods a request log records — `api_request_logs.method`.
+ * Re-exported from the wire contract so the CHECK reads from the tuple
+ * `RequestLog.method` is typed by.
+ */
+export { REQUEST_LOG_METHODS } from '@peable.to/shared-types';
+// ---------------------------------------------------------------------------
+// Orbit money (ADR 0015): accounts, fees, the ledger, payouts, reconciliation
+// ---------------------------------------------------------------------------
+
+/**
+ * What a `connected_accounts` row is to its merchant.
+ *
+ *  - `seller`   — one of a marketplace's sellers, addressed by the platform's
+ *                 own `external_ref` (ADR 0012).
+ *  - `merchant` — the merchant's OWN fiat account (ADR 0015 §1): at most one per
+ *                 merchant, card half only, no `external_ref`.
+ */
+export const CONNECTED_ACCOUNT_ROLES = ['seller', 'merchant'] as const;
+export type ConnectedAccountRole = (typeof CONNECTED_ACCOUNT_ROLES)[number];
+
+export {
+  BALANCE_TRANSACTION_STATUSES,
+  BALANCE_TRANSACTION_TYPES,
+  PAYOUT_STATUSES,
+  RECONCILIATION_MISMATCH_KINDS,
+  REFUND_REASONS,
+} from '@peable.to/shared-types';
+
+/**
+ * A ledger account's balance type (ADR 0015 §4). `available` and `pending`
+ * mirror the provider's balance; `informational` holds FairCoin the merchant
+ * received in its own wallet (§5); `external` is the counter-account every
+ * journal posts against — the world outside the mirrored balance — so each
+ * journal sums to zero.
+ */
+export const LEDGER_BALANCE_TYPES = ['available', 'pending', 'informational', 'external'] as const;
+export type LedgerBalanceType = (typeof LEDGER_BALANCE_TYPES)[number];
+
+/**
+ * Why a journal was posted: `recognized` when a balance transaction is first
+ * ingested, `released` when the provider moved its funds from pending to
+ * available. ONE of each per balance transaction (a unique index).
+ */
+export const LEDGER_JOURNAL_KINDS = ['recognized', 'released'] as const;
+export type LedgerJournalKind = (typeof LEDGER_JOURNAL_KINDS)[number];
+
+export const PAYOUT_METHODS = ['standard', 'instant'] as const;
+export const PAYOUT_TYPES = ['bank_account', 'card'] as const;
+/** `provider` — the account's schedule created it; `merchant` — `POST /v1/payouts`. */
+export const PAYOUT_ORIGINS = ['provider', 'merchant'] as const;
+export type PayoutOrigin = (typeof PAYOUT_ORIGINS)[number];
+
+/** The payment-method types a fee schedule can price. */
+export const FEE_PAYMENT_METHOD_TYPES = ['card'] as const;
+export type FeePaymentMethodType = (typeof FEE_PAYMENT_METHOD_TYPES)[number];
+
+/**
+ * A SIGNED canonical base-unit integer string: a balance transaction and a
+ * ledger entry move money out as well as in. One spelling per value — no `-0`,
+ * no leading zero.
+ */
+export const SIGNED_BASE_UNIT_STRING_PATTERN = '^(0|-?[1-9][0-9]*)$';

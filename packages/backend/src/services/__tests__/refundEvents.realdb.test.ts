@@ -17,7 +17,6 @@
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
 import type { ProviderMode } from '../providers/provider';
-import { must } from '../../__tests__/helpers/must';
 
 const providerCalls: string[] = [];
 
@@ -75,19 +74,17 @@ const {
   markRefundSucceeded,
   sumSucceededRefunds,
 } = await import('../../db/refunds/refundRepository');
-const {
-  findIntentByPublicId,
-  insertPaymentIntent,
-  linkProviderCharge,
-  linkProviderObject,
-  updateIntentState,
-} = await import('../../db/payments/paymentIntentRepository');
+const { findIntentByPublicId, insertPaymentIntent, linkProviderCharge, linkProviderObject } =
+  await import('../../db/payments/paymentIntentRepository');
 const { gatewayDb, seedMerchant, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
 const { useStripeKeys } = await import('../../__tests__/helpers/stripeModes');
 const { uuidv7 } = await import('@oxy.so/db');
+const { transitionIntent } = await import('../intentTransition');
+const { events } = await import('../../db/schema');
+const { eq } = await import('drizzle-orm');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
@@ -148,6 +145,7 @@ async function settledIntent(amount: string) {
     network: null,
     address: null,
     provider: 'stripe',
+    status: 'requires_payment_method',
     clientSecret: `cs_revt_${suffix}`,
     idempotencyKey: uuidv7(),
     metadata: {},
@@ -156,8 +154,19 @@ async function settledIntent(amount: string) {
   if (!intent) throw new Error('could not seed the intent');
   await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_revt_${suffix}`);
   await linkProviderCharge(gatewayDb(), intent.id, 'stripe', `ch_stripe_revt_${suffix}`);
-  await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+  // Through the real transition, so the `ch_…` a `charge.refunded` carries exists.
+  await transitionIntent(intent.id, { from: 'requires_payment_method', status: 'succeeded' });
   return { intent, suffix };
+}
+
+/** The events enqueued about one intent, oldest first. */
+async function eventTypesFor(intentId: string): Promise<string[]> {
+  const rows = await gatewayDb()
+    .select({ type: events.type })
+    .from(events)
+    .where(eq(events.paymentIntentId, intentId))
+    .orderBy(events.id);
+  return rows.map((row) => row.type);
 }
 
 describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
@@ -166,7 +175,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
 
   beforeAll(async () => {
     useFake = true;
-    merchant = await seedMerchant();
+    merchant = await seedMerchant({
+      webhookUrl: 'https://merchant.example/hooks',
+      webhookSecret: 'whsec_refund_events',
+    });
   });
 
   beforeEach(() => {
@@ -198,12 +210,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
     });
     if (!inserted) throw new Error('could not seed the refund');
     await markRefundSucceeded(gatewayDb(), inserted.id, `re_stripe_fail_${suffix}`);
-    // The payment is `refunded`, because the refund succeeded. Re-read first:
-    // `settledIntent` returns the row as INSERTED (`created`), and
-    // `applyRefundToIntent` decides the transition from the status it is handed.
-    const settled = await findIntentByPublicId(gatewayDb(), intent.publicId);
-    const { applyRefundToIntent } = await import('../refunds/refundService');
-    expect(await applyRefundToIntent(must(settled))).toBe('refunded');
+    // All of it came back, because the refund succeeded.
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.amountRefunded).toBe(
+      '10000',
+    );
 
     const eventId = await storeEvent(
       'refund.failed',
@@ -233,15 +243,15 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
     expect(await sumSucceededRefunds(gatewayDb(), intent.id)).toBe('0');
 
     /**
-     * ...and the PAYMENT stops claiming it was refunded.
-     *
-     * `refunded` used to be terminal in the transition table, so this was
-     * unreachable: a payment whose only refund failed would say `refunded`
-     * forever while the money was still with the merchant, with no legal
-     * transition able to correct it. `refund_voided` is that transition, and
-     * the target is recomputed from the sum rather than stepped.
+     * ...and the PAYMENT stops claiming it was refunded: `amount_refunded` is
+     * the sum of succeeded rows, so it drops with the row — no transition
+     * needed, because a refund was never a status (ADR 0019). The merchant is
+     * told by `refund.failed`.
      */
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    const after = await findIntentByPublicId(gatewayDb(), intent.publicId);
+    expect(after?.status).toBe('succeeded');
+    expect(after?.amountRefunded).toBe('0');
+    expect(await eventTypesFor(intent.id)).toContain('refund.failed');
   });
 
   /**
@@ -274,15 +284,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
     );
 
     const outcome = await processOne(eventId);
-    expect(outcome).toEqual({
-      kind: 'applied',
-      intentId: intent.id,
-      status: 'partially_refunded',
-    });
+    expect(outcome).toEqual({ kind: 'applied', intentId: intent.id, status: 'succeeded' });
     expect((await listRefundsForIntent(gatewayDb(), intent.id))[0]?.status).toBe('succeeded');
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
-      'partially_refunded',
-    );
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.amountRefunded).toBe('4000');
+    expect(await eventTypesFor(intent.id)).toEqual([
+      'payment_intent.succeeded',
+      'refund.updated',
+      'charge.refunded',
+    ]);
   });
 
   /**
@@ -353,9 +362,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('refund events', () => {
     // to infer it from a null.
     expect(rows[0]?.externalRef).toBeNull();
     expect(rows[0]?.origin).toBe('provider');
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
-      'partially_refunded',
-    );
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.amountRefunded).toBe('2500');
+    // An import is news twice over: the refund exists, and the charge's total moved.
+    expect(await eventTypesFor(intent.id)).toEqual([
+      'payment_intent.succeeded',
+      'refund.created',
+      'charge.refunded',
+    ]);
     expect((await findProviderEventById(gatewayDb(), eventId))?.processedAt).not.toBeNull();
   });
 

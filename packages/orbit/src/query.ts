@@ -3,7 +3,7 @@ import { QueryClient } from '@tanstack/react-query';
 /**
  * The one TanStack Query client: `OxyProvider` shares it with the SDK's own
  * queries, and every Orbit read goes through it. Merchant data changes under
- * the merchant's feet (a webhook retried, a payment settled), so it goes stale
+ * the merchant's feet (a webhook retried, a payment succeeded), so it goes stale
  * quickly and is refetched when the window regains focus.
  */
 export const queryClient = new QueryClient({

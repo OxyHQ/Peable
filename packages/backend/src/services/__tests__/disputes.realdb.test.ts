@@ -13,7 +13,7 @@
  */
 import { beforeAll, describe, expect, it } from 'bun:test';
 import { useStripeKeys } from '../../__tests__/helpers/stripeModes';
-import type { Dispute, WebhookEvent } from '@peable.to/shared-types';
+import type { Dispute } from '@peable.to/shared-types';
 import { eq } from 'drizzle-orm';
 import {
   insertProviderEvent,
@@ -21,13 +21,14 @@ import {
 } from '../../db/providers/providerEventRepository';
 import { linkProviderObject } from '../../db/payments/paymentIntentRepository';
 import { listDisputesForIntent } from '../../db/disputes/disputeRepository';
-import { disputes, webhookDeliveries } from '../../db/schema';
+import { disputes, events } from '../../db/schema';
 import { runProviderEventDrainPass } from '../providerEventDrain';
 import { redactProviderPayload } from '../providers/redact';
 import {
   gatewayDb,
   seedIntent,
   seedMerchant,
+  storedEvents,
   useGatewayDatabase,
 } from '../../__tests__/helpers/gatewayTestDatabase';
 import { POSTGRES_TESTS_ENABLED } from '../../db/testDatabase';
@@ -60,6 +61,7 @@ async function storeDisputeEvent(input: {
   reason?: string;
   status?: string;
   dueBy?: number;
+  isChargeRefundable?: boolean;
 }): Promise<string> {
   counter += 1;
   const objectIds: Record<string, string> = {};
@@ -86,6 +88,11 @@ async function storeDisputeEvent(input: {
           ...(input.reason ? { reason: input.reason } : {}),
           ...(input.status ? { status: input.status } : {}),
           ...(input.dueBy ? { evidence_details: { due_by: input.dueBy } } : {}),
+          ...(input.isChargeRefundable === undefined
+            ? {}
+            : { is_charge_refundable: input.isChargeRefundable }),
+          // What a real payload carries and the redaction must drop.
+          evidence: { customer_name: 'Jane Buyer' },
         },
       },
     }),
@@ -102,10 +109,11 @@ async function linkedCardIntent(objectId: string) {
 
 async function deliveriesFor(intentId: string): Promise<string[]> {
   const rows = await gatewayDb()
-    .select({ eventType: webhookDeliveries.eventType })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows.map((row) => row.eventType);
+    .select({ type: events.type })
+    .from(events)
+    .where(eq(events.paymentIntentId, intentId))
+    .orderBy(events.id);
+  return rows.map((row) => row.type);
 }
 
 /**
@@ -117,15 +125,10 @@ async function deliveriesFor(intentId: string): Promise<string[]> {
  * no reason and, most expensively, no evidence deadline.
  */
 async function disputePayloadsFor(intentId: string): Promise<Dispute[]> {
-  const rows = await gatewayDb()
-    .select({ payload: webhookDeliveries.payload })
-    .from(webhookDeliveries)
-    .where(eq(webhookDeliveries.paymentIntentId, intentId));
-  return rows
-    .map((row) => row.payload as unknown as WebhookEvent)
+  return (await storedEvents({ paymentIntentId: intentId }))
+    .map(({ event }) => event)
     .filter(
-      (event) =>
-        event.type === 'payment_intent.disputed' || event.type === 'payment_intent.dispute_closed',
+      (event) => event.type === 'charge.dispute.created' || event.type === 'charge.dispute.closed',
     )
     .map((event) => event.data.object as Dispute);
 }
@@ -135,10 +138,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
   useStripeKeys();
 
   beforeAll(async () => {
-    // BOTH halves, deliberately: `findWebhookTarget` returns null unless the
-    // url AND the secret are present, and a null target makes
-    // `enqueueIntentWebhook` return without writing a delivery row. Seeding
-    // only the url would leave every delivery assertion below vacuously empty.
+    // With an endpoint, so every recorded event also fans out a delivery.
     merchant = await seedMerchant({
       webhookUrl: 'https://merchant.invalid/hook',
       webhookSecret: 'whsec_dispute_fixture',
@@ -172,7 +172,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // acquirer, and a gateway paraphrase would not match what the acquirer holds.
     expect(rows[0]?.reason).toBe('fraudulent');
     expect(rows[0]?.evidenceDueAt).not.toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.disputed');
+    expect(await deliveriesFor(intent.id)).toContain('charge.dispute.created');
 
     // The payload is the DISPUTE, and it carries the three things a merchant
     // needs to act: how much, why, and by when.
@@ -180,7 +180,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(delivered?.object).toBe('dispute');
     expect(delivered?.amount).toBe('2500');
     expect(delivered?.reason).toBe('fraudulent');
-    expect(delivered?.evidence_due_at).not.toBeNull();
+    expect(delivered?.evidence_details.due_by).not.toBeNull();
     // And back to the payment, by its PUBLIC id — the internal one would name a
     // row the merchant has never seen.
     expect(delivered?.payment_intent).toBe(intent.publicId);
@@ -204,7 +204,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
 
     expect(await listDisputesForIntent(gatewayDb(), intent.id)).toHaveLength(1);
     const delivered = await deliveriesFor(intent.id);
-    expect(delivered.filter((type) => type === 'payment_intent.disputed')).toHaveLength(1);
+    expect(delivered.filter((type) => type === 'charge.dispute.created')).toHaveLength(1);
   });
 
   /**
@@ -237,7 +237,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // is also what stops an operator queue showing a response that can no
     // longer be given.
     expect(rows[0]?.evidenceDueAt).toBeNull();
-    expect(await deliveriesFor(intent.id)).toContain('payment_intent.dispute_closed');
+    expect(await deliveriesFor(intent.id)).toContain('charge.dispute.closed');
 
     // The closing payload says WHICH way it went and carries no deadline — a
     // merchant told only that a dispute "closed" has a notification and no
@@ -247,7 +247,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
       (payload) => payload.status === 'lost',
     );
     expect(closing).toBeDefined();
-    expect(closing?.evidence_due_at).toBeNull();
+    expect(closing?.evidence_details.due_by).toBeNull();
   });
 
   it('reads a win as a win', async () => {
@@ -298,7 +298,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     // The dispute keeps the status it had; nothing claims an outcome.
     const rows = await listDisputesForIntent(gatewayDb(), intent.id);
     expect(rows[0]?.status).toBe('needs_response');
-    expect(await deliveriesFor(intent.id)).not.toContain('payment_intent.dispute_closed');
+    expect(await deliveriesFor(intent.id)).not.toContain('charge.dispute.closed');
     // ...and the event stays VISIBLE for an operator rather than being marked
     // handled with a guess.
     const stored = await findProviderEventById(gatewayDb(), eventId);
@@ -374,5 +374,78 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(after).toBeDefined();
     expect((await listDisputesForIntent(gatewayDb(), intent.id))[0]?.status).toBe('needs_response');
     expect(before).toBe(intent.status);
+  });
+
+  /**
+   * The money moving is told as what it is — `funds_withdrawn`, then
+   * `funds_reinstated` — and moves no status by its type; the payload's
+   * `is_charge_refundable` is recorded, and nothing of the evidence is.
+   */
+  it('tells the merchant about the funds, records refundability, and stores no evidence', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_funds');
+    const base = {
+      intentObjectId: 'pi_stripe_dp_funds',
+      disputeObjectId: 'dp_stripe_funds',
+      reason: 'product_not_received',
+    };
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.created', status: 'needs_response' });
+    await storeDisputeEvent({
+      ...base,
+      type: 'charge.dispute.funds_withdrawn',
+      isChargeRefundable: true,
+    });
+    await runProviderEventDrainPass();
+
+    const [row] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(row?.status).toBe('needs_response');
+    expect(row?.isChargeRefundable).toBe(true);
+    expect(await deliveriesFor(intent.id)).toEqual([
+      'charge.dispute.created',
+      'charge.dispute.funds_withdrawn',
+    ]);
+
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.funds_reinstated', status: 'won' });
+    await runProviderEventDrainPass();
+    const [won] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(won?.status).toBe('won');
+    expect((await deliveriesFor(intent.id)).at(-1)).toBe('charge.dispute.funds_reinstated');
+
+    const stored = await storedEvents({ paymentIntentId: intent.id });
+    expect(JSON.stringify(stored)).not.toContain('Jane Buyer');
+    const payload = stored.at(-1)?.event.data.object as Dispute;
+    expect(payload.reason).toBe('product_not_received');
+    expect(payload.evidence).toBeUndefined();
+  });
+
+  /** A close the merchant already recorded (`…/close`) is not news twice. */
+  it('does not tell a close twice when the outcome was already recorded', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_close_once');
+    const base = {
+      intentObjectId: 'pi_stripe_dp_close_once',
+      disputeObjectId: 'dp_stripe_close_once',
+    };
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.created' });
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.closed', status: 'lost' });
+    await storeDisputeEvent({ ...base, type: 'charge.dispute.closed', status: 'lost' });
+    await runProviderEventDrainPass();
+    const closes = (await deliveriesFor(intent.id)).filter(
+      (type) => type === 'charge.dispute.closed',
+    );
+    expect(closes).toHaveLength(1);
+  });
+
+  it('normalises an unknown network reason to general on the wire', async () => {
+    const intent = await linkedCardIntent('pi_stripe_dp_reason');
+    await storeDisputeEvent({
+      type: 'charge.dispute.created',
+      intentObjectId: 'pi_stripe_dp_reason',
+      disputeObjectId: 'dp_stripe_reason',
+      reason: 'scheme_code_4837',
+    });
+    await runProviderEventDrainPass();
+    const [row] = await listDisputesForIntent(gatewayDb(), intent.id);
+    expect(row?.reason).toBe('scheme_code_4837');
+    const [payload] = await disputePayloadsFor(intent.id);
+    expect(payload?.reason).toBe('general');
   });
 });

@@ -225,6 +225,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       network: null,
       address: null,
       provider: 'stripe',
+      status: 'requires_payment_method' as const,
       clientSecret: 'cs_x',
       idempotencyKey: 'idem_settled',
       metadata: {},
@@ -238,7 +239,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       '../../db/payments/paymentIntentRepository'
     );
     await linkProviderObject(gatewayDb(), intent.id, 'stripe', 'pi_stripe_settled');
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'succeeded',
+    });
 
     // The credential stub: whichever merchant `actingApp` names. Both routers
     // resolve the merchant through it, so switching it is how the
@@ -299,7 +303,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     // Upper-cased on the way in, which is the form the CHECK insists on.
     expect(json.country).toBe('ES');
     expect(json.payable).toBe(false);
-    expect((json.requirements as Record<string, number>).currently_due).toBe(1);
+    expect((json.requirements as Record<string, unknown>).currently_due).toEqual([
+      'business_profile.url',
+    ]);
   });
 
   /**
@@ -446,7 +452,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
 
     expect(refreshed.status).toBe(200);
     expect(refreshed.json.payable).toBe(true);
-    expect((refreshed.json.requirements as Record<string, number>).currently_due).toBe(0);
+    expect((refreshed.json.requirements as Record<string, unknown>).currently_due).toEqual([]);
     expect(refreshed.json.default_currency).toBe('EUR');
   });
 
@@ -510,6 +516,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
       network: null,
       address: null,
       provider: 'stripe',
+      status: 'requires_payment_method' as const,
       clientSecret: `cs_${publicId}`,
       idempotencyKey: `idem_${publicId}`,
       metadata: {},
@@ -517,7 +524,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('the settlement API', () => {
     });
     if (!intent) throw new Error(`could not seed ${publicId}`);
     await linkProviderObject(gatewayDb(), intent.id, 'stripe', `pi_stripe_${publicId}`);
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'succeeded',
+    });
   }
 
   async function payableAccount(ref: string): Promise<string> {

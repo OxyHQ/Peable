@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, mock, test } from 'bun:test';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { PaymentIntent, PublicPaymentLink } from '@peable.to/shared-types';
 
 // Reuse-if-open (spec §6) never exercises the real `@peable.to/sdk/checkout`
@@ -50,31 +51,25 @@ const LINK: PublicPaymentLink = {
   rail: 'faircoin',
   network: 'testnet',
   active: true,
-  merchant: { name: 'Test Merchant', avatar_url: null, description: null },
+  merchant: { name: 'Test Merchant', avatar_url: null, logo_url: null, description: null },
 };
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_open789',
-    object: 'payment_intent',
-    livemode: false,
-    status: 'created',
-    rail: 'faircoin',
-    amount: '100000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: null,
-    confirmations: 0,
-    client_secret: 'pi_open789_secret',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = {},
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_open789',
+      rail: 'faircoin',
+      status: 'requires_action',
+      amount: '100000000',
+      client_secret: 'pi_open789_secret',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 const originalFetch = globalThis.fetch;
@@ -119,7 +114,7 @@ test('reuses an open intent without minting a fresh one', async () => {
   renderLinkRoute();
   fireEvent.click(await screen.findByRole('button', { name: /pay/i }));
 
-  // status 'created' is an awaiting-payment state — CheckoutView renders
+  // status 'requires_action' is an awaiting-payment state — CheckoutView renders
   // PayWithPeable (amount + deep link/QR), not StatusPanel yet.
   expect(await screen.findByText('1 FAIR')).toBeDefined();
   expect(getPaymentIntentMock).toHaveBeenCalledWith('pi_open789', 'pi_open789_secret');
@@ -132,7 +127,7 @@ test('mints a fresh intent once the remembered one is terminal', async () => {
     'peable:link-intent:link_test123',
     JSON.stringify({ id: 'pi_settled999', clientSecret: 'pi_settled999_secret' }),
   );
-  const terminalIntent = makeIntent({ id: 'pi_settled999', status: 'settled' });
+  const terminalIntent = makeIntent({ id: 'pi_settled999', status: 'succeeded' });
   getPaymentIntentMock.mockImplementation(async () => terminalIntent);
   const freshIntent = makeIntent({ id: 'pi_fresh456', client_secret: 'pi_fresh456_secret' });
 
@@ -150,7 +145,7 @@ test('mints a fresh intent once the remembered one is terminal', async () => {
   renderLinkRoute();
   fireEvent.click(await screen.findByRole('button', { name: /pay/i }));
 
-  // status 'created' is an awaiting-payment state — CheckoutView renders
+  // status 'requires_action' is an awaiting-payment state — CheckoutView renders
   // PayWithPeable (amount + deep link/QR), not StatusPanel yet.
   expect(await screen.findByText('1 FAIR')).toBeDefined();
   expect(fetchMock).toHaveBeenCalledTimes(2);

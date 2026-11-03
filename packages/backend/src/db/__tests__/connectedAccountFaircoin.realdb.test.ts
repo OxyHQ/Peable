@@ -85,6 +85,7 @@ function intentValues(merchantId: string, overrides: Record<string, unknown> = {
     network: 'testnet' as const,
     address: `addr_${id}`,
     provider: null,
+    status: 'requires_action' as const,
     clientSecret: `pi_${id}_secret`,
     idempotencyKey: `idem_${id}`,
     metadata: {},

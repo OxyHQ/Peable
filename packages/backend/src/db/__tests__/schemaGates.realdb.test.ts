@@ -18,6 +18,7 @@ import {
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  events,
   merchantAvatarAudit,
   merchants,
   oxyFileEvents,
@@ -31,6 +32,13 @@ import {
   socialSendAttributions,
   transfers,
   webhookDeliveries,
+  webhookEndpoints,
+  products,
+  prices,
+  coupons,
+  couponProducts,
+  promotionCodes,
+  apiRequestLogs,
 } from '../schema';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -50,6 +58,7 @@ const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MIGRATIONS_DIR = join(BACKEND_ROOT, 'db', 'migrations');
 
 const ALL_TABLES = [
+  apiRequestLogs,
   billingObjectBindings,
   billingOperations,
   faircoinRenewalAuthorizations,
@@ -57,6 +66,7 @@ const ALL_TABLES = [
   checkoutSessions,
   connectedAccountLinks,
   connectedAccounts,
+  events,
   merchantAvatarAudit,
   merchants,
   oxyFileEvents,
@@ -70,6 +80,12 @@ const ALL_TABLES = [
   socialSendAttributions,
   transfers,
   webhookDeliveries,
+  webhookEndpoints,
+  products,
+  prices,
+  coupons,
+  couponProducts,
+  promotionCodes,
 ] as const;
 
 let suite: SuiteDatabase | undefined;
@@ -192,8 +208,37 @@ describe('id-column classification', () => {
             "an Oxy Application's id; its agreement with the merchant's is carried by payment_links_merchant_identity_fkey",
         },
         {
-          column: 'webhook_deliveries.event_id',
-          reason: 'the evt_… envelope id that was signed and sent; events are never persisted',
+          column: 'events.public_id',
+          reason: "this row's own evt_… identifier, not a reference",
+        },
+        {
+          column: 'events.request_id',
+          reason: 'the Request-Id of the API call that caused the event — a log key, not a row',
+        },
+        {
+          column: 'api_request_logs.request_id',
+          reason:
+            "this row's own req_… identifier (the Request-Id it was answered with), not a reference",
+        },
+        {
+          column: 'webhook_endpoints.public_id',
+          reason: "this row's own we_… identifier, not a reference",
+        },
+        {
+          column: 'products.public_id',
+          reason: "this row's own prod_… identifier, not a reference",
+        },
+        {
+          column: 'prices.public_id',
+          reason: "this row's own price_… identifier, not a reference",
+        },
+        {
+          column: 'coupons.public_id',
+          reason: "this row's own coupon id (the merchant's, or coupon_…), not a reference",
+        },
+        {
+          column: 'promotion_codes.public_id',
+          reason: "this row's own promo_… identifier, not a reference",
         },
         // `provider_events` holds a PROVIDER's numbering, not this database's.
         // None of these can carry a foreign key: the rows they name live at

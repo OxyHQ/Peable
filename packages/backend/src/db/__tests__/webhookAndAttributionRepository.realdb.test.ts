@@ -12,7 +12,9 @@ import {
   findDeliveryForMerchant,
   listDeliveriesForMerchant,
 } from '../webhooks/webhookDeliveryRepository';
-import { enqueueWebhook, recordDeliveryAttempt } from '../webhooks/webhookOutboxRepository';
+import { enqueueDelivery, recordDeliveryAttempt } from '../webhooks/webhookOutboxRepository';
+import { insertEndpoint, type WebhookEndpointRow } from '../webhooks/webhookEndpointRepository';
+import { insertEvent } from '../events/eventRepository';
 import {
   findAttributionsForViewer,
   insertSendAttribution,
@@ -55,6 +57,7 @@ async function makeIntent(merchant: MerchantRow) {
       network: merchant.network,
       address: `T${unique}`,
       provider: null,
+      status: 'requires_action' as const,
       clientSecret: `pi_${unique}_secret_x`,
       idempotencyKey: unique,
       metadata: {},
@@ -79,21 +82,60 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
      * A minimal event body. The outbox stores the envelope verbatim, so a fixture
      * only has to be a JSON object — nothing here parses it.
      */
-    function eventFor(type: 'payment_intent.settled' | 'payment_intent.failed') {
-      const id = `evt_${uuidv7()}`;
-      return {
-        id,
-        object: 'event' as const,
+    const endpoints = new Map<string, WebhookEndpointRow>();
+
+    /** The merchant's one endpoint, created on first use. */
+    async function endpointOf(merchant: MerchantRow): Promise<WebhookEndpointRow> {
+      const known = endpoints.get(merchant.id);
+      if (known) return known;
+      const created = await insertEndpoint(must(suite).db, {
+        publicId: `we_${uuidv7()}`,
+        merchantId: merchant.id,
+        url: 'https://merchant.example/hook',
+        enabledEvents: ['*'],
+        metadata: {},
+        apiVersion: '2026-11-03',
+        secret: 'whsec_repository_suite',
+      });
+      if (created === 'limit_reached') throw new Error('unexpected endpoint limit');
+      endpoints.set(merchant.id, created);
+      return created;
+    }
+
+    /**
+     * An event about `intent`, enqueued to the merchant's endpoint. The
+     * snapshot only has to be a JSON object — nothing here parses it.
+     */
+    async function enqueueFor(
+      merchant: MerchantRow,
+      intent: { id: string },
+      type:
+        | 'payment_intent.succeeded'
+        | 'payment_intent.payment_failed' = 'payment_intent.succeeded',
+      url = 'https://merchant.example/hook',
+    ): Promise<string> {
+      const event = await insertEvent(must(suite).db, {
+        publicId: `evt_${uuidv7()}`,
+        merchantId: merchant.id,
         type,
-        created: new Date().toISOString(),
-        data: { object: {} },
-      };
+        apiVersion: '2026-11-03',
+        dataObject: {},
+        paymentIntentId: intent.id,
+        requestId: null,
+        idempotencyKey: null,
+      });
+      return enqueueDelivery(must(suite).db, {
+        merchantId: merchant.id,
+        eventId: event.id,
+        endpointId: (await endpointOf(merchant)).id,
+        url,
+      });
     }
 
     /**
      * A settled delivery — enqueue, then record one successful attempt.
      *
-     * Two writes because that is the only path a row now has: `enqueueWebhook`
+     * Two writes because that is the only path a row now has: `enqueueDelivery`
      * creates it and `recordDeliveryAttempt` finishes it. The cases below only
      * need a delivery to EXIST, so the shape is hidden here rather than repeated.
      */
@@ -102,12 +144,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       intent: { id: string },
       url = 'https://merchant.example/hook',
     ) {
-      const id = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.settled') as never,
-        url,
-      });
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded', url);
       await recordDeliveryAttempt(must(suite).db, {
         id,
         outcome: { kind: 'delivered' },
@@ -130,12 +167,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.settled') as never,
-        url: 'https://merchant.example/hook',
-      });
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       const row = await findDeliveryForMerchant(must(suite).db, id, merchant.id);
       expect(row?.lastStatus).toBe('pending');
@@ -155,12 +187,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const okId = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.settled') as never,
-        url: 'https://merchant.example/hook',
-      });
+      const okId = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
       await recordDeliveryAttempt(must(suite).db, {
         id: okId,
         outcome: { kind: 'delivered' },
@@ -171,12 +198,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(ok?.lastStatus).toBe('delivered');
       expect(ok?.delivered).toBe(true);
 
-      const badId = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.failed') as never,
-        url: 'https://merchant.example/hook',
-      });
+      const badId = await enqueueFor(merchant, intent, 'payment_intent.payment_failed');
       await recordDeliveryAttempt(must(suite).db, {
         id: badId,
         outcome: { kind: 'refused', reason: 'target responded 410' },
@@ -201,12 +223,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
 
-      const id = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.settled') as never,
-        url: 'https://merchant.example/hook',
-      });
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       // Retrying: still pending, still scheduled.
       await recordDeliveryAttempt(must(suite).db, {
@@ -236,12 +253,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
     it('refuses a pending delivery with no schedule', async () => {
       const merchant = await makeMerchant();
       const intent = await makeIntent(merchant);
-      const id = await enqueueWebhook(must(suite).db, {
-        merchantId: merchant.id,
-        paymentIntentId: intent.id,
-        event: eventFor('payment_intent.settled') as never,
-        url: 'https://merchant.example/hook',
-      });
+      const id = await enqueueFor(merchant, intent, 'payment_intent.succeeded');
 
       let raised: unknown;
       try {
@@ -256,22 +268,20 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       expect(isCheckViolation(raised, 'webhook_deliveries_schedule_agrees_check')).toBe(true);
     });
 
-    it('refuses a delivery for an intent that does not exist', async () => {
+    it('refuses a delivery for an event that does not exist', async () => {
       const merchant = await makeMerchant();
       let raised: unknown;
       try {
-        await enqueueWebhook(must(suite).db, {
+        await enqueueDelivery(must(suite).db, {
           merchantId: merchant.id,
-          paymentIntentId: uuidv7(),
-          event: eventFor('payment_intent.settled') as never,
+          eventId: uuidv7(),
+          endpointId: (await endpointOf(merchant)).id,
           url: 'https://merchant.example/hook',
         });
       } catch (error) {
         raised = error;
       }
-      expect(
-        isForeignKeyViolation(raised, 'webhook_deliveries_payment_intent_id_payment_intents_id_fk'),
-      ).toBe(true);
+      expect(isForeignKeyViolation(raised, 'webhook_deliveries_event_id_events_id_fk')).toBe(true);
     });
 
     it("never returns another merchant's delivery", async () => {
@@ -333,7 +343,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
      * every row and passes. The page LENGTH is what catches the cross join: 3
      * deliveries against 3 intents would come back as 9 rows.
      */
-    it("yields each delivery's own intent public id", async () => {
+    it("yields each delivery's own event and endpoint public ids", async () => {
       const merchant = await makeMerchant();
       const stranger = await makeMerchant();
       const first = await makeIntent(merchant);
@@ -343,7 +353,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       const expectedPublicId = new Map<string, string>();
       for (const intent of [first, second, first]) {
         const row = await makeDelivery(merchant, intent, 'https://merchant.example/hook');
-        expectedPublicId.set(row.id, intent.publicId);
+        expectedPublicId.set(row.id, row.eventPublicId);
       }
       const strangerDelivery = await makeDelivery(
         stranger,
@@ -356,13 +366,14 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         page: { limit: 10 },
       });
 
-      // The join is 1:1 by construction — `payment_intent_id` is NOT NULL and
-      // references a primary key — so it can neither drop a delivery nor
-      // duplicate one, and the page size is exactly what it was without it.
+      // The joins are 1:1 by construction — `event_id` and `endpoint_id` are
+      // NOT NULL and reference primary keys — so they can neither drop a
+      // delivery nor duplicate one.
       expect(page.data).toHaveLength(3);
       expect(page.data.map((row) => row.id)).not.toContain(strangerDelivery.id);
       for (const row of page.data) {
-        expect([row.id, row.intentPublicId]).toEqual([row.id, must(expectedPublicId.get(row.id))]);
+        expect([row.id, row.eventPublicId]).toEqual([row.id, must(expectedPublicId.get(row.id))]);
+        expect(row.endpointPublicId).toBe((await endpointOf(merchant)).publicId);
       }
     });
 

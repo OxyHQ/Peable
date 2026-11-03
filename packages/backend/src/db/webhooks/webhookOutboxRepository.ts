@@ -8,18 +8,17 @@
  * rather than a query-shape one.
  */
 import { and, eq, isNotNull, lte, or, sql } from 'drizzle-orm';
-import type { WebhookEvent, WebhookEventType } from '@peable.to/shared-types';
 import { uuidv7 } from '@oxy.so/db';
-import { webhookDeliveries } from '../schema';
+import { webhookDeliveries, webhookEndpoints } from '../schema';
 import type { DatabaseOrTransaction } from '../postgres';
 
 /** A claimed row, with everything an attempt needs and nothing it does not. */
 export interface ClaimedDeliveryRow {
   readonly id: string;
   readonly merchantId: string;
+  /** The event's PRIMARY key. */
   readonly eventId: string;
-  readonly eventType: WebhookEventType;
-  readonly payload: Record<string, unknown>;
+  readonly endpointId: string;
   readonly attempts: number;
 }
 
@@ -27,54 +26,77 @@ const CLAIMED_COLUMNS = {
   id: webhookDeliveries.id,
   merchantId: webhookDeliveries.merchantId,
   eventId: webhookDeliveries.eventId,
-  eventType: webhookDeliveries.eventType,
-  payload: webhookDeliveries.payload,
+  endpointId: webhookDeliveries.endpointId,
   attempts: webhookDeliveries.attempts,
 } as const;
 
-export interface EnqueueWebhookParams {
-  readonly merchantId: string;
-  /**
-   * The INTERNAL id of the intent the event is about, not its `pi_…`.
-   *
-   * OPTIONAL, because not every merchant-facing event is about a payment:
-   * `connected_account.updated` is about a seller.
-   * `webhook_deliveries_intent_event_has_intent_check` refuses the two
-   * combinations that would be wrong — a payment event with no intent, and a
-   * non-payment event naming one.
-   */
-  readonly paymentIntentId?: string | undefined;
-  readonly event: WebhookEvent;
-  /** The merchant's endpoint as of enqueue. Re-read at each attempt. */
-  readonly url: string;
+/**
+ * Fan an event out: one pending delivery per ENABLED endpoint of the merchant
+ * whose `enabled_events` names the type or `*`.
+ *
+ * Takes a `DatabaseOrTransaction` and is meant to be handed the TRANSACTION of
+ * the change the event records: the whole value of this table is that the row
+ * and the state change that caused it commit together (ADR 0001 D7).
+ *
+ * A read and then one multi-row insert, rather than `INSERT … SELECT`, because
+ * the ids are uuid v7 minted here (`CONVENTIONS.md` §Ids) — that is what keeps
+ * the delivery log's keyset walk in creation order. The array overlap `&&` is
+ * the subscription match: `{*}` or the exact type.
+ *
+ * @returns how many deliveries were enqueued.
+ */
+export async function enqueueEventDeliveries(
+  db: DatabaseOrTransaction,
+  event: { readonly id: string; readonly merchantId: string; readonly type: string },
+): Promise<number> {
+  const endpoints = await db
+    .select({ id: webhookEndpoints.id, url: webhookEndpoints.url })
+    .from(webhookEndpoints)
+    .where(
+      and(
+        eq(webhookEndpoints.merchantId, event.merchantId),
+        eq(webhookEndpoints.status, 'enabled'),
+        sql`${webhookEndpoints.enabledEvents} && ARRAY['*', ${event.type}]::text[]`,
+      ),
+    )
+    .orderBy(webhookEndpoints.id);
+  if (endpoints.length === 0) return 0;
+  // Due immediately: the backoff schedule starts after the FIRST failure.
+  const now = new Date();
+  await db.insert(webhookDeliveries).values(
+    endpoints.map((endpoint) => ({
+      id: uuidv7(),
+      merchantId: event.merchantId,
+      eventId: event.id,
+      endpointId: endpoint.id,
+      url: endpoint.url,
+      nextAttemptAt: now,
+    })),
+  );
+  return endpoints.length;
 }
 
 /**
- * Write the promise.
- *
- * Takes a `DatabaseOrTransaction` and is meant to be handed a TRANSACTION: the
- * whole value of this table is that the row and the state change that caused it
- * commit together. Enqueuing after the commit reintroduces exactly the window
- * ADR 0001 D7 closed — a crash there loses the event with the intent already
- * settled and nothing anywhere recording that a merchant was never told.
+ * Enqueue one delivery of `eventId` to one endpoint — a test event, which is
+ * sent to the endpoint it names and no other, and a manual redelivery.
  */
-export async function enqueueWebhook(
+export async function enqueueDelivery(
   db: DatabaseOrTransaction,
-  params: EnqueueWebhookParams,
+  params: {
+    readonly merchantId: string;
+    readonly eventId: string;
+    readonly endpointId: string;
+    readonly url: string;
+  },
 ): Promise<string> {
   const [row] = await db
     .insert(webhookDeliveries)
     .values({
       id: uuidv7(),
       merchantId: params.merchantId,
-      paymentIntentId: params.paymentIntentId ?? null,
-      eventId: params.event.id,
-      eventType: params.event.type,
-      payload: params.event as unknown as Record<string, unknown>,
+      eventId: params.eventId,
+      endpointId: params.endpointId,
       url: params.url,
-      // `attempts`, `delivered` and `last_status` take their column defaults —
-      // 0, false, 'pending'. Due immediately: the backoff schedule starts after
-      // the FIRST failure, not before the first try.
       nextAttemptAt: new Date(),
     })
     .returning({ id: webhookDeliveries.id });
@@ -96,29 +118,19 @@ export interface ClaimDueParams {
  *
  * ## What makes this safe, and what `SKIP LOCKED` actually buys
  *
- * Two things, and they are commonly conflated:
- *
  * - **Exactly one claimant** comes from the LIVE-LEASE predicate plus the fact
  *   that this is one statement. A blocked claimant re-evaluates the row after
  *   the lock clears (READ COMMITTED), sees the lease the winner just wrote, and
  *   matches nothing. Splitting this into a select and a later update is what
- *   would hand the same row to both — the symptom being a merchant receiving
- *   one event twice, which their endpoint may or may not be idempotent about.
+ *   would hand the same row to both.
  * - **`SKIP LOCKED` buys NON-BLOCKING**, not correctness. MEASURED on
  *   PostgreSQL 16.13, with one dispatcher holding its transaction open for
- *   400ms: with `SKIP LOCKED` the second returns in **8ms** with nothing; with
- *   a plain `FOR UPDATE` it returns in **403ms** with nothing. Same outcome,
- *   and the whole poll cycle of every other dispatcher spent waiting on the
- *   head of the queue.
- *
- * Both are wanted. The distinction is recorded because a future reader
- * measuring only the outcome will find `SKIP LOCKED` removable, and removing it
- * costs throughput in a way no test asserting the outcome can see.
+ *   400ms: with `SKIP LOCKED` the second returns in 8ms with nothing; with a
+ *   plain `FOR UPDATE` it returns in 403ms with nothing.
  *
  * A row is due when it is `pending`, its `next_attempt_at` has passed, and it
- * carries no LIVE lease. The expired-lease branch is the recovery path: a
- * dispatcher that died mid-attempt leaves its lease behind, and without that
- * `or` the row would stay claimable-by-nobody forever.
+ * carries no LIVE lease. The expired-lease branch is the recovery path for a
+ * dispatcher that died mid-attempt.
  */
 export async function claimDueDeliveries(
   db: DatabaseOrTransaction,
@@ -145,17 +157,11 @@ export async function claimDueDeliveries(
     .limit(params.limit)
     .for('update', { skipLocked: true });
 
-  const rows = await db
+  return db
     .update(webhookDeliveries)
     .set({ leaseOwner: params.leaseOwner, leaseExpiresAt })
     .where(sql`${webhookDeliveries.id} in (${due})`)
     .returning(CLAIMED_COLUMNS);
-
-  return rows.map((row) => ({
-    ...row,
-    eventType: row.eventType as WebhookEventType,
-    payload: row.payload,
-  }));
 }
 
 /** What one attempt concluded. */
@@ -180,8 +186,7 @@ export interface RecordAttemptParams {
  *
  * The lease is cleared on EVERY path, terminal or not. A row left holding one
  * after its dispatcher moved on is invisible to the claim query until the lease
- * expires — which turns a delivered event into a row that looks stuck, and a
- * retryable one into a delay nobody asked for.
+ * expires.
  */
 export async function recordDeliveryAttempt(
   db: DatabaseOrTransaction,
@@ -205,8 +210,7 @@ export async function recordDeliveryAttempt(
       delivered: lastStatus === 'delivered',
       url: params.url,
       lastError: outcome.kind === 'delivered' ? null : outcome.reason,
-      // `webhook_deliveries_schedule_agrees_check` ties this to the status, so
-      // the two cannot be set inconsistently even by a future caller.
+      // `webhook_deliveries_schedule_agrees_check` ties this to the status.
       nextAttemptAt: lastStatus === 'pending' ? params.nextAttemptAt : null,
       leaseOwner: null,
       leaseExpiresAt: null,
@@ -217,10 +221,9 @@ export async function recordDeliveryAttempt(
 /**
  * Release a claim without recording an attempt.
  *
- * For the case where a claimed row turns out to be undeliverable for a reason
- * that is not the target's fault and not an attempt — the merchant has removed
- * their webhook configuration between enqueue and claim. Counting that as an
- * attempt would burn the budget on a condition no attempt was made against.
+ * For a claimed row that is undeliverable for a reason that is not the
+ * target's answer — its endpoint is disabled. Counting that as an attempt
+ * would burn the budget on a condition no attempt was made against.
  */
 export async function releaseDeliveryClaim(
   db: DatabaseOrTransaction,

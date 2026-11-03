@@ -1,17 +1,21 @@
 /**
  * What Peable does when Oxy says something happened to a file it uses
- * (ADR 0043 D9). Peable uses exactly one kind of file — a merchant's avatar —
- * so every event is about avatars:
+ * (ADR 0043 D9). Peable uses files two ways — a merchant's avatar, and an
+ * Orbit File (`files`) — and every event is applied to both, in one
+ * transaction:
  *
  *  - `file.deleted`, `file.blocked`, `file.lost`: the file is gone for good (its owner
  *    deleted it, or it was taken down on a rights or privacy claim). The avatar
  *    is CLEARED on every merchant using it, an audit row says which event did
  *    it, and the reference sync tells Oxy the use ended.
+ *    Every File over it is REMOVED (`files.removed_at`, `removed_by` = the
+ *    event): the row stays, so a dispute's evidence or the merchant's logo can
+ *    say why it stopped working, and its reference is released.
  *  - every other event (`file.trashed`, `file.restored`, `file.unblocked`,
  *    `file.visibility_changed`): the file still exists and its owner may bring
- *    it back. The avatar is kept and WITHHELD from payers while Oxy would not
- *    serve it (`status` not `active`, or `visibility` `private`), and shown
- *    again when it would.
+ *    it back. The avatar and every File over it are kept and WITHHELD while
+ *    Oxy would not serve it (`status` not `active`, or `visibility`
+ *    `private`), and released again when it would.
  *
  * Delivery is at least once and unordered. The event row's primary key makes a
  * redelivery a no-op (same transaction as the effect), and
@@ -26,10 +30,19 @@ import {
   clearMerchantAvatarsForFile,
   setMerchantAvatarWithheldForFile,
 } from '../../db/merchants/merchantRepository';
+import {
+  type FileEventChange,
+  removeFilesForOxyFile,
+  setFilesWithheldForOxyFile,
+} from '../../db/files/fileRepository';
 import { kickReferenceSync } from './referenceSync';
 
 export type FileEventOutcome =
-  | { readonly kind: 'applied'; readonly changes: readonly AvatarEventChange[] }
+  | {
+      readonly kind: 'applied';
+      readonly changes: readonly AvatarEventChange[];
+      readonly fileChanges: readonly FileEventChange[];
+    }
   | { readonly kind: 'duplicate' };
 
 /** Whether Oxy would serve the file as described, and if not, why. */
@@ -68,19 +81,22 @@ export async function applyFileEvent(
       case 'file.deleted':
       case 'file.blocked':
       case 'file.lost':
-        return { kind: 'applied', changes: await clearMerchantAvatarsForFile(tx, avatarEvent) };
+        return {
+          kind: 'applied',
+          changes: await clearMerchantAvatarsForFile(tx, avatarEvent),
+          fileChanges: await removeFilesForOxyFile(tx, { ...avatarEvent, eventType: event.type }),
+        };
       case 'file.trashed':
       case 'file.restored':
       case 'file.unblocked':
-      case 'file.visibility_changed':
+      case 'file.visibility_changed': {
+        const withheld = withheldReasonFor(event.file);
         return {
           kind: 'applied',
-          changes: await setMerchantAvatarWithheldForFile(
-            tx,
-            avatarEvent,
-            withheldReasonFor(event.file),
-          ),
+          changes: await setMerchantAvatarWithheldForFile(tx, avatarEvent, withheld),
+          fileChanges: await setFilesWithheldForOxyFile(tx, avatarEvent, withheld),
         };
+      }
       default: {
         const unhandled: never = event.type;
         throw new Error(`unhandled file event type ${String(unhandled)}`);
@@ -88,7 +104,11 @@ export async function applyFileEvent(
     }
   });
 
-  if (outcome.kind === 'applied' && outcome.changes.some((change) => change.action === 'cleared')) {
+  if (
+    outcome.kind === 'applied' &&
+    (outcome.changes.some((change) => change.action === 'cleared') ||
+      outcome.fileChanges.some((change) => change.action === 'removed'))
+  ) {
     kickReferenceSync();
   }
   return outcome;

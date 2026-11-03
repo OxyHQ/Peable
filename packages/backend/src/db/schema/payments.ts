@@ -12,18 +12,24 @@ import {
   uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import type { PaymentIntentLastPaymentError, Shipping } from '@peable.to/shared-types';
 import { connectedAccounts } from './connectedAccounts';
+import { customers, paymentMethods } from './customers';
 import { merchants } from './merchants';
+import { paymentMethodConfigurations } from './paymentMethodConfigurations';
 import {
   BASE_UNIT_STRING_PATTERN,
+  CARD_RAIL_PAYMENT_METHOD_TYPES,
+  CANCELLATION_REASON_VALUES,
+  CAPTURE_METHOD_VALUES,
   CARD_ONLY_STATUSES,
-  CHAIN_ONLY_STATUSES,
   CURRENCY_CODES,
   NETWORK_TYPES,
   PAYMENT_INTENT_STATUS_VALUES,
   PROVIDER_IDS,
   RAIL_VALUES,
   SERVICE_ENVIRONMENTS,
+  SETUP_FUTURE_USAGE_VALUES,
 } from './valueSets';
 
 /**
@@ -89,6 +95,19 @@ export const paymentIntents = pgTable(
      * money goes, not whose record it is.
      */
     connectedAccountId: text(),
+    /**
+     * A DESTINATION charge (ADR 0015 §2), card only: the account the funds go
+     * to, the amount transferred when a platform named one (NULL = the whole
+     * amount less the fee), the account that is merchant of record
+     * (`on_behalf_of`), and Orbit's fee — the INSTRUCTION sent to the provider;
+     * the fee actually taken is the `application_fees` row. All NULL on a
+     * platform charge. Decided once, at create, and replayed from the row on a
+     * resumed provider create so a retry sends the same charge.
+     */
+    transferDestinationId: text(),
+    transferAmount: text(),
+    onBehalfOfId: text(),
+    applicationFeeAmount: text(),
     /**
      * `network`, but only on a payment to the merchant ITSELF — NULL on an
      * on-behalf one. Computed by the server, never written.
@@ -156,6 +175,42 @@ export const paymentIntents = pgTable(
      * the payment once per seller.
      */
     providerChargeId: text(),
+    /** The customer (`cus_…`) this payment is for, when the merchant named one (ADR 0016). */
+    customerId: text(),
+    /** The saved card (`pm_…`) it is charged to. Card only. */
+    paymentMethodId: text(),
+    /**
+     * What the payer may pay with — card rail only (the chain's is `faircoin`,
+     * by its rail). Fixed at creation: the types the merchant named, or those
+     * the configuration offered in this currency when the payment was made, so
+     * a later configuration change never re-prices what a payer was shown.
+     */
+    paymentMethodTypes: text().array(),
+    /** The `pmc_…` whose methods this card payment offers; NULL when types were named. Card only. */
+    paymentMethodConfigurationId: text(),
+    /** `automatic` captures at confirmation; `manual` holds the authorization (card only). */
+    captureMethod: text().notNull().default('automatic'),
+    /** Card only: keep the payment method on the customer for later. */
+    setupFutureUsage: text(),
+    description: text(),
+    receiptEmail: text(),
+    /** Card only. */
+    statementDescriptorSuffix: text(),
+    shipping: jsonb().$type<Shipping>(),
+    /**
+     * Why the last attempt failed, in Peable's words (ADR 0019). Written in the
+     * same statement as the transition that the failure caused; cleared by any
+     * other transition.
+     */
+    lastPaymentError: jsonb().$type<PaymentIntentLastPaymentError>(),
+    /** Set exactly when `status` is `canceled`; NULL there means nobody said why. */
+    cancellationReason: text(),
+    canceledAt: timestamptz(),
+    /**
+     * What was received — the captured amount — once `succeeded`; `"0"` in every
+     * other status (a reorg that rewinds a FairCoin payment resets it).
+     */
+    amountReceived: text().notNull().default('0'),
     clientSecret: text().notNull(),
     idempotencyKey: text().notNull(),
     metadata: jsonb().$type<Record<string, string>>().notNull().default(emptyMetadata),
@@ -165,6 +220,8 @@ export const paymentIntents = pgTable(
   },
   (table) => [
     index('payment_intents_payment_link_id_idx').on(table.paymentLinkId),
+    // `GET /v1/payment_intents?customer=`. Built CONCURRENTLY out of band first (0044).
+    index('payment_intents_customer_id_idx').on(table.customerId),
     uniqueIndex('payment_intents_public_id_key').on(table.publicId),
     // Stripe-style idempotency: one intent per (merchant, Idempotency-Key).
     // Load-bearing — `createIntent` races on it and converges on the winner
@@ -245,6 +302,34 @@ export const paymentIntents = pgTable(
       'payment_intents_connected_account_is_faircoin_check',
       sql`${table.connectedAccountId} is null or ${table.rail} = 'faircoin'`,
     ),
+    /** The destination and the merchant of record are THIS merchant's accounts. */
+    foreignKey({
+      name: 'payment_intents_transfer_destination_merchant_fkey',
+      columns: [table.transferDestinationId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'payment_intents_on_behalf_of_merchant_fkey',
+      columns: [table.onBehalfOfId, table.merchantId],
+      foreignColumns: [connectedAccounts.id, connectedAccounts.merchantId],
+    }).onDelete('restrict'),
+    /**
+     * The destination-charge fields are card fields, and they agree the way the
+     * provider requires: a fee or a transfer amount needs a destination, a
+     * transfer amount and a fee are never both set, and neither exceeds the
+     * payment.
+     */
+    check(
+      'payment_intents_destination_fields_check',
+      sql.raw(
+        `(rail = 'card' or (transfer_destination_id is null and on_behalf_of_id is null and application_fee_amount is null and transfer_amount is null))
+          and (application_fee_amount is null or transfer_destination_id is not null)
+          and (transfer_amount is null or transfer_destination_id is not null)
+          and (application_fee_amount is null or transfer_amount is null)
+          and (application_fee_amount is null or (application_fee_amount ~ '${BASE_UNIT_STRING_PATTERN}' and application_fee_amount::numeric <= amount::numeric))
+          and (transfer_amount is null or (transfer_amount ~ '${BASE_UNIT_STRING_PATTERN}' and transfer_amount::numeric <= amount::numeric))`,
+      ),
+    ),
     /**
      * What keeps `merchant_id` referential once `network` may be NULL.
      *
@@ -311,20 +396,97 @@ export const paymentIntents = pgTable(
       sql`${table.rail} <> 'card' or (${table.address} is null and ${table.network} is null and ${table.txid} is null and ${table.confirmations} = 0)`,
     ),
     /**
-     * ADR 0001 D5: the four chain states describe a transaction on a blockchain
-     * and the four card states describe an authorization at an acquirer.
-     * Neither set is expressible on the other rail, and the sets come from the
-     * contract (`CHAIN_ONLY_STATUSES` / `CARD_ONLY_STATUSES`) rather than being
-     * retyped here, so they cannot drift from the transition table.
+     * ADR 0019: a FairCoin payment requires no payment method, has nothing to
+     * confirm server-side and no authorization to capture. The set comes from
+     * the contract (`CARD_ONLY_STATUSES`) so it cannot drift from the table.
      */
-    check(
-      'payment_intents_chain_statuses_are_faircoin_check',
-      sql.raw(`status not in (${inList(CHAIN_ONLY_STATUSES)}) or rail = 'faircoin'`),
-    ),
     check(
       'payment_intents_card_statuses_are_card_check',
       sql.raw(`status not in (${inList(CARD_ONLY_STATUSES)}) or rail = 'card'`),
     ),
+    check(
+      'payment_intents_cancellation_reason_check',
+      sql.raw(
+        `cancellation_reason is null or cancellation_reason in (${inList(CANCELLATION_REASON_VALUES)})`,
+      ),
+    ),
+    /** A reason and an instant belong to a cancelled intent, and only to one. */
+    check(
+      'payment_intents_canceled_agrees_check',
+      sql`(${table.status} = 'canceled') = (${table.canceledAt} is not null) and (${table.cancellationReason} is null or ${table.status} = 'canceled')`,
+    ),
+    check(
+      'payment_intents_capture_method_check',
+      sql.raw(`capture_method in (${inList(CAPTURE_METHOD_VALUES)})`),
+    ),
+    check(
+      'payment_intents_setup_future_usage_check',
+      sql.raw(
+        `setup_future_usage is null or setup_future_usage in (${inList(SETUP_FUTURE_USAGE_VALUES)})`,
+      ),
+    ),
+    /** The card-only fields stay off the chain rail, where they mean nothing. */
+    check(
+      'payment_intents_card_only_fields_check',
+      sql`${table.rail} = 'card' or (${table.paymentMethodId} is null and ${table.setupFutureUsage} is null and ${table.captureMethod} = 'automatic' and ${table.statementDescriptorSuffix} is null)`,
+    ),
+    check(
+      'payment_intents_amount_received_check',
+      sql.raw(`amount_received ~ '${BASE_UNIT_STRING_PATTERN}'`),
+    ),
+    /** Money is received only by a payment that succeeded, and never more than it asked. */
+    check(
+      'payment_intents_amount_received_agrees_check',
+      sql`(${table.amountReceived} = '0' or ${table.status} = 'succeeded') and ${table.amountReceived}::numeric <= ${table.amount}::numeric`,
+    ),
+    check(
+      'payment_intents_last_payment_error_object_check',
+      sql`${table.lastPaymentError} is null or jsonb_typeof(${table.lastPaymentError}) = 'object'`,
+    ),
+    check(
+      'payment_intents_shipping_object_check',
+      sql`${table.shipping} is null or jsonb_typeof(${table.shipping}) = 'object'`,
+    ),
+    /**
+     * Only a card payment carries types; a chain payment is FairCoin by its rail.
+     *
+     * One direction only, on purpose: card rows written before payment method
+     * breadth hold none until the post-phase backfill, and the outgoing image
+     * keeps writing them without during the rollout. The writer
+     * (`resolveCardPaymentMethods` → `insertPaymentIntent`) always sets them.
+     */
+    check(
+      'payment_intents_payment_method_types_rail_check',
+      sql`${table.rail} = 'card' or ${table.paymentMethodTypes} is null`,
+    ),
+    check(
+      'payment_intents_payment_method_types_check',
+      sql.raw(
+        `payment_method_types is null or (cardinality(payment_method_types) >= 1 and payment_method_types <@ ARRAY[${inList(CARD_RAIL_PAYMENT_METHOD_TYPES)}]::text[])`,
+      ),
+    ),
+    check(
+      'payment_intents_payment_method_configuration_card_check',
+      sql`${table.rail} = 'card' or ${table.paymentMethodConfigurationId} is null`,
+    ),
+    /** The configuration is this merchant's. */
+    foreignKey({
+      name: 'payment_intents_payment_method_configuration_merchant_fkey',
+      columns: [table.paymentMethodConfigurationId, table.merchantId],
+      foreignColumns: [paymentMethodConfigurations.id, paymentMethodConfigurations.merchantId],
+    }).onDelete('restrict'),
+    /** The customer is this merchant's. */
+    foreignKey({
+      name: 'payment_intents_customer_merchant_fkey',
+      columns: [table.customerId, table.merchantId],
+      foreignColumns: [customers.id, customers.merchantId],
+    }).onDelete('restrict'),
+    /** ...and so is the payment method. */
+    foreignKey({
+      name: 'payment_intents_payment_method_merchant_fkey',
+      columns: [table.paymentMethodId, table.merchantId],
+      foreignColumns: [paymentMethods.id, paymentMethods.merchantId],
+    }).onDelete('restrict'),
     check(
       'payment_intents_provider_check',
       sql.raw(`provider is null or provider in (${inList(PROVIDER_IDS)})`),
@@ -366,32 +528,24 @@ export const paymentIntents = pgTable(
     check('payment_intents_confirmations_check', sql`${table.confirmations} >= 0`),
     check('payment_intents_metadata_object_check', sql`jsonb_typeof(${table.metadata}) = 'object'`),
     /**
-     * A broadcast, confirming or settled FAIRCOIN intent HAS a transaction id.
+     * A `processing` or `succeeded` FAIRCOIN intent HAS a transaction id
+     * (ADR 0019: `processing` is the old `broadcast`/`confirming`).
      *
-     * Verified against every writer rather than assumed: `POST
-     * /v1/payment_intents/:id/submit_tx` is the only path to `broadcast` and
-     * it sets `txid` in the same write, and `confirming`/`settled` are reached
-     * only by the settlement watcher, which selects on `txid` being present.
-     * `failed` is deliberately outside the set — `approved → failed` is a legal
-     * transition that no writer pairs with a txid.
+     * Verified against every writer: `POST /v1/payment_intents/:id/submit_tx`
+     * is the only path to `processing` on the chain and sets `txid` in the same
+     * write, and `succeeded` is reached only by the settlement watcher, which
+     * selects on `txid` being present. `canceled` is deliberately outside the
+     * set — an expired intent has none, an underpaid one has one.
      *
-     * **`rail = 'faircoin'` is a REPAIR, not a widening** (ADR 0001 D5).
-     * `settled` is a shared status: it is where a card charge lands too, and a
-     * card payment can never have a txid. Left unqualified, this constraint
-     * would have refused every settled card payment — the first one, in
-     * production, with every test green, because no fixture could reach that
-     * state before the rail existed. `broadcast` and `confirming` are
-     * chain-only and already unreachable on a card by the CHECK above, so the
-     * qualifier changes nothing for them.
-     *
-     * The fixture argument in `CONVENTIONS.md` still holds unchanged: a
-     * txid-less `broadcast` row is still unrepresentable, so `failed` is still
-     * the only status that both permits a missing txid and reaches
-     * `findWatchableIntents`.
+     * `rail = 'faircoin'`: a card payment is `processing` and `succeeded` too,
+     * and can never have a txid. The fixture argument in `CONVENTIONS.md`
+     * still holds: a txid-less `processing` FairCoin row is unrepresentable, so
+     * the txid predicate of `findWatchableIntents` is exercised with a
+     * `canceled` one.
      */
     check(
-      'payment_intents_broadcast_requires_txid_check',
-      sql`${table.rail} <> 'faircoin' or ${table.status} not in ('broadcast', 'confirming', 'settled') or ${table.txid} is not null`,
+      'payment_intents_processing_requires_txid_check',
+      sql`${table.rail} <> 'faircoin' or ${table.status} not in ('processing', 'succeeded') or ${table.txid} is not null`,
     ),
   ],
 );

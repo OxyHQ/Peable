@@ -6,7 +6,7 @@
  * A card payment is TWO things: a row here, and a PaymentIntent at an acquirer
  * that stays confirmable with a credential the payer's browser is still
  * holding. `POST /reject` moved the row and emitted
- * `payment_intent.rejected`; the expiry sweeper moved a batch to `expired`. The
+ * `payment_intent.canceled`; the expiry sweeper moved a batch to `expired`. The
  * acquirer was told nothing by either. So a payment this gateway had announced
  * as over could complete minutes later, against a terminal status, for an order
  * the merchant had already released — and the only trace was a
@@ -68,7 +68,9 @@ const fakeProvider = {
     return {
       providerObjectId,
       status:
-        cancelBehaviour === 'refuses_succeeded' ? ('succeeded' as const) : ('created' as const),
+        cancelBehaviour === 'refuses_succeeded'
+          ? ('succeeded' as const)
+          : ('requires_payment_method' as const),
       chargeObjectId: providerObjectId.replace(/^pi_/, 'ch_'),
     };
   },
@@ -139,7 +141,7 @@ let counter = 0;
 const passthrough: RequestHandler = (_req, _res, next) => next();
 
 interface ErrorBody {
-  readonly error?: { readonly type: string; readonly message: string };
+  readonly error?: { readonly type: string; readonly code?: string; readonly message: string };
   readonly status?: string;
 }
 
@@ -162,6 +164,7 @@ async function cardIntent(options: { expiresAt?: Date } = {}) {
     network: null,
     address: null,
     provider: 'stripe',
+    status: 'requires_payment_method',
     clientSecret: `cs_${publicId}`,
     idempotencyKey: uuidv7(),
     metadata: {},
@@ -218,12 +221,12 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
     });
   });
 
-  // ── reject ───────────────────────────────────────────────────────────────
+  // ── cancel ───────────────────────────────────────────────────────────────
 
-  test('cancels at the provider BEFORE announcing a rejection', async () => {
+  test('cancels at the provider BEFORE announcing a cancellation', async () => {
     const intent = await cardIntent();
 
-    const { status } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
+    const { status } = await post(`/v1/payment_intents/${intent.publicId}/cancel`);
 
     expect(status).toBe(200);
     // The order is the whole assertion: a rejection announced without this call
@@ -231,7 +234,37 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
     expect(providerCalls).toContain(
       `cancel:pi_stripe_${intent.publicId}:cancel:${intent.publicId}`,
     );
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('rejected');
+    const canceled = await findIntentByPublicId(gatewayDb(), intent.publicId);
+    expect(canceled?.status).toBe('canceled');
+    expect(canceled?.canceledAt).toBeInstanceOf(Date);
+  });
+
+  /** The merchant's reason is recorded, and sent on to the provider. */
+  test('records the cancellation reason', async () => {
+    const intent = await cardIntent();
+    const response = await fetch(`${baseUrl}/v1/payment_intents/${intent.publicId}/cancel`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ cancellation_reason: 'fraudulent' }),
+    });
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { cancellation_reason: string; status: string };
+    expect(body.status).toBe('canceled');
+    expect(body.cancellation_reason).toBe('fraudulent');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.cancellationReason).toBe(
+      'fraudulent',
+    );
+  });
+
+  /** A succeeded payment cannot be cancelled — Stripe's `payment_intent_unexpected_state`. */
+  test('refuses to cancel a payment in a status that does not allow it', async () => {
+    const intent = await cardIntent();
+    cancelBehaviour = 'refuses_succeeded';
+    await post(`/v1/payment_intents/${intent.publicId}/cancel`);
+    cancelBehaviour = 'cancels';
+    const { status, json } = await post(`/v1/payment_intents/${intent.publicId}/cancel`);
+    expect(status).toBe(400);
+    expect(json.error?.code).toBe('payment_intent_unexpected_state');
   });
 
   /**
@@ -240,7 +273,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
    */
   test("derives the cancellation key from the intent's own id", async () => {
     const intent = await cardIntent();
-    await post(`/v1/payment_intents/${intent.publicId}/reject`);
+    await post(`/v1/payment_intents/${intent.publicId}/cancel`);
     expect(providerCalls.some((call) => call.endsWith(`cancel:${intent.publicId}`))).toBe(true);
   });
 
@@ -248,31 +281,33 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
    * The payer confirmed first. The gateway must NOT announce a rejection it
    * cannot deliver — the money is real.
    */
-  test('reconciles to the truth when the payer pays during the rejection', async () => {
+  test('reconciles to the truth when the payer pays during the cancellation', async () => {
     const intent = await cardIntent();
     cancelBehaviour = 'refuses_succeeded';
 
-    const { status, json } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
+    const { status, json } = await post(`/v1/payment_intents/${intent.publicId}/cancel`);
 
-    expect(status).toBe(409);
+    expect(status).toBe(400);
     expect(json.error?.message).toContain('completed by the payer');
     // ...and the row now says what actually happened, rather than staying
     // `created` with a payment nobody recorded.
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
   });
 
   /**
    * The provider could not be reached. The payment is still live and its state
    * is unknown, so NOTHING is written and nothing is announced.
    */
-  test('refuses to reject when the provider cannot be reached', async () => {
+  test('refuses to cancel when the provider cannot be reached', async () => {
     const intent = await cardIntent();
     cancelBehaviour = 'unreachable';
 
-    const { status } = await post(`/v1/payment_intents/${intent.publicId}/reject`);
+    const { status } = await post(`/v1/payment_intents/${intent.publicId}/cancel`);
 
     expect(status).toBe(502);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
+      'requires_payment_method',
+    );
   });
 
   // ── expiry ───────────────────────────────────────────────────────────────
@@ -286,7 +321,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
     expect(providerCalls).toContain(
       `cancel:pi_stripe_${intent.publicId}:cancel:${intent.publicId}`,
     );
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('expired');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('canceled');
   });
 
   /**
@@ -301,7 +336,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
 
     expect(result.examined).toBeGreaterThanOrEqual(1);
     expect(result.expired).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('settled');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('succeeded');
   });
 
   /**
@@ -317,7 +352,9 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
     const result = await runExpirySweep({ now: new Date() });
 
     expect(result.expired).toBe(0);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('created');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe(
+      'requires_payment_method',
+    );
   });
 
   /**
@@ -338,6 +375,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
       network: merchant.network,
       address: `T${uuidv7()}`,
       provider: null,
+      status: 'requires_action',
       clientSecret: `cs_chain_${uuidv7()}`,
       idempotencyKey: uuidv7(),
       metadata: {},
@@ -352,6 +390,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('ending a card payment', () => {
     // rightly keeps retrying it. What must be true is that nothing was asked
     // about the CHAIN payment.
     expect(providerCalls.filter((call) => call.includes(intent.publicId))).toEqual([]);
-    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('expired');
+    expect((await findIntentByPublicId(gatewayDb(), intent.publicId))?.status).toBe('canceled');
   });
 });

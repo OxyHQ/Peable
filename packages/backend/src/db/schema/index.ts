@@ -9,18 +9,39 @@
 
 export { merchants } from './merchants';
 export { checkoutSessions, paymentIntents, paymentLinks } from './payments';
+export { customerProviderBindings, customers, paymentMethods } from './customers';
+export { charges } from './charges';
+export { setupIntents } from './setupIntents';
 export {
   SOCIAL_RECEIVE_FIRST_FRESH_INDEX,
   socialReceiveCursors,
   socialSendAttributions,
 } from './social';
-export { webhookDeliveries } from './webhooks';
+export { events } from './events';
+export { webhookDeliveries, webhookEndpoints } from './webhooks';
 export { providerEvents } from './providerEvents';
 export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
-export { disputes } from './disputes';
+export { disputeEvidenceFiles, disputes } from './disputes';
+export { files } from './files';
+export {
+  paymentMethodConfigurationBindings,
+  paymentMethodConfigurations,
+  paymentMethodDomains,
+} from './paymentMethodConfigurations';
 export { idempotencyKeys } from './idempotency';
+export { couponProducts, coupons, prices, products, promotionCodes } from './catalog';
+export { apiRequestLogs } from './requestLogs';
+export {
+  applicationFeeRefunds,
+  applicationFees,
+  balanceTransactions,
+  feeSchedules,
+  ledgerEntries,
+  payouts,
+  reconciliationMismatches,
+} from './money';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

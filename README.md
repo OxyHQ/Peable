@@ -303,7 +303,7 @@ this.
 | Enrichment | [`enrich.ts`](packages/backend/src/routes/enrich.ts) |
 
 Realtime intent updates go out over Socket.IO, which is what lets a checkout page move
-from `confirming` to `settled` without polling.
+from `processing` to `succeeded` without polling.
 
 ## Documentation
 

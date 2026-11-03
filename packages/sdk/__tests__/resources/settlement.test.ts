@@ -16,8 +16,10 @@ import type { ConnectedAccount, Refund, Transfer } from '@peable.to/shared-types
 import { ConnectedAccountsResource } from '../../src/resources/connectedAccounts';
 import { RefundsResource } from '../../src/resources/refunds';
 import { TransfersResource } from '../../src/resources/transfers';
-import { DisputesResource, MerchantsResource } from '../../src/resources/merchants';
+import { MerchantsResource } from '../../src/resources/merchants';
+import { DisputesResource } from '../../src/resources/disputes';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
+import { refundFixture, requirementsFixture } from '../support/moneyFixtures';
 import {
   buildTestClient,
   serviceTokenMintResponse,
@@ -38,8 +40,7 @@ const ACCOUNT: ConnectedAccount = {
   charges_enabled: true,
   transfers_capability: 'active',
   card_payments_capability: 'active',
-  requirements: { currently_due: 0, eventually_due: 0, past_due: 0, pending_verification: 0 },
-  disabled_reason_codes: [],
+  requirements: requirementsFixture(),
   last_synced_at: 1789776000,
   created: 1789776000,
   updated_at: 1789776000,
@@ -61,21 +62,7 @@ const TRANSFER: Transfer = {
   updated_at: 1789776000,
 };
 
-const REFUND: Refund = {
-  id: 're_1',
-  object: 'refund',
-  livemode: false,
-  external_ref: 'refund_1',
-  origin: 'merchant',
-  payment_intent: 'pi_1',
-  amount: '2500',
-  currency: 'EUR',
-  status: 'succeeded',
-  payment_status: 'partially_refunded',
-  failure_code: null,
-  created: 1789776000,
-  updated_at: 1789776000,
-};
+const REFUND: Refund = refundFixture({ created: 1789776000, updated_at: 1789776000 });
 
 function gateway(body: unknown, status = 200) {
   return createMockFetch((req) => {
@@ -214,11 +201,10 @@ describe('RefundsResource', () => {
       amount: '2500',
     });
 
-    // `status` is the REFUND's lifecycle and `payment_status` is the payment's.
-    // Two different questions on one response, so a caller needs no second read
-    // whose answer can move on before it arrives.
+    // `status` is the REFUND's lifecycle; the payment does not change status
+    // with a refund (ADR 0019), so the response carries no payment status.
     expect(refund.status).toBe('succeeded');
-    expect(refund.payment_status).toBe('partially_refunded');
+    expect('payment_status' in refund).toBe(false);
     expect(callOf(requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/refunds`);
   });
 
@@ -271,25 +257,27 @@ describe('settlement reporting', () => {
 
 describe('MerchantsResource and DisputesResource', () => {
   /**
-   * Answering a dispute is ONE SHOT — submitting is one-way at the card
-   * network — so everything the merchant has goes in the first call.
+   * `submitEvidence` (`POST …/evidence`) is gone: evidence is staged or
+   * submitted through the dispute's own update, Stripe's `POST /v1/disputes/:id`.
    */
-  test('submits dispute evidence as text, to the dispute itself', async () => {
-    const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' }, 201);
+  test('submits dispute evidence through the dispute update, once', async () => {
+    const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' });
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 
-    await resource.submitEvidence('dp_1', {
-      uncategorized_text: 'Collected in person.',
-      shipping_tracking_number: 'TRACK-1',
+    await resource.update('dp_1', {
+      evidence: { uncategorized_text: 'Collected in person.', receipt: 'file_1' },
+      submit: true,
     });
 
     const call = callOf(requests);
     expect(call?.method).toBe('POST');
-    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/evidence`);
+    expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1`);
     expect(JSON.parse(call?.body ?? '{}')).toEqual({
-      uncategorized_text: 'Collected in person.',
-      shipping_tracking_number: 'TRACK-1',
+      evidence: { uncategorized_text: 'Collected in person.', receipt: 'file_1' },
+      submit: true,
     });
+    expect(new Headers(call?.headers).get('Idempotency-Key')).toBeTruthy();
+    expect('submitEvidence' in resource).toBe(false);
   });
 
   /**
@@ -309,7 +297,7 @@ describe('MerchantsResource and DisputesResource', () => {
     expect(new Headers(call?.headers).get('Idempotency-Key')).toBe('merchant-registration-stable');
   });
 
-  test('disputes are read-only and scoped to one payment', async () => {
+  test("lists one payment's disputes", async () => {
     const { fetch: fetchImpl, requests } = gateway({ object: 'list', data: [] });
     const resource = new DisputesResource(buildTestClient(fetchImpl));
 

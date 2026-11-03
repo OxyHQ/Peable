@@ -25,7 +25,7 @@ import { enqueueReferenceSync } from '../oxyFiles/referenceSyncRepository';
  * one small reviewable change afterwards. Do not delete this as unreferenced.
  */
 
-/** A merchant row as every caller here reads it. `webhook_secret` is never selected. */
+/** A merchant row as every caller here reads it. `next_derivation_index` is never selected. */
 export interface MerchantRow {
   readonly id: string;
   readonly publicId: string;
@@ -35,16 +35,43 @@ export interface MerchantRow {
   readonly network: NetworkType | null;
   /** `null` on a card-only merchant. Nullable TOGETHER with `network`. */
   readonly xpub: string | null;
-  readonly webhookUrl: string | null;
   readonly requiredConfirmations: number;
   readonly livemode: boolean;
   readonly displayName: string | null;
   readonly avatarFileId: string | null;
   /** Why the avatar is not shown to a payer right now, or `null` when it is. */
   readonly avatarWithheld: MerchantAvatarWithheldReason | null;
+  /** The logo File's PUBLIC `file_…`, or `null`. */
+  readonly businessLogo: string | null;
+  /**
+   * The logo's Oxy file id, ONLY while the File is available (not withheld,
+   * not removed) — what a payer surface may render. `null` otherwise.
+   */
+  readonly businessLogoOxyFileId: string | null;
   readonly description: string | null;
+  /** Oxy's own product (ADR 0015 §2) — the verified authority of the last credential. */
+  readonly firstParty: boolean;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+}
+
+/**
+ * Mirror the verified authority of the credential acting for this merchant
+ * (`authority: 'first_party'`, Oxy ADR 0049) onto the row, when it differs.
+ * One conditional statement: a steady state writes nothing.
+ */
+export async function syncMerchantFirstParty(
+  db: DatabaseOrTransaction,
+  merchant: MerchantRow,
+  firstParty: boolean,
+): Promise<MerchantRow> {
+  if (merchant.firstParty === firstParty) return merchant;
+  const [row] = await db
+    .update(merchants)
+    .set({ firstParty })
+    .where(eq(merchants.id, merchant.id))
+    .returning(MERCHANT_COLUMNS);
+  return row ? (row as MerchantRow) : { ...merchant, firstParty };
 }
 
 const MERCHANT_COLUMNS = {
@@ -54,12 +81,21 @@ const MERCHANT_COLUMNS = {
   environment: merchants.environment,
   network: merchants.network,
   xpub: merchants.xpub,
-  webhookUrl: merchants.webhookUrl,
   requiredConfirmations: merchants.requiredConfirmations,
   livemode: merchants.livemode,
+  firstParty: merchants.firstParty,
   displayName: merchants.displayName,
   avatarFileId: merchants.avatarFileId,
   avatarWithheld: merchants.avatarWithheld,
+  // Table-qualified raw SQL: drizzle renders RETURNING columns unqualified, and
+  // an unqualified `"id"` inside a subquery over `files` would bind to the
+  // FILE's id (CONVENTIONS.md §Payments core).
+  businessLogo: sql<
+    string | null
+  >`(select "files"."public_id" from "files" where "files"."id" = "merchants"."business_logo_file_id")`,
+  businessLogoOxyFileId: sql<
+    string | null
+  >`(select "files"."oxy_file_id" from "files" where "files"."id" = "merchants"."business_logo_file_id" and "files"."removed_at" is null and "files"."withheld" is null)`,
   description: merchants.description,
   createdAt: merchants.createdAt,
   updatedAt: merchants.updatedAt,
@@ -94,8 +130,6 @@ export interface InsertMerchantParams {
   readonly network?: NetworkType | undefined;
   readonly xpub?: string | undefined;
   readonly publicId: string;
-  readonly webhookUrl?: string | undefined;
-  readonly webhookSecret?: string | undefined;
   readonly requiredConfirmations?: number | undefined;
   readonly displayName?: string | undefined;
   readonly avatarFileId?: string | undefined;
@@ -150,8 +184,6 @@ export async function insertMerchant(
           livemode: params.environment === 'production',
           network: params.network ?? null,
           xpub: params.xpub ?? null,
-          webhookUrl: params.webhookUrl ?? null,
-          webhookSecret: params.webhookSecret ?? null,
           ...(params.requiredConfirmations === undefined
             ? {}
             : { requiredConfirmations: params.requiredConfirmations }),
@@ -243,35 +275,21 @@ export async function findMerchantsByIds(
   return rows.map(toMerchantRow);
 }
 
-/**
- * The webhook target, read explicitly because `webhook_secret` is a protected
- * column — see `db/protectedColumns.ts`. Named separately from the merchant
- * reads so a delivery path is the only thing that ever loads a signing key, and
- * so the load stays greppable.
- */
-export async function findWebhookTarget(
-  db: DatabaseOrTransaction,
-  merchantId: string,
-): Promise<{ url: string; secret: string } | null> {
-  const [row] = await db
-    .select({ url: merchants.webhookUrl, secret: merchants.webhookSecret })
-    .from(merchants)
-    .where(eq(merchants.id, merchantId));
-  if (!row?.url || !row.secret) return null;
-  return { url: row.url, secret: row.secret };
-}
-
 export interface MerchantPatch {
-  readonly webhookUrl?: string | null | undefined;
-  readonly webhookSecret?: string | null | undefined;
   readonly requiredConfirmations?: number | undefined;
   /**
    * Branding is mutable, unlike `xpub`/`network`/`environment`: it names the
    * merchant to a payer and nothing derives from it. `null` clears the field,
-   * absent leaves it alone — the same contract `webhookUrl` already has.
+   * absent leaves it alone.
    */
   readonly displayName?: string | null | undefined;
   readonly avatarFileId?: string | null | undefined;
+  /**
+   * The INTERNAL id of a File of purpose `business_logo` owned by this
+   * merchant — resolved and checked by the one writer
+   * (`routes/merchants.ts`'s `applyMerchantPatch`); `null` clears it.
+   */
+  readonly businessLogoFileId?: string | null | undefined;
   readonly description?: string | null | undefined;
 }
 
@@ -296,13 +314,12 @@ export async function updateMerchantSettings(
   patch: MerchantPatch,
 ): Promise<MerchantRow | null> {
   const values: Record<string, string | number | Date | null> = {};
-  if (patch.webhookUrl !== undefined) values.webhookUrl = patch.webhookUrl;
-  if (patch.webhookSecret !== undefined) values.webhookSecret = patch.webhookSecret;
   if (patch.requiredConfirmations !== undefined) {
     values.requiredConfirmations = patch.requiredConfirmations;
   }
   if (patch.displayName !== undefined) values.displayName = patch.displayName;
   if (patch.avatarFileId !== undefined) values.avatarFileId = patch.avatarFileId;
+  if (patch.businessLogoFileId !== undefined) values.businessLogoFileId = patch.businessLogoFileId;
   if (patch.description !== undefined) values.description = patch.description;
   if (Object.keys(values).length === 0) {
     return findMerchantById(db, id);

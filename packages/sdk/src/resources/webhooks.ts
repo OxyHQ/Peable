@@ -1,7 +1,7 @@
 import { verifyWebhook, type WebhookEvent, type WebhookEventType } from '@peable.to/shared-types';
 import { PeableSignatureVerificationError } from '../core/errors';
 
-/** Header the Gateway's `webhookDispatcher.deliver` signs with (`Peable-Signature`). */
+/** The header every delivery is signed in. */
 export const WEBHOOK_SIGNATURE_HEADER = 'Peable-Signature';
 
 /** Default replay-tolerance window, matching the backend's own tests/usage. */
@@ -16,18 +16,60 @@ export interface ConstructEventOptions {
 // fail compilation until the SDK accepts it. Own-key lookup excludes prototype
 // names supplied by an untrusted, even correctly signed, payload.
 const WEBHOOK_EVENT_TYPES = {
-  'payment_intent.confirming': true,
-  'payment_intent.settled': true,
-  'payment_intent.failed': true,
-  'payment_intent.rejected': true,
-  'payment_intent.expired': true,
-  'payment_intent.refunded': true,
-  'payment_intent.partially_refunded': true,
-  'payment_intent.disputed': true,
-  'payment_intent.dispute_closed': true,
+  'payment_intent.created': true,
+  'payment_intent.requires_action': true,
+  'payment_intent.processing': true,
+  'payment_intent.amount_capturable_updated': true,
+  'payment_intent.succeeded': true,
+  'payment_intent.payment_failed': true,
+  'payment_intent.canceled': true,
+  'charge.refunded': true,
+  'charge.dispute.created': true,
+  'charge.dispute.updated': true,
+  'charge.dispute.closed': true,
+  'charge.dispute.funds_withdrawn': true,
+  'charge.dispute.funds_reinstated': true,
+  'refund.created': true,
+  'refund.updated': true,
+  'refund.failed': true,
+  'customer.created': true,
+  'customer.updated': true,
+  'customer.deleted': true,
+  'payment_method.attached': true,
+  'payment_method.detached': true,
+  'payment_method.updated': true,
+  'setup_intent.created': true,
+  'setup_intent.requires_action': true,
+  'setup_intent.succeeded': true,
+  'setup_intent.setup_failed': true,
+  'setup_intent.canceled': true,
+  'product.created': true,
+  'product.updated': true,
+  'product.deleted': true,
+  'price.created': true,
+  'price.updated': true,
+  'coupon.created': true,
+  'coupon.updated': true,
+  'coupon.deleted': true,
+  'promotion_code.created': true,
+  'promotion_code.updated': true,
   'billing.observation.updated': true,
   'connected_account.updated': true,
+  'account.updated': true,
+  'application_fee.created': true,
+  'application_fee.refunded': true,
+  'payout.created': true,
+  'payout.updated': true,
+  'payout.paid': true,
+  'payout.failed': true,
+  'payout.canceled': true,
+  'balance.available': true,
+  'webhook_endpoint.test': true,
 } satisfies Record<WebhookEventType, true>;
+
+function isNullableString(value: unknown): boolean {
+  return value === null || typeof value === 'string';
+}
 
 /**
  * Structural guard for the parsed payload — the signature already proves the
@@ -46,6 +88,11 @@ function isWebhookEventShape(value: unknown): value is WebhookEvent {
     // biome-ignore lint/suspicious/noPrototypeBuiltins: the published SDK targets ES2020, and Object.hasOwn is ES2022
     Object.prototype.hasOwnProperty.call(WEBHOOK_EVENT_TYPES, candidate.type) &&
     Number.isSafeInteger(candidate.created) &&
+    typeof candidate.api_version === 'string' &&
+    typeof candidate.request === 'object' &&
+    candidate.request !== null &&
+    isNullableString(candidate.request.id) &&
+    isNullableString(candidate.request.idempotency_key) &&
     typeof candidate.data === 'object' &&
     candidate.data !== null &&
     'object' in candidate.data;
@@ -91,11 +138,17 @@ export class WebhooksResource {
    * sides. Throws `PeableSignatureVerificationError` on a bad/stale/tampered
    * signature or a malformed payload — never returns a partially-trusted
    * event.
+   *
+   * `endpointSecret` is the endpoint's `whsec_…` — or several, while you are
+   * rotating: the event is accepted when ANY `v1=` signature in the header
+   * matches ANY of them. During a `roll_secret` overlap Peable signs every
+   * delivery with both the new and the previous secret, so either side of
+   * your switch verifies it.
    */
   constructEvent(
     rawBody: string,
     signatureHeader: string,
-    endpointSecret: string,
+    endpointSecret: string | readonly string[],
     opts: ConstructEventOptions = {},
   ): WebhookEvent {
     const toleranceSec = opts.toleranceSec ?? DEFAULT_TOLERANCE_SEC;

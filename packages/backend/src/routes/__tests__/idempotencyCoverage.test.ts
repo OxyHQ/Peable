@@ -21,6 +21,8 @@ const EXEMPT: Readonly<Record<string, string>> = {
     'registration CREATES the merchant the key would be scoped to; the unique (application, environment) makes a retry a 409 and GET /v1/merchants/me recovers it',
   'POST /v1/payment_intents/:id/client_action':
     'a READ behind POST only to keep a credential out of the URL: nothing happens twice, and storing it would keep the provider confirmation secret for 24 hours',
+  'POST /v1/setup_intents/:id/client_action':
+    'a READ behind POST, like the payment intent one: it reads the provider confirmation credential fresh and must never store it',
   'POST /v1/billing/customers':
     "billing's own leased operation ledger (billing_operations): a durable key with recovery, not a 24-hour cache",
   'POST /v1/billing/embedded_checkout_sessions':
@@ -75,7 +77,27 @@ test('every merchant POST runs the generic idempotency layer, or is exempt with 
         (handlers.includes(requireMerchant) || handlers.includes(optionalServiceAuth)),
     );
     // Vacuity floor: a walk that found nothing would pass every assertion.
-    expect(merchantPosts.length).toBeGreaterThanOrEqual(20);
+    expect(merchantPosts.length).toBeGreaterThanOrEqual(31);
+    // The webhook endpoint writes are found by the walk (and so held to it):
+    // a create that is retried must not mint a second endpoint and secret.
+    expect(merchantPosts.map(({ path }) => path)).toEqual(
+      expect.arrayContaining([
+        '/v1/webhook_endpoints',
+        '/v1/webhook_endpoints/:id',
+        '/v1/webhook_endpoints/:id/roll_secret',
+        '/v1/webhook_deliveries/:id/redeliver',
+        // The catalog (ADR 0018): a retried create must not mint a second
+        // product, price, coupon or promotion code — or a second event.
+        '/v1/products',
+        '/v1/products/:id',
+        '/v1/prices',
+        '/v1/prices/:id',
+        '/v1/coupons',
+        '/v1/coupons/:id',
+        '/v1/promotion_codes',
+        '/v1/promotion_codes/:id',
+      ]),
+    );
 
     const missing: string[] = [];
     const staleExemptions = new Set(Object.keys(EXEMPT));

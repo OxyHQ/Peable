@@ -16,6 +16,7 @@ import { eq } from 'drizzle-orm';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 import { uuidv7 } from '@oxy.so/db';
 import { createPaymentIntentsRouter } from '../paymentIntents';
+import { updateIntentState } from '../../db/payments/paymentIntentRepository';
 import { createPaymentLinksRouter } from '../paymentLinks';
 import { createCheckoutSessionsRouter } from '../checkoutSessions';
 import { createRefundsRouter } from '../refunds';
@@ -320,7 +321,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
 
   describe('every list speaks the same envelope', () => {
     test('per-intent sub-lists page with has_more and url, and refunds keep remaining_refundable', async () => {
-      const intent = await seedIntent(merchant, { rail: 'card', amount: '10000' });
+      const seeded = await seedIntent(merchant, { rail: 'card', amount: '10000' });
+      // Refunds draw on what was RECEIVED (ADR 0019), so the payment succeeds first.
+      const moved = await updateIntentState(gatewayDb(), seeded.id, {
+        from: 'requires_payment_method',
+        status: 'succeeded',
+      });
+      const intent = moved.kind === 'updated' ? moved.row : seeded;
       const refunds = [] as Awaited<ReturnType<typeof seedRefund>>[];
       for (let index = 0; index < 3; index += 1) {
         refunds.push(await seedRefund(intent, '100'));
@@ -462,6 +469,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
           network: 'testnet',
           address: `T${unique}`,
           provider: null,
+          status: 'requires_action' as const,
           clientSecret: `pi_${unique}_secret_x`,
           idempotencyKey: unique,
           metadata: {},
@@ -557,7 +565,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('lists, expand[] and metadata', () => {
 
       // The status is not mutable through an update.
       const sneaky = await call('POST', `/v1/payment_intents/${intent.publicId}`, {
-        status: 'settled',
+        status: 'succeeded',
       });
       expect(sneaky.status).toBe(400);
       expect(sneaky.json.error?.param).toBe('status');

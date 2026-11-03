@@ -23,6 +23,7 @@ import {
   LOCAL_TEST_PRICES,
   LOCAL_TEST_PRODUCT,
   localTestBillingConfiguration,
+  localTestBillingOwner,
 } from './stripeTestBilling';
 
 export const EMBEDDED_TEST_PURPOSE = 'local-test-subscription';
@@ -55,7 +56,10 @@ async function context(intent: PaymentIntentRow) {
     account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT
   )
     throw new Error('Unexpected test account');
-  const configuration = localTestBillingConfiguration(merchant, account.id);
+  const configuration = localTestBillingConfiguration(
+    await localTestBillingOwner(db, merchant),
+    account.id,
+  );
   const cohort = configuration.cohorts[0];
   if (!cohort) throw new Error('Missing local owner');
   const { evidenceRef, ...owner } = cohort;
@@ -297,7 +301,7 @@ export async function readLocalSubscription(
   const item = verified.subscription.items.data[0];
   let ready = false;
   if (
-    intent.status === 'settled' &&
+    intent.status === 'succeeded' &&
     verified.subscription.status === 'active' &&
     verified.invoice.status === 'paid'
   ) {

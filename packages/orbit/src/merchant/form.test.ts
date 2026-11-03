@@ -15,7 +15,6 @@ const merchant: Merchant = {
   environment: 'development',
   network: null,
   xpub: null,
-  webhook_url: 'https://shop.example/hook',
   required_confirmations: 6,
   display_name: 'Shop',
   created: 1,
@@ -32,8 +31,6 @@ describe('buildRegisterBody', () => {
       buildRegisterBody({
         ...EMPTY_MERCHANT_FORM,
         displayName: ' Shop ',
-        webhookUrl: 'https://shop.example/hook',
-        webhookSecret: 'whsec',
         requiredConfirmations: '3',
         network: 'testnet',
         xpub: ' tpubABC ',
@@ -42,8 +39,6 @@ describe('buildRegisterBody', () => {
       ok: true,
       body: {
         display_name: 'Shop',
-        webhook_url: 'https://shop.example/hook',
-        webhook_secret: 'whsec',
         required_confirmations: 3,
         network: 'testnet',
         xpub: 'tpubABC',
@@ -79,7 +74,6 @@ describe('buildMerchantPatch', () => {
       ...formFromMerchant(merchant),
       displayName: '',
       description: 'Fresh bread',
-      webhookUrl: '  ',
       requiredConfirmations: '2',
     };
     expect(buildMerchantPatch(merchant, form)).toEqual({
@@ -87,19 +81,15 @@ describe('buildMerchantPatch', () => {
       body: {
         display_name: null,
         description: 'Fresh bread',
-        webhook_url: null,
         required_confirmations: 2,
       },
     });
   });
 
-  it('sends a new secret and keeps the stored one when blank', () => {
-    expect(
-      buildMerchantPatch(merchant, { ...formFromMerchant(merchant), webhookSecret: ' new ' }),
-    ).toEqual({ ok: true, body: { webhook_secret: 'new' } });
-  });
-
-  it('never fills the form with a secret', () => {
-    expect(formFromMerchant(merchant).webhookSecret).toBe('');
+  /** Webhook endpoints are their own resource (ADR 0014 D4), not merchant fields. */
+  it('carries no webhook field in either body', () => {
+    const form = { ...formFromMerchant(merchant), displayName: 'New' };
+    expect(JSON.stringify(buildMerchantPatch(merchant, form))).not.toContain('webhook');
+    expect(JSON.stringify(buildRegisterBody(form))).not.toContain('webhook');
   });
 });

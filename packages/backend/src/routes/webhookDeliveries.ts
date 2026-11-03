@@ -1,150 +1,166 @@
 import { Router } from 'express';
-import type { RequestHandler } from 'express';
+import type { Request, RequestHandler, Response } from 'express';
+import { z } from 'zod';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
-import { findWebhookTarget } from '../db/merchants/merchantRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
-import { findIntentByIdForMerchant } from '../db/payments/paymentIntentRepository';
-import { findDeliveryForMerchant } from '../db/webhooks/webhookDeliveryRepository';
+import { findEventForMerchant } from '../db/events/eventRepository';
+import {
+  findDeliveryForMerchant,
+  listDeliveriesForMerchant,
+} from '../db/webhooks/webhookDeliveryRepository';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
-import { enqueueWebhook } from '../db/webhooks/webhookOutboxRepository';
+import { findEndpointForMerchant } from '../db/webhooks/webhookEndpointRepository';
+import { enqueueDelivery } from '../db/webhooks/webhookOutboxRepository';
 import type { SafeFetchFn } from '../services/webhookDispatcher';
 import { runWebhookOutboxPass } from '../services/webhookOutbox';
 import { toWebhookDeliveryDTO } from '../lib/serialize';
 import { sendError, wrap, requireAuthenticated } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
+import {
+  answerList,
+  parseQuery,
+  type QuerySurface,
+  resolveListReference,
+  surfaceListQuery,
+} from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
 export type RedeliverResult =
-  | {
-      ok: true;
-      delivery: WebhookDeliveryRow;
-      /**
-       * The `pi_…` of the intent the redelivery was about, or `null` when the
-       * event was not about a payment (`connected_account.updated` is about a
-       * seller).
-       *
-       * Carried alongside the row because the row stores the intent's INTERNAL
-       * id while `WebhookDelivery.intent_id` on the wire is the public one, and
-       * this path already loaded the intent when there was one.
-       */
-      intentPublicId: string | null;
-    }
+  | { ok: true; delivery: WebhookDeliveryRow }
   | { ok: false; status: number; message: string };
 
 /**
- * Shared redeliver core (F2.5) — factored out so `POST
- * /v1/webhook_deliveries/:id/redeliver` (service-authed, below) and the
- * dashboard's `POST
- * /v1/dashboard/applications/:applicationId/webhook_deliveries/:id/redeliver`
- * (human-authed) run the EXACT same lookup/redelivery/log logic against
- * different auth paths, never two copies to keep in sync.
+ * Shared redeliver core — `POST /v1/webhook_deliveries/:id/redeliver`
+ * (service-authed, below) and the dashboard's
+ * `POST /v1/dashboard/applications/:applicationId/webhook_deliveries/:id/redeliver`
+ * run the EXACT same lookup and enqueue against different auth paths.
+ *
+ * A redelivery is a NEW delivery of the SAME stored event to the SAME
+ * endpoint: the body is the event as it was recorded, never rebuilt from the
+ * resource as it is now — an event describes a moment. The original row keeps
+ * its own history.
  */
 export async function redeliverWebhookDelivery(
   merchant: MerchantRow,
   deliveryId: string,
-  deps: { safeFetch?: SafeFetchFn } = {},
+  deps: { safeFetch?: SafeFetchFn | undefined } = {},
 ): Promise<RedeliverResult> {
   const db = getDb();
 
-  // No id-shape guard before the lookup. These ids are `text`, so an id of any
-  // shape simply matches no row — and the ownership-scoped read answers
-  // "unknown" and "not yours" identically, which is the property that matters.
+  // No id-shape guard before the lookup: the ids are `text`, and the
+  // ownership-scoped read answers "unknown" and "not yours" identically.
   const delivery = await findDeliveryForMerchant(db, deliveryId, merchant.id);
   if (!delivery) {
     return { ok: false, status: 404, message: 'webhook delivery not found' };
   }
-
-  /**
-   * The payment this delivery was about — when it was about one.
-   *
-   * `payment_intent_id` is nullable since `connected_account.updated`, which is
-   * about a SELLER. A redelivery of such an event needs no intent and must not
-   * refuse for the want of one; requiring it here would make exactly the events
-   * a marketplace most wants to replay the only ones it cannot.
-   *
-   * When there IS one it is looked up by the INTERNAL id the delivery stores,
-   * re-scoped to the merchant: the id came out of a row rather than out of the
-   * request, so the scope is restated in the WHERE clause rather than compared
-   * after the read.
-   */
-  let intent = null;
-  if (delivery.paymentIntentId !== null) {
-    intent = await findIntentByIdForMerchant(db, delivery.paymentIntentId, merchant.id);
-    if (!intent) {
-      return {
-        ok: false,
-        status: 404,
-        message: 'the payment intent for this delivery no longer exists',
-      };
-    }
+  const endpoint = await findEndpointForMerchant(db, delivery.endpointPublicId, merchant.id);
+  if (!endpoint) {
+    return { ok: false, status: 404, message: 'webhook delivery not found' };
   }
-
-  // The signing secret is never on `MerchantRow` — it is a protected column,
-  // loaded explicitly and only on a delivery path.
-  const target = await findWebhookTarget(db, merchant.id);
-  if (!target) {
-    return { ok: false, status: 400, message: 'merchant has no webhook configured' };
-  }
-
-  // A delivery from before this table stored envelopes cannot be replayed: the
-  // body was built, POSTed and discarded, so there is nothing to send. Saying
-  // so is the only honest answer — the alternative is rebuilding the event from
-  // today's intent, which is what this path used to do and what made a replayed
-  // `payment_intent.settled` describe a different moment than the one it
-  // claimed.
-  if (Object.keys(delivery.payload).length === 0) {
+  if (endpoint.status !== 'enabled') {
     return {
       ok: false,
       status: 400,
-      message: 'this delivery predates stored envelopes and cannot be replayed',
+      message: 'the webhook endpoint of this delivery is disabled; enable it before redelivering',
     };
   }
 
-  // The ORIGINAL envelope, replayed byte-for-byte — not a fresh one built from
-  // the intent's state now.
-  //
-  // This path used to call `buildEvent(delivery.eventType, intent)`, which
-  // rebuilt the event from whatever the intent looks like AT REDELIVERY TIME.
-  // Replaying a `payment_intent.settled` from last week therefore sent a body
-  // describing this week's intent, under an event type asserting a moment that
-  // had passed. An event describes a moment; it does not get to change. The
-  // stored `payload` is what makes replaying one honest.
-  const enqueuedId = await enqueueWebhook(db, {
+  const enqueuedId = await enqueueDelivery(db, {
     merchantId: merchant.id,
-    paymentIntentId: intent?.id,
-    event: delivery.payload as unknown as Parameters<typeof enqueueWebhook>[1]['event'],
-    url: target.url,
+    eventId: delivery.eventId,
+    endpointId: endpoint.id,
+    url: endpoint.url,
   });
 
-  // Run one pass INLINE so a person who pressed "redeliver" sees the outcome
-  // rather than a row that says `pending`. It is only an early nudge: if the
-  // attempt fails transiently the row keeps its schedule and the background
-  // dispatcher carries on with it, which is the difference from the old
-  // behaviour, where a failed redelivery was simply over.
+  // One pass INLINE so a person who pressed "redeliver" sees the outcome rather
+  // than a row that says `pending`. A transient failure keeps its schedule and
+  // the background dispatcher carries on with it.
   await runWebhookOutboxPass(deps.safeFetch ? { safeFetch: deps.safeFetch } : {});
 
   const redelivery = await findDeliveryForMerchant(db, enqueuedId, merchant.id);
   if (!redelivery) {
     return { ok: false, status: 404, message: 'webhook delivery not found' };
   }
-
-  return { ok: true, delivery: redelivery, intentPublicId: intent?.publicId ?? null };
+  return { ok: true, delivery: redelivery };
 }
 
+const deliveryListFilters = {
+  /** Only the deliveries of this event (`evt_…`). */
+  event: z.string().min(1).max(255).optional(),
+  /** Only the deliveries to this endpoint (`we_…`). */
+  webhook_endpoint: z.string().min(1).max(255).optional(),
+} as const;
+
+const listDeliveriesQuery = surfaceListQuery(deliveryListFilters);
+
 /**
- * Build the webhook-delivery REST router (F2.0 task 4's "reenviar" button).
- * `requireMerchant` follows the same injectable-default pattern as the other
- * routers; `safeFetch` is separately injectable so tests can capture the
- * outbound request without a real network call, mirroring how `createGateway`
- * already injects it for the settlement watcher's own webhook delivery.
+ * `GET /v1/webhook_deliveries` — the delivery log, newest first, optionally one
+ * event's deliveries or one endpoint's. Both filters are PUBLIC ids, resolved
+ * inside the merchant's scope: another merchant's id is the same 400 as an
+ * unknown one.
  */
+export async function answerWebhookDeliveryList(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  surface: QuerySurface = 'api',
+): Promise<void> {
+  const query = parseQuery(req, res, listDeliveriesQuery[surface]);
+  if (!query) return;
+  const db = getDb();
+  const event = await resolveListReference(
+    res,
+    'event',
+    query.event,
+    async (publicId) => (await findEventForMerchant(db, publicId, merchant.id))?.id ?? null,
+  );
+  if (!event.ok) return;
+  const endpoint = await resolveListReference(
+    res,
+    'webhook_endpoint',
+    query.webhook_endpoint,
+    async (publicId) => (await findEndpointForMerchant(db, publicId, merchant.id))?.id ?? null,
+  );
+  if (!endpoint.ok) return;
+
+  await answerList(req, res, {
+    query,
+    type: 'webhook_delivery',
+    merchantId: merchant.id,
+    // Delivery ids are `text`, so a cursor of any shape simply matches no row,
+    // and the ownership-scoped lookup produces the same 400.
+    cursor: async (id) => (await findDeliveryForMerchant(db, id, merchant.id))?.id ?? null,
+    fetch: (page) =>
+      listDeliveriesForMerchant(db, {
+        merchantId: merchant.id,
+        page,
+        eventId: event.id,
+        endpointId: endpoint.id,
+      }),
+    serialize: toWebhookDeliveryDTO,
+  });
+}
+
+/** The service-authed delivery log and redelivery. */
 export function createWebhookDeliveriesRouter(deps: {
   requireMerchant: RequestHandler;
   safeFetch?: SafeFetchFn;
 }): Router {
   const { requireMerchant, safeFetch } = deps;
   const router = Router();
+
+  router.get(
+    '/v1/webhook_deliveries',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      await answerWebhookDeliveryList(req, res, merchant);
+    }),
+  );
 
   router.post(
     '/v1/webhook_deliveries/:id/redeliver',
@@ -156,8 +172,6 @@ export function createWebhookDeliveriesRouter(deps: {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      // `noUncheckedIndexedAccess` types `req.params.id` as possibly
-      // `undefined` even though Express guarantees `:id` is present here.
       const { id: deliveryId } = req.params;
       if (!deliveryId) {
         sendError(res, 400, 'invalid_request_error', 'id is required');
@@ -169,7 +183,7 @@ export function createWebhookDeliveriesRouter(deps: {
         sendError(res, result.status, 'invalid_request_error', result.message);
         return;
       }
-      res.status(200).json(toWebhookDeliveryDTO(result.delivery, result.intentPublicId));
+      res.status(200).json(toWebhookDeliveryDTO(result.delivery));
     }),
   );
 

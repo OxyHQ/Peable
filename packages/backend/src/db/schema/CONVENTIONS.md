@@ -223,8 +223,13 @@ Decided per relation, never defaulted:
   cannot be deleted, and losing the money record is never the right consequence
   of removing a party. Nothing deletes any of these today; `restrict` states what
   would happen rather than leaving it to whoever writes that statement.
-- `cascade` on `webhook_deliveries.payment_intent_id`. A delivery log is
-  derived from its intent and has no meaning without it.
+- `cascade` on `events.payment_intent_id`, `webhook_deliveries.event_id` and
+  `webhook_deliveries.endpoint_id`. An event about a payment, and a delivery of
+  an event to an endpoint, are derived records with no meaning without what
+  they derive from; the 30-day event sweep and an endpoint's deletion rely on
+  the cascade to take the deliveries with them.
+- `set null` on `recurring_observation_outbox.event_id`: the relay's own record
+  is `relayed_at`, which outlives the swept event.
 - `cascade` on `idempotency_keys.merchant_id`, for the same reason: a stored
   answer is derived from a request to that merchant, lives 24 hours, and is
   not part of the money graph.
@@ -246,32 +251,29 @@ and are wrong:
   impossible. The migration is `post` and carries a backfill, because the
   outgoing image still writes `false` for every environment and the constraint
   cannot land while it serves.
-- **`(webhook_url IS NULL) = (webhook_secret IS NULL)`** would refuse a
-  currently-legal write. Both `POST /v1/merchants` and its PATCH accept either
-  field alone; the incoherent state is reachable and already handled, by
-  `routes/webhookDeliveries.ts` refusing to send when either is missing.
 - **`expires_at > created_at`** compares an application clock against a database
   default and would fail on skew, for no invariant anyone depends on.
 
+(The `(webhook_url IS NULL) = (webhook_secret IS NULL)` question went away
+with the columns: a webhook endpoint's url and secret are both `NOT NULL`.)
+
 Two that ARE there, because every writer was checked:
 
-- `payment_intents_broadcast_requires_txid_check`. `submit_tx` is the only path
-  to `broadcast` and sets `txid` in the same write; `confirming` and `settled`
-  are reached only by the settlement watcher, which selects on `txid` being
-  present. `failed` is deliberately outside the set — `approved → failed` is
-  legal and pairs with no txid.
+- `payment_intents_processing_requires_txid_check` (was `…_broadcast_requires_txid_check`
+  before ADR 0019). A FairCoin `processing` or `succeeded` intent has a txid:
+  `submit_tx` is the only path to a chain `processing` and sets `txid` in the
+  same write, and `succeeded` is reached only by the settlement watcher, which
+  selects on `txid` being present. `canceled` is deliberately outside the set —
+  an expired intent has no txid and an underpaid one has one.
 
-  **This CHECK also decides which fixture can test the code around it, and that
-  is not a coincidence.** A mutation survived here: dropping `isNotNull(txid)`
-  from `findWatchableIntents` left the whole suite green, because every
-  txid-less fixture was `created` and the STATUS predicate excluded it before
-  the txid predicate was ever reached. The obvious discriminating fixture — a
-  txid-less `broadcast` row — is UNREPRESENTABLE, because this constraint
-  forbids exactly it. So the only status that both permits a missing txid and
-  reaches that query is `failed`, the one status left out of the set above. The
-  constraint and the fixture that tests around it are one design decision seen
-  from two sides; narrowing the constraint later would silently remove the only
-  fixture that can exercise the predicate.
+  **This CHECK also decides which fixture can test the code around it.** A
+  mutation survived here: dropping `isNotNull(txid)` from `findWatchableIntents`
+  left the suite green, because every txid-less fixture was excluded by the
+  STATUS predicate before the txid predicate was reached. A txid-less
+  `processing` FairCoin row is UNREPRESENTABLE, so the discriminating fixture is
+  a `canceled` one — the only status that holds rows both with a txid
+  (underpaid) and without (expired). Narrowing the constraint later would
+  silently remove it.
 - `webhook_deliveries_status_agrees_check`. `delivered` and `last_status` are two
   spellings of one fact and both writers derive the second from the first; the
   CHECK is that derivation, where the two cannot come apart.
@@ -379,8 +381,9 @@ key; deleting the call reds that test and the wrong-network one, measured.
 
 ## Protected columns
 
-`db/protectedColumns.ts` withholds `merchants.webhook_secret` and
-`merchants.next_derivation_index` from every ordinary read, at the TYPE level.
+`db/protectedColumns.ts` withholds `webhook_endpoints.secret` /
+`previous_secret` and `merchants.next_derivation_index` from every ordinary
+read, at the TYPE level.
 `xpub` and `client_secret` are deliberately NOT in the registry: both appear in
 a DTO by design, so listing them would not withhold anything — it would only
 make every read name them explicitly, which is the opposite of a guard.
@@ -453,6 +456,86 @@ file references. Decisions a reader would otherwise undo:
   expires an undelivered event after 30, so an older row dedupes nothing.
   `merchant_avatar_audit.event_id` therefore carries no foreign key to it.
 
+### Files (`files`) and dispute evidence
+
+- **A File is never deleted and never re-pointed.** Submitted evidence and the
+  merchant's logo reference it; what Oxy says afterwards is its standing:
+  `withheld` (reversible) or `removed_at`/`removed_by` (final) —
+  `files_removed_agrees_check` makes the pair one fact and
+  `files_removed_not_withheld_check` keeps a removed file from reading as
+  withheld. `oxy_file_event_at` orders Oxy's unordered events, as
+  `merchants.avatar_file_event_at` does.
+- **The purpose is part of the reference.** `dispute_evidence_files` points at
+  `files (id, merchant_id, purpose)` with a `file_purpose` pinned to
+  `dispute_evidence` by a CHECK, so another merchant's file — or the merchant's
+  own identity document — cannot be attached by naming its id.
+  `merchants_business_logo_file_fkey` points at `files (id, merchant_id)`; the
+  logo's purpose is the one writer's check (`applyMerchantPatch`).
+- **The size CHECK is the largest purpose's ceiling**; per-purpose type and size
+  are the upload's one writer (`services/files.ts`, `FILE_PURPOSE_POLICIES`).
+- **`dispute_evidence_files` holds ids, never words.** The draft text is at the
+  provider; `disputes.has_evidence` is the provider's boolean answer.
+
+### Payment method breadth
+
+- **`payment_method_configurations.preferences` holds only explicit choices**
+  (`{type: 'on'|'off'}`), merged in SQL (`||`), so a default Orbit changes later
+  reaches every merchant who never chose. `version` moves with every change and
+  is the compare half of `payment_method_configuration_bindings.synced_version`,
+  which only moves forward (`greatest`).
+- **One default per merchant** is a partial unique index (`… where is_default`),
+  which is also what converges two racing lazy creates;
+  `…_default_is_active_check` keeps the default usable.
+- **`payment_intents.payment_method_types` is fixed at creation** and checked
+  against the card-rail set; `payment_intents_payment_method_types_rail_check`
+  is one-directional (`rail = 'card' or types is null`) on purpose: rows from
+  before breadth hold none until the post-phase backfill (`0051`), and the
+  outgoing image keeps writing them without during the rollout.
+- **`payment_method_domains`** is unique per `(merchant_id, domain_name)` and per
+  `(provider, provider_object_id)`: one provider account per mode registers a
+  domain once, so a second merchant naming it is refused rather than sharing
+  wallets. The domain CHECK is the writer's hostname rule.
+
+## Events and webhook endpoints (ADR 0014 D4)
+
+`events`, `webhook_endpoints` and `webhook_deliveries` (`schema/events.ts`,
+`schema/webhooks.ts`). Decisions a reader would otherwise undo:
+
+- **One writer, in the change's transaction.** `recordEvent`
+  (`services/events.ts`) inserts the event and its deliveries together; the
+  event is the record whether or not any endpoint wants it.
+- **The event is a snapshot.** `data_object` is the object as rendered under
+  `api_version`; deliveries carry no body and render the event at attempt time,
+  so every attempt and redelivery sends the same object.
+- **`livemode` is not a column** on any of the three (ADR 0017): each reads its
+  merchant's in the row's own statement.
+- **`events_intent_event_has_intent_check`** moved here from
+  `webhook_deliveries`, still keyed on the declared scope
+  (`WEBHOOK_EVENT_SCOPES`), not on a name prefix: the row is written inside the
+  money transaction.
+- **`webhook_endpoints_enabled_events_check`** is `<@ ARRAY[…]` over
+  `WEBHOOK_ENABLED_EVENTS` — every subscribable type and `*`, never the targeted
+  `webhook_endpoint.test` — so a type cannot be subscribed that the catalog
+  does not hold.
+- **`webhook_endpoints_secret_check` is only "non-empty".** A generated secret
+  is `whsec_` + 64 hex, but the endpoints migrated from `merchants.webhook_secret`
+  keep the merchant's value byte for byte so their receivers keep verifying.
+- **`(previous_secret IS NULL) = (previous_secret_expires_at IS NULL)`** and
+  **`(status = 'disabled') = (disabled_reason IS NOT NULL)`**: each pair is one
+  fact. The previous secret is only USED while its expiry is in the future,
+  judged by the database clock in `findEndpointSigningTarget`.
+- **The endpoint cap (16) is not a CHECK**: `insertEndpoint` locks the merchant
+  row and counts, so two concurrent creates cannot both pass at fifteen.
+- **The failure run is one statement** (`recordEndpointAttempt`): the
+  comparison with the three-day bound and the disable happen in the same
+  `UPDATE`, gated on `status = 'enabled'`.
+- **Retention is `@oxy.so/db/expiry`** on `events.created_at`
+  (`services/eventSweeper.ts`, 30 days), and every API read filters on the same
+  horizon, so correctness does not wait on the sweep.
+- **Migration `0040`/`0041` hand-build uuid v7 ids** (`pg_temp.peable_uuid7`)
+  for the backfilled rows, from the original instant, so the keyset walk keeps
+  creation order — a v4 from `gen_random_uuid()` would sort them randomly.
+
 ## Generic idempotency (ADR 0014 D3)
 
 `idempotency_keys` (`schema/idempotency.ts`) holds one row per merchant and
@@ -480,3 +563,169 @@ body it answered. Decisions a reader would otherwise undo:
 - **Retention is `@oxy.so/db/expiry`** (`services/idempotencySweeper.ts`), on the
   indexed `expires_at`. Correctness does not wait on it: the read ignores an
   expired row and the claim takes one over.
+
+
+## Payments core (ADR 0019)
+
+- **`payment_intents` statuses are Stripe's seven**; `CARD_ONLY_STATUSES`
+  (`requires_payment_method`, `requires_confirmation`, `requires_capture`) are
+  refused on the chain by `payment_intents_card_statuses_are_card_check`, and
+  the card-only fields (`payment_method_id`, `setup_future_usage`,
+  `capture_method = 'manual'`, `statement_descriptor_suffix`) by
+  `payment_intents_card_only_fields_check`.
+- **`canceled_at` ⇔ `status = 'canceled'`, and `cancellation_reason` only on a
+  cancelled row** (`payment_intents_canceled_agrees_check`). The one writer is
+  `updateIntentState` (and the sweeper's claim), which stamps both in the
+  transition's own statement.
+- **`amount_received` is stored, `amount_refunded` is not.** The first is a fact
+  of the transition (a partial capture receives less) and is `'0'` outside
+  `succeeded` (`payment_intents_amount_received_agrees_check`); the second is
+  the sum of succeeded refunds, read in the same statement as the row — the
+  refund rows are its one home.
+- **A scalar subquery in a column map that every RETURNING shares must be
+  table-qualified in raw SQL.** drizzle renders column references UNqualified in
+  `INSERT/UPDATE … RETURNING`, and an unqualified `"id"` inside a subquery over
+  `charges` or `refunds` binds to THAT table's `id` — a silently wrong answer,
+  not an error. `latestChargePublicId` and `amountRefunded` are written with
+  `"payment_intents"."id"` for that reason (measured).
+- **`charges`: one per payment intent** (`charges_payment_intent_id_key`),
+  written by `ensureChargeForIntent` in the transition's transaction; `outcome`
+  and `payment_method_details` are a provider snapshot, NULL until read.
+- **`customers` are tombstoned, never deleted** (`deleted_at`): payment intents
+  and payment methods reference them with `restrict`. `payment_methods` and
+  `payment_intents` reference a customer through `(customer_id, merchant_id)`,
+  so a row can only name its own merchant's customer; the customer's default
+  method references `(default_payment_method_id, id) → payment_methods (id,
+  customer_id)`, so it can only be one of its OWN attached methods — detaching it
+  clears the default first, in the same transaction.
+- **`customer_provider_bindings` hold the provider customer** — the binding of
+  ADR 0016 D2, never serialized, one per (customer, provider); its mode is the
+  merchant's (ADR 0017).
+
+## Catalog (ADR 0018)
+
+`products`, `prices`, `coupons`, `coupon_products` and `promotion_codes`
+(`schema/catalog.ts`). Decisions a reader would otherwise undo:
+
+- **No provider binding.** A catalog row is Orbit's decision; a provider sees
+  only the amounts an invoice or a payment derives from it.
+- **Same-merchant references are composite.** `prices (product_id, merchant_id)
+  → products (id, merchant_id)`, `promotion_codes (coupon_id, merchant_id) →
+  coupons`, `(customer_id, merchant_id) → customers`, and both halves of
+  `coupon_products`, so no row can name another merchant's object.
+- **A product's default price is one of its OWN prices**: `(default_price_id,
+  id) → prices (id, product_id)` — a cycle with `prices.product_id`, which
+  drizzle-kit resolves by emitting both foreign keys after both tables.
+  `MATCH SIMPLE` switches it off while the product has none. The two table
+  callbacks carry an explicit `PgTableExtraConfigValue[]` return type, without
+  which `tsc` cannot type the cycle.
+- **A price's shape is CHECKs** (`prices_billing_scheme_shape_check`,
+  `prices_recurring_check`, `prices_transform_quantity_check`): per-unit ⇔ an
+  amount, tiered ⇔ tiers and a mode, recurring ⇔ interval + count + usage type
+  (≤ three years), a transform only on per-unit. The TIER amounts live in
+  `prices.tiers` (jsonb) and are validated by the one writer
+  (`services/catalog/params.ts`), not by a CHECK.
+- **Immutability is a chokepoint, not a trigger.** `insertPrice` is the only
+  statement that sets a price's amount or shape and `updatePrice` names only
+  `active`, `nickname`, `metadata`, `lookup_key`, `tax_behavior`; the service
+  refuses a set `tax_behavior` moving.
+- **The lookup key is decided by the unique index**
+  (`prices_merchant_lookup_key_key`, partial): an insert is `ON CONFLICT DO
+  NOTHING`, an update runs under a savepoint and maps the violation, so two
+  concurrent claims cannot both win and the loser's transaction survives to
+  answer 400.
+- **Coupon ids are per MERCHANT and forever.** `coupons_merchant_public_id_key`
+  covers deleted (tombstoned, `deleted_at`) coupons too, so a promotion code or
+  a future discount naming a coupon cannot be re-pointed at new terms.
+  `percent_off_bps` is basis points — the discount is integer math.
+- **`coupon_products` is `restrict` both ways.** A cascade that removed the last
+  row would turn a restricted coupon into one that applies to everything.
+- **A promotion code is unique among ACTIVE codes, case-insensitively**
+  (`promotion_codes_merchant_active_code_key` on `(merchant_id, lower(code))
+  WHERE active`), Stripe's rule; reactivation contends for it like a create.
+- **Locks are taken product → price** (`updateProduct`, `updatePrice`,
+  `createPrice`, `deleteProduct`), so archiving a default price and changing the
+  default cannot interleave, and a price cannot be created on a product being
+  deleted.
+- **Every scalar subquery in a catalog column map is raw, aliased and
+  table-qualified**, for the RETURNING reason above: an unqualified `"id"` in
+  the `applies_to` subquery bound to `products.id` and answered `null` for every
+  restricted coupon (measured).
+- **Migrations `0046`/`0047`.** New tables, plus `events_type_check` and
+  `webhook_endpoints_enabled_events_check` widened for the ten catalog event
+  types — re-added `NOT VALID` by hand in `0046` and validated in `0047`
+  (`post`), so the ACCESS EXCLUSIVE lock on `events` never scans.
+
+## Request logs and the live tail
+
+`api_request_logs` (`schema/requestLogs.ts`) holds one row per answered,
+service-authenticated merchant `/v1` request (`lib/requestLog.ts`, the one
+writer). Decisions a reader would otherwise undo:
+
+- **What it holds is the whole list**: method, path without its query string,
+  status, duration, `Idempotency-Key`. Never a body, a header, a query string or
+  an address — the merchant reads this log back, so it must not hold what a
+  request carried. `api_request_logs_path_check` refuses a `?`.
+- **`request_id` is the public id** (the `Request-Id`, `req_…`), unique, and
+  in the id-column ledger as the row's own identifier.
+- **Written after the answer, outside any business transaction**: a failed
+  write never changes what the merchant was told.
+- **`cascade` from the merchant**, as `idempotency_keys`; `livemode` is not a
+  column (ADR 0017).
+- **Retention is `@oxy.so/db/expiry`** on the indexed `created_at`
+  (`services/requestLogSweeper.ts`, 30 days); every read filters on the same
+  horizon.
+- **The live tail is a `NOTIFY` on the writing transaction**
+  (`services/liveTail.ts`): `recordEvent` and the request-log writer signal
+  `peable_test_events` / `peable_test_request_logs` with `merchant_id:row_id`
+  for a TEST-MODE row only, so a stream hears of a row at its commit and never
+  of a rollback, and live commits never take the notify queue's lock. The
+  stream reads the row back through its repository; the payload is never a copy.
+
+## Orbit money (ADR 0015)
+
+`fee_schedules`, `application_fees`, `application_fee_refunds`, `payouts`,
+`balance_transactions`, `ledger_entries` and `reconciliation_mismatches`
+(`schema/money.ts`), plus `connected_accounts.role` and the destination-charge
+fields on `payment_intents`. Decisions a reader would otherwise undo:
+
+- **The merchant's own account is a `connected_accounts` row**, not a new
+  table: `role = 'merchant'`, `(role = 'merchant') = (external_ref IS NULL)`,
+  card half only (`connected_accounts_merchant_role_is_card_check`), one per
+  merchant (`connected_accounts_merchant_role_key`, partial). A second table
+  would give one provider-account kind two snapshot writers and two refresh
+  paths. Requirement COUNTS became identifier LISTS (`currently_due` …), the
+  counts dropped post-deploy.
+- **Ledger amounts are SIGNED** (`SIGNED_BASE_UNIT_STRING_PATTERN`, no `-0`): a
+  refund or payout takes money out. Every other money column keeps the
+  non-negative pattern.
+- **`balance_transactions.fee` and `.net` are NULL together**, and when known
+  `amount - fee = net` (`balance_transactions_net_agrees_check`) — the
+  provider's own arithmetic, restated where a writer cannot break it.
+- **`informational` ⇔ FairCoin ⇔ no provider**
+  (`balance_transactions_informational_agrees_check`): coins Orbit never held
+  can never sit in a payable balance.
+- **Idempotent ingestion is `ingestion_key`** (`<provider>:<provider id>`, or
+  `faircoin:<intent>:<n>` for the n-th informational row of a payment, so a
+  reorg's reversal and a re-confirmation are distinct rows).
+- **The zero sum is not a CHECK** — it spans rows. `postJournal` refuses an
+  unbalanced journal before inserting; `ledger_entries_transaction_kind_balance_type_key`
+  makes a journal of each kind post once per transaction; the reconciliation
+  re-proves the sum (`unbalanced_journal`).
+- **`source_type` / `source_id` have no foreign key**: the source is one of six
+  tables by public id, and a provider source Orbit never saw is a legitimate
+  NULL.
+- **Every reference into an account is `(connected_account_id, merchant_id)` →
+  `connected_accounts (id, merchant_id)`** — the account is the row's own
+  merchant's, the companion-reference rule of ADR 0001 D6.
+- **A payout instruction is a row before it is a provider object**
+  (`provider_object_id` NULL, unique where set), the two-step every money
+  movement uses; `automatic ⇔ origin = 'provider'`, and a provider-origin row
+  always has its object.
+- **`reconciliation_mismatches` keeps one OPEN row per (kind, subject)**
+  (partial unique); `subject` is a provider id or a journal id and is never
+  serialized.
+- **The hot-table DDL is split** (`0053` merchants, `0054`/`0055`
+  connected_accounts, `0056` payment_intents; `0052` the new tables), every constraint added to an
+  existing table is `NOT VALID`, and the post migration validates them and drops
+  the requirement counts.

@@ -22,7 +22,7 @@ import express from 'express';
 import type { RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
 
-let statusToReport = 'created';
+let statusToReport = 'requires_payment_method';
 
 /** Set to make the provider unreachable, which must not break a merchant read. */
 let getStatusThrows: Error | null = null;
@@ -132,6 +132,7 @@ async function cardIntent() {
     network: null,
     address: null,
     provider: 'stripe',
+    status: 'requires_payment_method',
     clientSecret: `${publicId}_secret_${uuidv7()}`,
     idempotencyKey: uuidv7(),
     metadata: {},
@@ -183,7 +184,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
   });
 
   beforeEach(() => {
-    statusToReport = 'created';
+    statusToReport = 'requires_payment_method';
     getStatusThrows = null;
     asMerchant = true;
   });
@@ -245,8 +246,18 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
 
   test('a declined card resumes for the payer and merchant without creating another payment', async () => {
     const intent = await cardIntent();
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'failed' });
-    statusToReport = 'created';
+    // ADR 0019: a declined attempt is `requires_payment_method` with an error.
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'requires_payment_method',
+      lastPaymentError: {
+        type: 'card_error',
+        code: 'card_declined',
+        decline_code: 'generic_decline',
+        message: 'The card was declined.',
+      },
+    });
+    statusToReport = 'requires_payment_method';
     asMerchant = false;
     const resumed = await request('POST', `/v1/payment_intents/${intent.publicId}/client_action`, {
       'X-Peable-Client-Secret': intent.clientSecret,
@@ -280,7 +291,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
    */
   test('refuses to hand out a credential for a payment that is over', async () => {
     const intent = await cardIntent();
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'succeeded',
+    });
 
     const { status, json } = await request(
       'POST',
@@ -288,7 +302,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
     );
 
     expect(status).toBe(409);
-    expect(json.error?.message).toContain('settled');
+    expect(json.error?.message).toContain('succeeded');
   });
 
   /** The FairCoin rail needs no client action; its address is on the intent. */
@@ -301,7 +315,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
     );
 
     expect(status).toBe(400);
-    expect(json.error?.message).toContain('address');
+    expect(json.error?.message).toContain('next_action');
   });
 
   // ── the two GET surfaces, which differ deliberately ──────────────────────
@@ -326,7 +340,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
   /** ...and stops as soon as the payment can no longer be paid. */
   test("a merchant's read of a finished payment carries none", async () => {
     const intent = await cardIntent();
-    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'settled' });
+    await updateIntentState(gatewayDb(), intent.id, {
+      from: 'requires_payment_method',
+      status: 'succeeded',
+    });
 
     const { json } = await request('GET', `/v1/payment_intents/${intent.publicId}`);
 

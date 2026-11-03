@@ -28,17 +28,18 @@ closed sheet or browser callback.
 
 ## Packages
 
-There are **eight**. Four are published to npm, so a change in
-`contracts`, `shared-types`, `sdk` or `pay` is an external API change, not an
-internal refactor.
+There are **nine**. Four are published to npm (and `cli` will be), so a change
+in `contracts`, `shared-types`, `sdk`, `pay` or `cli` is an external API change,
+not an internal refactor.
 
 | Path | Name | What it is |
 |---|---|---|
 | `packages/backend/` | `@peable.to/backend` | Express + Socket.IO gateway API. PostgreSQL-native — see below |
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
+| `packages/cli/` | **`@peable.to/cli`** | The `peable` command, to be published (`private` until the owner configures its npm trusted publisher) (ESM bin, `dist/bin.js`): `login` (Oxy application credential per profile and mode, 0600 config), `listen` (test-mode events from `GET /v1/events/stream`, signed with a per-session `whsec_` by the SDK's own `signWebhook`, forwarded to localhost), `trigger` (fixtures over the public API and `/v1/test_helpers/*`), `logs tail`, resource commands. Built on `@peable.to/sdk` and `shared-types`; see `packages/cli/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
-| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
@@ -145,10 +146,10 @@ separate product. **No extensions** (an explicit empty list in
   `merch_…` / `link_…` / `cs_…` lives in `public_id` and is what the wire
   contracts call `id`; `id` itself is the internal primary key that other tables
   reference — never the public one. Both ids
-  are on shipped contracts (`CheckoutSession.payment_intent_id` and
-  `WebhookDelivery.intent_id` carry the `pi_…`), which is why
-  `listDeliveriesForMerchant` joins the public id in rather than the DTO
-  emitting the internal one, and why `findIntentById` (by primary key) is a
+  are on shipped contracts (`CheckoutSession.payment_intent` carries the
+  `pi_…`, `WebhookDelivery.event_id` / `webhook_endpoint_id` the `evt_…` /
+  `we_…`), which is why `listDeliveriesForMerchant` joins the public ids in
+  rather than the DTO emitting the internal ones, and why `findIntentById` (by primary key) is a
   DIFFERENT function from `findIntentByPublicId`. The socket room is keyed by
   the PUBLIC id — keying `emitIntentUpdate` by the internal one would emit into
   a room nobody is in and lose every realtime update silently.
@@ -209,8 +210,13 @@ and no RPC node dependency anywhere in this repo. `@fairco.in/core` is the only
 `@fairco.in/*` package any workspace depends on.
 
 `services/settlementWatcher.ts` polls the Explorer for in-flight intents.
-Only `broadcast` and `confirming` intents carrying a payer-reported txid are
-watchable; terminal and pre-broadcast intents are never polled. Its timer is
+Only FairCoin `processing` intents carrying a payer-reported txid are watchable
+(`submit_tx` moves `requires_action → processing` with the txid in one write);
+`requires_action` and the terminal statuses are never polled. While a paid
+transaction confirms it writes the live `confirmations` count (same status, no
+event) and accepts the payment's billing invoice (`recordVerifiedChainPayment`);
+at the merchant's threshold it is `succeeded`, and a transaction that pays LESS
+is `canceled` with `cancellation_reason: 'underpaid'`. Its timer is
 `.unref()`-ed so it cannot hold a test run or the event loop open.
 
 **The gateway is not a chain proxy for wallets.** It reads the chain to settle
@@ -272,10 +278,70 @@ a wire object stores the wire shape (migration `0036` converted them).
 
 ## Backend surface
 
-Routes (`src/routes/`): `checkoutSessions`, `connect`, `connectedAccounts`,
-`dashboard`, `disputes`, `enrich`, `merchants`, `oxyFileEvents`,
-`paymentIntents`, `paymentLinks`, `providerWebhooks`, `refunds`, `social`,
-`tax`, `transfers`, `webhookDeliveries`.
+Routes (`src/routes/`): `charges`, `checkoutSessions`, `connect`,
+`connectedAccounts`, `coupons`, `customers`, `dashboard`, `disputes`, `enrich`,
+`files`, `merchants`, `money`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
+`paymentMethodConfigurations` (configurations and wallet domains),
+`paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
+`refunds`, `setupIntents`, `social`, `tax`, `transfers`, `webhookDeliveries`,
+`webhookEndpoints`.
+
+### The catalog (ADR 0018)
+
+Products, prices, coupons and promotion codes are Orbit rows with no provider
+binding. The four resource files list their routes once as data
+(`routes/catalog.ts`); `catalogRoutes.ts` mounts that list on `/v1/*` AND on the
+dashboard, so the two surfaces cannot drift. Every write goes through
+`services/catalog/catalogService.ts`, which commits the row with its event.
+**A price never changes what it charges** — only `active`, `nickname`,
+`metadata`, `lookup_key` and an `unspecified` `tax_behavior` move; a new amount
+is a new price. **Amounts come from `services/catalog/pricing.ts` only** (pure,
+bigint, half-up percent discounts, Stripe's graduated/volume tiers): checkout,
+invoices and renewals must call it, never re-derive. A coupon id is never
+reused (deleted coupons are tombstones), a promotion code is unique among
+ACTIVE codes case-insensitively, and there is no `price.deleted` /
+`promotion_code.deleted` — those objects are archived, not deleted.
+
+### The PaymentIntent is Stripe's (ADR 0019)
+
+Seven statuses on both rails — `requires_payment_method`,
+`requires_confirmation`, `requires_action`, `processing`, `requires_capture`,
+`canceled`, `succeeded` — one transition table in
+`shared-types/src/paymentIntent.ts`, `succeeded`/`canceled` terminal (a chain
+reorg's `succeeded → processing` is the one exception, in `applyEvent`).
+
+- **The rail decides the path, and `applyEvent(status, event, rail)` takes it.**
+  FairCoin: `requires_action` (`next_action.faircoin_payment`) → `processing` →
+  `succeeded`/`canceled`. Card: all seven. `requires_action` and `processing`
+  are SHARED, so a card event must never move a chain payment because the
+  statuses match — the rail argument refuses it, `LEGAL_SOURCES` bounds each
+  event's sources, and `CARD_ONLY_STATUSES` is a CHECK.
+- **A declined card attempt is `requires_payment_method` + `last_payment_error`**
+  (Peable's own message, chosen from the code — never the provider's prose), and
+  stays payable; `payment_intent.payment_failed` is recorded even when the
+  status does not move. A FairCoin underpayment is terminal (`canceled`,
+  `underpaid`): Peable never holds those coins.
+- **Cancellation is one status with a reason** (`cancellation_reason`,
+  `canceled_at`, CHECKed together): expiry is `abandoned`, the merchant's
+  `POST …/cancel` names one, the provider's is `automatic`. There is no
+  `/reject`.
+- **Refunds are not statuses.** `amount_refunded` is the sum of SUCCEEDED refund
+  rows, read in the same statement and never stored; `amount_received` is
+  written with the transition to `succeeded` (a partial capture receives less;
+  leaving `succeeded` resets it) and is what refunds draw on. Refund events are
+  `refund.*` and `charge.refunded`.
+- **A card authorization that succeeded is ONE `ch_…`**, written by
+  `transitionIntent` in the transaction that reaches `requires_capture` or
+  `succeeded` (`ensureChargeForIntent`); its outcome/card snapshot is read from
+  the provider after the commit. Failed attempts are not charges. The provider
+  charge id stays the `provider_charge_id` binding.
+- **Customers, payment methods and SetupIntents are Orbit's rows**
+  (`cus_`/`pm_`/`seti_`, ADR 0016); the provider customer is a lazy per-mode
+  binding (`customer_provider_bindings`), never serialized. Card numbers never
+  reach Peable — the provider's Elements collect them.
+- **Every id on the wire is public** — `merchant_id` is the `merch_…`; the chain
+  side lives in `faircoin`; the card's confirmation credential is never on the
+  intent (`next_action: use_peable_sdk` → `POST …/client_action`).
 
 **Every merchant `POST` mounts `idempotent` (`lib/idempotency.ts`, ADR 0014 D3)
 after its auth and scope middleware**, or is named with its reason in
@@ -297,27 +363,56 @@ never deletions of the original transaction.
 
 ### Oxy Files (ADR 0043 of the oxy repo)
 
-A merchant's avatar is the only Oxy file Peable stores, and three rules keep it
-honest:
+Peable uses Oxy files two ways, each an `OXY_FILE_ENTITY_TYPES` member:
+`merchant_avatar` (the merchant's square identity image, an Oxy file THEY own,
+`merchants.avatar_file_id`) and `file` (an Orbit File, `file_…`, `files` — bytes
+Peable stored for a merchant, or a merchant-owned Oxy logo imported as one).
+Every live `files` row holds its own reference; whatever USES a File (dispute
+evidence, the merchant's `business_logo`) uses the row, never the Oxy file. Rules:
 
-- **Ownership is checked at ONE place**, `services/oxyFiles/merchantAvatar.ts`,
-  reached from `registerMerchant` / `applyMerchantPatch` (service AND dashboard
-  routes). The file must be active and owned by the merchant's application, its
-  owner account, the dashboard user or the user a delegated token acts as, and
-  Oxy must accept Peable's reference. It FAILS CLOSED (503) when Oxy cannot be
-  asked or hides the owner — Oxy reveals owners to verified first-party
-  workload authority. Application branding or tier is insufficient. Never
-  accept an avatar id without it.
-- **Every avatar write queues its reference sync in the same transaction**
-  (`enqueueReferenceSync`, called only from `db/merchants/merchantRepository.ts`);
-  `services/oxyFiles/referenceSync.ts` makes Oxy agree, and the daily
-  reconciliation (`OXY_FILE_RECONCILIATION_MODE`, `bun run oxy-files:reconcile`)
-  repairs the rest. A new kind of file use is a new `OXY_FILE_ENTITY_TYPES`
-  member, and the exhaustive switches will not compile without its rules.
+- **Ownership is checked at ONE place**, `services/oxyFiles/fileOwnership.ts`
+  (`acceptOxyFile`), reached from `registerMerchant` / `applyMerchantPatch`
+  (avatar) and `POST /v1/files` with `oxy_file` (an imported logo) — service AND
+  dashboard routes. The file must be active and owned by the merchant's
+  application, its owner account, the dashboard user or the user a delegated
+  token acts as, and Oxy must accept Peable's reference. It FAILS CLOSED (503)
+  when Oxy cannot be asked or hides the owner — Oxy reveals owners to verified
+  first-party workload authority. Application branding or tier is
+  insufficient. An UPLOAD needs no check: Peable stores the bytes as its own
+  application file (`storeAppFile`, the reference registered in the same Oxy
+  call), private — or public for a `business_logo`.
+- **Every use writes its reference sync in the same transaction**
+  (`enqueueReferenceSync`, called only from `db/merchants/merchantRepository.ts`
+  and `db/files/fileRepository.ts`); `services/oxyFiles/referenceSync.ts` makes
+  Oxy agree, and the daily reconciliation (`OXY_FILE_RECONCILIATION_MODE`, `bun
+  run oxy-files:reconcile`) repairs the rest, one run per entity type. A new
+  kind of file use is a new `OXY_FILE_ENTITY_TYPES` member, and the exhaustive
+  switches (`isReferenceWanted`, `inventoryFor`, `fileEvents.ts`) will not
+  compile without its rules.
 - **`/v1/webhooks/oxy/files` is mounted before `express.json()` and the rate
   limiter**, like the Stripe webhooks: the signature covers the raw bytes.
-  Deleted/blocked clears the avatar (audited in `merchant_avatar_audit`);
-  trashed/private withholds it from payers until the owner brings it back.
+  Deleted/blocked/lost clears the avatar (audited in `merchant_avatar_audit`)
+  and REMOVES every File over the Oxy file (`files.removed_at`/`removed_by` —
+  the row stays, so evidence and the logo can say why they stopped working);
+  trashed/private withholds both until the owner brings them back.
+
+**Files (`POST /v1/files`, `GET /v1/files[/:id]`).** `routes/files.ts` reads the
+`multipart/form-data` body itself, bounded by the largest purpose, recognises
+the TYPE from the bytes (never the client's `Content-Type`) and checks it
+against `FILE_PURPOSE_POLICIES` (shared-types). It sets `req.body` to the
+request's identity — purpose, name, size, sha256 — so the generic idempotency
+layer hashes the file without the bytes ever entering a stored hash, a log or
+an error. Never log or echo file bytes. Only a `business_logo` has a `url`;
+evidence and identity documents leave Peable only to the provider they are
+submitted to (`readFileBytes` → `linkedDownloadUrls`).
+
+**The logo sits BESIDE the avatar, and they are not the same thing.** The
+avatar is the square identity image (Stripe's branding `icon`), an Oxy file the
+merchant owns and the one the Oxy ecosystem renders; `business_logo` is the
+wide wordmark payer surfaces put in their header (Stripe's branding `logo`), a
+File of purpose `business_logo`, set with `POST /v1/merchants/me` (a File needs a
+merchant, so never at registration) and served as `MerchantDisplay.logo_url`
+only while the File is `available`.
 
 Peable's own Files calls use its live workload binding through the shared
 `OxyServer`; no application scopes or client key pair configure that authority.
@@ -326,14 +421,37 @@ Merchant/file ownership and reference visibility checks still apply. See
 
 Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
-`payments/` (`paymentIntentRepository`, `paymentLinkRepository`,
-`checkoutSessionRepository`), `social/` (`receiveCursor`, `sendAttribution`),
-`webhooks/` (`webhookDeliveryRepository`, `webhookOutboxRepository`),
+`payments/` (`paymentIntentRepository`, `chargeRepository`,
+`paymentLinkRepository`, `checkoutSessionRepository`), `customers/`
+(`customerRepository`, `paymentMethodRepository`, `setupIntentRepository`),
+`catalog/` (`productRepository`, `priceRepository`, `couponRepository`,
+`promotionCodeRepository`), `social/` (`receiveCursor`, `sendAttribution`),
+`events/` (`eventRepository`), `webhooks/` (`webhookEndpointRepository`,
+`webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`
 (`connectedAccountRepository`, `accountDerivationIndex`,
 `accountLinkRepository`), `transfers/` (`transferRepository`,
 `transferReversalRepository`), `refunds/` (`refundRepository`), `disputes/`
-(`disputeRepository`).
+(`disputeRepository`), `files/` (`fileRepository`), `paymentMethods/`
+(`paymentMethodConfigurationRepository`: configurations, their provider
+bindings, wallet domains), `money/` (`ledgerRepository`, `payoutRepository`,
+`applicationFeeRepository`, `feeScheduleRepository`, `reconciliationRepository`).
+
+**Payment method breadth is a card-rail intersection, decided once per
+payment.** `services/paymentMethods/configuration.ts`: a merchant's
+configurations (`pmc_…`, one default created on first need) hold only their
+explicit choices; a method is offered when it is on (or Orbit's default is),
+the provider processes it at all (`PROVIDER_PAYMENT_METHODS`), a wallet's card
+is on, and the payment's currency is one it takes (`PAYMENT_METHOD_CURRENCIES`).
+What cannot be offered says why (`unavailable_reason`) and a toggle that could
+never take effect is refused — never a silent no-op. A PaymentIntent stores
+the types it offers at creation (`payment_intents.payment_method_types`) and,
+unless the merchant named types, its configuration, whose provider binding is
+pushed again before use whenever the row's `version` moved — the provider never
+offers a method the merchant turned off. Every method Orbit does not model
+(the provider's own consumer wallet, BNPL, …) is switched OFF explicitly on
+every push. Wallet domains (`pmd_…`) are registered at the provider first and
+the row records its answer; Peable's, Oxy's and Kaana's own hosts are refused.
 
 **A refund and a dispute run in OPPOSITE directions, and the difference is the
 whole handler.** A refund is merchant-initiated: Peable writes the row, then
@@ -344,7 +462,7 @@ exists is the event, so "no row" is the NORMAL first state and
 `external_ref` but `unique(provider, provider_object_id)` — the only identity a
 redelivered creation carries. Its two events carry a **`Dispute`** under
 `data.object`, not the intent: `WebhookEventPayload` in `shared-types/event.ts`
-is the total map of event type to resource, and `buildEvent` is generic over it,
+is the total map of event type to resource, and `recordEvent` is generic over it,
 so a new event type cannot ship the wrong payload.
 
 ### The card rail's own invariants
@@ -352,7 +470,7 @@ so a new event type cannot ship the wrong payload.
 Five, and each one exists because its absence was a defect:
 
 - **A card payment is TWO things** — a row here, and a PaymentIntent at the
-  acquirer that stays confirmable. Ending it locally (`POST /reject`, the expiry
+  acquirer that stays confirmable. Ending it locally (`POST …/cancel`, the expiry
   sweeper) without cancelling there leaves a payment the payer can still
   complete against a terminal status. `services/cardCancellation.ts` cancels and
   then reports what is TRUE, because the cancellation can lose; the sweeper
@@ -367,19 +485,75 @@ Five, and each one exists because its absence was a defect:
   on `transfers.amount_reversed` is still the PROVIDER's figure and is never a
   sum of those rows.
 - **A refund's `state` is read, always.** `pending` and `failed` are ordinary
-  answers, a bank can reject a refund days later (`refund.failed`), and
-  `refunded → settled` is a legal transition for exactly that.
-- **`failed` is not terminal on the card rail.** One declined attempt returns
-  the provider's payment to a confirmable state; `underpaid` on the chain rail
-  still is terminal, and `LEGAL_SOURCES` is what keeps the two apart.
+  answers, and a bank can reject a refund days later (`refund.failed`): the row
+  moves `succeeded → failed` and `amount_refunded`, being their sum, drops with
+  it — no payment transition is needed, because a refund was never one.
+- **A declined attempt is not terminal on the card rail.** It returns the
+  payment to `requires_payment_method` with `last_payment_error`, confirmable
+  again; an `underpaid` chain payment is `canceled`, and the rail argument of
+  `applyEvent` plus `LEGAL_SOURCES` keep the two apart.
 
-**A dispute response is one shot, and none of it is stored.** Submitting is
-one-way at the network, so `submitDisputeEvidence` sends once and a second call
-is refused by reading `disputes.evidence_submitted_at` rather than by asking the
-provider. The evidence itself — a customer's name, email, address,
-correspondence — is forwarded and forgotten: only the timestamp is kept, which
-is the same split `redactProviderPayload` makes everywhere else. File
-attachments are deliberately unsupported.
+### Orbit money: the merchant's account, fees, ledger, payouts (ADR 0015)
+
+Fiat funds stay at the provider in an account that belongs to the merchant;
+Orbit instructs and MIRRORS. There is no Peable-held balance and no table that
+could represent one — a design that adds one supersedes ADR 0015 first.
+
+- **The merchant's own account is a `connected_accounts` row with
+  `role = 'merchant'`** (one per merchant, card half only, no `external_ref`),
+  opened by `services/accounts/merchantAccount.ts` through the same seller
+  machinery with `dashboard: 'none'`. Every SELLER read filters on the role
+  (`IS_SELLER` in the repository); `toConnectedAccountDTO` throws on a merchant
+  row rather than serialize it as a seller. `/v1/merchants/me` is the
+  registration and stays separate.
+- **The charge is decided once, at create, and replayed from the row**
+  (`services/money/chargeRouting.ts`, `providerRoutingFor`): first-party →
+  platform charge, no fee; own onboarded account → destination charge
+  `on_behalf_of` it with the fee schedule's fee; own account still onboarding →
+  409, never a silent platform charge; no own account → platform charge.
+  First-party is `merchants.first_party`, mirrored from the credential's
+  VERIFIED `authority: 'first_party'` by `resolveMerchant` — never branding or
+  tier.
+- **The live gate is `config.orbit.thirdPartyLivePayments`**
+  (`ORBIT_THIRD_PARTY_LIVE_PAYMENTS`, default false): `assertLiveMoneyAllowed`
+  sits at opening an account, a destination charge and a payout. Do not add a
+  live money path for a non-first-party merchant without it.
+- **The ledger is never invented.** `balance_transactions` hold the provider's
+  own figures verbatim, keyed by the provider id (`ingestion_key`); a
+  re-ingested transaction whose figures differ is a reconciliation mismatch,
+  not an update. `postJournal` is the ONE writer of `ledger_entries` and refuses
+  a journal that does not sum to zero. A balance is read from the entries,
+  never stored. A merchant without an account has no balance (404
+  `account_missing`), never zeros.
+- **Reconciliation records, it does not correct** (`services/money/reconciliation.ts`):
+  compare first, record mismatches, then the ordinary ingestion; the next run
+  resolves what it no longer sees.
+- **FairCoin is informational** — `recordFaircoinLedger` in `transitionIntent`'s
+  transaction, reversed by a reorg; never payable.
+- **`Peable-Account`** is accepted only on the routes in
+  `PEABLE_ACCOUNT_ROUTES` (`routes/money.ts`) and refused elsewhere by
+  `refuseMisplacedPeableAccount`.
+
+**A dispute response is one shot, and none of its words are stored — the
+provider is the store of a draft.** `POST /v1/disputes/:id` (Stripe's) STAGES
+evidence with `submit: false`: the TEXT goes to the provider's own draft
+(`disputes.update`), and Peable records only the provider's answer that
+evidence exists (`disputes.has_evidence`, a boolean) — a merchant reading the
+dispute back gets the text LIVE from the provider (`readDisputeEvidence`), and
+only `GET /v1/disputes/:id` and the answers of the two writes carry `evidence`;
+lists and EVENTS never do (an event is stored, and `recordDisputeEvent` strips
+it). FILE fields name the merchant's own `file_…` of purpose
+`dispute_evidence` (`dispute_evidence_files`, ids only — the composite keys
+make "this merchant's" and the purpose structural); their bytes go to the
+provider at SUBMISSION and only then, each under
+`dpfile:<dp>:<field>:<file>`, and the provider's file ids are used once and
+not kept. `submit: true` submits once under `dpev:<dp>`: a second submission,
+or a draft after one, is refused (409 `dispute_already_submitted`) by reading
+`disputes.evidence_submitted_at` — a CLAIM, guarded on it still being null —
+and never by asking the provider. `POST …/close` accepts the dispute (`lost`)
+by a CAS on `needs_response`, and the provider's later `charge.dispute.closed`
+is not told twice. `reason` is Stripe's enum on the wire (unknown →
+`general`); the row keeps the provider's word.
 
 **A settlement figure is `null` with a status, never `0`.**
 `services/settlementReport.ts` reads gross/fee/net live from the provider and
@@ -387,15 +561,60 @@ answers `unknown` for every reason a figure can be missing. It reports what the
 provider took and attributes that cost to nobody — which entity bears it is a
 commercial decision that is still open, and no code here makes it.
 
-**A webhook delivery does not always name a payment.**
-`webhook_deliveries.payment_intent_id` is nullable since
-`connected_account.updated`, which is about a SELLER — and
-`webhook_deliveries_intent_event_has_intent_check` keys on the
-`payment_intent.` prefix so a payment event still cannot be enqueued without
-one. The list join is a LEFT join for the same reason; an inner join would have
-made those rows vanish from the log a merchant consults to find out whether
-they were told something. An account acts through the provider on its OWN row,
-never `resolveCardProvider()` — that is only for opening a new one.
+### Events and webhook endpoints (ADR 0014 D4)
+
+**An event is stored once and a delivery is that event sent to one endpoint.**
+`services/events.ts`'s `recordEvent` is the ONE writer of `events` (`evt_…`):
+it inserts the snapshot — `data.object` as the API renders it now, the
+`api_version` it was rendered under, `previous_attributes`, and `request`
+(`Request-Id` + `Idempotency-Key` from `lib/requestContext.ts`, opened by the
+`idempotent` layer and the dashboard's writes; `null` for a background change)
+— and, in the SAME transaction, one `webhook_deliveries` row per ENABLED
+`webhook_endpoints` row of the merchant whose `enabled_events` holds the type
+or `*`. Every producer goes through it: `recordIntentEvent` /
+`recordIntentCreated` / `recordRefundEvent` / `recordChargeEvent` /
+`recordDisputeEvent` / `recordConnectedAccountEvent` /
+`recordCustomerObjectEvent` in `intentTransition.ts`,
+the billing-observation relay, the test event. A producer that wrote a delivery
+directly would be an event `/v1/events` never shows. An event exists whether or
+not any endpoint wants it.
+
+- **The body is rendered from the stored event at attempt time**
+  (`toEventDTO`), never stored on the delivery and never rebuilt from the
+  resource as it is now. A redelivery is a new delivery of the same event.
+- **The endpoint secret is Peable's (`whsec_…`, `services/webhookEndpoints.ts`),
+  shown only by the create and `roll_secret` responses**, and a protected
+  column (`db/protectedColumns.ts`): only `findEndpointSigningTarget` reads it.
+  A roll with `expires_in_seconds` (≤ 24h) keeps the previous secret signing
+  beside the new one — two `v1=` per delivery — until then.
+- **URLs are refused at create/update by the dispatcher's own SSRF rules**
+  (`webhookUrlProblem`: https, http only in test mode, ports 80/443, no
+  credentials, no blocked host or private IP literal); `safeFetch` still
+  resolves and checks DNS on every attempt.
+- **Retries span ~3 days** (`WEBHOOK_RETRY_SCHEDULE_MS`, ±20% jitter);
+  `recordEndpointAttempt` folds every attempt into the endpoint's
+  `failing_since` run in ONE statement and disables it with
+  `disabled_reason = 'delivery_failures'` once the run is three days old. A
+  claimed delivery whose endpoint is disabled ends `failed` without an attempt.
+- **Retention is 30 days** (`services/eventSweeper.ts`); every read filters on
+  the same horizon. Deleting an event or an endpoint cascades to its deliveries.
+- **The catalog is `WEBHOOK_EVENT_SCOPES`** (`schema/valueSets.ts`) — Stripe's
+  names since ADR 0019: `payment_intent.created|requires_action|processing|
+  amount_capturable_updated|succeeded|payment_failed|canceled`,
+  `charge.refunded`, `charge.dispute.created|updated|closed`,
+  `refund.created|updated|failed`, `customer.*`, `payment_method.*`,
+  `setup_intent.*`. The intent events derive from where the row landed
+  (`intentEventsFor`); a same-status write records nothing but a failed
+  attempt. A new type
+  is one entry there plus `WebhookEventPayload`, and a migration for the
+  `events_type_check` / `webhook_endpoints_enabled_events_check` it widens.
+  `webhook_endpoint.test` is TARGETED (`TARGETED_WEBHOOK_EVENT_TYPES`): sent to
+  the one endpoint it names, never subscribable.
+- `merchants.webhook_url` / `webhook_secret` no longer exist; nothing routes an
+  event through the merchant row.
+
+An account acts through the provider on its OWN row, never
+`resolveCardProvider()` — that is only for opening a new one.
 
 **Test and live live in ONE deployment, and the credential selects the key
 (ADR 0017).** `STRIPE_SECRET_KEY_TEST` and `STRIPE_SECRET_KEY_LIVE` (each with
@@ -424,11 +643,12 @@ explicitly open.
 **Every status change fans out through ONE path**, and a route that writes a
 status with `updateIntentState` and returns changes the database and tells
 nobody. That path is `transitionIntent` in `services/intentTransition.ts`: it
-advances the row AND enqueues the merchant's webhook **in the same transaction**
-(ADR 0001 D7), then the caller calls `announceIntentChange` after the commit for
-the two transports that are not durable — the payer's socket frame and the
-outbox kick. A batch producer that cannot go one row at a time takes
-`enqueueIntentWebhook` on its own `tx` instead, as the expiry sweeper does.
+advances the row AND records the merchant's event (with its deliveries) **in the
+same transaction** (ADR 0001 D7), then the caller calls `announceIntentChange`
+after the commit for the two transports that are not durable — the payer's
+socket frame and the outbox kick. A batch producer that cannot go one row at a
+time takes `recordIntentEvent` on its own `tx` instead, as the expiry sweeper
+does.
 
 The ordering is the whole point and it is easy to undo: enqueue after the commit
 and the outbox becomes the best-effort delivery it was built to replace; emit
@@ -439,13 +659,28 @@ that then rolled back.
 compare half.** Every caller reads the intent, decides a target with
 `applyEvent` — a pure function over that earlier read — and only then writes, so
 without `status = from` in the WHERE the state machine is advisory: `ALLOWED`
-has `expired: []`, and an event racing `expireDueIntents` still wrote `settled`
-over `expired` and enqueued a second, contradicting outcome for one payment.
+has `canceled: []`, and an event racing `expireDueIntents` still wrote
+`succeeded` over an expired intent and enqueued a second, contradicting outcome
+for one payment. The same statement writes what the transition decides with it
+— `last_payment_error` (cleared by any other transition),
+`cancellation_reason`/`canceled_at`, `amount_received`, the txid.
 `from` is required so a caller that cannot name where it started does not
 compile, and the result is three-way — `updated` / `stale` / `missing` — because
 a route answers 409 for a row that moved and 404 for one that is not there.
 `expireDueIntents` needs none of this: its own statement carries the status
 predicate and `for update skip locked`.
+
+**The live tail is a `NOTIFY` inside the writing transaction, and test mode
+only.** `recordEvent` (and the request-log writer, `lib/requestLog.ts`) signal
+`services/liveTail.ts`'s channel for a TEST-MODE row on the same `tx`, so
+`GET /v1/events/stream` / `/v1/request_logs/stream` (SSE, `lib/liveStream.ts`)
+hear of a row at its commit and never of a rollback, on every ECS task. The
+payload is ids only; the stream reads the row back through its repository.
+Never emit to a stream from anywhere else, and never signal a live row (a
+NOTIFY commit takes a database-wide lock on the shared instance). Test helpers
+(`/v1/test_helpers/*`, `services/testHelpers.ts`) are fake INPUTS to the real
+code — `reportFaircoinBroadcast`, the watcher's `applyChainObservation`, the
+sweep's `expireIntentNow` — never a status write of their own.
 
 ## Auth
 

@@ -37,6 +37,12 @@ import { connectPostgres, disconnectPostgres, isPostgresReady } from './db/postg
 import { createPaymentIntentsRouter } from './routes/paymentIntents';
 import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
+import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
+import { createEventsRouter } from './routes/events';
+import { createCatalogRouter } from './routes/catalog';
+import { createRequestLogsRouter } from './routes/requestLogs';
+import { createTestHelpersRouter } from './routes/testHelpers';
+import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createSocialRouter } from './routes/social';
@@ -52,10 +58,18 @@ import {
   stopReferenceReconciliation,
 } from './services/oxyFiles/referenceReconciliation';
 import { createConnectedAccountsRouter } from './routes/connectedAccounts';
+import { createMoneyRouter, refuseMisplacedPeableAccount } from './routes/money';
+import { startMoneyReconciliation, stopMoneyReconciliation } from './services/money/reconciliation';
 import { createConnectRouter } from './routes/connect';
 import { createTransfersRouter } from './routes/transfers';
 import { createRefundsRouter } from './routes/refunds';
+import { createChargesRouter } from './routes/charges';
+import { createCustomersRouter } from './routes/customers';
+import { createPaymentMethodsRouter } from './routes/paymentMethods';
+import { createSetupIntentsRouter } from './routes/setupIntents';
 import { createDisputesRouter } from './routes/disputes';
+import { createFilesRouter } from './routes/files';
+import { createPaymentMethodConfigurationsRouter } from './routes/paymentMethodConfigurations';
 import { SettlementWatcher } from './services/settlementWatcher';
 import type { PaymentIntentRow } from './db/payments/paymentIntentRepository';
 import { getTransaction } from './services/explorer';
@@ -63,6 +77,8 @@ import type { SafeFetchFn } from './services/webhookDispatcher';
 import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './services/webhookOutbox';
 import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
 import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
+import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
+import { startRequestLogSweeper, stopRequestLogSweeper } from './services/requestLogSweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
 import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
@@ -72,9 +88,7 @@ import {
   requestIdMiddleware,
 } from './lib/requestId';
 import { IDEMPOTENT_REPLAYED_HEADER } from './lib/idempotency';
-
-/** Date-based API version, echoed on every response (Stripe-parity). */
-const PEABLE_VERSION = '2026-11-03';
+import { PEABLE_API_VERSION } from '@peable.to/shared-types';
 
 /**
  * Flat per-window cap for the IDENTITY-AGNOSTIC public payer routes
@@ -122,7 +136,7 @@ export interface GatewayDeps {
   getTransaction?: typeof getTransaction;
   /** SSRF-safe fetch used for webhook delivery (default the real one). */
   safeFetch?: SafeFetchFn;
-  /** Oxy Files, for the merchant avatar ownership check (default the real client). */
+  /** Oxy Files: avatar ownership, File uploads and evidence reads (default the real client). */
   oxyFiles?: OxyFilesClient;
 }
 
@@ -245,10 +259,14 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
 
   app.use(createOxyRateLimit(oxy, { auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE } }));
   app.use(express.json());
+  // Before every router: it records each answered merchant `/v1` request on
+  // the response's `finish` (`lib/requestLog.ts`).
+  app.use(requestLogMiddleware);
   app.use(((_req, res, next) => {
-    res.setHeader('Peable-Version', PEABLE_VERSION);
+    res.setHeader('Peable-Version', PEABLE_API_VERSION);
     next();
   }) as RequestHandler);
+  app.use(refuseMisplacedPeableAccount);
   const requireMerchant: RequestHandler =
     deps.requireMerchant ?? oxy.middleware.service({ expectedAudience: PEABLE_SERVICE_AUDIENCE });
   const optionalServiceAuth: RequestHandler =
@@ -275,13 +293,25 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createEnrichRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createMerchantsRouter({ requireMerchant, files: deps.oxyFiles }));
   app.use(createConnectedAccountsRouter({ requireMerchant }));
+  app.use(createMoneyRouter({ requireMerchant }));
   // The SELLER's half of connected accounts (ADR 0012 D3): Oxy USER auth, never
   // a service credential — a platform cannot register a seller's key.
   app.use(createConnectRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createTransfersRouter({ requireMerchant }));
   app.use(createRefundsRouter({ requireMerchant }));
-  app.use(createDisputesRouter({ requireMerchant }));
+  app.use(createChargesRouter({ requireMerchant }));
+  app.use(createCustomersRouter({ requireMerchant }));
+  app.use(createPaymentMethodsRouter({ requireMerchant }));
+  app.use(createSetupIntentsRouter({ requireMerchant, optionalServiceAuth }));
+  app.use(createDisputesRouter({ requireMerchant, files: deps.oxyFiles }));
+  app.use(createFilesRouter({ requireMerchant, files: deps.oxyFiles }));
+  app.use(createPaymentMethodConfigurationsRouter({ requireMerchant }));
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
+  app.use(createWebhookEndpointsRouter({ requireMerchant, safeFetch: deps.safeFetch }));
+  app.use(createEventsRouter({ requireMerchant }));
+  app.use(createCatalogRouter({ requireMerchant }));
+  app.use(createRequestLogsRouter({ requireMerchant }));
+  app.use(createTestHelpersRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
@@ -386,6 +416,9 @@ export async function start(
     stopWebhookOutbox();
     stopExpirySweeper();
     stopIdempotencySweeper();
+    stopEventSweeper();
+    stopRequestLogSweeper();
+    stopMoneyReconciliation();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -393,7 +426,7 @@ export async function start(
     stopReferenceReconciliation();
     const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped])
+      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped, flushRequestLogs()])
         .then(async (results) => {
           await disconnectPostgres();
           if (results.some((result) => result.status === 'rejected'))
@@ -411,6 +444,9 @@ export async function start(
   startWebhookOutbox({ safeFetch: undefined });
   startExpirySweeper();
   startIdempotencySweeper();
+  startEventSweeper();
+  startRequestLogSweeper();
+  startMoneyReconciliation();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

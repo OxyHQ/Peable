@@ -139,14 +139,21 @@ async function call<T>(
 // Payments
 // ---------------------------------------------------------------------------
 
-export function createStripePaymentIntent(
+export async function createStripePaymentIntent(
   mode: ProviderMode,
   params: Stripe.PaymentIntentCreateParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
-  return call(mode, 'createPayment', (stripe) =>
-    stripe.paymentIntents.create(params, { idempotencyKey }),
-  );
+  try {
+    return await getStripeClient(mode).paymentIntents.create(params, { idempotencyKey });
+  } catch (error) {
+    // `confirm: true` at create: a decline is an answer, as in
+    // `confirmStripePaymentIntent` below.
+    if (params.confirm && error instanceof Stripe.errors.StripeCardError && error.payment_intent) {
+      return error.payment_intent;
+    }
+    throw toProviderError(error, 'createPayment');
+  }
 }
 
 export function retrieveStripePaymentIntent(
@@ -159,22 +166,112 @@ export function retrieveStripePaymentIntent(
 export function cancelStripePaymentIntent(
   mode: ProviderMode,
   id: string,
+  params: Stripe.PaymentIntentCancelParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
   // The idempotency key is a REQUEST OPTION (third argument), not a body
   // parameter. Passing it as the second argument type-checks in some SDK
   // versions and silently sends it as a field Stripe ignores — so the retry
   // that this key exists to make safe would create a second effect.
-  return call(mode, 'cancel', (stripe) => stripe.paymentIntents.cancel(id, {}, { idempotencyKey }));
+  return call(mode, 'cancel', (stripe) =>
+    stripe.paymentIntents.cancel(id, params, { idempotencyKey }),
+  );
 }
 
 export function captureStripePaymentIntent(
   mode: ProviderMode,
   id: string,
+  params: Stripe.PaymentIntentCaptureParams,
   idempotencyKey: string,
 ): Promise<Stripe.PaymentIntent> {
   return call(mode, 'capture', (stripe) =>
-    stripe.paymentIntents.capture(id, {}, { idempotencyKey }),
+    stripe.paymentIntents.capture(id, params, { idempotencyKey }),
+  );
+}
+
+/**
+ * Confirm server-side. A DECLINE is the provider's answer, not a failure: Stripe
+ * throws a card error carrying the PaymentIntent it left in
+ * `requires_payment_method` with `last_payment_error`, and that object is what
+ * is returned — so the caller records the decline instead of a 5xx.
+ */
+export async function confirmStripePaymentIntent(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentIntentConfirmParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentIntent> {
+  try {
+    return await getStripeClient(mode).paymentIntents.confirm(id, params, { idempotencyKey });
+  } catch (error) {
+    if (error instanceof Stripe.errors.StripeCardError && error.payment_intent) {
+      return error.payment_intent;
+    }
+    throw toProviderError(error, 'confirm');
+  }
+}
+
+/** A charge, for its outcome and card details — the `ch_…` snapshot (ADR 0019). */
+export function retrieveStripeCharge(mode: ProviderMode, id: string): Promise<Stripe.Charge> {
+  return call(mode, 'getStatus', (stripe) => stripe.charges.retrieve(id));
+}
+
+// ---------------------------------------------------------------------------
+// Customers
+// ---------------------------------------------------------------------------
+
+export function createStripeCustomer(
+  mode: ProviderMode,
+  params: Stripe.CustomerCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Customer> {
+  return call(mode, 'customer', (stripe) => stripe.customers.create(params, { idempotencyKey }));
+}
+
+// ---------------------------------------------------------------------------
+// SetupIntents and payment methods (ADR 0016)
+// ---------------------------------------------------------------------------
+
+export function createStripeSetupIntent(
+  mode: ProviderMode,
+  params: Stripe.SetupIntentCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) => stripe.setupIntents.create(params, { idempotencyKey }));
+}
+
+export function retrieveStripeSetupIntent(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) => stripe.setupIntents.retrieve(id));
+}
+
+export function cancelStripeSetupIntent(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.SetupIntentCancelParams,
+  idempotencyKey: string,
+): Promise<Stripe.SetupIntent> {
+  return call(mode, 'setup', (stripe) =>
+    stripe.setupIntents.cancel(id, params, { idempotencyKey }),
+  );
+}
+
+export function retrieveStripePaymentMethod(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.PaymentMethod> {
+  return call(mode, 'paymentMethod', (stripe) => stripe.paymentMethods.retrieve(id));
+}
+
+export function detachStripePaymentMethod(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethod> {
+  return call(mode, 'paymentMethod', (stripe) =>
+    stripe.paymentMethods.detach(id, {}, { idempotencyKey }),
   );
 }
 
@@ -192,6 +289,106 @@ export function createStripeRefund(
 
 export function retrieveStripeRefund(mode: ProviderMode, id: string): Promise<Stripe.Refund> {
   return call(mode, 'refund', (stripe) => stripe.refunds.retrieve(id));
+}
+
+export function cancelStripeRefund(
+  mode: ProviderMode,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Refund> {
+  return call(mode, 'refund', (stripe) => stripe.refunds.cancel(id, {}, { idempotencyKey }));
+}
+
+// ---------------------------------------------------------------------------
+// Orbit money (ADR 0015): balance transactions, payouts, application fees
+// ---------------------------------------------------------------------------
+
+/**
+ * The request option that scopes a call to a connected account — Stripe's
+ * `Stripe-Account` header. `null` is the platform's own account. Built here
+ * and nowhere else, so which account a money read reaches is one decision.
+ */
+function onAccount(
+  account: string | null,
+  extra: Stripe.RequestOptions = {},
+): Stripe.RequestOptions {
+  return account === null ? extra : { ...extra, stripeAccount: account };
+}
+
+/**
+ * One page of an account's balance transactions, oldest-to-newest ordering is
+ * Stripe's (newest first). `data.source.source_transfer` is expanded so a
+ * destination charge's funds on the destination account name the platform
+ * charge they came from.
+ */
+export function listStripeBalanceTransactions(
+  mode: ProviderMode,
+  account: string | null,
+  params: Stripe.BalanceTransactionListParams,
+): Promise<Stripe.ApiList<Stripe.BalanceTransaction>> {
+  return call(mode, 'balance', (stripe) =>
+    stripe.balanceTransactions.list(
+      { ...params, expand: ['data.source.source_transfer'] },
+      onAccount(account),
+    ),
+  );
+}
+
+/** A platform charge with its own and its refunds' balance transactions expanded. */
+export function retrieveStripeChargeWithLedger(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.Charge> {
+  return call(mode, 'balance', (stripe) =>
+    stripe.charges.retrieve(id, {
+      expand: ['balance_transaction', 'refunds.data.balance_transaction'],
+    }),
+  );
+}
+
+export function retrieveStripePayout(
+  mode: ProviderMode,
+  account: string,
+  id: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) => stripe.payouts.retrieve(id, {}, onAccount(account)));
+}
+
+export function listStripePayouts(
+  mode: ProviderMode,
+  account: string,
+  params: Stripe.PayoutListParams,
+): Promise<Stripe.ApiList<Stripe.Payout>> {
+  return call(mode, 'payout', (stripe) => stripe.payouts.list(params, onAccount(account)));
+}
+
+export function createStripePayout(
+  mode: ProviderMode,
+  account: string,
+  params: Stripe.PayoutCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) =>
+    stripe.payouts.create(params, onAccount(account, { idempotencyKey })),
+  );
+}
+
+export function cancelStripePayout(
+  mode: ProviderMode,
+  account: string,
+  id: string,
+  idempotencyKey: string,
+): Promise<Stripe.Payout> {
+  return call(mode, 'payout', (stripe) =>
+    stripe.payouts.cancel(id, {}, onAccount(account, { idempotencyKey })),
+  );
+}
+
+export function retrieveStripeApplicationFee(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.ApplicationFee> {
+  return call(mode, 'balance', (stripe) => stripe.applicationFees.retrieve(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -228,18 +425,106 @@ export function retrieveStripeTransfer(mode: ProviderMode, id: string): Promise<
 /**
  * Submit a merchant's response to a dispute.
  *
- * `disputes.update` is the same call for saving a draft and for submitting; the
- * difference is `submit`, and it is one-way. The gateway only ever sends
- * `submit: true` (`services/disputeEvidence.ts` says why), so this signature
- * takes the whole body rather than hiding the flag.
+ * `disputes.update` is the same call for staging a draft and for submitting;
+ * the difference is `submit`, and it is one-way — which is why this signature
+ * takes the whole body rather than hiding the flag. A draft carries no
+ * idempotency key (setting fields is naturally idempotent); a submission does.
  */
 export function updateStripeDispute(
   mode: ProviderMode,
   id: string,
   params: Stripe.DisputeUpdateParams,
+  idempotencyKey?: string,
+): Promise<Stripe.Dispute> {
+  return call(mode, 'dispute', (stripe) =>
+    stripe.disputes.update(id, params, idempotencyKey ? { idempotencyKey } : {}),
+  );
+}
+
+/** Read a dispute — the staged evidence text with it. */
+export function retrieveStripeDispute(mode: ProviderMode, id: string): Promise<Stripe.Dispute> {
+  return call(mode, 'dispute', (stripe) => stripe.disputes.retrieve(id));
+}
+
+/** Accept a dispute (Stripe's `close`): it is lost, one-way. */
+export function closeStripeDispute(
+  mode: ProviderMode,
+  id: string,
   idempotencyKey: string,
 ): Promise<Stripe.Dispute> {
-  return call(mode, 'dispute', (stripe) => stripe.disputes.update(id, params, { idempotencyKey }));
+  return call(mode, 'dispute', (stripe) => stripe.disputes.close(id, {}, { idempotencyKey }));
+}
+
+/**
+ * Upload one dispute evidence file. The bytes are in memory for the length of
+ * this call and are never logged; the returned id is used in the submission
+ * and not kept.
+ */
+export function createStripeDisputeFile(
+  mode: ProviderMode,
+  file: { readonly data: Uint8Array; readonly name: string; readonly type: string },
+  idempotencyKey: string,
+): Promise<Stripe.File> {
+  return call(mode, 'file', (stripe) =>
+    stripe.files.create(
+      {
+        purpose: 'dispute_evidence',
+        file: { data: Buffer.from(file.data), name: file.name, type: file.type },
+      },
+      { idempotencyKey },
+    ),
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Payment method configurations and domains
+// ---------------------------------------------------------------------------
+
+export function createStripePaymentMethodConfiguration(
+  mode: ProviderMode,
+  params: Stripe.PaymentMethodConfigurationCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethodConfiguration> {
+  return call(mode, 'paymentMethodConfiguration', (stripe) =>
+    stripe.paymentMethodConfigurations.create(params, { idempotencyKey }),
+  );
+}
+
+export function updateStripePaymentMethodConfiguration(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentMethodConfigurationUpdateParams,
+): Promise<Stripe.PaymentMethodConfiguration> {
+  return call(mode, 'paymentMethodConfiguration', (stripe) =>
+    stripe.paymentMethodConfigurations.update(id, params),
+  );
+}
+
+export function createStripePaymentMethodDomain(
+  mode: ProviderMode,
+  params: Stripe.PaymentMethodDomainCreateParams,
+  idempotencyKey: string,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) =>
+    stripe.paymentMethodDomains.create(params, { idempotencyKey }),
+  );
+}
+
+export function updateStripePaymentMethodDomain(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.PaymentMethodDomainUpdateParams,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) =>
+    stripe.paymentMethodDomains.update(id, params),
+  );
+}
+
+export function validateStripePaymentMethodDomain(
+  mode: ProviderMode,
+  id: string,
+): Promise<Stripe.PaymentMethodDomain> {
+  return call(mode, 'paymentMethodDomain', (stripe) => stripe.paymentMethodDomains.validate(id));
 }
 
 // ---------------------------------------------------------------------------
@@ -309,6 +594,20 @@ export function createStripeConnectedAccountV2(
  */
 export function retrieveStripeAccount(mode: ProviderMode, id: string): Promise<Stripe.Account> {
   return call(mode, 'account', (stripe) => stripe.accounts.retrieve(id));
+}
+
+/**
+ * Write an account's settings through v1 (`business_profile`,
+ * `settings.payouts.schedule`, statement descriptors, branding) — the v1 read
+ * above is where they are read back, so the write is made where it is read.
+ */
+export function updateStripeAccount(
+  mode: ProviderMode,
+  id: string,
+  params: Stripe.AccountUpdateParams,
+  idempotencyKey: string,
+): Promise<Stripe.Account> {
+  return call(mode, 'account', (stripe) => stripe.accounts.update(id, params, { idempotencyKey }));
 }
 
 export function createStripeAccountLink(

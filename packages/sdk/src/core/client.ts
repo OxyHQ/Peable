@@ -13,7 +13,15 @@ import { timeoutSignal } from './timeoutSignal';
 const HTTP_UNAUTHORIZED = 401;
 
 export interface RestClientRequestOptions {
+  /** JSON-encoded. Mutually exclusive with `form`. */
   body?: unknown;
+  /**
+   * Sent as `multipart/form-data` — a file upload. `fetch` writes the
+   * `Content-Type` with its boundary, so none is set here; `Idempotency-Key`
+   * is still sent, and the gateway binds it to the purpose and the bytes'
+   * hash.
+   */
+  form?: FormData;
   /** Arrays encode as `key[]=v`, objects as `key[sub]=v` — see `encodeQuery`. */
   query?: Readonly<Record<string, QueryValue>>;
   /**
@@ -23,11 +31,64 @@ export interface RestClientRequestOptions {
    * retry ACROSS calls (after a crash, from a queue) converge too.
    */
   idempotencyKey?: string;
+  /**
+   * Sent as `Peable-Account`: a PLATFORM acting on one of its connected
+   * accounts (`ca_…`). The gateway accepts it only on the account, balance,
+   * payout and reconciliation routes and refuses it (400) everywhere else.
+   */
+  peableAccount?: string;
   headers?: Record<string, string>;
+}
+
+export interface RestClientStreamOptions {
+  query?: Readonly<Record<string, QueryValue>>;
+  headers?: Record<string, string>;
+  /** Aborts the connection — the only way a long-lived stream ends early. */
+  signal?: AbortSignal;
+}
+
+/**
+ * The per-request options a resource method takes as its last argument.
+ *
+ * `peableAccount` sends `Peable-Account: ca_…`, so a marketplace platform reads
+ * or acts on one of its sellers' accounts with its own credential.
+ */
+export interface PeableRequestOptions {
+  /** See `RestClientRequestOptions.idempotencyKey`. Only meaningful on a POST. */
+  idempotencyKey?: string;
+  /** A connected account (`ca_…`) to act on, sent as `Peable-Account`. */
+  peableAccount?: string;
+}
+
+/** The `PeableRequestOptions` a caller passed, as `RestClientRequestOptions` fields. */
+export function requestOptionsOf(
+  options: PeableRequestOptions | undefined,
+): Pick<RestClientRequestOptions, 'idempotencyKey' | 'peableAccount'> {
+  return {
+    ...(options?.idempotencyKey === undefined ? {} : { idempotencyKey: options.idempotencyKey }),
+    ...(options?.peableAccount === undefined ? {} : { peableAccount: options.peableAccount }),
+  };
 }
 
 export interface RestClient {
   request<T>(method: string, path: string, opts?: RestClientRequestOptions): Promise<T>;
+}
+
+/**
+ * The client `createRestClient` builds: `request`, and `stream` for the two
+ * live tails (`events.stream`, `requestLogs.stream`). A separate interface so
+ * the `RestClient` an integrator implements (Orbit's contributions client)
+ * does not have to grow a method it never needs.
+ */
+export interface GatewayClient extends RestClient {
+  /**
+   * Open a long-lived `GET` (Server-Sent Events) with the same authentication
+   * and the same single 401 retry as `request`, and hand back the response
+   * whose body is the stream. A non-2xx answer is read and thrown as the same
+   * typed error `request` would throw. No request timeout applies: a stream is
+   * meant to stay open, and `signal` is how the caller ends it.
+   */
+  stream(path: string, opts?: RestClientStreamOptions): Promise<Response>;
 }
 
 export interface RestClientConfig {
@@ -59,7 +120,7 @@ export function createRestClient(
   config: RestClientConfig,
   tokenProvider: ServiceTokenProvider | undefined,
   deps: { fetch?: typeof fetch } = {},
-): RestClient {
+): GatewayClient {
   const fetchImpl = deps.fetch ?? fetch;
   const timeout = resolveRequestTimeout(config.requestTimeoutMs);
 
@@ -71,8 +132,12 @@ export function createRestClient(
   ): Promise<T> {
     const token = await tokenProvider?.getToken();
     const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    if (opts.body !== undefined && opts.form !== undefined) {
+      throw new PeableApiError('A request carries a JSON body or a form, never both');
+    }
     if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
     if (opts.idempotencyKey !== undefined) headers['Idempotency-Key'] = opts.idempotencyKey;
+    if (opts.peableAccount !== undefined) headers['Peable-Account'] = opts.peableAccount;
     if (opts.headers) Object.assign(headers, opts.headers);
 
     // One deadline over the headers AND the body, released once both are in.
@@ -85,7 +150,7 @@ export function createRestClient(
           method,
           headers,
           ...(deadline === undefined ? {} : { signal: deadline.signal }),
-          body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+          body: opts.form ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
         });
       } catch (cause) {
         throw new PeableApiError(
@@ -139,7 +204,48 @@ export function createRestClient(
     return body as T;
   }
 
+  async function openStream(
+    path: string,
+    opts: RestClientStreamOptions,
+    allowRetryOn401: boolean,
+  ): Promise<Response> {
+    const token = await tokenProvider?.getToken();
+    const headers: Record<string, string> = {
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opts.headers,
+    };
+    let response: Response;
+    try {
+      response = await fetchImpl(buildUrl(config.baseURL, path, opts.query), {
+        method: 'GET',
+        headers,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      });
+    } catch (cause) {
+      if (opts.signal?.aborted) throw cause;
+      throw new PeableApiError(
+        `Failed to reach the Peable Gateway at ${config.baseURL}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+    if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401 && tokenProvider) {
+      await response.body?.cancel();
+      tokenProvider.invalidate();
+      return openStream(path, opts, false);
+    }
+    if (!response.ok) {
+      const body = await readJsonBody(response).catch(() => undefined);
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
+    }
+    return response;
+  }
+
   return {
+    stream(path: string, opts: RestClientStreamOptions = {}): Promise<Response> {
+      return openStream(path, opts, true);
+    },
     request<T>(method: string, path: string, opts: RestClientRequestOptions = {}): Promise<T> {
       // Minted ONCE per call, above the attempts, so the 401 re-attempt below
       // presents the same key: a request the gateway already ran is answered

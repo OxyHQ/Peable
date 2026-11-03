@@ -25,11 +25,22 @@ metadata and reference synchronization; do not configure application scopes or
 a client key pair for these own calls.
 
 Oxy reveals file ownership to verified first-party workload authority, not an
-application's `internal` tier or branding. `acceptMerchantAvatar` still checks
+application's `internal` tier or branding. `acceptOxyFile` (`services/oxyFiles/fileOwnership.ts`) still checks
 the active file against the authenticated merchant/application/account and
 requires Oxy to accept the reference. Missing ownership fails closed. External
 customer credential scopes remain enforced by the shared middleware; an
 external key cannot obtain this ownership projection by requesting file scopes.
+
+Orbit Files (`file_…`, `services/files.ts`) store uploaded bytes as Peable's
+OWN application files through the same instance (`uploadAppFileLarge`, the
+`file` reference registered in the same call; private, or public for a
+`business_logo`) and read evidence bytes back with `linkedDownloadUrls` at
+dispute submission. Both calls are covered by Peable's verified first-party
+workload authority (Oxy `hasServiceAuthority`; an application reads its own
+files) — do NOT add `files:app:write` / `files:linked:read` to the Peable
+application's scopes: those scopes only bound external keys issued under the
+application (oxy ADR 0049). A 403 here means the workload binding is inactive
+or registered for another environment.
 
 ## Validation and release gate
 

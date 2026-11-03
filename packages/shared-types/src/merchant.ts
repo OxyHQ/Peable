@@ -1,7 +1,7 @@
 // Merchant contract — the public DTO for a registered Gateway merchant.
-// `webhookSecret` and `nextDerivationIndex` are deliberately NEVER included:
-// the former is an HMAC signing secret, the latter an internal derivation
-// counter with no meaning to a merchant integration.
+// `nextDerivationIndex` is deliberately NEVER included: it is an internal
+// derivation counter with no meaning to a merchant integration. Where events
+// are sent is not a merchant field: it is the `webhook_endpoint` resource.
 import type { NetworkType } from './network';
 
 export const MERCHANT_ENVIRONMENTS = ['development', 'staging', 'production'] as const;
@@ -29,7 +29,6 @@ export interface Merchant {
   network: NetworkType | null;
   /** `null` on a card-only merchant. Nullable together with `network`. */
   xpub: string | null;
-  webhook_url?: string;
   required_confirmations: number;
   /**
    * Payer-facing branding. Absent when unset — `MerchantDisplay` is what a
@@ -42,6 +41,13 @@ export interface Merchant {
    * Absent again once Oxy reports the file deleted or taken down.
    */
   avatar_file_id?: string;
+  /**
+   * The wide wordmark payer surfaces show in their header: a `file_…` of
+   * purpose `business_logo`. Beside the avatar, never instead of it — the avatar
+   * is the square identity image (Stripe's branding `icon`), the logo is the
+   * wordmark (Stripe's branding `logo`). Absent when unset.
+   */
+  business_logo?: string;
   description?: string;
   created: number;
   updated_at: number;

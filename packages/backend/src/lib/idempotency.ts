@@ -12,6 +12,7 @@ import {
 } from '../db/idempotency/idempotencyKeyRepository';
 import { sendError } from './http';
 import { requestIdOf } from './requestId';
+import { runInRequestContext, setRequestIdempotencyKey } from './requestContext';
 
 /**
  * Generic idempotency for every merchant `POST` (ADR 0014 D3).
@@ -53,7 +54,7 @@ export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 export const IDEMPOTENT_REPLAYED_HEADER = 'Idempotent-Replayed';
 
 /** 1–255 printable ASCII characters (space through tilde), exactly as sent. */
-const KEY_PATTERN = /^[ -~]{1,255}$/;
+export const IDEMPOTENCY_KEY_PATTERN = /^[ -~]{1,255}$/;
 
 /** How many times a claim that lost to a just-released key is retried. */
 const CLAIM_ATTEMPTS = 3;
@@ -159,7 +160,7 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     next();
     return;
   }
-  if (!KEY_PATTERN.test(key)) {
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
     sendError(
       res,
       400,
@@ -183,9 +184,26 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     next();
     return;
   }
+  // The request log reads it at the end instead of looking it up again.
+  res.locals.merchant = merchant;
+  await claimAndRun(req, res, merchant.id, key, next);
+}
 
+/**
+ * Claim `key` for one merchant and run the request under it, or answer the
+ * replay / conflict. Shared by the service-authed middleware and the Orbit
+ * dashboard (whose merchant is resolved only after its membership check).
+ */
+async function claimAndRun(
+  req: Request,
+  res: Response,
+  merchantId: string,
+  key: string,
+  next: () => void,
+): Promise<void> {
+  const db = getDb();
   const request: IdempotentRequest = {
-    merchantId: merchant.id,
+    merchantId,
     key,
     method: req.method,
     path: req.originalUrl.split('?')[0] ?? req.path,
@@ -196,12 +214,13 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     const claimId = await claimIdempotencyKey(db, request);
     if (claimId) {
       res.locals.idempotencyKey = key;
+      setRequestIdempotencyKey(key);
       captureResponse(res, claimId);
       next();
       return;
     }
 
-    const existing = await findIdempotencyKey(db, merchant.id, key);
+    const existing = await findIdempotencyKey(db, merchantId, key);
     // Released (a 5xx) or expired between the claim and this read: claim again.
     if (!existing) continue;
 
@@ -238,7 +257,49 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
   );
 }
 
-/** The middleware. See the module comment. */
+/**
+ * The generic idempotency layer for a route whose merchant is resolved inside
+ * the handler — the Orbit dashboard's money writes (`routes/dashboard.ts`).
+ * Without an `Idempotency-Key` it simply runs.
+ */
+export async function runIdempotent(
+  req: Request,
+  res: Response,
+  merchantId: string,
+  run: () => Promise<void>,
+): Promise<void> {
+  const key = req.header(IDEMPOTENCY_KEY_HEADER);
+  if (key === undefined) return run();
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
+    sendError(
+      res,
+      400,
+      'invalid_request_error',
+      'Idempotency-Key must be 1 to 255 printable ASCII characters.',
+      'idempotency_key_invalid',
+    );
+    return;
+  }
+  let task: Promise<void> = Promise.resolve();
+  await claimAndRun(req, res, merchantId, key, () => {
+    task = run();
+  });
+  await task;
+}
+
+/**
+ * The middleware. See the module comment.
+ *
+ * It also opens the request context (`lib/requestContext.ts`): every merchant
+ * `POST` passes through here after authentication, so an event the handler's
+ * change produces records this request's `Request-Id` and, once admitted, its
+ * `Idempotency-Key` as `event.request`.
+ */
 export const idempotent: RequestHandler = (req, res, next) => {
-  handle(req, res, next).catch(next);
+  const run = () => {
+    handle(req, res, next).catch(next);
+  };
+  const requestId = requestIdOf(res);
+  if (requestId === undefined) run();
+  else runInRequestContext(requestId, run);
 };

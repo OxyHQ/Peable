@@ -38,6 +38,23 @@ export {
   loadProviderSdk,
   type ProviderElement,
   type ProviderElements,
+  type ProviderFieldEvent,
   type ProviderSdk,
   type ProviderConfirmResult,
 } from './browser/providerJs';
+
+// The card rail's wallets + payment fields, shared with `packages/checkout`
+// so the hosted page and the embeddable widget confirm a card payment the same
+// way.
+export {
+  EXPRESS_CHECKOUT_OPTIONS,
+  availableWallets,
+  delayedProcessingNotice,
+  mountCardElements,
+  readRedirectReturn,
+  withoutRedirectParams,
+  type CardConfirmOutcome,
+  type CardElementsHandle,
+  type CardElementsOptions,
+  type ExpressWallet,
+} from './browser/cardElements';

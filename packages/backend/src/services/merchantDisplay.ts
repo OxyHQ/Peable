@@ -8,7 +8,7 @@ const DEFAULT_MERCHANT_NAME = 'Peable merchant';
 /**
  * Resolve the public, secret-free merchant identity that a payer-facing
  * surface (the hosted checkout page, a payment link's public display) may
- * render. Never touches `webhookUrl`/`webhookSecret`/`xpub` — those never
+ * render. Never touches `xpub` or `nextDerivationIndex` — those never
  * leave the merchant-authed DTO (`toMerchantDTO`).
  *
  * The avatar is resolved through the SDK's canonical media chokepoint
@@ -30,6 +30,11 @@ export async function resolveMerchantDisplay(merchant: MerchantRow): Promise<Mer
       merchant.avatarFileId && merchant.avatarWithheld === null
         ? oxy.assets.publicUrl(merchant.avatarFileId, 'thumb')
         : null,
+    // The wordmark, the same way: only a File Oxy is serving right now. The
+    // original rather than a thumbnail — a logo is shown at its own size.
+    logo_url: merchant.businessLogoOxyFileId
+      ? oxy.assets.publicUrl(merchant.businessLogoOxyFileId)
+      : null,
     description: merchant.description ?? null,
   };
 }

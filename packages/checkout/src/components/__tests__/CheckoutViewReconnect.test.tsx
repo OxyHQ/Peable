@@ -16,6 +16,7 @@
  */
 import { afterEach, beforeEach, expect, jest, mock, test } from 'bun:test';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 type ConnectionListener = (state: 'live' | 'lost') => void;
@@ -69,28 +70,22 @@ const { CheckoutView } = await import('../CheckoutView');
 /** Matches `FALLBACK_POLL_MS` in CheckoutView, plus a margin. */
 const ONE_TICK_MS = 5_100;
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_reconnect1',
-    object: 'payment_intent',
-    livemode: false,
-    rail: 'faircoin',
-    status: 'broadcast',
-    amount: '150000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: 'deadbeef',
-    confirmations: 0,
-    client_secret: 'pi_reconnect1_secret',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = { txid: 'deadbeef' },
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_reconnect1',
+      rail: 'faircoin',
+      status: 'processing',
+      amount: '150000000',
+      client_secret: 'pi_reconnect1_secret',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 async function flush(): Promise<void> {
@@ -151,11 +146,11 @@ test('a drop after a successful subscribe starts polling', async () => {
   expect(getPaymentIntentMock).toHaveBeenCalledTimes(0);
 
   await fire('lost');
-  polled = makeIntent({ status: 'settled' });
+  polled = makeIntent({ status: 'succeeded' });
   await tick();
 
   expect(getPaymentIntentMock.mock.calls.length).toBeGreaterThan(0);
-  expect(screen.getByText('Payment settled')).toBeTruthy();
+  expect(screen.getByText('Payment complete')).toBeTruthy();
 });
 
 /**
@@ -172,11 +167,11 @@ test('recovery re-reads the intent rather than trusting the socket', async () =>
 
   await fire('lost');
   // Settled while nothing was listening.
-  polled = makeIntent({ status: 'settled' });
+  polled = makeIntent({ status: 'succeeded' });
   await fire('live');
 
   expect(getPaymentIntentMock.mock.calls.length).toBeGreaterThan(0);
-  expect(screen.getByText('Payment settled')).toBeTruthy();
+  expect(screen.getByText('Payment complete')).toBeTruthy();
 });
 
 /**
@@ -188,7 +183,7 @@ test('polling stops once the recovery read has landed', async () => {
   await flush();
 
   await fire('lost');
-  polled = makeIntent({ status: 'confirming' });
+  polled = makeIntent({ status: 'processing' }, { txid: 'deadbeef', confirmations: 1 });
   await fire('live');
 
   getPaymentIntentMock.mockClear();
@@ -209,10 +204,10 @@ test('a failed recovery read keeps polling', async () => {
   // `polled` is null, so the recovery read rejects.
   await fire('live');
 
-  polled = makeIntent({ status: 'settled' });
+  polled = makeIntent({ status: 'succeeded' });
   await tick();
 
-  expect(screen.getByText('Payment settled')).toBeTruthy();
+  expect(screen.getByText('Payment complete')).toBeTruthy();
 });
 
 /** Unmounting still tears the subscription down; none of the above leaks one. */

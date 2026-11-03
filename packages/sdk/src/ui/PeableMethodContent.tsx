@@ -70,7 +70,7 @@ export type PeableMethodDetails =
         };
       };
       external?: {
-        state?: 'awaiting' | 'detected' | 'confirming' | 'settled' | 'failure' | 'expired';
+        state?: 'awaiting' | 'detected' | 'processing' | 'succeeded' | 'failure' | 'expired';
         payload: string;
         addressLabel: string;
         onCopy?(value: string): Promise<void>;

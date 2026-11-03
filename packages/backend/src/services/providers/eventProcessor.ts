@@ -42,8 +42,24 @@ import {
   type RefundStatus,
 } from '../../db/refunds/refundRepository';
 import { newId } from '../../lib/ids';
-import { applyRefundToIntent } from '../refunds/refundService';
-import { findAccountByProviderAccountId } from '../../db/accounts/connectedAccountRepository';
+import { emitRefundEvents } from '../refunds/refundService';
+import { syncChargeFromProvider, syncChargeSnapshot } from '../charges';
+import { saveIntentPaymentMethod } from '../customers/paymentMethodService';
+import { applySetupResult } from '../customers/setupIntentService';
+import { findSetupIntentByProviderObject } from '../../db/customers/setupIntentRepository';
+import { isSetupHoldingProvider } from './provider';
+import { selectStoredProvider } from './environmentGuard';
+import { toLastPaymentError } from '../intentReconciliation';
+import type { ProviderPaymentError } from './provider';
+import {
+  findAccountByProviderAccountId,
+  hasCardHalf,
+} from '../../db/accounts/connectedAccountRepository';
+import { findMerchantById } from '../../db/merchants/merchantRepository';
+import { recordEvent } from '../events';
+import { handleApplicationFeeEvent } from '../money/applicationFees';
+import { readBalance, syncAccountLedger, syncLedgerAfterPayment } from '../money/ledger';
+import { handlePayoutEvent } from '../money/payouts';
 import {
   applyTransferReversal,
   findTransferByProviderObject,
@@ -52,10 +68,12 @@ import { refreshConnectedAccount } from '../accounts/connectedAccountService';
 import { getDb } from '../../db/postgres';
 import { applyEvent, type IntentEvent } from '../intentState';
 import { reconcileIntentWithProvider } from '../intentReconciliation';
-import { announceIntentChange, enqueueDisputeWebhook, transitionIntent } from '../intentTransition';
-import { upsertDispute } from '../../db/disputes/disputeRepository';
+import { announceIntentChange, recordDisputeEvent, transitionIntent } from '../intentTransition';
+import { kickWebhookOutbox } from '../webhookOutbox';
+import { findDisputeByProviderObject, upsertDispute } from '../../db/disputes/disputeRepository';
 import { toDisputeDTO } from '../../lib/serialize';
 import type { DisputeStatus } from '../../db/schema/valueSets';
+import { toDisputeStatus } from './disputeStatus';
 import { redactProviderMessage } from './redact';
 import { providerModeOf, type ProviderId } from './provider';
 import { providerModeConfigured } from './registry';
@@ -81,17 +99,25 @@ import { providerModeConfigured } from './registry';
  * trusts over the code beneath it.
  */
 const INTENT_EVENT_FOR: Readonly<Record<string, IntentEvent>> = {
-  'payment_intent.succeeded': 'card_settled',
+  'payment_intent.succeeded': 'card_succeeded',
   'payment_intent.payment_failed': 'card_failed',
   'payment_intent.canceled': 'card_canceled',
   'payment_intent.processing': 'card_processing',
   'payment_intent.requires_action': 'card_requires_action',
-  // Stripe's name for "the payer has to do something" on some API versions.
-  // Listed alongside rather than instead of: which one arrives depends on the
-  // account's API version, and a gateway that pinned only one would silently
-  // stop showing SCA challenges when Stripe changed the name.
-  'payment_intent.amount_capturable_updated': 'card_processing',
+  // Authorized and held for capture (ADR 0019, `capture_method: manual`).
+  'payment_intent.amount_capturable_updated': 'card_requires_capture',
 };
+
+/**
+ * Charge events that mean "re-read the charge's outcome and card" — the
+ * `ch_…` snapshot (ADR 0019). They move no status; refunds and disputes on the
+ * charge have their own handlers below.
+ */
+const CHARGE_SNAPSHOT_EVENTS: ReadonlySet<string> = new Set([
+  'charge.succeeded',
+  'charge.captured',
+  'charge.updated',
+]);
 
 /** Which key in `object_ids` names the payment this event is about. */
 const PAYMENT_OBJECT_KEY = 'payment_intent';
@@ -148,73 +174,45 @@ const REFUND_EVENTS: ReadonlySet<string> = new Set([
  */
 function toRefundStatus(status: unknown): RefundStatus | null {
   if (status === 'succeeded') return 'succeeded';
-  if (status === 'failed' || status === 'canceled') return 'failed';
+  if (status === 'failed') return 'failed';
+  // Its own state since Orbit can cancel a refund (`POST /v1/refunds/:id/cancel`).
+  if (status === 'canceled') return 'canceled';
   if (status === 'pending' || status === 'requires_action') return 'pending';
   return null;
 }
 
 /**
- * Dispute events, and the gateway status each one means.
+ * Dispute events, and the gateway status each one means when the payload
+ * carries none.
  *
  * A CLOSED map from the provider's seven-state vocabulary to the gateway's
  * four (ADR 0001 D3: the acquirer stays invisible, so its vocabulary does not
- * reach the wire). `warning_*` collapses onto the state it is a warning ABOUT,
- * because a merchant's only useful question is whether evidence is due.
+ * reach the wire). The payload's own `status` decides first
+ * (`toDisputeStatus`, `providers/disputeStatus.ts`); this is only the fallback.
  *
- * `charge.dispute.funds_withdrawn` and `funds_reinstated` are deliberately
- * ABSENT. They describe money moving, which on this gateway is a refund row's
- * job, and mapping them to a dispute status would make the money movement and
- * the dispute outcome two names for one thing — so the network reinstating
- * funds on a dispute it later lost would silently mark it `won`.
+ * `charge.dispute.closed` maps to `needs_response` on purpose — never to an
+ * outcome: it closes a dispute the merchant may have WON or LOST, and a close
+ * whose outcome cannot be read is refused rather than guessed (it used to
+ * answer `won`, and a merchant told they won does not reconcile).
+ *
+ * `funds_withdrawn` and `funds_reinstated` are the money MOVING, not the
+ * dispute's outcome — the network can reinstate funds on a dispute it later
+ * decides — so they never change the status by their type: they keep what the
+ * payload or the row says, and are told to the merchant as what they are.
  */
-const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus>> = {
+const DISPUTE_STATUS_FOR_EVENT: Readonly<Record<string, DisputeStatus | null>> = {
   'charge.dispute.created': 'needs_response',
   'charge.dispute.updated': 'under_review',
-  // `charge.dispute.closed` is deliberately ABSENT from the values here and
-  // present as a key with no default — it closes a dispute the merchant may
-  // have WON or LOST, and the two are only distinguishable from the payload's
-  // own `status`. This map used to answer `won` for it, so every close whose
-  // status could not be read told the merchant they had won. That is the wrong
-  // half of a coin flip to land on by default: a merchant told they won a
-  // dispute they lost does not reconcile, does not re-bill, and finds out from
-  // their balance.
   'charge.dispute.closed': 'needs_response',
+  'charge.dispute.funds_withdrawn': null,
+  'charge.dispute.funds_reinstated': null,
 };
 
-/**
- * The PROVIDER's dispute vocabulary, mapped onto the gateway's four states.
- *
- * Stripe distinguishes `warning_needs_response` from `needs_response`, and
- * `warning_closed` from `won`/`lost`, because it is describing an inquiry that
- * has not become a formal chargeback yet. A merchant on this gateway needs to
- * know only whether evidence is DUE, whether it is being looked at, and how it
- * ended — so a warning collapses onto the state it is a warning ABOUT (ADR 0001
- * D3: the acquirer's vocabulary does not reach the wire).
- *
- * `warning_closed` maps to `under_review` rather than to an outcome: an inquiry
- * closing is not a dispute being won, and calling it one would report a result
- * the network never gave.
- *
- * `null` for anything unrecognised, which the handler treats as "the event type
- * decides" — a provider adding a state must not silently become an outcome.
- */
-function toDisputeStatus(status: unknown): DisputeStatus | null {
-  switch (status) {
-    case 'warning_needs_response':
-    case 'needs_response':
-      return 'needs_response';
-    case 'warning_under_review':
-    case 'under_review':
-    case 'warning_closed':
-      return 'under_review';
-    case 'won':
-      return 'won';
-    case 'lost':
-      return 'lost';
-    default:
-      return null;
-  }
-}
+/** The money-movement events, told to the merchant every time they arrive. */
+const DISPUTE_FUNDS_EVENTS = new Set([
+  'charge.dispute.funds_withdrawn',
+  'charge.dispute.funds_reinstated',
+] as const);
 
 /** Transfer events that carry a cumulative reversed total. */
 const TRANSFER_REVERSAL_EVENTS: ReadonlySet<string> = new Set([
@@ -297,6 +295,15 @@ export async function processProviderEvent(
     if (ACCOUNT_REFRESH_EVENTS.has(event.type)) {
       return await handleAccountEvent(db, event);
     }
+    if (event.type.startsWith('payout.')) {
+      return await handlePayoutProviderEvent(db, event);
+    }
+    if (event.type.startsWith('application_fee.')) {
+      return await handleApplicationFeeProviderEvent(db, event);
+    }
+    if (event.type === 'balance.available') {
+      return await handleBalanceAvailableEvent(db, event);
+    }
     if (TRANSFER_REVERSAL_EVENTS.has(event.type)) {
       return await handleTransferEvent(db, event);
     }
@@ -305,6 +312,12 @@ export async function processProviderEvent(
     }
     if (event.type in DISPUTE_STATUS_FOR_EVENT) {
       return await handleDisputeEvent(db, event);
+    }
+    if (SETUP_INTENT_EVENTS.has(event.type)) {
+      return await handleSetupIntentEvent(db, event);
+    }
+    if (CHARGE_SNAPSHOT_EVENTS.has(event.type)) {
+      return await handleChargeEvent(db, event);
     }
 
     const intentEvent = INTENT_EVENT_FOR[event.type];
@@ -346,7 +359,7 @@ export async function processProviderEvent(
     // payment is ordinary and must not look like an error.
     let target: ReturnType<typeof applyEvent>;
     try {
-      target = applyEvent(intent.status, intentEvent);
+      target = applyEvent(intent.status, intentEvent, intent.rail);
     } catch {
       /**
        * The event cannot legally act from where the row stands, which is not
@@ -387,7 +400,11 @@ export async function processProviderEvent(
       return { kind: 'failed', error: message };
     }
 
-    if (target === intent.status) {
+    // A failed attempt is news even when the status does not move: a decline
+    // on an intent still waiting for a payment method is recorded with its
+    // codes, and the merchant gets `payment_intent.payment_failed`.
+    const failed = intentEvent === 'card_failed';
+    if (target === intent.status && !failed) {
       await markProviderEventProcessed(db, event.id);
       return { kind: 'noop', intentId: intent.id };
     }
@@ -395,6 +412,8 @@ export async function processProviderEvent(
     const result = await transitionIntent(intent.id, {
       from: intent.status,
       status: target,
+      ...(failed ? { lastPaymentError: toLastPaymentError(readPaymentError(event.payload)) } : {}),
+      ...(target === 'canceled' ? { cancellationReason: 'automatic' as const } : {}),
     });
     if (result.kind !== 'updated') {
       // The row moved between the read and the update — which this comment has
@@ -415,6 +434,12 @@ export async function processProviderEvent(
     // Outside the transition's transaction, and after it — a socket frame is
     // not durable and must never be sent for a change that did not commit.
     announceIntentChange(updated);
+    if (updated.status === 'succeeded' || updated.status === 'requires_capture') {
+      await syncChargeFromProvider(updated);
+      // A payment that saved its card (ADR 0016): register the `pm_…`. Best-effort.
+      await saveIntentPaymentMethod(updated);
+    }
+    if (updated.status === 'succeeded') await syncLedgerFor(db, updated);
     return { kind: 'applied', intentId: updated.id, status: updated.status };
   } catch (error) {
     // Redacted before it is stored: a provider's message quotes the input back,
@@ -568,17 +593,16 @@ async function handleRefundEvent(
     // move. The payment's status is still recomputed from whatever rows exist:
     // the refund that produced this charge event arrives as its own
     // `refund.created`/`refund.updated`, and those are what import it.
+    // Since ADR 0019 nothing is recomputed from it: the payment's status does
+    // not move with a refund, and `amount_refunded` is read from the rows.
     const chargeId = event.objectIds.charge;
     const byCharge = chargeId ? await findIntentByProviderCharge(db, provider, chargeId) : null;
     if (byCharge) {
       const crossed = await refuseCrossMode(db, event, byCharge);
       if (crossed) return crossed;
-      await applyRefundToIntent(byCharge);
     }
     await markProviderEventProcessed(db, event.id);
-    return byCharge
-      ? { kind: 'applied', intentId: byCharge.id, status: byCharge.status }
-      : { kind: 'no_mapping' };
+    return byCharge ? { kind: 'noop', intentId: byCharge.id } : { kind: 'no_mapping' };
   }
 
   const detail = readRefundDetail(event.payload);
@@ -588,9 +612,9 @@ async function handleRefundEvent(
     const imported = await importRefundFromEvent(db, event, refundObjectId, detail);
     if (!imported) return { kind: 'unmatched' };
     if ('failed' in imported) return imported.failed;
-    const status = await applyRefundToIntent(imported.intent);
     await markProviderEventProcessed(db, event.id);
-    return { kind: 'applied', intentId: imported.intent.id, status };
+    kickWebhookOutbox();
+    return { kind: 'applied', intentId: imported.intent.id, status: imported.status };
   }
 
   const intent = await findIntentById(db, refund.paymentIntentId);
@@ -605,13 +629,125 @@ async function handleRefundEvent(
   // from the rows. `applyRefundState` refuses to move a row that already
   // reached a terminal state, so a `pending` arriving after the `succeeded`
   // that followed it cannot walk the money back.
-  if (detail.status !== null) {
-    await applyRefundState(db, refund.id, detail.status, detail.failureCode);
-  }
-
-  const status = await applyRefundToIntent(intent);
+  //
+  // The row and the merchant's `refund.*` / `charge.refunded` commit together
+  // (ADR 0001 D7).
+  const status = detail.status;
+  const moved =
+    status === null
+      ? null
+      : await db.transaction(async (tx) => {
+          const row = await applyRefundState(tx, refund.id, status, detail.failureCode);
+          if (row) await emitRefundEvents(tx, intent, row, refund.status);
+          return row;
+        });
   await markProviderEventProcessed(db, event.id);
-  return { kind: 'applied', intentId: intent.id, status };
+  if (moved) kickWebhookOutbox();
+  if (moved?.status === 'succeeded') await syncLedgerFor(db, intent);
+  return moved
+    ? { kind: 'applied', intentId: intent.id, status: moved.status }
+    : { kind: 'noop', intentId: intent.id };
+}
+
+/**
+ * Bring the ledger a card payment belongs to up to date (ADR 0015 §4) after it
+ * or one of its refunds moved: the destination account's, or — for an Oxy
+ * first-party merchant — the platform-attributed one. Best-effort: never fails
+ * the event; the daily reconciliation catches up.
+ */
+async function syncLedgerFor(
+  db: ReturnType<typeof getDb>,
+  intent: PaymentIntentRow,
+): Promise<void> {
+  const merchant = await findMerchantById(db, intent.merchantId);
+  if (!merchant) return;
+  const current = (await findIntentById(db, intent.id)) ?? intent;
+  await syncLedgerAfterPayment(current, merchant.firstParty);
+}
+
+/**
+ * `payout.*` on the Connect endpoint (ADR 0015 §5): re-read the payout from the
+ * account and mirror it — the payload is redacted, the fresh read is the truth.
+ */
+async function handlePayoutProviderEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const payoutId = event.objectIds.payout;
+  const accountId = event.objectIds[ACCOUNT_OBJECT_KEY];
+  if (!payoutId || !accountId) {
+    // A payout of the PLATFORM's own balance: the operator's treasury, on no
+    // merchant's ledger (ADR 0015). Handled, not failed.
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const outcome = await handlePayoutEvent(event.provider as ProviderId, accountId, payoutId);
+  if (outcome === 'unmatched') {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: payoutId };
+}
+
+/** `application_fee.*`: re-read the fee and record it and its refunds (ADR 0015 §3). */
+async function handleApplicationFeeProviderEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const feeId = event.objectIds.application_fee ?? event.objectIds.fee;
+  if (!feeId) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const outcome = await handleApplicationFeeEvent(
+    event.provider as ProviderId,
+    event.livemode,
+    feeId,
+  );
+  // Unmatched stays in the drain: the charge may not be bound to its payment yet.
+  if (outcome === 'unmatched') return { kind: 'unmatched' };
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: feeId };
+}
+
+/**
+ * `balance.available` for an account: ingest its new transactions and tell the
+ * merchant, with the balance read from the ledger (ADR 0015 §4).
+ */
+async function handleBalanceAvailableEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const accountId = event.objectIds[ACCOUNT_OBJECT_KEY];
+  const account = accountId
+    ? await findAccountByProviderAccountId(db, event.provider as ProviderId, accountId)
+    : null;
+  if (!account || !hasCardHalf(account)) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  await syncAccountLedger(account);
+  const figures = await readBalance({
+    merchantId: account.merchantId,
+    connectedAccountId: account.id,
+  });
+  await db.transaction(async (tx) => {
+    await recordEvent(tx, {
+      merchantId: account.merchantId,
+      type: 'balance.available',
+      object: {
+        object: 'balance',
+        livemode: account.livemode,
+        ...figures,
+        account: account.publicId,
+      },
+      account: account.publicId,
+    });
+    await markProviderEventProcessed(tx, event.id);
+  });
+  kickWebhookOutbox();
+  return { kind: 'noop', intentId: account.publicId };
 }
 
 /** What a refund payload says, narrowed to what a row needs. */
@@ -666,7 +802,11 @@ async function importRefundFromEvent(
   event: ProviderEventRow,
   refundObjectId: string,
   detail: RefundDetail,
-): Promise<{ readonly intent: PaymentIntentRow } | { readonly failed: ProcessOutcome } | null> {
+): Promise<
+  | { readonly intent: PaymentIntentRow; readonly status: string }
+  | { readonly failed: ProcessOutcome }
+  | null
+> {
   if (detail.amount === null) return null;
 
   const provider = event.provider as ProviderId;
@@ -681,20 +821,26 @@ async function importRefundFromEvent(
   const crossed = await refuseCrossMode(db, event, intent);
   if (crossed) return { failed: crossed };
 
-  await importProviderRefund(db, {
-    publicId: newId('re'),
-    merchantId: intent.merchantId,
-    paymentIntentId: intent.id,
-    amount: detail.amount,
-    currency: intent.currency,
-    provider,
-    providerObjectId: refundObjectId,
-    // Defaults to `pending` rather than `succeeded` when the payload says
-    // nothing: claiming money came back is the answer that is expensive to be
-    // wrong about, and the next `refund.updated` corrects it.
-    status: detail.status ?? 'pending',
+  const amount = detail.amount;
+  const imported = await db.transaction(async (tx) => {
+    const row = await importProviderRefund(tx, {
+      publicId: newId('re'),
+      merchantId: intent.merchantId,
+      paymentIntentId: intent.id,
+      amount,
+      currency: intent.currency,
+      provider,
+      providerObjectId: refundObjectId,
+      // Defaults to `pending` rather than `succeeded` when the payload says
+      // nothing: claiming money came back is the answer that is expensive to be
+      // wrong about, and the next `refund.updated` corrects it.
+      status: detail.status ?? 'pending',
+    });
+    // `refund.created` (and `charge.refunded` if it already succeeded) with the row.
+    if (row) await emitRefundEvents(tx, intent, row, null);
+    return row;
   });
-  return { intent };
+  return { intent, status: imported?.status ?? detail.status ?? 'pending' };
 }
 
 /**
@@ -719,12 +865,12 @@ async function importRefundFromEvent(
  * ## The merchant is told ONCE
  *
  * `upsertDispute` reports whether it created the row, and only a creation
- * enqueues `payment_intent.disputed`. A provider WILL redeliver — receipt is
+ * enqueues `charge.dispute.created`. A provider WILL redeliver — receipt is
  * acknowledged before processing — and a merchant told twice that one payment
  * is disputed has no way to tell that from two disputes on it.
  *
  * A close is the exception and enqueues every time it changes the status,
- * because `dispute_closed` carries the outcome and arriving twice with the same
+ * because `charge.dispute.closed` carries the outcome and arriving twice with the same
  * outcome is idempotent for the merchant in a way "you have a new dispute" is
  * not.
  */
@@ -771,7 +917,9 @@ async function handleDisputeEvent(
    * finds out from their balance.
    */
   const closing = event.type === 'charge.dispute.closed';
-  const status = detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? 'needs_response';
+  const known = await findDisputeByProviderObject(db, provider, disputeObjectId);
+  const status =
+    detail.status ?? DISPUTE_STATUS_FOR_EVENT[event.type] ?? known?.status ?? 'needs_response';
 
   if (closing && status !== 'won' && status !== 'lost') {
     // A close with no readable outcome is recorded and left VISIBLE rather than
@@ -790,7 +938,7 @@ async function handleDisputeEvent(
   /**
    * The row and the merchant's notification commit TOGETHER (ADR 0001 D7).
    *
-   * They did not. `upsertDispute` ran on `db` and `enqueueDisputeWebhook` ran
+   * They did not. `upsertDispute` ran on `db` and `recordDisputeEvent` ran
    * on `db` after it, as two statements with no transaction around them — so a
    * crash between them stored the dispute and lost its first notification
    * permanently. `created` is false on every redelivery afterwards, which is
@@ -799,6 +947,7 @@ async function handleDisputeEvent(
    * payment they were never told about, with a deadline they never saw.
    */
   const { dispute } = await db.transaction(async (tx) => {
+    const before = await findDisputeByProviderObject(tx, provider, disputeObjectId);
     const upserted = await upsertDispute(tx, {
       merchantId: intent.merchantId,
       paymentIntentId: intent.id,
@@ -809,18 +958,36 @@ async function handleDisputeEvent(
       status,
       ...(detail.reason === null ? {} : { reason: detail.reason }),
       evidenceDueAt: closed ? null : detail.evidenceDueAt,
+      ...(detail.isChargeRefundable === null
+        ? {}
+        : { isChargeRefundable: detail.isChargeRefundable }),
     });
 
-    if (upserted.created || closed) {
-      // The DISPUTE is the payload, not the intent. `disputed` is a deadline,
-      // and a merchant who has to make a second call to learn when evidence is
-      // due is a merchant who can miss it while their integration works as
-      // documented.
-      await enqueueDisputeWebhook(
+    // The DISPUTE is the payload, not the intent. `created` is a deadline, and
+    // a merchant who has to make a second call to learn when evidence is due is
+    // a merchant who can miss it while their integration works as documented.
+    // `updated` only when the status moved — a redelivery is not news.
+    // `closed` only when the outcome is NEWS: the merchant's own `…/close`
+    // already recorded it (and told them) before the provider's event arrived.
+    const changed = before !== null && before.status !== upserted.dispute.status;
+    const funds = DISPUTE_FUNDS_EVENTS.has(event.type as 'charge.dispute.funds_withdrawn')
+      ? (event.type as 'charge.dispute.funds_withdrawn' | 'charge.dispute.funds_reinstated')
+      : null;
+    const eventType = upserted.created
+      ? ('charge.dispute.created' as const)
+      : funds !== null
+        ? funds
+        : closed && changed
+          ? ('charge.dispute.closed' as const)
+          : changed
+            ? ('charge.dispute.updated' as const)
+            : null;
+    if (eventType !== null) {
+      await recordDisputeEvent(
         tx,
         intent,
         toDisputeDTO(upserted.dispute, intent.publicId),
-        upserted.created ? 'payment_intent.disputed' : 'payment_intent.dispute_closed',
+        eventType,
       );
     }
     return upserted;
@@ -837,6 +1004,8 @@ interface DisputeDetail {
   readonly evidenceDueAt: Date | null;
   /** The provider's own status, mapped — `null` when it said nothing readable. */
   readonly status: DisputeStatus | null;
+  /** `is_charge_refundable`, or `null` when the payload did not say. */
+  readonly isChargeRefundable: boolean | null;
 }
 
 /**
@@ -890,5 +1059,108 @@ function readDisputeDetail(payload: Record<string, unknown>): DisputeDetail | nu
     // states fell through to the event type — which is how a close with no
     // readable outcome became `won`.
     status: toDisputeStatus(fields.status),
+    isChargeRefundable:
+      typeof fields.is_charge_refundable === 'boolean' ? fields.is_charge_refundable : null,
   };
+}
+
+/**
+ * A charge changed at the provider (`charge.succeeded|captured|updated`):
+ * re-read its outcome and card into the `ch_…` snapshot. The stored payload is
+ * redacted, so the snapshot is never read from it.
+ */
+async function handleChargeEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
+  const chargeId = event.objectIds.charge;
+  if (!chargeId) {
+    await markProviderEventProcessed(db, event.id);
+    return { kind: 'no_mapping' };
+  }
+  const paymentObjectId = event.objectIds[PAYMENT_OBJECT_KEY];
+  const intent = paymentObjectId
+    ? await findIntentByProviderObject(db, provider, paymentObjectId)
+    : await findIntentByProviderCharge(db, provider, chargeId);
+  if (!intent) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, intent);
+  if (crossed) return crossed;
+  await syncChargeSnapshot(intent, chargeId);
+  await markProviderEventProcessed(db, event.id);
+  return { kind: 'noop', intentId: intent.id };
+}
+
+/**
+ * The failed attempt's CODES out of a stored `payment_intent.payment_failed`
+ * — `code`, `decline_code` and `type` are on the redaction allow-list; the
+ * provider's `message` is not, and is never wanted (Peable writes its own).
+ */
+function readPaymentError(payload: Record<string, unknown>): ProviderPaymentError {
+  const data = payload.data;
+  const object =
+    typeof data === 'object' && data !== null ? (data as Record<string, unknown>).object : null;
+  const error =
+    typeof object === 'object' && object !== null
+      ? (object as Record<string, unknown>).last_payment_error
+      : null;
+  if (typeof error !== 'object' || error === null) return { type: 'card_error' };
+  const fields = error as Record<string, unknown>;
+  const text = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 && value !== '[redacted]' ? value : undefined;
+  const code = text(fields.code);
+  const declineCode = text(fields.decline_code);
+  return {
+    type: fields.type === 'card_error' || fields.type === undefined ? 'card_error' : 'api_error',
+    ...(code !== undefined ? { code } : {}),
+    ...(declineCode !== undefined ? { declineCode } : {}),
+  };
+}
+
+/**
+ * SetupIntent events (ADR 0016). All of them mean the same thing — "re-read
+ * this SetupIntent" — because the stored payload is redacted and a fresh read
+ * is the only trustworthy account of what changed; the read is then applied
+ * through `applySetupResult`, the one path a provider SetupIntent becomes a
+ * transition (compare-and-swap, events in the same commit, the `pm_…` created
+ * on success).
+ */
+const SETUP_INTENT_EVENTS: ReadonlySet<string> = new Set([
+  'setup_intent.succeeded',
+  'setup_intent.setup_failed',
+  'setup_intent.requires_action',
+  'setup_intent.canceled',
+  'setup_intent.created',
+]);
+
+async function handleSetupIntentEvent(
+  db: ReturnType<typeof getDb>,
+  event: ProviderEventRow,
+): Promise<ProcessOutcome> {
+  const provider = event.provider as ProviderId;
+  const objectId = event.objectIds.setup_intent;
+  if (!objectId) {
+    await markProviderEventFailed(db, event.id, `no setup_intent id on a ${event.type}`);
+    return { kind: 'failed', error: `no setup_intent id on a ${event.type}` };
+  }
+  const setup = await findSetupIntentByProviderObject(db, provider, objectId);
+  // The two-step create's window, as for a payment: retried, not dropped.
+  if (!setup) return { kind: 'unmatched' };
+  const crossed = await refuseCrossMode(db, event, setup);
+  if (crossed) return crossed;
+  const adapter = selectStoredProvider(setup.provider, setup.livemode);
+  if (!adapter || !isSetupHoldingProvider(adapter)) {
+    const message = `the ${setup.provider} rail cannot read setup intents in this mode`;
+    await markProviderEventFailed(db, event.id, message);
+    return { kind: 'failed', error: message };
+  }
+  const outcome = await applySetupResult(setup, await adapter.getSetup(objectId));
+  if (outcome.kind === 'irreconcilable') {
+    await markProviderEventFailed(db, event.id, redactProviderMessage(outcome.error));
+    return { kind: 'failed', error: outcome.error };
+  }
+  await markProviderEventProcessed(db, event.id);
+  return outcome.kind === 'applied'
+    ? { kind: 'applied', intentId: setup.id, status: outcome.row.status }
+    : { kind: 'noop', intentId: setup.id };
 }

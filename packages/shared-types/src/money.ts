@@ -3,7 +3,11 @@
 // cents for a fiat currency — so no float ever touches one.
 
 /**
- * The currencies this gateway can denominate a payment in.
+ * The currencies this gateway can denominate a payment in: FairCoin on the
+ * chain rail, and on the card rail the fiat set the provider settles for the
+ * payment methods Orbit offers (cards, wallets, SEPA Debit, iDEAL, Bancontact,
+ * EPS). A local method narrows it further per payment
+ * (`PAYMENT_METHOD_CURRENCIES` in `paymentMethodConfiguration.ts`).
  *
  * A closed set, and the database mirrors it as a CHECK
  * (`db/schema/valueSets.ts`). ADR 0001 D4: the scale of an amount is a property
@@ -11,7 +15,21 @@
  * {@link CURRENCY_DECIMALS} exists and why {@link UNITS_PER_COIN} must never be
  * used to interpret a fiat amount.
  */
-export const CURRENCY_CODES = ['FAIR', 'EUR', 'USD'] as const;
+export const CURRENCY_CODES = [
+  'FAIR',
+  'EUR',
+  'USD',
+  'GBP',
+  'CHF',
+  'SEK',
+  'NOK',
+  'DKK',
+  'PLN',
+  'CZK',
+  'CAD',
+  'AUD',
+  'JPY',
+] as const;
 
 export type CurrencyCode = (typeof CURRENCY_CODES)[number];
 
@@ -24,7 +42,7 @@ export function isCurrencyCode(value: string): value is CurrencyCode {
  * How many decimal places each currency's smallest unit represents — i.e. an
  * amount of `1` means `10^-decimals` of one whole unit.
  *
- * FairCoin's 8 is a consensus constant and is pinned against
+ * ISO 4217's minor units for every fiat member (JPY has none). FairCoin's 8 is a consensus constant and is pinned against
  * {@link UNITS_PER_COIN} by this package's own tests, so the two spellings of
  * one fact cannot drift.
  */
@@ -32,7 +50,27 @@ export const CURRENCY_DECIMALS: Readonly<Record<CurrencyCode, number>> = Object.
   FAIR: 8,
   EUR: 2,
   USD: 2,
+  GBP: 2,
+  CHF: 2,
+  SEK: 2,
+  NOK: 2,
+  DKK: 2,
+  PLN: 2,
+  CZK: 2,
+  CAD: 2,
+  AUD: 2,
+  // A zero-decimal currency: an amount of `1` is one yen, never a hundredth of
+  // one. The provider counts JPY the same way, so the base unit crosses as is.
+  JPY: 0,
 });
+
+/** A currency the card rail can denominate a payment in. */
+export type FiatCurrencyCode = Exclude<CurrencyCode, 'FAIR'>;
+
+/** The fiat members — every currency the card rail can denominate a payment in. */
+export const FIAT_CURRENCY_CODES: readonly FiatCurrencyCode[] = CURRENCY_CODES.filter(
+  (code): code is FiatCurrencyCode => code !== 'FAIR',
+);
 
 /** The decimal places of `currency`'s smallest unit. */
 export function decimalsFor(currency: CurrencyCode): number {

@@ -63,6 +63,34 @@ describe('createOrbitTransport', () => {
     });
   });
 
+  it('sends a form as a replayable body factory with no content type of its own', async () => {
+    const { client, calls } = fakeClient(Response.json({ id: 'file_1' }, { status: 200 }));
+    let built = 0;
+    const form = () => {
+      built += 1;
+      const data = new FormData();
+      data.append('purpose', 'dispute_evidence');
+      return data;
+    };
+    await createOrbitTransport(client).request('POST', '/v1/files', { form });
+    const sent = calls[0];
+    expect(sent?.body).toBeUndefined();
+    expect(sent?.headers).toBeUndefined();
+    expect(typeof sent?.bodyFactory).toBe('function');
+    expect(sent?.bodyFactory?.()).toBeInstanceOf(FormData);
+    expect(built).toBe(1);
+  });
+
+  it('refuses a request with both a JSON body and a form', async () => {
+    const { client } = fakeClient(Response.json({}));
+    await expect(
+      createOrbitTransport(client).request('POST', '/v1/files', {
+        body: {},
+        form: () => new FormData(),
+      }),
+    ).rejects.toThrow('never both');
+  });
+
   it('answers undefined for an empty success', async () => {
     const { client } = fakeClient(new Response(null, { status: 204 }));
     expect(await createOrbitTransport(client).request('DELETE', '/v1/x')).toBeUndefined();

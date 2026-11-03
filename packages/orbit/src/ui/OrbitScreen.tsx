@@ -119,6 +119,27 @@ export function MerchantMissing({ environment }: { environment: OrbitScopeValue[
   );
 }
 
+/**
+ * What a money screen shows when the merchant has no fiat account in this
+ * mode (`account_missing`): an explanation and the way to open one — never a
+ * zero balance.
+ */
+export function AccountMissing({ environment }: { environment: OrbitScopeValue['environment'] }) {
+  const router = useRouter();
+  return (
+    <EmptyState
+      title={t('money.accountMissing.title')}
+      description={t('money.accountMissing.body', {
+        mode: t(modeForEnvironment(environment) === 'live' ? 'scope.live' : 'scope.test'),
+      })}
+      action={{
+        label: t('money.accountMissing.action'),
+        onPress: () => router.navigate('/account'),
+      }}
+    />
+  );
+}
+
 /** A titled group of content on a card surface. */
 export function Section({
   title,

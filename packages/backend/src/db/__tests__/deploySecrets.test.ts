@@ -28,6 +28,12 @@ const INFRA_CONFIGURATION: Readonly<Record<string, string>> = {
   // Public chain infrastructure. `@fairco.in/core` supplies the default and an
   // override is an operational choice, not a credential.
   EXPLORER_BASE_URL: 'a public Explorer URL, defaulted from @fairco.in/core',
+  // ADR 0015: the release gate and Orbit's default fee. Reviewed deployment
+  // decisions, never credentials; all three default closed (false / zero).
+  ORBIT_THIRD_PARTY_LIVE_PAYMENTS:
+    'the ADR 0015 legal release gate for third-party live destination charges and payouts; false unless explicitly opened',
+  ORBIT_FEE_PERCENT_BPS: "Orbit's default application fee rate in basis points; 0 when unset",
+  ORBIT_FEE_FIXED: "Orbit's default fixed application fee per currency; none when unset",
   // Plain configuration, and both have safe defaults in `config.ts`.
   PEABLE_NETWORK: 'mainnet|testnet, a deployment shape rather than a credential',
   PEABLE_SOCIAL_PAY_NETWORK:

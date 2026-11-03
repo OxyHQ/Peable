@@ -135,11 +135,11 @@ describe('createRestClient', () => {
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
 
     await client.request('GET', '/v1/payment_intents', {
-      query: { status: 'settled', limit: 10, starting_after: undefined },
+      query: { status: 'succeeded', limit: 10, starting_after: undefined },
     });
 
     const url = new URL(requests[0]?.url ?? '');
-    expect(url.searchParams.get('status')).toBe('settled');
+    expect(url.searchParams.get('status')).toBe('succeeded');
     expect(url.searchParams.get('limit')).toBe('10');
     expect(url.searchParams.has('starting_after')).toBe(false);
   });
@@ -147,7 +147,7 @@ describe('createRestClient', () => {
   test('returns the parsed JSON body on 2xx', async () => {
     const { fetch: fetchImpl } = createMockFetch(() => ({
       status: 200,
-      json: { id: 'pi_1', status: 'created' },
+      json: { id: 'pi_1', status: 'requires_action' },
     }));
     const { provider } = fakeTokenProvider(['tok_1']);
     const client = createRestClient({ baseURL: TEST_GATEWAY_URL }, provider, { fetch: fetchImpl });
@@ -157,7 +157,7 @@ describe('createRestClient', () => {
       '/v1/payment_intents/pi_1',
     );
 
-    expect(result).toEqual({ id: 'pi_1', status: 'created' });
+    expect(result).toEqual({ id: 'pi_1', status: 'requires_action' });
   });
 
   test('maps a non-2xx nested-envelope response to a typed PeableError', async () => {

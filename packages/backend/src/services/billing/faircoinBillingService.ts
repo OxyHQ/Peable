@@ -187,7 +187,7 @@ export function createFaircoinBillingService(options: {
     const periods = await rows(subscription);
     const paid = periods.filter(
       (row) =>
-        row.intent?.status === 'settled' &&
+        row.intent?.status === 'succeeded' &&
         row.intent.rail === 'faircoin' &&
         row.intent.amount === row.invoice.fxQuote.amount_base_units &&
         row.invoice.acceptedAt &&
@@ -248,7 +248,7 @@ export function createFaircoinBillingService(options: {
       : null;
     // A submitted txid, a success redirect or an unconfirmed transfer awards nothing.
     if (
-      intent?.status !== 'settled' ||
+      intent?.status !== 'succeeded' ||
       intent.rail !== 'faircoin' ||
       !intent.txid ||
       !invoice.acceptedAt ||
@@ -443,9 +443,9 @@ export function createFaircoinBillingService(options: {
                 .where(inArray(paymentIntents.id, intentIds))
                 .for('update')
             : [];
-          if (payments.some((payment) => payment.status === 'failed'))
+          if (payments.some((payment) => payment.cancellationReason === 'underpaid'))
             throw new BillingError('reconciliation_required');
-          // An expired/rejected initial attempt has no source to renew in
+          // An expired/cancelled initial attempt has no source to renew in
           // Oxy. Retire it atomically so the payer can request a fresh quote.
           // Missing materialization, confirming transfers and all paid history
           // still hold the slot; elapsed quote time alone never releases it.
@@ -454,10 +454,7 @@ export function createFaircoinBillingService(options: {
             intentIds.length !== attempts.length ||
             payments.length !== attempts.length ||
             attempts.some((attempt) => attempt.acceptedAt !== null) ||
-            payments.some(
-              (payment) =>
-                payment.rail !== 'faircoin' || !['expired', 'rejected'].includes(payment.status),
-            )
+            payments.some((payment) => payment.rail !== 'faircoin' || payment.status !== 'canceled')
           )
             throw new BillingError('identity_conflict');
           await tx
@@ -509,22 +506,16 @@ export function createFaircoinBillingService(options: {
         .where(eq(invoices.subscriptionId, sub.id))
         .orderBy(desc(invoices.periodStart));
       if (
-        prior.some(
-          (p) =>
-            !p.intent ||
-            ['created', 'awaiting_approval', 'approved', 'broadcast', 'confirming'].includes(
-              p.intent.status,
-            ),
-        )
+        prior.some((p) => !p.intent || ['requires_action', 'processing'].includes(p.intent.status))
       )
         throw new BillingError('identity_conflict');
       // A failed chain observation may include partial funds. Do not propose
       // another full renewal payment until that payment has been reconciled.
-      if (prior.some((p) => p.intent?.status === 'failed'))
+      if (prior.some((p) => p.intent?.cancellationReason === 'underpaid'))
         throw new BillingError('reconciliation_required');
       const lastPaid = prior.find(
         (p) =>
-          p.intent?.status === 'settled' &&
+          p.intent?.status === 'succeeded' &&
           p.intent.rail === 'faircoin' &&
           p.intent.amount === p.invoice.fxQuote.amount_base_units &&
           p.invoice.acceptedAt &&
@@ -590,15 +581,15 @@ export function createFaircoinBillingService(options: {
       const intent = invoice.paymentIntentId
         ? await findIntentById(db, invoice.paymentIntentId)
         : null;
-      const settled = intent?.status === 'settled';
+      const settled = intent?.status === 'succeeded';
       if (
-        intent?.status === 'failed' ||
+        intent?.cancellationReason === 'underpaid' ||
         (invoice.acceptedAt &&
           (+invoice.acceptedAt < fromUnix(invoice.fxQuote.quoted_at).getTime() ||
             +invoice.acceptedAt >= fromUnix(invoice.fxQuote.expires_at).getTime())) ||
         (!invoice.acceptedAt &&
           invoice.fxQuote.expires_at <= toUnix(now()) &&
-          ['approved', 'broadcast', 'confirming'].includes(intent?.status ?? ''))
+          intent?.status === 'processing')
       )
         throw new BillingError('reconciliation_required');
       if (settled) {
@@ -615,11 +606,7 @@ export function createFaircoinBillingService(options: {
       return {
         id: ref,
         initial_invoice_id: settled ? invoice.id : null,
-        status: settled
-          ? 'complete'
-          : ['expired', 'rejected'].includes(intent?.status ?? '')
-            ? 'expired'
-            : 'open',
+        status: settled ? 'complete' : intent?.status === 'canceled' ? 'expired' : 'open',
         store_id: sub.subjectRef,
         plan_id: sub.planRef,
         provider_customer_id: sub.customerRef,

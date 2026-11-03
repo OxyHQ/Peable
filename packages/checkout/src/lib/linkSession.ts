@@ -53,12 +53,10 @@ function isExpired(intent: PaymentIntent): boolean {
  * True when a remembered intent is still safe to reuse as-is: the payer can
  * still complete a payment against it, and it is not past its own `expires_at`.
  *
- * This used to ask whether the status was a LEAF of the transition table, which
- * meant `settled` right up until `settled` gained the refund edges — after
- * which a settled payment stopped looking finished and this function started
- * reusing it, showing a payer who had already paid their old receipt forever
- * with no way to pay the link again. `canStillBePaid` asks the question in the
- * payer's terms instead: is `settled` still reachable from here.
+ * `canStillBePaid` asks the question in the payer's terms: is the payment
+ * still open — anything but `succeeded` or `canceled` (ADR 0019). A payment
+ * that already succeeded must never be reused, or a payer who has paid sees
+ * their old receipt forever with no way to pay the link again.
  */
 function isReusable(intent: PaymentIntent): boolean {
   return canStillBePaid(intent.status) && !isExpired(intent);

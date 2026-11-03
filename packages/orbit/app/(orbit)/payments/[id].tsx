@@ -11,6 +11,7 @@ import { describeError } from '@/api/transport';
 import { formatAmount } from '@/format/money';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
+import { cancellationReasonLabel } from '@/payments/status';
 import { paymentTimeline, type TimelineStep } from '@/payments/timeline';
 import { usePayment } from '@/payments/usePayments';
 import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
@@ -56,6 +57,11 @@ function Timeline({ steps }: { steps: TimelineStep[] }) {
   );
 }
 
+/** A reference as its id, whether or not the read expanded it. */
+function idOf(reference: string | { id: string }): string {
+  return typeof reference === 'string' ? reference : reference.id;
+}
+
 function PaymentDetail({ payment }: { payment: PaymentIntent }) {
   const metadata = Object.entries(payment.metadata ?? {});
   return (
@@ -76,17 +82,76 @@ function PaymentDetail({ payment }: { payment: PaymentIntent }) {
             />
             <Field label={t('payment.field.baseUnits')} value={payment.amount} mono />
             <Field label={t('payment.field.rail')} value={t(`payments.rail.${payment.rail}`)} />
-            {payment.network ? (
-              <Field label={t('payment.field.network')} value={payment.network} />
+            {payment.amount_received !== '0' ? (
+              <Field
+                label={t('payment.field.received')}
+                value={formatAmount(payment.amount_received, payment.currency)}
+              />
             ) : null}
-            {payment.address ? (
-              <Field label={t('payment.field.address')} value={payment.address} mono />
+            {payment.amount_capturable !== '0' ? (
+              <Field
+                label={t('payment.field.capturable')}
+                value={formatAmount(payment.amount_capturable, payment.currency)}
+              />
             ) : null}
-            {payment.txid ? (
-              <Field label={t('payment.field.txid')} value={payment.txid} mono />
+            {payment.amount_refunded !== '0' ? (
+              <Field
+                label={t('payment.field.refunded')}
+                value={formatAmount(payment.amount_refunded, payment.currency)}
+              />
             ) : null}
-            {payment.rail === 'faircoin' ? (
-              <Field label={t('payment.field.confirmations')} value={payment.confirmations} />
+            {payment.capture_method === 'manual' ? (
+              <Field
+                label={t('payment.field.captureMethod')}
+                value={t('payment.field.captureManual')}
+              />
+            ) : null}
+            {payment.status === 'canceled' ? (
+              <Field
+                label={t('payment.field.canceledReason')}
+                value={cancellationReasonLabel(payment.cancellation_reason)}
+              />
+            ) : null}
+            {payment.last_payment_error ? (
+              <Field
+                label={t('payment.field.lastError')}
+                value={payment.last_payment_error.message}
+              />
+            ) : null}
+            {payment.faircoin ? (
+              <>
+                <Field label={t('payment.field.network')} value={payment.faircoin.network} />
+                <Field label={t('payment.field.address')} value={payment.faircoin.address} mono />
+                {payment.faircoin.txid ? (
+                  <Field label={t('payment.field.txid')} value={payment.faircoin.txid} mono />
+                ) : null}
+                <Field
+                  label={t('payment.field.confirmations')}
+                  value={t('payment.field.confirmationsValue', {
+                    count: payment.faircoin.confirmations,
+                    required: payment.faircoin.required_confirmations,
+                  })}
+                />
+              </>
+            ) : null}
+            {payment.customer ? (
+              <Field label={t('payment.field.customer')} value={idOf(payment.customer)} mono />
+            ) : null}
+            {payment.payment_method ? (
+              <Field
+                label={t('payment.field.paymentMethod')}
+                value={idOf(payment.payment_method)}
+                mono
+              />
+            ) : null}
+            {payment.latest_charge ? (
+              <Field label={t('payment.field.charge')} value={idOf(payment.latest_charge)} mono />
+            ) : null}
+            {payment.description ? (
+              <Field label={t('payment.field.description')} value={payment.description} />
+            ) : null}
+            {payment.receipt_email ? (
+              <Field label={t('payment.field.receiptEmail')} value={payment.receipt_email} />
             ) : null}
             {payment.connected_account ? (
               <Field

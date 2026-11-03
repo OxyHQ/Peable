@@ -81,6 +81,9 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
    * ground `created` and `arrival_date` are here on.
    */
   'dueby',
+  // Whether a disputed charge can still be refunded — a boolean the dispute
+  // row records (`disputes.is_charge_refundable`), no personal data in it.
+  'ischargerefundable',
   'livemode',
   'paymentintent',
   'charge',
@@ -99,6 +102,10 @@ const ALLOWED_KEYS: ReadonlySet<string> = new Set([
   'peableintentid',
   'peabletransferid',
   'peableaccountid',
+  'peablecustomerid',
+  'peablesetupintentid',
+  'setupintent',
+  'paymentmethod',
 ]);
 
 /** How deep to walk before giving up. A provider envelope is nested 3–4 levels. */

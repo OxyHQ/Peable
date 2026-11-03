@@ -21,6 +21,37 @@ offending field in bracket notation (`metadata[order_id]`), and `err.requestId`
 the response's `Request-Id` — quote it to Peable support. A request that is
 well-formed JSON but invalid is a 400, never a 422.
 
+### Webhooks: endpoints, events, deliveries
+
+An event (`evt_…`) is stored once, in the same transaction as the change it
+records, and kept 30 days (`peable.events.list({ type: 'payment_intent.*' })`).
+Each enabled webhook endpoint whose `enabled_events` match it receives one
+delivery, retried for about three days; an endpoint that fails every delivery
+for three days is disabled with `disabled_reason: 'delivery_failures'`.
+
+```ts
+const endpoint = await peable.webhookEndpoints.create({
+  url: 'https://shop.example/webhooks/peable',
+  enabled_events: ['payment_intent.succeeded'], // or ['*']
+});
+endpoint.secret; // whsec_… — returned only here and by rollSecret; store it
+
+// In the handler, with the RAW body:
+const event = peable.webhooks.constructEvent(rawBody, req.header(WEBHOOK_SIGNATURE_HEADER), secret);
+event.request; // { id, idempotency_key } of the API call that caused it, or nulls
+
+// Rotation without a gap: for an hour every delivery is signed with both secrets.
+const rolled = await peable.webhookEndpoints.rollSecret(endpoint.id, { expires_in_seconds: 3600 });
+peable.webhooks.constructEvent(rawBody, header, [rolled.secret!, secret]);
+
+for await (const delivery of peable.webhookDeliveries.list({ webhook_endpoint: endpoint.id })) {
+  if (delivery.last_status === 'dead') await peable.webhookDeliveries.redeliver(delivery.id);
+}
+```
+
+A merchant has no `webhook_url` any more: the endpoints are the only place
+events are sent.
+
 ### Idempotency: every POST, automatically
 
 Every `POST` the client sends carries an `Idempotency-Key` (ADR 0014 D3). When
@@ -57,14 +88,14 @@ resource's own filters, and returns a promise of one page
 iterable over every page:
 
 ```ts
-const page = await peable.paymentIntents.list({ status: 'settled', limit: 20 });
+const page = await peable.paymentIntents.list({ status: 'succeeded', limit: 20 });
 for await (const refund of peable.refunds.list({ payment_intent: intent.id })) {
   reconcile(refund);
 }
 const sellers = await peable.connectedAccounts.list().autoPagingToArray({ limit: 1000 });
 ```
 
-Listable: `paymentIntents`, `paymentLinks`, `checkout.sessions`, `refunds`,
+Listable: `paymentIntents`, `charges`, `paymentLinks`, `checkout.sessions`, `refunds`,
 `transfers`, `disputes`, `connectedAccounts`, `tax.transactions`, the
 per-payment `listForPaymentIntent` sub-lists and contributions. Iterating from
 `ending_before` walks backwards, away from the cursor.
@@ -86,6 +117,166 @@ update is a patch — a key sent as `''` is removed — and every update is a `P
 await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes', draft: '' } });
 await peable.paymentLinks.update(link.id, { active: false });
 ```
+
+### Payment statuses, confirm, capture and cancel (ADR 0019)
+
+A PaymentIntent walks Stripe's seven statuses — `requires_payment_method`,
+`requires_confirmation`, `requires_action`, `processing`, `requires_capture`,
+`succeeded`, `canceled` — on both rails. A FairCoin payment starts in
+`requires_action` (`next_action.faircoin_payment` has the address, amount and
+`faircoin:` URI), is `processing` once the payer broadcasts (`faircoin.txid`,
+`faircoin.confirmations`) and ends `succeeded` or `canceled`
+(`cancellation_reason: 'abandoned' | 'underpaid' | …`). A declined card returns
+to `requires_payment_method` with `last_payment_error` and can be retried.
+Refunds never change the status: read `amount_refunded`, or the refunds.
+
+```ts
+const intent = await peable.paymentIntents.create({
+  amount: '1999', rail: 'card', currency: 'EUR',
+  customer: 'cus_…', payment_method: 'pm_…', confirm: true, off_session: true,
+  capture_method: 'manual',
+});
+await peable.paymentIntents.capture(intent.id, { amount_to_capture: '1500' });
+await peable.paymentIntents.cancel(other.id, { cancellation_reason: 'requested_by_customer' });
+try {
+  await peable.paymentIntents.confirm(id, { payment_method: 'pm_…' });
+} catch (error) {
+  if (error instanceof PeableCardError) offerAnotherCard(error.paymentIntent);
+}
+const charge = await peable.charges.retrieve(intent.latest_charge as string);
+```
+
+Events are Stripe's names: `payment_intent.created|requires_action|processing|
+amount_capturable_updated|succeeded|payment_failed|canceled`, `charge.refunded`,
+`charge.dispute.created|updated|closed|funds_withdrawn|funds_reinstated`,
+`refund.created|updated|failed`, `customer.*`, `payment_method.*` and
+`setup_intent.*`.
+
+### Files (0.16.0)
+
+A file (`file_…`) is bytes given to Orbit for ONE purpose, stored in Oxy Files.
+The purpose sets the policy, and the format is recognised from the bytes:
+
+| `purpose` | Formats | Max | Visibility |
+|---|---|---|---|
+| `dispute_evidence` | PDF, PNG, JPEG | 5 MiB | private — attach to a dispute |
+| `business_logo` | PNG, JPEG | 512 KiB | public — `merchants.update({ business_logo })` |
+| `identity_document`, `additional_verification` | PDF, PNG, JPEG | 10 MiB | private |
+
+```ts
+const receipt = await peable.files.create({
+  purpose: 'dispute_evidence',
+  file: await readFile('receipt.pdf'), // Blob, Uint8Array or ArrayBuffer
+  filename: 'receipt.pdf',
+});
+// An Oxy file you already own, without uploading it again:
+const logo = await peable.files.create({ purpose: 'business_logo', oxy_file: 'oxy_file_id' });
+await peable.merchants.update({ business_logo: logo.id }); // beside avatar_file_id
+for await (const file of peable.files.list({ purpose: 'dispute_evidence' })) console.log(file.id);
+```
+
+The upload is `multipart/form-data` and still carries an `Idempotency-Key`; a
+retry under the same key with the same bytes answers the stored file.
+`url` is set only on an available `business_logo`; evidence and documents are
+never addressable by URL.
+
+### Disputes: stage, submit once, or accept (0.16.0)
+
+```ts
+// Stage — text goes to the provider as a draft; files attach by id.
+await peable.disputes.update(dispute.id, {
+  evidence: { product_description: 'Blue enamel mug', receipt: receipt.id },
+});
+// Submit — the attached files are uploaded to the provider now, and the
+// response is sent. ONE shot: a second submission is refused.
+await peable.disputes.update(dispute.id, { submit: true });
+// Or accept the dispute (it becomes `lost`):
+await peable.disputes.close(dispute.id);
+```
+
+Peable stores none of the evidence text: the draft lives at the provider, and
+`dispute.evidence` is read live on `retrieve`, `update` and `close` only —
+lists and webhook events never carry it. What Peable keeps is the `file_…` ids
+you attached and `evidence_details` (`due_by`, `has_evidence`, `past_due`,
+`submission_count`, `submitted_at`). An empty string unsets a field. `reason`
+is Stripe's enum; `charge` is expandable.
+
+### Payment methods: configurations and wallet domains (0.16.0)
+
+`paymentMethodConfigurations` (`pmc_…`) say which card-rail methods payers are
+offered: `card`, `apple_pay`, `google_pay`, `sepa_debit`, `ideal`,
+`bancontact`, `eps` (and `bizum`, reported `unavailable_reason:
+'provider_unsupported'`). Each method carries `available`,
+`display_preference`, `unavailable_reason` and the `currencies` it is offered
+in. A card PaymentIntent uses the default configuration unless it names
+`payment_method_configuration` or explicit `payment_method_types`.
+
+```ts
+const [config] = (await peable.paymentMethodConfigurations.list()).data;
+await peable.paymentMethodConfigurations.update(config.id, {
+  ideal: { display_preference: { preference: 'on' } },
+});
+await peable.paymentIntents.create({
+  amount: '2500', rail: 'card', currency: 'EUR',
+  payment_method_types: ['card', 'sepa_debit'],
+});
+
+// Apple Pay / Google Pay on your own pages (Peable's hosted checkout needs none):
+const domain = await peable.paymentMethodDomains.create({ domain_name: 'shop.example.com' });
+if (domain.apple_pay.status === 'inactive') await peable.paymentMethodDomains.validate(domain.id);
+```
+
+Card data and bank credentials are entered in the provider's hosted fields and
+never reach Peable. Currencies: FAIR, EUR, USD, GBP, CHF, SEK, NOK, DKK, PLN,
+CZK, CAD, AUD and JPY — JPY is zero-decimal (`CURRENCY_DECIMALS.JPY === 0`),
+so `amount: '1500'` is ¥1,500.
+
+### Catalog: products, prices, coupons, promotion codes (0.14.0)
+
+What you sell and on what terms, as Orbit objects (ADR 0018): `products`
+(`prod_…`), `prices` (`price_…`), `coupons` and `promotionCodes` (`promo_…`),
+each with create / retrieve / update / auto-paginating `list` (and `del` on
+products and coupons). Every amount is a **base-unit string** — `'999'` is
+9.99 EUR, `'100000000'` is 1 FAIR — never a number.
+
+```ts
+const plus = await peable.products.create({
+  name: 'Plus',
+  tax_code: 'txcd_10103000',
+  default_price_data: { currency: 'EUR', unit_amount: '999', recurring: { interval: 'month' } },
+});
+const yearly = await peable.prices.create({
+  product: plus.id, currency: 'EUR', unit_amount: '9900',
+  recurring: { interval: 'year' }, lookup_key: 'plus_yearly', transfer_lookup_key: true,
+});
+const { data: [current] } = await peable.prices.list({ lookup_keys: ['plus_yearly'] });
+
+await peable.coupons.create({ id: 'LAUNCH20', percent_off: 20, duration: 'once' });
+await peable.promotionCodes.create({ coupon: 'LAUNCH20', code: 'LAUNCH', max_redemptions: 100 });
+```
+
+- **Prices are immutable** except `active`, `nickname`, `metadata`,
+  `lookup_key` and a `tax_behavior` that is still `unspecified`. To change an
+  amount, create a price and archive the old one (`active: false`). The product's
+  `default_price` cannot be archived until another default is set.
+- **`lookup_key`** is unique among your prices (per mode). `transfer_lookup_key:
+  true` moves it from the price holding it, so the key always names the current
+  price of a plan. `lookup_keys` (at most 10) filters a list by them.
+- Tiered prices: `billing_scheme: 'tiered'`, `tiers_mode: 'graduated' |
+  'volume'`, `tiers: [{ up_to, unit_amount?, flat_amount? }]`, the last `up_to`
+  `'inf'`. `transform_quantity` packs per-unit quantities. Metered usage
+  (`usage_type: 'metered'`) is refused until meters exist.
+- A product with prices (or named by a coupon's `applies_to`) cannot be
+  deleted — archive it. **Coupon ids are never reused**, even after `del`.
+  Coupons change only `name` and `metadata`.
+- **Promotion codes** are case-insensitive and unique among your ACTIVE codes;
+  restrict them with `customer`, `max_redemptions`, `expires_at` (never after the
+  coupon's `redeem_by`) and `restrictions` (`first_time_transaction`,
+  `minimum_amount` + `minimum_amount_currency`). Change `active` and `metadata`.
+- Events: `product.created|updated|deleted`, `price.created|updated`,
+  `coupon.created|updated|deleted`, `promotion_code.created|updated`. Prices
+  and promotion codes are archived, never deleted, so there is no
+  `price.deleted` or `promotion_code.deleted`.
 
 ### Own Oxy applications: shared workload transport
 
@@ -123,7 +314,7 @@ pass `requestTimeoutMs: 20_000`. A401 may still trigger the existing single toke
 refresh/retry; timeouts and interrupted responses never retry a payment POST.
 The remote outcome may be unknown: recover explicitly with the same durable key.
 
-`paymentIntents.reject`, `refunds.create`, and `transfers.create` accept an
+`paymentIntents.cancel` / `confirm` / `capture`, `refunds.create`, and `transfers.create` accept an
 optional second `{ idempotencyKey }` argument; without it the client mints one
 (above). Refund/transfer/reversal `external_ref` remains their durable business
 identity; the key neither replaces it nor changes gateway financial semantics.
@@ -153,6 +344,75 @@ const intent = await peable.paymentIntents.create(
 an on-behalf payment carry `event.account`; `intent.can_expire` is `false` once a
 payer has broadcast, so never cancel an order on `expires_at` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
+
+### Connect & money (0.17.0, ADR 0015)
+
+Fiat funds never reach a Peable bank account: a merchant that takes cards has
+its OWN provider account, opened and onboarded through Peable. Orbit mirrors
+that account's balance, balance transactions and payouts into a double-entry
+ledger reconciled against the provider daily, and instructs payouts the
+provider executes. Nothing here is computed by Orbit — a figure the provider
+has not given is `null`, never `0`.
+
+```ts
+// The merchant's own account. The first update opens it (country + business_type).
+let account = await peable.account.retrieve(); // 404 code 'account_missing' when there is none
+account = await peable.account.update({
+  settings: { payouts: { schedule: { interval: 'weekly', weekly_anchor: 'friday' } } },
+});
+account.requirements.currently_due; // ['individual.verification.document', …] — identifiers, never values
+
+// Hosted onboarding. Mint on click, never store; a return proves nothing — read the account back.
+const link = await peable.accountLinks.create({
+  return_url: 'https://you.example/account',
+  refresh_url: 'https://you.example/account?refresh=1',
+});
+
+// The balance, per currency. `informational` is FairCoin received in the merchant's
+// own wallet: on the books, never payable.
+const balance = await peable.balance.retrieve();
+for await (const txn of peable.balanceTransactions.list({ type: 'charge', currency: 'eur' })) {
+  // txn.amount is signed; txn.fee / txn.net are null when the provider gave no figure
+}
+
+// Payouts: the provider executes them. `create` is for a manual schedule.
+const payout = await peable.payouts.create(
+  { amount: '10000', currency: 'EUR' },
+  { idempotencyKey: `payout:${weekId}` },
+);
+await peable.payouts.cancel(payout.id); // while still pending
+const report = await peable.reports.payoutReconciliation({ payout: payout.id });
+report.summary; // { count, amount, fee, net } over every transaction the payout paid out
+
+// Orbit's fee on a destination charge, and its refunds.
+const fees = await peable.applicationFees.list({ payment_intent: 'pi_…' });
+await peable.applicationFees.listRefunds(fees.data[0].id);
+```
+
+**`peableAccount` — a platform acting for a seller.** `account`, `accountLinks`
+(without `account`), `balance`, `balanceTransactions`, `payouts` and
+`reports.payoutReconciliation` take a last `{ peableAccount: 'ca_…' }` option,
+sent as the `Peable-Account` header, to read or act on one of the platform's
+connected accounts with the platform's own credential. Every other route refuses
+the header with a 400.
+
+```ts
+await peable.balance.retrieve({ peableAccount: seller.id });
+await peable.payouts.create(
+  { amount: '5000', currency: 'EUR' },
+  { peableAccount: seller.id, idempotencyKey: `payout:${seller.id}:${day}` },
+);
+```
+
+Card payments for a seller: `paymentIntents.create({ …, transfer_data: { destination:
+'ca_…' }, application_fee_amount: '150' })` (a destination charge), or `on_behalf_of`
+to make the seller the merchant of record.
+
+**Refunds** gain `reason`, `metadata`, `refund_application_fee` and
+`reverse_transfer` on `create`, plus `refunds.update(id, { metadata })` and
+`refunds.cancel(id)` — read the answer's `status`; only `canceled` means the
+money stayed. Events: `account.updated`, `application_fee.created|refunded`,
+`payout.created|updated|paid|failed|canceled` and `balance.available`.
 
 ### Optional checkout presentation (local development)
 

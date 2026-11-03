@@ -21,6 +21,14 @@ function randomHex(byteLength: number): string {
 export function newId(
   prefix:
     | 'pi'
+    | 'ch'
+    | 'cus'
+    | 'pm'
+    | 'seti'
+    | 'prod'
+    | 'price'
+    | 'coupon'
+    | 'promo'
     | 'evt'
     | 'merch'
     | 'link'
@@ -34,7 +42,18 @@ export function newId(
     | 'taxloc'
     | 'taxcalc'
     | 'taxtxn'
-    | 'req',
+    | 'we'
+    | 'req'
+    | 'file'
+    | 'pmc'
+    | 'pmd'
+    // Orbit money (ADR 0015): balance transactions, payouts, application fees and
+    // their refunds, and reconciliation findings.
+    | 'txn'
+    | 'po'
+    | 'fee'
+    | 'fr'
+    | 'recon',
 ): string {
   return `${prefix}_${randomHex(ID_ENTROPY_BYTES)}`;
 }

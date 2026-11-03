@@ -1,9 +1,22 @@
 import type { Response } from 'express';
 import { findAccountsByPublicIds } from '../db/accounts/connectedAccountRepository';
 import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentRepository';
+import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
+import { findCustomersForMerchantByPublicIds } from '../db/customers/customerRepository';
+import { findPaymentMethodsForMerchantByPublicIds } from '../db/customers/paymentMethodRepository';
+import { findCouponsByPublicIds } from '../db/catalog/couponRepository';
+import { findPricesByPublicIds } from '../db/catalog/priceRepository';
+import { findProductsByPublicIds } from '../db/catalog/productRepository';
+import { toCouponDTO, toPriceDTO, toProductDTO } from './serializeCatalog';
 import { getDb } from '../db/postgres';
 import { sendError } from './http';
-import { toPaymentIntentDTO } from './serialize';
+import {
+  toChargeDTO,
+  toCustomerDTO,
+  toDeletedCustomerDTO,
+  toPaymentIntentDTO,
+  toPaymentMethodDTO,
+} from './serialize';
 import { toConnectedAccountDTO } from './serializeSettlement';
 
 /**
@@ -38,6 +51,10 @@ import { toConnectedAccountDTO } from './serializeSettlement';
 /** Every object type that appears at the root of a response that accepts `expand[]`. */
 export type ExpandableType =
   | 'payment_intent'
+  | 'charge'
+  | 'customer'
+  | 'payment_method'
+  | 'setup_intent'
   | 'checkout_session'
   | 'refund'
   | 'transfer'
@@ -46,22 +63,70 @@ export type ExpandableType =
   | 'connected_account'
   | 'payment_link'
   | 'webhook_delivery'
-  | 'tax.transaction';
+  | 'webhook_endpoint'
+  | 'event'
+  | 'tax.transaction'
+  | 'product'
+  | 'price'
+  | 'coupon'
+  | 'promotion_code'
+  | 'request_log'
+  | 'file'
+  | 'payment_method_configuration'
+  | 'payment_method_domain'
+  | 'balance_transaction'
+  | 'payout'
+  | 'application_fee'
+  | 'reconciliation_mismatch';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
-type TargetType = 'payment_intent' | 'connected_account';
+type TargetType =
+  | 'payment_intent'
+  | 'connected_account'
+  | 'charge'
+  | 'customer'
+  | 'payment_method'
+  | 'product'
+  | 'price'
+  | 'coupon';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
-  payment_intent: { connected_account: 'connected_account' },
+  // `latest_charge` is the one reference named for its ROLE, not its type —
+  // Stripe's spelling; it expands to a `charge`.
+  payment_intent: {
+    connected_account: 'connected_account',
+    customer: 'customer',
+    payment_method: 'payment_method',
+    latest_charge: 'charge',
+  },
+  charge: { payment_intent: 'payment_intent' },
+  customer: {},
+  payment_method: { customer: 'customer' },
+  setup_intent: { customer: 'customer', payment_method: 'payment_method' },
   checkout_session: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
   refund: { payment_intent: 'payment_intent' },
   transfer: { payment_intent: 'payment_intent', connected_account: 'connected_account' },
-  dispute: { payment_intent: 'payment_intent' },
+  dispute: { payment_intent: 'payment_intent', charge: 'charge' },
   settlement: { payment_intent: 'payment_intent' },
   connected_account: {},
   payment_link: {},
   webhook_delivery: {},
+  webhook_endpoint: {},
+  event: {},
+  request_log: {},
+  file: {},
+  payment_method_configuration: {},
+  payment_method_domain: {},
   'tax.transaction': {},
+  product: { default_price: 'price' },
+  price: { product: 'product' },
+  coupon: {},
+  promotion_code: { coupon: 'coupon', customer: 'customer' },
+  // ADR 0015's mirrors name their sources by public id; none expands yet.
+  balance_transaction: {},
+  payout: {},
+  application_fee: {},
+  reconciliation_mismatch: {},
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -72,6 +137,50 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findIntentsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toPaymentIntentDTO(row),
+      ]),
+    ),
+  charge: async (merchantId, ids) =>
+    new Map(
+      (await findChargesForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toChargeDTO(row),
+      ]),
+    ),
+  customer: async (merchantId, ids) =>
+    new Map(
+      (await findCustomersForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        row.deletedAt === null ? toCustomerDTO(row) : toDeletedCustomerDTO(row),
+      ]),
+    ),
+  payment_method: async (merchantId, ids) =>
+    new Map(
+      (await findPaymentMethodsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toPaymentMethodDTO(row),
+      ]),
+    ),
+  product: async (merchantId, ids) =>
+    new Map(
+      (await findProductsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toProductDTO(row),
+      ]),
+    ),
+  price: async (merchantId, ids) =>
+    new Map(
+      (await findPricesByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toPriceDTO(row),
+      ]),
+    ),
+  // Deleted coupons included: a promotion code keeps naming the coupon it
+  // redeemed, and the expansion shows it `valid: false` rather than failing.
+  coupon: async (merchantId, ids) =>
+    new Map(
+      (await findCouponsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toCouponDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, jest, mock, test } from 'bun:test';
 import { act, cleanup, render, screen } from '@testing-library/react';
+import { intentFixture } from '../../__tests__/intentFixture';
 import type { PaymentIntent } from '@peable.to/shared-types';
 
 // Separate file from `CheckoutView.test.tsx` because it needs the OPPOSITE
@@ -38,31 +39,22 @@ const { CheckoutView } = await import('../CheckoutView');
 /** Matches `FALLBACK_POLL_MS` in CheckoutView, plus a margin. */
 const ONE_TICK_MS = 5_100;
 
-function makeIntent(overrides: Partial<PaymentIntent> = {}): PaymentIntent {
-  return {
-    id: 'pi_fallback1',
-    object: 'payment_intent',
-    livemode: false,
-    // `rail` became a required discriminator on the contract (ADR 0001): it is
-    // what decides whether `address`/`network` mean anything. This fixture has
-    // both and a txid, so it is a chain payment.
-    rail: 'faircoin',
-    status: 'broadcast',
-    amount: '150000000',
-    currency: 'FAIR',
-    network: 'testnet',
-    address: 'TAddressExample1111111111111111111',
-    merchant_id: 'merch_1',
-    connected_account: null,
-    txid: 'deadbeef',
-    confirmations: 0,
-    client_secret: 'pi_fallback1_secret',
-    metadata: {},
-    expires_at: Math.floor((Date.now() + 60_000) / 1000),
-    created: Math.floor(Date.now() / 1000),
-    updated_at: Math.floor(Date.now() / 1000),
-    ...overrides,
-  };
+function makeIntent(
+  overrides: Partial<PaymentIntent> = {},
+  chain: Partial<NonNullable<PaymentIntent['faircoin']>> = { txid: 'deadbeef' },
+): PaymentIntent {
+  return intentFixture(
+    {
+      id: 'pi_fallback1',
+      rail: 'faircoin',
+      status: 'processing',
+      amount: '150000000',
+      client_secret: 'pi_fallback1_secret',
+      expires_at: Math.floor((Date.now() + 60_000) / 1000),
+      ...overrides,
+    },
+    chain,
+  );
 }
 
 /**
@@ -104,21 +96,21 @@ test('a failed subscribe starts polling and the payer sees the settlement', asyn
   // snapshot the route already loaded is the current truth.
   expect(getPaymentIntentMock).toHaveBeenCalledTimes(0);
 
-  polled = makeIntent({ status: 'settled' });
+  polled = makeIntent({ status: 'succeeded' });
   await tick();
 
   expect(getPaymentIntentMock.mock.calls.length).toBeGreaterThan(0);
   // The whole point: the page moved off the frozen snapshot on its own, with
   // no refresh from the payer.
-  expect(screen.getByText('Payment settled')).toBeTruthy();
+  expect(screen.getByText('Payment complete')).toBeTruthy();
 });
 
 test('polling stops once the intent is terminal', async () => {
-  render(<CheckoutView intent={makeIntent({ status: 'settled' })} />);
+  render(<CheckoutView intent={makeIntent({ status: 'succeeded' })} />);
   await flush();
   await tick();
 
-  // Nothing can follow `settled`, so re-reading the row is pure waste.
+  // Nothing can follow `succeeded`, so re-reading the row is pure waste.
   expect(getPaymentIntentMock).toHaveBeenCalledTimes(0);
 });
 
@@ -131,11 +123,11 @@ test('a failed poll is retried on the next tick, not given up on', async () => {
   const afterFailure = getPaymentIntentMock.mock.calls.length;
   expect(afterFailure).toBeGreaterThan(0);
 
-  polled = makeIntent({ status: 'settled' });
+  polled = makeIntent({ status: 'succeeded' });
   await tick();
 
   expect(getPaymentIntentMock.mock.calls.length).toBeGreaterThan(afterFailure);
-  expect(screen.getByText('Payment settled')).toBeTruthy();
+  expect(screen.getByText('Payment complete')).toBeTruthy();
 });
 
 test('a successful subscribe never polls', async () => {

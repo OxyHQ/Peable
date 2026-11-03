@@ -24,6 +24,8 @@ let transferResponse: Record<string, unknown> = {};
 /** What `retrieveStripeTransfer` answers, when the adapter has to ask. */
 let retrievedTransferResponse: Record<string, unknown> = {};
 let accountResponse: Record<string, unknown> = {};
+let disputeResponse: Record<string, unknown> = {};
+let domainResponse: Record<string, unknown> = {};
 
 function record(fn: string, [mode, ...args]: readonly unknown[]) {
   calls.push({ fn, mode, args });
@@ -38,8 +40,41 @@ mock.module('../client', () => ({
   retrieveStripeChargeWithBalance: async () => {
     throw new Error('not used by these tests');
   },
-  updateStripeDispute: async () => {
-    throw new Error('not used by these tests');
+  updateStripeDispute: async (...args: unknown[]) => {
+    record('updateStripeDispute', args);
+    return disputeResponse;
+  },
+  retrieveStripeDispute: async (...args: unknown[]) => {
+    record('retrieveStripeDispute', args);
+    return disputeResponse;
+  },
+  closeStripeDispute: async (...args: unknown[]) => {
+    record('closeStripeDispute', args);
+    return { ...disputeResponse, status: 'lost' };
+  },
+  createStripeDisputeFile: async (...args: unknown[]) => {
+    record('createStripeDisputeFile', args);
+    return { id: 'file_stripe_1' };
+  },
+  createStripePaymentMethodConfiguration: async (...args: unknown[]) => {
+    record('createStripePaymentMethodConfiguration', args);
+    return { id: 'pmc_stripe_1' };
+  },
+  updateStripePaymentMethodConfiguration: async (...args: unknown[]) => {
+    record('updateStripePaymentMethodConfiguration', args);
+    return { id: args[1] };
+  },
+  createStripePaymentMethodDomain: async (...args: unknown[]) => {
+    record('createStripePaymentMethodDomain', args);
+    return domainResponse;
+  },
+  updateStripePaymentMethodDomain: async (...args: unknown[]) => {
+    record('updateStripePaymentMethodDomain', args);
+    return domainResponse;
+  },
+  validateStripePaymentMethodDomain: async (...args: unknown[]) => {
+    record('validateStripePaymentMethodDomain', args);
+    return domainResponse;
   },
   toProviderError: (error: unknown) => error,
   createStripePaymentIntent: async (...args: unknown[]) => {
@@ -97,6 +132,30 @@ mock.module('../client', () => ({
     api_version: '2026-07-29.dahlia',
     data: { object: { id: 'pi_1', object: 'payment_intent' } },
   }),
+  cancelStripeSetupIntent: async () => {
+    throw new Error('not used by these tests');
+  },
+  confirmStripePaymentIntent: async () => {
+    throw new Error('not used by these tests');
+  },
+  createStripeSetupIntent: async () => {
+    throw new Error('not used by these tests');
+  },
+  detachStripePaymentMethod: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripePaymentMethod: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripeSetupIntent: async () => {
+    throw new Error('not used by these tests');
+  },
+  createStripeCustomer: async () => {
+    throw new Error('not used by these tests');
+  },
+  retrieveStripeCharge: async () => {
+    throw new Error('not used by these tests');
+  },
 }));
 
 const { StripePaymentProvider } = await import('../stripeProvider');
@@ -111,6 +170,19 @@ function argsOf(fn: string): readonly unknown[] {
 describe('StripePaymentProvider', () => {
   beforeEach(() => {
     calls.length = 0;
+    disputeResponse = {
+      id: 'du_1',
+      status: 'warning_needs_response',
+      is_charge_refundable: true,
+      evidence_details: { has_evidence: true, submission_count: 0 },
+      evidence: { customer_name: 'Jane Buyer', receipt: 'file_stripe_9', billing_address: '' },
+    };
+    domainResponse = {
+      id: 'pmd_stripe_1',
+      enabled: true,
+      apple_pay: { status: 'inactive', status_details: { error_message: 'provider prose' } },
+      google_pay: { status: 'active' },
+    };
     paymentIntentResponse = {
       id: 'pi_1',
       status: 'requires_payment_method',
@@ -170,7 +242,7 @@ describe('StripePaymentProvider', () => {
     expect(idempotencyKey).toBe('pay:pi_public_1');
 
     expect(result.providerObjectId).toBe('pi_1');
-    expect(result.status).toBe('created');
+    expect(result.status).toBe('requires_payment_method');
     expect(result.clientAction).toEqual({ kind: 'client_secret', value: 'pi_1_secret_x' });
   });
 
@@ -272,7 +344,26 @@ describe('StripePaymentProvider', () => {
       idempotencyKey: 'cap:pi_public_1',
     });
 
-    expect(argsOf('captureStripePaymentIntent')).toEqual(['pi_1', 'cap:pi_public_1']);
+    expect(argsOf('captureStripePaymentIntent')).toEqual(['pi_1', {}, 'cap:pi_public_1']);
+  });
+
+  /** A partial capture (ADR 0019) sends Stripe's `amount_to_capture` as a number. */
+  test('capture sends amount_to_capture for a partial capture', async () => {
+    paymentIntentResponse = { id: 'pi_1', status: 'requires_capture', client_secret: 's' };
+    const provider = new StripePaymentProvider({ mode: 'test' });
+
+    await provider.capture({
+      intentId: 'pi_public_1',
+      providerObjectId: 'pi_1',
+      idempotencyKey: 'cap:pi_public_1',
+      amountToCapture: '1500',
+    });
+
+    expect(argsOf('captureStripePaymentIntent')).toEqual([
+      'pi_1',
+      { amount_to_capture: 1500 },
+      'cap:pi_public_1',
+    ]);
   });
 
   /**
@@ -386,6 +477,7 @@ describe('StripePaymentProvider', () => {
       businessType: 'individual',
       idempotencyKey: 'acct:acc_gateway_1',
       metadata: {},
+      role: 'seller',
     });
 
     const [body] = argsOf('createStripeConnectedAccountV2') as [Record<string, unknown>];
@@ -416,6 +508,7 @@ describe('StripePaymentProvider', () => {
       businessType: 'company',
       idempotencyKey: 'acct:acc_gateway_1',
       metadata: {},
+      role: 'seller',
     });
 
     expect(argsOf('retrieveStripeAccount')).toEqual(['acct_new']);
@@ -443,5 +536,123 @@ describe('StripePaymentProvider', () => {
     expect(params.collection_options).toMatchObject({ fields: 'eventually_due' });
     expect(link.url).toContain('connect.stripe.com');
     expect(link.expiresAt).toBeInstanceOf(Date);
+  });
+
+  describe('payment method breadth and disputes', () => {
+    test('named types are sent as payment_method_types; a configuration as its binding', async () => {
+      const provider = new StripePaymentProvider({ mode: 'test' });
+      await provider.createPayment({
+        intentId: 'pi_named',
+        amount: { amount: '1500', currency: 'JPY' },
+        idempotencyKey: 'pay:pi_named',
+        metadata: {},
+        paymentMethodTypes: ['card', 'ideal'],
+      });
+      const [named] = argsOf('createStripePaymentIntent') as [Record<string, unknown>];
+      expect(named.payment_method_types).toEqual(['card', 'ideal']);
+      expect(named.automatic_payment_methods).toBeUndefined();
+      // A zero-decimal currency crosses as the same integer.
+      expect(named.amount).toBe(1500);
+      expect(named.currency).toBe('jpy');
+
+      calls.length = 0;
+      await provider.createPayment({
+        intentId: 'pi_configured',
+        amount: { amount: '2500', currency: 'EUR' },
+        idempotencyKey: 'pay:pi_configured',
+        metadata: {},
+        paymentMethodConfigurationObjectId: 'pmc_stripe_merchant',
+      });
+      const [configured] = argsOf('createStripePaymentIntent') as [Record<string, unknown>];
+      expect(configured.automatic_payment_methods).toEqual({ enabled: true });
+      expect(configured.payment_method_configuration).toBe('pmc_stripe_merchant');
+      expect(configured.payment_method_types).toBeUndefined();
+    });
+
+    test('a configuration names Orbit’s methods and switches every other one off', async () => {
+      const provider = new StripePaymentProvider({ mode: 'test' });
+      const created = await provider.savePaymentMethodConfiguration({
+        configurationId: 'pmc_orbit_1',
+        methods: { card: 'on', apple_pay: 'on', sepa_debit: 'off' },
+        idempotencyKey: 'pmc:pmc_orbit_1:stripe:v1',
+      });
+      expect(created.providerObjectId).toBe('pmc_stripe_1');
+      const [params, key] = argsOf('createStripePaymentMethodConfiguration') as [
+        Record<string, { display_preference: { preference: string } }>,
+        string,
+      ];
+      expect(params.card?.display_preference.preference).toBe('on');
+      expect(params.sepa_debit?.display_preference.preference).toBe('off');
+      expect(params.link?.display_preference.preference).toBe('off');
+      expect(params.klarna?.display_preference.preference).toBe('off');
+      expect(key).toBe('pmc:pmc_orbit_1:stripe:v1');
+
+      await provider.savePaymentMethodConfiguration({
+        providerObjectId: 'pmc_stripe_1',
+        configurationId: 'pmc_orbit_1',
+        methods: { card: 'off' },
+        idempotencyKey: 'pmc:pmc_orbit_1:stripe:v2',
+      });
+      const [id] = argsOf('updateStripePaymentMethodConfiguration') as [string];
+      expect(id).toBe('pmc_stripe_1');
+    });
+
+    test('evidence crosses in Stripe’s names, text and files, and comes back without file ids', async () => {
+      const provider = new StripePaymentProvider({ mode: 'test' });
+      const snapshot = await provider.updateDisputeEvidence({
+        providerObjectId: 'du_1',
+        evidence: { customer_name: 'Jane Buyer', receipt: 'file_stripe_9', billing_address: '' },
+        submit: true,
+        idempotencyKey: 'dpev:dp_1',
+      });
+      const [id, params, key] = argsOf('updateStripeDispute') as [
+        string,
+        { evidence: Record<string, string>; submit: boolean },
+        string,
+      ];
+      expect(id).toBe('du_1');
+      expect(params.submit).toBe(true);
+      expect(params.evidence).toEqual({
+        customer_name: 'Jane Buyer',
+        receipt: 'file_stripe_9',
+        billing_address: '',
+      });
+      expect(key).toBe('dpev:dp_1');
+      expect(snapshot.status).toBe('needs_response');
+      expect(snapshot.hasEvidence).toBe(true);
+      expect(snapshot.isChargeRefundable).toBe(true);
+      expect(snapshot.evidence.customer_name).toBe('Jane Buyer');
+      expect(snapshot.evidence.billing_address).toBeNull();
+      expect('receipt' in snapshot.evidence).toBe(false);
+
+      const closed = await provider.closeDispute({ providerObjectId: 'du_1', idempotencyKey: 'k' });
+      expect(closed.status).toBe('lost');
+      const uploaded = await provider.uploadDisputeEvidenceFile({
+        bytes: new Uint8Array([1, 2, 3]),
+        filename: 'r.pdf',
+        mime: 'application/pdf',
+        idempotencyKey: 'dpfile:dp_1:receipt:file_1',
+      });
+      expect(uploaded.providerFileId).toBe('file_stripe_1');
+      const [file, fileKey] = argsOf('createStripeDisputeFile') as [
+        Record<string, unknown>,
+        string,
+      ];
+      expect(file.name).toBe('r.pdf');
+      expect(fileKey).toBe('dpfile:dp_1:receipt:file_1');
+    });
+
+    test('a domain’s wallet standing is in Peable’s words, never the provider’s prose', async () => {
+      const provider = new StripePaymentProvider({ mode: 'test' });
+      const domain = await provider.createPaymentMethodDomain({
+        domainName: 'shop.example.com',
+        enabled: true,
+        idempotencyKey: 'pmd:merch_1:shop.example.com',
+      });
+      expect(domain.applePay.status).toBe('inactive');
+      expect(domain.applePay.error).not.toContain('provider prose');
+      expect(domain.applePay.error).toContain('Apple Pay');
+      expect(domain.googlePay).toEqual({ status: 'active', error: null });
+    });
   });
 });

@@ -1,40 +1,95 @@
 /**
- * Answering a dispute — the write this surface did not have.
+ * Answering a dispute — Stripe's `POST /v1/disputes/:id` and `…/close`, over
+ * HTTP, against a real database, a fake provider that keeps a DRAFT the way
+ * Stripe does, and a fake Oxy Files holding the merchant's evidence uploads.
  *
- * `routes/disputes.ts` was read-only and said why: the provider port had no
- * `submitDisputeEvidence`, and a route that accepted a merchant's defence and
- * did nothing with it would be worse than none, because they would believe they
- * had responded. That was right while the port was missing, and it left a
- * merchant able to read `evidenceDueAt`, watch it pass, and lose a dispute this
- * gateway had told them about and given them no way to answer.
- *
- * Three properties matter more than the happy path and each has a case below:
- * the submission is ONE SHOT, the evidence is never stored, and a deadline that
- * has passed is refused here rather than at the acquirer.
+ * The properties that matter more than the happy path, each with a case:
+ *  - a draft lives at the PROVIDER and none of its words are stored here —
+ *    not on the dispute row, not in an event;
+ *  - files are attached by id and their bytes reach the provider only at
+ *    submission, each under a key derived from the dispute, field and File;
+ *  - a response is submitted ONCE: a second submission, or a draft after one,
+ *    is refused without calling the provider;
+ *  - a deadline that has passed, a closed dispute, an empty response, an
+ *    unknown field and another merchant's file or dispute are refused here.
  */
 import { afterAll, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { ProviderMode } from '../../services/providers/provider';
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
 import type { RequestHandler } from 'express';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
+import type { ProviderMode } from '../../services/providers/provider';
 
 interface ProviderCall {
   readonly fn: string;
   readonly request: Record<string, unknown>;
 }
 const providerCalls: ProviderCall[] = [];
-let submitThrows: Error | null = null;
+/** Stripe's draft store: the staged evidence of each provider dispute. */
+const drafts = new Map<string, Record<string, string>>();
+let failNext: Error | null = null;
+
+const TEXT = [
+  'access_activity_log',
+  'billing_address',
+  'cancellation_policy_disclosure',
+  'cancellation_rebuttal',
+  'customer_email_address',
+  'customer_name',
+  'customer_purchase_ip',
+  'duplicate_charge_explanation',
+  'product_description',
+  'refund_policy_disclosure',
+  'refund_refusal_explanation',
+  'service_date',
+  'shipping_address',
+  'shipping_carrier',
+  'shipping_date',
+  'shipping_tracking_number',
+  'uncategorized_text',
+];
+
+function snapshot(id: string, status: string) {
+  const draft = drafts.get(id) ?? {};
+  return {
+    status,
+    hasEvidence: Object.values(draft).some((value) => value.length > 0),
+    submissionCount: status === 'under_review' ? 1 : 0,
+    isChargeRefundable: true,
+    evidence: Object.fromEntries(TEXT.map((field) => [field, draft[field] || null])),
+  };
+}
 
 const fakeProvider = {
   id: 'stripe' as const,
-  submitDisputeEvidence: async (request: Record<string, unknown>) => {
-    providerCalls.push({ fn: 'submitDisputeEvidence', request });
-    if (submitThrows) throw submitThrows;
-    return { providerObjectId: String(request.providerObjectId), status: 'under_review' };
+  updateDisputeEvidence: async (request: Record<string, unknown>) => {
+    providerCalls.push({ fn: 'updateDisputeEvidence', request });
+    if (failNext) {
+      const error = failNext;
+      failNext = null;
+      throw error;
+    }
+    const id = String(request.providerObjectId);
+    drafts.set(id, { ...(drafts.get(id) ?? {}), ...(request.evidence as Record<string, string>) });
+    return snapshot(id, request.submit ? 'under_review' : 'needs_response');
+  },
+  getDispute: async (providerObjectId: string) => {
+    providerCalls.push({ fn: 'getDispute', request: { providerObjectId } });
+    return snapshot(providerObjectId, 'needs_response');
+  },
+  closeDispute: async (request: Record<string, unknown>) => {
+    providerCalls.push({ fn: 'closeDispute', request });
+    return snapshot(String(request.providerObjectId), 'lost');
+  },
+  uploadDisputeEvidenceFile: async (request: Record<string, unknown>) => {
+    providerCalls.push({ fn: 'uploadDisputeEvidenceFile', request });
+    return { providerFileId: `file_stripe_${String(request.idempotencyKey).split(':').at(-1)}` };
   },
   createPayment: async () => {
+    throw new Error('not used');
+  },
+  confirm: async () => {
     throw new Error('not used');
   },
   capture: async () => {
@@ -74,50 +129,74 @@ mock.module('../../services/providers/registry', () => ({
 }));
 
 const { createDisputesRouter } = await import('../disputes');
+const { createFilesRouter } = await import('../files');
+const { createFakeOxyFiles } = await import('../../__tests__/helpers/fakeOxyFiles');
 const { upsertDispute, findDisputeByProviderObject } = await import(
   '../../db/disputes/disputeRepository'
 );
-const { gatewayDb, seedIntent, seedMerchant, useGatewayDatabase } = await import(
+const { gatewayDb, seedIntent, seedMerchant, storedEvents, useGatewayDatabase } = await import(
   '../../__tests__/helpers/gatewayTestDatabase'
 );
 const { POSTGRES_TESTS_ENABLED } = await import('../../db/testDatabase');
 
 type Merchant = Awaited<ReturnType<typeof seedMerchant>>;
 let merchant: Merchant;
+let other: Merchant;
+/** Which merchant the next request authenticates as. */
+let actingAs: () => Merchant;
 let server: Server;
 let baseUrl = '';
 let counter = 0;
+const files = createFakeOxyFiles();
 
-interface Body {
-  readonly id?: string;
-  readonly object?: string;
-  readonly status?: string;
-  readonly evidence_submitted_at?: number | null;
-  readonly evidence_due_at?: number | null;
-  readonly error?: { readonly type: string; readonly message: string };
-}
+type Json = Record<string, unknown> & {
+  error?: { type: string; code?: string; param?: string; message: string };
+};
 
-async function post(path: string, body: unknown): Promise<{ status: number; json: Body }> {
+async function call(
+  method: 'GET' | 'POST',
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = {},
+): Promise<{ status: number; json: Json; headers: Headers }> {
   const response = await fetch(`${baseUrl}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    method,
+    headers: body === undefined ? headers : { 'Content-Type': 'application/json', ...headers },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
   const text = await response.text();
-  return { status: response.status, json: text ? (JSON.parse(text) as Body) : {} };
+  return {
+    status: response.status,
+    json: text ? (JSON.parse(text) as Json) : {},
+    headers: response.headers,
+  };
+}
+
+const PDF = new TextEncoder().encode('%PDF-1.7\nreceipt for order 1001\n%%EOF');
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
+
+async function upload(purpose: string, bytes: Uint8Array, name = 'receipt.pdf'): Promise<string> {
+  const form = new FormData();
+  form.set('purpose', purpose);
+  form.set('file', new Blob([bytes]), name);
+  const response = await fetch(`${baseUrl}/v1/files`, { method: 'POST', body: form });
+  const json = (await response.json()) as { id: string };
+  expect(response.status).toBe(200);
+  return json.id;
 }
 
 /** A dispute in the one state that accepts a response. */
 async function openDispute(
-  options: { dueAt?: Date | null; status?: 'needs_response' | 'won' } = {},
+  options: { dueAt?: Date | null; status?: 'needs_response' | 'won'; owner?: Merchant } = {},
 ) {
   counter += 1;
-  const intent = await seedIntent(merchant, { rail: 'card', currency: 'EUR', amount: '5000' });
+  const owner = options.owner ?? merchant;
+  const intent = await seedIntent(owner, { rail: 'card', currency: 'EUR', amount: '5000' });
   const { dispute } = await upsertDispute(gatewayDb(), {
-    merchantId: merchant.id,
+    merchantId: owner.id,
     paymentIntentId: intent.id,
     provider: 'stripe',
-    providerObjectId: `dp_stripe_${String(counter)}`,
+    providerObjectId: `du_stripe_${String(counter)}`,
     amount: '5000',
     currency: 'EUR',
     status: options.status ?? 'needs_response',
@@ -134,10 +213,13 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
   beforeAll(async () => {
     useFake = true;
     merchant = await seedMerchant();
+    other = await seedMerchant();
+    actingAs = () => merchant;
 
     const stubAuth: RequestHandler = (req, _res, next) => {
+      const as = actingAs();
       (req as OxyAuthRequest).serviceApp = {
-        appId: merchant.oxyAppId,
+        appId: as.oxyAppId,
         appName: 't',
         scopes: ['payments:read', 'payments:write'],
         credentialId: 'c',
@@ -150,14 +232,16 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
 
     const app = express();
     app.use(express.json());
-    app.use(createDisputesRouter({ requireMerchant: stubAuth }));
+    app.use(createDisputesRouter({ requireMerchant: stubAuth, files }));
+    app.use(createFilesRouter({ requireMerchant: stubAuth, files }));
     server = app.listen(0);
     baseUrl = `http://127.0.0.1:${String((server.address() as AddressInfo).port)}`;
   });
 
   beforeEach(() => {
     providerCalls.length = 0;
-    submitThrows = null;
+    failNext = null;
+    actingAs = () => merchant;
   });
 
   afterAll(async () => {
@@ -169,189 +253,244 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('answering a dispute', () => {
     });
   });
 
-  test("forwards the merchant's response and records that it was given", async () => {
+  test('a draft is staged at the provider, read back live, and none of it is stored', async () => {
     const dispute = await openDispute();
-
-    const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      product_description: 'A blue enamel mug, 350ml',
-      shipping_tracking_number: 'TRACK-1',
-      uncategorized_text: 'The buyer collected this in person on the 3rd.',
+    const { status, json } = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { customer_name: 'Jane Buyer', product_description: 'A blue enamel mug' },
     });
 
-    expect(status).toBe(201);
+    expect(status).toBe(200);
     expect(json.object).toBe('dispute');
-    expect(json.evidence_submitted_at).not.toBeNull();
+    expect((json.evidence as Record<string, unknown>).customer_name).toBe('Jane Buyer');
+    expect((json.evidence as Record<string, unknown>).receipt).toBeNull();
+    const details = json.evidence_details as Record<string, unknown>;
+    expect(details.has_evidence).toBe(true);
+    expect(details.submission_count).toBe(0);
+    // A draft is NOT a submission, and carries no idempotency key.
+    const update = providerCalls.find((entry) => entry.fn === 'updateDisputeEvidence');
+    expect(update?.request.submit).toBe(false);
+    expect(update?.request.idempotencyKey).toBeUndefined();
 
-    const call = providerCalls.find((entry) => entry.fn === 'submitDisputeEvidence');
-    expect(call?.request.providerObjectId).toBe(dispute.providerObjectId);
-    // Derived from the dispute's own id, so a retry after a lost response is
-    // the same submission rather than a second one.
-    expect(call?.request.idempotencyKey).toBe(`dpev:${dispute.publicId}`);
-  });
-
-  /**
-   * THE property. Submitting is one-way at the network, so a second call must
-   * not send a second response — it answers 200 with the dispute as it stands.
-   */
-  test('submits once, however many times it is asked', async () => {
-    const dispute = await openDispute();
-    const body = { uncategorized_text: 'The goods were delivered and signed for.' };
-
-    const first = await post(`/v1/disputes/${dispute.publicId}/evidence`, body);
-    providerCalls.length = 0;
-    const second = await post(`/v1/disputes/${dispute.publicId}/evidence`, body);
-
-    expect(first.status).toBe(201);
-    expect(second.status).toBe(200);
-    expect(second.json.evidence_submitted_at).toBe(first.json.evidence_submitted_at);
-    // Nothing reached the provider the second time.
-    expect(providerCalls).toHaveLength(0);
-  });
-
-  /**
-   * The evidence is NEVER stored.
-   *
-   * It carries a customer's name, their email, a billing address and
-   * correspondence — the richest personal-data payload this system handles, and
-   * `redactProviderPayload` exists because this gateway does not keep that
-   * class of data. What is recorded is THAT a response was given and when.
-   */
-  test('keeps none of the evidence, only the fact that it was submitted', async () => {
-    const dispute = await openDispute();
-    await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      customer_name: 'Jane Buyer',
-      customer_email_address: 'jane@example.com',
-      billing_address: '3 Flat Street, Springfield',
-      uncategorized_text: 'She collected it herself.',
-    });
-
-    const stored = await findDisputeByProviderObject(
-      gatewayDb(),
-      'stripe',
-      dispute.providerObjectId,
+    // Read back LIVE from the provider, where the draft lives.
+    const read = await call('GET', `/v1/disputes/${dispute.publicId}`);
+    expect((read.json.evidence as Record<string, unknown>).product_description).toBe(
+      'A blue enamel mug',
     );
-    expect(stored?.evidenceSubmittedAt).toBeInstanceOf(Date);
 
-    // The whole row, serialized — none of the merchant's words are in it.
-    const asText = JSON.stringify(stored);
-    expect(asText).not.toContain('Jane Buyer');
-    expect(asText).not.toContain('jane@example.com');
-    expect(asText).not.toContain('Springfield');
-    expect(asText).not.toContain('collected it herself');
+    // The row and the stored events hold the FACT, never the words.
+    const row = await findDisputeByProviderObject(gatewayDb(), 'stripe', dispute.providerObjectId);
+    expect(row?.hasEvidence).toBe(true);
+    expect(JSON.stringify(row)).not.toContain('Jane Buyer');
+    const events = await storedEvents({ merchantId: merchant.id });
+    expect(events.length).toBeGreaterThan(0);
+    expect(JSON.stringify(events)).not.toContain('Jane Buyer');
+    expect(JSON.stringify(events)).not.toContain('enamel');
   });
 
-  /**
-   * A deadline that has passed is refused HERE.
-   *
-   * The merchant needs to know it was the clock and not their request — and a
-   * late submission is the one failure on this surface no retry fixes, so
-   * finding out from the acquirer's error message is finding out too late.
-   */
-  test('refuses a response after the deadline, without calling the provider', async () => {
-    const dispute = await openDispute({ dueAt: new Date(Date.now() - 1000) });
-
-    const { status, json } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorized_text: 'Late.',
-    });
-
-    expect(status).toBe(409);
-    expect(json.error?.message).toContain('deadline');
-    expect(providerCalls).toHaveLength(0);
-  });
-
-  /** A decided dispute accepts nothing. */
-  test('refuses a response to a dispute that is already closed', async () => {
-    const dispute = await openDispute({ status: 'won', dueAt: null });
-
-    const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorized_text: 'Anything.',
-    });
-
-    expect(status).toBe(409);
-    expect(providerCalls).toHaveLength(0);
-  });
-
-  /**
-   * An EMPTY response would be submitted, final, and would say nothing — the
-   * worst possible use of a one-shot action.
-   */
-  test('refuses a response with nothing in it', async () => {
+  test('a list item carries no evidence; the retrieve does', async () => {
     const dispute = await openDispute();
+    const list = await call('GET', '/v1/disputes');
+    const item = (list.json.data as Record<string, unknown>[]).find(
+      (entry) => entry.id === dispute.publicId,
+    );
+    expect(item).toBeDefined();
+    expect(item?.evidence).toBeUndefined();
+    expect(item?.reason).toBe('fraudulent');
+    expect(item?.is_charge_refundable).toBe(false);
+  });
 
-    const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {});
+  test('files are attached by id; their bytes reach the provider only at submission, once', async () => {
+    const dispute = await openDispute();
+    const receipt = await upload('dispute_evidence', PDF);
 
-    expect(status).toBe(409);
+    const staged = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { receipt, uncategorized_text: 'Delivered and signed for.' },
+    });
+    expect(staged.status).toBe(200);
+    expect((staged.json.evidence as Record<string, unknown>).receipt).toBe(receipt);
+    // Nothing was uploaded to the provider by a draft.
+    expect(providerCalls.filter((entry) => entry.fn === 'uploadDisputeEvidenceFile')).toHaveLength(
+      0,
+    );
+
+    providerCalls.length = 0;
+    const submitted = await call('POST', `/v1/disputes/${dispute.publicId}`, { submit: true });
+    expect(submitted.status).toBe(200);
+    const details = submitted.json.evidence_details as Record<string, unknown>;
+    expect(details.submission_count).toBe(1);
+    expect(details.submitted_at).not.toBeNull();
+    expect(submitted.json.status).toBe('under_review');
+
+    const uploadCall = providerCalls.find((entry) => entry.fn === 'uploadDisputeEvidenceFile');
+    expect(uploadCall?.request.idempotencyKey).toBe(
+      `dpfile:${dispute.publicId}:receipt:${receipt}`,
+    );
+    expect(Buffer.from(uploadCall?.request.bytes as Uint8Array).equals(Buffer.from(PDF))).toBe(
+      true,
+    );
+    expect(uploadCall?.request.mime).toBe('application/pdf');
+    const submitCall = providerCalls.find(
+      (entry) => entry.fn === 'updateDisputeEvidence' && entry.request.submit === true,
+    );
+    expect(submitCall?.request.idempotencyKey).toBe(`dpev:${dispute.publicId}`);
+    expect((submitCall?.request.evidence as Record<string, string> | undefined)?.receipt).toBe(
+      `file_stripe_${receipt}`,
+    );
+  });
+
+  test('a second submission is refused, and so is a draft after one', async () => {
+    const dispute = await openDispute();
+    const first = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { uncategorized_text: 'The goods were delivered.' },
+      submit: true,
+    });
+    expect(first.status).toBe(200);
+
+    providerCalls.length = 0;
+    const second = await call('POST', `/v1/disputes/${dispute.publicId}`, { submit: true });
+    expect(second.status).toBe(409);
+    expect(second.json.error?.code).toBe('dispute_already_submitted');
+    const late = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { uncategorized_text: 'One more thing.' },
+    });
+    expect(late.status).toBe(409);
+    // Neither reached the provider.
     expect(providerCalls).toHaveLength(0);
   });
 
-  /**
-   * An unknown field is REFUSED rather than dropped.
-   *
-   * A merchant who sent `trackingNumber` instead of `shippingTrackingNumber`
-   * would otherwise submit — finally — a response missing the field they were
-   * relying on, and find out when the dispute is decided.
-   */
+  test('a retried submission under the same Idempotency-Key replays the first answer', async () => {
+    const dispute = await openDispute();
+    const body = { evidence: { uncategorized_text: 'Signed for.' }, submit: true };
+    const headers = { 'Idempotency-Key': `submit-${dispute.publicId}` };
+    const first = await call('POST', `/v1/disputes/${dispute.publicId}`, body, headers);
+    providerCalls.length = 0;
+    const replay = await call('POST', `/v1/disputes/${dispute.publicId}`, body, headers);
+    expect(first.status).toBe(200);
+    expect(replay.status).toBe(200);
+    expect(replay.headers.get('Idempotent-Replayed')).toBe('true');
+    expect(providerCalls).toHaveLength(0);
+  });
+
+  test('a submission with nothing in it is refused', async () => {
+    const dispute = await openDispute();
+    const { status, json } = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      submit: true,
+    });
+    expect(status).toBe(409);
+    expect(json.error?.message).toContain('at least one field');
+    expect(providerCalls.filter((entry) => entry.fn === 'updateDisputeEvidence')).toHaveLength(0);
+  });
+
+  test('refuses evidence after the deadline, and on a closed dispute', async () => {
+    const late = await openDispute({ dueAt: new Date(Date.now() - 1000) });
+    const lateAnswer = await call('POST', `/v1/disputes/${late.publicId}`, {
+      evidence: { uncategorized_text: 'Late.' },
+    });
+    expect(lateAnswer.status).toBe(409);
+    expect(lateAnswer.json.error?.message).toContain('deadline');
+
+    const closed = await openDispute({ status: 'won', dueAt: null });
+    const closedAnswer = await call('POST', `/v1/disputes/${closed.publicId}`, {
+      evidence: { uncategorized_text: 'Anything.' },
+    });
+    expect(closedAnswer.status).toBe(409);
+    expect(providerCalls).toHaveLength(0);
+  });
+
   test('refuses a field name the network would not recognise', async () => {
     const dispute = await openDispute();
-
-    const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      trackingNumber: 'TRACK-2',
+    const { status, json } = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { trackingNumber: 'TRACK-2' },
     });
-
     expect(status).toBe(400);
+    expect(json.error?.type).toBe('invalid_request_error');
     expect(providerCalls).toHaveLength(0);
   });
 
-  /** Another merchant's dispute is a 404, exactly like one that does not exist. */
+  test("refuses a file that is not the merchant's own dispute evidence", async () => {
+    const dispute = await openDispute();
+    const logo = await upload('business_logo', PNG, 'logo.png');
+    const asLogo = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { receipt: logo },
+    });
+    expect(asLogo.status).toBe(400);
+    expect(asLogo.json.error?.param).toBe('evidence[receipt]');
+
+    actingAs = () => other;
+    const theirs = await upload('dispute_evidence', PDF);
+    actingAs = () => merchant;
+    const crossed = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { receipt: theirs },
+    });
+    expect(crossed.status).toBe(400);
+    expect(providerCalls.filter((entry) => entry.fn === 'updateDisputeEvidence')).toHaveLength(0);
+  });
+
   test('does not answer across merchants', async () => {
-    const other = await seedMerchant();
-    const intent = await seedIntent(other, { rail: 'card', currency: 'EUR', amount: '5000' });
-    counter += 1;
-    const { dispute } = await upsertDispute(gatewayDb(), {
-      merchantId: other.id,
-      paymentIntentId: intent.id,
-      provider: 'stripe',
-      providerObjectId: `dp_stripe_other_${String(counter)}`,
-      amount: '5000',
-      currency: 'EUR',
-      status: 'needs_response',
-      evidenceDueAt: new Date(Date.now() + 86_400_000),
+    const dispute = await openDispute({ owner: other });
+    const { status } = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { uncategorized_text: 'Not mine to answer.' },
     });
-
-    const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorized_text: 'Not mine to answer.',
-    });
-
     expect(status).toBe(404);
+    expect((await call('GET', `/v1/disputes/${dispute.publicId}`)).status).toBe(404);
     expect(providerCalls).toHaveLength(0);
   });
 
-  /**
-   * A provider failure leaves the dispute UNANSWERED, so the merchant can try
-   * again while the deadline is still running.
-   */
   test('does not record a submission the provider refused', async () => {
     const dispute = await openDispute();
     const { ProviderError } = await import('../../services/providers/provider');
-    submitThrows = new ProviderError({
+    failNext = new ProviderError({
       provider: 'stripe',
       stage: 'dispute',
       message: 'the acquirer could not be reached',
       retryable: true,
     });
-
-    const { status } = await post(`/v1/disputes/${dispute.publicId}/evidence`, {
-      uncategorized_text: 'Delivered and signed for.',
+    const { status } = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { uncategorized_text: 'Delivered and signed for.' },
+      submit: true,
     });
-
     expect(status).toBe(502);
     const stored = await findDisputeByProviderObject(
       gatewayDb(),
       'stripe',
       dispute.providerObjectId,
     );
-    // Still unanswered — the row records a FACT at the network, not an attempt,
-    // so a failed call must not claim the merchant responded.
     expect(stored?.evidenceSubmittedAt).toBeNull();
+  });
+
+  test('close accepts the dispute: lost, told once, and closed for good', async () => {
+    const dispute = await openDispute();
+    const closed = await call('POST', `/v1/disputes/${dispute.publicId}/close`, {});
+    expect(closed.status).toBe(200);
+    expect(closed.json.status).toBe('lost');
+    expect((closed.json.evidence_details as Record<string, unknown>).due_by).toBeNull();
+    expect(providerCalls.find((entry) => entry.fn === 'closeDispute')?.request.idempotencyKey).toBe(
+      `dpclose:${dispute.publicId}`,
+    );
+    const events = (
+      await storedEvents({ merchantId: merchant.id, type: 'charge.dispute.closed' })
+    ).filter(({ event }) => (event.data.object as { id?: string }).id === dispute.publicId);
+    expect(events).toHaveLength(1);
+
+    providerCalls.length = 0;
+    const again = await call('POST', `/v1/disputes/${dispute.publicId}/close`, {});
+    expect(again.status).toBe(409);
+    const answer = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      evidence: { uncategorized_text: 'Changed my mind.' },
+    });
+    expect(answer.status).toBe(409);
+    expect(providerCalls).toHaveLength(0);
+  });
+
+  test('metadata updates in any state and is a patch', async () => {
+    const dispute = await openDispute({ status: 'won', dueAt: null });
+    const first = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      metadata: { case: 'C-1', team: 'risk' },
+    });
+    expect(first.status).toBe(200);
+    const second = await call('POST', `/v1/disputes/${dispute.publicId}`, {
+      metadata: { team: '' },
+    });
+    expect(second.json.metadata).toEqual({ case: 'C-1' });
   });
 });

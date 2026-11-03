@@ -1,6 +1,17 @@
 import { sql } from 'drizzle-orm';
-import { boolean, check, integer, pgTable, text, unique, uniqueIndex } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  check,
+  foreignKey,
+  integer,
+  pgTable,
+  text,
+  unique,
+  uniqueIndex,
+} from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
+import type { AnyPgColumn } from 'drizzle-orm/pg-core';
+import { files } from './files';
 import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS } from './valueSets';
 
 /**
@@ -12,6 +23,16 @@ import { MERCHANT_AVATAR_WITHHELD_REASONS, NETWORK_TYPES, SERVICE_ENVIRONMENTS }
  * carries a private key, so a merchant handing over an `xprv` is rejected
  * rather than silently granting the gateway the ability to spend their funds.
  */
+/**
+ * The File columns the logo reference points at, behind an explicit return
+ * type: `files` references `merchants` too, and two tables whose types infer
+ * from each other's are a cycle `tsc` cannot resolve (the same device as
+ * `paymentMethodColumns` in `customers.ts`).
+ */
+function fileColumns(): { id: AnyPgColumn; merchantId: AnyPgColumn } {
+  return { id: files.id, merchantId: files.merchantId };
+}
+
 export const merchants = pgTable(
   'merchants',
   {
@@ -49,8 +70,6 @@ export const merchants = pgTable(
      * DIFFERENT address than the one reserved.
      */
     nextDerivationIndex: integer().notNull().default(0),
-    webhookUrl: text(),
-    webhookSecret: text(),
     requiredConfirmations: integer().notNull().default(1),
     /**
      * Whether this merchant's payments are REAL money, derived from the
@@ -78,7 +97,7 @@ export const merchants = pgTable(
      * Bare Oxy file id for the merchant's logo — the canonical media chokepoint.
      *
      * Accepted only for a file the caller owns or acts for
-     * (`services/oxyFiles/merchantAvatar.ts`), and every write of it queues the
+     * (`services/oxyFiles/fileOwnership.ts`), and every write of it queues the
      * matching Oxy file reference in the same transaction
      * (`db/merchants/merchantRepository.ts`), so Oxy knows Peable uses it and
      * tells Peable when it goes away (ADR 0043).
@@ -98,7 +117,28 @@ export const merchants = pgTable(
      * followed it, or one about the file before it was set again) is ignored.
      */
     avatarFileEventAt: timestamptz(),
+    /**
+     * The wordmark payer surfaces show in their header — a File of purpose
+     * `business_logo` (`files`), beside the avatar and never instead of it: the
+     * avatar is the square identity image (Stripe's branding `icon`), this is
+     * the wide logo (Stripe's branding `logo`). The File holds its own Oxy
+     * reference, so this column needs none; whether it is SHOWN is the File's
+     * status, read when the display is built.
+     */
+    businessLogoFileId: text(),
     description: text(),
+    /**
+     * Whether this merchant is one of Oxy's OWN products (ADR 0015 §2): its card
+     * payments are platform charges with Oxy as merchant of record and no
+     * application fee, its ledger is fed from the platform account, and the
+     * third-party live gate does not apply to it.
+     *
+     * A mirror of the VERIFIED authority of the credential that last acted for
+     * the merchant (`authority: 'first_party'`, Oxy ADR 0049 — never branding or
+     * tier), written by `resolveMerchant` when it differs. A dashboard request
+     * carries no service credential and reads it from here.
+     */
+    firstParty: boolean().notNull().default(false),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -148,6 +188,12 @@ export const merchants = pgTable(
       table.oxyAppId,
       table.environment,
     ),
+    /** The logo is one of THIS merchant's Files. Its purpose is the one writer's rule. */
+    foreignKey({
+      name: 'merchants_business_logo_file_fkey',
+      columns: [table.businessLogoFileId, table.id],
+      foreignColumns: [fileColumns().id, fileColumns().merchantId],
+    }).onDelete('restrict'),
     check(
       'merchants_environment_check',
       sql.raw(`environment in (${inList(SERVICE_ENVIRONMENTS)})`),
@@ -196,10 +242,5 @@ export const merchants = pgTable(
     // The create and update schemas both validate `.positive()`; this is that
     // range, in the one place a write that skipped them still has to pass.
     check('merchants_required_confirmations_check', sql`${table.requiredConfirmations} > 0`),
-    // There is deliberately NO `(webhook_url is null) = (webhook_secret is
-    // null)` coherence CHECK. Both `POST /v1/merchants` and its PATCH accept
-    // either field alone, so that constraint would refuse a currently-legal
-    // write; the incoherent state is reachable and already handled, by
-    // `routes/webhookDeliveries.ts` refusing to send when either is missing.
   ],
 );

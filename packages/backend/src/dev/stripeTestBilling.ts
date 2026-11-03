@@ -7,21 +7,30 @@ export const LOCAL_TEST_PRICES = {
   year: { id: 'price_1UXYLcAofUef123Lj2BeXxxU', amount: 5750, plan: 'local-mention-plus-annual' },
 } as const;
 
-export function localTestBillingConfiguration(
-  merchant: {
-    id: string;
-    oxyAppId: string;
-    environment: string;
-    livemode: boolean;
-    webhookUrl: string | null;
-  },
-  accountId: string,
-) {
+/** The local test merchant, with how many webhook endpoints it has. */
+export interface LocalTestBillingOwner {
+  id: string;
+  oxyAppId: string;
+  environment: string;
+  livemode: boolean;
+  webhookEndpoints: number;
+}
+
+/** Read the merchant's webhook endpoint count for {@link localTestBillingConfiguration}. */
+export async function localTestBillingOwner(
+  db: import('../db/postgres').DatabaseOrTransaction,
+  merchant: Omit<LocalTestBillingOwner, 'webhookEndpoints'>,
+): Promise<LocalTestBillingOwner> {
+  const { countEndpointsForMerchant } = await import('../db/webhooks/webhookEndpointRepository');
+  return { ...merchant, webhookEndpoints: await countEndpointsForMerchant(db, merchant.id) };
+}
+
+export function localTestBillingConfiguration(merchant: LocalTestBillingOwner, accountId: string) {
   if (
     merchant.oxyAppId !== LOCAL_TEST_APP ||
     merchant.environment !== 'development' ||
     merchant.livemode ||
-    merchant.webhookUrl
+    merchant.webhookEndpoints > 0
   ) {
     throw new Error(
       'Recurring test requires the isolated development merchant without an external webhook target',

@@ -8,6 +8,8 @@ import {
   NETWORK_TYPES,
   PAYMENT_INTENT_STATUS_VALUES,
   PROVIDER_IDS,
+  WEBHOOK_ENABLED_EVENTS,
+  INTENT_WEBHOOK_EVENT_TYPES,
   WEBHOOK_EVENT_TYPES,
 } from '../valueSets';
 
@@ -58,31 +60,59 @@ describe('closed value sets', () => {
    * anyone noticing that merchants now receive an event they never subscribed
    * to.
    */
-  it('lists the eleven webhook event types', () => {
-    // 11th: `billing.observation.updated`, a wake-up delivered only to the
-    // merchant that owns the recurring mirror, and only when the recurring
-    // relay is explicitly enabled — never to a merchant that did not opt in.
-    expect(WEBHOOK_EVENT_TYPES).toHaveLength(11);
+  it("lists Stripe's event catalogue, and nothing of the pre-0019 vocabulary", () => {
+    // 28 of ADR 0019 + the catalog's ten (ADR 0018) + the dispute funds pair
+    // + Orbit money's nine (ADR 0015).
+    expect(WEBHOOK_EVENT_TYPES).toHaveLength(49);
+    for (const retired of [
+      'payment_intent.settled',
+      'payment_intent.confirming',
+      'payment_intent.failed',
+      'payment_intent.rejected',
+      'payment_intent.expired',
+      'payment_intent.refunded',
+      'payment_intent.partially_refunded',
+      'payment_intent.disputed',
+      'payment_intent.dispute_closed',
+    ]) {
+      expect(WEBHOOK_EVENT_TYPES as readonly string[]).not.toContain(retired);
+    }
+  });
+
+  /** The test event names its endpoint; it is never subscribed to. */
+  it('lets an endpoint subscribe to every type but the targeted ones, and to *', () => {
+    expect(WEBHOOK_ENABLED_EVENTS[0]).toBe('*');
+    expect(WEBHOOK_ENABLED_EVENTS).not.toContain('webhook_endpoint.test');
+    expect(WEBHOOK_ENABLED_EVENTS).toHaveLength(WEBHOOK_EVENT_TYPES.length);
   });
 
   /**
-   * ...and exactly one of them is not about a payment.
-   *
-   * This used to assert that EVERY type began `payment_intent.`, which was true
-   * and became a constraint nobody had chosen: `connected_account.updated` is
-   * about a seller, and its delivery names no payment intent at all. The prefix
-   * is load-bearing rather than cosmetic —
-   * `webhook_deliveries_intent_event_has_intent_check` keys on it to decide
-   * whether a delivery must carry an intent — so what is asserted now is the
-   * split, which is the thing the CHECK depends on.
+   * The split the delivery CHECK depends on — by DECLARED scope, not by name:
+   * `charge.refunded`, `refund.*` and `charge.dispute.*` are named for another
+   * object and are still about a payment, while `customer.*`,
+   * `payment_method.*` and `setup_intent.*` name none.
    */
-  it('splits into payment events and the ones that are not about a payment', () => {
-    const aboutPayments = WEBHOOK_EVENT_TYPES.filter((type) => type.startsWith('payment_intent.'));
-    expect(aboutPayments).toHaveLength(9);
-    expect(WEBHOOK_EVENT_TYPES.filter((type) => !type.startsWith('payment_intent.'))).toEqual([
-      'billing.observation.updated',
-      'connected_account.updated',
-    ]);
+  it('splits into events about a payment and the ones that are not', () => {
+    expect([...INTENT_WEBHOOK_EVENT_TYPES].sort() as string[]).toEqual(
+      [
+        'payment_intent.created',
+        'payment_intent.requires_action',
+        'payment_intent.processing',
+        'payment_intent.amount_capturable_updated',
+        'payment_intent.succeeded',
+        'payment_intent.payment_failed',
+        'payment_intent.canceled',
+        'charge.refunded',
+        'charge.dispute.created',
+        'charge.dispute.updated',
+        'charge.dispute.closed',
+        'charge.dispute.funds_withdrawn',
+        'charge.dispute.funds_reinstated',
+        'refund.created',
+        'refund.updated',
+        'refund.failed',
+      ].sort(),
+    );
   });
 });
 
@@ -148,7 +178,17 @@ describe('the base-unit amount pattern', () => {
     // One per money-carrying COLUMN, which is not one per table:
     // payment_intents, checkout_sessions, payment_links, refunds, disputes and
     // transfer_reversals carry one `amount` each; `transfers` carries `amount`
-    // AND the cumulative `amount_reversed`.
-    expect(occurrences).toBe(8);
+    // AND the cumulative `amount_reversed`; `payment_intents.amount_received`,
+    // and `charges` its `amount` and `amount_captured` (ADR 0019); the catalog's
+    // `prices.unit_amount`, `coupons.amount_off` and
+    // `promotion_codes.minimum_amount` (ADR 0018). A tiered price's tier amounts
+    // live inside `prices.tiers` (jsonb) and are checked by its one writer.
+    // Plus two RE-ADDED: `0049` re-adds the coupon and promotion-code CHECKs
+    // (their currency set widened), and each carries the pattern again.
+    // ADR 0015 adds `fee_schedules.fixed_amount`, `application_fees.amount`,
+    // `application_fee_refunds.amount`, `payouts.amount` and the intent's
+    // `application_fee_amount` and `transfer_amount` (the ledger's signed
+    // amounts use their own pattern).
+    expect(occurrences).toBe(22);
   });
 });

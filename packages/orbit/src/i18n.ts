@@ -6,11 +6,20 @@
  *
  * The `tax.*` and `contributions.*` strings are the wallet screens' strings,
  * carried over with those screens.
+ *
+ * Spanish (`es`) so far covers the money screens (`money/strings.ts`) and the
+ * navigation only. It is NOT in `SUPPORTED_LOCALES` yet: offering it would
+ * render the rest of Orbit in English under a Spanish locale. `t` falls back
+ * to English per key, so turning it on is adding `'es'` here once the other
+ * screens are translated.
  */
+import { MONEY_EN, MONEY_ES } from './money/strings';
+
 export const SUPPORTED_LOCALES = ['en'];
 export const FALLBACK_LOCALE = 'en';
 
 const en: Record<string, string> = {
+  ...MONEY_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
   'error.generic': 'Something went wrong. Try again.',
@@ -26,6 +35,8 @@ const en: Record<string, string> = {
 
   'nav.home': 'Home',
   'nav.payments': 'Payments',
+  'nav.products': 'Products',
+  'nav.disputes': 'Disputes',
   'nav.developers': 'Developers',
   'nav.tax': 'Tax',
   'nav.contributions': 'Contributions',
@@ -65,11 +76,11 @@ const en: Record<string, string> = {
   'home.since': ' since {date}',
   'home.succeeded': 'Succeeded',
   'home.open': 'In progress',
-  'home.unsuccessful': 'Failed, rejected or expired',
+  'home.unsuccessful': 'Canceled, underpaid or expired',
   'home.refunded': 'Refunded (fully or partly)',
   'home.volume': 'Gross volume',
-  'home.volumeHelp': 'Payments that reached settlement, before refunds.',
-  'home.noVolume': 'No settled payments in this sample.',
+  'home.volumeHelp': 'Received by succeeded payments, before refunds.',
+  'home.noVolume': 'No succeeded payments in this sample.',
   'home.empty.title': 'No payments yet',
   'home.empty.body': 'Payments your integration creates in this mode appear here.',
   'home.recent': 'Recent payments',
@@ -105,26 +116,153 @@ const en: Record<string, string> = {
   'payment.field.address': 'Receive address',
   'payment.field.txid': 'Transaction',
   'payment.field.confirmations': 'Confirmations',
+  'payment.field.confirmationsValue': '{count} of {required}',
+  'payment.field.received': 'Received',
+  'payment.field.refunded': 'Refunded',
+  'payment.field.capturable': 'Capturable',
+  'payment.field.captureMethod': 'Capture',
+  'payment.field.captureManual': 'Manual — capture before the authorization lapses',
+  'payment.field.canceledReason': 'Cancellation reason',
+  'payment.field.lastError': 'Last payment error',
+  'payment.field.customer': 'Customer',
+  'payment.field.paymentMethod': 'Payment method',
+  'payment.field.charge': 'Charge',
+  'payment.field.description': 'Description',
+  'payment.field.receiptEmail': 'Receipt email',
   'payment.field.connectedAccount': 'On behalf of',
   'payment.field.mode': 'Mode',
   'payment.field.created': 'Created',
   'payment.field.updated': 'Last updated',
   'payment.field.expires': 'Expires',
 
+  'products.title': 'Products',
+  'products.description':
+    'What this merchant sells, and its prices. A product with prices is archived, never deleted.',
+  'products.filter': 'Show',
+  'products.filter.active': 'Active',
+  'products.filter.archived': 'Archived',
+  'products.filter.all': 'All products',
+  'products.empty.title': 'No products',
+  'products.empty.body': 'Products you create in this mode appear here.',
+  'products.add': 'Add product',
+  'products.added': 'Product created.',
+  'products.new': 'New product',
+  'products.withPrice': 'Add a first price',
+  'products.withoutPrice': 'No price yet',
+  'products.noPrice': 'No default price',
+  'products.archived': 'Archived',
+  'products.active': 'Active',
+
+  'product.title': 'Product',
+  'product.notFound': 'No product with this id in this mode.',
+  'product.details': 'Details',
+  'product.field.name': 'Name',
+  'product.field.description': 'Description',
+  'product.field.unitLabel': 'Unit label',
+  'product.field.unitLabelHelp': 'What a quantity counts, e.g. seat (at most 12 characters).',
+  'product.field.statementDescriptor': 'Statement descriptor',
+  'product.field.statementDescriptorHelp':
+    'Shown on card statements: at most 22 characters, with at least one letter.',
+  'product.field.id': 'ID',
+  'product.invalidName': 'A product needs a name.',
+  'product.save': 'Save changes',
+  'product.saved': 'Product saved.',
+  'product.nothingChanged': 'Nothing changed.',
+  'product.archive': 'Archive',
+  'product.unarchive': 'Unarchive',
+  'product.archivedToast': 'Product archived.',
+  'product.unarchivedToast': 'Product is active again.',
+  'product.delete': 'Delete product',
+  'product.deleteHelp': 'Only a product with no prices can be deleted; archive it otherwise.',
+  'product.deleted': 'Product deleted.',
+  'product.prices': 'Prices',
+  'product.pricesIntro':
+    'A price never changes once created. To charge a different amount, add a price and archive the old one.',
+  'product.prices.empty.title': 'No prices',
+  'product.prices.empty.body': 'Add a price to sell this product.',
+  'product.price.default': 'Default',
+  'product.price.active': 'Active',
+  'product.price.archived': 'Archived',
+  'product.price.makeDefault': 'Make default',
+  'product.price.archive': 'Archive',
+  'product.price.unarchive': 'Unarchive',
+  'product.price.updated': 'Price updated.',
+  'product.price.added': 'Price added.',
+  'product.price.add': 'Add price',
+  'product.price.tiered': 'Tiered',
+
+  'price.field.currency': 'Currency',
+  'price.field.amount': 'Amount',
+  'price.field.amountHelp': 'In whole {currency}, e.g. 19.99 (at most {decimals} decimals).',
+  'price.field.type': 'Billing',
+  'price.type.recurring': 'Recurring',
+  'price.type.one_time': 'One time',
+  'price.field.interval': 'Every',
+  'price.field.intervalCount': 'Interval count',
+  'price.field.intervalCountHelp': 'Billed every this many intervals (at most three years).',
+  'price.field.taxBehavior': 'Tax',
+  'price.interval.day': 'Day',
+  'price.interval.week': 'Week',
+  'price.interval.month': 'Month',
+  'price.interval.year': 'Year',
+  'price.tax.unspecified': 'Merchant default',
+  'price.tax.inclusive': 'Tax included',
+  'price.tax.exclusive': 'Tax added on top',
+  'price.invalidAmount': 'Enter an amount like 19.99, with no more decimals than the currency has.',
+  'price.invalidIntervalCount': 'Enter a whole number of intervals, 1 or more.',
+
   'developers.title': 'Developers',
-  'developers.webhooks': 'Webhooks',
+  'developers.webhooks': 'Webhook deliveries',
   'developers.webhooksIntro':
-    'Every event Peable sent, or is about to send, to this merchant’s webhook URL. A delivery that was refused or gave up can be sent again.',
+    'Every event Peable sent, or is about to send, to one of this merchant’s endpoints — one delivery per event per endpoint, retried for about three days. A delivery that was refused or gave up can be sent again.',
   'developers.empty.title': 'No webhook deliveries',
   'developers.empty.body':
-    'Deliveries appear once this merchant has a webhook URL and a payment changes status.',
+    'Deliveries appear once this merchant has a webhook endpoint and something it listens for happens.',
   'developers.attempts': '{count} attempt(s)',
   'developers.nextAttempt': 'Next attempt {at}',
   'developers.lastError': 'Last error: {error}',
   'developers.redeliver': 'Redeliver',
   'developers.redelivered': 'Delivery sent again.',
-  'developers.payment': 'Payment {id}',
   'developers.endpoint': 'Endpoint',
+  'developers.event': 'Event',
+  'developers.endpoints': 'Webhook endpoints',
+  'developers.endpointsIntro':
+    'Where Peable sends this merchant’s events. Each endpoint has its own events and its own signing secret; verify every delivery with it. An endpoint that fails every delivery for three days is disabled.',
+  'developers.endpoints.empty.title': 'No webhook endpoints',
+  'developers.endpoints.empty.body': 'Add an endpoint to receive events as they happen.',
+  'developers.endpoint.url': 'Endpoint URL',
+  'developers.endpoint.urlHelp':
+    'https, on port 443, at a public host. Test mode also accepts http.',
+  'developers.endpoint.events': 'Events',
+  'developers.endpoint.eventsHelp':
+    'Event types separated by spaces or commas, such as payment_intent.succeeded. * is every event.',
+  'developers.endpoint.description': 'Description',
+  'developers.endpoint.add': 'Add endpoint',
+  'developers.endpoint.added': 'Endpoint added.',
+  'developers.endpoint.invalidUrl': 'Enter the full URL, starting with https://.',
+  'developers.endpoint.invalidEvents': 'Name at least one event type, or *.',
+  'developers.endpoint.allEvents': 'All events',
+  'developers.endpoint.enabled': 'Enabled',
+  'developers.endpoint.disabled': 'Disabled',
+  'developers.endpoint.disabledByMerchant': 'Disabled by you',
+  'developers.endpoint.disabledFailing': 'Disabled: every delivery failed for three days',
+  'developers.endpoint.enable': 'Enable',
+  'developers.endpoint.disable': 'Disable',
+  'developers.endpoint.test': 'Send test event',
+  'developers.endpoint.tested': 'Test event: {status}.',
+  'developers.endpoint.roll': 'Roll secret',
+  'developers.endpoint.delete': 'Delete',
+  'developers.endpoint.deleted': 'Endpoint deleted.',
+  'developers.secret.title': 'Signing secret for {url}',
+  'developers.secret.body':
+    'Copy it now: Peable never shows it again. A rolled secret keeps signing beside this one for 24 hours, so deploy it within that window.',
+  'developers.secret.dismiss': 'I have stored it',
+  'developers.events': 'Events',
+  'developers.eventsIntro':
+    'Everything Peable recorded for this merchant in the last 30 days, whether or not an endpoint listens for it.',
+  'developers.events.empty.title': 'No events',
+  'developers.events.empty.body': 'Events appear as payments, refunds and accounts change.',
+  'developers.event.request': 'Request {id}',
 
   'settings.title': 'Settings',
   'settings.merchant': 'Merchant',
@@ -138,14 +276,8 @@ const en: Record<string, string> = {
   'settings.branding': 'Branding',
   'settings.displayName': 'Display name',
   'settings.description': 'Description',
-  'settings.webhooks': 'Webhooks',
-  'settings.webhookUrl': 'Webhook URL',
-  'settings.webhookSecret': 'Webhook signing secret',
-  'settings.webhookSecretHelp':
-    'Peable never shows a stored secret. Leave empty to keep the current one; enter a new one to replace it.',
-  'settings.clearWebhook': 'Remove webhook URL',
   'settings.confirmations': 'Required confirmations',
-  'settings.confirmationsHelp': 'FairCoin confirmations before a payment counts as settled.',
+  'settings.confirmationsHelp': 'FairCoin confirmations before a payment counts as succeeded.',
   'settings.faircoin': 'FairCoin',
   'settings.network': 'Network',
   'settings.cardOnly': 'Card only',
@@ -247,13 +379,138 @@ const en: Record<string, string> = {
   'contributions.morePayments': 'More payments',
   'contributions.refund': 'Refund {amount} · {status}',
   'contributions.error': 'Request failed. Try again.',
+
+  'disputes.title': 'Disputes',
+  'disputes.intro':
+    'Cardholders contesting a payment. Each dispute takes one response, submitted once, before its deadline.',
+  'disputes.column.amount': 'Disputed amount',
+  'disputes.column.status': 'Status',
+  'disputes.column.reason': 'Reason',
+  'disputes.column.due': 'Respond by',
+  'disputes.column.id': 'Dispute',
+  'disputes.empty.title': 'No disputes',
+  'disputes.empty.body': 'When a cardholder disputes a payment in this mode, it appears here.',
+  'disputes.pastDue': 'Past due',
+  'disputes.responded': 'Responded',
+
+  'dispute.title': 'Dispute',
+  'dispute.details': 'Details',
+  'dispute.notFound': 'Dispute not found',
+  'dispute.field.id': 'ID',
+  'dispute.field.amount': 'Disputed amount',
+  'dispute.field.reason': 'Reason',
+  'dispute.field.payment': 'Payment',
+  'dispute.field.charge': 'Charge',
+  'dispute.field.refundable': 'Payment can still be refunded',
+  'dispute.field.dueBy': 'Respond by',
+  'dispute.field.hasEvidence': 'Evidence staged',
+  'dispute.field.submitted': 'Response submitted',
+  'dispute.field.created': 'Opened',
+  'dispute.yes': 'Yes',
+  'dispute.no': 'No',
+  'dispute.evidence.oneShot':
+    'Save drafts as often as you like. Submitting sends your response to the card network once and for all: it cannot be changed or sent again.',
+  'dispute.evidence.text': 'Your response',
+  'dispute.evidence.textNote':
+    'Fill in what applies to this dispute. Drafts are kept by the processing provider, not by Peable.',
+  'dispute.evidence.files': 'Supporting files',
+  'dispute.evidence.filesNote':
+    'PDF, PNG or JPG, up to 5 MB each. Files go to the card network only when you submit.',
+  'dispute.evidence.noFile': 'No file',
+  'dispute.evidence.removeFile': 'Remove',
+  'dispute.evidence.attachTo': 'Attach a file as',
+  'dispute.evidence.upload': 'Upload {field}',
+  'dispute.evidence.attached': '{field} attached. Save a draft or submit to keep it.',
+  'dispute.saveDraft': 'Save draft',
+  'dispute.saved': 'Draft saved.',
+  'dispute.submit': 'Submit response',
+  'dispute.submitted': 'Response submitted to the card network.',
+  'dispute.emptyResponse': 'Add at least one piece of evidence before submitting.',
+  'dispute.accept': 'Accept dispute',
+  'dispute.accepted': 'Dispute accepted. It is now lost.',
+  'dispute.confirmSubmit.title': 'Submit this response?',
+  'dispute.confirmSubmit.body':
+    'Your response and its files go to the card network now. This is final: a dispute takes one response, and it cannot be edited or submitted again.',
+  'dispute.confirmSubmit.action': 'Submit once',
+  'dispute.confirmAccept.title': 'Accept this dispute?',
+  'dispute.confirmAccept.body':
+    'Accepting means you will not contest it: the dispute is lost and the disputed amount stays with the cardholder. This cannot be undone.',
+  'dispute.confirmAccept.action': 'Accept and lose dispute',
+
+  'files.failed': 'The file could not be uploaded.',
+  'files.unreadable': 'That file could not be read.',
+  'files.webOnly': 'Upload files from Orbit on the web.',
+
+  'methods.title': 'Payment methods',
+  'methods.intro':
+    'What payers are offered on card payments. Card details and bank logins are entered in the provider’s secure fields and never reach Peable.',
+  'methods.configuration': 'Configuration',
+  'methods.defaultName': '{name} (default)',
+  'methods.inactive': 'This configuration is inactive: new payments cannot use it.',
+  'methods.available': 'Available',
+  'methods.unavailable': 'Unavailable',
+  'methods.toggle': 'Offer {method}',
+  'methods.none': 'No payment method configuration yet',
+  'methods.noMerchant': 'Register the merchant first.',
+
+  'domains.title': 'Wallet domains',
+  'domains.intro':
+    'Websites where you take payments yourself. Apple Pay and Google Pay run only on registered domains. Peable’s hosted checkout needs none.',
+  'domains.none': 'No domains registered.',
+  'domains.enabled': 'Enabled',
+  'domains.disabled': 'Disabled',
+  'domains.enable': 'Enable',
+  'domains.disable': 'Disable',
+  'domains.validate': 'Check again',
+  'domains.validated': 'Domain checked.',
+  'domains.add': 'Domain',
+  'domains.addHelp': 'The hostname only, like shop.example.com.',
+  'domains.addAction': 'Add domain',
+  'domains.added': 'Domain added.',
+
+  'settings.logo': 'Logo',
+  'settings.logo.intro':
+    'The wordmark payers see at the top of your checkout, beside your avatar. PNG or JPG, up to 512 KB.',
+  'settings.logo.current': 'Current logo',
+  'settings.logo.none': 'None',
+  'settings.logo.upload': 'Upload a logo',
+  'settings.logo.remove': 'Remove logo',
+  'settings.logo.saved': 'Logo saved.',
+  'settings.logo.removed': 'Logo removed.',
 };
+
+const es: Record<string, string> = {
+  ...MONEY_ES,
+  'nav.home': 'Inicio',
+  'nav.payments': 'Pagos',
+  'nav.developers': 'Desarrolladores',
+  'nav.tax': 'Impuestos',
+  'nav.contributions': 'Contribuciones',
+  'nav.settings': 'Ajustes',
+};
+
+const CATALOGS: Readonly<Record<string, Readonly<Record<string, string>>>> = { en, es };
+
+/** The catalog `t` reads first; English fills any key it lacks. */
+let activeLocale = FALLBACK_LOCALE;
+
+/** A catalog by language (`es-ES` reads `es`), for tests and the locale switch. */
+export function catalogFor(locale: string): Readonly<Record<string, string>> | undefined {
+  return CATALOGS[locale.split('-')[0]?.toLowerCase() ?? ''];
+}
+
+/** Switch the catalog `t` reads; an unknown language selects English. Returns the one chosen. */
+export function setLocale(locale: string | null | undefined): string {
+  const language = (locale ?? '').split('-')[0]?.toLowerCase() ?? '';
+  activeLocale = Object.hasOwn(CATALOGS, language) ? language : FALLBACK_LOCALE;
+  return activeLocale;
+}
 
 export type TranslationParams = Record<string, string | number>;
 
-/** The English string for `key`, with `{name}` placeholders filled. Unknown keys render as the key. */
+/** The string for `key` in the active locale (else English), with `{name}` placeholders filled. Unknown keys render as the key. */
 export function t(key: string, params?: TranslationParams): string {
-  const template = en[key] ?? key;
+  const template = CATALOGS[activeLocale]?.[key] ?? en[key] ?? key;
   if (!params) return template;
   return template.replace(/\{(\w+)\}/g, (match, name: string) =>
     Object.hasOwn(params, name) ? String(params[name]) : match,

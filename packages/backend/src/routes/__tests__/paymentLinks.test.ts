@@ -58,7 +58,12 @@ interface PublicPaymentLinkResponse {
   rail: string;
   network: string;
   active: boolean;
-  merchant: { name: string; avatar_url: string | null; description: string | null };
+  merchant: {
+    name: string;
+    avatar_url: string | null;
+    logo_url: string | null;
+    description: string | null;
+  };
   error?: { type: string; message: string };
 }
 
@@ -66,8 +71,7 @@ interface IntentResponse {
   id: string;
   status: string;
   amount: string;
-  network: string;
-  address: string;
+  faircoin: { network: string; address: string } | null;
   merchant_id: string;
   metadata: Record<string, string>;
   client_secret?: string;
@@ -347,6 +351,7 @@ describe('GET /v1/payment_links/:id/public', () => {
       merchant: {
         name: 'Paylinks Co',
         avatar_url: null,
+        logo_url: null,
         description: null,
       },
     });
@@ -397,11 +402,12 @@ describe('POST /v1/payment_links/:id/payment_intent', () => {
     expect(res.status).toBe(201);
     const body = await readJson<IntentResponse>(res);
     expect(body.amount).toBe('123000000');
-    expect(body.network).toBe('testnet');
-    expect(body.merchant_id).toBe(merchantId);
+    expect(body.faircoin?.network).toBe('testnet');
+    // The merchant's PUBLIC id on the wire (AGENTS.md: every id is two ids).
+    expect(body.merchant_id).toBe(merchant.publicId);
     expect(body.metadata).toEqual({ orderId: 'o_mint' });
-    expect(body.status).toBe('created');
-    expect(typeof body.address).toBe('string');
+    expect(body.status).toBe('requires_action');
+    expect(typeof body.faircoin?.address).toBe('string');
     expect(body.client_secret).toStartWith(`${body.id}_secret_`);
   });
 

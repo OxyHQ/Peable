@@ -15,23 +15,48 @@ import type { BottomTabBarProps } from 'expo-router/tabs';
 import { Rail } from '@oxy.so/bloom/rail';
 import { TabBar, TabBarButton, useTabBarFootprint } from '@oxy.so/bloom/tab-bar';
 import { useTheme } from '@oxy.so/bloom/theme';
+import { RiAlarmWarningLine } from '@oxy.so/bloom/icons/RiAlarmWarningLine';
 import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
+import { RiBankLine } from '@oxy.so/bloom/icons/RiBankLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
 import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
+import { RiPriceTag3Line } from '@oxy.so/bloom/icons/RiPriceTag3Line';
 import { RiReceiptLine } from '@oxy.so/bloom/icons/RiReceiptLine';
 import { RiSettings3Fill } from '@oxy.so/bloom/icons/RiSettings3Fill';
 import { RiSettings3Line } from '@oxy.so/bloom/icons/RiSettings3Line';
+import { RiStore2Line } from '@oxy.so/bloom/icons/RiStore2Line';
 import { RiTerminalBoxLine } from '@oxy.so/bloom/icons/RiTerminalBoxLine';
+import { RiWallet3Line } from '@oxy.so/bloom/icons/RiWallet3Line';
 import { t } from '../i18n';
 
-export type OrbitTab = 'index' | 'payments' | 'developers' | 'tax' | 'contributions' | 'settings';
+export type OrbitTab =
+  | 'index'
+  | 'payments'
+  | 'products'
+  | 'disputes'
+  | 'balances'
+  | 'payouts'
+  | 'account'
+  | 'developers'
+  | 'tax'
+  | 'contributions'
+  | 'settings';
 
 type Glyph = typeof RiHome5Line;
 
 const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Glyph }> = {
   index: { labelKey: 'nav.home', icon: RiHome5Line, activeIcon: RiHome5Fill },
   payments: { labelKey: 'nav.payments', icon: RiBankCardLine, activeIcon: RiBankCardLine },
+  products: { labelKey: 'nav.products', icon: RiPriceTag3Line, activeIcon: RiPriceTag3Line },
+  disputes: {
+    labelKey: 'nav.disputes',
+    icon: RiAlarmWarningLine,
+    activeIcon: RiAlarmWarningLine,
+  },
+  balances: { labelKey: 'nav.balances', icon: RiWallet3Line, activeIcon: RiWallet3Line },
+  payouts: { labelKey: 'nav.payouts', icon: RiBankLine, activeIcon: RiBankLine },
+  account: { labelKey: 'nav.account', icon: RiStore2Line, activeIcon: RiStore2Line },
   developers: {
     labelKey: 'nav.developers',
     icon: RiTerminalBoxLine,
@@ -50,6 +75,11 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
 export const ORBIT_TABS: readonly OrbitTab[] = [
   'index',
   'payments',
+  'products',
+  'disputes',
+  'balances',
+  'payouts',
+  'account',
   'developers',
   'tax',
   'contributions',

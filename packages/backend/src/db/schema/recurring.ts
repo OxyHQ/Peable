@@ -13,7 +13,7 @@ import { createdAt, generatedId, timestamptz } from '@oxy.so/db';
 import type { RecurringSnapshot } from '../../services/recurring/contracts';
 import { merchants } from './merchants';
 import { providerEvents } from './providerEvents';
-import { webhookDeliveries } from './webhooks';
+import { events } from './events';
 
 /** No public creator. Identity is insert-only; the repository updates observations only. */
 export const recurringMirrors = pgTable(
@@ -76,7 +76,17 @@ export const recurringObservationOutbox = pgTable(
       .notNull()
       .references(() => recurringMirrors.id, { onDelete: 'restrict' }),
     revision: integer().notNull(),
-    deliveryId: text().references(() => webhookDeliveries.id, { onDelete: 'restrict' }),
+    /**
+     * When this observation was relayed as a `billing.observation.updated`
+     * event. NULL is the relay's queue.
+     *
+     * Its own column rather than "the event exists": events are kept 30 days
+     * (`events` table), and an observation whose event was swept must not look
+     * unrelayed and be announced again.
+     */
+    relayedAt: timestamptz(),
+    /** The event it was relayed as, while that event is retained. */
+    eventId: text().references(() => events.id, { onDelete: 'set null' }),
     sourceEventId: text()
       .notNull()
       .references(() => providerEvents.id, { onDelete: 'restrict' }),
@@ -86,6 +96,10 @@ export const recurringObservationOutbox = pgTable(
   (table) => [
     unique('recurring_observation_outbox_revision_key').on(table.mirrorId, table.revision),
     check('recurring_observation_outbox_revision_check', sql`${table.revision} > 0`),
+    check(
+      'recurring_observation_outbox_relayed_event_check',
+      sql`${table.eventId} is null or ${table.relayedAt} is not null`,
+    ),
     check(
       'recurring_observation_outbox_snapshot_check',
       sql`jsonb_typeof(${table.snapshot}) = 'object'`,

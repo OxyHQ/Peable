@@ -2,14 +2,20 @@ import { and, eq, inArray, isNotNull, isNull, lt, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import {
   EXPIRABLE_STATUSES as SHARED_EXPIRABLE_STATUSES,
+  type CardRailPaymentMethodType,
   type CurrencyCode,
+  type PaymentIntentCancellationReason,
+  type PaymentIntentCaptureMethod,
+  type PaymentIntentLastPaymentError,
   type PaymentIntentRail,
+  type PaymentIntentSetupFutureUsage,
   type PaymentIntentStatus,
+  type Shipping,
 } from '@peable.to/shared-types';
-import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
+import { uuidv7 } from '@oxy.so/db';
 // Type-only: this repository must not pull the Stripe SDK into a query path.
 import type { ProviderId } from '../../services/providers/provider';
-import { connectedAccounts, paymentIntents } from '../schema';
+import { connectedAccounts, customers, merchants, paymentIntents, paymentMethods } from '../schema';
 import { keyset, type KeysetPage } from '../keyset';
 import { mergedMetadata, metadataWithinLimit, type MetadataPatch } from '../metadata';
 import type { DatabaseOrTransaction } from '../postgres';
@@ -51,6 +57,18 @@ export interface PaymentIntentRow {
    * serializer has to look it up (or reach for the internal id instead).
    */
   readonly connectedAccountPublicId?: string | null;
+  /**
+   * A destination charge (ADR 0015 §2), card only: INTERNAL account ids (what
+   * the columns reference) and their PUBLIC `ca_…` read in the same statement,
+   * plus the transfer amount and Orbit's fee instruction. Optional in the type,
+   * as `connectedAccountId` is, so an older fixture still describes a row.
+   */
+  readonly transferDestinationId?: string | null;
+  readonly transferDestinationPublicId?: string | null;
+  readonly transferAmount?: string | null;
+  readonly onBehalfOfId?: string | null;
+  readonly onBehalfOfPublicId?: string | null;
+  readonly applicationFeeAmount?: string | null;
   readonly txid: string | null;
   readonly confirmations: number;
   /** Card rail only — `null` on a FairCoin intent, where the chain is the provider. */
@@ -67,6 +85,41 @@ export interface PaymentIntentRow {
   readonly expiresAt: Date;
   readonly createdAt: Date;
   readonly updatedAt: Date;
+  /**
+   * The merchant's PUBLIC `merch_…`, read in the same statement — what the wire
+   * calls `merchant_id`. Never the internal `merchantId` above.
+   */
+  readonly merchantPublicId: string;
+  /** The merchant's confirmation threshold, read with the row — `faircoin.required_confirmations`. */
+  readonly requiredConfirmations: number;
+  /** INTERNAL id of the customer (ADR 0016), and its public `cus_…` beside it. */
+  readonly customerId: string | null;
+  readonly customerPublicId: string | null;
+  /** INTERNAL id of the saved card, and its public `pm_…` beside it. Card only. */
+  readonly paymentMethodId: string | null;
+  readonly paymentMethodPublicId: string | null;
+  /** The `ch_…` of the authorization that succeeded, when there is one. Card only. */
+  readonly latestChargePublicId: string | null;
+  /** Card only: what the payer may pay with, fixed at creation. `null` on the chain. */
+  readonly paymentMethodTypes: CardRailPaymentMethodType[] | null;
+  /** INTERNAL id of the configuration it offers, and its public `pmc_…`. Card only. */
+  readonly paymentMethodConfigurationId: string | null;
+  readonly paymentMethodConfigurationPublicId: string | null;
+  readonly captureMethod: PaymentIntentCaptureMethod;
+  readonly setupFutureUsage: PaymentIntentSetupFutureUsage | null;
+  readonly description: string | null;
+  readonly receiptEmail: string | null;
+  readonly statementDescriptorSuffix: string | null;
+  readonly shipping: Shipping | null;
+  readonly lastPaymentError: PaymentIntentLastPaymentError | null;
+  readonly cancellationReason: PaymentIntentCancellationReason | null;
+  readonly canceledAt: Date | null;
+  readonly amountReceived: string;
+  /**
+   * The sum of SUCCEEDED refunds — money that actually went back. Read in the
+   * same statement, never stored: the refund rows are the one home of that fact.
+   */
+  readonly amountRefunded: string;
 }
 
 /**
@@ -97,6 +150,16 @@ const INTENT_COLUMNS = {
   connectedAccountPublicId: sql<
     string | null
   >`(select ${connectedAccounts.publicId} from ${connectedAccounts} where ${connectedAccounts.id} = ${paymentIntents.connectedAccountId})`,
+  transferDestinationId: paymentIntents.transferDestinationId,
+  transferDestinationPublicId: sql<string | null>`${sql.raw(
+    '(select ca.public_id from connected_accounts ca where ca.id = "payment_intents"."transfer_destination_id")',
+  )}`,
+  transferAmount: paymentIntents.transferAmount,
+  onBehalfOfId: paymentIntents.onBehalfOfId,
+  onBehalfOfPublicId: sql<string | null>`${sql.raw(
+    '(select ca.public_id from connected_accounts ca where ca.id = "payment_intents"."on_behalf_of_id")',
+  )}`,
+  applicationFeeAmount: paymentIntents.applicationFeeAmount,
   txid: paymentIntents.txid,
   confirmations: paymentIntents.confirmations,
   provider: paymentIntents.provider,
@@ -107,6 +170,42 @@ const INTENT_COLUMNS = {
   expiresAt: paymentIntents.expiresAt,
   createdAt: paymentIntents.createdAt,
   updatedAt: paymentIntents.updatedAt,
+  // Scalar subqueries for the same reason as `connectedAccountPublicId`: this
+  // map is every RETURNING in this file, and RETURNING cannot join.
+  merchantPublicId: sql<string>`(select ${merchants.publicId} from ${merchants} where ${merchants.id} = ${paymentIntents.merchantId})`,
+  requiredConfirmations: sql<number>`(select ${merchants.requiredConfirmations} from ${merchants} where ${merchants.id} = ${paymentIntents.merchantId})`,
+  customerId: paymentIntents.customerId,
+  customerPublicId: sql<
+    string | null
+  >`(select ${customers.publicId} from ${customers} where ${customers.id} = ${paymentIntents.customerId})`,
+  paymentMethodId: paymentIntents.paymentMethodId,
+  paymentMethodPublicId: sql<
+    string | null
+  >`(select ${paymentMethods.publicId} from ${paymentMethods} where ${paymentMethods.id} = ${paymentIntents.paymentMethodId})`,
+  // Raw and table-qualified: drizzle renders these columns UNqualified in an
+  // INSERT/UPDATE … RETURNING, and an unqualified `"id"` inside a subquery
+  // over `charges` or `refunds` would bind to THAT table's own `id`.
+  latestChargePublicId: sql<string | null>`${sql.raw(
+    '(select ch.public_id from charges ch where ch.payment_intent_id = "payment_intents"."id")',
+  )}`,
+  paymentMethodTypes: paymentIntents.paymentMethodTypes,
+  paymentMethodConfigurationId: paymentIntents.paymentMethodConfigurationId,
+  paymentMethodConfigurationPublicId: sql<string | null>`${sql.raw(
+    '(select pmc.public_id from payment_method_configurations pmc where pmc.id = "payment_intents"."payment_method_configuration_id")',
+  )}`,
+  captureMethod: paymentIntents.captureMethod,
+  setupFutureUsage: paymentIntents.setupFutureUsage,
+  description: paymentIntents.description,
+  receiptEmail: paymentIntents.receiptEmail,
+  statementDescriptorSuffix: paymentIntents.statementDescriptorSuffix,
+  shipping: paymentIntents.shipping,
+  lastPaymentError: paymentIntents.lastPaymentError,
+  cancellationReason: paymentIntents.cancellationReason,
+  canceledAt: paymentIntents.canceledAt,
+  amountReceived: paymentIntents.amountReceived,
+  amountRefunded: sql<string>`${sql.raw(
+    `(select coalesce(sum(r.amount::numeric), 0)::text from refunds r where r.payment_intent_id = "payment_intents"."id" and r.status = 'succeeded')`,
+  )}`,
 } as const;
 
 interface RawIntentRow {
@@ -115,6 +214,7 @@ interface RawIntentRow {
   readonly currency: string;
   readonly network: string | null;
   readonly provider: string | null;
+  readonly requiredConfirmations: number | string;
   readonly [key: string]: unknown;
 }
 
@@ -127,6 +227,9 @@ function toIntentRow(row: RawIntentRow): PaymentIntentRow {
     currency: row.currency as CurrencyCode,
     network: row.network as NetworkType | null,
     provider: row.provider as ProviderId | null,
+    // A scalar subquery's type is not known to the driver's decoder by column,
+    // so an `int4` read this way is coerced here once.
+    requiredConfirmations: Number(row.requiredConfirmations),
   } as unknown as PaymentIntentRow;
 }
 
@@ -142,6 +245,14 @@ export interface InsertPaymentIntentParams {
    * `payment_intents_connected_account_network_fkey` refuses the row.
    */
   readonly connectedAccountId?: string | null;
+  /**
+   * The destination charge decided by `services/money/chargeModel.ts`
+   * (ADR 0015 §2). Card only; every one NULL on a platform charge.
+   */
+  readonly transferDestinationId?: string | null;
+  readonly transferAmount?: string | null;
+  readonly onBehalfOfId?: string | null;
+  readonly applicationFeeAmount?: string | null;
   readonly rail: PaymentIntentRail;
   readonly amount: string;
   readonly currency: CurrencyCode;
@@ -155,6 +266,23 @@ export interface InsertPaymentIntentParams {
    * without one. Never set on faircoin.
    */
   readonly provider: ProviderId | null;
+  /**
+   * Where the intent starts (ADR 0019): `requires_action` on the chain (the
+   * payer must broadcast), `requires_payment_method` or `requires_confirmation`
+   * on a card. Never a status that claims money moved.
+   */
+  readonly status: 'requires_action' | 'requires_payment_method' | 'requires_confirmation';
+  readonly customerId?: string | null;
+  readonly paymentMethodId?: string | null;
+  /** Card only, and required there (`payment_intents_payment_method_types_rail_check`). */
+  readonly paymentMethodTypes?: readonly CardRailPaymentMethodType[] | null;
+  readonly paymentMethodConfigurationId?: string | null;
+  readonly captureMethod?: PaymentIntentCaptureMethod;
+  readonly setupFutureUsage?: PaymentIntentSetupFutureUsage | null;
+  readonly description?: string | null;
+  readonly receiptEmail?: string | null;
+  readonly statementDescriptorSuffix?: string | null;
+  readonly shipping?: Shipping | null;
   readonly clientSecret: string;
   readonly idempotencyKey: string;
   readonly metadata: Record<string, string>;
@@ -174,39 +302,50 @@ export async function insertPaymentIntent(
   db: DatabaseOrTransaction,
   params: InsertPaymentIntentParams,
 ): Promise<PaymentIntentRow | null> {
-  try {
-    // Explicit field list, never a spread. `status` and `confirmations` take
-    // their column defaults: a caller does not get to mint an intent that is
-    // already settled. `currency` and `rail` are now ARGUMENTS rather than
-    // defaults — a default would silently make every card intent a FairCoin one.
-    const [row] = await db
-      .insert(paymentIntents)
-      .values({
-        id: uuidv7(),
-        publicId: params.publicId,
-        paymentLinkId: params.paymentLinkId ?? null,
-        status: 'created',
-        rail: params.rail,
-        amount: params.amount,
-        currency: params.currency,
-        network: params.network,
-        address: params.address,
-        provider: params.provider,
-        merchantId: params.merchantId,
-        connectedAccountId: params.connectedAccountId ?? null,
-        clientSecret: params.clientSecret,
-        idempotencyKey: params.idempotencyKey,
-        metadata: params.metadata,
-        expiresAt: params.expiresAt,
-      })
-      .returning(INTENT_COLUMNS);
-    return row ? toIntentRow(row) : null;
-  } catch (error) {
-    if (isUniqueViolation(error, 'payment_intents_merchant_id_idempotency_key_key')) {
-      return null;
-    }
-    throw error;
-  }
+  // Explicit field list, never a spread. `status` is one of the three
+  // starting statuses (the type says so) and `confirmations` takes its
+  // default: a caller does not get to mint an intent that already succeeded. `currency` and `rail` are now ARGUMENTS rather than
+  // defaults — a default would silently make every card intent a FairCoin one.
+  const [row] = await db
+    .insert(paymentIntents)
+    .values({
+      id: uuidv7(),
+      publicId: params.publicId,
+      paymentLinkId: params.paymentLinkId ?? null,
+      status: params.status,
+      rail: params.rail,
+      amount: params.amount,
+      currency: params.currency,
+      network: params.network,
+      address: params.address,
+      provider: params.provider,
+      merchantId: params.merchantId,
+      connectedAccountId: params.connectedAccountId ?? null,
+      transferDestinationId: params.transferDestinationId ?? null,
+      transferAmount: params.transferAmount ?? null,
+      onBehalfOfId: params.onBehalfOfId ?? null,
+      applicationFeeAmount: params.applicationFeeAmount ?? null,
+      customerId: params.customerId ?? null,
+      paymentMethodId: params.paymentMethodId ?? null,
+      paymentMethodTypes: params.paymentMethodTypes ? [...params.paymentMethodTypes] : null,
+      paymentMethodConfigurationId: params.paymentMethodConfigurationId ?? null,
+      captureMethod: params.captureMethod ?? 'automatic',
+      setupFutureUsage: params.setupFutureUsage ?? null,
+      description: params.description ?? null,
+      receiptEmail: params.receiptEmail ?? null,
+      statementDescriptorSuffix: params.statementDescriptorSuffix ?? null,
+      shipping: params.shipping ?? null,
+      clientSecret: params.clientSecret,
+      idempotencyKey: params.idempotencyKey,
+      metadata: params.metadata,
+      expiresAt: params.expiresAt,
+    })
+    // `on conflict do nothing`, not a caught unique violation: the insert runs
+    // inside the transaction that also records `payment_intent.created`, and a
+    // violation there would abort that transaction, catch or no catch.
+    .onConflictDoNothing({ target: [paymentIntents.merchantId, paymentIntents.idempotencyKey] })
+    .returning(INTENT_COLUMNS);
+  return row ? toIntentRow(row) : null;
 }
 
 /** The idempotency lookup — both the fast path and the race recovery. */
@@ -363,6 +502,8 @@ export interface ListIntentsParams {
   readonly connectedAccountId?: string | undefined;
   /** Only the payments minted from this link — its INTERNAL id, already resolved and ownership-checked. */
   readonly paymentLinkId?: string | undefined;
+  /** Only this customer's payments — its INTERNAL id, already resolved and ownership-checked. */
+  readonly customerId?: string | undefined;
   readonly page: KeysetPage;
 }
 
@@ -405,6 +546,9 @@ export async function listIntentsForMerchant(
         params.paymentLinkId === undefined
           ? undefined
           : eq(paymentIntents.paymentLinkId, params.paymentLinkId),
+        params.customerId === undefined
+          ? undefined
+          : eq(paymentIntents.customerId, params.customerId),
         walk.where,
       ),
     )
@@ -452,33 +596,80 @@ export async function findIntentsByIds(
   return rows.map(toIntentRow);
 }
 
+/** The merchant's own fields on an intent — what `POST /v1/payment_intents/:id` changes. */
+export interface IntentDetailsPatch {
+  readonly metadata?: MetadataPatch | undefined;
+  readonly description?: string | null | undefined;
+  readonly receiptEmail?: string | null | undefined;
+  readonly shipping?: Shipping | null | undefined;
+}
+
 /**
- * Replace the merchant's own metadata on one intent — the only field
- * `POST /v1/payment_intents/:id` changes.
+ * Update the merchant's own fields on one intent — never the payment itself or
+ * its status, which move only through their own operations.
  *
  * Merged in ONE statement (`db/metadata.ts`), scoped to the merchant in the
- * predicate. `limitExceeded` is distinct from `missing` because the two are
+ * predicate. `limit_exceeded` is distinct from `missing` because the two are
  * different answers: 400 naming `metadata`, and 404.
  */
-export async function updateIntentMetadata(
+export async function updateIntentDetails(
   db: DatabaseOrTransaction,
   publicId: string,
   merchantId: string,
-  patch: MetadataPatch,
+  patch: IntentDetailsPatch,
 ): Promise<PaymentIntentRow | 'missing' | 'limit_exceeded'> {
   const scope = and(
     eq(paymentIntents.publicId, publicId),
     eq(paymentIntents.merchantId, merchantId),
   );
-  const merged = mergedMetadata(paymentIntents.metadata, patch);
+  const merged =
+    patch.metadata === undefined
+      ? undefined
+      : mergedMetadata(paymentIntents.metadata, patch.metadata);
   const [row] = await db
     .update(paymentIntents)
-    .set({ metadata: merged })
-    .where(and(scope, metadataWithinLimit(merged)))
+    .set({
+      ...(merged !== undefined ? { metadata: merged } : {}),
+      ...(patch.description !== undefined ? { description: patch.description } : {}),
+      ...(patch.receiptEmail !== undefined ? { receiptEmail: patch.receiptEmail } : {}),
+      ...(patch.shipping !== undefined ? { shipping: patch.shipping } : {}),
+    })
+    .where(and(scope, merged === undefined ? undefined : metadataWithinLimit(merged)))
     .returning(INTENT_COLUMNS);
   if (row) return toIntentRow(row);
   const [exists] = await db.select({ id: paymentIntents.id }).from(paymentIntents).where(scope);
   return exists ? 'limit_exceeded' : 'missing';
+}
+
+/**
+ * Set the payment method a confirmation uses (and what came with it), on an
+ * intent still waiting for one — the CAS half is `status = from`, so a
+ * confirmation racing another cannot repoint a payment that already moved.
+ */
+export async function setIntentPaymentMethod(
+  db: DatabaseOrTransaction,
+  id: string,
+  from: PaymentIntentStatus,
+  fields: {
+    readonly paymentMethodId: string;
+    readonly setupFutureUsage?: PaymentIntentSetupFutureUsage | undefined;
+    readonly receiptEmail?: string | undefined;
+    readonly shipping?: Shipping | undefined;
+  },
+): Promise<PaymentIntentRow | null> {
+  const [row] = await db
+    .update(paymentIntents)
+    .set({
+      paymentMethodId: fields.paymentMethodId,
+      ...(fields.setupFutureUsage !== undefined
+        ? { setupFutureUsage: fields.setupFutureUsage }
+        : {}),
+      ...(fields.receiptEmail !== undefined ? { receiptEmail: fields.receiptEmail } : {}),
+      ...(fields.shipping !== undefined ? { shipping: fields.shipping } : {}),
+    })
+    .where(and(eq(paymentIntents.id, id), eq(paymentIntents.status, from)))
+    .returning(INTENT_COLUMNS);
+  return row ? toIntentRow(row) : null;
 }
 
 /**
@@ -506,44 +697,6 @@ export async function findIntentsByAddresses(
 }
 
 /**
- * Intents that have run out of time.
- *
- * The statuses are a CLOSED, hand-written list and not "everything
- * non-terminal", and that is the whole safety of this query. `approved`,
- * `broadcast` and `confirming` are deliberately absent: a payer has committed
- * funds by then, and expiring one of those would abandon a payment that is
- * on its way — the intent would read `expired` while coins arrived at an address
- * nobody is watching any more. Only the states where nothing has been sent yet
- * are expirable.
- *
- * `requires_action` and `processing` are the card rail's equivalents and are
- * included for the same reason: an SCA challenge nobody completed, and a charge
- * the provider never resolved, are both a checkout the buyer walked away from.
- */
-export async function findExpiredIntents(
-  db: DatabaseOrTransaction,
-  params: { readonly now: Date; readonly limit: number },
-): Promise<PaymentIntentRow[]> {
-  const rows = await db
-    .select(INTENT_COLUMNS)
-    .from(paymentIntents)
-    .where(
-      and(
-        inArray(paymentIntents.status, [
-          'created',
-          'awaiting_approval',
-          'requires_action',
-          'processing',
-        ]),
-        lt(paymentIntents.expiresAt, params.now),
-      ),
-    )
-    .orderBy(paymentIntents.expiresAt)
-    .limit(params.limit);
-  return rows.map(toIntentRow);
-}
-
-/**
  * What the settlement watcher polls: in-flight intents carrying a payer-reported
  * txid. Terminal and pre-broadcast intents are never watched, and an intent with
  * no txid has nothing to look up on chain.
@@ -558,14 +711,12 @@ export async function findWatchableIntents(
     .from(paymentIntents)
     .where(
       and(
-        // The rail predicate is NOT redundant with the status one, even though
-        // `payment_intents_chain_statuses_are_faircoin_check` makes every
-        // `broadcast`/`confirming` row a FairCoin row today. `settled` is a
-        // SHARED status: the day this query is asked for one — a reorg sweep, a
-        // reconciliation — it would start handing card payments to a watcher
-        // that dereferences `address` and `network`. Stating the rail here is
-        // what makes "only the FairCoin rail is watchable" a property of the
-        // query rather than of the caller's current status list.
+        // The rail predicate is NOT redundant with the status one: since
+        // ADR 0019 `processing` is a SHARED status — a card payment the acquirer
+        // is still working on is `processing` too — and handing one to the
+        // watcher would dereference an `address` and `network` it does not
+        // have. Stating the rail here is what makes "only the FairCoin rail is
+        // watchable" a property of the query rather than of the caller.
         eq(paymentIntents.rail, 'faircoin'),
         inArray(paymentIntents.status, [...statuses]),
         isNotNull(paymentIntents.txid),
@@ -588,6 +739,21 @@ export interface IntentStateChange {
   readonly status: PaymentIntentStatus;
   readonly txid?: string | undefined;
   readonly confirmations?: number | undefined;
+  /**
+   * Why the attempt that caused THIS transition failed. Every transition writes
+   * the column: absent here means "cleared", because a stale error describing an
+   * earlier attempt would sit beside a status that has moved on (ADR 0019).
+   */
+  readonly lastPaymentError?: PaymentIntentLastPaymentError | undefined;
+  /** Only with `status: 'canceled'`; `canceled_at` is stamped by the same statement. */
+  readonly cancellationReason?: PaymentIntentCancellationReason | undefined;
+  /**
+   * Only with `status: 'succeeded'`: what was captured, when less than the
+   * amount (a partial manual capture). Defaults to the whole amount; every
+   * other status resets it to `"0"` — a reorg rewinding a FairCoin payment
+   * un-receives it.
+   */
+  readonly amountReceived?: string | undefined;
 }
 
 /**
@@ -608,17 +774,19 @@ export type IntentStateResult =
  *
  * The transition itself is decided by `services/intentState.ts`; this only
  * records the outcome. `txid` is part of the SAME statement rather than a second
- * write, which is what keeps `payment_intents_broadcast_requires_txid_check`
- * satisfiable: moving to `broadcast` without the txid alongside it is refused by
- * the database, not merely by convention.
+ * write, which is what keeps `payment_intents_processing_requires_txid_check`
+ * satisfiable: moving a FairCoin intent to `processing` without the txid
+ * alongside it is refused by the database, not merely by convention. So are the
+ * fields a transition decides with it (ADR 0019): `last_payment_error`,
+ * `cancellation_reason` / `canceled_at`, and `amount_received`.
  *
  * ## Why `status = from` is in the WHERE
  *
  * This used to be `WHERE id = ?` alone, and the validation lived entirely in
  * `applyEvent` — a PURE function reading a status fetched in an earlier
  * statement. So the state machine was advisory: `ALLOWED` in the shared
- * contract has `expired: []`, and an event racing `expireDueIntents` still
- * wrote `settled` over `expired` and enqueued a second, contradicting outcome
+ * contract has `canceled: []`, and an event racing `expireDueIntents` still
+ * wrote `succeeded` over an expired intent and enqueued a second, contradicting outcome
  * for one payment. Every one of the callers reads then writes, so this was not
  * one caller's slip.
  *
@@ -635,9 +803,21 @@ export async function updateIntentState(
   id: string,
   change: IntentStateChange,
 ): Promise<IntentStateResult> {
-  const values: Record<string, string | number> = { status: change.status };
-  if (change.txid !== undefined) values.txid = change.txid;
-  if (change.confirmations !== undefined) values.confirmations = change.confirmations;
+  const canceled = change.status === 'canceled';
+  const values = {
+    status: change.status,
+    lastPaymentError: change.lastPaymentError ?? null,
+    cancellationReason: canceled ? (change.cancellationReason ?? null) : null,
+    canceledAt: canceled ? sql`date_trunc('milliseconds', now())` : null,
+    amountReceived:
+      change.status !== 'succeeded'
+        ? '0'
+        : change.amountReceived !== undefined
+          ? change.amountReceived
+          : sql`${paymentIntents.amount}`,
+    ...(change.txid !== undefined ? { txid: change.txid } : {}),
+    ...(change.confirmations !== undefined ? { confirmations: change.confirmations } : {}),
+  };
 
   const [row] = await db
     .update(paymentIntents)
@@ -780,33 +960,21 @@ export async function findIntentByProviderCharge(
 }
 
 /**
- * The statuses an unpaid intent may expire FROM — exactly those whose
- * transition list in shared-types' `ALLOWED` table contains `expired`.
+ * The statuses an unpaid intent may expire FROM (ADR 0012 D9, ADR 0019).
  *
- * What unites them is that the gateway is waiting on a PERSON. `created` and
- * `awaiting_approval` wait on a payer who has not paid; `requires_action` waits
- * on one who opened a 3DS challenge and walked away. None of them has money
- * moving anywhere, so a clock running out is the honest outcome.
+ * What unites them is that the gateway is waiting on a PERSON: a FairCoin payer
+ * who has not broadcast (`requires_action`), a card payer who has not supplied
+ * or confirmed a payment method, or one who opened a 3DS challenge and walked
+ * away. None of them has money moving anywhere, so a clock running out is the
+ * honest outcome — a cancellation with `cancellation_reason: 'abandoned'`.
  *
- * `approved`, `broadcast` and `confirming` are absent because coins are already
- * on their way and the settlement watcher owns those rows. `processing` is
- * absent for the same reason on the card side — the charge is at the acquirer,
- * and the table refuses it an `expired` edge at all.
+ * `processing` is absent: on the chain coins are on their way and the
+ * settlement watcher owns the row; on a card the acquirer is working on it.
+ * `requires_capture` is absent because a held authorization is the merchant's
+ * to capture or cancel.
  *
- * `requires_action` was NOT in this list when it arrived from
- * `feat/web-read-only-wallet`, and could not have been: the status is part of
- * the card rail, which landed after that branch was cut. The drift was found by
- * the test rather than by review — `expirySweeper.test.ts` re-derives this list
- * from `applyEvent` and went red on the merge. Without it, an abandoned 3DS
- * checkout would sit in `requires_action` forever, never expiring, and the
- * merchant would never get the `payment_intent.expired` they release an
- * inventory reservation on.
- *
- * The list itself now lives in `@peable.to/shared-types` (ADR 0012 D9), because
- * the wire contract publishes it as `PaymentIntent.canExpire`: a platform must
- * be able to tell a payment that can still expire from one that never will, and
- * a second copy here would be a second answer. The sweeper and the DTO read the
- * same array.
+ * The list lives in `@peable.to/shared-types`, because the wire publishes it as
+ * `PaymentIntent.can_expire`; the sweeper and the DTO read the same array.
  */
 export const EXPIRABLE_STATUSES: readonly PaymentIntentStatus[] = SHARED_EXPIRABLE_STATUSES;
 
@@ -901,10 +1069,40 @@ export async function expireDueIntents(
     .limit(limit)
     .for('update', { skipLocked: true });
 
+  // Expiry is a cancellation: `abandoned`, stamped now (ADR 0019).
   const rows = await db
     .update(paymentIntents)
-    .set({ status: 'expired' })
+    .set({
+      status: 'canceled',
+      cancellationReason: 'abandoned',
+      canceledAt: sql`date_trunc('milliseconds', now())`,
+      lastPaymentError: null,
+    })
     .where(sql`${paymentIntents.id} in (${due})`)
     .returning(INTENT_COLUMNS);
   return rows.map(toIntentRow);
+}
+
+/**
+ * Record the `pm_…` a SUCCEEDED card payment saved (`setup_future_usage`,
+ * ADR 0016) — once: guarded on `payment_method_id IS NULL`, and never a status
+ * write.
+ */
+export async function setIntentSavedPaymentMethod(
+  db: DatabaseOrTransaction,
+  id: string,
+  paymentMethodId: string,
+): Promise<boolean> {
+  const rows = await db
+    .update(paymentIntents)
+    .set({ paymentMethodId })
+    .where(
+      and(
+        eq(paymentIntents.id, id),
+        eq(paymentIntents.rail, 'card'),
+        isNull(paymentIntents.paymentMethodId),
+      ),
+    )
+    .returning({ id: paymentIntents.id });
+  return rows.length === 1;
 }

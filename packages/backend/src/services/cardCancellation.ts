@@ -3,7 +3,7 @@
  *
  * ## The gap this closes
  *
- * `POST /v1/payment_intents/:id/reject` moved the row to `rejected` and emitted
+ * `POST /v1/payment_intents/:id/reject` (since replaced by `/cancel`) moved the row to `rejected` and emitted
  * the merchant's event, and the expiry sweeper moved a batch to `expired` — and
  * neither told the acquirer anything. The payer's browser still held a live
  * confirmation credential for a PaymentIntent that remained confirmable, so a
@@ -27,6 +27,7 @@
  */
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
+  type CancelPaymentRequest,
   isRetryableProviderError,
   ProviderError,
   type PaymentProvider,
@@ -67,19 +68,17 @@ function fromProviderStatus(status: ProviderPaymentStatus): CardCancellation {
     case 'canceled':
       return { kind: 'canceled' };
     case 'succeeded':
-    case 'refunded':
-    case 'partially_refunded':
-      // Refunded means it succeeded and then some came back. Either way the
-      // payer paid, which is the fact the caller has to act on.
+      // The payer paid — the fact the caller has to act on.
       return { kind: 'settled' };
-    case 'failed':
-      // A declined payment is not cancelled, and treating it as cancelled would
-      // let a caller announce a cancellation for a payment the payer can still
-      // retry on the same object.
-      return { kind: 'in_flight', status };
-    case 'created':
+    case 'requires_payment_method':
+    case 'requires_confirmation':
     case 'requires_action':
     case 'processing':
+    case 'requires_capture':
+      // A cancel that answered with any of these did not cancel. A declined
+      // attempt (`requires_payment_method`) is NOT cancelled either: the payer
+      // can still retry on the same object, and calling it cancelled would let
+      // a caller announce a cancellation that has not happened.
       return { kind: 'in_flight', status };
   }
 }
@@ -93,6 +92,7 @@ function fromProviderStatus(status: ProviderPaymentStatus): CardCancellation {
 export async function cancelCardPaymentAtProvider(
   intent: PaymentIntentRow,
   idempotencyKey: string,
+  cancellationReason?: CancelPaymentRequest['cancellationReason'],
 ): Promise<CardCancellation> {
   if (!intent.provider || !intent.providerObjectId) return { kind: 'nothing_to_cancel' };
   const provider = selectStoredProvider(intent.provider, intent.livemode);
@@ -103,6 +103,7 @@ export async function cancelCardPaymentAtProvider(
       intentId: intent.publicId,
       providerObjectId: intent.providerObjectId,
       idempotencyKey,
+      ...(cancellationReason !== undefined ? { cancellationReason } : {}),
     });
     return fromProviderStatus(result.status);
   } catch (error) {
