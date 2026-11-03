@@ -70,7 +70,11 @@ export async function resolveClientAction(intent: PaymentIntentRow): Promise<Cli
   // be worse than answering nothing: a checkout that receives a credential
   // renders a card form over a payment that is already settled, expired or
   // rejected.
-  if (!canStillBePaid(intent.status)) return { kind: 'unpayable', status: intent.status };
+  // A declined card attempt remains confirmable on the same provider payment.
+  // The rail-neutral helper deliberately excludes failed chain payments.
+  if (!canStillBePaid(intent.status) && intent.status !== 'failed') {
+    return { kind: 'unpayable', status: intent.status };
+  }
 
   const provider = resolveProvider(intent.provider);
   if (!provider) {
