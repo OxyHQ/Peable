@@ -7,44 +7,15 @@ import { assertLocalStripeTestEnvironment } from './stripeTestGuard';
 let stage = 'local configuration';
 async function run() {
   assertLocalStripeTestEnvironment(process.env);
-  const { getStripeClient } = await import('../services/providers/stripe/client');
   const { connectPostgres, disconnectPostgres } = await import('../db/postgres');
-  const { insertMerchant, findMerchantByAppEnvironment } = await import(
-    '../db/merchants/merchantRepository'
-  );
-  const { createIntent } = await import('../services/createIntent');
-  const { newId } = await import('../lib/ids');
   const { toPaymentIntentDTO } = await import('../lib/serialize');
-
-  stage = 'Stripe Accounts read';
-  const account = await getStripeClient().accounts.retrieve(null);
-  if (account.id !== process.env.PEABLE_TEST_STRIPE_ACCOUNT) {
-    throw new Error('Stripe account does not match the explicitly approved local test account');
-  }
+  const { createLocalStripeTestIntent } = await import('./stripeTestCheckout');
   try {
-    const db = await connectPostgres();
-    const appId = 'peable-local-stripe-test';
-    const merchant =
-      (await findMerchantByAppEnvironment(db, appId, 'development')) ??
-      (await insertMerchant(db, {
-        publicId: newId('merch'),
-        oxyAppId: appId,
-        environment: 'development',
-        displayName: 'Local test checkout',
-        // Card-only registration: no chain key is fabricated or accepted.
-      }));
-    if (!merchant || merchant.livemode || merchant.network !== null || merchant.xpub !== null) {
-      throw new Error('Local test merchant is missing or has an unexpected mode/rail');
-    }
-    stage = 'PaymentIntents create/read';
-    const created = await createIntent({
-      merchant,
-      rail: 'card',
-      currency: 'USD',
-      amount: '599',
-      idempotencyKey: `local-test-${process.env.PEABLE_TEST_RUN_ID}`,
-      metadata: { purpose: 'local-provider-integration-test' },
-    });
+    await connectPostgres();
+    stage = 'verified local test PaymentIntent creation';
+    const { account, merchant, created } = await createLocalStripeTestIntent(
+      process.env.PEABLE_TEST_RUN_ID ?? '',
+    );
     const directory = join(homedir(), '.local/share/peable-stripe-test');
     await mkdir(directory, { recursive: true, mode: 0o700 });
     const output = join(directory, 'checkout.json');
@@ -63,7 +34,7 @@ async function run() {
     );
     console.info(
       JSON.stringify({
-        account: account.id,
+        account,
         merchant: merchant.publicId,
         intent: created.intent.publicId,
         reused: created.reused,

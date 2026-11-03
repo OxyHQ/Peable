@@ -30,7 +30,17 @@ async function run() {
   }
   stage = 'gateway startup and recurring configuration validation';
   const { start } = await import('../server');
-  await start({ listenHost: '127.0.0.1', billingConfiguration });
+  const gateway = await start({ listenHost: '127.0.0.1', billingConfiguration });
+  const { createLocalStripeTestCheckoutRouter } = await import('./stripeTestCheckoutRouter');
+  const { createLocalStripeTestIntent } = await import('./stripeTestCheckout');
+  gateway.app.use(
+    createLocalStripeTestCheckoutRouter({
+      create: async (key) => {
+        const { created } = await createLocalStripeTestIntent(key);
+        return { intentId: created.intent.publicId, clientSecret: created.intent.clientSecret };
+      },
+    }),
+  );
 }
 void run().catch(() => {
   console.error(
