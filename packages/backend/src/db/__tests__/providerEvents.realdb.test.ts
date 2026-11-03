@@ -7,7 +7,7 @@
  */
 import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 import { must } from '../../__tests__/helpers/must';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { isCheckViolation } from '@oxy.so/db';
 import {
   findProviderEventById,
@@ -213,9 +213,8 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
       must(suite).db,
       delivery({ providerEventId: 'evt_drain_2' }),
     );
-    // `created_at` has millisecond precision and the id tiebreak is random
-    // within a millisecond, so two back-to-back inserts can be "the same age".
-    // Make the older row measurably older; the order under test is by age.
+    // Made measurably older, so the order under test is by AGE rather than by
+    // the same-millisecond tiebreak (which has a case of its own below).
     await must(suite)
       .db.update(providerEvents)
       .set({ createdAt: new Date(Date.now() - 60_000) })
@@ -231,6 +230,60 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('provider_events', () => {
     const after = await findUnprocessedProviderEvents(must(suite).db, 100);
     expect(after.map((row) => row.id)).not.toContain(must(older));
     expect(after.map((row) => row.id)).toContain(must(newer));
+  });
+
+  /**
+   * Within one millisecond the drain serves events in the order they ARRIVED,
+   * not in uuid order.
+   *
+   * `created_at` is millisecond precision, and a uuid v7 is random within its
+   * millisecond, so the old `id` tiebreak inverted about half of all
+   * same-millisecond pairs. Pinned here with the inversion written down
+   * rather than waited for: the first row inserted gets the HIGHER id and both
+   * rows the same instant, so only `received_seq` can put them in order.
+   */
+  it('serves same-millisecond events in arrival order, whatever their ids say', async () => {
+    const instant = new Date(Date.now() - 120_000);
+    const ids = ['ffffffff-0000-7000-8000-000000000001', '00000000-0000-7000-8000-000000000001'];
+    for (const [index, id] of ids.entries()) {
+      await must(suite)
+        .db.insert(providerEvents)
+        .values({
+          ...delivery({ providerEventId: `evt_same_ms_${String(index)}` }),
+          id,
+          createdAt: instant,
+        });
+    }
+
+    for (const options of [undefined, { dueAt: new Date() }]) {
+      const served = (await findUnprocessedProviderEvents(must(suite).db, 100, options))
+        .map((row) => row.id)
+        .filter((id) => ids.includes(id));
+      expect(served).toEqual(ids);
+    }
+  });
+
+  /**
+   * The database numbers arrivals, not the application, and it numbers every
+   * insert — including one that names no `received_seq` at all, which is every
+   * insert this gateway makes.
+   */
+  it('numbers every stored event in insert order', async () => {
+    const first = must(
+      await insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_seq_1' })),
+    );
+    const second = must(
+      await insertProviderEvent(must(suite).db, delivery({ providerEventId: 'evt_seq_2' })),
+    );
+    const rows = await must(suite)
+      .db.select({ id: providerEvents.id, seq: providerEvents.receivedSeq })
+      .from(providerEvents)
+      .where(inArray(providerEvents.id, [first, second]));
+    const seqOf = (id: string) => must(rows.find((row) => row.id === id)).seq;
+    // Compared as bigints: two consecutive values, so a string decoding that
+    // only LOOKED numeric would fail the `+ 1n`.
+    expect(typeof seqOf(first)).toBe('bigint');
+    expect(seqOf(second)).toBe(seqOf(first) + 1n);
   });
 
   /**

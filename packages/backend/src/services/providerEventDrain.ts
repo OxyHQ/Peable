@@ -86,6 +86,10 @@ export async function retryProviderEventDrainDeferral(
  * one payment (`processing` then `succeeded`) arrive in order and mean
  * different things applied in the wrong one. Concurrency here would buy
  * throughput this gateway does not need and would make the ordering a race.
+ *
+ * "Oldest first" is ARRIVAL order: same-millisecond events are tie-broken by
+ * `provider_events.received_seq`, never by the uuid v7 `id`, which is random
+ * within its millisecond (`findUnprocessedProviderEvents`).
  */
 export async function runProviderEventDrainPass(
   options: DrainPassOptions = {},

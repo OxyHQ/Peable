@@ -79,6 +79,11 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // The billing engine's validate half ships with #206; it must be DEPLOYED
   // (its post phase applied) before the report types' `0067`–`0068` merge.
   '0066_billing_engine_validate': 'released with #206; deployed before 0067 (report types) merges',
+  // The report types' validate half ships with #205; it must be DEPLOYED (its
+  // post phase applied) before provider events' arrival order (`0069`–`0072`)
+  // merges.
+  '0068_report_types_itemized_validate':
+    'released with #205; deployed before 0069 (provider event arrival order) merges',
 };
 
 interface Migration {

@@ -19,7 +19,7 @@ export {
 } from './social';
 export { events } from './events';
 export { webhookDeliveries, webhookEndpoints } from './webhooks';
-export { providerEvents } from './providerEvents';
+export { providerEvents, providerEventsReceivedSeq } from './providerEvents';
 export { connectedAccountLinks, connectedAccounts } from './connectedAccounts';
 export { transferReversals, transfers } from './transfers';
 export { refunds } from './refunds';
