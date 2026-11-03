@@ -234,6 +234,23 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('resuming a card payment', () => {
     expect(json.value).toBe(`pi_stripe_${intent.publicId}_secret_live`);
   });
 
+  test('a declined card resumes for the payer and merchant without creating another payment', async () => {
+    const intent = await cardIntent();
+    await updateIntentState(gatewayDb(), intent.id, { from: 'created', status: 'failed' });
+    statusToReport = 'created';
+    asMerchant = false;
+    const resumed = await request('POST', `/v1/payment_intents/${intent.publicId}/client_action`, {
+      'X-Peable-Client-Secret': intent.clientSecret,
+    });
+    expect(resumed.status).toBe(200);
+    expect(resumed.json.value).toBe(`pi_stripe_${intent.publicId}_secret_live`);
+    expect(resumed.cacheControl).toBe('no-store');
+    asMerchant = true;
+    const reread = await request('GET', `/v1/payment_intents/${intent.publicId}`);
+    expect(reread.json.client_action?.value).toBe(resumed.json.value);
+    expect(reread.cacheControl).toBe('no-store');
+  });
+
   test('a wrong client_secret is refused, and a missing one is unauthenticated', async () => {
     const intent = await cardIntent();
     asMerchant = false;

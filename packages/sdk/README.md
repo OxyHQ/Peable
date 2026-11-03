@@ -64,3 +64,112 @@ const intent = await peable.paymentIntents.create(
 an on-behalf payment carry `event.account`; `intent.canExpire` is `false` once a
 payer has broadcast, so never cancel an order on `expiresAt` alone. A seller
 without a registered key is a 409 with `error.code === 'account_not_ready'`.
+
+### Optional checkout presentation (local development)
+
+`@peable.to/sdk/checkout/ui` exposes the controlled `PeableCheckoutSheet` and
+checkout view-model types. It composes Bloom's `CheckoutSheet` with Peable's
+provided brand asset, localized copy and minor-unit currency formatting. The
+host supplies quoted items, requirements, draft state, navigation and the
+`onAuthorize` callback. Card collection is a provider-owned `cardEntry` slot;
+the component never collects or stores card numbers, calls payment APIs, or
+grants access. Shipping is conditional on the request. Optional `brandState`
+controls presentation only; a host may restore the logo after confirmed
+success before closing. Completion timers and authoritative outcomes belong
+to the host.
+
+This entry is ESM/React Native only, with optional React, React Native and Bloom
+peers. Neither the server root nor the anonymous `/checkout` core imports it;
+the module-graph isolation test enforces that boundary. The Peable logo is
+copied into the ESM build and included in the package artifact.
+
+This UI currently requires the coordinated **local** Bloom checkout/status-ring
+build and local SDK build. Registry version 0.5.0 does not acquire these APIs
+until a separately authorized package release. Local Mention development uses
+an explicit source resolver/artifact override; no publication is implied.
+
+The controlled UI also accepts `methodDetails` for a provider handoff or
+FairCoin wallet/external-wallet presentation. Available choices come from host
+capabilities and the request's allowed method IDs. Wallet availability is an
+explicit callback/data capability, never inferred from a signed-in account or
+platform. The host supplies quoted amounts, balance and remaining balance;
+the UI performs no FX conversion, wallet reads, signing or automatic debits.
+A wallet top-up uses the wallet owner's receive details, separately from the
+merchant payment destination. Neither flow buys or sells cryptocurrency.
+The external QR merely renders the host-provided payload; payment confirmation
+and any incoming-funds recognition must remain authoritative host operations.
+
+`checkoutFeedbackSounds` exposes the supplied success/failure AAC assets for
+host-controlled playback. Original OGG files are retained byte-for-byte in the
+artifact. The host owns terminal-transition deduplication, mute preferences,
+playback cancellation and platform audio capabilities; the SDK imports no Expo
+audio runtime. `resultIllustration` can carry a host-owned catalogue sticker,
+without adding sticker services or account data to the SDK.
+
+The optional installment detail variant displays a host-supplied schedule,
+amount due today, full total and fees. It neither calculates a financing quote
+nor approves credit. The host restricts this method to eligible requests and
+supplies the corresponding review totals; it is not modeled as an automatically
+renewing subscription. The generic checkout shell blocks interactive dismissal
+while processing, while the host retains ownership of terminal outcomes and
+session teardown.
+
+Wallet observations are independent of spending permission. A ready public balance
+can be displayed without an authorization callback; loading, unavailable and error
+states never manufacture a zero. Retry/connect actions are optional host capabilities,
+not a new identity-to-wallet synchronization API.
+
+Installment presentation accepts supplied plan choices, decision states, dated
+schedules and optional repayment/APR/terms details. `validInstallmentQuote` checks
+structural consistency of integer amounts and dates only; it cannot authenticate a
+provider, establish eligibility or approve credit. The host binds selected quotes to
+the current order and merchant configuration. Method completion uses the compositor's
+forward continuation and explicit payment confirmation rather than charging on selection.
+
+External wallet presentation accepts authoritative observation phases. Waiting displays
+a QR/address and progress ring; detection/confirmation are distinct from settlement.
+The host owns observation and cancellation. Full addresses remain selectable and the
+optional copy callback must resolve successfully before the UI reports a copy. Local
+preview simulations and their nonpayable QR values stay in the consuming app.
+
+`PeableProviderFields` renders the same Bloom `CardForm` used by the rest of
+checkout. Only number, expiry and security-code inputs are provider-origin hosted
+fields in atomic Bloom slots. Billing country/postcode, labels, validation chrome
+and layout remain Bloom; no full processor form or competing payment selector is
+embedded. Link autofill is disabled through the supported hosted-card option.
+The split hosted Elements are an explicit compatibility choice for this layout;
+they remain supported, while Payment Element is the provider's preferred general
+integration. This choice never routes raw card values through React or Peable.
+
+Completeness publishes a **preparation** callback. Continue tokenizes the secure
+fields without charging, returning masked metadata and an opaque, in-memory
+prepared authorization. The host may then unmount the input fields and show its
+Bloom confirmation. Only explicit Pay calls `authorization.confirm()`. The handle
+survives field unmount, rejects concurrent confirmation, and must be disposed on
+close, a new card, or an intent change. It owns no persistence or saved-card grant.
+Provider acceptance still means pending: the host observes gateway settlement;
+subscriptions additionally require authoritative active/paid readiness.
+
+The hosted checkout and this UI share `loadProviderSdk` through the anonymous
+`/checkout` browser entry. React/Bloom remain unreachable from that entry or the
+server root. Provider text styling uses current Bloom typography/colors without
+recreating secure frames on theme changes; the surrounding chrome is Bloom itself.
+Postal code is optional unless explicitly required by the host. Readiness timeouts
+and errors permit retry. Native hosts without browser-hosted-field capability
+remain unavailable rather than falling back to raw card capture.
+
+### Order details and optional rewards
+
+The optional `@peable.to/sdk/checkout/ui` entry also exports
+`PeableOrderDetailsSheet`. Its host supplies the order's quoted total, paid and
+remaining amounts, dated repayment observations, and explicit optional actions.
+It uses Bloom's order progress/timeline, grouped sections and dialog compositor;
+it does not calculate a loan, initiate an early payment, or infer autopay.
+
+Reward data is bound to an order and includes eligibility, a deadline, category
+requirements, offer descriptions and full conditions. Browsing and selecting an
+offer are separate from explicitly confirming a claim. The host must revalidate
+order binding, eligibility and expiry and make claims idempotent. The SDK has no
+reward service, persistence, fulfillment or entitlement side effects. A rejected
+claim never changes the order's payment status. `claiming` blocks dismissal until
+the host supplies a result. No reward is inferred for a successful payment.

@@ -388,7 +388,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             id: 'il_one',
             invoice: 'in_one',
             livemode: false,
-            subscription: 'sub_one',
             quantity: 1,
             amount: 2500,
             parent: {
@@ -961,6 +960,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       });
       expect(calls.find((c) => c.method === 'checkout')?.params).toMatchObject({
         mode: 'subscription',
+        adaptive_pricing: { enabled: false },
         customer: 'cus_one',
         line_items: [{ price: 'price_one', quantity: 1 }],
         success_url: 'https://example.invalid/billing?from=plans&billing=complete',
@@ -1431,6 +1431,30 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       );
       expect(enabled?.observations?.deployment.environment).toBe(owner.environment);
       expect(enabled?.observations?.bindOwnedInvoice).toBeFunction();
+      expect(enabled?.observations?.timeoutMs).toBe(2000);
+      const bounded = await configureBillingRuntime(
+        gatewayDb(),
+        JSON.stringify({
+          ...configuration,
+          observationsEnabled: true,
+          observationTimeoutMs: 10_000,
+        }),
+        client,
+      );
+      expect(bounded?.observations?.timeoutMs).toBe(10_000);
+      for (const observationTimeoutMs of [0, 10_001]) {
+        await expect(
+          configureBillingRuntime(
+            gatewayDb(),
+            JSON.stringify({
+              ...configuration,
+              observationsEnabled: true,
+              observationTimeoutMs,
+            }),
+            client,
+          ),
+        ).rejects.toThrow();
+      }
       expect(enabled?.relay?.enabled).toBe(true);
       expect(enabled?.relay?.cohorts).toEqual([
         { ...owner, ...deployment, evidenceRef: 'fixture:cohort', requireTaxQuote: false },
@@ -1945,7 +1969,6 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
             id: 'il_one',
             invoice: 'in_one',
             livemode: false,
-            subscription: 'sub_one',
             quantity: 1,
             parent: {
               type: 'subscription_item_details',

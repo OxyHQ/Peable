@@ -169,6 +169,12 @@ function toCapabilityStatus(
   return null;
 }
 
+export interface StripePaymentProviderOptions {
+  readonly paymentMethodConfiguration?: string;
+  /** An explicit integration capability; absent keeps account-configured dynamic methods. */
+  readonly allowedPaymentMethodTypes?: readonly Stripe.PaymentIntentCreateParams.AllowedPaymentMethodType[];
+}
+
 export class StripePaymentProvider
   implements
     SettlingPaymentProvider,
@@ -177,6 +183,23 @@ export class StripePaymentProvider
     SettlementReportingProvider
 {
   readonly id = 'stripe' as const;
+  private readonly paymentMethodConfiguration?: string;
+  private readonly allowedPaymentMethodTypes?: readonly Stripe.PaymentIntentCreateParams.AllowedPaymentMethodType[];
+
+  constructor(options: StripePaymentProviderOptions = {}) {
+    if (options.allowedPaymentMethodTypes && options.paymentMethodConfiguration)
+      throw new Error('Choose either a payment method allowlist or a configuration');
+    if (
+      options.paymentMethodConfiguration &&
+      !/^pmc_[A-Za-z0-9]+$/.test(options.paymentMethodConfiguration)
+    )
+      throw new Error('Invalid payment method configuration');
+    this.paymentMethodConfiguration = options.paymentMethodConfiguration;
+    if (options.allowedPaymentMethodTypes) {
+      if (!options.allowedPaymentMethodTypes.length) throw new Error('Empty payment method policy');
+      this.allowedPaymentMethodTypes = Object.freeze([...options.allowedPaymentMethodTypes]);
+    }
+  }
 
   async createPayment(request: CreatePaymentRequest): Promise<ProviderPaymentResult> {
     const params: Stripe.PaymentIntentCreateParams = {
@@ -185,7 +208,12 @@ export class StripePaymentProvider
       // `automatic_payment_methods` rather than a hand-listed set: the methods a
       // payment can offer are a dashboard decision an operator changes without a
       // deploy, and hard-coding them here would make that dashboard lie.
-      automatic_payment_methods: { enabled: true },
+      ...(this.allowedPaymentMethodTypes
+        ? { allowed_payment_method_types: [...this.allowedPaymentMethodTypes] }
+        : { automatic_payment_methods: { enabled: true } }),
+      ...(this.paymentMethodConfiguration
+        ? { payment_method_configuration: this.paymentMethodConfiguration }
+        : {}),
       metadata: { ...request.metadata, peable_intent_id: request.intentId },
       // Ties every movement of one checkout together at Stripe, so a support
       // conversation can find the charge and its transfers from one id.

@@ -21,9 +21,19 @@
 
 import { config } from '../../config';
 import type { PaymentProvider, ProviderId } from './provider';
-import { StripePaymentProvider } from './stripe/stripeProvider';
+import { StripePaymentProvider, type StripePaymentProviderOptions } from './stripe/stripeProvider';
 
 let stripeInstance: StripePaymentProvider | undefined;
+
+/** Trusted startup configuration only; never change the policy of an active adapter. */
+export function configureStripePaymentProvider(
+  options: StripePaymentProviderOptions,
+  factory: (options: StripePaymentProviderOptions) => StripePaymentProvider = (value) =>
+    new StripePaymentProvider(value),
+): void {
+  if (stripeInstance) throw new Error('Stripe payment provider is already initialized');
+  stripeInstance = factory(options);
+}
 
 /**
  * The adapter for a provider, if this deployment has one.

@@ -33,3 +33,11 @@ export {
   type PayDeepLinkParams,
   PeableRailUnsupportedError,
 } from './browser/mount';
+
+export {
+  loadProviderSdk,
+  type ProviderElement,
+  type ProviderElements,
+  type ProviderSdk,
+  type ProviderConfirmResult,
+} from './browser/providerJs';
