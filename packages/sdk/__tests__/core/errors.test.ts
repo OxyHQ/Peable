@@ -1,11 +1,15 @@
 import { describe, expect, test } from 'bun:test';
+import { errorDocUrl } from '@peable.to/contracts/vocabulary';
 import {
   errorFromResponse,
-  PeableApiError,
+  PeableAPIError,
   PeableAuthenticationError,
+  PeableCardError,
   PeableError,
+  PeableIdempotencyError,
   PeableInvalidRequestError,
   PeablePermissionError,
+  PeableRateLimitError,
 } from '../../src/core/errors';
 
 describe('errorFromResponse', () => {
@@ -21,7 +25,7 @@ describe('errorFromResponse', () => {
     expect(err).toBeInstanceOf(PeableError);
     expect(err.message).toBe('amount must be a base-unit integer string');
     expect(err.type).toBe('invalid_request_error');
-    expect(err.code).toBe('invalid_request_error');
+    expect(err.code).toBeUndefined();
     expect(err.statusCode).toBe(400);
     expect(err.param).toBeUndefined();
     expect(err.requestId).toBe('req_1');
@@ -79,18 +83,18 @@ describe('errorFromResponse', () => {
     expect(err).toBeInstanceOf(PeablePermissionError);
   });
 
-  test('5xx nested envelope maps to PeableApiError', () => {
+  test('5xx nested envelope maps to PeableAPIError', () => {
     const err = errorFromResponse(500, {
       error: { type: 'api_error', message: 'internal error' },
     });
-    expect(err).toBeInstanceOf(PeableApiError);
+    expect(err).toBeInstanceOf(PeableAPIError);
   });
 
-  test('502 (webhook-style api_error) maps to PeableApiError', () => {
+  test('502 (webhook-style api_error) maps to PeableAPIError', () => {
     const err = errorFromResponse(502, {
       error: { type: 'api_error', message: 'failed to resolve recipient — try again' },
     });
-    expect(err).toBeInstanceOf(PeableApiError);
+    expect(err).toBeInstanceOf(PeableAPIError);
   });
 
   // `@oxy.so/core`'s Express auth middleware (serviceAuth()/requireScope())
@@ -131,7 +135,7 @@ describe('errorFromResponse', () => {
 
   test('an unparseable/empty body still maps by status with a generic message', () => {
     const err = errorFromResponse(500, undefined);
-    expect(err).toBeInstanceOf(PeableApiError);
+    expect(err).toBeInstanceOf(PeableAPIError);
     expect(err.message).toBe('Peable request failed with status 500');
     expect(err.code).toBeUndefined();
   });
@@ -142,5 +146,76 @@ describe('errorFromResponse', () => {
     });
     expect(err).toBeInstanceOf(Error);
     expect(err.name).toBe('PeableInvalidRequestError');
+  });
+});
+
+describe('one class per error.type', () => {
+  test('the gateway type picks the class, whatever the status', () => {
+    const cases = [
+      ['idempotency_error', 409, PeableIdempotencyError],
+      ['idempotency_error', 400, PeableIdempotencyError],
+      ['rate_limit_error', 429, PeableRateLimitError],
+      ['card_error', 402, PeableCardError],
+      ['api_error', 502, PeableAPIError],
+      ['permission_error', 403, PeablePermissionError],
+      ['authentication_error', 401, PeableAuthenticationError],
+      ['invalid_request_error', 404, PeableInvalidRequestError],
+    ] as const;
+    for (const [type, status, ErrorClass] of cases) {
+      const error = errorFromResponse(status, { error: { type, message: 'x', request_id: null } });
+      expect(error).toBeInstanceOf(ErrorClass);
+      expect(error.type).toBe(type);
+      expect(error.statusCode).toBe(status);
+    }
+  });
+
+  test('a flat 429 is a rate-limit error too', () => {
+    expect(errorFromResponse(429, { error: 'RATE_LIMITED', message: 'slow down' })).toBeInstanceOf(
+      PeableRateLimitError,
+    );
+  });
+
+  test('carries decline code, doc url, request id and the raw body', () => {
+    const body = {
+      error: {
+        type: 'card_error',
+        code: 'expired_card',
+        decline_code: 'expired_card',
+        message: 'Your card has insufficient funds.',
+        request_id: 'req_card',
+      },
+    };
+    const error = errorFromResponse(402, body, 'req_header');
+    expect(error).toMatchObject({
+      name: 'PeableCardError',
+      code: 'expired_card',
+      declineCode: 'expired_card',
+      requestId: 'req_card',
+      raw: body,
+    });
+    // `expired_card` is a network's code Peable passes through, not one it documents.
+    expect(error.docUrl).toBeUndefined();
+  });
+
+  test("a documented code gets its doc url; the body's own doc_url wins", () => {
+    const documented = errorFromResponse(404, {
+      error: { type: 'invalid_request_error', code: 'resource_missing', message: 'x' },
+    });
+    expect(documented.docUrl).toBe(errorDocUrl('resource_missing'));
+    const explicit = errorFromResponse(404, {
+      error: {
+        type: 'invalid_request_error',
+        code: 'resource_missing',
+        message: 'x',
+        doc_url: 'https://docs.peable.to/errors#elsewhere',
+      },
+    });
+    expect(explicit.docUrl).toBe('https://docs.peable.to/errors#elsewhere');
+  });
+
+  test('an unknown type falls back to the status', () => {
+    expect(errorFromResponse(503, { error: { type: 'toString', message: 'x' } })).toBeInstanceOf(
+      PeableAPIError,
+    );
   });
 });

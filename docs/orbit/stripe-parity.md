@@ -149,10 +149,10 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 
 | Capability | State | Today | Target |
 |---|---|---|---|
-| Server SDK | 🟡 | Resources above; typed errors; `constructEvent` | 1.0 generated from OpenAPI |
+| Server SDK | ✅ | `@peable.to/sdk` 1.0: resource methods generated from the route contracts (`scripts/generate-resources.ts`, CI drift gate `check:sdk-resources`), types are the contracts' `BodyOf`/`QueryOf`/`ResponseOf`; every merchant route generated (255 methods, 44 namespaces); hand-written only `webhooks.constructEvent` and the pinned-key verification of the two signed billing documents; one error class per `error.type`; `constructEvent` with rolling secrets | |
 | Auto-pagination | ✅ | `list()` is a page promise and an async iterable on every list; `autoPagingEach`, `autoPagingToArray({ limit })`; `expand` option | |
-| Auto idempotency keys / retries / default timeout | 🟡 | A uuid key on every POST (0.8.0); one 401 retry under the same key; no network retries; no default timeout | Retries with backoff; default timeout |
-| Version pinning in SDK | ❌ | — | `apiVersion` |
+| Auto idempotency keys / retries / default timeout | ✅ | A uuid key on every POST, reused by every retry; `maxNetworkRetries` (default 2): network, timeout, 5xx, 429, 409 `idempotency_error`, exponential backoff with jitter honouring `Retry-After`; `timeout` default 80 s; one 401 re-attempt with a fresh token | |
+| Version pinning in SDK | ✅ | `apiVersion` (default `PEABLE_API_VERSION`) sent as `Peable-Version` | |
 | CLI (`listen`, `trigger`, `logs tail`) | ✅ | `@peable.to/cli` 0.1.0 (`private` until its npm trusted publisher is configured): `login`/`logout`/`whoami` (0600 profiles, test/live), `listen --forward-to` (per-session `whsec_`, the gateway's own signing; fed by `GET /v1/events/stream`, SSE signalled by `NOTIFY` in the event's transaction, test mode), `trigger` (fixtures over the public API + test helpers), `logs tail`, `events`, `payment_intents`, `checkout_sessions create`, `webhook_endpoints` | `trigger` for card-only events (needs provider-confirmed test cards) |
 | Test helpers / documented test data | ✅ | `POST /v1/test_helpers/payment_intents/:id/simulate_faircoin_payment` (the watcher's own decision, synthetic txid, no chain) and `/v1/test_helpers/checkout_sessions/:id/expire` (the sweep's own step), test mode only; SDK `testHelpers`; `docs/integrating-peable.md` › Local development links the provider's test cards and documents testnet | Card test helpers (Stripe's `test_clocks`, refund/dispute simulation) |
 | Docs site + API reference | 🟡 | `docs/integrating-peable.md` | docs.peable.to |

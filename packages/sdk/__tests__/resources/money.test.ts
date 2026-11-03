@@ -7,18 +7,9 @@
  * `Peable-Account` header — the half an integrator would otherwise guess, and
  * the half whose mistake moves money for the wrong account.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import { Peable } from '../../src';
-import { AccountResource } from '../../src/resources/account';
-import { ApplicationFeesResource } from '../../src/resources/applicationFees';
-import { BalanceResource, BalanceTransactionsResource } from '../../src/resources/balance';
-import {
-  AccountLinksResource,
-  ConnectedAccountsResource,
-} from '../../src/resources/connectedAccounts';
-import { PayoutsResource } from '../../src/resources/payouts';
-import { RefundsResource } from '../../src/resources/refunds';
-import { ReportsResource } from '../../src/resources/reports';
 import { PeableInvalidRequestError } from '../../src/core/errors';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
@@ -64,26 +55,27 @@ function list<T>(data: T[], has_more = false, url = '/v1/x') {
 describe('Peable — the money namespaces', () => {
   test('are wired on the client', () => {
     const peable = new Peable({ publicKey: 'oxy_dk_test', secret: 'sk_test' });
-    expect(peable.account).toBeInstanceOf(AccountResource);
-    expect(peable.balance).toBeInstanceOf(BalanceResource);
-    expect(peable.balanceTransactions).toBeInstanceOf(BalanceTransactionsResource);
-    expect(peable.payouts).toBeInstanceOf(PayoutsResource);
-    expect(peable.applicationFees).toBeInstanceOf(ApplicationFeesResource);
-    expect(peable.reports).toBeInstanceOf(ReportsResource);
-    expect(peable.accountLinks).toBeInstanceOf(AccountLinksResource);
+    expect(typeof peable.account).toBe('object');
+    expect(typeof peable.balance).toBe('object');
+    expect(typeof peable.balanceTransactions).toBe('object');
+    expect(typeof peable.payouts).toBe('object');
+    expect(typeof peable.applicationFees).toBe('object');
+    expect(typeof peable.reports).toBe('object');
+    expect(typeof peable.accountLinks).toBe('object');
   });
 });
 
 describe('Peable-Account', () => {
   test('is sent only when the caller names a connected account', async () => {
     const own = gateway(accountFixture());
-    await new AccountResource(buildTestClient(own.fetch)).retrieve();
+    await resources(buildTestClient(own.fetch)).account.retrieve();
     expect(callOf(own.requests).headers.get('Peable-Account')).toBeNull();
 
     const seller = gateway(accountFixture({ id: 'ca_seller', type: 'connected' }));
-    await new AccountResource(buildTestClient(seller.fetch)).retrieve({
-      peableAccount: 'ca_seller',
-    });
+    await resources(buildTestClient(seller.fetch)).account.retrieve(
+      {},
+      { peableAccount: 'ca_seller' },
+    );
     expect(callOf(seller.requests).headers.get('Peable-Account')).toBe('ca_seller');
   });
 });
@@ -91,7 +83,7 @@ describe('Peable-Account', () => {
 describe('account', () => {
   test('retrieves the merchant account', async () => {
     const { fetch: fetchImpl, requests } = gateway(accountFixture());
-    const account = await new AccountResource(buildTestClient(fetchImpl)).retrieve();
+    const account = await resources(buildTestClient(fetchImpl)).account.retrieve();
 
     expect(account.requirements.currently_due).toEqual([]);
     const call = callOf(requests);
@@ -110,8 +102,8 @@ describe('account', () => {
       },
       404,
     );
-    const error = await new AccountResource(buildTestClient(fetchImpl))
-      .retrieve()
+    const error = await resources(buildTestClient(fetchImpl))
+      .account.retrieve()
       .catch((e: unknown) => e);
     expect(error).toBeInstanceOf(PeableInvalidRequestError);
     expect((error as PeableInvalidRequestError).code).toBe('account_missing');
@@ -119,7 +111,7 @@ describe('account', () => {
 
   test('opens or updates the account with the payout schedule in the body', async () => {
     const { fetch: fetchImpl, requests } = gateway(accountFixture(), 201);
-    await new AccountResource(buildTestClient(fetchImpl)).update(
+    await resources(buildTestClient(fetchImpl)).account.update(
       {
         country: 'ES',
         business_type: 'company',
@@ -153,10 +145,7 @@ describe('accountLinks', () => {
     const { fetch: fetchImpl, requests } = gateway(link, 201);
     // Wired as `Peable` wires it, against the injected fetch.
     const client = buildTestClient(fetchImpl);
-    const links = new AccountLinksResource(
-      new ConnectedAccountsResource(client),
-      new AccountResource(client),
-    );
+    const links = resources(client).accountLinks;
 
     const created = await links.create(
       {
@@ -179,14 +168,9 @@ describe('accountLinks', () => {
     expect(call.headers.get('Peable-Account')).toBe('ca_seller');
   });
 
-  test('with `account`, still onboards that seller through its own route', async () => {
+  test("a seller's link is the seller's own route", async () => {
     const { fetch: fetchImpl, requests } = gateway(link, 201);
-    const client = buildTestClient(fetchImpl);
-    await new AccountLinksResource(
-      new ConnectedAccountsResource(client),
-      new AccountResource(client),
-    ).create({
-      account: 'ca_seller',
+    await resources(buildTestClient(fetchImpl)).connectedAccounts.createAccountLink('ca_seller', {
       return_url: 'https://m.example/done',
       refresh_url: 'https://m.example/refresh',
     });
@@ -194,25 +178,15 @@ describe('accountLinks', () => {
       `${TEST_GATEWAY_URL}/v1/connected_accounts/ca_seller/account_links`,
     );
   });
-
-  test('refuses a merchant link when built without an AccountResource', async () => {
-    const { fetch: fetchImpl, requests } = gateway(link, 201);
-    const links = new AccountLinksResource(
-      new ConnectedAccountsResource(buildTestClient(fetchImpl)),
-    );
-    await expect(
-      links.create({ return_url: 'https://m.example/r', refresh_url: 'https://m.example/f' }),
-    ).rejects.toBeInstanceOf(TypeError);
-    expect(callsOf(requests)).toHaveLength(0);
-  });
 });
 
 describe('balance', () => {
   test('retrieves available, pending and informational funds', async () => {
     const { fetch: fetchImpl, requests } = gateway(balanceFixture());
-    const balance = await new BalanceResource(buildTestClient(fetchImpl)).retrieve({
-      peableAccount: 'ca_seller',
-    });
+    const balance = await resources(buildTestClient(fetchImpl)).balance.retrieve(
+      {},
+      { peableAccount: 'ca_seller' },
+    );
 
     expect(balance.informational[0]?.currency).toBe('FAIR');
     const call = callOf(requests);
@@ -225,7 +199,7 @@ describe('balance', () => {
 describe('balanceTransactions', () => {
   test('retrieves one by id', async () => {
     const { fetch: fetchImpl, requests } = gateway(balanceTransactionFixture());
-    await new BalanceTransactionsResource(buildTestClient(fetchImpl)).retrieve('txn_1');
+    await resources(buildTestClient(fetchImpl)).balanceTransactions.retrieve('txn_1');
     expect(callOf(requests).url).toBe(`${TEST_GATEWAY_URL}/v1/balance_transactions/txn_1`);
   });
 
@@ -238,7 +212,7 @@ describe('balanceTransactions', () => {
         ? { status: 200, json: list([balanceTransactionFixture({ id: 'txn_2' })], true) }
         : { status: 200, json: list([balanceTransactionFixture({ id: 'txn_1' })], false) };
     });
-    const resource = new BalanceTransactionsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).balanceTransactions;
 
     const all = await resource
       .list(
@@ -250,10 +224,10 @@ describe('balanceTransactions', () => {
     expect(all.map((t) => t.id)).toEqual(['txn_2', 'txn_1']);
     const [first, second] = callsOf(requests);
     expect(first?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/balance_transactions?limit=1&type=payout&payout=po_1&source=ch_1&currency=eur`,
+      `${TEST_GATEWAY_URL}/v1/balance_transactions?type=payout&payout=po_1&source=ch_1&currency=eur&limit=1`,
     );
     expect(second?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/balance_transactions?limit=1&starting_after=txn_2&type=payout&payout=po_1&source=ch_1&currency=eur`,
+      `${TEST_GATEWAY_URL}/v1/balance_transactions?type=payout&payout=po_1&source=ch_1&currency=eur&limit=1&starting_after=txn_2`,
     );
     expect(first?.headers.get('Peable-Account')).toBe('ca_seller');
     expect(second?.headers.get('Peable-Account')).toBe('ca_seller');
@@ -263,7 +237,7 @@ describe('balanceTransactions', () => {
 describe('payouts', () => {
   test('creates a manual payout with the instruction in the body', async () => {
     const { fetch: fetchImpl, requests } = gateway(payoutFixture(), 201);
-    const payout = await new PayoutsResource(buildTestClient(fetchImpl)).create(
+    const payout = await resources(buildTestClient(fetchImpl)).payouts.create(
       { amount: '10000', currency: 'EUR', description: 'Weekly' },
       { idempotencyKey: 'payout_week_45', peableAccount: 'ca_seller' },
     );
@@ -279,7 +253,7 @@ describe('payouts', () => {
 
   test('mints an idempotency key when the caller gives none', async () => {
     const { fetch: fetchImpl, requests } = gateway(payoutFixture(), 201);
-    await new PayoutsResource(buildTestClient(fetchImpl)).create({
+    await resources(buildTestClient(fetchImpl)).payouts.create({
       amount: '10000',
       currency: 'EUR',
     });
@@ -288,47 +262,42 @@ describe('payouts', () => {
 
   test('retrieves, lists by status and cancels', async () => {
     const one = gateway(payoutFixture());
-    await new PayoutsResource(buildTestClient(one.fetch)).retrieve('po_1');
+    await resources(buildTestClient(one.fetch)).payouts.retrieve('po_1');
     expect(callOf(one.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/payouts/po_1`);
 
     const page = gateway(list([payoutFixture()]));
-    await new PayoutsResource(buildTestClient(page.fetch)).list(
+    await resources(buildTestClient(page.fetch)).payouts.list(
       { status: 'pending', limit: 5 },
       { peableAccount: 'ca_seller' },
     );
-    expect(callOf(page.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/payouts?limit=5&status=pending`);
+    expect(callOf(page.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/payouts?status=pending&limit=5`);
     expect(callOf(page.requests).headers.get('Peable-Account')).toBe('ca_seller');
 
     const canceled = gateway(payoutFixture({ status: 'canceled' }));
-    const result = await new PayoutsResource(buildTestClient(canceled.fetch)).cancel('po_1');
+    const result = await resources(buildTestClient(canceled.fetch)).payouts.cancel('po_1');
     expect(result.status).toBe('canceled');
     expect(callOf(canceled.requests).method).toBe('POST');
     expect(callOf(canceled.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/payouts/po_1/cancel`);
-    expect(callOf(canceled.requests).body).toBeUndefined();
+    expect(callOf(canceled.requests).body).toBe('{}');
   });
 });
 
 describe('applicationFees', () => {
   test('retrieves, lists by payment and lists refunds', async () => {
     const one = gateway(applicationFeeFixture());
-    await new ApplicationFeesResource(buildTestClient(one.fetch)).retrieve('fee_1');
+    await resources(buildTestClient(one.fetch)).applicationFees.retrieve('fee_1');
     expect(callOf(one.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/application_fees/fee_1`);
 
     const page = gateway(list([applicationFeeFixture()]));
-    await new ApplicationFeesResource(buildTestClient(page.fetch)).list({
-      payment_intent: 'pi_1',
-      charge: 'ch_1',
-    });
+    await resources(buildTestClient(page.fetch)).applicationFees.list({ payment_intent: 'pi_1' });
     expect(callOf(page.requests).url).toBe(
-      `${TEST_GATEWAY_URL}/v1/application_fees?payment_intent=pi_1&charge=ch_1`,
+      `${TEST_GATEWAY_URL}/v1/application_fees?payment_intent=pi_1`,
     );
 
     const refunds = gateway(list([]));
-    await new ApplicationFeesResource(buildTestClient(refunds.fetch)).listRefunds('fee_1', {
-      limit: 3,
-    });
+    await resources(buildTestClient(refunds.fetch)).applicationFees.listRefunds('fee_1');
     expect(callOf(refunds.requests).url).toBe(
-      `${TEST_GATEWAY_URL}/v1/application_fees/fee_1/refunds?limit=3`,
+      `${TEST_GATEWAY_URL}/v1/application_fees/fee_1/refunds`,
     );
   });
 });
@@ -336,7 +305,7 @@ describe('applicationFees', () => {
 describe('reports.payoutReconciliation', () => {
   test('reads the report for one payout, with its summary beside the page', async () => {
     const { fetch: fetchImpl, requests } = gateway(payoutReconciliationFixture());
-    const report = await new ReportsResource(buildTestClient(fetchImpl)).payoutReconciliation(
+    const report = await resources(buildTestClient(fetchImpl)).reports.payoutReconciliation(
       { payout: 'po_1', limit: 50 },
       { peableAccount: 'ca_seller' },
     );
@@ -345,7 +314,7 @@ describe('reports.payoutReconciliation', () => {
     expect(report.data[0]?.payout).toBe('po_1');
     const call = callOf(requests);
     expect(call.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/reports/payout_reconciliation?limit=50&payout=po_1`,
+      `${TEST_GATEWAY_URL}/v1/reports/payout_reconciliation?payout=po_1&limit=50`,
     );
     expect(call.headers.get('Peable-Account')).toBe('ca_seller');
   });
@@ -354,7 +323,7 @@ describe('reports.payoutReconciliation', () => {
 describe('refunds — Connect & money additions', () => {
   test('creates with reason, metadata and the Connect reversals', async () => {
     const { fetch: fetchImpl, requests } = gateway(refundFixture(), 201);
-    await new RefundsResource(buildTestClient(fetchImpl)).create({
+    await resources(buildTestClient(fetchImpl)).refunds.create({
       payment_intent: 'pi_1',
       external_ref: 'refund_1',
       amount: '2500',
@@ -376,12 +345,12 @@ describe('refunds — Connect & money additions', () => {
 
   test('retrieves, updates metadata and cancels', async () => {
     const one = gateway(refundFixture());
-    await new RefundsResource(buildTestClient(one.fetch)).retrieve('re_1');
+    await resources(buildTestClient(one.fetch)).refunds.retrieve('re_1');
     expect(callOf(one.requests).method).toBe('GET');
     expect(callOf(one.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/refunds/re_1`);
 
     const updated = gateway(refundFixture({ metadata: { ticket: 'T-2' } }));
-    await new RefundsResource(buildTestClient(updated.fetch)).update('re_1', {
+    await resources(buildTestClient(updated.fetch)).refunds.update('re_1', {
       metadata: { ticket: 'T-2' },
     });
     expect(callOf(updated.requests).method).toBe('POST');
@@ -389,7 +358,7 @@ describe('refunds — Connect & money additions', () => {
     expect(bodyOf(callOf(updated.requests))).toEqual({ metadata: { ticket: 'T-2' } });
 
     const canceled = gateway(refundFixture({ status: 'canceled' }));
-    const refund = await new RefundsResource(buildTestClient(canceled.fetch)).cancel('re_1');
+    const refund = await resources(buildTestClient(canceled.fetch)).refunds.cancel('re_1');
     expect(refund.status).toBe('canceled');
     expect(callOf(canceled.requests).method).toBe('POST');
     expect(callOf(canceled.requests).url).toBe(`${TEST_GATEWAY_URL}/v1/refunds/re_1/cancel`);

@@ -1,5 +1,4 @@
 import type { AuthenticatedResponseRequest } from '@oxy.so/core';
-import { encodeQuery, type QueryValue } from '@peable.to/sdk/contributions';
 
 /**
  * The one way Orbit talks to the gateway.
@@ -22,9 +21,38 @@ export interface RawResponseClient {
   requestAuthenticatedResponse(request: AuthenticatedResponseRequest): Promise<Response>;
 }
 
-/** Arrays encode as `key[]=v`, objects as `key[sub]=v` — the SDK's own encoding of the gateway's query. */
-export type { QueryValue };
+/** The scalar and structured values a query string carries. */
+export type QueryValue =
+  | string
+  | number
+  | boolean
+  | null
+  | undefined
+  | readonly string[]
+  | { readonly [key: string]: string | number | undefined };
 export type Query = Readonly<Record<string, QueryValue>>;
+
+/**
+ * Encode a query the way the gateway reads it (Express's `qs`): arrays as
+ * `key[]=v` (`expand[]=a&expand[]=b`), objects as `key[sub]=v`
+ * (`created[gte]=1`); `undefined` and `null` are omitted. Keys keep their order.
+ */
+export function encodeQuery(query: Query | undefined): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value === undefined || value === null) continue;
+    if (Array.isArray(value)) {
+      for (const item of value) search.append(`${key}[]`, String(item));
+    } else if (typeof value === 'object') {
+      for (const [sub, inner] of Object.entries(value)) {
+        if (inner !== undefined) search.append(`${key}[${sub}]`, String(inner));
+      }
+    } else {
+      search.append(key, String(value));
+    }
+  }
+  return search.toString();
+}
 
 export interface RequestOptions {
   query?: Query;

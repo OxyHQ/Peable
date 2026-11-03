@@ -1,8 +1,11 @@
 import { describe, expect, test } from 'bun:test';
 import type { ServiceTokenProvider } from '../../src/core/serviceToken';
+import { PEABLE_API_VERSION } from '@peable.to/contracts/vocabulary';
 import {
   DEFAULT_GATEWAY_BASE_URL,
+  DEFAULT_MAX_NETWORK_RETRIES,
   DEFAULT_OXY_API_URL,
+  DEFAULT_TIMEOUT_MS,
   resolveConfig,
 } from '../../src/core/config';
 
@@ -35,15 +38,40 @@ describe('resolveConfig', () => {
   });
 });
 
-test('optional HTTP deadline preserves the existing default and refuses invalid explicit values', () => {
-  expect(
-    resolveConfig({ publicKey: 'fixture', secret: 'fixture' }).requestTimeoutMs,
-  ).toBeUndefined();
-  for (const requestTimeoutMs of [0, -1, Infinity, NaN, 1.5, 2147483648]) {
-    expect(() =>
-      resolveConfig({ publicKey: 'fixture', secret: 'fixture', requestTimeoutMs }),
-    ).toThrow(/requestTimeoutMs/);
+test('defaults: an 80 s timeout, 2 retries, the contracts wire date, no account', () => {
+  const resolved = resolveConfig({ publicKey: 'fixture', secret: 'fixture' });
+  expect(resolved.timeout).toBe(80_000);
+  expect(resolved.timeout).toBe(DEFAULT_TIMEOUT_MS);
+  expect(resolved.maxNetworkRetries).toBe(DEFAULT_MAX_NETWORK_RETRIES);
+  expect(resolved.maxNetworkRetries).toBe(2);
+  expect(resolved.apiVersion).toBe(PEABLE_API_VERSION);
+  expect(resolved.peableAccount).toBeUndefined();
+});
+
+test('refuses an invalid timeout, retry count, api version or account', () => {
+  for (const timeout of [0, -1, Infinity, NaN, 1.5, 2147483648]) {
+    expect(() => resolveConfig({ publicKey: 'fixture', secret: 'fixture', timeout })).toThrow(
+      /timeout/,
+    );
   }
+  for (const maxNetworkRetries of [-1, 1.5, NaN]) {
+    expect(() =>
+      resolveConfig({ publicKey: 'fixture', secret: 'fixture', maxNetworkRetries }),
+    ).toThrow(/maxNetworkRetries/);
+  }
+  expect(() =>
+    resolveConfig({
+      publicKey: 'fixture',
+      secret: 'fixture',
+      apiVersion: '2020-01-01' as typeof PEABLE_API_VERSION,
+    }),
+  ).toThrow(/apiVersion/);
+  expect(() =>
+    resolveConfig({ publicKey: 'fixture', secret: 'fixture', peableAccount: '' }),
+  ).toThrow(/peableAccount/);
+  expect(
+    resolveConfig({ publicKey: 'fixture', secret: 'fixture', maxNetworkRetries: 0, timeout: 5 }),
+  ).toMatchObject({ maxNetworkRetries: 0, timeout: 5 });
 });
 
 describe('resolveConfig with a tokenProvider', () => {
@@ -83,7 +111,7 @@ describe('resolveConfig with a tokenProvider', () => {
     }
   });
 
-  test('still validates requestTimeoutMs', () => {
-    expect(() => resolveConfig({ tokenProvider, requestTimeoutMs: 0 })).toThrow(/requestTimeoutMs/);
+  test('still validates timeout', () => {
+    expect(() => resolveConfig({ tokenProvider, timeout: 0 })).toThrow(/timeout/);
   });
 });

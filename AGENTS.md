@@ -71,6 +71,19 @@ ABSENCE — not `Platform.OS` — is what selects the "continue on your phone" s
 with the `faircoin:` QR, same capability-over-platform rule as the wallet's own
 web build.
 
+**`@peable.to/sdk`'s resource methods are GENERATED from the route contracts**
+(ADR 0014 D5): `packages/sdk/src/generated/resources.ts` is written by
+`bun run generate:sdk-resources` from every `service` contract with an `sdk` path
+(payer and user-session routes never become server-SDK methods), and CI's
+`check:sdk-resources` fails when the committed file drifts. Never edit it by hand;
+change the contract and regenerate. It imports the contracts as TYPES only — the
+SDK never constructs a schema at runtime (`ui-isolation.test.ts` walks the
+runtime graph), and `__tests__/generated/types.test.ts` proves every generated
+signature equals what the contract's `BodyOf` / `QueryOf` / `ResponseOf` derive. There is no
+hand-written resource: the only hand-written behaviour is `webhooks` and
+`src/overlays/billingAuthority.ts` (pinned-key verification of the signed tax
+quote and invoice authority, wrapping the generated methods with the same types).
+
 `bunfig.toml` sets `linker = "hoisted"`. Expo, Metro and Babel resolve transitive
 deps through the standard `node_modules` chain, and the default isolated linker
 breaks that plus ECS image resolution. Copy `bunfig.toml` into any Dockerfile

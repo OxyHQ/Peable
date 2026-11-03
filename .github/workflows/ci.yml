@@ -200,6 +200,12 @@ jobs:
       - run: bun run build:contracts
       - run: bun run build:shared-types
 
+      # The SDK's resource methods are generated from the BUILT route contracts
+      # (ADR 0014 D5): the committed `packages/sdk/src/generated/resources.ts`
+      # must be exactly what the generator writes for them.
+      - name: SDK resources match the route contracts
+        run: bun run check:sdk-resources
+
       # `@peable.to/pay` is consumed from its build output, same as
       # shared-types. Stated rather than left to `postinstall`, for the same
       # reason: a job should not depend on a side effect of installing.

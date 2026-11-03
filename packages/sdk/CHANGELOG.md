@@ -1,5 +1,162 @@
 # Changelog
 
+## 1.0.0 — generated from the contracts; retries, timeouts, typed errors (ADR 0014)
+
+Requires `@peable.to/contracts` 1.0.0 and `@peable.to/shared-types` 1.0.0. A
+major: the wire is ADR 0014's one wire, and the client is changed at the root —
+there are no deprecated aliases.
+
+Added:
+
+- **Generated resource methods.** `scripts/generate-resources.ts` reads every
+  route contract of `@peable.to/contracts` that names an `sdk` method and writes
+  `src/generated/resources.ts` (committed; CI fails when it drifts —
+  `bun run check:sdk-resources`). Each method's parameter and return types ARE
+  the contract's `BodyOf` / `QueryOf` / `ResponseOf`, imported as types: no
+  schema is loaded at runtime. One shape everywhere:
+  `method(...pathParams, params?, options?)`, `params` optional exactly when
+  nothing in it is required. Lists and searches answer the auto-paging page
+  promise, bytes answer `{ bytes, contentType, filename }`, live tails answer
+  the reconnecting async iterable, uploads are sent as `multipart/form-data`.
+  Every merchant route is generated: 255 methods in 44 namespaces. Payer
+  (`public`) and Oxy-session (`user`) routes are never server-SDK methods,
+  whatever `sdk` name their contract carries.
+- **Retries.** `maxNetworkRetries` (default **2**, client and per request):
+  network failures, timeouts, interrupted bodies, 5xx, 429 and 409
+  `idempotency_error` are retried with exponential backoff and jitter
+  (0.5 s → 8 s), never sooner than `Retry-After` (honoured up to 60 s). Every
+  attempt of a `POST` carries the same `Idempotency-Key`.
+- **Default timeout.** `timeout` (default **80 000 ms**, client and per
+  request) bounds each attempt, headers and body together, and each token mint.
+- **`apiVersion`** (default `PEABLE_API_VERSION`, exported), sent as
+  `Peable-Version` on every request, client and per request.
+- **`peableAccount`** on the client: the default `Peable-Account`, sent only on
+  routes that accept it. A request's own `peableAccount` replaces it.
+- **`signal`** on every request: aborts the attempt in flight and any backoff.
+- **One error class per `error.type`**: `PeableInvalidRequestError`,
+  `PeableAuthenticationError`, `PeablePermissionError`, `PeableCardError`,
+  `PeableIdempotencyError`, `PeableRateLimitError`, `PeableAPIError`, plus
+  `PeableConnectionError` (no answer) and `PeableSignatureVerificationError`.
+  Every error carries `statusCode`, `type`, `code`, `declineCode`, `param`,
+  `message`, `docUrl`, `requestId` and `raw`.
+- `webhooks.constructEvent` accepts the raw body as bytes (`Buffer` /
+  `Uint8Array`) as well as a string; `DEFAULT_WEBHOOK_TOLERANCE_SEC` (300).
+- Exported: `RequestOptions`, `IdempotencyOptions`, `AccountOptions`,
+  `ApiListPromise`, `DEFAULT_TIMEOUT_MS`, `DEFAULT_MAX_NETWORK_RETRIES`, the
+  generated `GeneratedResources` and its namespace interfaces
+  (`CustomersResource`, `PaymentMethodsResource`, …).
+
+### MIGRATION from 0.x
+
+Client configuration:
+
+| 0.x | 1.0 |
+|---|---|
+| `requestTimeoutMs` (no default) | `timeout` (default 80 000 ms; also per request) |
+| no retries | `maxNetworkRetries: 2` by default — pass `0` to keep 0.x behaviour |
+| `Peable-Version` never sent | sent on every request: `apiVersion` |
+| `peableAccount` per request only | also a client default (`peableAccount`), applied where the route accepts it |
+
+Errors:
+
+| 0.x | 1.0 |
+|---|---|
+| `PeableApiError` | `PeableAPIError` |
+| a network failure or timeout was a `PeableApiError` | `PeableConnectionError` (`code: 'timeout'` / `'response_interrupted'`), retried first |
+| an interrupted or timed-out `POST` was never retried | retried under the same `Idempotency-Key` |
+| 409 / 400 `idempotency_error` was a `PeableInvalidRequestError` | `PeableIdempotencyError` (the 409 is retried first) |
+| 429 was a `PeableInvalidRequestError` | `PeableRateLimitError`, retried first |
+| `err.code` fell back to `err.type` when the gateway sent no code | `err.code` is the gateway's code or `undefined`; branch on `err.type` |
+| `PeableCardError.declineCode` only | `declineCode`, `docUrl` and `raw` on every error |
+| `PeableErrorType` had no `rate_limit_error` / `idempotency_error` | the gateway's seven types, `api_connection_error`, `signature_verification_error` |
+
+Webhooks:
+
+| 0.x | 1.0 |
+|---|---|
+| `constructEvent(raw, header, secret, { toleranceSec })` | `constructEvent(payload, header, secret \| secret[], tolerance?)` — `tolerance` in seconds |
+| `ConstructEventOptions` | removed |
+
+Customers and payment methods (generated):
+
+| 0.x | 1.0 |
+|---|---|
+| `class CustomersResource`, `class PaymentMethodsResource` | generated interfaces of the same names; reach them through `peable.customers` / `peable.paymentMethods` |
+| `customers.del(id)` | `customers.del(id, options?)` |
+| `paymentMethods.detach(id, { idempotencyKey })` | `paymentMethods.detach(id, params?, options?)` — `params` is the body (`{ expand }`), the key moves to the third argument |
+| `CustomerListParams` | `ListCustomersParams` |
+| `PaymentMethodListParams` | `ListPaymentMethodsParams` |
+| `CustomerList`, `PaymentMethodList` | `List<Customer>`, `List<PaymentMethod>` (from `@peable.to/shared-types`) |
+
+Removed:
+
+- The `@peable.to/sdk/contributions` entry, and `ContributionsResource`,
+  `ContributionScope`, `CreateContribution`, `ContributionLink`,
+  `ContributionDetails` from the root. Contribution links are managed by a
+  PERSON (an Oxy user session), never a merchant service token, so they do not
+  belong in the server SDK; their wire is `@peable.to/contracts`
+  (`/contributions`, and the route registry once contracted) — validate against
+  it over your own authenticated transport, as Orbit does.
+
+Integrating the low-level client (`createRestClient`, `GatewayClient`):
+
+- `download(path, { query })` → `download(method, path, options)`, with the
+  same attempts, deadline and retries as `request`.
+- `RestClientRequestOptions` gains `apiVersion`, `maxNetworkRetries`,
+  `timeout`, `signal` and `acceptsPeableAccount`.
+
+#### Every resource is generated
+
+All 255 merchant (`service`) routes are generated, in 44 namespaces. Every
+0.x resource class (`PaymentIntentsResource`, `BillingNamespace`,
+`TaxResource`, …) is gone; the generated interface of the same namespace
+replaces it (`import type { PaymentIntentsResource } from '@peable.to/sdk'` is
+now an interface). The SDK's own aliases of wire types (`PaymentIntentList`,
+`CustomerListParams`, `CreatePaymentIntentOptions`, `BillingRequestOptions`, …)
+are removed — use the contract's types (`List<T>`, `List…Params`, `Create…Params`)
+and `RequestOptions & IdempotencyOptions`.
+
+The shape is the same everywhere: `(…pathParams, params?, options?)`. Where 0.x
+put options where `params` now goes, or named a method differently:
+
+| 0.x | 1.0 |
+|---|---|
+| `peable.accounts.*` (alias) | `peable.connectedAccounts.*` |
+| `account.createLink(params, options)` | `accountLinks.create(params, options)` |
+| `accountLinks.create({ account, … })` (a seller) | `connectedAccounts.createAccountLink(account, { … })`; `accountLinks.create` is the merchant's own account (or a seller's with `{ peableAccount }`) |
+| `account.retrieve({ peableAccount })` | `account.retrieve(params?, { peableAccount })` |
+| `balance.retrieve({ peableAccount })` | `balance.retrieve(params?, { peableAccount })` |
+| `balanceTransactions.retrieve(id, options)` | `balanceTransactions.retrieve(id, params?, options?)` |
+| `payouts.retrieve(id, options)` / `payouts.cancel(id, options)` | `payouts.retrieve(id, params?, options?)` / `payouts.cancel(id, params?, options?)` |
+| `disputes.close(id, { idempotencyKey })` | `disputes.close(id, params?, { idempotencyKey })` |
+| `paymentMethods.detach(id, options)` | `paymentMethods.detach(id, params?, options?)` |
+| `paymentMethodDomains.validate(id, options)` | `paymentMethodDomains.validate(id, params?, options?)` |
+| `testHelpers.checkoutSessions.expire(id, options)` | `testHelpers.checkoutSessions.expire(id, params?, options?)` |
+| `tax.products.setTaxCode(productRef, taxCode)` | `tax.products.setTaxCode(productRef, { tax_code })` |
+| `billing.cancelAtPeriodEnd(ref, { idempotencyKey })` | `billing.cancelAtPeriodEnd(ref, params?, options?)` |
+| `billing.retrieveCheckoutOperation({ idempotency_key, …identity })` | `billing.retrieveCheckoutOperation(idempotency_key, { …identity })` |
+| `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: ['tax_lines'] })` | `billing.retrieveFinalInvoiceAuthority(sub, inv, { include: 'tax_lines' })` |
+| `billing.*` writes: `{ idempotencyKey }` required | optional — the SDK sends one on every `POST`; pass your own to recover the operation later with `retrieveCheckoutOperation` |
+| `events.stream({ types: [...], signal, onConnect, onDisconnect })` | `events.stream({ types: 'a.*,b' }, { signal, onConnect, onDisconnect })` — `types` is the wire's comma-separated string |
+| `requestLogs.stream({ status, method, signal, … })` | `requestLogs.stream({ status, method }, { signal, … })` |
+| `reporting.reportTypes.download(id, params)` → a streamed `Response` | → `{ bytes, contentType, filename }` (the whole CSV) |
+| `files.create({ purpose, file: Uint8Array, filename })` | `files.create({ purpose, file: new File([bytes], filename) })`; `{ purpose, oxy_file }` is unchanged |
+| `applicationFees.list({ charge })` | not a filter of the route; `payment_intent` is |
+
+Lists that answered one plain page — `billing.listRails`, `tax.products.list`,
+`reporting.reportTypes.list`, `billing.meters.listEventSummaries` — now answer
+the auto-paging page promise like every list (still awaitable to the page).
+
+New in 1.0: `invoices.retrievePdf`, `setupIntents.clientAction`,
+`tax.compliance.retrieveDocument` / `retrieveOperatingLocation` /
+`retrieveRegistrationDeclaration` / `retrieveSalesDestination`.
+
+Still written by hand, because no route describes them: `webhooks.constructEvent`;
+the verification of `billing.createTaxQuote` and
+`billing.retrieveFinalInvoiceAuthority` against your pinned keys (same signature
+as the generated methods); and the `files.create` type, widened to also take the
+JSON `{ purpose, oxy_file }` form the route's contract documents as a second schema.
+
 ## 0.22.0 — Peable Tax business compliance (ADR 0020)
 
 Requires `@peable.to/shared-types` 0.20.0. Additive.

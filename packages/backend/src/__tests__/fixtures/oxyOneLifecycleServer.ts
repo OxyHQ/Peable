@@ -9,7 +9,8 @@ import { createInterface } from 'node:readline';
 import { randomUUID, generateKeyPairSync, sign } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { Peable, type BillingRequestOptions } from '@peable.to/sdk';
+import type { RetrieveBillingCheckoutOperationParams } from '@peable.to/contracts';
+import { Peable } from '@peable.to/sdk';
 import {
   PEABLE_API_VERSION,
   signWebhook,
@@ -584,13 +585,14 @@ interface FixtureStateInput {
  */
 type FixtureMessage = { id?: unknown } & (
   | { method: 'initialize'; input: Parameters<typeof initialize>[0] }
-  | { method: 'cancelAtPeriodEnd'; args: [string, BillingRequestOptions] }
+  | { method: 'cancelAtPeriodEnd'; args: [string, { idempotencyKey: string }] }
   | { method: 'verifyEvent'; args: [string, string] }
   | { method: 'setClock'; input?: { now?: unknown } }
   | { method: 'checkoutDispatchCount' }
   | {
       method: 'retrieveCheckoutOperation';
-      args: Parameters<Peable['billing']['retrieveCheckoutOperation']>;
+      // The parent's line keeps its 0.x shape: one params object carrying the key.
+      args: [RetrieveBillingCheckoutOperationParams];
     }
   | {
       method:
@@ -628,14 +630,16 @@ async function command(message: FixtureMessage) {
       return billing.retrieveFinalInvoiceAuthority(...message.args);
     case 'retrievePaidInvoice':
       return billing.retrievePaidInvoice(...message.args);
-    case 'retrieveCheckoutOperation':
-      return billing.retrieveCheckoutOperation(...message.args);
+    case 'retrieveCheckoutOperation': {
+      const { idempotency_key: key, ...query } = message.args[0];
+      return billing.retrieveCheckoutOperation(key, query);
+    }
     case 'retrieveInvoiceState':
       return billing.retrieveInvoiceState(...message.args);
     case 'retrieveSubscription':
       return billing.retrieveSubscription(message.args[0]);
     case 'cancelAtPeriodEnd':
-      return billing.cancelAtPeriodEnd(message.args[0], message.args[1]);
+      return billing.cancelAtPeriodEnd(message.args[0], {}, message.args[1]);
     case 'setState': {
       if (message.input.cancelAtPeriodEnd !== undefined)
         cancelled = message.input.cancelAtPeriodEnd;

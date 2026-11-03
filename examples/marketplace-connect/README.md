@@ -5,10 +5,10 @@ A platform that takes card payments for its sellers, as a small JSON API:
 | Route | What it does |
 |---|---|
 | `POST /sellers` `{ ref, country, business_type }` | Opens the seller's connected account (`connectedAccounts.create`). `ref` is your own id for the seller and the idempotency: repeating it returns the same `ca_…`. |
-| `GET /sellers/:ref/onboard` | Mints a hosted onboarding link (`accountLinks.create`, `rail: 'card'`) and redirects to it. Single-use and short-lived: open it from the click, never store or email it. |
+| `GET /sellers/:ref/onboard` | Mints a hosted onboarding link (`connectedAccounts.createAccountLink(id, { rail: 'card', … })`) and redirects to it. Single-use and short-lived: open it from the click, never store or email it. |
 | `GET /sellers/:ref/return` | Where onboarding returns. Arriving proves nothing, so it re-reads the account (`connectedAccounts.refresh`) and reports `payable` and what is still due. |
 | `POST /orders` `{ seller, amount, flow }` | Creates the order's card PaymentIntent. `flow: 'destination'` is a **destination charge**: `transfer_data.destination` is the seller and the platform keeps `application_fee_amount` (10% here). `flow: 'separate'` is a platform charge settled to the seller afterwards. Returns the `client_secret` the payer confirms with Elements (see [`../elements-vite`](../elements-vite)). |
-| `GET /sellers/:ref/balance` | The seller's balance (`balance.retrieve({ peableAccount })`, the `Peable-Account` header) and their last transfers (`transfers.list({ connected_account })`). |
+| `GET /sellers/:ref/balance` | The seller's balance (`balance.retrieve({}, { peableAccount })`, the `Peable-Account` header) and their last transfers (`transfers.list({ connected_account })`). |
 | `POST /webhooks` | On `payment_intent.succeeded` for a `separate` order it pays the seller's share with `transfers.create` — `external_ref` makes a redelivered event converge on one transfer. Also logs `connected_account.updated` (a seller became payable, or stopped being) and `application_fee.created`. |
 
 Peable never computes a split: the fee and every amount are the platform's.

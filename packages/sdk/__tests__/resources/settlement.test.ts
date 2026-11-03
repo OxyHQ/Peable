@@ -11,13 +11,9 @@
  * These cases assert the ROUTES and the shapes, because that is the half an
  * integrator would otherwise have had to guess.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type { ConnectedAccount, Refund, Transfer } from '@peable.to/shared-types';
-import { ConnectedAccountsResource } from '../../src/resources/connectedAccounts';
-import { RefundsResource } from '../../src/resources/refunds';
-import { TransfersResource } from '../../src/resources/transfers';
-import { MerchantsResource } from '../../src/resources/merchants';
-import { DisputesResource } from '../../src/resources/disputes';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import { refundFixture, requirementsFixture } from '../support/moneyFixtures';
 import {
@@ -79,7 +75,7 @@ function callOf(requests: CapturedRequest[]): CapturedRequest | undefined {
 describe('ConnectedAccountsResource', () => {
   test("creates a seller account by the merchant's own reference", async () => {
     const { fetch: fetchImpl, requests } = gateway(ACCOUNT, 201);
-    const resource = new ConnectedAccountsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).connectedAccounts;
 
     const account = await resource.create({
       external_ref: 'store_1',
@@ -105,7 +101,7 @@ describe('ConnectedAccountsResource', () => {
       data: [ACCOUNT],
       has_more: true,
     });
-    const resource = new ConnectedAccountsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).connectedAccounts;
 
     const page = await resource.list({ limit: 2, starting_after: 'ca_0' });
 
@@ -121,7 +117,7 @@ describe('ConnectedAccountsResource', () => {
    */
   test('reads a seller back by the reference the merchant chose', async () => {
     const { fetch: fetchImpl, requests } = gateway(ACCOUNT);
-    const resource = new ConnectedAccountsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).connectedAccounts;
 
     await resource.retrieveByRef('store 1/a');
 
@@ -136,7 +132,7 @@ describe('ConnectedAccountsResource', () => {
 describe('TransfersResource', () => {
   test('settles a seller out of a payment', async () => {
     const { fetch: fetchImpl, requests } = gateway(TRANSFER, 201);
-    const resource = new TransfersResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).transfers;
 
     const transfer = await resource.create({
       payment_intent: 'pi_1',
@@ -166,7 +162,7 @@ describe('TransfersResource', () => {
    */
   test('sends the external_ref in the body and a request key beside it', async () => {
     const minted = gateway({ ...TRANSFER, reversal: {} }, 201);
-    await new TransfersResource(buildTestClient(minted.fetch)).reverse('tr_1', {
+    await resources(buildTestClient(minted.fetch)).transfers.reverse('tr_1', {
       amount: '500',
       external_ref: 'leg_b',
     });
@@ -176,7 +172,7 @@ describe('TransfersResource', () => {
     expect(call?.headers.get('Idempotency-Key')).toMatch(/^[0-9a-f-]{36}$/);
 
     const keyed = gateway({ ...TRANSFER, reversal: {} }, 201);
-    await new TransfersResource(buildTestClient(keyed.fetch)).reverse(
+    await resources(buildTestClient(keyed.fetch)).transfers.reverse(
       'tr_1',
       { amount: '500', external_ref: 'leg_a' },
       { idempotencyKey: 'req_leg_a' },
@@ -188,7 +184,7 @@ describe('TransfersResource', () => {
 describe('RefundsResource', () => {
   test('refunds a payment and reports where the payment now stands', async () => {
     const { fetch: fetchImpl, requests } = gateway(REFUND, 201);
-    const resource = new RefundsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).refunds;
 
     const refund = await resource.create({
       payment_intent: 'pi_1',
@@ -214,7 +210,7 @@ describe('RefundsResource', () => {
       data: [REFUND],
       remaining_refundable: '7500',
     });
-    const resource = new RefundsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).refunds;
 
     const list = await resource.listForPaymentIntent('pi_1');
 
@@ -244,7 +240,7 @@ describe('settlement reporting', () => {
       available_on: null,
       exchange_rate: null,
     });
-    const resource = new RefundsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).refunds;
 
     const settlement = await resource.settlement('pi_1');
 
@@ -262,7 +258,7 @@ describe('MerchantsResource and DisputesResource', () => {
    */
   test('submits dispute evidence through the dispute update, once', async () => {
     const { fetch: fetchImpl, requests } = gateway({ id: 'dp_1', object: 'dispute' });
-    const resource = new DisputesResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).disputes;
 
     await resource.update('dp_1', {
       evidence: { uncategorized_text: 'Collected in person.', receipt: 'file_1' },
@@ -287,7 +283,7 @@ describe('MerchantsResource and DisputesResource', () => {
    */
   test('registers a card-only merchant with an empty body', async () => {
     const { fetch: fetchImpl, requests } = gateway({ id: 'merch_1' }, 201);
-    const resource = new MerchantsResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).merchants;
 
     await resource.register({}, { idempotencyKey: 'merchant-registration-stable' });
 
@@ -299,7 +295,7 @@ describe('MerchantsResource and DisputesResource', () => {
 
   test("lists one payment's disputes", async () => {
     const { fetch: fetchImpl, requests } = gateway({ object: 'list', data: [] });
-    const resource = new DisputesResource(buildTestClient(fetchImpl));
+    const resource = resources(buildTestClient(fetchImpl)).disputes;
 
     await resource.listForPaymentIntent('pi_1');
 

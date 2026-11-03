@@ -73,7 +73,7 @@ mock.module('socket.io-client', () => ({
 }));
 
 const { createPeableCheckout } = await import('../../src/browser/payerClient');
-const { PeableApiError, PeableInvalidRequestError, PeablePermissionError } = await import(
+const { PeableConnectionError, PeableInvalidRequestError, PeablePermissionError } = await import(
   '../../src/core/errors'
 );
 
@@ -168,12 +168,12 @@ describe('getPaymentIntent', () => {
     );
   });
 
-  test('wraps a network-level fetch failure as PeableApiError', async () => {
+  test('wraps a network-level fetch failure as PeableConnectionError', async () => {
     globalThis.fetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await expect(client.getPaymentIntent('pi_1', 'secret_1')).rejects.toBeInstanceOf(
-      PeableApiError,
+      PeableConnectionError,
     );
   });
 });
@@ -223,12 +223,12 @@ describe('submitTx', () => {
     );
   });
 
-  test('wraps a network-level fetch failure as PeableApiError', async () => {
+  test('wraps a network-level fetch failure as PeableConnectionError', async () => {
     globalThis.fetch = (() => Promise.reject(new Error('ECONNRESET'))) as unknown as typeof fetch;
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await expect(client.submitTx('pi_1', 'secret_1', 'tx_abc')).rejects.toBeInstanceOf(
-      PeableApiError,
+      PeableConnectionError,
     );
   });
 });
@@ -343,12 +343,12 @@ describe('subscribe', () => {
     expect(socket.on).not.toHaveBeenCalled();
   });
 
-  test('an emitWithAck failure disconnects the socket and throws PeableApiError', async () => {
+  test('an emitWithAck failure disconnects the socket and throws PeableConnectionError', async () => {
     const socket = installFakeSocket(new Error('socket disconnected before ack'));
     const client = createPeableCheckout({ gatewayUrl: TEST_GATEWAY_URL });
 
     await expect(client.subscribe('pi_1', 'secret_1', () => {})).rejects.toBeInstanceOf(
-      PeableApiError,
+      PeableConnectionError,
     );
     expect(socket.disconnect).toHaveBeenCalledTimes(1);
   });

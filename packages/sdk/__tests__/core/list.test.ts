@@ -1,8 +1,6 @@
 import { describe, expect, test } from 'bun:test';
+import { resources } from '../support/testGateway';
 import { encodeQuery } from '../../src/core/list';
-import { PaymentIntentsResource } from '../../src/resources/paymentIntents';
-import { RefundsResource } from '../../src/resources/refunds';
-import { PaymentLinksResource } from '../../src/resources/paymentLinks';
 import { createMockFetch } from '../support/mockFetch';
 import {
   buildTestClient,
@@ -65,7 +63,7 @@ describe('encodeQuery', () => {
 describe('list() auto-pagination', () => {
   test('awaiting list() is one page', async () => {
     const { fetch, requests } = pagingGateway();
-    const page = await new PaymentIntentsResource(buildTestClient(fetch)).list({ limit: 2 });
+    const page = await resources(buildTestClient(fetch)).paymentIntents.list({ limit: 2 });
     expect(page.data.map((row) => row.id)).toEqual(['pi_5', 'pi_4']);
     expect(page.has_more).toBe(true);
     expect(page.url).toBe('/v1/payment_intents');
@@ -75,7 +73,7 @@ describe('list() auto-pagination', () => {
   test('for await walks every page forward with starting_after', async () => {
     const { fetch, requests } = pagingGateway();
     const ids: string[] = [];
-    for await (const intent of new PaymentIntentsResource(buildTestClient(fetch)).list({
+    for await (const intent of resources(buildTestClient(fetch)).paymentIntents.list({
       limit: 2,
     })) {
       ids.push(intent.id);
@@ -90,7 +88,7 @@ describe('list() auto-pagination', () => {
   test('from ending_before it walks backwards, moving away from the cursor', async () => {
     const { fetch, requests } = pagingGateway();
     const ids: string[] = [];
-    const list = new PaymentIntentsResource(buildTestClient(fetch)).list({
+    const list = resources(buildTestClient(fetch)).paymentIntents.list({
       limit: 2,
       ending_before: 'pi_1',
     });
@@ -108,8 +106,8 @@ describe('list() auto-pagination', () => {
 
   test('autoPagingToArray stops at limit without fetching further pages', async () => {
     const { fetch, requests } = pagingGateway();
-    const ids = await new PaymentIntentsResource(buildTestClient(fetch))
-      .list({ limit: 2 })
+    const ids = await resources(buildTestClient(fetch))
+      .paymentIntents.list({ limit: 2 })
       .autoPagingToArray({ limit: 3 });
     expect(ids.map((row) => row.id)).toEqual(['pi_5', 'pi_4', 'pi_3']);
     expect(requests.filter((r) => r.url.startsWith(TEST_GATEWAY_URL))).toHaveLength(2);
@@ -117,7 +115,7 @@ describe('list() auto-pagination', () => {
 
   test('autoPagingToArray requires a bounded limit', async () => {
     const { fetch } = pagingGateway();
-    const list = new PaymentIntentsResource(buildTestClient(fetch)).list();
+    const list = resources(buildTestClient(fetch)).paymentIntents.list();
     await expect(list.autoPagingToArray({ limit: 0 })).rejects.toThrow(TypeError);
     await expect(list.autoPagingToArray({ limit: 10_001 })).rejects.toThrow(TypeError);
   });
@@ -125,8 +123,8 @@ describe('list() auto-pagination', () => {
   test('autoPagingEach stops when the callback returns false', async () => {
     const { fetch } = pagingGateway();
     const seen: string[] = [];
-    await new PaymentIntentsResource(buildTestClient(fetch))
-      .list({ limit: 2 })
+    await resources(buildTestClient(fetch))
+      .paymentIntents.list({ limit: 2 })
       .autoPagingEach((intent) => {
         seen.push(intent.id);
         return seen.length < 3;
@@ -138,7 +136,7 @@ describe('list() auto-pagination', () => {
 describe('expand, filters and updates on the wire', () => {
   test('list sends created ranges, filters and expand[]', async () => {
     const { fetch, requests } = pagingGateway();
-    await new PaymentIntentsResource(buildTestClient(fetch)).list({
+    await resources(buildTestClient(fetch)).paymentIntents.list({
       status: 'succeeded',
       created: { gte: 1_800_000_000 },
       expand: ['data.connected_account'],
@@ -154,7 +152,7 @@ describe('expand, filters and updates on the wire', () => {
       if (req.url.includes('/auth/service-token')) return serviceTokenMintResponse();
       return { status: 200, json: { id: 'pi_1', object: 'payment_intent' } };
     });
-    const intents = new PaymentIntentsResource(buildTestClient(fetch));
+    const intents = resources(buildTestClient(fetch)).paymentIntents;
     await intents.retrieve('pi_1', { expand: ['connected_account'] });
     await intents.update('pi_1', { metadata: { order: '' } });
     const calls = requests.filter((r) => r.url.startsWith(TEST_GATEWAY_URL));
@@ -174,13 +172,13 @@ describe('expand, filters and updates on the wire', () => {
         json: { object: 'list', data: [], has_more: false, url: '/x', remaining_refundable: '42' },
       };
     });
-    const page = await new RefundsResource(buildTestClient(fetch)).listForPaymentIntent('pi_1');
+    const page = await resources(buildTestClient(fetch)).refunds.listForPaymentIntent('pi_1');
     expect(page.remaining_refundable).toBe('42');
   });
 
   test('payment links filter by active', async () => {
     const { fetch, requests } = pagingGateway();
-    await new PaymentLinksResource(buildTestClient(fetch)).list({ active: false });
+    await resources(buildTestClient(fetch)).paymentLinks.list({ active: false });
     const url = new URL(requests.filter((r) => r.url.startsWith(TEST_GATEWAY_URL))[0]?.url ?? '');
     expect(url.pathname).toBe('/v1/payment_links');
     expect(url.searchParams.get('active')).toBe('false');

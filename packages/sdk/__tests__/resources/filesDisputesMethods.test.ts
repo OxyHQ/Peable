@@ -2,6 +2,8 @@
  * Files, disputes, payment method configurations and domains — the routes and
  * the bodies, which is what an integrator would otherwise have to guess.
  */
+import type { FilesNamespace } from '../../src';
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import type {
   Dispute,
@@ -9,13 +11,6 @@ import type {
   PaymentMethodConfigurationEntry,
   PaymentMethodDomain,
 } from '@peable.to/shared-types';
-import { DisputesResource } from '../../src/resources/disputes';
-import { FilesResource } from '../../src/resources/files';
-import {
-  PaymentMethodConfigurationsResource,
-  PaymentMethodDomainsResource,
-} from '../../src/resources/paymentMethodConfigurations';
-import { MerchantsResource } from '../../src/resources/merchants';
 import { Peable } from '../../src';
 import { createMockFetch, type CapturedRequest } from '../support/mockFetch';
 import {
@@ -97,13 +92,12 @@ describe('FilesResource', () => {
    */
   test('uploads bytes as multipart/form-data with an idempotency key', async () => {
     const { fetch: fetchImpl, requests } = gateway(FILE, 201);
-    const files = new FilesResource(buildTestClient(fetchImpl));
+    const files = resources(buildTestClient(fetchImpl)).files;
 
     const file = await files.create(
       {
         purpose: 'dispute_evidence',
-        file: new TextEncoder().encode('%PDF'),
-        filename: 'receipt.pdf',
+        file: new File([new TextEncoder().encode('%PDF')], 'receipt.pdf'),
       },
       { idempotencyKey: 'upload-1' },
     );
@@ -123,7 +117,7 @@ describe('FilesResource', () => {
 
   test("keeps a File's own name and mints a key when none is given", async () => {
     const { fetch: fetchImpl, requests } = gateway(FILE, 201);
-    const files = new FilesResource(buildTestClient(fetchImpl));
+    const files = resources(buildTestClient(fetchImpl)).files;
 
     await files.create({
       purpose: 'business_logo',
@@ -138,7 +132,8 @@ describe('FilesResource', () => {
 
   test('makes a file from an Oxy file as JSON', async () => {
     const { fetch: fetchImpl, requests } = gateway(FILE, 201);
-    const files = new FilesResource(buildTestClient(fetchImpl));
+    // `Peable.files` is typed `FilesNamespace`: `create` also takes the JSON form.
+    const files = resources(buildTestClient(fetchImpl)).files as FilesNamespace;
 
     await files.create({ purpose: 'business_logo', oxy_file: 'oxyfile_1' });
 
@@ -152,17 +147,17 @@ describe('FilesResource', () => {
 
   test('retrieves one and lists by purpose', async () => {
     const one = gateway(FILE);
-    await new FilesResource(buildTestClient(one.fetch)).retrieve('file_1');
+    await resources(buildTestClient(one.fetch)).files.retrieve('file_1');
     expect(callOf(one.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/files/file_1`);
 
     const many = gateway({ object: 'list', data: [FILE], has_more: false, url: '/v1/files' });
-    const page = await new FilesResource(buildTestClient(many.fetch)).list({
+    const page = await resources(buildTestClient(many.fetch)).files.list({
       purpose: 'dispute_evidence',
       limit: 5,
     });
     expect(page.data).toEqual([FILE]);
     expect(callOf(many.requests)?.url).toBe(
-      `${TEST_GATEWAY_URL}/v1/files?limit=5&purpose=dispute_evidence`,
+      `${TEST_GATEWAY_URL}/v1/files?purpose=dispute_evidence&limit=5`,
     );
   });
 });
@@ -170,7 +165,7 @@ describe('FilesResource', () => {
 describe('DisputesResource', () => {
   test('stages evidence without submitting', async () => {
     const { fetch: fetchImpl, requests } = gateway(DISPUTE);
-    const disputes = new DisputesResource(buildTestClient(fetchImpl));
+    const disputes = resources(buildTestClient(fetchImpl)).disputes;
 
     await disputes.update('dp_1', {
       evidence: { product_description: 'A mug', shipping_documentation: 'file_2' },
@@ -187,21 +182,21 @@ describe('DisputesResource', () => {
 
   test('closes (accepts) a dispute', async () => {
     const { fetch: fetchImpl, requests } = gateway({ ...DISPUTE, status: 'lost' });
-    const disputes = new DisputesResource(buildTestClient(fetchImpl));
+    const disputes = resources(buildTestClient(fetchImpl)).disputes;
 
-    const closed = await disputes.close('dp_1', { idempotencyKey: 'close-1' });
+    const closed = await disputes.close('dp_1', {}, { idempotencyKey: 'close-1' });
 
     expect(closed.status).toBe('lost');
     const call = callOf(requests);
     expect(call?.method).toBe('POST');
     expect(call?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes/dp_1/close`);
-    expect(call?.body).toBeUndefined();
+    expect(call?.body).toBe('{}');
     expect(call?.headers.get('Idempotency-Key')).toBe('close-1');
   });
 
   test('retrieves with expand and lists by charge', async () => {
     const one = gateway(DISPUTE);
-    await new DisputesResource(buildTestClient(one.fetch)).retrieve('dp_1', {
+    await resources(buildTestClient(one.fetch)).disputes.retrieve('dp_1', {
       expand: ['charge'],
     });
     expect(callOf(one.requests)?.url).toBe(
@@ -209,7 +204,7 @@ describe('DisputesResource', () => {
     );
 
     const many = gateway({ object: 'list', data: [], has_more: false, url: '/v1/disputes' });
-    await new DisputesResource(buildTestClient(many.fetch)).list({ charge: 'ch_1' });
+    await resources(buildTestClient(many.fetch)).disputes.list({ charge: 'ch_1' });
     expect(callOf(many.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/disputes?charge=ch_1`);
   });
 });
@@ -217,7 +212,7 @@ describe('DisputesResource', () => {
 describe('PaymentMethodConfigurationsResource', () => {
   test('turns a method on through the configuration update', async () => {
     const { fetch: fetchImpl, requests } = gateway({ id: 'pmc_1', ideal: ENTRY });
-    const configurations = new PaymentMethodConfigurationsResource(buildTestClient(fetchImpl));
+    const configurations = resources(buildTestClient(fetchImpl)).paymentMethodConfigurations;
 
     await configurations.update('pmc_1', { ideal: { display_preference: { preference: 'on' } } });
 
@@ -231,7 +226,7 @@ describe('PaymentMethodConfigurationsResource', () => {
 
   test('creates, retrieves and lists', async () => {
     const created = gateway({ id: 'pmc_2' }, 201);
-    await new PaymentMethodConfigurationsResource(buildTestClient(created.fetch)).create({
+    await resources(buildTestClient(created.fetch)).paymentMethodConfigurations.create({
       name: 'Checkout EU',
     });
     expect(callOf(created.requests)?.url).toBe(
@@ -240,11 +235,11 @@ describe('PaymentMethodConfigurationsResource', () => {
     expect(JSON.parse(callOf(created.requests)?.body ?? '{}')).toEqual({ name: 'Checkout EU' });
 
     const one = gateway({ id: 'pmc_2' });
-    await new PaymentMethodConfigurationsResource(buildTestClient(one.fetch)).retrieve('pmc_2');
+    await resources(buildTestClient(one.fetch)).paymentMethodConfigurations.retrieve('pmc_2');
     expect(callOf(one.requests)?.method).toBe('GET');
 
     const many = gateway({ object: 'list', data: [], has_more: false, url: '' });
-    await new PaymentMethodConfigurationsResource(buildTestClient(many.fetch)).list();
+    await resources(buildTestClient(many.fetch)).paymentMethodConfigurations.list();
     expect(callOf(many.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_method_configurations`);
   });
 });
@@ -252,7 +247,7 @@ describe('PaymentMethodConfigurationsResource', () => {
 describe('PaymentMethodDomainsResource', () => {
   test('registers, validates, updates and lists a domain', async () => {
     const created = gateway(DOMAIN, 201);
-    await new PaymentMethodDomainsResource(buildTestClient(created.fetch)).create({
+    await resources(buildTestClient(created.fetch)).paymentMethodDomains.create({
       domain_name: 'shop.example.com',
     });
     expect(callOf(created.requests)?.url).toBe(`${TEST_GATEWAY_URL}/v1/payment_method_domains`);
@@ -261,20 +256,20 @@ describe('PaymentMethodDomainsResource', () => {
     });
 
     const validated = gateway(DOMAIN);
-    await new PaymentMethodDomainsResource(buildTestClient(validated.fetch)).validate('pmd_1');
+    await resources(buildTestClient(validated.fetch)).paymentMethodDomains.validate('pmd_1');
     expect(callOf(validated.requests)?.method).toBe('POST');
     expect(callOf(validated.requests)?.url).toBe(
       `${TEST_GATEWAY_URL}/v1/payment_method_domains/pmd_1/validate`,
     );
 
     const updated = gateway({ ...DOMAIN, enabled: false });
-    await new PaymentMethodDomainsResource(buildTestClient(updated.fetch)).update('pmd_1', {
+    await resources(buildTestClient(updated.fetch)).paymentMethodDomains.update('pmd_1', {
       enabled: false,
     });
     expect(JSON.parse(callOf(updated.requests)?.body ?? '{}')).toEqual({ enabled: false });
 
     const many = gateway({ object: 'list', data: [DOMAIN], has_more: false, url: '' });
-    await new PaymentMethodDomainsResource(buildTestClient(many.fetch)).list({ enabled: true });
+    await resources(buildTestClient(many.fetch)).paymentMethodDomains.list({ enabled: true });
     expect(callOf(many.requests)?.url).toBe(
       `${TEST_GATEWAY_URL}/v1/payment_method_domains?enabled=true`,
     );
@@ -284,7 +279,7 @@ describe('PaymentMethodDomainsResource', () => {
 describe('merchant branding and the client surface', () => {
   test('sets and clears the business logo beside the avatar', async () => {
     const { fetch: fetchImpl, requests } = gateway({ id: 'merch_1' });
-    const merchants = new MerchantsResource(buildTestClient(fetchImpl));
+    const merchants = resources(buildTestClient(fetchImpl)).merchants;
 
     await merchants.update({ business_logo: 'file_logo' });
     await merchants.update({ business_logo: null });
@@ -296,9 +291,9 @@ describe('merchant branding and the client surface', () => {
 
   test('Peable exposes the new namespaces', () => {
     const peable = new Peable({ tokenProvider: { getToken: async () => 't', invalidate() {} } });
-    expect(peable.files).toBeInstanceOf(FilesResource);
-    expect(peable.disputes).toBeInstanceOf(DisputesResource);
-    expect(peable.paymentMethodConfigurations).toBeInstanceOf(PaymentMethodConfigurationsResource);
-    expect(peable.paymentMethodDomains).toBeInstanceOf(PaymentMethodDomainsResource);
+    expect(typeof peable.files).toBe('object');
+    expect(typeof peable.disputes).toBe('object');
+    expect(typeof peable.paymentMethodConfigurations).toBe('object');
+    expect(typeof peable.paymentMethodDomains).toBe('object');
   });
 });

@@ -36,9 +36,9 @@ import { Peable } from '@peable.to/sdk';
 
 const peable = new Peable({ publicKey, secret });
 
-const seller = await peable.accounts.create({
-  externalRef: store.id,                       // YOUR id for the seller — the idempotency
-  faircoin: { network: 'testnet', oxyUserId: store.ownerOxyUserId },
+const seller = await peable.connectedAccounts.create({
+  external_ref: store.id,                      // YOUR id for the seller — the idempotency
+  faircoin: { network: 'testnet', oxy_user_id: store.ownerOxyUserId },
 });
 // seller.rails       → ['faircoin']
 // seller.faircoin    → { network: 'testnet', status: 'pending', oxyUserId, registeredAt: null }
@@ -58,18 +58,16 @@ const seller = await peable.accounts.create({
   Asking for a different network or a different Oxy user on an existing
   FairCoin account is a 409.
 
-`peable.accounts` is `peable.connectedAccounts` under its Stripe name:
-`accounts.retrieve(id)`, `accounts.list({ limit, starting_after })`,
-`accounts.retrieveByRef(externalRef)`.
+Also `connectedAccounts.retrieve(id)`, `connectedAccounts.list({ limit, starting_after })`,
+`connectedAccounts.retrieveByRef(externalRef)`.
 
 ## 2. Send the seller to register their key
 
 ```ts
-const link = await peable.accountLinks.create({
-  account: seller.id,
+const link = await peable.connectedAccounts.createAccountLink(seller.id, {
   rail: 'faircoin',
-  returnUrl: 'https://mercaria.co/sell/payments/done',
-  refreshUrl: 'https://mercaria.co/sell/payments/refresh',
+  return_url: 'https://mercaria.co/sell/payments/done',
+  refresh_url: 'https://mercaria.co/sell/payments/refresh',
 });
 redirect(link.url);                            // https://peable.to/connect/<token>
 ```
@@ -201,8 +199,8 @@ movement of money; the options and a recommendation are in ADR 0012 §D12.
 ## Mercaria checklist
 
 - [ ] On store creation (or when the owner opts in):
-      `accounts.create({ externalRef: storeId, faircoin: { network, oxyUserId: ownerOxyUserId } })`.
-- [ ] Seller settings → "Get paid in FairCoin" → `accountLinks.create({ account, rail: 'faircoin', … })` → redirect.
+      `connectedAccounts.create({ externalRef: storeId, faircoin: { network, oxyUserId: ownerOxyUserId } })`.
+- [ ] Seller settings → "Get paid in FairCoin" → `connectedAccounts.createAccountLink(account, { rail: 'faircoin', … })` → redirect.
 - [ ] Webhook: on `connected_account.updated` with `faircoin.status === 'active'`, enable FairCoin at that store's checkout.
 - [ ] Checkout: one `paymentIntents.create` / `checkout.sessions.create` per seller group with `connectedAccount`, explicit `rail: 'faircoin'`.
 - [ ] Fulfil on `payment_intent.succeeded`; release stock only on `payment_intent.canceled`.

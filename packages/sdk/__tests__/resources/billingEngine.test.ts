@@ -2,25 +2,9 @@
  * The native billing engine's resources (ADR 0018): the routes, methods,
  * query spellings and bodies an integrator would otherwise guess.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
 import { Peable } from '../../src/index';
-import { BillingResource } from '../../src/resources/billing';
-import {
-  BillingMeterEventsResource,
-  BillingMetersResource,
-  BillingNamespace,
-  BillingPortalResource,
-  BillingSettingsResource,
-  CreditNotesResource,
-  CustomerBalanceTransactionsResource,
-  EntitlementsResource,
-  InvoiceItemsResource,
-  InvoicesResource,
-  SubscriptionItemsResource,
-  SubscriptionsResource,
-  TestClocksResource,
-} from '../../src/resources/billingEngine';
-import { TestHelpersResource } from '../../src/resources/testHelpers';
 import {
   CREDIT_NOTE,
   ENTITLEMENT_SUMMARY,
@@ -69,28 +53,27 @@ describe('Peable wires the billing engine', () => {
     const peable = new Peable({
       tokenProvider: { getToken: async () => 'token', invalidate: () => undefined },
     });
-    expect(peable.subscriptions).toBeInstanceOf(SubscriptionsResource);
-    expect(peable.subscriptionItems).toBeInstanceOf(SubscriptionItemsResource);
-    expect(peable.invoices).toBeInstanceOf(InvoicesResource);
-    expect(peable.invoiceItems).toBeInstanceOf(InvoiceItemsResource);
-    expect(peable.creditNotes).toBeInstanceOf(CreditNotesResource);
-    expect(peable.customerBalanceTransactions).toBeInstanceOf(CustomerBalanceTransactionsResource);
-    expect(peable.testHelpers).toBeInstanceOf(TestHelpersResource);
-    expect(peable.testHelpers.testClocks).toBeInstanceOf(TestClocksResource);
-    expect(peable.billingSettings).toBeInstanceOf(BillingSettingsResource);
-    expect(peable.entitlements).toBeInstanceOf(EntitlementsResource);
-    expect(peable.billingPortal).toBeInstanceOf(BillingPortalResource);
-    expect(peable.billing).toBeInstanceOf(BillingNamespace);
-    expect(peable.billing).toBeInstanceOf(BillingResource);
-    expect(peable.billing.meters).toBeInstanceOf(BillingMetersResource);
-    expect(peable.billing.meterEvents).toBeInstanceOf(BillingMeterEventsResource);
+    expect(typeof peable.subscriptions).toBe('object');
+    expect(typeof peable.subscriptionItems).toBe('object');
+    expect(typeof peable.invoices).toBe('object');
+    expect(typeof peable.invoiceItems).toBe('object');
+    expect(typeof peable.creditNotes).toBe('object');
+    expect(typeof peable.customerBalanceTransactions).toBe('object');
+    expect(typeof peable.testHelpers).toBe('object');
+    expect(typeof peable.testHelpers.testClocks).toBe('object');
+    expect(typeof peable.billingSettings).toBe('object');
+    expect(typeof peable.entitlements).toBe('object');
+    expect(typeof peable.billingPortal).toBe('object');
+    expect(typeof peable.billing).toBe('object');
+    expect(typeof peable.billing.meters).toBe('object');
+    expect(typeof peable.billing.meterEvents).toBe('object');
   });
 });
 
 describe('subscriptions', () => {
   test('create, retrieve, update, cancel, resume and list', async () => {
     const { client, gateway } = harness(SUBSCRIPTION);
-    const subscriptions = new SubscriptionsResource(client);
+    const subscriptions = resources(client).subscriptions;
     const params = {
       customer: 'cus_1',
       items: [{ price: 'price_1', quantity: 2 }],
@@ -121,7 +104,7 @@ describe('subscriptions', () => {
 
   test('list spells its filters, ranges included', async () => {
     const { client, gateway } = harness(list([SUBSCRIPTION]));
-    await new SubscriptionsResource(client).list({
+    await resources(client).subscriptions.list({
       customer: 'cus_1',
       status: 'all',
       current_period_end: { lt: 100 },
@@ -129,14 +112,14 @@ describe('subscriptions', () => {
     });
     expect(route(gateway)).toEqual([
       'GET',
-      '/v1/subscriptions?limit=5&customer=cus_1&status=all&current_period_end[lt]=100',
+      '/v1/subscriptions?customer=cus_1&status=all&current_period_end[lt]=100&limit=5',
     ]);
   });
 
   test('items are their own resource', async () => {
     const item = SUBSCRIPTION.items.data[0];
     const { client, gateway } = harness(item);
-    const items = new SubscriptionItemsResource(client);
+    const items = resources(client).subscriptionItems;
     await items.create({ subscription: 'sub_1', price: 'price_2', proration_behavior: 'none' });
     expect(route(gateway)).toEqual(['POST', '/v1/subscription_items']);
     await items.update('si_1', { quantity: 3 });
@@ -151,7 +134,7 @@ describe('subscriptions', () => {
 describe('invoices', () => {
   test('the lifecycle actions are POSTs on the invoice', async () => {
     const { client, gateway } = harness(INVOICE);
-    const invoices = new InvoicesResource(client);
+    const invoices = resources(client).invoices;
     await invoices.create({ customer: 'cus_1', currency: 'EUR', auto_advance: false });
     expect(route(gateway)).toEqual(['POST', '/v1/invoices']);
     await invoices.finalizeInvoice('in_1', { auto_advance: true });
@@ -173,7 +156,7 @@ describe('invoices', () => {
 
   test('upcoming previews a change as an indexed query', async () => {
     const { client, gateway } = harness(INVOICE);
-    await new InvoicesResource(client).retrieveUpcoming({
+    await resources(client).invoices.retrieveUpcoming({
       customer: 'cus_1',
       subscription: 'sub_1',
       subscription_items: [{ id: 'si_1', price: 'price_2' }],
@@ -181,13 +164,13 @@ describe('invoices', () => {
     });
     expect(route(gateway)).toEqual([
       'GET',
-      '/v1/invoices/upcoming?customer=cus_1&subscription=sub_1&subscription_proration_behavior=create_prorations&subscription_items[0][id]=si_1&subscription_items[0][price]=price_2',
+      '/v1/invoices/upcoming?customer=cus_1&subscription=sub_1&subscription_items[0][id]=si_1&subscription_items[0][price]=price_2&subscription_proration_behavior=create_prorations',
     ]);
   });
 
   test('list, and invoice items', async () => {
     const { client, gateway } = harness(list([INVOICE]));
-    await new InvoicesResource(client).list({
+    await resources(client).invoices.list({
       customer: 'cus_1',
       status: 'open',
       due_date: { lte: 9 },
@@ -197,13 +180,13 @@ describe('invoices', () => {
       '/v1/invoices?customer=cus_1&status=open&due_date[lte]=9',
     ]);
     const items = harness(list([INVOICE_ITEM]));
-    await new InvoiceItemsResource(items.client).list({ customer: 'cus_1', pending: true });
+    await resources(items.client).invoiceItems.list({ customer: 'cus_1', pending: true });
     expect(route(items.gateway)).toEqual(['GET', '/v1/invoiceitems?customer=cus_1&pending=true']);
   });
 
   test('invoice items create, update, delete', async () => {
     const { client, gateway } = harness(INVOICE_ITEM);
-    const items = new InvoiceItemsResource(client);
+    const items = resources(client).invoiceItems;
     await items.create(
       { customer: 'cus_1', amount: '700', currency: 'EUR' },
       { idempotencyKey: 'ii' },
@@ -219,7 +202,7 @@ describe('invoices', () => {
 describe('credit notes and balances', () => {
   test('create, preview (a query), void', async () => {
     const { client, gateway } = harness(CREDIT_NOTE);
-    const notes = new CreditNotesResource(client);
+    const notes = resources(client).creditNotes;
     await notes.create({ invoice: 'in_1', amount: '300', refund_amount: '300' });
     expect(route(gateway)).toEqual(['POST', '/v1/credit_notes']);
     await notes.preview({
@@ -236,7 +219,7 @@ describe('credit notes and balances', () => {
 
   test('balance transactions live under the customer', async () => {
     const { client, gateway } = harness({ id: 'cbtxn_1' });
-    const balance = new CustomerBalanceTransactionsResource(client);
+    const balance = resources(client).customerBalanceTransactions;
     await balance.create('cus_1', { amount: '-500', currency: 'EUR' });
     expect(route(gateway)).toEqual(['POST', '/v1/customers/cus_1/balance_transactions']);
     expect(body(gateway)).toEqual({ amount: '-500', currency: 'EUR' });
@@ -248,7 +231,7 @@ describe('credit notes and balances', () => {
 describe('test clocks, settings, meters', () => {
   test('test clocks', async () => {
     const { client, gateway } = harness(TEST_CLOCK);
-    const clocks = new TestClocksResource(client);
+    const clocks = resources(client).testHelpers.testClocks;
     await clocks.create({ frozen_time: 100, name: 'trial' });
     expect(route(gateway)).toEqual(['POST', '/v1/test_helpers/test_clocks']);
     await clocks.advance('clock_1', { frozen_time: 200 });
@@ -262,7 +245,7 @@ describe('test clocks, settings, meters', () => {
 
   test('billing settings', async () => {
     const { client, gateway } = harness({ object: 'billing_settings' });
-    const settings = new BillingSettingsResource(client);
+    const settings = resources(client).billingSettings;
     await settings.update({ dunning: { retry_schedule_days: [1, 3], final_action: 'unpaid' } });
     expect(route(gateway)).toEqual(['POST', '/v1/billing_settings']);
     await settings.retrieve();
@@ -271,7 +254,7 @@ describe('test clocks, settings, meters', () => {
 
   test('meters and meter events', async () => {
     const { client, gateway } = harness(METER);
-    const meters = new BillingMetersResource(client);
+    const meters = resources(client).billing.meters;
     await meters.create({
       display_name: 'API',
       event_name: 'api_call',
@@ -285,7 +268,7 @@ describe('test clocks, settings, meters', () => {
       'GET',
       '/v1/billing/meters/mtr_1/event_summaries?customer=cus_1&start_time=1&end_time=2',
     ]);
-    await new BillingMeterEventsResource(client).create(
+    await resources(client).billing.meterEvents.create(
       {
         event_name: 'api_call',
         identifier: 'e1',
@@ -300,7 +283,7 @@ describe('test clocks, settings, meters', () => {
 describe('entitlements and the portal', () => {
   test('features, product features, active entitlements', async () => {
     const { client, gateway } = harness(ENTITLEMENT_SUMMARY.entitlements);
-    const entitlements = new EntitlementsResource(client);
+    const entitlements = resources(client).entitlements;
     await entitlements.features.create({ lookup_key: 'mention_plus', name: 'Mention Plus' });
     expect(route(gateway)).toEqual(['POST', '/v1/entitlements/features']);
     await entitlements.productFeatures.attach('prod_1', { entitlement_feature: 'feat_1' });
@@ -315,13 +298,13 @@ describe('entitlements and the portal', () => {
 
   test('portal configurations and sessions', async () => {
     const { client, gateway } = harness(PORTAL_CONFIGURATION);
-    const portal = new BillingPortalResource(client);
+    const portal = resources(client).billingPortal;
     await portal.configurations.create({ features: { invoice_history: { enabled: true } } });
     expect(route(gateway)).toEqual(['POST', '/v1/billing_portal/configurations']);
     await portal.configurations.update('bpc_1', { active: true });
     expect(route(gateway)).toEqual(['POST', '/v1/billing_portal/configurations/bpc_1']);
     const sessions = harness(PORTAL_SESSION);
-    await new BillingPortalResource(sessions.client).sessions.create({ customer: 'cus_1' });
+    await resources(sessions.client).billingPortal.sessions.create({ customer: 'cus_1' });
     expect(route(sessions.gateway)).toEqual(['POST', '/v1/billing_portal/sessions']);
   });
 });

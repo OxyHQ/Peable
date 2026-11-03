@@ -8,7 +8,7 @@
 // aborts (the iterator then simply ends) or the gateway REFUSES the stream —
 // a 4xx such as a live credential's `test_mode_only` — which is thrown.
 
-import type { GatewayClient } from './client';
+import type { GatewayClient, RestClientStreamOptions } from './client';
 import type { QueryValue } from './list';
 import { PeableError } from './errors';
 
@@ -105,6 +105,10 @@ export async function* liveStream<T>(
   eventName: string,
   query: Readonly<Record<string, QueryValue>>,
   options: LiveStreamOptions = {},
+  request: Pick<
+    RestClientStreamOptions,
+    'apiVersion' | 'peableAccount' | 'acceptsPeableAccount'
+  > = {},
 ): AsyncGenerator<T> {
   const { signal } = options;
   let lastEventId: string | undefined;
@@ -112,6 +116,7 @@ export async function* liveStream<T>(
   while (!signal?.aborted) {
     try {
       const response = await client.stream(path, {
+        ...request,
         query,
         ...(signal ? { signal } : {}),
         ...(lastEventId === undefined ? {} : { headers: { 'Last-Event-ID': lastEventId } }),

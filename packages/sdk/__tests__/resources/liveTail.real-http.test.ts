@@ -80,13 +80,15 @@ describe('events.stream', () => {
     const controller = new AbortController();
     let connects = 0;
     const got: string[] = [];
-    for await (const item of client(url).events.stream({
-      types: ['payment_intent.*', 'charge.refunded'],
-      signal: controller.signal,
-      onConnect: () => {
-        connects += 1;
+    for await (const item of client(url).events.stream(
+      { types: 'payment_intent.*,charge.refunded' },
+      {
+        signal: controller.signal,
+        onConnect: () => {
+          connects += 1;
+        },
       },
-    })) {
+    )) {
       got.push(item.id);
       if (got.length === 2) controller.abort();
     }
@@ -138,10 +140,13 @@ describe('requestLogs', () => {
     });
     const peable = client(url);
     await peable.requestLogs.list({ status: '4xx', method: 'POST', limit: 5 });
-    expect(urls[0]).toBe('/v1/request_logs?limit=5&status=4xx&method=POST');
+    expect(urls[0]).toBe('/v1/request_logs?status=4xx&method=POST&limit=5');
 
     const controller = new AbortController();
-    for await (const log of peable.requestLogs.stream({ status: 404, signal: controller.signal })) {
+    for await (const log of peable.requestLogs.stream(
+      { status: 404 },
+      { signal: controller.signal },
+    )) {
       expect(log).toMatchObject({ id: 'req_1', status: 404 });
       controller.abort();
     }
@@ -166,7 +171,7 @@ describe('testHelpers and sendTestEvent', () => {
     await peable.testHelpers.paymentIntents.simulateFaircoinPayment('pi_1', {
       outcome: 'underpaid',
     });
-    await peable.testHelpers.checkoutSessions.expire('cs_1', { idempotencyKey: 'k' });
+    await peable.testHelpers.checkoutSessions.expire('cs_1', {}, { idempotencyKey: 'k' });
     await peable.webhookEndpoints.sendTestEvent('we_1');
     expect(seen.map((r) => `${r.method} ${r.url}`)).toEqual([
       'POST /v1/test_helpers/payment_intents/pi_1/simulate_faircoin_payment',

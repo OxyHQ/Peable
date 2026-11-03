@@ -3,8 +3,9 @@
 // injected fetch mock, so resource-level tests exercise the FULL path
 // (resource → RestClient → fetch) instead of stubbing `RestClient` itself.
 
-import { createRestClient, type GatewayClient } from '../../src/core/client';
+import { createRestClient, type GatewayClient, type RestClientConfig } from '../../src/core/client';
 import { createServiceTokenProvider } from '../../src/core/serviceToken';
+import { GeneratedClient } from '../../src/generated/resources';
 import type { MockResponseSpec } from './mockFetch';
 
 export const TEST_OXY_API_URL = 'https://api.oxy.test';
@@ -30,11 +31,26 @@ export function serviceTokenMintResponse(
   };
 }
 
-/** Build a `RestClient` wired exactly like `Peable`'s constructor, against the given fetch. */
-export function buildTestClient(fetchImpl: typeof fetch): GatewayClient {
+/**
+ * Build a `RestClient` wired exactly like `Peable`'s constructor, against the
+ * given fetch — retries on (the default 2), with an instant backoff so a suite
+ * exercising them does not wait.
+ */
+export function buildTestClient(
+  fetchImpl: typeof fetch,
+  config: Omit<RestClientConfig, 'baseURL'> = {},
+): GatewayClient {
   const tokenProvider = createServiceTokenProvider(
     { publicKey: TEST_PUBLIC_KEY, secret: TEST_SECRET, oxyApiUrl: TEST_OXY_API_URL },
     { fetch: fetchImpl },
   );
-  return createRestClient({ baseURL: TEST_GATEWAY_URL }, tokenProvider, { fetch: fetchImpl });
+  return createRestClient({ baseURL: TEST_GATEWAY_URL, ...config }, tokenProvider, {
+    fetch: fetchImpl,
+    sleep: async () => {},
+  });
+}
+
+/** Every generated namespace over `client` — what `Peable` exposes, without its config. */
+export function resources(client: GatewayClient): GeneratedClient {
+  return new GeneratedClient(client);
 }

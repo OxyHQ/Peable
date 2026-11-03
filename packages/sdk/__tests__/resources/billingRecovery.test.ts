@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'bun:test';
-import { BillingResource } from '../../src/resources/billing';
 import { createRestClient } from '../../src/core/client';
+import { resources } from '../support/testGateway';
 import type { BillingCheckoutOperationRecovery } from '@peable.to/shared-types';
 
 const params = {
@@ -10,6 +10,7 @@ const params = {
   store_id: 'store:fixture',
   plan_id: 'plan:fixture',
 };
+const { idempotency_key: operationKey, ...operationQuery } = params;
 const source = {
   ...params,
   merchant_id: 'merch_fixture',
@@ -26,16 +27,16 @@ function resource(reply: unknown, status = 200) {
   }) as typeof fetch;
   return {
     calls,
-    billing: new BillingResource(
+    billing: resources(
       createRestClient(
         { baseURL: 'https://example.invalid' },
         {
           getToken: async () => 'synthetic-owner-token',
           invalidate() {},
         },
-        { fetch: fakeFetch },
+        { fetch: fakeFetch, sleep: async () => {} },
       ),
-    ),
+    ).billing,
   };
 }
 
@@ -47,7 +48,9 @@ describe('checkout operation recovery official SDK transport', () => {
       checkout: { id: 'cs_test_fixture', expires_at: 1790812800 },
     };
     const fixture = resource(expected);
-    expect(await fixture.billing.retrieveCheckoutOperation(params)).toEqual(expected);
+    expect(await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).toEqual(
+      expected,
+    );
     expect(fixture.calls).toHaveLength(1);
     const request = fixture.calls[0];
     if (!request) throw new Error('Expected request');
@@ -67,16 +70,26 @@ describe('checkout operation recovery official SDK transport', () => {
   it('preserves absent/pending/indeterminate observations without cancellation or another write', async () => {
     for (const state of ['not_found', 'pending', 'indeterminate'] as const) {
       const fixture = resource({ state, source });
-      expect((await fixture.billing.retrieveCheckoutOperation(params)).state).toBe(state);
+      expect(
+        (await fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery)).state,
+      ).toBe(state);
       expect(fixture.calls).toHaveLength(1);
       expect(fixture.calls.every((call) => call.init.method === 'GET')).toBe(true);
     }
   });
   it('propagates provider uncertainty and foreign-owner failures with no fallback request', async () => {
-    for (const status of [404, 503]) {
+    // A 404 is answered once; a 503 is the SAME read retried (the default
+    // two retries), never another request.
+    for (const [status, attempts] of [
+      [404, 1],
+      [503, 3],
+    ] as const) {
       const fixture = resource({ error: { message: 'synthetic_recovery_unavailable' } }, status);
-      await expect(fixture.billing.retrieveCheckoutOperation(params)).rejects.toThrow();
-      expect(fixture.calls).toHaveLength(1);
+      await expect(
+        fixture.billing.retrieveCheckoutOperation(operationKey, operationQuery),
+      ).rejects.toThrow();
+      expect(fixture.calls).toHaveLength(attempts);
+      expect(new Set(fixture.calls.map((call) => `${call.init.method} ${call.url}`)).size).toBe(1);
     }
   });
 });

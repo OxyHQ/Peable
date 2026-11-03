@@ -2,10 +2,8 @@
  * The report download, a settlement's reversals and the per-payment event
  * filter: each case asserts the ROUTE (method, path, query) and the headers.
  */
+import { resources } from '../support/testGateway';
 import { describe, expect, test } from 'bun:test';
-import { ReportTypesResource } from '../../src/resources/reporting';
-import { TransfersResource } from '../../src/resources/transfers';
-import { EventsResource } from '../../src/resources/webhookEndpoints';
 import { PeableInvalidRequestError } from '../../src/core/errors';
 import { createMockFetch, type CapturedRequest, type MockResponseSpec } from '../support/mockFetch';
 import {
@@ -31,11 +29,12 @@ describe('reporting.reportTypes.download', () => {
   test('streams the report over the interval, with its columns, asking for CSV', async () => {
     const csv = 'payment_intent_id,amount\r\n';
     const mock = gateway({ status: 200, text: csv, headers: { 'Content-Type': 'text/csv' } });
-    const response = await new ReportTypesResource(buildTestClient(mock.fetch)).download(
+    const response = await resources(buildTestClient(mock.fetch)).reporting.reportTypes.download(
       'payments.itemized.1',
       { interval_start: 100, interval_end: 200, columns: ['payment_intent_id', 'amount'] },
     );
-    expect(await response.text()).toBe(csv);
+    expect(new TextDecoder().decode(response.bytes)).toBe(csv);
+    expect(response.contentType).toBe('text/csv');
     const call = callOf(mock.requests);
     expect(call.method).toBe('GET');
     expect(decodeURIComponent(call.url)).toBe(
@@ -50,7 +49,7 @@ describe('reporting.reportTypes.download', () => {
       json: { error: { type: 'invalid_request_error', message: 'bad', request_id: 'req_1' } },
     });
     await expect(
-      new ReportTypesResource(buildTestClient(mock.fetch)).download('refunds.itemized.1', {
+      resources(buildTestClient(mock.fetch)).reporting.reportTypes.download('refunds.itemized.1', {
         interval_start: 2,
         interval_end: 1,
       }),
@@ -67,7 +66,7 @@ describe('transfers.listReversals', () => {
       url: '/v1/transfers/tr_1/reversals',
     };
     const mock = gateway({ status: 200, json: page });
-    expect(await new TransfersResource(buildTestClient(mock.fetch)).listReversals('tr_1')).toEqual(
+    expect(await resources(buildTestClient(mock.fetch)).transfers.listReversals('tr_1')).toEqual(
       page,
     );
     const call = callOf(mock.requests);
@@ -84,7 +83,7 @@ describe('events.list', () => {
       status: 200,
       json: { object: 'list', data: [], has_more: false, url: '/v1/events' },
     });
-    await new EventsResource(buildTestClient(mock.fetch)).list({
+    await resources(buildTestClient(mock.fetch)).events.list({
       payment_intent: 'pi_1',
       limit: 5,
     });

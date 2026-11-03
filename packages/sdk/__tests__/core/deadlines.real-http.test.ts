@@ -16,13 +16,14 @@ async function listen(handler: RequestListener) {
   if (!address || typeof address === 'string') throw new Error('Missing port');
   return `http://127.0.0.1:${address.port}`;
 }
-function sdk(url: string) {
+function sdk(url: string, maxNetworkRetries = 0) {
   return new Peable({
     publicKey: 'synthetic',
     secret: 'synthetic',
     baseURL: url,
     oxyApiUrl: url,
-    requestTimeoutMs: 100,
+    timeout: 100,
+    maxNetworkRetries,
   });
 }
 describe('HTTP deadline and existing intent propagation', () => {
@@ -38,7 +39,7 @@ describe('HTTP deadline and existing intent propagation', () => {
     statics.timeout = saved.timeout;
   });
   test.each(['mint-headers', 'mint-body', 'gateway-headers', 'gateway-body'])(
-    'bounds %s without automatically repeating a POST',
+    'bounds %s; with retries off, the POST is attempted once',
     async (mode) => {
       let gatewayCalls = 0;
       let mintCalls = 0;
@@ -76,15 +77,17 @@ describe('HTTP deadline and existing intent propagation', () => {
           { idempotencyKey: 'owned-stable-key' },
         ),
       ).rejects.toMatchObject({
-        name: 'PeableApiError',
-        ...(mode.endsWith('body') ? { statusCode: 200, code: 'invalid_response' } : {}),
+        name: 'PeableConnectionError',
+        ...(mode.endsWith('body')
+          ? { statusCode: 200, code: 'response_interrupted' }
+          : { code: 'timeout' }),
       });
       expect(mintCalls).toBe(1);
       expect(gatewayCalls).toBe(mode.startsWith('mint-') ? 0 : 1);
       expect(keys).toEqual(mode.startsWith('mint-') ? [] : ['owned-stable-key']);
     },
   );
-  test('a timed-out accepted effect recovers only on explicit retry of the same key', async () => {
+  test('a timed-out accepted effect is retried under the same key and runs once', async () => {
     const keys: string[] = [];
     const effects = new Set<string>();
     const url = await listen((request, response) => {
@@ -103,16 +106,11 @@ describe('HTTP deadline and existing intent propagation', () => {
       if (keys.length === 1) setTimeout(complete, 500);
       else complete();
     });
-    const client = sdk(url);
+    const client = sdk(url, 2);
     const params = { amount: '100', currency: 'USD' as const, rail: 'card' as const };
-    await expect(
-      client.paymentIntents.create(params, { idempotencyKey: 'stable-intent' }),
-    ).rejects.toMatchObject({ name: 'PeableApiError' });
-    expect(keys).toEqual(['stable-intent']);
-    expect(
-      await client.paymentIntents.create(params, { idempotencyKey: 'stable-intent' }),
-    ).toMatchObject({ id: 'accepted-once' });
-    expect(keys).toEqual(['stable-intent', 'stable-intent']);
+    expect(await client.paymentIntents.create(params)).toMatchObject({ id: 'accepted-once' });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1] as string);
     expect(effects.size).toBe(1);
   });
   test('preserves supplied keys on cancel/refund/transfer without changing durable body identity', async () => {
