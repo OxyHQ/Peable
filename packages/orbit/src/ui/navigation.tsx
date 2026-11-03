@@ -18,6 +18,7 @@ import { useTheme } from '@oxy.so/bloom/theme';
 import { RiAlarmWarningLine } from '@oxy.so/bloom/icons/RiAlarmWarningLine';
 import { RiBankCardLine } from '@oxy.so/bloom/icons/RiBankCardLine';
 import { RiBankLine } from '@oxy.so/bloom/icons/RiBankLine';
+import { RiBarChartBoxLine } from '@oxy.so/bloom/icons/RiBarChartBoxLine';
 import { RiHandHeartLine } from '@oxy.so/bloom/icons/RiHandHeartLine';
 import { RiHome5Fill } from '@oxy.so/bloom/icons/RiHome5Fill';
 import { RiHome5Line } from '@oxy.so/bloom/icons/RiHome5Line';
@@ -39,6 +40,7 @@ export type OrbitTab =
   | 'disputes'
   | 'balances'
   | 'payouts'
+  | 'reports'
   | 'account'
   | 'links'
   | 'developers'
@@ -60,6 +62,7 @@ const TAB_DEFS: Record<OrbitTab, { labelKey: string; icon: Glyph; activeIcon: Gl
   },
   balances: { labelKey: 'nav.balances', icon: RiWallet3Line, activeIcon: RiWallet3Line },
   payouts: { labelKey: 'nav.payouts', icon: RiBankLine, activeIcon: RiBankLine },
+  reports: { labelKey: 'nav.reports', icon: RiBarChartBoxLine, activeIcon: RiBarChartBoxLine },
   account: { labelKey: 'nav.account', icon: RiStore2Line, activeIcon: RiStore2Line },
   links: { labelKey: 'nav.links', icon: RiLinksLine, activeIcon: RiLinksLine },
   developers: {
@@ -85,6 +88,7 @@ export const ORBIT_TABS: readonly OrbitTab[] = [
   'disputes',
   'balances',
   'payouts',
+  'reports',
   'account',
   'links',
   'developers',

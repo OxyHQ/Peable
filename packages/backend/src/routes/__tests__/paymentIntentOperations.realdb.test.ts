@@ -97,6 +97,7 @@ function fakeProviderFor(mode: ProviderMode) {
       calls.push(`getChargeSnapshot:${chargeObjectId}`);
       return {
         outcome: { networkStatus: 'approved_by_network', riskLevel: 'normal', type: 'authorized' },
+        billingDetails: { address: null, email: 'jenny@example.com', name: 'Jenny', phone: null },
         paymentMethodDetails: {
           type: 'card' as const,
           card: {

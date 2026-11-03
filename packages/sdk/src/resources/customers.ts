@@ -5,10 +5,12 @@ import type {
   ExpandParams,
   List,
   ListParams,
+  SearchParams,
   UpdateCustomerParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { searchResource } from '../core/search';
+import { type ApiListPromise, type ApiSearchPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Customers (`cus_…`, ADR 0016) — Orbit's own object. The provider customer a
@@ -72,5 +74,15 @@ export class CustomersResource {
         }),
       params,
     );
+  }
+
+  /**
+   * Search in Stripe's query language — `email`, `name`, `phone`, `created`, `metadata['key']`. Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<Customer> {
+    return searchResource<Customer>(this.client, 'customers', params);
   }
 }

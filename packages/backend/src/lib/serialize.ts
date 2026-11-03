@@ -195,6 +195,7 @@ export function toChargeDTO(row: ChargeRow): Charge {
             type: row.outcome.type,
             seller_message: sellerMessageFor(row.outcome.type),
           },
+    billing_details: row.billingDetails,
     payment_method_details: row.paymentMethodDetails,
     receipt_url: null,
     balance_transaction: row.balanceTransactionPublicId,

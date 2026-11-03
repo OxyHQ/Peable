@@ -39,6 +39,11 @@ export interface RequestOptions {
   form?: () => FormData;
   /** Sent as `Idempotency-Key` (ADR 0014 D3). Only when the caller has one to keep. */
   idempotencyKey?: string;
+  /**
+   * `blob` answers the body's raw bytes (a report's CSV) instead of parsing
+   * JSON. A refusal is still read as the gateway's JSON error envelope.
+   */
+  responseType?: 'json' | 'blob';
 }
 
 export type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -146,6 +151,7 @@ export function createOrbitTransport(client: RawResponseClient): OrbitTransport 
         ...(Object.keys(headers).length ? { headers } : {}),
       });
       if (!response.ok) throw await errorFromResponse(response);
+      if (options.responseType === 'blob') return (await response.blob()) as T;
       if (response.status === 204) return undefined as T;
       const text = await response.text();
       if (!text) return undefined as T;

@@ -116,6 +116,7 @@ import { BalanceResource, BalanceTransactionsResource } from './resources/balanc
 import { PayoutsResource } from './resources/payouts';
 import { ApplicationFeesResource } from './resources/applicationFees';
 import { ReportsResource } from './resources/reports';
+import { ReportingResource } from './resources/reporting';
 
 /**
  * The merchant-authed client.
@@ -181,6 +182,8 @@ export class Peable {
   readonly applicationFees: ApplicationFeesResource;
   /** Ledger reports: `payoutReconciliation({ payout })`. */
   readonly reports: ReportsResource;
+  /** Report runs (`reportRuns`) and the report types they run (`reportTypes`). */
+  readonly reporting: ReportingResource;
   /** Money going back to a payer. */
   readonly refunds: RefundsResource;
   /** Read-only: the authorization a card payment obtained (`ch_…`). */
@@ -252,6 +255,7 @@ export class Peable {
     this.payouts = new PayoutsResource(client);
     this.applicationFees = new ApplicationFeesResource(client);
     this.reports = new ReportsResource(client);
+    this.reporting = new ReportingResource(client);
     this.refunds = new RefundsResource(client);
     this.charges = new ChargesResource(client);
     this.customers = new CustomersResource(client);
@@ -289,6 +293,7 @@ export {
 export type { PeableErrorType, PeableErrorDetails } from './core/errors';
 
 export type {
+  DownloadedBytes,
   GatewayClient,
   PeableRequestOptions,
   RestClient,
@@ -428,6 +433,7 @@ export type {
   FilePurpose,
   FileStatus,
   FileType,
+  FileUploadPurpose,
   FiatCurrencyCode,
   PaymentMethodConfiguration,
   PaymentMethodConfigurationEntry,
@@ -452,6 +458,7 @@ export {
   FIAT_CURRENCY_CODES,
   FILE_PURPOSE_POLICIES,
   FILE_PURPOSES,
+  FILE_UPLOAD_PURPOSES,
   PAYMENT_METHOD_CONFIGURATION_TYPES,
   PAYMENT_METHOD_CURRENCIES,
 } from '@peable.to/shared-types';
@@ -483,6 +490,40 @@ export type {
 } from './resources/applicationFees';
 export { ReportsResource } from './resources/reports';
 export type { PayoutReconciliationParams } from './resources/reports';
+export {
+  ReportingResource,
+  ReportRunsResource,
+  ReportTypesResource,
+} from './resources/reporting';
+export type {
+  ReportRunList,
+  ReportRunListParams,
+  ReportTypeList,
+} from './resources/reporting';
+/** Reporting (Stripe's `reporting.*`). */
+export {
+  REPORT_RUN_STATUSES,
+  REPORT_TYPE_IDS,
+  REPORT_TYPE_LAYOUTS,
+  type CreateReportRunParams,
+  type ListReportRunsParams,
+  type ReportRun,
+  type ReportRunParameters,
+  type ReportRunStatus,
+  type ReportType,
+  type ReportTypeId,
+} from '@peable.to/shared-types';
+/** Search (Stripe's Search API): `<resource>.search({ query })`. */
+export {
+  SEARCHABLE_RESOURCES,
+  SEARCH_QUERY_MAX_CLAUSES,
+  SEARCH_QUERY_MAX_LENGTH,
+  SEARCH_SUBSTRING_MIN_LENGTH,
+  type SearchParams,
+  type SearchResult,
+  type SearchableResource,
+} from '@peable.to/shared-types';
+export type { ApiSearchPromise, AutoPaging } from './core/list';
 /** The money wire shapes (ADR 0015): the account, the balance and its ledger, payouts, fees. */
 export type {
   Account,

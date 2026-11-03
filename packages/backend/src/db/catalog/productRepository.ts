@@ -1,4 +1,4 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, count, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import type { ProductMarketingFeature } from '@peable.to/shared-types';
 import { uuidv7 } from '@oxy.so/db';
 import { couponProducts, prices, products } from '../schema';
@@ -152,6 +152,17 @@ export interface ProductListFilters {
   readonly active?: boolean | undefined;
   /** PUBLIC ids. */
   readonly ids?: readonly string[] | undefined;
+  /** A predicate compiled by `lib/search` over this table's fields — never caller text. */
+  readonly search?: SQL | undefined;
+}
+
+function productListWhere(filters: Omit<ProductListFilters, 'page'>): SQL | undefined {
+  return and(
+    eq(products.merchantId, filters.merchantId),
+    filters.active === undefined ? undefined : eq(products.active, filters.active),
+    filters.ids === undefined ? undefined : inArray(products.publicId, [...filters.ids]),
+    filters.search,
+  );
 }
 
 /** One page of a merchant's products, newest first. */
@@ -163,17 +174,19 @@ export async function listProductsForMerchant(
   const rows = await db
     .select(PRODUCT_COLUMNS)
     .from(products)
-    .where(
-      and(
-        eq(products.merchantId, filters.merchantId),
-        filters.active === undefined ? undefined : eq(products.active, filters.active),
-        filters.ids === undefined ? undefined : inArray(products.publicId, [...filters.ids]),
-        walk.where,
-      ),
-    )
+    .where(and(productListWhere(filters), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows);
+}
+
+/** How many products {@link listProductsForMerchant} would walk — a search's `total_count`. */
+export async function countProductsForMerchant(
+  db: DatabaseOrTransaction,
+  filters: Omit<ProductListFilters, 'page'>,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(products).where(productListWhere(filters));
+  return row?.n ?? 0;
 }
 
 export interface ProductPatch {

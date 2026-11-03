@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from 'bun:test';
 import { catalogFor, FALLBACK_LOCALE, setLocale, SUPPORTED_LOCALES, t } from './i18n';
 import { MONEY_EN, MONEY_ES } from './money/strings';
+import { REPORTS_EN, REPORTS_ES } from './reports/strings';
+import { SEARCH_EN, SEARCH_ES } from './search/strings';
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -13,6 +15,18 @@ describe('catalogs', () => {
     expect(Object.keys(MONEY_ES).sort()).toEqual(Object.keys(MONEY_EN).sort());
     for (const [key, english] of Object.entries(MONEY_EN)) {
       expect(placeholders(MONEY_ES[key] ?? '')).toEqual(placeholders(english));
+    }
+  });
+
+  it('spells the reports screen and the search box in both, with the same placeholders', () => {
+    for (const [english, spanish] of [
+      [REPORTS_EN, REPORTS_ES],
+      [SEARCH_EN, SEARCH_ES],
+    ] as const) {
+      expect(Object.keys(spanish).sort()).toEqual(Object.keys(english).sort());
+      for (const [key, text] of Object.entries(english)) {
+        expect(placeholders(spanish[key] ?? '')).toEqual(placeholders(text));
+      }
     }
   });
 

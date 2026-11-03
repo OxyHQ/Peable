@@ -1,6 +1,8 @@
 /**
  * Files (`file_…`): `POST /v1/files` (multipart bytes, or JSON `oxy_file`),
- * `GET /v1/files/:id`, `GET /v1/files`. Cores shared with the dashboard.
+ * `GET /v1/files/:id`, `GET /v1/files`, and `GET /v1/files/:id/contents` for
+ * the files whose bytes the merchant reads back (a report run's CSV). Cores
+ * shared with the dashboard.
  *
  * ## The multipart body is read here, bounded, and never logged
  *
@@ -17,8 +19,8 @@ import { createHash } from 'node:crypto';
 import { Router } from 'express';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
-import type { OxyAuthRequest } from '@oxy.so/core/server';
-import { FILE_PURPOSES, type FilePurpose } from '@peable.to/shared-types';
+import { OXY_SERVICE_ENVIRONMENTS, type OxyAuthRequest } from '@oxy.so/core/server';
+import { FILE_PURPOSES, FILE_UPLOAD_PURPOSES, type FilePurpose } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
@@ -29,6 +31,8 @@ import {
   FILE_UPLOAD_MAX_BYTES,
   FileRequestError,
   FileStorageUnavailableError,
+  hasReadableContents,
+  readFileBytes,
   toFileDTO,
 } from '../services/files';
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
@@ -47,12 +51,16 @@ import { serviceFileActor } from './merchants';
 
 const listFilesQuery = surfaceListQuery({ purpose: z.enum(FILE_PURPOSES).optional() });
 const retrieveFileQuery = surfaceRetrieveQuery();
+const contentsQuery = {
+  api: z.object({}).strict(),
+  dashboard: z.object({ environment: z.enum(OXY_SERVICE_ENVIRONMENTS) }).strict(),
+} as const;
 
 /** Room for the form's boundaries and its `purpose` field beside the largest file. */
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
 
 const importBodySchema = z
-  .object({ purpose: z.enum(FILE_PURPOSES), oxy_file: z.string().min(1).max(128) })
+  .object({ purpose: z.enum(FILE_UPLOAD_PURPOSES), oxy_file: z.string().min(1).max(128) })
   .strict();
 
 /** The upload `parseFileUpload` read, kept off `req.body` so nothing serializes it. */
@@ -137,12 +145,15 @@ export const parseFileUpload: RequestHandler = (
       return;
     }
     const purpose = form.get('purpose');
-    if (typeof purpose !== 'string' || !(FILE_PURPOSES as readonly string[]).includes(purpose)) {
+    if (
+      typeof purpose !== 'string' ||
+      !(FILE_UPLOAD_PURPOSES as readonly string[]).includes(purpose)
+    ) {
       sendError(
         res,
         400,
         'invalid_request_error',
-        `purpose must be one of ${FILE_PURPOSES.join(', ')}`,
+        `purpose must be one of ${FILE_UPLOAD_PURPOSES.join(', ')}`,
         'parameter_invalid',
         'purpose',
       );
@@ -239,6 +250,53 @@ export async function retrieveFile(
   res.status(200).json(toFileDTO(row));
 }
 
+/**
+ * `GET /v1/files/:id/contents` — the bytes of a file the merchant reads back:
+ * a report run's CSV. Read from Oxy through Peable's own binding and answered
+ * as an attachment; never logged, never cached. Any other purpose is a 404 —
+ * evidence and identity documents leave Peable only to their provider.
+ */
+export async function answerFileContents(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+  deps: { readonly files: OxyFilesClient; readonly surface?: QuerySurface },
+): Promise<void> {
+  if (!parseQuery(req, res, contentsQuery[deps.surface ?? 'api'])) return;
+  const { id } = req.params;
+  if (!id) {
+    sendError(res, 400, 'invalid_request_error', 'id is required');
+    return;
+  }
+  const row = await findFileByPublicId(getDb(), merchant.id, id);
+  if (!row || !hasReadableContents(row)) {
+    sendError(res, 404, 'invalid_request_error', 'file not found', 'resource_missing', 'id');
+    return;
+  }
+  try {
+    const { bytes, mime } = await readFileBytes(deps.files, row, 'id');
+    res
+      .status(200)
+      .type(mime)
+      .setHeader('Cache-Control', 'no-store')
+      .setHeader(
+        'Content-Disposition',
+        `attachment; filename="${row.filename ?? `${row.publicId}.${row.type}`}"`,
+      )
+      .send(Buffer.from(bytes));
+  } catch (error) {
+    if (error instanceof FileRequestError) {
+      sendError(res, 400, 'invalid_request_error', error.message, 'file_unavailable', 'id');
+      return;
+    }
+    if (error instanceof FileStorageUnavailableError) {
+      sendError(res, 503, 'api_error', error.message);
+      return;
+    }
+    throw error;
+  }
+}
+
 export async function answerFileList(
   req: Request,
   res: Response,
@@ -296,5 +354,10 @@ export function createFilesRouter(deps: {
   );
   router.get('/v1/files', ...read, withMerchant(answerFileList));
   router.get('/v1/files/:id', ...read, withMerchant(retrieveFile));
+  router.get(
+    '/v1/files/:id/contents',
+    ...read,
+    withMerchant((req, res, merchant) => answerFileContents(req, res, merchant, { files })),
+  );
   return router;
 }

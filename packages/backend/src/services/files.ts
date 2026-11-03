@@ -25,6 +25,7 @@
  */
 import {
   FILE_PURPOSE_POLICIES,
+  FILE_UPLOAD_PURPOSES,
   type FileObject,
   type FilePurpose,
   type FileType,
@@ -35,20 +36,25 @@ import { getDb } from '../db/postgres';
 import { fileStatusOf, insertFile, type FileRow } from '../db/files/fileRepository';
 import { enqueueReferenceSync } from '../db/oxyFiles/referenceSyncRepository';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
+import { config } from '../config';
 import { oxy } from '../oxy';
 import type { OxyFilesClient } from './oxyFiles/client';
 import { acceptOxyFile, type FileActor } from './oxyFiles/fileOwnership';
 import { kickReferenceSync } from './oxyFiles/referenceSync';
 
-/** The largest upload any purpose takes — the body cap of `POST /v1/files`. */
+/**
+ * The largest upload any UPLOADABLE purpose takes — the body cap of
+ * `POST /v1/files`. A report's ceiling is not an upload's: nobody uploads one.
+ */
 export const FILE_UPLOAD_MAX_BYTES = Math.max(
-  ...Object.values(FILE_PURPOSE_POLICIES).map((policy) => policy.max_bytes),
+  ...FILE_UPLOAD_PURPOSES.map((purpose) => FILE_PURPOSE_POLICIES[purpose].max_bytes),
 );
 
 const MIME_FOR: Readonly<Record<FileType, string>> = {
   pdf: 'application/pdf',
   png: 'image/png',
   jpg: 'image/jpeg',
+  csv: 'text/csv',
 };
 
 /** The type the BYTES are, by their signature; `null` for anything else. */
@@ -83,6 +89,11 @@ export class FileStorageUnavailableError extends Error {
     super(message);
     this.name = 'FileStorageUnavailableError';
   }
+}
+
+/** Whether a merchant may upload or import a file of `purpose` (not a report's). */
+export function isUploadPurpose(purpose: FilePurpose): boolean {
+  return (FILE_UPLOAD_PURPOSES as readonly FilePurpose[]).includes(purpose);
 }
 
 /** Refuse a file its purpose does not take, before anything is stored. */
@@ -154,7 +165,46 @@ export async function createUploadedFile(input: {
   readonly bytes: Uint8Array;
   readonly filename?: string;
 }): Promise<FileRow> {
+  if (!isUploadPurpose(input.purpose)) {
+    throw new FileRequestError(
+      `a ${input.purpose} file is written by Peable and cannot be uploaded`,
+      'purpose',
+    );
+  }
   const type = checkPolicy(input.purpose, sniffFileType(input.bytes), input.bytes.byteLength);
+  return store(input, type);
+}
+
+/**
+ * Store bytes PEABLE produced — a report run's CSV — as a File of `merchant`.
+ *
+ * The one writer of `finance_report_run` files. There is no signature to sniff
+ * in a CSV, and none is needed: the bytes are Peable's own output, so the type
+ * is the purpose's and only the size is checked.
+ *
+ * @throws {FileRequestError} the bytes exceed the purpose's ceiling.
+ * @throws {FileStorageUnavailableError} Oxy Files did not store them.
+ */
+export async function createGeneratedFile(input: {
+  readonly files: OxyFilesClient;
+  readonly merchant: MerchantRow;
+  readonly purpose: 'finance_report_run';
+  readonly bytes: Uint8Array;
+  readonly filename: string;
+}): Promise<FileRow> {
+  return store(input, checkPolicy(input.purpose, 'csv', input.bytes.byteLength));
+}
+
+async function store(
+  input: {
+    readonly files: OxyFilesClient;
+    readonly merchant: MerchantRow;
+    readonly purpose: FilePurpose;
+    readonly bytes: Uint8Array;
+    readonly filename?: string;
+  },
+  type: FileType,
+): Promise<FileRow> {
   const filename = printableName(input.filename);
   const publicId = newId('file');
 
@@ -170,7 +220,7 @@ export async function createUploadedFile(input: {
     });
   } catch (error) {
     process.emitWarning(
-      `Peable file storage failed for a ${input.purpose} upload: ${
+      `Peable file storage failed for a ${input.purpose} file: ${
         error instanceof Error ? error.message : String(error)
       }`,
     );
@@ -240,7 +290,25 @@ export async function createImportedFile(input: {
   });
 }
 
-/** A File on the wire. Only an available logo has a URL. */
+/**
+ * Where a file's bytes can be read on the wire, when they can: a logo's public
+ * URL, or a report's authenticated `contents` path on this gateway.
+ */
+function urlOf(row: FileRow, status: ReturnType<typeof fileStatusOf>): string | null {
+  if (status !== 'available') return null;
+  if (row.purpose === 'business_logo') return oxy.assets.publicUrl(row.oxyFileId);
+  if (row.purpose === 'finance_report_run') {
+    return `${config.apiBaseUrl}/v1/files/${row.publicId}/contents`;
+  }
+  return null;
+}
+
+/** Whether `GET /v1/files/:id/contents` answers a file of this purpose: a report's only. */
+export function hasReadableContents(row: FileRow): boolean {
+  return row.purpose === 'finance_report_run';
+}
+
+/** A File on the wire. An available logo or report has a URL. */
 export function toFileDTO(row: FileRow): FileObject {
   const status = fileStatusOf(row);
   return {
@@ -252,10 +320,7 @@ export function toFileDTO(row: FileRow): FileObject {
     size: row.size,
     type: row.type,
     status,
-    url:
-      row.purpose === 'business_logo' && status === 'available'
-        ? oxy.assets.publicUrl(row.oxyFileId)
-        : null,
+    url: urlOf(row, status),
     created: toUnix(row.createdAt),
   };
 }
@@ -283,16 +348,12 @@ export async function readFileBytes(
   }
   const response = await fetch(link.url, { signal: AbortSignal.timeout(READ_TIMEOUT_MS) });
   if (!response.ok) {
-    throw new FileStorageUnavailableError(
-      'an evidence file could not be read right now; try again',
-    );
+    throw new FileStorageUnavailableError('the file could not be read right now; try again');
   }
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength !== row.size) {
     // The bytes are not the ones this File recorded: never forward them.
-    throw new FileStorageUnavailableError(
-      'an evidence file could not be read right now; try again',
-    );
+    throw new FileStorageUnavailableError('the file could not be read right now; try again');
   }
   return { bytes, mime: MIME_FOR[row.type] };
 }

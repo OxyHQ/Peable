@@ -6,7 +6,7 @@
  * total is a second place the same fact lives and the two disagree the first
  * time a write is lost.
  */
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, count, desc, eq, isNull, type SQL, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { paymentIntents, refunds } from '../schema';
@@ -459,7 +459,19 @@ export interface ListRefundsParams {
   readonly merchantId: string;
   /** Only the refunds of this payment — its INTERNAL id, already resolved inside the merchant. */
   readonly paymentIntentId?: string | undefined;
+  /** A predicate compiled by `lib/search` over this table's fields — never caller text. */
+  readonly search?: SQL | undefined;
   readonly page: KeysetPage;
+}
+
+function refundListWhere(params: Omit<ListRefundsParams, 'page'>): SQL | undefined {
+  return and(
+    eq(refunds.merchantId, params.merchantId),
+    params.paymentIntentId === undefined
+      ? undefined
+      : eq(refunds.paymentIntentId, params.paymentIntentId),
+    params.search,
+  );
 }
 
 /**
@@ -479,16 +491,17 @@ export async function listRefundsForMerchant(
     })
     .from(refunds)
     .innerJoin(paymentIntents, eq(paymentIntents.id, refunds.paymentIntentId))
-    .where(
-      and(
-        eq(refunds.merchantId, params.merchantId),
-        params.paymentIntentId === undefined
-          ? undefined
-          : eq(refunds.paymentIntentId, params.paymentIntentId),
-        walk.where,
-      ),
-    )
+    .where(and(refundListWhere(params), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows.map((row) => row as unknown as RefundWithIntentRow));
+}
+
+/** How many refunds {@link listRefundsForMerchant} would walk — a search's `total_count`. */
+export async function countRefundsForMerchant(
+  db: DatabaseOrTransaction,
+  params: Omit<ListRefundsParams, 'page'>,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(refunds).where(refundListWhere(params));
+  return row?.n ?? 0;
 }

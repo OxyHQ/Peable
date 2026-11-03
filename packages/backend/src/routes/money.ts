@@ -67,6 +67,7 @@ import {
 } from '../services/accounts/merchantAccount';
 import { createAccountLink } from '../services/accounts/connectedAccountService';
 import { readBalance } from '../services/money/ledger';
+import { merchantLedger } from '../services/money/ledgerScope';
 import { cancelPayout, createPayout } from '../services/money/payouts';
 import { toAccountDTO } from '../lib/serializeSettlement';
 import {
@@ -159,13 +160,8 @@ async function resolveTarget(
     }
     return { account: seller, scope: { merchantId: merchant.id, connectedAccountId: seller.id } };
   }
-  const own = await findMerchantAccount(db, merchant.id);
-  if (own && hasCardHalf(own)) {
-    return { account: own, scope: { merchantId: merchant.id, connectedAccountId: own.id } };
-  }
-  if (options.firstPartyLedger && merchant.firstParty) {
-    return { account: null, scope: { merchantId: merchant.id, connectedAccountId: null } };
-  }
+  const own = await merchantLedger(merchant, options);
+  if (own) return own;
   sendMoneyRefusal(res, new AccountMissingError());
   return null;
 }

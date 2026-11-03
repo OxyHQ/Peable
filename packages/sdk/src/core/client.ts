@@ -40,6 +40,15 @@ export interface RestClientRequestOptions {
   headers?: Record<string, string>;
 }
 
+/** The bytes of a binary answer (`GET /v1/files/:id/contents`). */
+export interface DownloadedBytes {
+  readonly bytes: Uint8Array;
+  /** The response's `Content-Type` (`text/csv`), when it named one. */
+  readonly contentType: string | null;
+  /** The name `Content-Disposition` gives the file, when it gives one. */
+  readonly filename: string | null;
+}
+
 export interface RestClientStreamOptions {
   query?: Readonly<Record<string, QueryValue>>;
   headers?: Record<string, string>;
@@ -89,6 +98,15 @@ export interface GatewayClient extends RestClient {
    * meant to stay open, and `signal` is how the caller ends it.
    */
   stream(path: string, opts?: RestClientStreamOptions): Promise<Response>;
+  /**
+   * A `GET` whose success is BYTES, not JSON — a report's CSV. Same
+   * authentication, single 401 retry and request timeout as `request`; a
+   * non-2xx answer is the same typed error.
+   */
+  download(
+    path: string,
+    opts?: { query?: Readonly<Record<string, QueryValue>> },
+  ): Promise<DownloadedBytes>;
 }
 
 export interface RestClientConfig {
@@ -114,6 +132,12 @@ async function readJsonBody(response: Response): Promise<unknown> {
   } catch {
     return undefined;
   }
+}
+
+/** `attachment; filename="x.csv"` → `x.csv`. */
+function filenameOf(disposition: string | null): string | null {
+  const match = disposition === null ? null : /filename="([^"]*)"/.exec(disposition);
+  return match?.[1] ?? null;
 }
 
 export function createRestClient(
@@ -242,7 +266,64 @@ export function createRestClient(
     return response;
   }
 
+  async function performDownload(
+    path: string,
+    query: Readonly<Record<string, QueryValue>> | undefined,
+    allowRetryOn401: boolean,
+  ): Promise<DownloadedBytes> {
+    const token = await tokenProvider?.getToken();
+    const headers: Record<string, string> = token ? { Authorization: `Bearer ${token}` } : {};
+    const deadline = timeout === undefined ? undefined : timeoutSignal(timeout);
+    try {
+      let response: Response;
+      try {
+        response = await fetchImpl(buildUrl(config.baseURL, path, query), {
+          method: 'GET',
+          headers,
+          ...(deadline === undefined ? {} : { signal: deadline.signal }),
+        });
+      } catch (cause) {
+        throw new PeableApiError(
+          `Failed to reach the Peable Gateway at ${config.baseURL}: ${
+            cause instanceof Error ? cause.message : String(cause)
+          }`,
+        );
+      }
+      if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401 && tokenProvider) {
+        await response.body?.cancel();
+        tokenProvider.invalidate();
+        return performDownload(path, query, false);
+      }
+      if (!response.ok) {
+        const body = await readJsonBody(response).catch(() => undefined);
+        throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
+      }
+      let bytes: Uint8Array;
+      try {
+        bytes = new Uint8Array(await response.arrayBuffer());
+      } catch {
+        throw new PeableApiError('The Peable Gateway response body could not be read', {
+          statusCode: response.status,
+          code: 'invalid_response',
+        });
+      }
+      return {
+        bytes,
+        contentType: response.headers.get('Content-Type'),
+        filename: filenameOf(response.headers.get('Content-Disposition')),
+      };
+    } finally {
+      deadline?.dispose();
+    }
+  }
+
   return {
+    download(
+      path: string,
+      opts: { query?: Readonly<Record<string, QueryValue>> } = {},
+    ): Promise<DownloadedBytes> {
+      return performDownload(path, opts.query, true);
+    },
     stream(path: string, opts: RestClientStreamOptions = {}): Promise<Response> {
       return openStream(path, opts, true);
     },

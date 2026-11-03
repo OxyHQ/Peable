@@ -32,6 +32,14 @@ export function runInRequestContext<T>(requestId: string, fn: () => T): T {
   return storage.run({ requestId, idempotencyKey: null }, fn);
 }
 
+/**
+ * Run `fn` as part of NO request — background work a request merely woke up
+ * (a worker kick), whose events must not claim to be that request's change.
+ */
+export function outsideRequestContext<T>(fn: () => T): T {
+  return storage.exit(fn);
+}
+
 /** Record the `Idempotency-Key` the current request was admitted with. */
 export function setRequestIdempotencyKey(key: string): void {
   const context = storage.getStore();

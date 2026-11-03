@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm';
-import { check, foreignKey, jsonb, pgTable, text, unique } from 'drizzle-orm/pg-core';
+import { check, foreignKey, index, jsonb, pgTable, text, unique } from 'drizzle-orm/pg-core';
 import { createdAt, generatedId, inList, timestamptz, updatedAt } from '@oxy.so/db';
-import type { CardDetails } from '@peable.to/shared-types';
+import type { BillingDetails, CardDetails } from '@peable.to/shared-types';
 import { merchants } from './merchants';
 import { paymentIntents } from './payments';
 import { BASE_UNIT_STRING_PATTERN, CURRENCY_CODES } from './valueSets';
@@ -24,7 +24,7 @@ export interface StoredChargeOutcome {
  * already is — `payment_intents.provider_charge_id`, the binding transfers read —
  * and is never serialized (ADR 0016).
  *
- * `outcome` and `payment_method_details` are a snapshot of what the provider
+ * `outcome`, `billing_details` and `payment_method_details` are a snapshot of what the provider
  * reports, filled after the transition by a provider read (`services/charges.ts`)
  * and refreshed by `charge.*` provider events: NULL means "not read yet", never
  * "nothing to say". `amount_refunded` is not stored — it is the sum of
@@ -44,6 +44,8 @@ export const charges = pgTable(
     currency: text().notNull(),
     outcome: jsonb().$type<StoredChargeOutcome>(),
     paymentMethodDetails: jsonb().$type<{ type: 'card'; card: CardDetails }>(),
+    /** The billing details the provider reported for the charge (Stripe's `billing_details`). */
+    billingDetails: jsonb().$type<BillingDetails>(),
     /** When the provider snapshot above was last read. */
     syncedAt: timestamptz(),
     createdAt: createdAt(),
@@ -73,5 +75,11 @@ export const charges = pgTable(
       sql`${table.amountCaptured}::numeric <= ${table.amount}::numeric`,
     ),
     check('charges_currency_check', sql.raw(`currency in (${inList(CURRENCY_CODES)})`)),
+    check(
+      'charges_billing_details_object_check',
+      sql`${table.billingDetails} is null or jsonb_typeof(${table.billingDetails}) = 'object'`,
+    ),
+    /** Every charge search and list walks `merchant_id = … order by id desc` (`db/search`). */
+    index('charges_merchant_id_id_idx').on(table.merchantId, table.id),
   ],
 );

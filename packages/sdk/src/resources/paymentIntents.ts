@@ -8,10 +8,12 @@ import type {
   ListParams,
   PaymentIntent,
   PaymentIntentStatus,
+  SearchParams,
   UpdatePaymentIntentParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { searchResource } from '../core/search';
+import { type ApiListPromise, type ApiSearchPromise, listPromise, listQuery } from '../core/list';
 
 export interface PaymentIntentListParams extends ListParams {
   status?: PaymentIntentStatus;
@@ -204,5 +206,15 @@ export class PaymentIntentsResource {
       'POST',
       `/v1/payment_intents/${encodeURIComponent(id)}/client_action`,
     );
+  }
+
+  /**
+   * Search in Stripe's query language — `amount`, `currency`, `customer`, `status`, `created`, `metadata['key']` (Stripe's) and `description`, `receipt_email`. Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<PaymentIntent> {
+    return searchResource<PaymentIntent>(this.client, 'payment_intents', params);
   }
 }

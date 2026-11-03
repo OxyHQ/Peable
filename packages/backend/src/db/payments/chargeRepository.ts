@@ -1,5 +1,10 @@
-import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { CardDetails, CurrencyCode, PaymentIntentStatus } from '@peable.to/shared-types';
+import { and, count, eq, inArray, type SQL, sql } from 'drizzle-orm';
+import type {
+  BillingDetails,
+  CardDetails,
+  CurrencyCode,
+  PaymentIntentStatus,
+} from '@peable.to/shared-types';
 import { uuidv7 } from '@oxy.so/db';
 import { charges } from '../schema';
 import type { StoredChargeOutcome } from '../schema/charges';
@@ -32,6 +37,7 @@ export interface ChargeRow {
   readonly currency: CurrencyCode;
   readonly disputed: boolean;
   readonly outcome: StoredChargeOutcome | null;
+  readonly billingDetails: BillingDetails | null;
   readonly paymentMethodDetails: { type: 'card'; card: CardDetails } | null;
   readonly description: string | null;
   readonly receiptEmail: string | null;
@@ -71,6 +77,7 @@ const CHARGE_COLUMNS = {
     `exists (select 1 from disputes d where d.payment_intent_id = ${INTENT_OF})`,
   )}`,
   outcome: charges.outcome,
+  billingDetails: charges.billingDetails,
   paymentMethodDetails: charges.paymentMethodDetails,
   description: sql<string | null>`${viaIntent('p.description')}`,
   receiptEmail: sql<string | null>`${viaIntent('p.receipt_email')}`,
@@ -128,6 +135,7 @@ export async function updateChargeSnapshot(
   paymentIntentId: string,
   snapshot: {
     readonly outcome: StoredChargeOutcome | null;
+    readonly billingDetails: BillingDetails | null;
     readonly paymentMethodDetails: { type: 'card'; card: CardDetails } | null;
   },
 ): Promise<boolean> {
@@ -135,6 +143,7 @@ export async function updateChargeSnapshot(
     .update(charges)
     .set({
       outcome: snapshot.outcome,
+      billingDetails: snapshot.billingDetails,
       paymentMethodDetails: snapshot.paymentMethodDetails,
       syncedAt: sql`date_trunc('milliseconds', now())`,
     })
@@ -181,29 +190,43 @@ export async function findChargesForMerchantByPublicIds(
   return rows.map(toChargeRow);
 }
 
+export interface ChargeListScope {
+  readonly merchantId: string;
+  /** INTERNAL id, already resolved inside the merchant's scope. */
+  readonly paymentIntentId?: string | undefined;
+  /** A predicate compiled by `lib/search` over this table's fields — never caller text. */
+  readonly search?: SQL | undefined;
+}
+
+function chargeListWhere(params: ChargeListScope): SQL | undefined {
+  return and(
+    eq(charges.merchantId, params.merchantId),
+    params.paymentIntentId === undefined
+      ? undefined
+      : eq(charges.paymentIntentId, params.paymentIntentId),
+    params.search,
+  );
+}
+
 export async function listChargesForMerchant(
   db: DatabaseOrTransaction,
-  params: {
-    readonly merchantId: string;
-    /** INTERNAL id, already resolved inside the merchant's scope. */
-    readonly paymentIntentId?: string | undefined;
-    readonly page: KeysetPage;
-  },
+  params: ChargeListScope & { readonly page: KeysetPage },
 ): Promise<{ data: ChargeRow[]; hasMore: boolean }> {
   const walk = keyset(charges.id, charges.createdAt, params.page);
   const rows = await db
     .select(CHARGE_COLUMNS)
     .from(charges)
-    .where(
-      and(
-        eq(charges.merchantId, params.merchantId),
-        params.paymentIntentId === undefined
-          ? undefined
-          : eq(charges.paymentIntentId, params.paymentIntentId),
-        walk.where,
-      ),
-    )
+    .where(and(chargeListWhere(params), walk.where))
     .orderBy(walk.orderBy)
     .limit(walk.limit);
   return walk.finish(rows.map(toChargeRow));
+}
+
+/** How many charges {@link listChargesForMerchant} would walk — a search's `total_count`. */
+export async function countChargesForMerchant(
+  db: DatabaseOrTransaction,
+  params: ChargeListScope,
+): Promise<number> {
+  const [row] = await db.select({ n: count() }).from(charges).where(chargeListWhere(params));
+  return row?.n ?? 0;
 }

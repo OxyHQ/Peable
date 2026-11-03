@@ -29,7 +29,13 @@ import {
   retrieveDispute,
   updateDisputeCore,
 } from './disputes';
-import { answerFileList, createFile, parseFileUpload, retrieveFile } from './files';
+import {
+  answerFileContents,
+  answerFileList,
+  createFile,
+  parseFileUpload,
+  retrieveFile,
+} from './files';
 import {
   answerConfigurationList,
   answerDomainList,
@@ -59,6 +65,8 @@ import {
 } from './webhookEndpoints';
 import { answerEventList, retrieveEvent } from './events';
 import { CATALOG_ROUTES } from './catalog';
+import { mountSearchDashboardRoutes } from './search';
+import { mountReportingDashboardRoutes } from './reporting';
 import { mountCatalogDashboardRoutes } from './catalogRoutes';
 import { answerRequestLogList, retrieveRequestLog } from './requestLogs';
 import { checkoutSessionRoutes } from './checkoutSessions';
@@ -231,6 +239,19 @@ export function createDashboardRouter(deps?: {
   const safeFetch = deps?.safeFetch;
   const router = Router();
 
+  type MerchantCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
+  const asMember = (core: MerchantCore) =>
+    wrap(async (req, res) => {
+      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
+      if (!access) return;
+      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
+      if (!merchant) return;
+      await core(req, res, merchant);
+    });
+  const base = '/v1/dashboard/applications/:applicationId';
+  // Search first: `…/products/search` must not reach `…/products/:id`.
+  mountSearchDashboardRoutes(router, { base, requireOxyUser, asMember });
+
   router.get(
     '/v1/dashboard/applications/:applicationId/merchant',
     requireOxyUser,
@@ -350,16 +371,6 @@ export function createDashboardRouter(deps?: {
    * reach another's endpoints. The writes open the request context, so an event
    * they cause records this request.
    */
-  type MerchantCore = (req: Request, res: Response, merchant: MerchantRow) => Promise<void>;
-  const asMember = (core: MerchantCore) =>
-    wrap(async (req, res) => {
-      const access = await resolveDashboardAccess(req, res, { assertAppMembership });
-      if (!access) return;
-      const merchant = await resolveMerchantByApp(access.applicationId, access.environment, res);
-      if (!merchant) return;
-      await core(req, res, merchant);
-    });
-  const base = '/v1/dashboard/applications/:applicationId';
 
   router.get(
     `${base}/webhook_endpoints`,
@@ -486,6 +497,15 @@ export function createDashboardRouter(deps?: {
     requireOxyUser,
     asMember((req, res, merchant) => retrieveFile(req, res, merchant, 'dashboard')),
   );
+  router.get(
+    `${base}/files/:id/contents`,
+    requireOxyUser,
+    asMember((req, res, merchant) =>
+      answerFileContents(req, res, merchant, { files, surface: 'dashboard' }),
+    ),
+  );
+  // Reporting: report types, runs, and the run's CSV through `…/files/:id/contents`.
+  mountReportingDashboardRoutes(router, { base, requireOxyUser, asMember });
   router.get(
     `${base}/payment_method_configurations`,
     requireOxyUser,

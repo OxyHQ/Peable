@@ -95,7 +95,7 @@ for await (const refund of peable.refunds.list({ payment_intent: intent.id })) {
 const sellers = await peable.connectedAccounts.list().autoPagingToArray({ limit: 1000 });
 ```
 
-Listable: `paymentIntents`, `charges`, `paymentLinks`, `checkout.sessions`, `refunds`,
+Listable (and, for six of them, searchable — see Search below): `paymentIntents`, `charges`, `paymentLinks`, `checkout.sessions`, `refunds`,
 `transfers`, `disputes`, `connectedAccounts`, `tax.transactions`, the
 per-payment `listForPaymentIntent` sub-lists and contributions. Iterating from
 `ending_before` walks backwards, away from the cursor.
@@ -117,6 +117,60 @@ update is a patch — a key sent as `''` is removed — and every update is a `P
 await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes', draft: '' } });
 await peable.paymentLinks.update(link.id, { active: false });
 ```
+
+### Search (0.19.0)
+
+Stripe's Search API on `paymentIntents`, `charges`, `customers`, `products`,
+`prices` and `refunds`: `search({ query, limit?, page?, expand? })` answers a
+promise of one page — `{ object: 'search_result', data, has_more, next_page,
+url }` — that is ALSO an async iterable over every match, following
+`next_page` with the same query:
+
+```ts
+const page = await peable.customers.search({ query: 'email:"jenny@example.com"' });
+for await (const intent of peable.paymentIntents.search({
+  query: "status:'succeeded' AND amount>1000 AND metadata['order_id']:'6735'",
+})) {
+  fulfil(intent);
+}
+const counted = await peable.charges.search({
+  query: 'payment_method_details.card.last4:"4242"',
+  expand: ['total_count', 'data.payment_intent'],
+});
+```
+
+The language is Stripe's: `field:value` (exact, case-insensitive for text),
+`field~"sub"` (substring, at least 3 characters), `>`, `<`, `>=`, `<=`, `=` on
+amounts (base units) and `created` (Unix seconds), `-field:value` to negate,
+`field:null` for no value, `metadata['key']:'value'`. Text values are quoted;
+clauses join with spaces / `AND` or with `OR`, never both; at most 10 clauses
+and 1000 characters. A malformed query is a `PeableInvalidRequestError` with
+`param: 'query'` and the position in its message. Searchable fields per
+resource are in `docs/integrating-peable.md` › Search.
+
+### Reporting: report runs (0.19.0)
+
+`peable.reporting.reportTypes` lists what can be run (`payments.itemized.1`,
+`balance.summary.1`, `payouts.itemized.1`, with `columns`, `default_columns`
+and the interval data exists for). A run is produced in the background:
+
+```ts
+const run = await peable.reporting.reportRuns.create({
+  report_type: 'payments.itemized.1',
+  parameters: { interval_start: 1_780_000_000, interval_end: 1_782_592_000 },
+});
+// Later — or on `reporting.report_run.succeeded`:
+const done = await peable.reporting.reportRuns.retrieve(run.id);
+if (done.status === 'succeeded' && done.result) {
+  const { bytes } = await peable.files.contents(done.result.id); // the CSV
+}
+```
+
+`interval_end` is exclusive and may not be in the future; `columns` picks a
+subset of the type's columns (written in the layout's order); `currency` narrows it. A ledger report
+for a merchant without a fiat account is a 404 `account_missing`. A run that
+cannot be produced is `failed` with `error`. `reportRuns.list({ report_type })`
+pages like every list.
 
 ### Payment statuses, confirm, capture and cancel (ADR 0019)
 
@@ -162,6 +216,7 @@ The purpose sets the policy, and the format is recognised from the bytes:
 | `dispute_evidence` | PDF, PNG, JPEG | 5 MiB | private — attach to a dispute |
 | `business_logo` | PNG, JPEG | 512 KiB | public — `merchants.update({ business_logo })` |
 | `identity_document`, `additional_verification` | PDF, PNG, JPEG | 10 MiB | private |
+| `finance_report_run` | CSV | 64 MiB | private — written by report runs only, never uploaded; read with `files.contents(id)` |
 
 ```ts
 const receipt = await peable.files.create({
@@ -177,8 +232,10 @@ for await (const file of peable.files.list({ purpose: 'dispute_evidence' })) con
 
 The upload is `multipart/form-data` and still carries an `Idempotency-Key`; a
 retry under the same key with the same bytes answers the stored file.
-`url` is set only on an available `business_logo`; evidence and documents are
-never addressable by URL.
+`url` is set on an available `business_logo` (public) and `finance_report_run`
+(the authenticated `GET /v1/files/:id/contents`, which `files.contents(id)`
+reads); evidence and documents are never addressable by URL.
+`FILE_UPLOAD_PURPOSES` lists the purposes `create` takes.
 
 ### Disputes: stage, submit once, or accept (0.16.0)
 

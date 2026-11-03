@@ -10,11 +10,12 @@ import { t } from '../i18n';
 import { modeForEnvironment } from '../scope/scope';
 import { useOrbitScope, type OrbitScopeValue } from '../scope/ScopeProvider';
 import { useScreenBottomInset } from './navigation';
+import { SearchBox } from '../search/SearchBox';
 import { ScopeBar } from './ScopeBar';
 
 /**
- * The frame of every Orbit screen: the scope bar, a test-mode notice, a title,
- * and a centred column that reads at desktop width and narrows to a phone.
+ * The frame of every Orbit screen: the scope bar, the search box (once an
+ * application is chosen), a test-mode notice, a title, and a centred column that reads at desktop width and narrows to a phone.
  *
  * `children` is a function of the selected scope and is called only once an
  * application is chosen; until then the frame explains what is missing.
@@ -69,6 +70,12 @@ export function OrbitScreen({
     >
       <View className="w-full max-w-6xl self-center px-4 pt-6 gap-6 md:px-8">
         <ScopeBar />
+        {scope.scope ? (
+          <SearchBox
+            key={`${scope.scope.applicationId}:${scope.scope.environment}`}
+            scope={scope.scope}
+          />
+        ) : null}
         {test ? (
           <Admonition type="info">
             <AdmonitionText>{t('scope.testBanner')}</AdmonitionText>

@@ -15,13 +15,15 @@ import type {
   ProductListParams,
   PromotionCode,
   PromotionCodeListParams,
+  SearchParams,
   UpdateCouponParams,
   UpdatePriceParams,
   UpdateProductParams,
   UpdatePromotionCodeParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { searchResource } from '../core/search';
+import { type ApiListPromise, type ApiSearchPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * The catalog (ADR 0018): what a merchant sells and on what terms — products,
@@ -82,6 +84,16 @@ export class ProductsResource {
   del(id: string): Promise<DeletedProduct> {
     return this.client.request<DeletedProduct>('DELETE', resourcePath('products', id));
   }
+
+  /**
+   * Search in Stripe's query language — `name`, `active`, `description`, `url`, `created`, `metadata['key']`. Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<Product> {
+    return searchResource<Product>(this.client, 'products', params);
+  }
 }
 
 /**
@@ -128,6 +140,16 @@ export class PricesResource {
         }),
       params,
     );
+  }
+
+  /**
+   * Search in Stripe's query language — `active`, `currency`, `product`, `type`, `lookup_key`, `created`, `metadata['key']`. Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<Price> {
+    return searchResource<Price>(this.client, 'prices', params);
   }
 }
 

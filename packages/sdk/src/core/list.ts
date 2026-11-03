@@ -7,21 +7,14 @@
 //   for await (const intent of peable.paymentIntents.list({ status: 'succeeded' })) { … }
 //   const all = await peable.refunds.list().autoPagingToArray({ limit: 500 });
 
-import type { List, ListParams } from '@peable.to/shared-types';
+import type { List, ListParams, SearchParams, SearchResult } from '@peable.to/shared-types';
 import { PeableApiError } from './errors';
 
 /** The most `autoPagingToArray` will collect — an upper bound, so a typo is not an OOM. */
 export const AUTO_PAGING_ARRAY_MAX = 10_000;
 
-/**
- * The first page, and every item across all pages.
- *
- * `L` is the page type — a list may carry fields beside the envelope (a
- * payment's refund list carries `remaining_refundable`).
- */
-export interface ApiListPromise<T, L extends List<T> = List<T>>
-  extends Promise<L>,
-    AsyncIterable<T> {
+/** Every item across all pages, whatever the page shape. */
+export interface AutoPaging<T> extends AsyncIterable<T> {
   /**
    * Call `onItem` for every item, page by page. Returning `false` stops early.
    */
@@ -31,42 +24,30 @@ export interface ApiListPromise<T, L extends List<T> = List<T>>
 }
 
 /**
- * Wrap a page fetcher as an `ApiListPromise`.
+ * The first page, and every item across all pages.
  *
- * The walk follows the cursor the CALLER chose: with `ending_before` it pages
- * backwards — each page is still newest first on the wire, so its items are
- * yielded in reverse, moving steadily away from the cursor, Stripe's
- * semantics — and otherwise forwards with `starting_after`.
+ * `L` is the page type — a list may carry fields beside the envelope (a
+ * payment's refund list carries `remaining_refundable`).
  */
-export function listPromise<T extends { id: string }, P extends ListParams, L extends List<T>>(
-  fetchPage: (params: P) => Promise<L>,
-  params: P,
-): ApiListPromise<T, L> {
-  const first = fetchPage(params);
-  const backwards = params.ending_before !== undefined;
+export interface ApiListPromise<T, L extends List<T> = List<T>> extends Promise<L>, AutoPaging<T> {}
 
-  async function* items(): AsyncGenerator<T> {
-    let page: L = await first;
-    const cursors = new Set<string>();
-    for (;;) {
-      yield* backwards ? [...page.data].reverse() : page.data;
-      const edge = backwards ? page.data[0] : page.data[page.data.length - 1];
-      if (!page.has_more || edge === undefined) return;
-      // A gateway answering the same cursor twice would loop forever; say so.
-      if (cursors.has(edge.id)) {
-        throw new PeableApiError(`Pagination did not advance past ${edge.id}`, {
-          code: 'invalid_response',
-        });
-      }
-      cursors.add(edge.id);
-      const { starting_after: _after, ending_before: _before, ...rest } = params;
-      page = await fetchPage({
-        ...rest,
-        ...(backwards ? { ending_before: edge.id } : { starting_after: edge.id }),
-      } as P);
-    }
-  }
+/**
+ * The first page of a search, and every match across all pages — a search
+ * pages forward over the opaque `next_page` token rather than an id cursor.
+ */
+export interface ApiSearchPromise<T, R extends SearchResult<T> = SearchResult<T>>
+  extends Promise<R>,
+    AutoPaging<T> {}
 
+/**
+ * The ONE auto-pager: attach iteration to a first-page promise, given the
+ * generator that walks from it. A list and a search differ only in how they
+ * step to the next page, so that is all each passes.
+ */
+function autoPaging<P extends Promise<unknown>, T>(
+  first: P,
+  items: () => AsyncGenerator<T>,
+): P & AutoPaging<T> {
   return Object.assign(first, {
     [Symbol.asyncIterator]: items,
     async autoPagingEach(onItem: (item: T) => unknown): Promise<void> {
@@ -91,6 +72,80 @@ export function listPromise<T extends { id: string }, P extends ListParams, L ex
       return out;
     },
   });
+}
+
+/** A gateway answering the same cursor twice would loop forever; say so. */
+function stalled(cursor: string): PeableApiError {
+  return new PeableApiError(`Pagination did not advance past ${cursor}`, {
+    code: 'invalid_response',
+  });
+}
+
+/**
+ * Wrap a page fetcher as an `ApiListPromise`.
+ *
+ * The walk follows the cursor the CALLER chose: with `ending_before` it pages
+ * backwards — each page is still newest first on the wire, so its items are
+ * yielded in reverse, moving steadily away from the cursor, Stripe's
+ * semantics — and otherwise forwards with `starting_after`.
+ */
+export function listPromise<T extends { id: string }, P extends ListParams, L extends List<T>>(
+  fetchPage: (params: P) => Promise<L>,
+  params: P,
+): ApiListPromise<T, L> {
+  const first = fetchPage(params);
+  const backwards = params.ending_before !== undefined;
+
+  async function* items(): AsyncGenerator<T> {
+    let page: L = await first;
+    const cursors = new Set<string>();
+    for (;;) {
+      yield* backwards ? [...page.data].reverse() : page.data;
+      const edge = backwards ? page.data[0] : page.data[page.data.length - 1];
+      if (!page.has_more || edge === undefined) return;
+      if (cursors.has(edge.id)) throw stalled(edge.id);
+      cursors.add(edge.id);
+      const { starting_after: _after, ending_before: _before, ...rest } = params;
+      page = await fetchPage({
+        ...rest,
+        ...(backwards ? { ending_before: edge.id } : { starting_after: edge.id }),
+      } as P);
+    }
+  }
+
+  return autoPaging(first, items);
+}
+
+/**
+ * Wrap a search page fetcher as an `ApiSearchPromise`: each next page is the
+ * SAME query with `page` set to the previous answer's `next_page`, until it is
+ * `null`.
+ */
+export function searchPromise<T, P extends SearchParams, R extends SearchResult<T>>(
+  fetchPage: (params: P) => Promise<R>,
+  params: P,
+): ApiSearchPromise<T, R> {
+  const first = fetchPage(params);
+
+  async function* items(): AsyncGenerator<T> {
+    let page: R = await first;
+    const tokens = new Set<string>();
+    for (;;) {
+      yield* page.data;
+      const next = page.next_page;
+      if (!page.has_more || next === null) return;
+      if (tokens.has(next)) throw stalled(next);
+      tokens.add(next);
+      page = await fetchPage({ ...params, page: next });
+    }
+  }
+
+  return autoPaging(first, items);
+}
+
+/** The search parameters as a query — one spelling for every `search()`. */
+export function searchQuery(params: SearchParams): Record<string, QueryValue> {
+  return { query: params.query, limit: params.limit, page: params.page, expand: params.expand };
 }
 
 /** The scalar and structured values a query string carries. */

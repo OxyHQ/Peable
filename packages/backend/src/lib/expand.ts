@@ -80,7 +80,8 @@ export type ExpandableType =
   | 'payout'
   | 'application_fee'
   | 'reconciliation_mismatch'
-  | 'item';
+  | 'item'
+  | 'reporting.report_run';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -138,6 +139,8 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   reconciliation_mismatch: {},
   // A checkout session's or payment link's line (`object: 'item'`).
   item: { price: 'price', product: 'product' },
+  // The result File is embedded, as on Stripe; nothing on a run expands.
+  'reporting.report_run': {},
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;

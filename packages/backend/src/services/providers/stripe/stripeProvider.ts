@@ -13,6 +13,7 @@
 
 import type Stripe from 'stripe';
 import {
+  type BillingDetails,
   type CurrencyCode,
   DISPUTE_TEXT_EVIDENCE_FIELDS,
   type DisputeFileEvidenceField,
@@ -161,6 +162,27 @@ function toStripeAmount(
  * `typeof x === 'string'` alone would silently answer `undefined` for every
  * expanded read and send a settlement looking for a charge it already had.
  */
+/** Stripe's billing details in Peable's shape — the same on a payment method and a charge. */
+function toBillingDetails(
+  billing: Stripe.PaymentMethod.BillingDetails | Stripe.Charge.BillingDetails | null | undefined,
+): BillingDetails {
+  return {
+    address: billing?.address
+      ? {
+          line1: billing.address.line1 ?? null,
+          line2: billing.address.line2 ?? null,
+          city: billing.address.city ?? null,
+          state: billing.address.state ?? null,
+          postal_code: billing.address.postal_code ?? null,
+          country: billing.address.country ?? null,
+        }
+      : null,
+    email: billing?.email ?? null,
+    name: billing?.name ?? null,
+    phone: billing?.phone ?? null,
+  };
+}
+
 function readChargeId(latestCharge: Stripe.PaymentIntent['latest_charge']): string | undefined {
   if (typeof latestCharge === 'string') return latestCharge;
   if (typeof latestCharge === 'object' && latestCharge !== null) return latestCharge.id;
@@ -976,21 +998,7 @@ export class StripePaymentProvider
         country: card?.country ?? null,
         funding: card?.funding ?? null,
       },
-      billingDetails: {
-        address: billing?.address
-          ? {
-              line1: billing.address.line1 ?? null,
-              line2: billing.address.line2 ?? null,
-              city: billing.address.city ?? null,
-              state: billing.address.state ?? null,
-              postal_code: billing.address.postal_code ?? null,
-              country: billing.address.country ?? null,
-            }
-          : null,
-        email: billing?.email ?? null,
-        name: billing?.name ?? null,
-        phone: billing?.phone ?? null,
-      },
+      billingDetails: toBillingDetails(billing),
       ...(customer !== undefined ? { customerObjectId: customer } : {}),
     };
   }
@@ -1016,6 +1024,7 @@ export class StripePaymentProvider
     const outcome = charge.outcome;
     const card = charge.payment_method_details?.card;
     return {
+      billingDetails: toBillingDetails(charge.billing_details),
       outcome: outcome
         ? {
             networkStatus: outcome.network_status ?? null,

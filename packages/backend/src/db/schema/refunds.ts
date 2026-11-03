@@ -129,6 +129,8 @@ export const refunds = pgTable(
     unique('refunds_provider_object_key').on(table.provider, table.providerObjectId),
     /** "What has come back off this payment?" — the read the total is summed from. */
     index('refunds_payment_intent_idx').on(table.paymentIntentId),
+    /** Every refund list and search walks `merchant_id = … order by id desc`. */
+    index('refunds_merchant_id_id_idx').on(table.merchantId, table.id),
     foreignKey({
       name: 'refunds_merchant_id_fkey',
       columns: [table.merchantId],

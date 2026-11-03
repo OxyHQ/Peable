@@ -4,11 +4,13 @@ import type {
   List,
   ListParams,
   Refund,
+  SearchParams,
   Settlement,
   UpdateRefundParams,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { searchResource } from '../core/search';
+import { type ApiListPromise, type ApiSearchPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Sending money back to a payer.
@@ -144,5 +146,15 @@ export class RefundsResource {
         ),
       params,
     );
+  }
+
+  /**
+   * Search in Stripe's query language — `amount`, `currency`, `status`, `reason`, `payment_intent`, `created`, `metadata['key']` (a Peable addition: Stripe has no refund search). Clauses join
+   * with spaces / `AND` or with `OR`, never both. A page promise and an async
+   * iterable that follows `next_page`; `expand: ['total_count']` counts every
+   * match.
+   */
+  search(params: SearchParams): ApiSearchPromise<Refund> {
+    return searchResource<Refund>(this.client, 'refunds', params);
   }
 }

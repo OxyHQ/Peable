@@ -251,6 +251,10 @@ export const paymentIntents = pgTable(
     // The list route filters and paginates by merchant; the compound unique
     // above is keyed on `idempotency_key` second and cannot serve it.
     index('payment_intents_merchant_id_idx').on(table.merchantId),
+    // Every list and search walks `merchant_id = … order by id desc limit n`;
+    // this serves the walk itself, so a page reads n rows, not the merchant's
+    // every row then a sort. Built CONCURRENTLY out of band first (0063).
+    index('payment_intents_merchant_id_id_idx').on(table.merchantId, table.id),
     // `services/enrichment.ts` resolves intents by address.
     index('payment_intents_address_idx').on(table.address),
     /**

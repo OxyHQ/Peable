@@ -682,6 +682,39 @@ writer). Decisions a reader would otherwise undo:
   of a rollback, and live commits never take the notify queue's lock. The
   stream reads the row back through its repository; the payload is never a copy.
 
+## Search and report runs (Orbit Phase 8)
+
+`report_runs` (`schema/reporting.ts`), `charges.billing_details`, and the
+indexes the search walks. Decisions a reader would otherwise undo:
+
+- **No search extension.** No `pg_trgm`, no `tsvector`: substring is
+  `strpos(lower(col), lower($1))` over the merchant's rows, equality on text is
+  `lower(col) = lower($1)`, metadata is `@>` containment (a GIN index would
+  serve it unchanged, if one is ever clearly needed).
+- **The walk indexes are `(merchant_id, id)`**: every list and search is
+  `merchant_id = … order by id desc limit n`, so the index is the walk and a
+  page reads `n` rows. Added where a table had no merchant index (`charges`,
+  `refunds`) and on the hot `payment_intents` (`0063`, alone, `IF NOT
+  EXISTS`); `customers (merchant_id, lower(email))` serves the
+  case-insensitive email search. `routes/__tests__/search.realdb.test.ts` proves
+  each is usable with `enable_seqscan = off`.
+- **A run's result is its own merchant's report file**:
+  `(result_file_id, merchant_id, result_file_purpose) → files (id,
+  merchant_id, purpose)`, the purpose pinned to `finance_report_run` by a
+  CHECK — the `dispute_evidence_files` rule.
+- **Its lifecycle is CHECKs**: succeeded ⇔ a result and `succeeded_at`,
+  failed ⇔ `error`, only a pending run holds a lease (`lease_token` and
+  `lease_expires_at` together). The claim is one `UPDATE … where id = (select …
+  for update skip locked)`; completion and failure are gated on the claim's
+  `lease_token`, so a worker that outlived its lease writes nothing. A deferral
+  moves the lease forward rather than clearing it — the backoff needs no column.
+- **`finance_report_run` widens `files`**: the purpose, the `csv` type and the
+  64 MiB ceiling (`files_size_check`). The upload cap is computed over
+  `FILE_UPLOAD_PURPOSES` only, so the widening never raised what `POST
+  /v1/files` accepts.
+- **Migrations `0062`–`0064`.** `0062` re-adds every widened CHECK on an
+  existing table `NOT VALID` by hand and `0064` (post) validates them.
+
 ## Orbit money (ADR 0015)
 
 `fee_schedules`, `application_fees`, `application_fee_refunds`, `payouts`,
