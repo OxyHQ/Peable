@@ -1,5 +1,13 @@
 const messages = {
   en: {
+    'provider.incomplete': 'Complete payment authentication before continuing.',
+    'provider.loading': 'Preparing secure payment fields…',
+    'provider.unavailable': 'Secure payment fields are unavailable.',
+    'provider.busy': 'This payment cannot be confirmed right now.',
+    'provider.closed': 'The payment view was closed.',
+    'provider.failed': 'The payment could not be confirmed. Try again.',
+    'provider.retry': 'Try again',
+
     taxIncluded: 'Tax included',
     'step.confirmation': 'Confirm payment',
     'faircoin.transfer.awaiting': 'Waiting for your transfer',
@@ -117,6 +125,14 @@ const messages = {
     title: '',
   },
   es: {
+    'provider.incomplete': 'Completa la autenticación del pago para continuar.',
+    'provider.loading': 'Preparando los campos de pago seguros…',
+    'provider.unavailable': 'Los campos de pago seguros no están disponibles.',
+    'provider.busy': 'No se puede confirmar este pago ahora.',
+    'provider.closed': 'Se ha cerrado la ventana de pago.',
+    'provider.failed': 'No se pudo confirmar el pago. Inténtalo de nuevo.',
+    'provider.retry': 'Intentar de nuevo',
+
     taxIncluded: 'Impuestos incluidos',
     'step.confirmation': 'Confirmar pago',
     'faircoin.transfer.awaiting': 'Esperando tu transferencia',

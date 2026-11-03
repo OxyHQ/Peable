@@ -307,7 +307,6 @@ export function PeableMethodContent({
     <>
       {details.view !== 'topup' && (
         <View style={{ alignItems: 'center', gap: 4 }}>
-          <Text>{label('faircoin.amount')}</Text>
           <Text variant="display-3-bold">{details.amountLabel}</Text>
           {!!details.quoteDescription && <Text>{details.quoteDescription}</Text>}
         </View>

@@ -16,3 +16,8 @@ export { checkoutFeedbackSounds } from './feedback';
 
 export type { WalletObservation } from './walletView';
 export { validInstallmentQuote, type InstallmentQuote } from './installmentPlan';
+export {
+  PeableProviderFields,
+  type PeableProviderFieldsProps,
+  type ProviderConfirmation,
+} from './PeableProviderFields';

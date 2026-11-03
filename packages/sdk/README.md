@@ -131,3 +131,17 @@ a QR/address and progress ring; detection/confirmation are distinct from settlem
 The host owns observation and cancellation. Full addresses remain selectable and the
 optional copy callback must resolve successfully before the UI reports a copy. Local
 preview simulations and their nonpayable QR values stay in the consuming app.
+
+`PeableProviderFields` is an optional browser-capability adapter for the existing
+provider-origin Payment Element. It accepts the payer client's `client_action`,
+reports a guarded confirmation callback, and keeps raw card fields inside the
+provider iframe. A resolved confirmation reports provider acceptance, not
+settlement. The host must keep the field mounted while authentication is in
+progress (`CheckoutSheet.interactionBlocked`) and observe the gateway for final
+status. Native hosts without the browser capability receive an unavailable state;
+this does not introduce a native card-capture implementation.
+
+The hosted checkout and this UI share `loadProviderSdk` through the anonymous
+`/checkout` browser entry. React/Bloom remain unreachable from that entry or the
+server root. Appearance uses Bloom's current theme via the provider API, with
+bounded loading/readiness timeouts and retry. It never reads iframe card values.
