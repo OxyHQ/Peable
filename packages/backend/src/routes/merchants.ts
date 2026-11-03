@@ -1,3 +1,4 @@
+import { idempotent } from '../lib/idempotency';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
@@ -374,6 +375,7 @@ export function createMerchantsRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

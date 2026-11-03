@@ -345,6 +345,7 @@ export function createCheckoutSessionsRouter(deps: {
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
