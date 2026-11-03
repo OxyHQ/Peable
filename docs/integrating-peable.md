@@ -17,8 +17,10 @@ the merchant's **watch-only** xpub. Your server never sees a private key.
 
 Every request and response field is `snake_case`; every instant (`created`,
 `expires_at`, `available_on`, …) is an integer of **Unix seconds**; every amount
-is a base-unit **string**. Lists are `{ object: 'list', data, has_more }` and page
-with `limit` and `starting_after` (the last id you saw). Every response carries a
+is a base-unit **string**. Lists are `{ object: 'list', data, has_more, url }`,
+newest first (see [Lists, expand and metadata](#lists-expand-and-metadata)). Every
+update on the merchant API is a `POST` to the object's path — there is no `PATCH`.
+Every response carries a
 `Request-Id` header, and every error is
 `{ error: { type, code?, param?, message, request_id } }` — a well-formed but
 invalid request is a `400`, never a `422`. The SDK passes your params and returns
@@ -62,6 +64,67 @@ live in — a retry answers `409`, recover with `GET /v1/merchants/me`), `POST
 `/v1/billing/*` routes (their own durable operation keys, see
 [checkout operation recovery](integrations/checkout-operation-recovery.md)), and
 the anonymous payer routes.
+
+### Lists, expand and metadata
+
+**Lists.** Every list endpoint takes the same parameters and answers the same
+envelope:
+
+| Parameter | Meaning |
+|---|---|
+| `limit` | 1–100, default 10 |
+| `starting_after` | The id of the LAST object you saw: the next page is older |
+| `ending_before` | The id of the FIRST object you saw: the page is the newer objects, still newest first. Never with `starting_after` (400, `param: 'ending_before'`) |
+| `created` / `created[gt\|gte\|lt\|lte]` | Unix seconds — one second, or a range. Judged against the `created` you can see |
+
+A cursor is resolved inside YOUR scope: an id that names nothing you own — another
+merchant's included — is a 400 `resource_missing` naming the parameter, the same
+answer either way. An unknown query parameter is a 400 naming it. The lists:
+`/v1/payment_intents` (`status`, `connected_account`), `/v1/checkout_sessions`
+(`payment_intent`), `/v1/payment_links` (`active`), `/v1/refunds`
+(`payment_intent`), `/v1/transfers` (`payment_intent`, `connected_account`),
+`/v1/disputes` (`payment_intent`), `/v1/connected_accounts`,
+`/v1/tax/transactions` (`created` is the tax date), the per-payment
+`/v1/payment_intents/:id/{refunds,transfers,disputes}` (refunds also carry
+`remaining_refundable`), and the dashboard and contribution lists.
+
+The SDK's `list()` is a promise of one page that is also an async iterable over
+every page:
+
+```ts
+const page = await peable.refunds.list({ payment_intent: 'pi_…', limit: 20 });
+for await (const intent of peable.paymentIntents.list({ status: 'settled' })) { … }
+const recent = await peable.transfers.list({ created: { gte: since } }).autoPagingToArray({ limit: 500 });
+```
+
+**Expand.** A reference to another object is spelled without `_id` —
+`payment_intent`, `connected_account` — and is the id string unless you ask for
+the object with `expand[]` (dot paths, at most four levels; on a list, prefix
+`data.`):
+
+```ts
+await peable.checkout.sessions.retrieve('cs_…', { expand: ['payment_intent.connected_account'] });
+await peable.refunds.list({ expand: ['data.payment_intent'] });
+```
+
+Expandable: `payment_intent.connected_account`; `checkout_session.payment_intent`
+and `.connected_account`; `refund.payment_intent`; `transfer.payment_intent` and
+`.connected_account`; `dispute.payment_intent`; `settlement.payment_intent`.
+Expansion resolves inside your own scope, and a path that names anything else is
+a 400 with `param: 'expand'`. The payer's `client_secret` read of an intent
+cannot expand. Webhook payloads always carry ids.
+
+**Metadata.** `metadata` is your own `string → string` bag: at most 50 keys,
+keys at most 40 characters (no `[` or `]`), values at most 500. On an update it
+is a patch — named keys are set, a key sent as `''` is removed, others are kept —
+and the 50-key limit is judged on the result. Updatable today on payment intents
+(`POST /v1/payment_intents/:id`, metadata only), payment links
+(`POST /v1/payment_links/:id`) and checkout sessions
+(`POST /v1/checkout_sessions/:id`).
+
+```ts
+await peable.paymentIntents.update('pi_…', { metadata: { order_id: '', shipped: 'yes' } });
+```
 
 ---
 
@@ -132,7 +195,7 @@ const session = await peable.checkout.sessions.create({
 });
 
 // session.url  → redirect the buyer here (checkout.peable.to/c/<id>#cs=…)
-// session.id, session.payment_intent_id, session.client_secret also returned
+// session.id, session.payment_intent (the `pi_…`), session.client_secret also returned
 return redirect(session.url);
 ```
 
@@ -177,7 +240,8 @@ const intent = await peable.paymentIntents.create(
 // intent.id, intent.client_secret, intent.address, intent.status, intent.expires_at
 new Date(intent.expires_at * 1000);              // instants are Unix seconds
 await peable.paymentIntents.retrieve(intent.id);
-await peable.paymentIntents.list({ status: 'settled', limit: 20 });
+await peable.paymentIntents.list({ status: 'settled', limit: 20 });   // one page; or `for await`
+await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes' } });
 await peable.paymentIntents.reject(intent.id);   // cancel an unpaid intent
 ```
 
@@ -278,7 +342,7 @@ intent, so a handler can tell them apart.
 
 ### `connected_account.updated` — the one event that is not about a payment
 
-Its `data.object` is a `ConnectedAccount`, and its `payment_intent_id` on the
+Its `data.object` is a `ConnectedAccount`, and its `intent_id` on the
 delivery log is `null`. It fires when something a marketplace ACTS on changes about a
 seller — payability, either capability, the requirement counts, the disabled
 reasons — and not on every refresh, because a periodic sweep re-reads every
@@ -355,7 +419,7 @@ import {
 } from '@peable.to/sdk';
 
 try {
-  await peable.refunds.create({ payment_intent_id, external_ref, amount: '0' });
+  await peable.refunds.create({ payment_intent, external_ref, amount: '0' });
 } catch (err) {
   if (err instanceof PeableInvalidRequestError) {
     err.statusCode; // 400
@@ -381,10 +445,12 @@ them in production.
 
 ```ts
 await peable.connectedAccounts.create({ external_ref, country, business_type });
-await peable.transfers.create({ payment_intent_id, connected_account_ref, external_ref, amount });
+await peable.transfers.create({ payment_intent, connected_account_ref, external_ref, amount });
 await peable.transfers.reverse(transferId, { amount, external_ref });   // identity required
-await peable.refunds.create({ payment_intent_id, external_ref, amount });
-await peable.disputes.listForPaymentIntent(paymentIntentId);
+await peable.refunds.create({ payment_intent, external_ref, amount });
+await peable.refunds.list({ payment_intent });           // or .retrieve('re_…')
+await peable.transfers.list({ connected_account });      // or .retrieve('tr_…')
+await peable.disputes.list({ payment_intent });          // or .retrieve('dp_…')
 ```
 
 Three things that are easy to get wrong and expensive:
@@ -496,11 +562,12 @@ const quote = await peable.billing.createTaxQuote({
   recorded with `peable.tax.transactions.createReversal(txnId, { reference,
   amount? })` (`amount` = gross refunded; omitted = the rest). Reversals list as
   `type: 'reversal'` transactions naming the sale they reverse.
-- `peable.tax.transactions.list({ from, to })` and
-  `peable.tax.reports.summary({ from, to })` (`from` inclusive, `to` exclusive,
-  both Unix seconds; or `GET /v1/tax/reports/summary?format=csv`) are the filing
-  export; report rows are
-  net of reversals and count them in `reversals`.
+- `peable.tax.transactions.list({ created: { gte, lt } })` lists transactions
+  newest first like every list (`created` filters the tax date, `committed_at`),
+  and `peable.tax.reports.summary({ from, to })` (`from` inclusive, `to`
+  exclusive, both Unix seconds; or `GET /v1/tax/reports/summary?format=csv`) is
+  the filing export; report rows are net of reversals and count them in
+  `reversals`.
 
 ## Connect for FairCoin — paying sellers in their own wallets
 
@@ -517,8 +584,10 @@ The walkthrough is [Connect for FairCoin](connect-faircoin.md); the decisions ar
 | `POST /v1/payment_intents`, `POST /v1/checkout_sessions` | service, `payments:write` | `connected_account: 'ca_…'` pays that seller: FairCoin only, address from the seller's key, 409 `account_not_ready` until they register |
 | `GET /v1/payment_intents?connected_account=ca_…` | service, `payments:read` | One seller's payments |
 
-On the wire, optional in the published types: `PaymentIntent.connected_account_id`,
-`PaymentIntent.can_expire`, `CheckoutSession.connected_account_id`, `WebhookEvent.account`.
+On the wire: `PaymentIntent.connected_account` and `CheckoutSession.connected_account`
+(the `ca_…`, `null` for a payment to the merchant itself, the object when
+expanded); optional in the published types: `PaymentIntent.can_expire`,
+`WebhookEvent.account`.
 `ConnectedAccount.country` is now `string | null` (a FairCoin-only seller has
 none) and `ConnectedAccount.rails` / `.faircoin` are new.
 
@@ -555,8 +624,9 @@ first. The merchant fixes the network; the contribution amount is always FAIR.
 `expires_at` is Unix seconds. Purpose, amount policy and organization are
 immutable; use `setActive` to withdraw a link. `list` and `collections` return
 only that organization's contribution records as `{ object: 'list', data,
-has_more }`, paged with `{ limit, starting_after }` (the last id of the previous
-page; default 10, at most 100); `iterate` walks every page.
+has_more, url }`, newest first, with the [list parameters](#lists-expand-and-metadata)
+(`limit`, `starting_after`/`ending_before`, `created`); iterating the returned
+list (`for await`) walks every page. `setActive` is a `POST`.
 The app's Settings → Organization contributions screen uses this SDK.
 
 Payers open the existing anonymous `https://checkout.peable.to/l/<id>` page.

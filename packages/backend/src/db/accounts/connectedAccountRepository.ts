@@ -7,11 +7,12 @@
  * provider response — a hand-set readiness field is a seller the gateway
  * believes is payable on no evidence.
  */
-import { and, asc, desc, eq, isNotNull, isNull, lt, sql } from 'drizzle-orm';
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from 'drizzle-orm';
 import type { NetworkType } from '@fairco.in/core';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
 import { assertWatchOnly } from '../../services/watchOnly';
 import { connectedAccounts, merchants } from '../schema';
+import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
@@ -517,13 +518,6 @@ export async function findAccountsToSync(
   return rows.map(toRow);
 }
 
-/** Every seller a merchant has onboarded. Newest first. */
-export interface ListAccountsPage {
-  readonly data: readonly ConnectedAccountRow[];
-  /** Whether another page exists — the cursor to continue from is the last row's `ca_…`. */
-  readonly hasMore: boolean;
-}
-
 /**
  * One PAGE of a merchant's sellers, newest first.
  *
@@ -531,36 +525,42 @@ export interface ListAccountsPage {
  * and no `has_more`: a marketplace with more than a hundred sellers could not
  * see the rest of them, and nothing in the response said so. A silently
  * truncated list is worse than a refusal — a caller reconciling against it
- * concludes the sellers are gone.
- *
- * The keyset walk runs on the PRIMARY KEY rather than on `created_at`. Both are
- * uuidv7 and therefore k-sortable, so the order is the same, and `id` is unique
- * where a timestamp is not: two accounts created in the same millisecond would
- * make a `created_at` cursor either skip one or repeat it forever.
- *
- * `limit + 1` rows are read and the extra is dropped, which answers `has_more`
- * without a second `count(*)` over a table that grows with the merchant.
+ * concludes the sellers are gone. The walk is `db/keyset.ts`'s, on the primary
+ * key, for the reason every list's is.
  */
 export async function listAccountsForMerchant(
   db: DatabaseOrTransaction,
   merchantId: string,
-  limit: number,
-  after?: string,
-): Promise<ListAccountsPage> {
+  page: KeysetPage,
+): Promise<{ data: ConnectedAccountRow[]; hasMore: boolean }> {
+  const walk = keyset(connectedAccounts.id, connectedAccounts.createdAt, page);
+  const rows = await db
+    .select(ACCOUNT_COLUMNS)
+    .from(connectedAccounts)
+    .where(and(eq(connectedAccounts.merchantId, merchantId), walk.where))
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map(toRow));
+}
+
+/**
+ * Several sellers by PUBLIC id, scoped to the merchant in the predicate — the
+ * `expand[]` loader, one query per page.
+ */
+export async function findAccountsByPublicIds(
+  db: DatabaseOrTransaction,
+  merchantId: string,
+  publicIds: readonly string[],
+): Promise<ConnectedAccountRow[]> {
+  if (publicIds.length === 0) return [];
   const rows = await db
     .select(ACCOUNT_COLUMNS)
     .from(connectedAccounts)
     .where(
       and(
         eq(connectedAccounts.merchantId, merchantId),
-        after === undefined ? undefined : lt(connectedAccounts.id, after),
+        inArray(connectedAccounts.publicId, [...publicIds]),
       ),
-    )
-    .orderBy(desc(connectedAccounts.id))
-    .limit(limit + 1);
-
-  return {
-    data: rows.slice(0, limit).map(toRow),
-    hasMore: rows.length > limit,
-  };
+    );
+  return rows.map(toRow);
 }

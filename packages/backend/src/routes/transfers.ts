@@ -21,12 +21,12 @@ import {
   findAccountByPublicId,
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
-import { findIntentById, findIntentByPublicId } from '../db/payments/paymentIntentRepository';
+import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import type { PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
   findTransferByExternalRef,
   findTransferByPublicId,
-  listTransfersForIntent,
+  listTransfersForMerchant,
   TransferReversalTooLargeError,
   type TransferRow,
 } from '../db/transfers/transferRepository';
@@ -53,7 +53,24 @@ import {
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
+import { expandObjects, parseExpand } from '../lib/expand';
+import {
+  answerList,
+  listQuerySchema,
+  parseQuery,
+  resolveListReference,
+  retrieveQuerySchema,
+} from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
+
+/** `GET /v1/transfers`: every settlement, or those of one payment and/or one seller. */
+const listTransfersQuery = listQuerySchema({
+  payment_intent: z.string().min(1).max(255).optional(),
+  connected_account: z.string().min(1).max(255).optional(),
+});
+/** The per-payment sub-list: the payment is in the path. */
+const listIntentTransfersQuery = listQuerySchema({});
+const retrieveTransferQuery = retrieveQuerySchema({});
 
 /**
  * A canonical base-unit integer string, validated with the SAME predicate the
@@ -76,17 +93,17 @@ const baseUnitAmount = z
 const createTransferBodySchema = z
   .object({
     /** The `pi_…` this settles out of. */
-    payment_intent_id: z.string().min(1),
+    payment_intent: z.string().min(1),
     /** Either address for the seller — their `ca_…` or the merchant's own ref. */
-    connected_account_id: z.string().min(1).optional(),
+    connected_account: z.string().min(1).optional(),
     connected_account_ref: z.string().min(1).max(255).optional(),
     /** The merchant's own id for what this settles. The idempotency. */
     external_ref: z.string().min(1).max(255),
     amount: baseUnitAmount,
   })
   .strict()
-  .refine((body) => Boolean(body.connected_account_id) !== Boolean(body.connected_account_ref), {
-    message: 'name the seller by exactly one of connected_account_id or connected_account_ref',
+  .refine((body) => Boolean(body.connected_account) !== Boolean(body.connected_account_ref), {
+    message: 'name the seller by exactly one of connected_account or connected_account_ref',
   });
 
 const reverseTransferBodySchema = z
@@ -145,11 +162,11 @@ async function serializeTransfer(
  */
 function transferReplayConflict(
   existing: TransferRow,
-  body: { readonly payment_intent_id: string; readonly amount: string },
+  body: { readonly payment_intent: string; readonly amount: string },
   requestedIntent: PaymentIntentRow,
 ): string | null {
   if (existing.paymentIntentId !== requestedIntent.id) {
-    return `${body.payment_intent_id} does not match the payment this settlement reference already names`;
+    return `${body.payment_intent} does not match the payment this settlement reference already names`;
   }
   if (existing.amount !== body.amount) {
     return `this settlement reference already names an amount of ${existing.amount}`;
@@ -190,10 +207,11 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       const body = parsed.data;
       const db = getDb();
 
-      const intent = await findIntentByPublicId(db, body.payment_intent_id);
-      // ONE 404 for "does not exist" and for "is not yours". Distinguishing
-      // them tells a caller whether another merchant's `pi_…` is real.
-      if (!intent || intent.merchantId !== merchant.id) {
+      // ONE 404 for "does not exist" and for "is not yours" — scoped in the
+      // predicate. Distinguishing them tells a caller whether another
+      // merchant's `pi_…` is real.
+      const intent = await findIntentForMerchant(db, body.payment_intent, merchant.id);
+      if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
@@ -257,8 +275,8 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
         }
       }
 
-      const account = body.connected_account_id
-        ? await findAccountByPublicId(db, merchant.id, body.connected_account_id)
+      const account = body.connected_account
+        ? await findAccountByPublicId(db, merchant.id, body.connected_account)
         : await findAccountByExternalRef(db, merchant.id, body.connected_account_ref ?? '');
       if (!account) {
         sendError(res, 404, 'invalid_request_error', 'connected account not found');
@@ -401,6 +419,88 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
     }),
   );
 
+  /**
+   * Every settlement of the merchant, newest first — narrowed by
+   * `payment_intent=pi_…` and/or `connected_account=ca_…`.
+   */
+  router.get(
+    '/v1/transfers',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const query = parseQuery(req, res, listTransfersQuery);
+      if (!query) return;
+
+      const db = getDb();
+      const intent = await resolveListReference(
+        res,
+        'payment_intent',
+        query.payment_intent,
+        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+      );
+      if (!intent.ok) return;
+      const account = await resolveListReference(
+        res,
+        'connected_account',
+        query.connected_account,
+        async (publicId) => (await findAccountByPublicId(db, merchant.id, publicId))?.id ?? null,
+      );
+      if (!account.ok) return;
+
+      await answerList(req, res, {
+        query,
+        type: 'transfer',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findTransferByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listTransfersForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            connectedAccountId: account.id,
+            page,
+          }),
+        serialize: (row) =>
+          toTransferDTO(row, row.connectedAccountPublicId, row.paymentIntentPublicId),
+      });
+    }),
+  );
+
+  /** One settlement, by `tr_…`, scoped to the merchant in the predicate. */
+  router.get(
+    '/v1/transfers/:transferId',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { transferId } = req.params;
+      if (!transferId) {
+        sendError(res, 400, 'invalid_request_error', 'transferId is required');
+        return;
+      }
+      const query = parseQuery(req, res, retrieveTransferQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'transfer', query.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const transfer = await findTransferByPublicId(db, merchant.id, transferId);
+      if (!transfer) {
+        sendError(res, 404, 'invalid_request_error', 'transfer not found');
+        return;
+      }
+      const intent = await findIntentByPublicIdForTransfer(db, transfer);
+      const dto = await serializeTransfer(merchant.id, transfer, intent);
+      await expandObjects([dto], 'transfer', expand, merchant.id);
+      res.status(200).json(dto);
+    }),
+  );
+
   /** What one payment settled. The reconciliation read. */
   router.get(
     '/v1/payment_intents/:intentId/transfers',
@@ -411,24 +511,36 @@ export function createTransfersRouter(deps: { requireMerchant: RequestHandler })
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const db = getDb();
       const { intentId } = req.params;
       if (!intentId) {
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
+      const query = parseQuery(req, res, listIntentTransfersQuery);
+      if (!query) return;
 
-      const intent = await findIntentByPublicId(db, intentId);
-      if (!intent || intent.merchantId !== merchant.id) {
+      const db = getDb();
+      const intent = await findIntentForMerchant(db, intentId, merchant.id);
+      if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
-      const rows = await listTransfersForIntent(db, intent.id);
-      const data = await Promise.all(
-        rows.map((row) => serializeTransfer(merchant.id, row, intent)),
-      );
-      res.status(200).json({ object: 'list', data });
+      await answerList(req, res, {
+        query,
+        type: 'transfer',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findTransferByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listTransfersForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          }),
+        serialize: (row) =>
+          toTransferDTO(row, row.connectedAccountPublicId, row.paymentIntentPublicId),
+      });
     }),
   );
 

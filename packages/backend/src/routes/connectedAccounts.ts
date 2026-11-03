@@ -46,20 +46,10 @@ import {
 import { idempotent } from '../lib/idempotency';
 import { toUnix } from '../lib/time';
 import { resolveMerchant } from './paymentIntents';
+import { answerList, listQuerySchema, parseQuery } from '../lib/list';
 
-/** How many accounts one list call returns when the caller does not say. */
-const DEFAULT_LIST_LIMIT = 25;
-/** ...and the most it will return however large a `limit` is asked for. */
-const MAX_LIST_LIMIT = 100;
-
-/**
- * Mirrors the payment-intent list query, deliberately: a merchant paginating
- * two collections in one integration should not have to learn two shapes.
- */
-const listQuerySchema = z.object({
-  limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
-  starting_after: z.string().optional(),
-});
+/** The shared list parameters, and no filter of its own yet. */
+const listAccountsQuery = listQuerySchema({});
 
 /** Bounded for the reason `external_ref` is: it is stored, and it is compared. */
 const OXY_USER_ID_MAX = 128;
@@ -209,47 +199,21 @@ export function createConnectedAccountsRouter(deps: { requireMerchant: RequestHa
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const parsed = listQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
+      const query = parseQuery(req, res, listAccountsQuery);
+      if (!query) return;
 
       const db = getDb();
-      /**
-       * The cursor arrives as a PUBLIC `ca_…` and the keyset walk runs on the
-       * primary key, so it is resolved here — ownership-scoped, so a cursor
-       * naming ANOTHER merchant's seller is a 400 exactly like an unknown one
-       * and never confirms that the account exists.
-       */
-      let after: string | undefined;
-      if (parsed.data.starting_after) {
-        const cursor = await findAccountByPublicId(db, merchant.id, parsed.data.starting_after);
-        if (!cursor) {
-          sendError(
-            res,
-            400,
-            'invalid_request_error',
-            'starting_after references an unknown connected account',
-          );
-          return;
-        }
-        after = cursor.id;
-      }
-
-      const page = await listAccountsForMerchant(
-        db,
-        merchant.id,
-        parsed.data.limit ?? DEFAULT_LIST_LIMIT,
-        after,
-      );
-      // `has_more` rather than a silently truncated list: this route used to
-      // return at most 100 sellers with nothing saying there were more, and a
-      // caller reconciling against it concludes the rest are gone.
-      res.status(200).json({
-        object: 'list',
-        data: page.data.map(toConnectedAccountDTO),
-        has_more: page.hasMore,
+      await answerList(req, res, {
+        query,
+        type: 'connected_account',
+        merchantId: merchant.id,
+        // A PUBLIC `ca_…`, resolved ownership-scoped: a cursor naming ANOTHER
+        // merchant's seller is a 400 exactly like an unknown one and never
+        // confirms that the account exists.
+        cursor: async (publicId) =>
+          (await findAccountByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) => listAccountsForMerchant(db, merchant.id, page),
+        serialize: toConnectedAccountDTO,
       });
     }),
   );

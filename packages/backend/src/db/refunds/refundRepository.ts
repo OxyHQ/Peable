@@ -9,7 +9,9 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { refunds } from '../schema';
+import type { PaymentIntentStatus } from '@peable.to/shared-types';
+import { paymentIntents, refunds } from '../schema';
+import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
@@ -372,4 +374,49 @@ export async function listRefundsForIntent(
     .where(eq(refunds.paymentIntentId, paymentIntentId))
     .orderBy(desc(refunds.createdAt));
   return rows.map(toRow);
+}
+
+/** A refund plus the two facts of its payment the wire carries: its `pi_…` and its status. */
+export interface RefundWithIntentRow extends RefundRow {
+  readonly paymentIntentPublicId: string;
+  readonly paymentStatus: PaymentIntentStatus;
+}
+
+export interface ListRefundsParams {
+  readonly merchantId: string;
+  /** Only the refunds of this payment — its INTERNAL id, already resolved inside the merchant. */
+  readonly paymentIntentId?: string | undefined;
+  readonly page: KeysetPage;
+}
+
+/**
+ * One page of a merchant's refunds, newest first (`db/keyset.ts`), each with
+ * its payment's PUBLIC id and status joined in — the DTO promises both, and a
+ * per-row lookup would be an N+1 the caller sizes through `limit`.
+ */
+export async function listRefundsForMerchant(
+  db: DatabaseOrTransaction,
+  params: ListRefundsParams,
+): Promise<{ data: RefundWithIntentRow[]; hasMore: boolean }> {
+  const walk = keyset(refunds.id, refunds.createdAt, params.page);
+  const rows = await db
+    .select({
+      ...REFUND_COLUMNS,
+      paymentIntentPublicId: paymentIntents.publicId,
+      paymentStatus: paymentIntents.status,
+    })
+    .from(refunds)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, refunds.paymentIntentId))
+    .where(
+      and(
+        eq(refunds.merchantId, params.merchantId),
+        params.paymentIntentId === undefined
+          ? undefined
+          : eq(refunds.paymentIntentId, params.paymentIntentId),
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map((row) => row as unknown as RefundWithIntentRow));
 }

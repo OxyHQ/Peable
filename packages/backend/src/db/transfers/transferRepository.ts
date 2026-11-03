@@ -10,7 +10,8 @@
 import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import type { CurrencyCode } from '@peable.to/shared-types';
 import { isUniqueViolation, uuidv7 } from '@oxy.so/db';
-import { transfers } from '../schema';
+import { connectedAccounts, paymentIntents, transfers } from '../schema';
+import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
@@ -305,4 +306,54 @@ export async function listTransfersForIntent(
     .where(eq(transfers.paymentIntentId, paymentIntentId))
     .orderBy(desc(transfers.createdAt));
   return rows.map(toRow);
+}
+
+/** A transfer plus the PUBLIC ids of the payment and the seller it names. */
+export interface TransferWithRefsRow extends TransferRow {
+  readonly paymentIntentPublicId: string;
+  readonly connectedAccountPublicId: string;
+}
+
+export interface ListTransfersParams {
+  readonly merchantId: string;
+  /** INTERNAL ids, already resolved inside the merchant. */
+  readonly paymentIntentId?: string | undefined;
+  readonly connectedAccountId?: string | undefined;
+  readonly page: KeysetPage;
+}
+
+/**
+ * One page of a merchant's settlements, newest first (`db/keyset.ts`), with
+ * both references' PUBLIC ids joined in: the rows hold internal keys, and the
+ * contract promises a `pi_…` and a `ca_…`.
+ */
+export async function listTransfersForMerchant(
+  db: DatabaseOrTransaction,
+  params: ListTransfersParams,
+): Promise<{ data: TransferWithRefsRow[]; hasMore: boolean }> {
+  const walk = keyset(transfers.id, transfers.createdAt, params.page);
+  const rows = await db
+    .select({
+      ...TRANSFER_COLUMNS,
+      paymentIntentPublicId: paymentIntents.publicId,
+      connectedAccountPublicId: connectedAccounts.publicId,
+    })
+    .from(transfers)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, transfers.paymentIntentId))
+    .innerJoin(connectedAccounts, eq(connectedAccounts.id, transfers.connectedAccountId))
+    .where(
+      and(
+        eq(transfers.merchantId, params.merchantId),
+        params.paymentIntentId === undefined
+          ? undefined
+          : eq(transfers.paymentIntentId, params.paymentIntentId),
+        params.connectedAccountId === undefined
+          ? undefined
+          : eq(transfers.connectedAccountId, params.connectedAccountId),
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(rows.map((row) => row as unknown as TransferWithRefsRow));
 }

@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.9.0 — lists, expand and metadata (breaking)
+
+- A reference to another object is named without `_id` and is expandable:
+  `payment_intent` (was `payment_intent_id`) on checkout sessions, refunds,
+  transfers, disputes and settlements; `connected_account` (was
+  `connected_account_id`) on payment intents, checkout sessions and transfers.
+  Typed `string | Object`; `expand` returns the object. Create bodies follow:
+  `refunds.create({ payment_intent })`,
+  `transfers.create({ payment_intent, connected_account })`.
+- Every `list()` returns an `ApiListPromise`: a promise of one page
+  (`{ object, data, has_more, url }`) that is also an async iterable over every
+  page, with `autoPagingEach` and `autoPagingToArray({ limit })`. Lists take
+  `ending_before` and `created` beside `limit` / `starting_after`. New:
+  `refunds.list/retrieve`, `transfers.list/retrieve`, `disputes.list/retrieve`,
+  `checkout.sessions.list/update`, `paymentIntents.update`; `listForPaymentIntent`
+  pages. `ContributionsResource.iterate` is gone — iterate `list()` instead.
+- `tax.transactions.list` takes the list parameters (`created` filters the tax
+  date) instead of `{ from, to }`, and is newest first.
+- Updates are `POST`: `paymentLinks.update`, `merchants.update` and contribution
+  `setActive` no longer send `PATCH`. `metadata` on an update is a patch (`''`
+  removes a key); at most 50 keys, 40-character keys, 500-character values.
+
 ## 0.8.0 — generic idempotency (breaking)
 
 The gateway now answers `Idempotency-Key` on every merchant `POST` (ADR 0014

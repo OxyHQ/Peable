@@ -1,3 +1,4 @@
+import { idempotent } from '../lib/idempotency';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
@@ -250,7 +251,7 @@ export function sendMerchantWriteError(
 }
 
 /**
- * Apply the mutable merchant fields (F2.5 — shared by `PATCH /v1/merchants/me`
+ * Apply the mutable merchant fields (F2.5 — shared by `POST /v1/merchants/me`
  * and the dashboard's `PATCH .../merchant`). `xpub`/`network`/`environment`/
  * `oxyAppId` are deliberately NOT accepted here: mutating the derivation key
  * after intents already derived addresses from it would corrupt address
@@ -368,11 +369,13 @@ export function createMerchantsRouter(deps: {
     }),
   );
 
-  router.patch(
+  // An update is a POST, as every update on this API is; there is no PATCH.
+  router.post(
     '/v1/merchants/me',
     requireMerchant,
     requireAuthenticated,
     oxy.middleware.requireScope('payments:write'),
+    idempotent,
     wrap(async (req, res) => {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;

@@ -38,7 +38,7 @@ const passthroughRateLimit: RequestHandler = (_req, _res, next) => next();
 interface CheckoutSessionResponse {
   id: string;
   object: string;
-  payment_intent_id: string;
+  payment_intent: string;
   client_secret: string;
   amount: string;
   network: string;
@@ -135,13 +135,13 @@ describe('POST /v1/checkout_sessions', () => {
     const body = await readJson<CheckoutSessionResponse>(res);
     expect(body.id).toMatch(/^cs_[0-9a-f]+$/);
     expect(body.object).toBe('checkout_session');
-    expect(body.payment_intent_id).toMatch(/^pi_[0-9a-f]+$/);
-    expect(body.client_secret).toStartWith(`${body.payment_intent_id}_secret_`);
+    expect(body.payment_intent).toMatch(/^pi_[0-9a-f]+$/);
+    expect(body.client_secret).toStartWith(`${body.payment_intent}_secret_`);
     expect(body.amount).toBe('400000000');
     expect(body.metadata).toEqual({ orderId: 'o_cs_1' });
     expect(body.url).toBe(`https://checkout.peable.to/c/${body.id}`);
 
-    const intent = await findIntentByPublicId(gatewayDb(), body.payment_intent_id);
+    const intent = await findIntentByPublicId(gatewayDb(), body.payment_intent);
     expect(intent).not.toBeNull();
     expect(intent?.clientSecret).toBe(body.client_secret);
   });
@@ -282,7 +282,7 @@ describe('GET /v1/checkout_sessions/:id/public', () => {
     expect(body.id).toBe(created.id);
     expect(body.success_url).toBe('https://merchant.example/success');
     expect(body.merchant.name).toBe('Sessions Co');
-    expect(body.payment_intent.id).toBe(created.payment_intent_id);
+    expect(body.payment_intent.id).toBe(created.payment_intent);
     expect(body.payment_intent.client_secret).toBe(created.client_secret);
     expect(body.payment_intent.amount).toBe('88000000');
   });
@@ -384,7 +384,7 @@ describe('POST /v1/checkout_sessions with an Idempotency-Key', () => {
     const a = await readJson<CheckoutSessionResponse>(first);
     const b = await readJson<CheckoutSessionResponse>(second);
     expect(b.id).toBe(a.id);
-    expect(b.payment_intent_id).toBe(a.payment_intent_id);
+    expect(b.payment_intent).toBe(a.payment_intent);
     expect(await countIntentsForMerchant(merchantId)).toBe(before + 1);
   });
 

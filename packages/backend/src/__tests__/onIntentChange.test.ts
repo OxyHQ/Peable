@@ -66,7 +66,7 @@ test('the outbox row exists before onIntentChange runs, not because of it', asyn
   const settled = transition.row;
 
   const beforeAnnounce = (
-    await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, limit: 50 })
+    await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, page: { limit: 50 } })
   ).data;
   expect(beforeAnnounce).toHaveLength(1);
   expect(beforeAnnounce[0]?.eventType).toBe('payment_intent.settled');
@@ -78,7 +78,7 @@ test('the outbox row exists before onIntentChange runs, not because of it', asyn
   // Announcing emits, and creates nothing.
   expect(rooms()).toEqual([`intent:${settled.publicId}`]);
   const afterAnnounce = (
-    await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, limit: 50 })
+    await listDeliveriesForMerchant(gatewayDb(), { merchantId: merchant.id, page: { limit: 50 } })
   ).data;
   expect(afterAnnounce).toHaveLength(1);
 });

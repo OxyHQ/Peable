@@ -56,3 +56,15 @@ export interface CreatePaymentLinkParams {
   metadata?: Record<string, string>;
   success_url?: string;
 }
+
+/**
+ * `POST /v1/payment_links/:id`. `amount`/`network` are deliberately absent — a
+ * link's price is immutable once shared.
+ */
+export interface UpdatePaymentLinkParams {
+  active?: boolean;
+  /** A patch: named keys are set, `""` removes a key, others are kept. */
+  metadata?: Record<string, string>;
+  /** `null` removes it. */
+  success_url?: string | null;
+}

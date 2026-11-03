@@ -21,7 +21,7 @@ describe('CheckoutResource.sessions', () => {
         json: {
           id: 'cs_1',
           object: 'checkout_session',
-          payment_intent_id: 'pi_1',
+          payment_intent: 'pi_1',
           client_secret: 'pi_1_secret_x',
           amount: '100000',
           network: 'testnet',

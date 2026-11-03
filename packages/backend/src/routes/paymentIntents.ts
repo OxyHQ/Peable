@@ -8,6 +8,7 @@ import {
   PAYMENT_INTENT_STATUSES,
   type CreatePaymentIntentParams,
   type PaymentIntentStatus,
+  type UpdatePaymentIntentParams,
 } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import { findMerchantByAppEnvironment } from '../db/merchants/merchantRepository';
@@ -16,6 +17,7 @@ import {
   findIntentByPublicId,
   findIntentForMerchant,
   listIntentsForMerchant,
+  updateIntentMetadata,
 } from '../db/payments/paymentIntentRepository';
 import type { IntentStateResult, PaymentIntentRow } from '../db/payments/paymentIntentRepository';
 import {
@@ -46,9 +48,21 @@ import {
 } from '../lib/http';
 import { railBodyFields } from '../lib/railSchema';
 import { idempotencyKeyOf, idempotent } from '../lib/idempotency';
-
-const DEFAULT_LIST_LIMIT = 20;
-const MAX_LIST_LIMIT = 100;
+import { expandObjects, parseExpand } from '../lib/expand';
+import {
+  answerList,
+  expandParam,
+  type ListQuery,
+  listQuerySchema,
+  parseQuery,
+  resolveListReference,
+  retrieveQuerySchema,
+} from '../lib/list';
+import {
+  METADATA_LIMIT_MESSAGE,
+  metadataCreateSchema,
+  metadataUpdateSchema,
+} from '../lib/metadata';
 
 /**
  * The payer's capability token, from the header or the query.
@@ -94,16 +108,29 @@ function sendStaleOrMissing(
   );
 }
 
-/** Exported: `routes/dashboard.ts` parses the SAME query shape for its list route (F2.5) so the two never drift. */
-export const listQuerySchema = z.object({
+/**
+ * The payment-intent list's own filters, beside the shared list parameters.
+ * Exported: `routes/dashboard.ts` lists the SAME way so the two never drift.
+ */
+export const paymentIntentListFilters = {
   status: z
     .enum(PAYMENT_INTENT_STATUSES as [PaymentIntentStatus, ...PaymentIntentStatus[]])
     .optional(),
-  limit: z.coerce.number().int().positive().max(MAX_LIST_LIMIT).optional(),
-  starting_after: z.string().optional(),
   /** Only the payments made on behalf of this seller (`ca_…`, ADR 0012). */
-  connected_account: z.string().min(1).optional(),
-});
+  connected_account: z.string().min(1).max(255).optional(),
+} as const;
+
+const listPaymentIntentsQuery = listQuerySchema(paymentIntentListFilters);
+
+/** A merchant retrieve takes `expand[]`; the payer's takes `client_secret` and nothing to expand. */
+const retrieveIntentQuery = retrieveQuerySchema({});
+
+const updateBodySchema = z
+  .object({
+    metadata: metadataUpdateSchema.optional(),
+    expand: expandParam.optional(),
+  } satisfies Record<keyof UpdatePaymentIntentParams | 'expand', z.ZodType>)
+  .strict();
 
 /**
  * The `connected_account` a create body may carry (ADR 0012 D5). Shared by the
@@ -141,7 +168,7 @@ const createBodySchema = z
   .object({
     ...railBodyFields,
     ...connectedAccountBodyField,
-    metadata: z.record(z.string(), z.string()).optional(),
+    metadata: metadataCreateSchema.optional(),
     expires_in_seconds: z.number().int().positive().optional(),
   } satisfies Record<keyof CreatePaymentIntentParams, z.ZodType>)
   .strict();
@@ -176,7 +203,7 @@ function findMerchantByAppEnv(
  * this specific environment (403), so callers just `if (!merchant) return`.
  *
  * Exported: `routes/merchants.ts` reuses this unchanged for the merchant-authed
- * GET/PATCH `/v1/merchants/me` routes.
+ * GET/POST `/v1/merchants/me` routes.
  */
 export async function resolveMerchant(req: Request, res: Response): Promise<MerchantRow | null> {
   const serviceApp = requireServiceApp(req, res);
@@ -218,74 +245,50 @@ export async function resolveMerchantByApp(
   return merchant;
 }
 
-export interface ListPaymentIntentsQuery {
-  status?: PaymentIntentStatus;
-  limit?: number;
-  starting_after?: string;
+export interface ListPaymentIntentsQuery extends ListQuery {
+  readonly status?: PaymentIntentStatus | undefined;
   /** A seller's PUBLIC `ca_…`; resolved and ownership-checked below. */
-  connected_account?: string;
+  readonly connected_account?: string | undefined;
 }
 
-export type ListPaymentIntentsResult =
-  | { ok: true; data: PaymentIntentRow[]; hasMore: boolean }
-  | { ok: false; status: number; message: string };
-
 /**
- * Shared pagination body for "list a merchant's payment intents" — factored
- * out (F2.5) so `GET /v1/payment_intents` (below) and the dashboard's `GET
- * /v1/dashboard/applications/:applicationId/payment_intents` run the EXACT
- * same query/cursor/status-filter logic against different auth paths, never
- * two copies to keep in sync.
+ * Answer "list a merchant's payment intents" — shared (F2.5) so
+ * `GET /v1/payment_intents` (below) and the dashboard's
+ * `GET /v1/dashboard/applications/:applicationId/payment_intents` run the
+ * EXACT same query, cursor and filter logic against different auth paths.
  */
-export async function listPaymentIntentsForMerchant(
+export async function answerPaymentIntentList(
+  req: Request,
+  res: Response,
   merchantId: string,
   query: ListPaymentIntentsQuery,
-): Promise<ListPaymentIntentsResult> {
-  const { status, starting_after } = query;
-  const limit = query.limit ?? DEFAULT_LIST_LIMIT;
+): Promise<void> {
   const db = getDb();
 
-  // The cursor arrives as a PUBLIC `pi_…` and the keyset walk runs on the
-  // primary key, so it is resolved here — ownership-scoped, so a cursor
-  // naming another merchant's intent is a 400 exactly like an unknown one and
-  // never confirms that the intent exists.
-  let after: string | undefined;
-  if (starting_after) {
-    const cursor = await findIntentForMerchant(db, starting_after, merchantId);
-    if (!cursor) {
-      return {
-        ok: false,
-        status: 400,
-        message: 'starting_after references an unknown payment intent',
-      };
-    }
-    after = cursor.id;
-  }
-
-  // The seller filter arrives as a PUBLIC `ca_…` and is resolved the way the
+  // The seller filter arrives as a PUBLIC `ca_…` and is resolved the way a
   // cursor is: scoped to the merchant, so another platform's seller is a 400
   // exactly like an unknown one.
-  let connectedAccountId: string | undefined;
-  if (query.connected_account !== undefined) {
-    const account = await findAccountByPublicId(db, merchantId, query.connected_account);
-    if (!account) {
-      return {
-        ok: false,
-        status: 400,
-        message: 'connected_account references an unknown connected account',
-      };
-    }
-    connectedAccountId = account.id;
-  }
+  const account = await resolveListReference(
+    res,
+    'connected_account',
+    query.connected_account,
+    async (publicId) => (await findAccountByPublicId(db, merchantId, publicId))?.id ?? null,
+  );
+  if (!account.ok) return;
+  const connectedAccountId = account.id;
 
-  const page = await listIntentsForMerchant(db, {
+  await answerList(req, res, {
+    query,
+    type: 'payment_intent',
     merchantId,
-    status,
-    limit,
-    after,
-    ...(connectedAccountId !== undefined ? { connectedAccountId } : {}),
+    // The cursor arrives as a PUBLIC `pi_…` and the walk runs on the primary
+    // key; resolved ownership-scoped, so a cursor naming another merchant's
+    // intent is a 400 exactly like an unknown one.
+    cursor: async (publicId) => (await findIntentForMerchant(db, publicId, merchantId))?.id ?? null,
+    fetch: (page) =>
+      listIntentsForMerchant(db, { merchantId, status: query.status, connectedAccountId, page }),
+    serialize: toPaymentIntentDTO,
   });
-  return { ok: true, data: page.data, hasMore: page.hasMore };
 }
 
 /**
@@ -406,19 +409,9 @@ export function createPaymentIntentsRouter(deps: {
       const merchant = await resolveMerchant(req, res);
       if (!merchant) return;
 
-      const parsed = listQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
-        return;
-      }
-
-      const result = await listPaymentIntentsForMerchant(merchant.id, parsed.data);
-      if (!result.ok) {
-        sendError(res, result.status, 'invalid_request_error', result.message);
-        return;
-      }
-      const data = result.data.map((intent) => toPaymentIntentDTO(intent));
-      res.status(200).json({ object: 'list', data, has_more: result.hasMore });
+      const query = parseQuery(req, res, listPaymentIntentsQuery);
+      if (!query) return;
+      await answerPaymentIntentList(req, res, merchant.id, query);
     }),
   );
 
@@ -454,6 +447,10 @@ export function createPaymentIntentsRouter(deps: {
 
         const merchant = await resolveMerchant(req, res);
         if (!merchant) return;
+        const query = parseQuery(req, res, retrieveIntentQuery);
+        if (!query) return;
+        const expand = parseExpand(res, 'payment_intent', query.expand, { list: false });
+        if (!expand) return;
         const intent = await findIntentForMerchant(getDb(), id, merchant.id);
         if (!intent) {
           sendError(res, 404, 'invalid_request_error', 'payment intent not found');
@@ -482,10 +479,26 @@ export function createPaymentIntentsRouter(deps: {
             : { kind: 'not_applicable' as const };
         if (action.kind === 'ok') res.setHeader('Cache-Control', 'no-store');
 
+        const dto = toPaymentIntentDTO(intent);
+        await expandObjects([dto], 'payment_intent', expand, merchant.id);
         res.status(200).json({
-          ...toPaymentIntentDTO(intent),
+          ...dto,
           ...(action.kind === 'ok' ? { client_action: action.action } : {}),
         });
+        return;
+      }
+
+      // Expansion resolves inside a MERCHANT's scope, and a payer has none: an
+      // expanded seller is the merchant's record of them, not the payer's.
+      if (req.query.expand !== undefined) {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          'expand requires the merchant credential',
+          'parameter_invalid',
+          'expand',
+        );
         return;
       }
 
@@ -520,6 +533,63 @@ export function createPaymentIntentsRouter(deps: {
         return;
       }
       res.status(200).json(toPaymentIntentDTO(intent));
+    }),
+  );
+
+  /**
+   * Update an intent — Stripe's `POST /v1/payment_intents/:id`.
+   *
+   * Only `metadata` is mutable. The amount, rail and address ARE the payment,
+   * and the status moves only through its own operations (`transitionIntent`),
+   * so a generic update can never be a back door into the state machine.
+   * Sends no webhook: a metadata change is the merchant's own bookkeeping, and
+   * the event catalog has no `payment_intent.updated` to carry it.
+   */
+  router.post(
+    '/v1/payment_intents/:id',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:write'),
+    idempotent,
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const parsed = updateBodySchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        sendValidationError(res, parsed.error);
+        return;
+      }
+      const expand = parseExpand(res, 'payment_intent', parsed.data.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const result =
+        parsed.data.metadata === undefined
+          ? ((await findIntentForMerchant(db, id, merchant.id)) ?? 'missing')
+          : await updateIntentMetadata(db, id, merchant.id, parsed.data.metadata);
+      if (result === 'missing') {
+        sendError(res, 404, 'invalid_request_error', 'payment intent not found');
+        return;
+      }
+      if (result === 'limit_exceeded') {
+        sendError(
+          res,
+          400,
+          'invalid_request_error',
+          METADATA_LIMIT_MESSAGE,
+          'parameter_invalid',
+          'metadata',
+        );
+        return;
+      }
+      const dto = toPaymentIntentDTO(result);
+      await expandObjects([dto], 'payment_intent', expand, merchant.id);
+      res.status(200).json(dto);
     }),
   );
 

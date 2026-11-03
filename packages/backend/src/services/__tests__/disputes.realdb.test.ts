@@ -181,7 +181,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('disputes', () => {
     expect(delivered?.evidence_due_at).not.toBeNull();
     // And back to the payment, by its PUBLIC id — the internal one would name a
     // row the merchant has never seen.
-    expect(delivered?.payment_intent_id).toBe(intent.publicId);
+    expect(delivered?.payment_intent).toBe(intent.publicId);
   });
 
   /**

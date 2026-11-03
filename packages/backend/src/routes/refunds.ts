@@ -12,13 +12,11 @@ import { z } from 'zod';
 import { oxy } from '../oxy';
 import { isBaseUnitString, type Refund, type Settlement } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
-import {
-  findIntentByPublicId,
-  findIntentForMerchant,
-} from '../db/payments/paymentIntentRepository';
+import { findIntentById, findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import {
   findRefundByExternalRef,
-  listRefundsForIntent,
+  findRefundByPublicId,
+  listRefundsForMerchant,
   type RefundRow,
 } from '../db/refunds/refundRepository';
 import {
@@ -42,12 +40,28 @@ import {
 } from '../lib/http';
 import { idempotent } from '../lib/idempotency';
 import { toUnix, toUnixOrNull } from '../lib/time';
+import { expandObjects, parseExpand } from '../lib/expand';
+import {
+  answerList,
+  listQuerySchema,
+  parseQuery,
+  resolveListReference,
+  retrieveQuerySchema,
+} from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
+
+/** `GET /v1/refunds`: every refund of the merchant, or of one payment. */
+const listRefundsQuery = listQuerySchema({
+  payment_intent: z.string().min(1).max(255).optional(),
+});
+/** The per-payment sub-list: the payment is in the path. */
+const listIntentRefundsQuery = listQuerySchema({});
+const retrieveRefundQuery = retrieveQuerySchema({});
 
 const createRefundBodySchema = z
   .object({
     /** The `pi_…` being refunded. */
-    payment_intent_id: z.string().min(1),
+    payment_intent: z.string().min(1),
     /** The merchant's own id for this refund. The idempotency. */
     external_ref: z.string().min(1).max(255),
     /**
@@ -78,7 +92,7 @@ function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatu
     object: 'refund',
     external_ref: row.externalRef,
     origin: row.origin,
-    payment_intent_id: paymentIntentPublicId,
+    payment_intent: paymentIntentPublicId,
     amount: row.amount,
     currency: row.currency,
     status: row.status,
@@ -114,8 +128,10 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       const body = parsed.data;
       const db = getDb();
 
-      const intent = await findIntentByPublicId(db, body.payment_intent_id);
-      if (!intent || intent.merchantId !== merchant.id) {
+      // Scoped in the PREDICATE: a payment that does not exist and one that
+      // belongs to another merchant are the same answer.
+      const intent = await findIntentForMerchant(db, body.payment_intent, merchant.id);
+      if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
@@ -180,12 +196,92 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
   );
 
   /**
+   * Every refund of the merchant, newest first — or of one payment, with
+   * `payment_intent=pi_…`. Includes refunds made OUTSIDE Peable (imported,
+   * `origin: 'provider'`).
+   */
+  router.get(
+    '/v1/refunds',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const query = parseQuery(req, res, listRefundsQuery);
+      if (!query) return;
+
+      const db = getDb();
+      const intent = await resolveListReference(
+        res,
+        'payment_intent',
+        query.payment_intent,
+        async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+      );
+      if (!intent.ok) return;
+
+      await answerList(req, res, {
+        query,
+        type: 'refund',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findRefundByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listRefundsForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          }),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+      });
+    }),
+  );
+
+  /** One refund, by `re_…`, scoped to the merchant in the predicate. */
+  router.get(
+    '/v1/refunds/:id',
+    requireMerchant,
+    requireAuthenticated,
+    oxy.middleware.requireScope('payments:read'),
+    wrap(async (req, res) => {
+      const merchant = await resolveMerchant(req, res);
+      if (!merchant) return;
+      const { id } = req.params;
+      if (!id) {
+        sendError(res, 400, 'invalid_request_error', 'id is required');
+        return;
+      }
+      const query = parseQuery(req, res, retrieveRefundQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'refund', query.expand, { list: false });
+      if (!expand) return;
+
+      const db = getDb();
+      const refund = await findRefundByPublicId(db, merchant.id, id);
+      if (!refund) {
+        sendError(res, 404, 'invalid_request_error', 'refund not found');
+        return;
+      }
+      const intent = await findIntentById(db, refund.paymentIntentId);
+      if (!intent) {
+        // `refunds.payment_intent_id` carries a foreign key; stated rather
+        // than asserted away, so loosening it fails loudly.
+        throw new Error(`refund ${refund.publicId} names an intent that cannot be read`);
+      }
+      const dto = toRefundDTO(refund, intent.publicId, intent.status);
+      await expandObjects([dto], 'refund', expand, merchant.id);
+      res.status(200).json(dto);
+    }),
+  );
+
+  /**
    * Every refund against one payment, and what is still refundable.
    *
-   * The remaining figure is offered because otherwise every merchant computes
-   * it themselves by summing this list — and the ones who forget that a
-   * `pending` or `failed` refund moved no money would compute it wrong, in the
-   * direction that refuses a legitimate refund.
+   * The remaining figure is offered beside the envelope because otherwise every
+   * merchant computes it themselves by summing this list — and the ones who
+   * forget that a `pending` or `failed` refund moved no money would compute it
+   * wrong, in the direction that refuses a legitimate refund. It is about the
+   * PAYMENT, so it is the same on every page.
    */
   router.get(
     '/v1/payment_intents/:intentId/refunds',
@@ -201,19 +297,30 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         sendError(res, 400, 'invalid_request_error', 'intentId is required');
         return;
       }
+      const query = parseQuery(req, res, listIntentRefundsQuery);
+      if (!query) return;
 
       const db = getDb();
-      const intent = await findIntentByPublicId(db, intentId);
-      if (!intent || intent.merchantId !== merchant.id) {
+      const intent = await findIntentForMerchant(db, intentId, merchant.id);
+      if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
         return;
       }
 
-      const rows = await listRefundsForIntent(db, intent.id);
-      res.status(200).json({
-        object: 'list',
-        data: rows.map((row) => toRefundDTO(row, intent.publicId, intent.status)),
-        remaining_refundable: await remainingRefundable(intent),
+      await answerList(req, res, {
+        query,
+        type: 'refund',
+        merchantId: merchant.id,
+        cursor: async (publicId) =>
+          (await findRefundByPublicId(db, merchant.id, publicId))?.id ?? null,
+        fetch: (page) =>
+          listRefundsForMerchant(db, {
+            merchantId: merchant.id,
+            paymentIntentId: intent.id,
+            page,
+          }),
+        serialize: (row) => toRefundDTO(row, row.paymentIntentPublicId, row.paymentStatus),
+        extra: { remaining_refundable: await remainingRefundable(intent) },
       });
     }),
   );
@@ -251,6 +358,10 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       // Scoped in the PREDICATE, not compared after the read: a payment that
       // does not exist and one belonging to another merchant are the same
       // answer, so neither the row nor its absence can confirm an id.
+      const query = parseQuery(req, res, retrieveRefundQuery);
+      if (!query) return;
+      const expand = parseExpand(res, 'settlement', query.expand, { list: false });
+      if (!expand) return;
       const intent = await findIntentForMerchant(getDb(), intentId, merchant.id);
       if (!intent) {
         sendError(res, 404, 'invalid_request_error', 'payment intent not found');
@@ -260,7 +371,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
       const settlement = await reportSettlement(intent);
       const body: Settlement = {
         object: 'settlement',
-        payment_intent_id: intent.publicId,
+        payment_intent: intent.publicId,
         status: settlement.status,
         gross: settlement.gross,
         fee: settlement.fee,
@@ -269,6 +380,7 @@ export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): 
         available_on: toUnixOrNull(settlement.availableOn),
         exchange_rate: settlement.exchangeRate,
       };
+      await expandObjects([body], 'settlement', expand, merchant.id);
       res.status(200).json(body);
     }),
   );

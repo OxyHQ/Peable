@@ -48,6 +48,45 @@ Signed billing documents (tax quotes and final invoice authorities) carry
 `schema_version: 2`, whose instants are Unix seconds; the verifiers accept no
 other version.
 
+### Lists, auto-pagination, `expand` and metadata
+
+Every `list()` takes `limit` (1–100, default 10), `starting_after` or
+`ending_before`, `created` (Unix seconds, or `{ gt, gte, lt, lte }`) and the
+resource's own filters, and returns a promise of one page
+(`{ object: 'list', data, has_more, url }`, newest first) that is ALSO an async
+iterable over every page:
+
+```ts
+const page = await peable.paymentIntents.list({ status: 'settled', limit: 20 });
+for await (const refund of peable.refunds.list({ payment_intent: intent.id })) {
+  reconcile(refund);
+}
+const sellers = await peable.connectedAccounts.list().autoPagingToArray({ limit: 1000 });
+```
+
+Listable: `paymentIntents`, `paymentLinks`, `checkout.sessions`, `refunds`,
+`transfers`, `disputes`, `connectedAccounts`, `tax.transactions`, the
+per-payment `listForPaymentIntent` sub-lists and contributions. Iterating from
+`ending_before` walks backwards, away from the cursor.
+
+A reference to another object (`payment_intent`, `connected_account`) is its id
+unless you `expand` it — dot paths up to four levels, `data.`-prefixed on a list:
+
+```ts
+const session = await peable.checkout.sessions.retrieve(id, {
+  expand: ['payment_intent.connected_account'],
+});
+await peable.refunds.list({ expand: ['data.payment_intent'] });
+```
+
+`metadata` holds at most 50 keys (40-character keys, 500-character values). An
+update is a patch — a key sent as `''` is removed — and every update is a `POST`:
+
+```ts
+await peable.paymentIntents.update(intent.id, { metadata: { shipped: 'yes', draft: '' } });
+await peable.paymentLinks.update(link.id, { active: false });
+```
+
 ### Own Oxy applications: shared workload transport
 
 ```ts

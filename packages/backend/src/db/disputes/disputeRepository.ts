@@ -1,7 +1,8 @@
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { newId } from '../../lib/ids';
 import type { DisputeStatus } from '../schema/valueSets';
-import { disputes } from '../schema';
+import { disputes, paymentIntents } from '../schema';
+import { keyset, type KeysetPage } from '../keyset';
 import type { DatabaseOrTransaction } from '../postgres';
 import type { ProviderId } from '../../services/providers/provider';
 
@@ -209,4 +210,42 @@ export async function listDisputesForIntent(
     .where(eq(disputes.paymentIntentId, paymentIntentId))
     .orderBy(desc(disputes.createdAt));
   return rows.map(toRow);
+}
+
+/** A dispute plus its payment's PUBLIC id. */
+export interface DisputeWithIntentRow extends DisputeRow {
+  readonly paymentIntentPublicId: string;
+}
+
+export interface ListDisputesParams {
+  readonly merchantId: string;
+  /** Only the disputes of this payment — its INTERNAL id, already resolved inside the merchant. */
+  readonly paymentIntentId?: string | undefined;
+  readonly page: KeysetPage;
+}
+
+/** One page of a merchant's disputes, newest first (`db/keyset.ts`). */
+export async function listDisputesForMerchant(
+  db: DatabaseOrTransaction,
+  params: ListDisputesParams,
+): Promise<{ data: DisputeWithIntentRow[]; hasMore: boolean }> {
+  const walk = keyset(disputes.id, disputes.createdAt, params.page);
+  const rows = await db
+    .select({ ...DISPUTE_COLUMNS, paymentIntentPublicId: paymentIntents.publicId })
+    .from(disputes)
+    .innerJoin(paymentIntents, eq(paymentIntents.id, disputes.paymentIntentId))
+    .where(
+      and(
+        eq(disputes.merchantId, params.merchantId),
+        params.paymentIntentId === undefined
+          ? undefined
+          : eq(disputes.paymentIntentId, params.paymentIntentId),
+        walk.where,
+      ),
+    )
+    .orderBy(walk.orderBy)
+    .limit(walk.limit);
+  return walk.finish(
+    rows.map((row) => ({ ...toRow(row), paymentIntentPublicId: row.paymentIntentPublicId })),
+  );
 }

@@ -1,5 +1,6 @@
-import type { Refund, Settlement } from '@peable.to/shared-types';
+import type { ExpandParams, List, ListParams, Refund, Settlement } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Sending money back to a payer.
@@ -12,16 +13,20 @@ import type { RestClient } from '../core/client';
 
 export interface CreateRefundParams {
   /** The `pi_…` being refunded. */
-  payment_intent_id: string;
+  payment_intent: string;
   /** YOUR id for this refund. The idempotency. */
   external_ref: string;
   /** Minor units, as a canonical integer string. Zero is refused. */
   amount: string;
 }
 
-export interface RefundList {
-  object: 'list';
-  data: Refund[];
+export interface RefundListParams extends ListParams {
+  /** Only the refunds of this payment (`pi_…`). */
+  payment_intent?: string;
+}
+
+/** A payment's refunds, with what can still go back beside the envelope. */
+export interface RefundList extends List<Refund> {
   /**
    * What can still go back, in minor units.
    *
@@ -73,10 +78,29 @@ export class RefundsResource {
    * automatically your expense, and that is a commercial question this API does
    * not answer.
    */
-  settlement(paymentIntentId: string): Promise<Settlement> {
+  settlement(paymentIntentId: string, params: ExpandParams = {}): Promise<Settlement> {
     return this.client.request<Settlement>(
       'GET',
       `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/settlement`,
+      { query: { expand: params.expand } },
+    );
+  }
+
+  /** One refund, by `re_…`. `expand: ['payment_intent']` returns the payment itself. */
+  retrieve(id: string, params: ExpandParams = {}): Promise<Refund> {
+    return this.client.request<Refund>('GET', `/v1/refunds/${encodeURIComponent(id)}`, {
+      query: { expand: params.expand },
+    });
+  }
+
+  /** Every refund, newest first — or one payment's, with `payment_intent`. */
+  list(params: RefundListParams = {}): ApiListPromise<Refund> {
+    return listPromise(
+      (page: RefundListParams) =>
+        this.client.request<List<Refund>>('GET', '/v1/refunds', {
+          query: listQuery(page, { payment_intent: page.payment_intent }),
+        }),
+      params,
     );
   }
 
@@ -87,10 +111,18 @@ export class RefundsResource {
    * resolving a dispute, is imported with `origin: 'provider'` and no
    * `external_ref` — the merchant did not make it and has no id for it.
    */
-  listForPaymentIntent(paymentIntentId: string): Promise<RefundList> {
-    return this.client.request<RefundList>(
-      'GET',
-      `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/refunds`,
+  listForPaymentIntent(
+    paymentIntentId: string,
+    params: ListParams = {},
+  ): ApiListPromise<Refund, RefundList> {
+    return listPromise(
+      (page: ListParams) =>
+        this.client.request<RefundList>(
+          'GET',
+          `/v1/payment_intents/${encodeURIComponent(paymentIntentId)}/refunds`,
+          { query: listQuery(page) },
+        ),
+      params,
     );
   }
 }

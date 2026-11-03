@@ -46,7 +46,7 @@ test('SDK refuses a provider response that changes rail currency', async () => {
   });
   await expect(client.setActive(scope, 'link_one', false)).rejects.toThrow();
 });
-test('iterator pages by starting_after until has_more is false', async () => {
+test('list() auto-pages by starting_after until has_more is false', async () => {
   const second = { ...link, id: 'link_two' };
   const queries: unknown[] = [];
   const client = new ContributionsResource({
@@ -55,28 +55,43 @@ test('iterator pages by starting_after until has_more is false', async () => {
       const after = options?.query?.starting_after;
       return (
         after === undefined
-          ? { object: 'list', data: [link], has_more: true }
-          : { object: 'list', data: [second], has_more: false }
+          ? { object: 'list', data: [link], has_more: true, url: '/x' }
+          : { object: 'list', data: [second], has_more: false, url: '/x' }
       ) as T;
     },
   });
   const ids: string[] = [];
-  for await (const row of client.iterate(scope)) ids.push(row.id);
+  for await (const row of client.list(scope)) ids.push(row.id);
   expect(ids).toEqual(['link_one', 'link_two']);
-  expect(queries).toEqual([
+  expect(
+    queries.map((query) =>
+      Object.fromEntries(Object.entries(query as object).filter(([, v]) => v !== undefined)),
+    ),
+  ).toEqual([
     { environment: 'development' },
     { environment: 'development', starting_after: 'link_one' },
   ]);
 });
-test('iterator rejects a repeated page instead of looping', async () => {
+test('auto-pagination rejects a repeated page instead of looping', async () => {
   const client = new ContributionsResource({
-    request: async <T>() => ({ object: 'list', data: [link], has_more: true }) as T,
+    request: async <T>() => ({ object: 'list', data: [link], has_more: true, url: '/x' }) as T,
   });
   await expect(
     (async () => {
-      for await (const _row of client.iterate(scope)) {
+      for await (const _row of client.list(scope)) {
         /* drain */
       }
     })(),
-  ).rejects.toThrow('Repeated contribution page');
+  ).rejects.toThrow('Pagination did not advance');
+});
+test('setActive updates with POST — there is no PATCH', async () => {
+  const methods: string[] = [];
+  const client = new ContributionsResource({
+    request: async <T>(method: string) => {
+      methods.push(method);
+      return link as T;
+    },
+  });
+  await client.setActive(scope, 'link_one', false);
+  expect(methods).toEqual(['POST']);
 });

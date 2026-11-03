@@ -216,8 +216,7 @@ test('lost HTTP reply and concurrent retries converge on one FairCoin intent/add
 test('expired or disabled links refuse new contributions', async () => {
   const link = await make();
   expect(
-    (await request(`${root}/${link.id}?environment=development`, 'PATCH', { active: false }))
-      .status,
+    (await request(`${root}/${link.id}?environment=development`, 'POST', { active: false })).status,
   ).toBe(200);
   expect(
     (
@@ -342,8 +341,7 @@ test('disabled links recover a previously minted attempt but refuse a new operat
     path = `/v1/payment_links/${link.id}/payment_intent`;
   const first = (await (await request(path, 'POST', {}, key, false)).json()) as { id: string };
   expect(
-    (await request(`${root}/${link.id}?environment=development`, 'PATCH', { active: false }))
-      .status,
+    (await request(`${root}/${link.id}?environment=development`, 'POST', { active: false })).status,
   ).toBe(200);
   const replay = await request(path, 'POST', {}, key, false);
   expect(replay.status).toBe(201);

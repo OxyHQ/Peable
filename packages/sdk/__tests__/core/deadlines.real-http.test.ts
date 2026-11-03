@@ -135,13 +135,13 @@ describe('HTTP deadline and existing intent propagation', () => {
     const client = sdk(url);
     await client.paymentIntents.reject('pi_owned', { idempotencyKey: 'reject-intent' });
     await client.refunds.create(
-      { payment_intent_id: 'pi_owned', external_ref: 'refund-owned', amount: '10' },
+      { payment_intent: 'pi_owned', external_ref: 'refund-owned', amount: '10' },
       { idempotencyKey: 'refund-intent' },
     );
     await client.transfers.create(
       {
-        payment_intent_id: 'pi_owned',
-        connected_account_id: 'ca_owned',
+        payment_intent: 'pi_owned',
+        connected_account: 'ca_owned',
         external_ref: 'order-owned',
         amount: '90',
       },

@@ -82,7 +82,7 @@ let counter = 0;
 
 interface Body {
   readonly object?: string;
-  readonly payment_intent_id?: string;
+  readonly payment_intent?: string;
   readonly status?: string;
   readonly gross?: string | null;
   readonly fee?: string | null;
@@ -168,7 +168,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('reporting what a payment came to', () 
 
     expect(status).toBe(200);
     expect(json.object).toBe('settlement');
-    expect(json.payment_intent_id).toBe(intent.publicId);
+    expect(json.payment_intent).toBe(intent.publicId);
     expect(json.status).toBe('available');
     expect(json.fee).toBe('204');
     expect(json.net).toBe('9796');

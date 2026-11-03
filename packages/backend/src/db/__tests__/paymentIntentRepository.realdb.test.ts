@@ -236,8 +236,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     for (let page = 0; page < 3; page += 1) {
       const result = await listIntentsForMerchant(must(suite).db, {
         merchantId: merchant.id,
-        limit: 2,
-        after,
+        page: { limit: 2, after: after },
       });
       seen.push(...result.data.map((row) => row.publicId));
       expect(result.hasMore).toBe(page < 2);
@@ -271,7 +270,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
 
     const page = await listIntentsForMerchant(must(suite).db, {
       merchantId: merchant.id,
-      limit: 10,
+      page: { limit: 10 },
     });
     expect(page.data.map((row) => row.publicId)).toEqual(
       [...created].reverse().map((row) => row.publicId),
@@ -293,7 +292,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('payment intent repository', () => {
     const page = await listIntentsForMerchant(must(suite).db, {
       merchantId: merchant.id,
       status: 'broadcast',
-      limit: 10,
+      page: { limit: 10 },
     });
     expect(page.data.map((row) => row.publicId)).toEqual([must(settled).publicId]);
     expect(page.hasMore).toBe(false);

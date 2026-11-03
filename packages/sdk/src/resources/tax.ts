@@ -2,6 +2,7 @@ import type {
   CreateTaxCalculationParams,
   CreateTaxReversalParams,
   CreateTaxLocationEvidenceParams,
+  List,
   ListTaxTransactionsParams,
   TaxCalculation,
   TaxCode,
@@ -14,11 +15,7 @@ import type {
   TaxTransactionList,
 } from '@peable.to/shared-types';
 import type { RestClient } from '../core/client';
-
-interface List<T> {
-  object: 'list';
-  data: T[];
-}
+import { type ApiListPromise, listPromise, listQuery } from '../core/list';
 
 /**
  * Peable Tax for the merchant's server: what its tax settings and
@@ -47,9 +44,10 @@ export class TaxResource {
     setTaxCode(productRef: string, taxCode: string): Promise<TaxProductCode>;
   };
   readonly transactions: {
-    /** Paid sales and their frozen calculations, oldest first; refunds appear
-     * as `type: "reversal"` rows naming the sale they reverse. */
-    list(params: ListTaxTransactionsParams): Promise<TaxTransactionList>;
+    /** Paid sales and their frozen calculations, newest first; refunds appear
+     * as `type: "reversal"` rows naming the sale they reverse. `created`
+     * filters the tax date (`committed_at`). */
+    list(params?: ListTaxTransactionsParams): ApiListPromise<TaxTransaction, TaxTransactionList>;
     /** Record a refund made outside Peable (a FairCoin sale refunded from your
      * own wallet). Card refunds and credit notes are reversed automatically. */
     createReversal(id: string, params: CreateTaxReversalParams): Promise<TaxTransaction>;
@@ -78,15 +76,14 @@ export class TaxResource {
         }),
     };
     this.transactions = {
-      list: (params) =>
-        client.request('GET', '/v1/tax/transactions', {
-          query: {
-            from: params.from,
-            to: params.to,
-            limit: params.limit,
-            starting_after: params.starting_after,
-          },
-        }),
+      list: (params = {}) =>
+        listPromise(
+          (page: ListTaxTransactionsParams) =>
+            client.request<TaxTransactionList>('GET', '/v1/tax/transactions', {
+              query: listQuery(page),
+            }),
+          params,
+        ),
       createReversal: (id, params) =>
         client.request('POST', `/v1/tax/transactions/${encodeURIComponent(id)}/reversals`, {
           body: params,

@@ -9,11 +9,13 @@ export {
   isCurrencyCode,
 } from './money';
 export type { NetworkType } from './network';
+export type { ExpandParams, List, ListParams, RangeQuery } from './list';
 export {
   type PaymentIntentStatus,
   type PaymentIntentRail,
   type PaymentIntent,
   type CreatePaymentIntentParams,
+  type UpdatePaymentIntentParams,
   isValidStatusTransition,
   canStillBePaid,
   reachesSettlementFromPayer,
@@ -69,11 +71,13 @@ export type {
   PaymentLink,
   PublicPaymentLink,
   CreatePaymentLinkParams,
+  UpdatePaymentLinkParams,
 } from './paymentLink';
 export type {
   CheckoutSession,
   CheckoutSessionPublic,
   CreateCheckoutSessionParams,
+  UpdateCheckoutSessionParams,
 } from './checkoutSession';
 export {
   SOCIAL_SOURCE_APP_MAX_LENGTH,
