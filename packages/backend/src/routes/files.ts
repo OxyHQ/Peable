@@ -18,10 +18,15 @@
 import { createHash } from 'node:crypto';
 import { Router } from 'express';
 import type { NextFunction, Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
-import { OXY_SERVICE_ENVIRONMENTS, type OxyAuthRequest } from '@oxy.so/core/server';
-import { FILE_PURPOSES, FILE_UPLOAD_PURPOSES, type FilePurpose } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
+import type { OxyAuthRequest } from '@oxy.so/core/server';
+import {
+  createFileFromOxyParams,
+  createFileUploadParams,
+  emptyQuery,
+  expandOnlyQuery,
+  listFilesQuery as listFilesContractQuery,
+} from '@peable.to/contracts';
+import type { FilePurpose } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { findFileByPublicId, listFilesForMerchant } from '../db/files/fileRepository';
@@ -38,30 +43,22 @@ import {
 import { type OxyFilesClient, oxyFilesClient } from '../services/oxyFiles/client';
 import type { FileActor } from '../services/oxyFiles/fileOwnership';
 import { requireAuthenticated, sendError, sendValidationError, wrap } from '../lib/http';
+import { requireScope } from '../lib/requireScope';
 import { idempotent } from '../lib/idempotency';
-import {
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 import { serviceFileActor } from './merchants';
 
-const listFilesQuery = surfaceListQuery({ purpose: z.enum(FILE_PURPOSES).optional() });
-const retrieveFileQuery = surfaceRetrieveQuery();
-const contentsQuery = {
-  api: z.object({}).strict(),
-  dashboard: z.object({ environment: z.enum(OXY_SERVICE_ENVIRONMENTS) }).strict(),
+// The contract's queries on the API; the dashboard's twin adds its environment.
+const listFilesQuery = {
+  api: listFilesContractQuery,
+  dashboard: dashboardQuery(listFilesContractQuery),
 } as const;
+const retrieveFileQuery = { api: expandOnlyQuery, dashboard: dashboardQuery(expandOnlyQuery) };
+const contentsQuery = { api: emptyQuery, dashboard: dashboardQuery(emptyQuery) };
 
 /** Room for the form's boundaries and its `purpose` field beside the largest file. */
 const MULTIPART_OVERHEAD_BYTES = 64 * 1024;
-
-const importBodySchema = z
-  .object({ purpose: z.enum(FILE_UPLOAD_PURPOSES), oxy_file: z.string().min(1).max(128) })
-  .strict();
 
 /** The upload `parseFileUpload` read, kept off `req.body` so nothing serializes it. */
 interface ParsedUpload {
@@ -144,30 +141,39 @@ export const parseFileUpload: RequestHandler = (
       );
       return;
     }
-    const purpose = form.get('purpose');
-    if (
-      typeof purpose !== 'string' ||
-      !(FILE_UPLOAD_PURPOSES as readonly string[]).includes(purpose)
-    ) {
+    // Each part is checked with the contract's schema of that part, so the
+    // refusal keeps naming the part and why (a missing file is a missing
+    // parameter, not an invalid one).
+    const purposeParsed = createFileUploadParams.shape.purpose.safeParse(form.get('purpose'));
+    if (!purposeParsed.success) {
       sendError(
         res,
         400,
         'invalid_request_error',
-        `purpose must be one of ${FILE_UPLOAD_PURPOSES.join(', ')}`,
+        purposeParsed.error.issues[0]?.message ?? 'purpose is invalid',
         'parameter_invalid',
         'purpose',
       );
       return;
     }
-    const file = form.get('file');
-    if (file === null || typeof file === 'string') {
-      sendError(res, 400, 'invalid_request_error', 'file is required', 'parameter_missing', 'file');
+    const purpose = purposeParsed.data;
+    const fileParsed = createFileUploadParams.shape.file.safeParse(form.get('file'));
+    if (!fileParsed.success) {
+      sendError(
+        res,
+        400,
+        'invalid_request_error',
+        fileParsed.error.issues[0]?.message ?? 'file is required',
+        'parameter_missing',
+        'file',
+      );
       return;
     }
+    const file = fileParsed.data;
     const bytes = new Uint8Array(await file.arrayBuffer());
     const filename = file.name && file.name !== 'blob' ? file.name : undefined;
     (req as WithUpload)[UPLOAD] = {
-      purpose: purpose as FilePurpose,
+      purpose,
       bytes,
       ...(filename !== undefined ? { filename } : {}),
     };
@@ -204,7 +210,7 @@ export async function createFile(
       res.status(200).json(toFileDTO(row));
       return;
     }
-    const parsed = importBodySchema.safeParse(req.body ?? {});
+    const parsed = createFileFromOxyParams.safeParse(req.body ?? {});
     if (!parsed.success) {
       sendValidationError(res, parsed.error);
       return;
@@ -324,11 +330,7 @@ export function createFilesRouter(deps: {
   const router = Router();
   const { requireMerchant } = deps;
   const files = deps.files ?? oxyFilesClient;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>
@@ -342,7 +344,7 @@ export function createFilesRouter(deps: {
     '/v1/files',
     requireMerchant,
     requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
+    requireScope('payments:write'),
     parseFileUpload,
     idempotent,
     withMerchant((req, res, merchant) =>

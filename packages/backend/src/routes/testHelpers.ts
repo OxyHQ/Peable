@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
+import { expireCheckoutSessionTestHelperParams } from '@peable.to/contracts';
 import { SIMULATED_FAIRCOIN_OUTCOMES } from '@peable.to/shared-types';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
@@ -31,8 +32,6 @@ import { resolveMerchant } from './paymentIntents';
 const simulateBodySchema = z
   .object({ outcome: z.enum(SIMULATED_FAIRCOIN_OUTCOMES).optional() })
   .strict();
-
-const expireBodySchema = z.object({}).strict();
 
 function idOf(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -77,7 +76,7 @@ async function expireCheckoutSessionRoute(
 ): Promise<void> {
   const id = idOf(req, res);
   if (!id) return;
-  const parsed = expireBodySchema.safeParse(req.body ?? {});
+  const parsed = expireCheckoutSessionTestHelperParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;

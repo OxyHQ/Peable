@@ -12,13 +12,19 @@
 import { eq } from 'drizzle-orm';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import { verifySecret } from '@oxy.so/core/server';
 import {
-  CHECKOUT_SESSION_STATUSES,
-  type CheckoutSessionPublic,
-  type UpdateCheckoutSessionParams,
-} from '@peable.to/shared-types';
+  METADATA_LIMIT_MESSAGE,
+  confirmCheckoutSessionPublicParams,
+  createCheckoutSessionParams,
+  expandOnlyQuery,
+  expireCheckoutSessionParams,
+  listCheckoutSessionLineItemsQuery,
+  listCheckoutSessionsQuery,
+  updateCheckoutSessionParams,
+  updateCheckoutSessionPublicParams,
+} from '@peable.to/contracts';
+import type { CheckoutSessionPublic } from '@peable.to/shared-types';
 import { findCouponById } from '../db/catalog/couponRepository';
 import { findPromotionCodeById } from '../db/catalog/promotionCodeRepository';
 import { findLiveCustomerForMerchant } from '../db/customers/customerRepository';
@@ -39,15 +45,7 @@ import { getDb } from '../db/postgres';
 import { faircoinBillingInvoices } from '../db/schema/faircoinBilling';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError, wrap } from '../lib/http';
-import {
-  answerList,
-  expandParam,
-  parseQuery,
-  resolveListReference,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
-import { METADATA_LIMIT_MESSAGE, metadataUpdateSchema } from '../lib/metadata';
+import { answerList, dashboardQuery, parseQuery, resolveListReference } from '../lib/list';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import {
   toCheckoutBranding,
@@ -56,7 +54,7 @@ import {
   toCheckoutSessionPublicDTO,
 } from '../lib/serializeCheckout';
 import { CheckoutError, sendCheckoutError } from '../services/checkout/errors';
-import { createSessionBodySchema, payerUpdateSchema } from '../services/checkout/params';
+import { refuseUnknownTaxCodes } from '../services/checkout/params';
 import {
   type CheckoutDeps,
   confirmSessionAsPayer,
@@ -69,23 +67,16 @@ import {
 import { resolveMerchantDisplay } from '../services/merchantDisplay';
 import { type CatalogRoute, createCatalogApiRouter } from './catalogRoutes';
 
-const idSchema = z.string().min(1).max(255);
-
-const listSessionsQuery = surfaceListQuery({
-  payment_intent: idSchema.optional(),
-  payment_link: idSchema.optional(),
-  customer: idSchema.optional(),
-  status: z.enum(CHECKOUT_SESSION_STATUSES).optional(),
-});
-const retrieveSessionQuery = surfaceRetrieveQuery();
-const lineItemsQuery = surfaceListQuery({});
-
-const updateBodySchema = z
-  .object({
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof UpdateCheckoutSessionParams | 'expand', z.ZodTypeAny>)
-  .strict();
+// The contract's queries on the API; the dashboard's twin adds its environment.
+const listSessionsQuery = {
+  api: listCheckoutSessionsQuery,
+  dashboard: dashboardQuery(listCheckoutSessionsQuery),
+} as const;
+const retrieveSessionQuery = { api: expandOnlyQuery, dashboard: dashboardQuery(expandOnlyQuery) };
+const lineItemsQuery = {
+  api: listCheckoutSessionLineItemsQuery,
+  dashboard: dashboardQuery(listCheckoutSessionLineItemsQuery),
+} as const;
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -123,11 +114,12 @@ export function checkoutSessionRoutes(deps: CheckoutDeps): CatalogRoute[] {
       method: 'post',
       path: '/checkout_sessions',
       core: async (req, res, merchant) => {
-        const parsed = createSessionBodySchema.safeParse(req.body ?? {});
+        const parsed = createCheckoutSessionParams.safeParse(req.body ?? {});
         if (!parsed.success) {
           sendValidationError(res, parsed.error);
           return;
         }
+        if (!refuseUnknownTaxCodes(res, parsed.data)) return;
         if (!parseExpand(res, 'checkout_session', parsed.data.expand, { list: false })) return;
         const row = await createCheckoutSession(merchant, parsed.data, deps);
         await answerSession(res, merchant, row, parsed.data.expand, 201);
@@ -198,7 +190,7 @@ export function checkoutSessionRoutes(deps: CheckoutDeps): CatalogRoute[] {
       core: async (req, res, merchant) => {
         const id = idParam(req, res);
         if (!id) return;
-        const parsed = updateBodySchema.safeParse(req.body ?? {});
+        const parsed = updateCheckoutSessionParams.safeParse(req.body ?? {});
         if (!parsed.success) {
           sendValidationError(res, parsed.error);
           return;
@@ -223,10 +215,7 @@ export function checkoutSessionRoutes(deps: CheckoutDeps): CatalogRoute[] {
       core: async (req, res, merchant) => {
         const id = idParam(req, res);
         if (!id) return;
-        const parsed = z
-          .object({ expand: expandParam.optional() })
-          .strict()
-          .safeParse(req.body ?? {});
+        const parsed = expireCheckoutSessionParams.safeParse(req.body ?? {});
         if (!parsed.success) {
           sendValidationError(res, parsed.error);
           return;
@@ -409,7 +398,7 @@ export function createCheckoutSessionsRouter(deps: {
     wrap(async (req, res) => {
       const found = await payerSession(req, res);
       if (!found) return;
-      const parsed = payerUpdateSchema.safeParse(req.body ?? {});
+      const parsed = updateCheckoutSessionPublicParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
@@ -434,10 +423,7 @@ export function createCheckoutSessionsRouter(deps: {
     wrap(async (req, res) => {
       const found = await payerSession(req, res);
       if (!found) return;
-      const parsed = z
-        .object({})
-        .strict()
-        .safeParse(req.body ?? {});
+      const parsed = confirmCheckoutSessionPublicParams.safeParse(req.body ?? {});
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;

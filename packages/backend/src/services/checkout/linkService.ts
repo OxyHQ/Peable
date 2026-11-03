@@ -6,14 +6,13 @@
  * `payment_link.updated` with the moved fields. A payer visiting the link
  * creates a Checkout Session (`createSessionFromLink`), never a payment.
  */
-import { z } from 'zod';
+import type { z } from 'zod';
 import {
-  CHECKOUT_CUSTOMER_CREATIONS,
-  CHECKOUT_SUBMIT_TYPES,
-  type CheckoutLineItem,
-  PAYMENT_LINK_LIMITS,
-  type PaymentLink,
-} from '@peable.to/shared-types';
+  METADATA_LIMIT_MESSAGE,
+  type createPaymentLinkParams,
+  type updatePaymentLinkParams,
+} from '@peable.to/contracts';
+import type { CheckoutLineItem, PaymentLink } from '@peable.to/shared-types';
 import { findBranding } from '../../db/merchants/brandingRepository';
 import { findPriceForMerchant } from '../../db/catalog/priceRepository';
 import { findProductsByPublicIds } from '../../db/catalog/productRepository';
@@ -31,12 +30,6 @@ import {
 } from '../../db/payments/paymentLinkRepository';
 import { type DatabaseOrTransaction, getDb } from '../../db/postgres';
 import { newId } from '../../lib/ids';
-import { expandParam } from '../../lib/list';
-import {
-  METADATA_LIMIT_MESSAGE,
-  metadataCreateSchema,
-  metadataUpdateSchema,
-} from '../../lib/metadata';
 import { toPaymentLinkDTO } from '../../lib/serializeCheckout';
 import { previousAttributes } from '../catalog/catalogService';
 import {
@@ -51,101 +44,12 @@ import type { TaxService } from '../tax/taxService';
 import { kickWebhookOutbox } from '../webhookOutbox';
 import { CheckoutError, invalid } from './errors';
 import { linkLineItemDTO, resolveLinkLines } from './lineItems';
-import {
-  adjustableBoundsOf,
-  collectionFields,
-  linkLineItemSchema,
-  localeSchema,
-  redirectUrlSchema,
-  storedCollectionOf,
-  storedCustomFieldsOf,
-} from './params';
+import { adjustableBoundsOf, storedCollectionOf, storedCustomFieldsOf } from './params';
 
-const afterCompletionSchema = z
-  .object({
-    type: z.enum(['redirect', 'hosted_confirmation']),
-    redirect: z.object({ url: redirectUrlSchema }).strict().optional(),
-    hosted_confirmation: z
-      .object({
-        custom_message: z
-          .string()
-          .trim()
-          .min(1)
-          .max(PAYMENT_LINK_LIMITS.customMessageMax)
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.type === 'redirect' && !value.redirect) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['redirect'],
-        message: 'redirect.url is required',
-      });
-    }
-    if (value.type === 'redirect' && value.hosted_confirmation) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['hosted_confirmation'],
-        message: 'hosted_confirmation is for type hosted_confirmation',
-      });
-    }
-    if (value.type === 'hosted_confirmation' && value.redirect) {
-      ctx.addIssue({
-        code: 'custom',
-        path: ['redirect'],
-        message: 'redirect is for type redirect',
-      });
-    }
-  });
-
-const restrictionsSchema = z
-  .object({
-    completed_sessions: z.object({ limit: z.number().int().min(1).max(1_000_000) }).strict(),
-  })
-  .strict();
-
-const optionFields = {
-  allow_promotion_codes: z.boolean().optional(),
-  ...collectionFields,
-  automatic_tax: z.object({ enabled: z.boolean() }).strict().optional(),
-  customer_creation: z.enum(CHECKOUT_CUSTOMER_CREATIONS).optional(),
-  after_completion: afterCompletionSchema.optional(),
-  submit_type: z.enum(CHECKOUT_SUBMIT_TYPES).optional(),
-  locale: localeSchema.optional(),
-};
-
-/** `POST /v1/payment_links`. */
-export const createLinkBodySchema = z
-  .object({
-    line_items: z.array(linkLineItemSchema).min(1).max(PAYMENT_LINK_LIMITS.lineItemsMax),
-    ...optionFields,
-    restrictions: restrictionsSchema.optional(),
-    metadata: metadataCreateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-/** `POST /v1/payment_links/:id` — everything but the line items. `''` clears. */
-export const updateLinkBodySchema = z
-  .object({
-    active: z.boolean().optional(),
-    ...optionFields,
-    shipping_address_collection: z
-      .union([collectionFields.shipping_address_collection.unwrap(), z.literal('')])
-      .optional(),
-    custom_fields: z.union([collectionFields.custom_fields.unwrap(), z.literal('')]).optional(),
-    restrictions: z.union([restrictionsSchema, z.literal('')]).optional(),
-    metadata: metadataUpdateSchema.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-export type CreateLinkBody = z.infer<typeof createLinkBodySchema>;
-export type UpdateLinkBody = z.infer<typeof updateLinkBodySchema>;
+/** A parsed `POST /v1/payment_links` body. */
+export type CreateLinkBody = z.output<typeof createPaymentLinkParams>;
+/** A parsed `POST /v1/payment_links/:id` body. */
+export type UpdateLinkBody = z.output<typeof updatePaymentLinkParams>;
 
 /** The `item`s of several links, by link id — one read of their prices and products. */
 export async function linkLineItemsFor(

@@ -6,3 +6,7 @@ export * from './errors';
 export * from './lists';
 export * from './money';
 export * from './version';
+export * from './checkout';
+export * from './files';
+export * from './merchants';
+export * from './paymentMethodConfigurations';

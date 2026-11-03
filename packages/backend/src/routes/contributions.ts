@@ -6,8 +6,9 @@ import {
   contributionPageQuerySchema,
   contributionPatchSchema,
   contributionLinkSchema,
+  contributionScopeQuerySchema,
   type ContributionCollection,
-} from '@peable.to/contracts/contributions';
+} from '@peable.to/contracts';
 import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import {
@@ -30,7 +31,18 @@ import {
   listIntentsForMerchant,
   type PaymentIntentRow,
 } from '../db/payments/paymentIntentRepository';
-import { answerList } from '../lib/list';
+import { answerList, parseQuery } from '../lib/list';
+
+/**
+ * Organization contributions (`@peable.to/contracts` `contributionRoutes`):
+ * managed with the member's Oxy USER session. The shared gate below
+ * authenticates, authorizes the organization and resolves the application's
+ * merchant in the requested environment; each route then validates its own
+ * query and body with the contract's schemas.
+ */
+
+/** Just the environment, from any of the routes' queries: what the gate needs to resolve the merchant. */
+const environmentOf = contributionScopeQuerySchema.loose();
 function dto(row: PaymentLinkRow) {
   return contributionLinkSchema.parse({
     id: row.publicId,
@@ -81,14 +93,14 @@ export function createContributionsRouter(
         sendError(res, 503, 'api_error', 'Organization access cannot be verified');
         return;
       }
-      const parsed = contributionPageQuerySchema.safeParse(req.query);
-      if (!parsed.success) {
-        sendValidationError(res, parsed.error);
+      const scope = environmentOf.safeParse(req.query);
+      if (!scope.success) {
+        sendValidationError(res, scope.error);
         return;
       }
-      const merchant = await resolveMerchantByApp(app, parsed.data.environment, res);
+      const merchant = await resolveMerchantByApp(app, scope.data.environment, res);
       if (!merchant) return;
-      res.locals.contribution = { org, app, merchant, query: parsed.data };
+      res.locals.contribution = { org, app, merchant };
       next();
     })().catch(next);
   });
@@ -96,6 +108,7 @@ export function createContributionsRouter(
     root,
     wrap(async (req, res) => {
       const { org, merchant } = res.locals.contribution;
+      if (!parseQuery(req, res, contributionScopeQuerySchema)) return;
       const parsed = createContributionSchema.safeParse(req.body);
       const key = contributionOperationKeySchema.safeParse(req.header('Idempotency-Key'));
       if (!parsed.success) {
@@ -165,7 +178,9 @@ export function createContributionsRouter(
   router.get(
     root,
     wrap(async (req, res) => {
-      const { org, merchant, query } = res.locals.contribution;
+      const { org, merchant } = res.locals.contribution;
+      const query = parseQuery(req, res, contributionPageQuerySchema);
+      if (!query) return;
       const db = getDb();
       await answerList(req, res, {
         query,
@@ -194,6 +209,7 @@ export function createContributionsRouter(
     `${root}/:id`,
     wrap(async (req, res) => {
       const { org, merchant } = res.locals.contribution;
+      if (!parseQuery(req, res, contributionScopeQuerySchema)) return;
       const body = contributionPatchSchema.safeParse(req.body);
       if (!body.success || !req.params.id) {
         sendError(res, 400, 'invalid_request_error', 'Invalid link update');
@@ -212,7 +228,9 @@ export function createContributionsRouter(
   router.get(
     `${root}/:id/collections`,
     wrap(async (req, res) => {
-      const { org, merchant, query } = res.locals.contribution;
+      const { org, merchant } = res.locals.contribution;
+      const query = parseQuery(req, res, contributionPageQuerySchema);
+      if (!query) return;
       if (!req.params.id) {
         sendError(res, 404, 'invalid_request_error', 'Contribution not found');
         return;

@@ -55,6 +55,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   idempotency_error:
     'The `Idempotency-Key` was used with a different request, or its first request is still running.',
   idempotency_key_invalid: 'The `Idempotency-Key` header is not a valid key.',
+  insufficient_scope:
+    'The credential lacks the scope this operation requires (`payments:read` or `payments:write`).',
   invalid_billing_request: 'The billing request is not valid for this subscription or offer.',
   keyless_recipient: 'The recipient has no receive key, so no address can be derived for them.',
   link_not_found: 'The link does not exist or is no longer active.',

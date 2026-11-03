@@ -5,12 +5,22 @@
  */
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
+import {
+  createPaymentMethodConfigurationParams,
+  createPaymentMethodDomainParams,
+  expandOnlyQuery,
+  listPaymentMethodConfigurationsQuery,
+  listPaymentMethodDomainsQuery,
+  type paymentMethodConfigurationEntryParams,
+  updatePaymentMethodConfigurationParams,
+  updatePaymentMethodDomainParams,
+  validatePaymentMethodDomainParams,
+} from '@peable.to/contracts';
 import {
   PAYMENT_METHOD_CONFIGURATION_TYPES,
   type PaymentMethodConfigurationType,
 } from '@peable.to/shared-types';
-import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -44,48 +54,24 @@ import {
   sendValidationError,
   wrap,
 } from '../lib/http';
+import { requireScope } from '../lib/requireScope';
 import { idempotent } from '../lib/idempotency';
-import {
-  answerList,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
+import { answerList, dashboardQuery, parseQuery, type QuerySurface } from '../lib/list';
 import { resolveMerchant } from './paymentIntents';
 
-const listConfigurationsQuery = surfaceListQuery({});
-const retrieveQuery = surfaceRetrieveQuery();
-const listDomainsQuery = surfaceListQuery({
-  domain_name: z.string().min(1).max(253).optional(),
-  enabled: z.enum(['true', 'false']).optional(),
-});
+// The contract's schemas (`@peable.to/contracts` `paymentMethodConfigurationRoutes`);
+// the dashboard's twin of each query adds its environment.
+const listConfigurationsQuery = {
+  api: listPaymentMethodConfigurationsQuery,
+  dashboard: dashboardQuery(listPaymentMethodConfigurationsQuery),
+} as const;
+const retrieveQuery = { api: expandOnlyQuery, dashboard: dashboardQuery(expandOnlyQuery) };
+const listDomainsQuery = {
+  api: listPaymentMethodDomainsQuery,
+  dashboard: dashboardQuery(listPaymentMethodDomainsQuery),
+} as const;
 
-const entryParam = z
-  .object({
-    display_preference: z.object({ preference: z.enum(['on', 'off', 'none']) }).strict(),
-  })
-  .strict();
-
-const methodFields = Object.fromEntries(
-  PAYMENT_METHOD_CONFIGURATION_TYPES.map((type) => [type, entryParam.optional()]),
-) as Record<PaymentMethodConfigurationType, z.ZodOptional<typeof entryParam>>;
-
-const createConfigurationBody = z
-  .object({ name: z.string().min(1).max(100).optional(), ...methodFields })
-  .strict();
-const updateConfigurationBody = z
-  .object({
-    name: z.string().min(1).max(100).optional(),
-    active: z.boolean().optional(),
-    ...methodFields,
-  })
-  .strict();
-
-const createDomainBody = z
-  .object({ domain_name: z.string().min(1).max(300), enabled: z.boolean().optional() })
-  .strict();
-const updateDomainBody = z.object({ enabled: z.boolean().optional() }).strict();
+type EntryParams = z.output<typeof paymentMethodConfigurationEntryParams>;
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -99,7 +85,7 @@ function idParam(req: Request, res: Response): string | null {
 /** Split a body's method settings into choices and resets, refusing what cannot be on. */
 function preferencesOf(
   res: Response,
-  body: Partial<Record<PaymentMethodConfigurationType, z.infer<typeof entryParam>>>,
+  body: Partial<Record<PaymentMethodConfigurationType, EntryParams | undefined>>,
 ): { set: PaymentMethodPreferences; reset: PaymentMethodConfigurationType[] } | null {
   const set: PaymentMethodPreferences = {};
   const reset: PaymentMethodConfigurationType[] = [];
@@ -186,7 +172,7 @@ export async function createConfiguration(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = createConfigurationBody.safeParse(req.body ?? {});
+  const parsed = createPaymentMethodConfigurationParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -209,7 +195,7 @@ export async function updateConfigurationCore(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = updateConfigurationBody.safeParse(req.body ?? {});
+  const parsed = updatePaymentMethodConfigurationParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -280,7 +266,7 @@ export async function answerDomainList(
       listDomainsForMerchant(db, {
         merchantId: merchant.id,
         domainName: query.domain_name?.toLowerCase(),
-        enabled: query.enabled === undefined ? undefined : query.enabled === 'true',
+        enabled: query.enabled,
         page,
       }),
     serialize: toPaymentMethodDomainDTO,
@@ -321,7 +307,7 @@ export async function createDomain(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = createDomainBody.safeParse(req.body ?? {});
+  const parsed = createPaymentMethodDomainParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -342,7 +328,7 @@ export async function updateDomain(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = updateDomainBody.safeParse(req.body ?? {});
+  const parsed = updatePaymentMethodDomainParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -365,10 +351,7 @@ export async function validateDomain(
   res: Response,
   merchant: MerchantRow,
 ): Promise<void> {
-  const parsed = z
-    .object({})
-    .strict()
-    .safeParse(req.body ?? {});
+  const parsed = validatePaymentMethodDomainParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -387,16 +370,8 @@ export function createPaymentMethodConfigurationsRouter(deps: {
 }): Router {
   const router = Router();
   const { requireMerchant } = deps;
-  const read = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:read'),
-  ];
-  const write = [
-    requireMerchant,
-    requireAuthenticated,
-    oxy.middleware.requireScope('payments:write'),
-  ];
+  const read = [requireMerchant, requireAuthenticated, requireScope('payments:read')];
+  const write = [requireMerchant, requireAuthenticated, requireScope('payments:write')];
   const withMerchant = (
     handler: (req: Request, res: Response, merchant: MerchantRow) => Promise<void>,
   ) =>
