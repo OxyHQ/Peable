@@ -4,15 +4,15 @@ The merchant dashboard — Oxy's equivalent of the Stripe Dashboard — served a
 **orbit.peable.to**. A separate app from the Peable wallet (`packages/frontend`),
 which stays a personal app.
 
-Expo + expo-router + Bloom, web first (a desktop-width layout with Bloom's `Rail`,
-narrowing to Bloom's floating `TabBar` below 768 px), and still a valid Expo app for
+Expo + expo-router + Bloom, web first (the Stripe Dashboard's layout in Bloom's
+`AppShell` and `Sidebar`, down to a phone's drawer), and still a valid Expo app for
 iOS and Android.
 
 ## What it does (first version)
 
 | Area | Screen | Gateway routes |
 |---|---|---|
-| Shell | Oxy sign-in; organization + application picker; **Test / Live** toggle (`environment=development` / `production`) | Oxy `accounts.list`, `apps.list` |
+| Shell | Oxy sign-in; the organization + application switcher at the head of the sidebar; the **Test mode** switch in the top bar (`environment=development` / `production`) and the test strip across the window while it is on; the command palette | Oxy `accounts.list`, `apps.list` |
 | Home | Counts and gross volume **computed in the browser from the first page (100) of payments**, labelled as such; five most recent payments | `GET …/payment_intents` |
 | Payments | List with a status filter and `starting_after` / `has_more` paging; detail with amount by currency decimals, a timeline built only from the intent's own fields, metadata, and its **events** each linked to the request log of the API call that caused it | `GET …/payment_intents`, `GET …/payment_intents/:id`, `GET …/events?payment_intent=` |
 | Products | The catalog (ADR 0018): products with an Active / Archived filter and `starting_after` paging; create a product with an optional first price (`default_price_data`); detail to rename, describe, set unit label and statement descriptor, archive / unarchive, delete (refused by the gateway while it has prices); its prices with Active / Default badges — add a price (currency, amount in whole units converted exactly to base units, one-time or every N days/weeks/months/years, tax behavior), archive / unarchive, make default | `GET/POST …/products`, `GET/POST/DELETE …/products/:id`, `GET/POST …/prices`, `POST …/prices/:id` |
@@ -40,6 +40,41 @@ caller's membership of the application on each request. There is no merchant
 credential in Orbit, and none may be added: a browser is not a place to keep one.
 
 The wallet has no Tax or Contributions screen: those are Orbit's alone.
+
+## The shell, and adding a screen
+
+`src/shell/OrbitShell.tsx` is the frame, composed the way Nilo's is
+(`apps/app/components/shell/nilo-shell.tsx`): Bloom's `AppShell` with its `Sidebar`
+as a docked `sm` column — the organization + application switcher at its head
+(`teamPlacement="header"`), the navigation, the theme toggle, Developers and
+Settings, and the person's card at its foot. From 1024 px it is the full panel
+(collapse it with its control or **Mod+\\**, remembered on the device); from 768 px
+an icon rail; below that a drawer opened from the top bar. Over every page the top
+bar: **search** over the application's objects (the gateway's `…/search`, in a dialog;
+also `/`), **Test mode**, keyboard help and notifications. **Mod+K** opens the command
+palette: every destination, Test / Live, the other applications, and the search.
+
+Every destination is ONE entry in `src/shell/destinations.ts`, in the Stripe
+Dashboard's sections: the main rows (Home, Balances, Payouts, Payments, Customers,
+Product catalog), **Products** (a Payments group with Disputes and Payment Links; a
+Billing group with Subscriptions, Invoices and Settings and features; Connect,
+Reports, Tax, Contributions), **Business** (Account, Branding) and the foot
+(Developers, Settings). The sidebar, the collapsed rail (where every destination
+is an icon), the command palette and the breadcrumbs all read it. A new screen is
+its entry (with `parent` to sit in a group; a group with no entries is not drawn)
+plus its glyph in `src/shell/icons.ts`, which will not compile without one.
+`destinations.test.ts` fails when an entry names a route that does not exist, or a
+top-level route under `app/(orbit)` has no entry. A page inside a destination
+(Settings → Team or Business details, Developers → an event or a request log) is
+not an entry: its route lies under the destination's, so it lights that up and its
+breadcrumb leads back.
+
+Pages render in `OrbitScreen` (`src/ui/OrbitScreen.tsx`): a breadcrumb trail on a
+page below a destination (derived from the route), the title, description and
+primary `actions`, a `filters` row for a list, then the page. A list ends in
+`ListFooter` (rows shown, and **Load more** while `has_more`); a detail lays out in
+`DetailLayout` — the object's content beside a side panel of its attributes, which
+wraps under it on a narrow page, where `Field`s stack their label over their value.
 
 ## How it talks to the gateway
 

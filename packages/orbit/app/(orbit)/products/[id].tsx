@@ -14,7 +14,6 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
@@ -35,7 +34,14 @@ import { Choice } from '@/ui/Choice';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import {
+  DetailLayout,
+  ErrorNotice,
+  Field,
+  ListFooter,
+  OrbitScreen,
+  Section,
+} from '@/ui/OrbitScreen';
 
 /** A reference as its id, whether or not the read expanded it. */
 function idOf(reference: string | { id: string } | null): string | null {
@@ -314,17 +320,7 @@ function Prices({ scope, product }: { scope: DashboardScope; product: Product })
             description={t('product.prices.empty.body')}
           />
         )}
-        {pages.hasNextPage ? (
-          <View className="items-center pt-2">
-            <Button
-              appearance="outline"
-              loading={pages.isFetchingNextPage}
-              onPress={() => void pages.fetchNextPage()}
-            >
-              {t('action.loadMore')}
-            </Button>
-          </View>
-        ) : null}
+        <ListFooter pages={pages} />
       </>
     );
   }
@@ -449,9 +445,10 @@ function ProductDetail({ scope, product }: { scope: DashboardScope; product: Pro
       </View>
       <ProductActions scope={scope} product={product} />
       {/* Keyed by `updated`, so a save elsewhere re-seeds the form from the stored product. */}
-      <EditProduct key={product.updated} scope={scope} product={product} />
-      <Prices scope={scope} product={product} />
-      <ProductFeatures scope={scope} product={product} />
+      <DetailLayout aside={<EditProduct key={product.updated} scope={scope} product={product} />}>
+        <Prices scope={scope} product={product} />
+        <ProductFeatures scope={scope} product={product} />
+      </DetailLayout>
     </View>
   );
 }
@@ -475,21 +472,8 @@ function ProductLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function ProductScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('product.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/products'))}
-        >
-          {t('nav.products')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('product.title')}>
       {({ scope }) => (id ? <ProductLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

@@ -8,12 +8,11 @@ import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeBalance } from '@/billing/amount';
-import { LoadMore } from '@/billing/BillingParts';
 import { useCustomerPages } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 function CustomerRow({ customer }: { customer: Customer }) {
   const router = useRouter();
@@ -68,11 +67,7 @@ function CustomerList({ scope, email }: { scope: DashboardScope; email: string }
           description={t('customers.empty.body')}
         />
       )}
-      <LoadMore
-        visible={pages.hasNextPage}
-        loading={pages.isFetchingNextPage}
-        onPress={() => void pages.fetchNextPage()}
-      />
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -103,7 +98,7 @@ export default function CustomersScreen() {
     <OrbitScreen
       title={t('customers.title')}
       description={t('customers.description')}
-      actions={<EmailFilter onSearch={setEmail} />}
+      filters={<EmailFilter onSearch={setEmail} />}
     >
       {({ scope }) => <CustomerList scope={scope} email={email} />}
     </OrbitScreen>

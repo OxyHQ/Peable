@@ -37,8 +37,8 @@ import {
 } from '@/developers/requestLogs';
 import { Choice } from '@/ui/Choice';
 import { FormField } from '@/ui/FormField';
-import { LoadMore, usePagedList } from '@/ui/paging';
-import { ErrorNotice, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { usePagedList } from '@/ui/paging';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { DeliveryStatusBadge, ToneBadge } from '@/ui/StatusBadge';
 import {
   buildEndpointBody,
@@ -311,7 +311,7 @@ function Endpoints({ scope }: { scope: DashboardScope }) {
           description={t('developers.endpoints.empty.body')}
         />
       )}
-      <LoadMore pages={pages} />
+      <ListFooter pages={pages} />
     </Section>
   );
 }
@@ -384,7 +384,7 @@ function Events({ scope }: { scope: DashboardScope }) {
             description={t('developers.events.empty.body')}
           />
         )}
-        <LoadMore pages={pages} />
+        <ListFooter pages={pages} />
       </>
     );
   }
@@ -477,7 +477,7 @@ function RequestLogs({ scope }: { scope: DashboardScope }) {
             description={t('developers.logs.empty.body')}
           />
         )}
-        <LoadMore pages={pages} />
+        <ListFooter pages={pages} />
       </>
     );
   }
@@ -610,7 +610,7 @@ function Deliveries({ scope }: { scope: DashboardScope }) {
           description={t('developers.empty.body')}
         />
       )}
-      <LoadMore pages={pages} />
+      <ListFooter pages={pages} />
     </Section>
   );
 }

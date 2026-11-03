@@ -8,7 +8,6 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
@@ -18,7 +17,7 @@ import { subscriptionActions, type SubscriptionAction } from '@/billing/status';
 import { billingKeys, useSubscription } from '@/billing/useBilling';
 import { formatInstant } from '@/format/time';
 import { t } from '@/i18n';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -137,87 +136,92 @@ function SubscriptionDetail({
         ) : null}
       </View>
       <Actions scope={scope} subscription={subscription} />
-      <Section title={t('subscription.details')}>
-        <Field
-          label={t('subscription.field.customer')}
-          value={
-            customerId ? (
-              <LinkButton
-                size="sm"
-                onPress={() =>
-                  router.push({ pathname: '/customers/[id]', params: { id: customerId } })
-                }
-              >
-                {customerId}
-              </LinkButton>
-            ) : (
-              '—'
-            )
-          }
-        />
-        <Field
-          label={t('subscription.field.period')}
-          value={`${formatInstant(subscription.current_period_start)} → ${formatInstant(subscription.current_period_end)}`}
-        />
-        {subscription.trial_end ? (
-          <Field
-            label={t('subscription.field.trialEnd')}
-            value={formatInstant(subscription.trial_end)}
-          />
-        ) : null}
-        <Field
-          label={t('subscription.field.collection')}
-          value={t(`collection.${subscription.collection_method}`)}
-        />
-        {subscription.cancel_at ? (
-          <Field
-            label={t('subscription.field.cancelAt')}
-            value={formatInstant(subscription.cancel_at)}
-          />
-        ) : null}
-        {subscription.ended_at ? (
-          <Field
-            label={t('subscription.field.endedAt')}
-            value={formatInstant(subscription.ended_at)}
-          />
-        ) : null}
-        <Field
-          label={t('subscription.field.latestInvoice')}
-          value={<LatestInvoice invoice={subscription.latest_invoice} />}
-        />
-        {subscription.test_clock ? (
-          <Field label={t('customer.field.testClock')} value={subscription.test_clock} mono />
-        ) : null}
-        <Field
-          label={t('subscription.field.created')}
-          value={formatInstant(subscription.created)}
-        />
-      </Section>
-      <Section title={t('subscription.items')}>
-        {subscription.items.data.map((item) => (
-          <View
-            key={item.id}
-            className="flex-row flex-wrap gap-x-4 gap-y-1 py-2 border-b border-border"
-          >
-            <Text variant="body-2-semibold">
-              {item.price.unit_amount === null
-                ? t('product.price.tiered')
-                : formatSignedAmount(item.price.unit_amount, item.price.currency)}
-              {item.price.recurring ? ` / ${item.price.recurring.interval}` : ''}
-            </Text>
-            <Text variant="body-2-regular">
-              {t('subscription.quantity', { quantity: item.quantity })}
-            </Text>
-            <Text
-              variant="caption-1-regular"
-              selectable
-              className="text-muted-foreground font-mono"
+      <DetailLayout
+        aside={
+          <Section title={t('subscription.details')}>
+            <Field
+              label={t('subscription.field.customer')}
+              value={
+                customerId ? (
+                  <LinkButton
+                    size="sm"
+                    onPress={() =>
+                      router.push({ pathname: '/customers/[id]', params: { id: customerId } })
+                    }
+                  >
+                    {customerId}
+                  </LinkButton>
+                ) : (
+                  '—'
+                )
+              }
+            />
+            <Field
+              label={t('subscription.field.period')}
+              value={`${formatInstant(subscription.current_period_start)} → ${formatInstant(subscription.current_period_end)}`}
+            />
+            {subscription.trial_end ? (
+              <Field
+                label={t('subscription.field.trialEnd')}
+                value={formatInstant(subscription.trial_end)}
+              />
+            ) : null}
+            <Field
+              label={t('subscription.field.collection')}
+              value={t(`collection.${subscription.collection_method}`)}
+            />
+            {subscription.cancel_at ? (
+              <Field
+                label={t('subscription.field.cancelAt')}
+                value={formatInstant(subscription.cancel_at)}
+              />
+            ) : null}
+            {subscription.ended_at ? (
+              <Field
+                label={t('subscription.field.endedAt')}
+                value={formatInstant(subscription.ended_at)}
+              />
+            ) : null}
+            <Field
+              label={t('subscription.field.latestInvoice')}
+              value={<LatestInvoice invoice={subscription.latest_invoice} />}
+            />
+            {subscription.test_clock ? (
+              <Field label={t('customer.field.testClock')} value={subscription.test_clock} mono />
+            ) : null}
+            <Field
+              label={t('subscription.field.created')}
+              value={formatInstant(subscription.created)}
+            />
+          </Section>
+        }
+      >
+        <Section title={t('subscription.items')}>
+          {subscription.items.data.map((item) => (
+            <View
+              key={item.id}
+              className="flex-row flex-wrap gap-x-4 gap-y-1 py-2 border-b border-border"
             >
-              {item.price.id}
-            </Text>
-          </View>
-        ))}
-      </Section>
+              <Text variant="body-2-semibold">
+                {item.price.unit_amount === null
+                  ? t('product.price.tiered')
+                  : formatSignedAmount(item.price.unit_amount, item.price.currency)}
+                {item.price.recurring ? ` / ${item.price.recurring.interval}` : ''}
+              </Text>
+              <Text variant="body-2-regular">
+                {t('subscription.quantity', { quantity: item.quantity })}
+              </Text>
+              <Text
+                variant="caption-1-regular"
+                selectable
+                className="text-muted-foreground font-mono"
+              >
+                {item.price.id}
+              </Text>
+            </View>
+          ))}
+        </Section>
+      </DetailLayout>
     </View>
   );
 }
@@ -241,21 +245,8 @@ function SubscriptionLoader({ scope, id }: { scope: DashboardScope; id: string }
 
 export default function SubscriptionScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('subscription.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/subscriptions'))}
-        >
-          {t('nav.subscriptions')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('subscription.title')}>
       {({ scope }) => (id ? <SubscriptionLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

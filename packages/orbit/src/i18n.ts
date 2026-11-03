@@ -22,6 +22,7 @@ import { MONEY_EN, MONEY_ES } from './money/strings';
 import { REPORTS_EN, REPORTS_ES } from './reports/strings';
 import { SEARCH_EN, SEARCH_ES } from './search/strings';
 import { ORBIT_EN, ORBIT_ES } from './orbitStrings';
+import { SHELL_EN, SHELL_ES } from './shell/strings';
 
 export const SUPPORTED_LOCALES = ['en', 'es'];
 export const FALLBACK_LOCALE = 'en';
@@ -31,6 +32,7 @@ const en: Record<string, string> = {
   ...REPORTS_EN,
   ...SEARCH_EN,
   ...ORBIT_EN,
+  ...SHELL_EN,
   'app.name': 'Orbit',
   'app.byline': 'by Peable',
   'error.generic': 'Something went wrong. Try again.',
@@ -1019,6 +1021,7 @@ const es: Record<string, string> = {
   'notFound.body': 'No hay nada en esta dirección de Orbit.',
   'notFound.action': 'Ir a Inicio',
 
+  ...SHELL_ES,
   'nav.home': 'Inicio',
   'nav.payments': 'Pagos',
   'nav.products': 'Productos',

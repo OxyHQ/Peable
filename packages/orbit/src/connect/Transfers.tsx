@@ -2,8 +2,7 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { type DashboardScope, isMerchantMissing } from '../api/dashboard';
 import { t } from '../i18n';
-import { ErrorNotice, Section } from '../ui/OrbitScreen';
-import { LoadMore } from '../ui/paging';
+import { ErrorNotice, ListFooter, Section } from '../ui/OrbitScreen';
 import { TransferRow } from './TransferRow';
 import { useTransferPages } from './useConnect';
 
@@ -29,7 +28,7 @@ export function Transfers({ scope, seller }: { scope: DashboardScope; seller: st
           description={t('connect.transfers.empty.body')}
         />
       )}
-      <LoadMore pages={pages} />
+      <ListFooter pages={pages} />
     </Section>
   );
 }

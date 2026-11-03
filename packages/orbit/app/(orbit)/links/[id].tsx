@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { PaymentLink, UpdatePaymentLinkParams } from '@peable.to/shared-types';
 import { Badge } from '@oxy.so/bloom/badge';
@@ -9,7 +9,6 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError, isOrbitApiError } from '@/api/transport';
@@ -28,7 +27,7 @@ import {
   serverErrors,
 } from '@/links/linkForm';
 import { linkKeys, useLink } from '@/links/useLinks';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 
 const fail = (error: unknown) => toast.error(describeError(error, t('error.generic')));
 
@@ -133,39 +132,46 @@ function LinkDetail({ scope, link }: { scope: DashboardScope; link: PaymentLink 
           content={link.active ? t('links.active') : t('links.inactive')}
         />
       </View>
-      <Section title={t('links.share')}>
-        <LinkShare url={link.url} qr />
-        <View className="flex-row flex-wrap gap-2">
-          <Button
-            appearance="outline"
-            size="sm"
-            loading={toggle.isPending}
-            onPress={() => toggle.mutate()}
-          >
-            {link.active ? t('links.deactivate') : t('links.activate')}
-          </Button>
-        </View>
-        <Text variant="caption-1-regular" className="text-muted-foreground">
-          {t('links.deactivateHelp')}
-        </Text>
-      </Section>
-      <Section title={t('links.details')}>
-        <Field label={t('links.field.id')} value={link.id} mono />
-        <Field label={t('links.field.currency')} value={link.currency} />
-        <Field label={t('links.field.created')} value={formatInstant(link.created)} />
-        {link.restrictions ? (
-          <Field
-            label={t('links.field.sessions')}
-            value={t('links.sessionsCount', {
-              count: link.restrictions.completed_sessions.count,
-              limit: link.restrictions.completed_sessions.limit,
-            })}
-          />
-        ) : null}
-      </Section>
-      {link.contribution ? null : <LineItems link={link} />}
-      {/* Keyed by `updated_at`, so a save re-seeds the form from the stored link. */}
-      {link.contribution ? null : <EditOptions key={link.updated_at} scope={scope} link={link} />}
+      <DetailLayout
+        aside={
+          <>
+            <Section title={t('links.share')}>
+              <LinkShare url={link.url} qr />
+              <View className="flex-row flex-wrap gap-2">
+                <Button
+                  appearance="outline"
+                  size="sm"
+                  loading={toggle.isPending}
+                  onPress={() => toggle.mutate()}
+                >
+                  {link.active ? t('links.deactivate') : t('links.activate')}
+                </Button>
+              </View>
+              <Text variant="caption-1-regular" className="text-muted-foreground">
+                {t('links.deactivateHelp')}
+              </Text>
+            </Section>
+            <Section title={t('links.details')}>
+              <Field label={t('links.field.id')} value={link.id} mono />
+              <Field label={t('links.field.currency')} value={link.currency} />
+              <Field label={t('links.field.created')} value={formatInstant(link.created)} />
+              {link.restrictions ? (
+                <Field
+                  label={t('links.field.sessions')}
+                  value={t('links.sessionsCount', {
+                    count: link.restrictions.completed_sessions.count,
+                    limit: link.restrictions.completed_sessions.limit,
+                  })}
+                />
+              ) : null}
+            </Section>
+          </>
+        }
+      >
+        {link.contribution ? null : <LineItems link={link} />}
+        {/* Keyed by `updated_at`, so a save re-seeds the form from the stored link. */}
+        {link.contribution ? null : <EditOptions key={link.updated_at} scope={scope} link={link} />}
+      </DetailLayout>
     </View>
   );
 }
@@ -189,21 +195,8 @@ function LinkLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function PaymentLinkScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('link.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/links'))}
-        >
-          {t('nav.links')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('link.title')}>
       {({ scope }) => (id ? <LinkLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

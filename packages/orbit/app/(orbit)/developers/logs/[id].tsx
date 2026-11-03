@@ -1,11 +1,9 @@
 import { View } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { RequestLog } from '@peable.to/shared-types';
-import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { Text } from '@oxy.so/bloom/typography';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
@@ -72,21 +70,8 @@ function LogLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function RequestLogScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('developers.logs.request')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/developers'))}
-        >
-          {t('nav.developers')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('developers.logs.request')}>
       {({ scope }) => (id ? <LogLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

@@ -8,7 +8,6 @@ import {
   AdmonitionRow,
   AdmonitionText,
 } from '@oxy.so/bloom/admonition';
-import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
@@ -32,6 +31,7 @@ import { Choice } from '@/ui/Choice';
 import {
   AccountMissing,
   ErrorNotice,
+  ListFooter,
   MerchantMissing,
   OrbitScreen,
   Section,
@@ -160,17 +160,7 @@ function Transactions({ scope }: { scope: DashboardScope }) {
             />
           }
         />
-        {pages.hasNextPage ? (
-          <View className="items-center">
-            <Button
-              appearance="outline"
-              loading={pages.isFetchingNextPage}
-              onPress={() => void pages.fetchNextPage()}
-            >
-              {t('action.loadMore')}
-            </Button>
-          </View>
-        ) : null}
+        <ListFooter pages={pages} />
       </View>
     );
   }

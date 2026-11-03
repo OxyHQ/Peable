@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { View } from 'react-native';
 import type { PaymentIntentStatus } from '@peable.to/shared-types';
-import { Button } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
@@ -10,7 +9,7 @@ import { PaymentsTable } from '@/payments/PaymentsTable';
 import { ORBIT_PAYMENT_STATUSES, paymentStatusLabel } from '@/payments/status';
 import { usePaymentPages } from '@/payments/usePayments';
 import { Choice } from '@/ui/Choice';
-import { ErrorNotice, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
+import { ErrorNotice, ListFooter, MerchantMissing, OrbitScreen } from '@/ui/OrbitScreen';
 
 const ALL = 'all';
 const statusOptions = () => [
@@ -64,17 +63,7 @@ function PaymentList({
           />
         }
       />
-      {pages.hasNextPage ? (
-        <View className="items-center">
-          <Button
-            appearance="outline"
-            loading={pages.isFetchingNextPage}
-            onPress={() => void pages.fetchNextPage()}
-          >
-            {t('action.loadMore')}
-          </Button>
-        </View>
-      ) : null}
+      <ListFooter pages={pages} />
     </View>
   );
 }
@@ -84,7 +73,7 @@ export default function PaymentsScreen() {
   return (
     <OrbitScreen
       title={t('payments.title')}
-      actions={<StatusFilter value={status} onChange={setStatus} />}
+      filters={<StatusFilter value={status} onChange={setStatus} />}
     >
       {({ scope }) => <PaymentList scope={scope} status={status} />}
     </OrbitScreen>

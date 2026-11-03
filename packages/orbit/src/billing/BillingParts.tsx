@@ -47,26 +47,6 @@ export function refId(reference: string | { id: string } | null): string | null 
   return reference === null || typeof reference === 'string' ? reference : reference.id;
 }
 
-/** The "Load more" row under every paged list. */
-export function LoadMore({
-  visible,
-  loading,
-  onPress,
-}: {
-  visible: boolean;
-  loading: boolean;
-  onPress: () => void;
-}) {
-  if (!visible) return null;
-  return (
-    <View className="items-center pt-2">
-      <Button appearance="outline" loading={loading} onPress={onPress}>
-        {t('action.loadMore')}
-      </Button>
-    </View>
-  );
-}
-
 /** Open a payer-facing page (hosted invoice, PDF) — public URLs, no Orbit credential in them. */
 export function ExternalLink({ url, label }: { url: string | null; label: string }) {
   if (!url) return null;

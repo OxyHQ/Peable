@@ -6,7 +6,6 @@ import type { CreatePaymentLinkParams, PaymentLink } from '@peable.to/shared-typ
 import { Button } from '@oxy.so/bloom/button';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import type { DashboardScope } from '@/api/dashboard';
 import { describeError, isOrbitApiError } from '@/api/transport';
@@ -127,22 +126,8 @@ function Builder({ scope }: { scope: DashboardScope }) {
 }
 
 export default function NewPaymentLinkScreen() {
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('links.new')}
-      description={t('links.newIntro')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/links'))}
-        >
-          {t('nav.links')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('links.new')} description={t('links.newIntro')}>
       {({ scope }) => <Builder key={`${scope.applicationId}:${scope.environment}`} scope={scope} />}
     </OrbitScreen>
   );

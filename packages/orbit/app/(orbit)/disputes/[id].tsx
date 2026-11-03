@@ -16,7 +16,6 @@ import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { toast } from '@oxy.so/bloom/toast';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
@@ -40,7 +39,7 @@ import { t } from '@/i18n';
 import { Choice } from '@/ui/Choice';
 import { FileUploadField } from '@/ui/FileUploadField';
 import { FormField } from '@/ui/FormField';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { DisputeStatusBadge } from '@/ui/StatusBadge';
 
 function idOf(reference: string | { id: string } | null): string | null {
@@ -349,8 +348,9 @@ function DisputeDetail({ scope, dispute }: { scope: DashboardScope; dispute: Dis
         </Text>
         <DisputeStatusBadge status={dispute.status} />
       </View>
-      <DisputeFacts dispute={dispute} />
-      <EvidenceEditor scope={scope} dispute={dispute} />
+      <DetailLayout aside={<DisputeFacts dispute={dispute} />}>
+        <EvidenceEditor scope={scope} dispute={dispute} />
+      </DetailLayout>
     </View>
   );
 }
@@ -374,21 +374,8 @@ function DisputeLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function DisputeScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('dispute.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/disputes'))}
-        >
-          {t('nav.disputes')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('dispute.title')}>
       {({ scope }) => (id ? <DisputeLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );

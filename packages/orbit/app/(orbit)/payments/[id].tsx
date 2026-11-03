@@ -2,11 +2,10 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useQuery } from '@tanstack/react-query';
 import type { PaymentIntent } from '@peable.to/shared-types';
-import { Button, LinkButton } from '@oxy.so/bloom/button';
+import { LinkButton } from '@oxy.so/bloom/button';
 import { EmptyState } from '@oxy.so/bloom/empty-state';
 import { Loading } from '@oxy.so/bloom/loading';
 import { Text } from '@oxy.so/bloom/typography';
-import { RiArrowLeftLine } from '@oxy.so/bloom/icons/RiArrowLeftLine';
 import { dashboardApi } from '@/api/client';
 import { isMerchantMissing, type DashboardScope } from '@/api/dashboard';
 import { describeError } from '@/api/transport';
@@ -17,7 +16,7 @@ import { t } from '@/i18n';
 import { cancellationReasonLabel } from '@/payments/status';
 import { paymentTimeline, type TimelineStep } from '@/payments/timeline';
 import { paymentKeys, usePayment } from '@/payments/usePayments';
-import { ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
+import { DetailLayout, ErrorNotice, Field, OrbitScreen, Section } from '@/ui/OrbitScreen';
 import { PaymentStatusBadge } from '@/ui/StatusBadge';
 
 const DOT: Record<TimelineStep['state'], string> = {
@@ -135,8 +134,8 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
         </Text>
         <PaymentStatusBadge status={payment.status} />
       </View>
-      <View className="flex-row flex-wrap gap-6">
-        <View className="flex-1 min-w-80">
+      <DetailLayout
+        aside={
           <Section title={t('payment.details')}>
             <Field label={t('payment.field.id')} value={payment.id} mono />
             <Field
@@ -238,23 +237,22 @@ function PaymentDetail({ scope, payment }: { scope: DashboardScope; payment: Pay
               <Field label={t('payment.field.expires')} value={formatInstant(payment.expires_at)} />
             ) : null}
           </Section>
-        </View>
-        <View className="flex-1 min-w-72">
-          <Section title={t('payment.timeline')} description={t('payment.timelineNote')}>
-            <Timeline steps={paymentTimeline(payment)} />
-          </Section>
-        </View>
-      </View>
-      <PaymentEvents scope={scope} payment={payment} />
-      <Section title={t('payment.metadata')}>
-        {metadata.length ? (
-          metadata.map(([key, value]) => <Field key={key} label={key} value={value} mono />)
-        ) : (
-          <Text variant="body-2-regular" className="text-muted-foreground">
-            {t('payment.noMetadata')}
-          </Text>
-        )}
-      </Section>
+        }
+      >
+        <Section title={t('payment.timeline')} description={t('payment.timelineNote')}>
+          <Timeline steps={paymentTimeline(payment)} />
+        </Section>
+        <PaymentEvents scope={scope} payment={payment} />
+        <Section title={t('payment.metadata')}>
+          {metadata.length ? (
+            metadata.map(([key, value]) => <Field key={key} label={key} value={value} mono />)
+          ) : (
+            <Text variant="body-2-regular" className="text-muted-foreground">
+              {t('payment.noMetadata')}
+            </Text>
+          )}
+        </Section>
+      </DetailLayout>
     </View>
   );
 }
@@ -280,21 +278,8 @@ function PaymentLoader({ scope, id }: { scope: DashboardScope; id: string }) {
 
 export default function PaymentScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
-  const router = useRouter();
   return (
-    <OrbitScreen
-      title={t('payment.title')}
-      actions={
-        <Button
-          appearance="plain"
-          size="sm"
-          leadingIcon={RiArrowLeftLine}
-          onPress={() => (router.canGoBack() ? router.back() : router.replace('/payments'))}
-        >
-          {t('nav.payments')}
-        </Button>
-      }
-    >
+    <OrbitScreen title={t('payment.title')}>
       {({ scope }) => (id ? <PaymentLoader scope={scope} id={id} /> : null)}
     </OrbitScreen>
   );
