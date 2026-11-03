@@ -40,6 +40,8 @@ import {
   updateWebhookEndpoint,
 } from './webhookEndpoints';
 import { answerEventList, retrieveEvent } from './events';
+import { CATALOG_ROUTES } from './catalog';
+import { mountCatalogDashboardRoutes } from './catalogRoutes';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
@@ -346,6 +348,9 @@ export function createDashboardRouter(deps?: {
     requestContextMiddleware,
     asMember((req, res, merchant) => sendWebhookEndpointTest(req, res, merchant, { safeFetch })),
   );
+
+  /** Orbit's catalog: products, prices, coupons and promotion codes. */
+  mountCatalogDashboardRoutes(router, CATALOG_ROUTES, { base, requireOxyUser, asMember });
 
   router.get(
     `${base}/events`,

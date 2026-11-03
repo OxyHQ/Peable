@@ -38,7 +38,7 @@ internal refactor.
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
-| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
+| `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
 | `packages/shared-types/` | `@peable.to/shared-types` | Published wire contract shared by backend, SDK and frontend |
 | `packages/pay/` | **`@peable.to/pay`** | Published client for paying FROM an Oxy app. Holds the money code the wallet used to own — HD derivation, the UTXO set, coin selection — so there is exactly one implementation of "how much money is this", not one per app. `sendPayment` / `quotePayment` / `readBalance` (`src/payment.ts`) are the whole surface: seed in, txid out, no key custody |
@@ -278,10 +278,27 @@ a wire object stores the wire shape (migration `0036` converted them).
 ## Backend surface
 
 Routes (`src/routes/`): `charges`, `checkoutSessions`, `connect`,
-`connectedAccounts`, `customers`, `dashboard`, `disputes`, `enrich`, `merchants`,
-`oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`, `paymentMethods`,
-`providerWebhooks`, `refunds`, `setupIntents`, `social`, `tax`, `transfers`,
-`webhookDeliveries`, `webhookEndpoints`.
+`connectedAccounts`, `coupons`, `customers`, `dashboard`, `disputes`, `enrich`,
+`merchants`, `oxyFileEvents`, `events`, `paymentIntents`, `paymentLinks`,
+`paymentMethods`, `prices`, `products`, `promotionCodes`, `providerWebhooks`,
+`refunds`, `setupIntents`, `social`, `tax`, `transfers`, `webhookDeliveries`,
+`webhookEndpoints`.
+
+### The catalog (ADR 0018)
+
+Products, prices, coupons and promotion codes are Orbit rows with no provider
+binding. The four resource files list their routes once as data
+(`routes/catalog.ts`); `catalogRoutes.ts` mounts that list on `/v1/*` AND on the
+dashboard, so the two surfaces cannot drift. Every write goes through
+`services/catalog/catalogService.ts`, which commits the row with its event.
+**A price never changes what it charges** — only `active`, `nickname`,
+`metadata`, `lookup_key` and an `unspecified` `tax_behavior` move; a new amount
+is a new price. **Amounts come from `services/catalog/pricing.ts` only** (pure,
+bigint, half-up percent discounts, Stripe's graduated/volume tiers): checkout,
+invoices and renewals must call it, never re-derive. A coupon id is never
+reused (deleted coupons are tombstones), a promotion code is unique among
+ACTIVE codes case-insensitively, and there is no `price.deleted` /
+`promotion_code.deleted` — those objects are archived, not deleted.
 
 ### The PaymentIntent is Stripe's (ADR 0019)
 
@@ -375,7 +392,9 @@ Repositories (`src/db/`), the only thing that reaches Postgres — there is no
 `src/models/`: `merchants/` (`merchantRepository`, `derivationIndex`),
 `payments/` (`paymentIntentRepository`, `chargeRepository`,
 `paymentLinkRepository`, `checkoutSessionRepository`), `customers/`
-(`customerRepository`, `paymentMethodRepository`, `setupIntentRepository`), `social/` (`receiveCursor`, `sendAttribution`),
+(`customerRepository`, `paymentMethodRepository`, `setupIntentRepository`),
+`catalog/` (`productRepository`, `priceRepository`, `couponRepository`,
+`promotionCodeRepository`), `social/` (`receiveCursor`, `sendAttribution`),
 `events/` (`eventRepository`), `webhooks/` (`webhookEndpointRepository`,
 `webhookDeliveryRepository`, `webhookOutboxRepository`),
 `providers/` (`providerEventRepository`), `accounts/`

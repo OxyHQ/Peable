@@ -283,6 +283,77 @@ A confirmation that needs 3-D Secure answers `status: 'requires_action'` with
 `@peable.to/sdk/checkout`. Card-only parameters on a FairCoin payment are a 400
 naming the field.
 
+### Catalog: products, prices, coupons, promotion codes (ADR 0018)
+
+What you sell is an Orbit object, not a provider's: products (`prod_…`),
+prices (`price_…`), coupons (your own id, or `coupon_…`) and promotion codes
+(`promo_…`). Checkout line items, invoices and subscriptions will price from
+them; today they are managed through the API, the SDK and Orbit's Products
+screen. Every create, update and delete emits its event (`product.created`,
+`price.updated`, `coupon.deleted`, `promotion_code.created`, …).
+
+```ts
+// A product with its default price, in one call.
+const plus = await peable.products.create({
+  name: 'Mention Plus',
+  tax_code: 'txcd_10103000', // a Peable Tax code — GET /v1/tax/codes
+  default_price_data: {
+    currency: 'EUR', unit_amount: '499', // base units, always a string
+    recurring: { interval: 'month' }, tax_behavior: 'inclusive',
+  },
+});
+
+// A yearly price with a stable name you look up instead of storing its id.
+await peable.prices.create({
+  product: plus.id, currency: 'EUR', unit_amount: '4990',
+  recurring: { interval: 'year' }, lookup_key: 'plus_yearly',
+});
+const [yearly] = (await peable.prices.list({ lookup_keys: ['plus_yearly'] })).data;
+
+// Seats in packs of ten, or graduated tiers ('inf' closes the last tier).
+await peable.prices.create({
+  product: plus.id, currency: 'EUR', billing_scheme: 'tiered', tiers_mode: 'graduated',
+  tiers: [{ up_to: 10, unit_amount: '500' }, { up_to: 'inf', unit_amount: '400' }],
+  recurring: { interval: 'month' },
+});
+
+// A coupon and a customer-facing code for it.
+await peable.coupons.create({ id: 'LAUNCH20', percent_off: 20, duration: 'repeating', duration_in_months: 3 });
+await peable.promotionCodes.create({ coupon: 'LAUNCH20', code: 'HELLO', restrictions: { first_time_transaction: true } });
+```
+
+The rules a Stripe integrator should know:
+
+- **A price never changes what it charges.** Only `active`, `nickname`,
+  `metadata`, `lookup_key` and — while it is `unspecified` — `tax_behavior` can
+  be updated; any other field is a 400 naming it. To change an amount, create a
+  new price (move the `lookup_key` with `transfer_lookup_key: true`, which also
+  sends `price.updated` for the price that lost it) and archive the old one.
+- **Nothing is deleted that something still names.** A product with prices, or
+  named by a coupon's `applies_to`, answers 400 `product_has_prices` /
+  `product_in_use` — archive it with `active: false`. Prices and promotion
+  codes are never deleted, only archived, so there is no `price.deleted` or
+  `promotion_code.deleted`. A product's `default_price` must be one of its own
+  active prices, and it cannot be archived while it is the default.
+- **A coupon id names one coupon forever**: a deleted coupon's id is not reused
+  (400 `resource_already_exists`), so a code or a discount naming it cannot be
+  re-pointed at other terms. Only `name` and `metadata` change after creation.
+- **Promotion codes are case-insensitive** and unique among your ACTIVE codes;
+  omit `code` and Peable generates eight readable characters. `expires_at`
+  cannot be after the coupon's `redeem_by`; `customer` restricts it to one
+  `cus_…`.
+- **Amounts are base-unit strings**, bounded at a billion whole units of their
+  currency; `percent_off` takes at most two decimals. Discounts round half up,
+  once per line, and an `amount_off` never takes a line below zero
+  (`services/catalog/pricing.ts`).
+- **Metered prices are refused** until meters exist (`recurring[usage_type]`).
+
+Lists filter Stripe's way: products by `active` and `ids[]`; prices by
+`product`, `active`, `type`, `currency`, `lookup_keys[]` and
+`recurring[interval]`; promotion codes by `code`, `coupon`, `customer` and
+`active`. `expand[]` reaches `product.default_price`, `price.product` and
+`promotion_code.coupon` / `customer`.
+
 ### Payment Links (shareable, reusable price)
 
 ```ts

@@ -39,6 +39,7 @@ import { createMerchantsRouter } from './routes/merchants';
 import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
 import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
 import { createEventsRouter } from './routes/events';
+import { createCatalogRouter } from './routes/catalog';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createSocialRouter } from './routes/social';
@@ -293,6 +294,7 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
   app.use(createWebhookEndpointsRouter({ requireMerchant }));
   app.use(createEventsRouter({ requireMerchant }));
+  app.use(createCatalogRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));

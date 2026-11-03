@@ -561,3 +561,57 @@ body it answered. Decisions a reader would otherwise undo:
 - **`customer_provider_bindings` hold the provider customer** — the binding of
   ADR 0016 D2, never serialized, one per (customer, provider); its mode is the
   merchant's (ADR 0017).
+
+## Catalog (ADR 0018)
+
+`products`, `prices`, `coupons`, `coupon_products` and `promotion_codes`
+(`schema/catalog.ts`). Decisions a reader would otherwise undo:
+
+- **No provider binding.** A catalog row is Orbit's decision; a provider sees
+  only the amounts an invoice or a payment derives from it.
+- **Same-merchant references are composite.** `prices (product_id, merchant_id)
+  → products (id, merchant_id)`, `promotion_codes (coupon_id, merchant_id) →
+  coupons`, `(customer_id, merchant_id) → customers`, and both halves of
+  `coupon_products`, so no row can name another merchant's object.
+- **A product's default price is one of its OWN prices**: `(default_price_id,
+  id) → prices (id, product_id)` — a cycle with `prices.product_id`, which
+  drizzle-kit resolves by emitting both foreign keys after both tables.
+  `MATCH SIMPLE` switches it off while the product has none. The two table
+  callbacks carry an explicit `PgTableExtraConfigValue[]` return type, without
+  which `tsc` cannot type the cycle.
+- **A price's shape is CHECKs** (`prices_billing_scheme_shape_check`,
+  `prices_recurring_check`, `prices_transform_quantity_check`): per-unit ⇔ an
+  amount, tiered ⇔ tiers and a mode, recurring ⇔ interval + count + usage type
+  (≤ three years), a transform only on per-unit. The TIER amounts live in
+  `prices.tiers` (jsonb) and are validated by the one writer
+  (`services/catalog/params.ts`), not by a CHECK.
+- **Immutability is a chokepoint, not a trigger.** `insertPrice` is the only
+  statement that sets a price's amount or shape and `updatePrice` names only
+  `active`, `nickname`, `metadata`, `lookup_key`, `tax_behavior`; the service
+  refuses a set `tax_behavior` moving.
+- **The lookup key is decided by the unique index**
+  (`prices_merchant_lookup_key_key`, partial): an insert is `ON CONFLICT DO
+  NOTHING`, an update runs under a savepoint and maps the violation, so two
+  concurrent claims cannot both win and the loser's transaction survives to
+  answer 400.
+- **Coupon ids are per MERCHANT and forever.** `coupons_merchant_public_id_key`
+  covers deleted (tombstoned, `deleted_at`) coupons too, so a promotion code or
+  a future discount naming a coupon cannot be re-pointed at new terms.
+  `percent_off_bps` is basis points — the discount is integer math.
+- **`coupon_products` is `restrict` both ways.** A cascade that removed the last
+  row would turn a restricted coupon into one that applies to everything.
+- **A promotion code is unique among ACTIVE codes, case-insensitively**
+  (`promotion_codes_merchant_active_code_key` on `(merchant_id, lower(code))
+  WHERE active`), Stripe's rule; reactivation contends for it like a create.
+- **Locks are taken product → price** (`updateProduct`, `updatePrice`,
+  `createPrice`, `deleteProduct`), so archiving a default price and changing the
+  default cannot interleave, and a price cannot be created on a product being
+  deleted.
+- **Every scalar subquery in a catalog column map is raw, aliased and
+  table-qualified**, for the RETURNING reason above: an unqualified `"id"` in
+  the `applies_to` subquery bound to `products.id` and answered `null` for every
+  restricted coupon (measured).
+- **Migrations `0046`/`0047`.** New tables, plus `events_type_check` and
+  `webhook_endpoints_enabled_events_check` widened for the ten catalog event
+  types — re-added `NOT VALID` by hand in `0046` and validated in `0047`
+  (`post`), so the ACCESS EXCLUSIVE lock on `events` never scans.

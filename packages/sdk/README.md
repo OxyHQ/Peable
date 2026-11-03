@@ -151,6 +151,53 @@ amount_capturable_updated|succeeded|payment_failed|canceled`, `charge.refunded`,
 `charge.dispute.created|updated|closed`, `refund.created|updated|failed`,
 `customer.*`, `payment_method.*` and `setup_intent.*`.
 
+### Catalog: products, prices, coupons, promotion codes (0.14.0)
+
+What you sell and on what terms, as Orbit objects (ADR 0018): `products`
+(`prod_…`), `prices` (`price_…`), `coupons` and `promotionCodes` (`promo_…`),
+each with create / retrieve / update / auto-paginating `list` (and `del` on
+products and coupons). Every amount is a **base-unit string** — `'999'` is
+9.99 EUR, `'100000000'` is 1 FAIR — never a number.
+
+```ts
+const plus = await peable.products.create({
+  name: 'Plus',
+  tax_code: 'txcd_10103000',
+  default_price_data: { currency: 'EUR', unit_amount: '999', recurring: { interval: 'month' } },
+});
+const yearly = await peable.prices.create({
+  product: plus.id, currency: 'EUR', unit_amount: '9900',
+  recurring: { interval: 'year' }, lookup_key: 'plus_yearly', transfer_lookup_key: true,
+});
+const { data: [current] } = await peable.prices.list({ lookup_keys: ['plus_yearly'] });
+
+await peable.coupons.create({ id: 'LAUNCH20', percent_off: 20, duration: 'once' });
+await peable.promotionCodes.create({ coupon: 'LAUNCH20', code: 'LAUNCH', max_redemptions: 100 });
+```
+
+- **Prices are immutable** except `active`, `nickname`, `metadata`,
+  `lookup_key` and a `tax_behavior` that is still `unspecified`. To change an
+  amount, create a price and archive the old one (`active: false`). The product's
+  `default_price` cannot be archived until another default is set.
+- **`lookup_key`** is unique among your prices (per mode). `transfer_lookup_key:
+  true` moves it from the price holding it, so the key always names the current
+  price of a plan. `lookup_keys` (at most 10) filters a list by them.
+- Tiered prices: `billing_scheme: 'tiered'`, `tiers_mode: 'graduated' |
+  'volume'`, `tiers: [{ up_to, unit_amount?, flat_amount? }]`, the last `up_to`
+  `'inf'`. `transform_quantity` packs per-unit quantities. Metered usage
+  (`usage_type: 'metered'`) is refused until meters exist.
+- A product with prices (or named by a coupon's `applies_to`) cannot be
+  deleted — archive it. **Coupon ids are never reused**, even after `del`.
+  Coupons change only `name` and `metadata`.
+- **Promotion codes** are case-insensitive and unique among your ACTIVE codes;
+  restrict them with `customer`, `max_redemptions`, `expires_at` (never after the
+  coupon's `redeem_by`) and `restrictions` (`first_time_transaction`,
+  `minimum_amount` + `minimum_amount_currency`). Change `active` and `metadata`.
+- Events: `product.created|updated|deleted`, `price.created|updated`,
+  `coupon.created|updated|deleted`, `promotion_code.created|updated`. Prices
+  and promotion codes are archived, never deleted, so there is no
+  `price.deleted` or `promotion_code.deleted`.
+
 ### Own Oxy applications: shared workload transport
 
 ```ts

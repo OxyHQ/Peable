@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.14.0 — catalog: products, prices, coupons, promotion codes (ADR 0018)
+
+Additive.
+
+- New `peable.products` (`create` / `retrieve` / `update` / `list` / `del`):
+  `prod_…` with `default_price` (expandable), `tax_code` (Peable Tax),
+  `images`, `marketing_features`, `unit_label`, `statement_descriptor`, `url`;
+  `default_price_data` on create; `list({ active, ids })`. A product with prices
+  cannot be deleted — archive it.
+- New `peable.prices` (`create` / `retrieve` / `update` / `list`): `price_…`,
+  per-unit or tiered (`graduated` / `volume`), `transform_quantity`, one-time or
+  `recurring` (at most three years), `tax_behavior`, `lookup_key` with
+  `transfer_lookup_key`; `list({ product, active, type, currency, lookup_keys,
+  recurring: { interval, usage_type } })`. Immutable except `active`,
+  `nickname`, `metadata`, `lookup_key` and an `unspecified` `tax_behavior`.
+- New `peable.coupons` (`create` / `retrieve` / `update` / `list` / `del`):
+  `percent_off` (two decimals) or `amount_off` + `currency`, `duration`,
+  `max_redemptions`, `redeem_by`, `applies_to.products`, computed `valid`.
+- New `peable.promotionCodes` (`create` / `retrieve` / `update` / `list`):
+  `promo_…` redeeming a coupon, case-insensitive `code` unique among active
+  codes, `customer`, `max_redemptions`, `expires_at`, `restrictions`;
+  `list({ code, coupon, customer, active })`.
+- Ten new event types, accepted by `webhooks.constructEvent`:
+  `product.created`, `product.updated`, `product.deleted`, `price.created`,
+  `price.updated`, `coupon.created`, `coupon.updated`, `coupon.deleted`,
+  `promotion_code.created`, `promotion_code.updated`.
+- Requires `@peable.to/shared-types` 0.12.0.
+
 ## 0.13.0 — Orbit payments core: Stripe's PaymentIntent, events, Customers, PaymentMethods, SetupIntents (breaking, ADR 0019)
 
 - `PaymentIntent.status` is Stripe's vocabulary: `requires_payment_method`,

@@ -958,7 +958,10 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
       ).toMatchObject({ id: 'cs_test_a11fixture' });
     });
     it('verifies final invoice fiscal fields against the persisted checkout even after quote expiry', async () => {
-      const fixture = await fiscalFixture(1000);
+      // Instants are whole Unix seconds: a 1 s lifetime truncates to an
+      // `expires_at` that can already be the current second, and the SDK
+      // rightly refuses an expired quote. Two seconds always leaves one.
+      const fixture = await fiscalFixture(2000);
       await fixture.fiscalSdk.createCheckoutSession(
         { ...checkout, tax_quote: fixture.quote },
         { idempotencyKey: 'quoted:invoice' },
@@ -968,7 +971,7 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)(
         subscription: { provider_subscription_id: 'sub_one' },
       });
       const providerInvoice = configurePaidEvidence();
-      await new Promise((resolve) => setTimeout(resolve, 1100));
+      await new Promise((resolve) => setTimeout(resolve, 3100));
       time = new Date();
       fixture.product.invoiceIssuerId = 'current_unrelated_issuer';
       expect(

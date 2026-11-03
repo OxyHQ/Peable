@@ -77,7 +77,7 @@ test('every merchant POST runs the generic idempotency layer, or is exempt with 
         (handlers.includes(requireMerchant) || handlers.includes(optionalServiceAuth)),
     );
     // Vacuity floor: a walk that found nothing would pass every assertion.
-    expect(merchantPosts.length).toBeGreaterThanOrEqual(23);
+    expect(merchantPosts.length).toBeGreaterThanOrEqual(31);
     // The webhook endpoint writes are found by the walk (and so held to it):
     // a create that is retried must not mint a second endpoint and secret.
     expect(merchantPosts.map(({ path }) => path)).toEqual(
@@ -86,6 +86,16 @@ test('every merchant POST runs the generic idempotency layer, or is exempt with 
         '/v1/webhook_endpoints/:id',
         '/v1/webhook_endpoints/:id/roll_secret',
         '/v1/webhook_deliveries/:id/redeliver',
+        // The catalog (ADR 0018): a retried create must not mint a second
+        // product, price, coupon or promotion code — or a second event.
+        '/v1/products',
+        '/v1/products/:id',
+        '/v1/prices',
+        '/v1/prices/:id',
+        '/v1/coupons',
+        '/v1/coupons/:id',
+        '/v1/promotion_codes',
+        '/v1/promotion_codes/:id',
       ]),
     );
 

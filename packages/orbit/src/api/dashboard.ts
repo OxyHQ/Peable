@@ -1,5 +1,12 @@
 import type {
+  CreatePriceParams,
+  CreateProductParams,
   CreateTaxRegistrationParams,
+  DeletedProduct,
+  Price,
+  Product,
+  UpdatePriceParams,
+  UpdateProductParams,
   Merchant,
   PaymentIntent,
   PaymentIntentStatus,
@@ -55,6 +62,17 @@ export interface DeliveryListParams extends PageParams {
   event?: string;
   /** Only the deliveries to this endpoint (`we_…`). */
   webhook_endpoint?: string;
+}
+
+export interface ProductListParams extends PageParams {
+  /** `true` sellable, `false` archived; absent for both. */
+  active?: boolean;
+}
+
+export interface PriceListParams extends PageParams {
+  /** Only this product's prices (`prod_…`). */
+  product?: string;
+  active?: boolean;
 }
 
 export interface PaymentIntentListParams extends PageParams {
@@ -141,6 +159,37 @@ export function createDashboardApi(transport: OrbitTransport) {
         list<PaymentIntent>(dashboardPath(scope, '/payment_intents', { ...params })),
       retrieve: (scope: DashboardScope, intentId: string) =>
         get<PaymentIntent>(dashboardPath(scope, `/payment_intents/${id(intentId)}`)),
+    },
+
+    /** The catalog's products (ADR 0018). A product with prices is archived, not deleted. */
+    products: {
+      list: (scope: DashboardScope, params: ProductListParams = {}) =>
+        list<Product>(dashboardPath(scope, '/products', { ...params })),
+      retrieve: (scope: DashboardScope, productId: string) =>
+        get<Product>(dashboardPath(scope, `/products/${id(productId)}`)),
+      create: (scope: DashboardScope, body: CreateProductParams) =>
+        transport.request<Product>('POST', dashboardPath(scope, '/products'), { body }),
+      update: (scope: DashboardScope, productId: string, body: UpdateProductParams) =>
+        transport.request<Product>('POST', dashboardPath(scope, `/products/${id(productId)}`), {
+          body,
+        }),
+      delete: (scope: DashboardScope, productId: string) =>
+        transport.request<DeletedProduct>(
+          'DELETE',
+          dashboardPath(scope, `/products/${id(productId)}`),
+        ),
+    },
+
+    /** Prices are immutable but for `active`, `nickname`, `metadata`, `lookup_key`. */
+    prices: {
+      list: (scope: DashboardScope, params: PriceListParams = {}) =>
+        list<Price>(dashboardPath(scope, '/prices', { ...params })),
+      create: (scope: DashboardScope, body: CreatePriceParams) =>
+        transport.request<Price>('POST', dashboardPath(scope, '/prices'), { body }),
+      update: (scope: DashboardScope, priceId: string, body: UpdatePriceParams) =>
+        transport.request<Price>('POST', dashboardPath(scope, `/prices/${id(priceId)}`), {
+          body,
+        }),
     },
 
     /**

@@ -4,6 +4,10 @@ import { findIntentsForMerchantByPublicIds } from '../db/payments/paymentIntentR
 import { findChargesForMerchantByPublicIds } from '../db/payments/chargeRepository';
 import { findCustomersForMerchantByPublicIds } from '../db/customers/customerRepository';
 import { findPaymentMethodsForMerchantByPublicIds } from '../db/customers/paymentMethodRepository';
+import { findCouponsByPublicIds } from '../db/catalog/couponRepository';
+import { findPricesByPublicIds } from '../db/catalog/priceRepository';
+import { findProductsByPublicIds } from '../db/catalog/productRepository';
+import { toCouponDTO, toPriceDTO, toProductDTO } from './serializeCatalog';
 import { getDb } from '../db/postgres';
 import { sendError } from './http';
 import {
@@ -61,10 +65,22 @@ export type ExpandableType =
   | 'webhook_delivery'
   | 'webhook_endpoint'
   | 'event'
-  | 'tax.transaction';
+  | 'tax.transaction'
+  | 'product'
+  | 'price'
+  | 'coupon'
+  | 'promotion_code';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
-type TargetType = 'payment_intent' | 'connected_account' | 'charge' | 'customer' | 'payment_method';
+type TargetType =
+  | 'payment_intent'
+  | 'connected_account'
+  | 'charge'
+  | 'customer'
+  | 'payment_method'
+  | 'product'
+  | 'price'
+  | 'coupon';
 
 const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   // `latest_charge` is the one reference named for its ROLE, not its type —
@@ -90,6 +106,10 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   webhook_endpoint: {},
   event: {},
   'tax.transaction': {},
+  product: { default_price: 'price' },
+  price: { product: 'product' },
+  coupon: {},
+  promotion_code: { coupon: 'coupon', customer: 'customer' },
 };
 
 type Loader = (merchantId: string, ids: readonly string[]) => Promise<Map<string, object>>;
@@ -121,6 +141,29 @@ const LOADERS: Record<TargetType, Loader> = {
       (await findPaymentMethodsForMerchantByPublicIds(getDb(), merchantId, ids)).map((row) => [
         row.publicId,
         toPaymentMethodDTO(row),
+      ]),
+    ),
+  product: async (merchantId, ids) =>
+    new Map(
+      (await findProductsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toProductDTO(row),
+      ]),
+    ),
+  price: async (merchantId, ids) =>
+    new Map(
+      (await findPricesByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toPriceDTO(row),
+      ]),
+    ),
+  // Deleted coupons included: a promotion code keeps naming the coupon it
+  // redeemed, and the expansion shows it `valid: false` rather than failing.
+  coupon: async (merchantId, ids) =>
+    new Map(
+      (await findCouponsByPublicIds(getDb(), merchantId, ids)).map((row) => [
+        row.publicId,
+        toCouponDTO(row),
       ]),
     ),
   connected_account: async (merchantId, ids) =>

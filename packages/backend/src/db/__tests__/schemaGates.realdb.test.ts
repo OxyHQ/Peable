@@ -33,6 +33,11 @@ import {
   transfers,
   webhookDeliveries,
   webhookEndpoints,
+  products,
+  prices,
+  coupons,
+  couponProducts,
+  promotionCodes,
 } from '../schema';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -74,6 +79,11 @@ const ALL_TABLES = [
   transfers,
   webhookDeliveries,
   webhookEndpoints,
+  products,
+  prices,
+  coupons,
+  couponProducts,
+  promotionCodes,
 ] as const;
 
 let suite: SuiteDatabase | undefined;
@@ -206,6 +216,22 @@ describe('id-column classification', () => {
         {
           column: 'webhook_endpoints.public_id',
           reason: "this row's own we_… identifier, not a reference",
+        },
+        {
+          column: 'products.public_id',
+          reason: "this row's own prod_… identifier, not a reference",
+        },
+        {
+          column: 'prices.public_id',
+          reason: "this row's own price_… identifier, not a reference",
+        },
+        {
+          column: 'coupons.public_id',
+          reason: "this row's own coupon id (the merchant's, or coupon_…), not a reference",
+        },
+        {
+          column: 'promotion_codes.public_id',
+          reason: "this row's own promo_… identifier, not a reference",
         },
         // `provider_events` holds a PROVIDER's numbering, not this database's.
         // None of these can carry a foreign key: the rows they name live at
