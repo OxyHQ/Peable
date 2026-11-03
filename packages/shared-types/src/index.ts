@@ -496,7 +496,11 @@ export {
   type CreditNoteListParams,
   type CustomerBalanceTransactionType,
   type CustomerBalanceTransaction,
+  type CustomerBalanceTransactionListParams,
   type CreateCustomerBalanceTransactionParams,
+  type InvoiceActionParams,
+  type InvoiceItemPriceDataParams,
+  type PreviewCreditNoteParams,
   type PublicInvoice,
   type PublicInvoicePayment,
 } from './invoice';
@@ -536,6 +540,7 @@ export {
   type ActiveEntitlementSummary,
   type ActiveEntitlementListParams,
   type PortalCustomerUpdate,
+  type BillingPortalBusinessProfile,
   type BillingPortalFeatures,
   type BillingPortalConfiguration,
   type CreateBillingPortalConfigurationParams,
@@ -543,6 +548,8 @@ export {
   type BillingPortalConfigurationListParams,
   type BillingPortalSession,
   type CreateBillingPortalSessionParams,
+  type PortalPaymentMethodUpdate,
+  type PortalPaymentMethodUpdateResult,
   type PublicPortalSession,
   type PublicPortalSubscription,
 } from './billingEngine';

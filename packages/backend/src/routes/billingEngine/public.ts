@@ -9,10 +9,20 @@
  *   actions.
  *
  * Mounted behind the public rate limiter; nothing here reveals anything but
- * the one invoice or the one customer the token names.
+ * the one invoice or the one customer the token names. Every request schema
+ * is the contract's (`@peable.to/contracts` `publicBillingRoutes`).
  */
 import { Router, type Request, type RequestHandler, type Response } from 'express';
-import { z } from 'zod';
+import type { z } from 'zod';
+import {
+  completePortalPaymentMethodUpdateParams,
+  payPublicInvoiceParams,
+  portalChangePlanParams,
+  portalCustomerParams,
+  portalSubscriptionParams,
+  startPortalPaymentMethodUpdateParams,
+  toAddress,
+} from '@peable.to/contracts';
 import type { PublicInvoice } from '@peable.to/shared-types';
 import {
   findInvoiceByHostedToken,
@@ -21,7 +31,6 @@ import {
 } from '../../db/billingEngine/invoiceRepository';
 import { findMerchantById } from '../../db/merchants/merchantRepository';
 import { getDb } from '../../db/postgres';
-import { addressSchema, emailSchema, toAddress } from '../../lib/addressSchema';
 import { sendError, sendValidationError, wrap } from '../../lib/http';
 import { invoicePdfUrl } from '../../lib/serializeBilling';
 import { toUnix, toUnixOrNull } from '../../lib/time';
@@ -38,7 +47,6 @@ import {
   portalView,
 } from '../../services/billingEngine/portal';
 import { sendCatalogError } from '../catalogRoutes';
-import { idString, quantity, shortText } from './helpers';
 
 async function invoiceByToken(
   res: Response,
@@ -135,7 +143,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     limit,
     guarded(async (req, res) => {
       const invoice = await invoiceByToken(res, req.params.token);
-      if (!invoice || !body(req, res, z.object({}).strict())) return;
+      if (!invoice || !body(req, res, payPublicInvoiceParams)) return;
       const intent = await payerIntentForInvoice(invoice);
       res.status(200).json({
         object: 'public_invoice_payment',
@@ -170,12 +178,11 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     }),
   );
 
-  const subscriptionBody = z.object({ subscription: idString }).strict();
   router.post(
     '/v1/billing_portal/public/:token/cancel',
     limit,
     guarded(async (req, res) => {
-      const input = body(req, res, subscriptionBody);
+      const input = body(req, res, portalSubscriptionParams);
       if (!input) return;
       await portalCancel(token(req), input.subscription);
       res.status(200).json(await portalView(token(req)));
@@ -185,7 +192,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     '/v1/billing_portal/public/:token/renew',
     limit,
     guarded(async (req, res) => {
-      const input = body(req, res, subscriptionBody);
+      const input = body(req, res, portalSubscriptionParams);
       if (!input) return;
       await portalRenew(token(req), input.subscription);
       res.status(200).json(await portalView(token(req)));
@@ -195,17 +202,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     '/v1/billing_portal/public/:token/change_plan',
     limit,
     guarded(async (req, res) => {
-      const input = body(
-        req,
-        res,
-        z
-          .object({
-            subscription: idString,
-            price: idString.optional(),
-            quantity: quantity.optional(),
-          })
-          .strict(),
-      );
+      const input = body(req, res, portalChangePlanParams);
       if (!input) return;
       await portalChangePlan(token(req), {
         subscription: input.subscription,
@@ -219,18 +216,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     '/v1/billing_portal/public/:token/customer',
     limit,
     guarded(async (req, res) => {
-      const input = body(
-        req,
-        res,
-        z
-          .object({
-            email: emailSchema.optional(),
-            name: shortText(500).optional(),
-            phone: shortText(40).optional(),
-            address: addressSchema.optional(),
-          })
-          .strict(),
-      );
+      const input = body(req, res, portalCustomerParams);
       if (!input) return;
       await portalUpdateCustomer(token(req), {
         ...(input.email ? { email: input.email } : {}),
@@ -245,7 +231,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     '/v1/billing_portal/public/:token/payment_method_update',
     limit,
     guarded(async (req, res) => {
-      if (!body(req, res, z.object({}).strict())) return;
+      if (!body(req, res, startPortalPaymentMethodUpdateParams)) return;
       res.status(200).json(await portalStartPaymentMethodUpdate(token(req)));
     }),
   );
@@ -253,7 +239,7 @@ export function createPublicBillingRouter(deps: { publicRateLimit: RequestHandle
     '/v1/billing_portal/public/:token/payment_method_update/complete',
     limit,
     guarded(async (req, res) => {
-      const input = body(req, res, z.object({ setup_intent: idString }).strict());
+      const input = body(req, res, completePortalPaymentMethodUpdateParams);
       if (!input) return;
       const status = await portalFinishPaymentMethodUpdate(token(req), input.setup_intent);
       res.status(200).json({ status, session: await portalView(token(req)) });

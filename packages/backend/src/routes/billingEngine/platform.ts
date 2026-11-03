@@ -1,6 +1,6 @@
 /**
- * Test clocks, billing settings, meters, entitlements and the customer
- * portal's merchant side — ADR 0018 §3, §5–9.
+ * Test clocks, billing settings, meters and entitlements — ADR 0018 §3, §5–8.
+ * The customer portal's merchant side is `portal.ts`.
  */
 import type { Request, Response } from 'express';
 import { z } from 'zod';
@@ -10,7 +10,6 @@ import {
   DUNNING_INVOICE_ACTIONS,
   METER_AGGREGATIONS,
   METER_STATUSES,
-  PORTAL_CUSTOMER_UPDATES,
 } from '@peable.to/shared-types';
 import { findLiveCustomerForMerchant } from '../../db/customers/customerRepository';
 import { findProductForMerchant } from '../../db/catalog/productRepository';
@@ -23,10 +22,6 @@ import {
   listProductFeatures,
 } from '../../db/billingEngine/entitlementRepository';
 import { findMeterForMerchant, listMeters } from '../../db/billingEngine/meterRepository';
-import {
-  findPortalConfigurationForMerchant,
-  listPortalConfigurations,
-} from '../../db/billingEngine/portalRepository';
 import { findLiveTestClockForMerchant } from '../../db/billingEngine/testClockRepository';
 import { getDb } from '../../db/postgres';
 import { answerList, parseQuery, surfaceListQuery, surfaceRetrieveQuery } from '../../lib/list';
@@ -43,12 +38,6 @@ import {
   updateFeatureFields,
 } from '../../services/billingEngine/entitlements';
 import { BillingEngineError, missing } from '../../services/billingEngine/errors';
-import {
-  changePortalConfiguration,
-  createPortalConfiguration,
-  createPortalSession,
-  toPortalConfigurationDTO,
-} from '../../services/billingEngine/portal';
 import {
   changeBillingSettings,
   changeMeter,
@@ -68,16 +57,7 @@ import {
   retrieveTestClock,
 } from '../../services/billingEngine/testClocks';
 import type { CatalogRoute } from '../catalogRoutes';
-import {
-  answerObject,
-  cleared,
-  idParam,
-  idString,
-  parseBody,
-  queryUnixSeconds,
-  shortText,
-  unixSeconds,
-} from './helpers';
+import { idParam, idString, parseBody, queryUnixSeconds, shortText, unixSeconds } from './helpers';
 
 const retrieveQuery = surfaceRetrieveQuery();
 
@@ -547,170 +527,9 @@ const entitlementRoutes: CatalogRoute[] = [
   },
 ];
 
-// ---- Portal ----------------------------------------------------------------------------
-
-const url = z
-  .string()
-  .regex(/^https?:\/\//)
-  .max(2048);
-const businessProfile = z
-  .object({
-    headline: shortText(60).optional(),
-    privacy_policy_url: url.optional(),
-    terms_of_service_url: url.optional(),
-  })
-  .strict();
-const featuresSchema = z
-  .object({
-    customer_update: z
-      .object({
-        enabled: z.boolean().optional(),
-        allowed_updates: z.array(z.enum(PORTAL_CUSTOMER_UPDATES)).max(4).optional(),
-      })
-      .strict()
-      .optional(),
-    invoice_history: z.object({ enabled: z.boolean() }).strict().optional(),
-    payment_method_update: z.object({ enabled: z.boolean() }).strict().optional(),
-    subscription_cancel: z
-      .object({
-        enabled: z.boolean().optional(),
-        mode: z.enum(['at_period_end', 'immediately']).optional(),
-        proration_behavior: z.enum(['create_prorations', 'none']).optional(),
-      })
-      .strict()
-      .optional(),
-    subscription_update: z
-      .object({
-        enabled: z.boolean().optional(),
-        default_allowed_updates: z
-          .array(z.enum(['price', 'quantity']))
-          .max(2)
-          .optional(),
-        proration_behavior: z.enum(['create_prorations', 'none', 'always_invoice']).optional(),
-        products: z
-          .array(z.object({ product: idString, prices: z.array(idString).min(1).max(10) }).strict())
-          .max(10)
-          .optional(),
-      })
-      .strict()
-      .optional(),
-  })
-  .strict();
-const createConfigurationBody = z
-  .object({
-    business_profile: businessProfile.optional(),
-    default_return_url: url.optional(),
-    features: featuresSchema,
-    metadata: metadataCreateSchema.optional(),
-  })
-  .strict();
-const updateConfigurationBody = z
-  .object({
-    active: z.boolean().optional(),
-    business_profile: businessProfile.optional(),
-    default_return_url: z.union([url, z.literal('')]).optional(),
-    features: featuresSchema.optional(),
-    metadata: metadataUpdateSchema.optional(),
-  })
-  .strict();
-const listConfigurationsQuery = surfaceListQuery({
-  active: booleanQuery.optional(),
-  is_default: booleanQuery.optional(),
-});
-const sessionBody = z
-  .object({ customer: idString, configuration: idString.optional(), return_url: url.optional() })
-  .strict();
-
-const portalRoutes: CatalogRoute[] = [
-  {
-    method: 'post',
-    path: '/billing_portal/configurations',
-    core: async (req, res, merchant) => {
-      const body = parseBody(req, res, createConfigurationBody);
-      if (!body) return;
-      const row = await createPortalConfiguration(merchant, {
-        ...(body.business_profile ? { businessProfile: body.business_profile } : {}),
-        ...(body.default_return_url ? { defaultReturnUrl: body.default_return_url } : {}),
-        features: body.features,
-        metadata: body.metadata ?? {},
-      });
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'get',
-    path: '/billing_portal/configurations',
-    core: async (req, res, merchant, surface) => {
-      const query = parseQuery(req, res, listConfigurationsQuery[surface]);
-      if (!query) return;
-      const db = getDb();
-      await answerList(req, res, {
-        query,
-        type: 'billing_portal.configuration',
-        merchantId: merchant.id,
-        cursor: async (publicId) =>
-          (await findPortalConfigurationForMerchant(db, publicId, merchant.id))?.id ?? null,
-        fetch: (page) =>
-          listPortalConfigurations(db, {
-            merchantId: merchant.id,
-            page,
-            active: query.active,
-            isDefault: query.is_default,
-          }),
-        serialize: toPortalConfigurationDTO,
-      });
-    },
-  },
-  {
-    method: 'get',
-    path: '/billing_portal/configurations/:id',
-    core: async (req, res, merchant, surface) => {
-      const id = idParam(req, res);
-      if (!id || !parseQuery(req, res, retrieveQuery[surface])) return;
-      const row = await findPortalConfigurationForMerchant(getDb(), id, merchant.id);
-      if (!row) throw missing('portal configuration');
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'post',
-    path: '/billing_portal/configurations/:id',
-    core: async (req, res, merchant) => {
-      const id = idParam(req, res);
-      const body = id ? parseBody(req, res, updateConfigurationBody) : null;
-      if (!id || !body) return;
-      const row = await changePortalConfiguration(merchant, id, {
-        ...(body.active !== undefined ? { active: body.active } : {}),
-        ...(body.business_profile ? { businessProfile: body.business_profile } : {}),
-        ...(body.default_return_url !== undefined
-          ? { defaultReturnUrl: cleared(body.default_return_url) ?? null }
-          : {}),
-        ...(body.features ? { features: body.features } : {}),
-        ...(body.metadata ? { metadata: body.metadata } : {}),
-      });
-      res.status(200).json(toPortalConfigurationDTO(row));
-    },
-  },
-  {
-    method: 'post',
-    path: '/billing_portal/sessions',
-    core: async (req, res, merchant) => {
-      const body = parseBody(req, res, sessionBody);
-      if (!body) return;
-      const session = await createPortalSession(merchant, {
-        customer: body.customer,
-        ...(body.configuration ? { configuration: body.configuration } : {}),
-        ...(body.return_url ? { returnUrl: body.return_url } : {}),
-      });
-      await answerObject(res, merchant, 'billing_portal.session', session, undefined);
-    },
-  },
-];
-
 export const PLATFORM_ROUTES: readonly CatalogRoute[] = [
   ...clockRoutes,
   ...settingsRoutes,
   ...meterRoutes,
   ...entitlementRoutes,
-  ...portalRoutes,
 ];
