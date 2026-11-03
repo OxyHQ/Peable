@@ -141,3 +141,16 @@ and processed state separately. Configure supported test event delivery to the
 pinned version; never rewrite stored events or relax the observation identity
 guard to make a local test pass. Events arriving before verified object binding
 remain pending for a supported explicit observation retry after binding.
+
+The local runner also mounts `POST /__local/checkout-test` for the normal local
+Mention Subscribe flow. This route is absent from ordinary gateway startup. It
+accepts only an empty JSON object, exact loopback peer/Host and the two local
+8110 origins, `X-Peable-Local-Test: 1`, and a stable 16–80 character
+`Idempotency-Key`. The runner limits it to ten requests per minute. It verifies
+the approved test account, key mode, isolated database and local card-only
+merchant, then uses the same production `createIntent` path as the seed CLI.
+The amount is fixed at 599 USD minor units: this is a one-time provider-fields
+test, not a recurring subscription or an access grant. The response contains
+only `{ intentId, clientSecret }`, is `no-store`, and belongs in component memory;
+never put it in browser storage, query strings or application logs. Use the
+separate hosted subscription harness above to test recurring billing.

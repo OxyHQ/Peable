@@ -333,7 +333,7 @@ export async function start(
     listenHost?: string;
     billingConfiguration?: string;
   } = {},
-): Promise<void> {
+): Promise<Gateway> {
   const database = await connectPostgres();
   const taxProvider = configuredTaxProvider();
   const taxService = createConfiguredTaxService(database, taxProvider);
@@ -404,6 +404,7 @@ export async function start(
     startReferenceReconciliation({ dryRun: config.oxyFiles.reconciliationMode === 'dry-run' });
   }
   gateway.httpServer.listen(config.port, options.listenHost);
+  return gateway;
 }
 
 if (import.meta.main) {
