@@ -15,6 +15,7 @@ async function harness(assertEnvironment = () => {}) {
   app.use(
     createLocalStripeTestCheckoutRouter({
       assertEnvironment,
+      prepare: async () => ({ environment: 'test', publishableKey: 'pk_test_public' }),
       read: async (id, capability) => {
         if (id !== 'pi_local' || capability !== 'payer-capability') throw new Error('not found');
         return { ready: false, invoiceStatus: 'open' };
@@ -30,6 +31,15 @@ async function harness(assertEnvironment = () => {}) {
   const base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   return {
     keys,
+    prepare: (headers: Record<string, string> = {}) =>
+      fetch(`${base}/__local/checkout-test/config`, {
+        headers: {
+          Host: '127.0.0.1:4310',
+          Origin: 'http://localhost:8110',
+          'X-Peable-Local-Test': '1',
+          ...headers,
+        },
+      }),
     read: (id = 'pi_local', capability = 'payer-capability', origin = 'http://localhost:8110') =>
       fetch(`${base}/__local/checkout-test/${id}/subscription`, {
         headers: { Host: '127.0.0.1:4310', Origin: origin, 'X-Peable-Client-Secret': capability },
@@ -114,4 +124,28 @@ describe('loopback test checkout entry', () => {
     expect(limited.headers.get('retry-after')).toBe('60');
     expect(h.keys).toHaveLength(10);
   });
+});
+
+test('readonly preparation returns public fields without creating a payment and rejects foreign scope', async () => {
+  const h = await harness();
+  const response = await h.prepare();
+  expect(response.status).toBe(200);
+  expect(response.headers.get('cache-control')).toBe('no-store');
+  expect(await response.json()).toEqual({ environment: 'test', publishableKey: 'pk_test_public' });
+  const invalidHeaders: Record<string, string>[] = [
+    { Origin: 'https://mention.earth' },
+    { Host: 'attacker.example' },
+    { 'X-Peable-Local-Test': '' },
+  ];
+  for (const headers of invalidHeaders) expect((await h.prepare(headers)).status).toBe(403);
+  expect(h.keys).toHaveLength(0);
+});
+test('readonly preparation rechecks environment even without any create request', async () => {
+  let valid = true;
+  const h = await harness(() => {
+    if (!valid) throw new Error('wrong mode');
+  });
+  valid = false;
+  expect((await h.prepare()).status).toBe(503);
+  expect(h.keys).toHaveLength(0);
 });

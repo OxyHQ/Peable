@@ -11,6 +11,7 @@ export function createLocalStripeTestCheckoutRouter(options: {
     operationKey: string,
     interval: 'month' | 'year',
   ) => Promise<{ intentId: string; clientSecret: string }>;
+  prepare?: () => Promise<unknown>;
   read?: (intentId: string, capability: string) => Promise<unknown>;
 }) {
   const assertEnvironment =
@@ -18,6 +19,26 @@ export function createLocalStripeTestCheckoutRouter(options: {
   assertEnvironment();
   const router = Router();
   const attempts: number[] = [];
+  router.get('/__local/checkout-test/config', async (req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    if (
+      !PEERS.has(req.socket.remoteAddress ?? '') ||
+      req.get('host') !== '127.0.0.1:4310' ||
+      !ORIGINS.has(req.get('origin') ?? '') ||
+      req.get('x-peable-local-test') !== '1' ||
+      !options.prepare
+    ) {
+      res.status(403).json({ error: 'local_test_request_required' });
+      return;
+    }
+    try {
+      assertEnvironment();
+      res.json(await options.prepare());
+    } catch {
+      res.status(503).json({ error: 'local_test_configuration_unavailable' });
+    }
+  });
+
   router.post('/__local/checkout-test', async (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     if (
