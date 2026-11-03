@@ -46,6 +46,12 @@ function graph(entry: string) {
         const first = node.arguments[0];
         if (first && ts.isStringLiteral(first)) follow(first.text);
       }
+      if (
+        ts.isImportTypeNode(node) &&
+        ts.isLiteralTypeNode(node.argument) &&
+        ts.isStringLiteral(node.argument.literal)
+      )
+        follow(node.argument.literal.text);
       ts.forEachChild(node, walk);
     }
     walk(source);
