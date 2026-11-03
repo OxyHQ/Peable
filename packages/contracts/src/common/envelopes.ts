@@ -106,3 +106,14 @@ contractRegistry.add(errorEnvelopeSchema, {
 
 export type ApiError = z.output<typeof apiErrorSchema>;
 export type ErrorEnvelope = z.output<typeof errorEnvelopeSchema>;
+
+/** One page of a list of `T` — the type of every `listOf(…)` answer. */
+export type List<T> = Omit<z.output<ReturnType<typeof listOf<z.ZodNever>>>, 'data'> & {
+  data: T[];
+};
+
+/** One page of a search over `T` — the type of every `searchResultOf(…)` answer. */
+export type SearchResult<T> = Omit<
+  z.output<ReturnType<typeof searchResultOf<z.ZodNever>>>,
+  'data'
+> & { data: T[] };

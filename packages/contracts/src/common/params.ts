@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, SEARCH_QUERY_MAX_LENGTH } from '../vocabulary/lists';
 import { contractRegistry } from './objects';
 
 /**
@@ -120,9 +121,6 @@ export const cursorParam = z.string().min(1).max(255);
 /** An object id in a body or query. */
 export const idParam = z.string().min(1).max(255);
 
-export const LIST_LIMIT_DEFAULT = 10;
-export const LIST_LIMIT_MAX = 100;
-
 /** The list limit: 1–100, default 10. */
 export const limitParam = documentedAs(
   z
@@ -187,12 +185,6 @@ export const expandOnlyQuery = retrieveQuery({});
 /** The query of a route that takes no parameters at all. */
 export const emptyQuery = z.object({}).strict();
 
-/** Search bounds — the gateway's, restated so a client can check before it asks. */
-export const SEARCH_QUERY_MAX_LENGTH = 1000;
-export const SEARCH_QUERY_MAX_CLAUSES = 10;
-/** A `~` substring needs at least this many characters (Stripe's rule). */
-export const SEARCH_SUBSTRING_MIN_LENGTH = 3;
-
 /** The parameters every `GET /v1/<objects>/search` accepts. */
 export const searchShape = {
   query: z
@@ -221,6 +213,21 @@ export const searchQuery = z.object(searchShape).strict();
 // ---------------------------------------------------------------------------
 // Metadata (ADR 0014 D1): Stripe's limits.
 // ---------------------------------------------------------------------------
+
+/** The parameters every list accepts, as a caller sends them. */
+export type ListParams = z.input<ReturnType<typeof listQuery<Record<never, z.ZodType>>>>;
+
+/** A Unix-seconds range as a caller sends it: bounds, each optional. */
+export type RangeQuery = Extract<z.input<typeof rangeParam>, object>;
+
+/** The parameter a single read or write accepts to expand its answer. */
+export interface ExpandParams {
+  /** Dot paths, at most four levels deep (`['payment_intent.connected_account']`). */
+  expand?: string[];
+}
+
+/** The parameters every search accepts, as a caller sends them. */
+export type SearchParams = z.input<typeof searchQuery>;
 
 export const METADATA_MAX_KEYS = 50;
 export const METADATA_KEY_MAX = 40;
