@@ -48,7 +48,6 @@ import {
   listCustomerSubscriptions,
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
-import { priceDataSchema } from '../../services/catalog/params';
 import { answerList, parseQuery, type QuerySurface, resolveListReference } from '../../lib/list';
 import { sendValidationError } from '../../lib/http';
 import {
@@ -344,36 +343,15 @@ async function answerItem(
   await answerObject(res, merchant, 'invoiceitem', dto, expand);
 }
 
-/**
- * The stored shape of an inline `price_data`: the contract checked its fields,
- * the catalog applies its pricing rules (the per-currency bound, the interval
- * limit) — the same rules every other `price_data` meets. A broken rule is the
- * same 400, under `price_data`.
- */
-function inlinePriceShape(
-  res: Response,
-  priceData: z.output<typeof createInvoiceItemParams>['price_data'],
-): { ok: true; value: z.output<typeof priceDataSchema> | undefined } | { ok: false } {
-  if (priceData === undefined) return { ok: true, value: undefined };
-  const parsed = priceDataSchema.safeParse(priceData);
-  if (parsed.success) return { ok: true, value: parsed.data };
-  sendValidationError(res, {
-    issues: parsed.error.issues.map((issue) => ({ ...issue, path: ['price_data', ...issue.path] })),
-  });
-  return { ok: false };
-}
-
 async function createItem(req: Request, res: Response, merchant: MerchantRow) {
   const body = parseBody(req, res, createInvoiceItemParams);
   if (!body) return;
-  const priceData = inlinePriceShape(res, body.price_data);
-  if (!priceData.ok) return;
   const row = await createInvoiceItem(merchant, {
     customer: body.customer,
     ...(body.invoice ? { invoice: body.invoice } : {}),
     ...(body.subscription ? { subscription: body.subscription } : {}),
     ...(body.price ? { price: body.price } : {}),
-    ...(priceData.value ? { priceData: priceData.value } : {}),
+    ...(body.price_data ? { priceData: body.price_data } : {}),
     ...(body.quantity !== undefined ? { quantity: body.quantity } : {}),
     ...(body.amount !== undefined ? { amount: body.amount } : {}),
     ...(body.currency ? { currency: body.currency } : {}),

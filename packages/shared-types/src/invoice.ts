@@ -41,7 +41,6 @@ export type {
   InvoiceActionParams,
   InvoiceItem,
   InvoiceItemListParams,
-  InvoiceItemPriceDataParams,
   InvoiceLineItem,
   InvoiceListParams,
   InvoiceTaxAmount,

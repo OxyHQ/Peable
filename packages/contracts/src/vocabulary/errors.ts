@@ -183,6 +183,8 @@ export const ERROR_CODE_DESCRIPTIONS = {
   already_registered: 'The seller already registered a FairCoin key, and it cannot be changed.',
   key_in_use: 'The key already receives payments for another account.',
   no_faircoin_half: 'The connected account has no FairCoin half to register a key for.',
+  scope_missing:
+    'The credential does not carry the Oxy scope this route requires; `message` names it.',
 } as const satisfies Record<string, string>;
 
 export type ErrorCode = keyof typeof ERROR_CODE_DESCRIPTIONS;

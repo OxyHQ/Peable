@@ -3,8 +3,12 @@
  * Deleting is only for a product nothing names; archive with `active: false`.
  */
 import type { Request, Response } from 'express';
-import { z } from 'zod';
-import { CATALOG_LIMITS, type CreateProductParams } from '@peable.to/shared-types';
+import {
+  createProductParams,
+  expandOnlyQuery,
+  listProductsQuery,
+  updateProductParams,
+} from '@peable.to/contracts';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
@@ -18,66 +22,15 @@ import {
   notFound,
   updateProduct,
 } from '../services/catalog/catalogService';
-import {
-  booleanQuery,
-  clearable,
-  defaultPriceDataSchema,
-  idListQuery,
-  productFields,
-} from '../services/catalog/params';
 import { expandObjects, parseExpand } from '../lib/expand';
 import { sendError, sendValidationError } from '../lib/http';
-import {
-  answerList,
-  expandParam,
-  parseQuery,
-  type QuerySurface,
-  surfaceListQuery,
-  surfaceRetrieveQuery,
-} from '../lib/list';
-import { metadataCreateSchema, metadataUpdateSchema } from '../lib/metadata';
+import { answerList, parseQuery, type QuerySurface, surfaceQuery } from '../lib/list';
 import { toProductDTO } from '../lib/serializeCatalog';
 import type { CatalogRoute } from './catalogRoutes';
 
-const createBodySchema = z
-  .object({
-    name: productFields.name,
-    active: z.boolean().optional(),
-    description: productFields.description.optional(),
-    images: productFields.images.optional(),
-    metadata: metadataCreateSchema.optional(),
-    tax_code: productFields.tax_code.optional(),
-    default_price_data: defaultPriceDataSchema.optional(),
-    unit_label: productFields.unit_label.optional(),
-    url: productFields.url.optional(),
-    statement_descriptor: productFields.statement_descriptor.optional(),
-    marketing_features: productFields.marketing_features.optional(),
-    expand: expandParam.optional(),
-  } satisfies Record<keyof CreateProductParams | 'expand', z.ZodTypeAny>)
-  .strict();
-
-const updateBodySchema = z
-  .object({
-    name: productFields.name.optional(),
-    active: z.boolean().optional(),
-    description: clearable(productFields.description).optional(),
-    images: productFields.images.optional(),
-    metadata: metadataUpdateSchema.optional(),
-    tax_code: clearable(productFields.tax_code).optional(),
-    default_price: clearable(z.string().min(1).max(255)).optional(),
-    unit_label: clearable(productFields.unit_label).optional(),
-    url: clearable(productFields.url).optional(),
-    statement_descriptor: clearable(productFields.statement_descriptor).optional(),
-    marketing_features: productFields.marketing_features.optional(),
-    expand: expandParam.optional(),
-  })
-  .strict();
-
-const listProductsQuery = surfaceListQuery({
-  active: booleanQuery.optional(),
-  ids: idListQuery(CATALOG_LIMITS.idsFilterMax).optional(),
-});
-const retrieveProductQuery = surfaceRetrieveQuery();
+// The request schemas are the contract's (`@peable.to/contracts` `productRoutes`).
+const listQuery = surfaceQuery(listProductsQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 function idParam(req: Request, res: Response): string | null {
   const { id } = req.params;
@@ -103,7 +56,7 @@ async function answerProduct(
 }
 
 async function create(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
-  const parsed = createBodySchema.safeParse(req.body ?? {});
+  const parsed = createProductParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -134,7 +87,7 @@ async function retrieve(
 ): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const query = parseQuery(req, res, retrieveProductQuery[surface]);
+  const query = parseQuery(req, res, retrieveQuery[surface]);
   if (!query) return;
   if (!parseExpand(res, 'product', query.expand, { list: false })) return;
   const product = await findProductForMerchant(getDb(), id, merchant.id);
@@ -145,7 +98,7 @@ async function retrieve(
 async function update(req: Request, res: Response, merchant: MerchantRow): Promise<void> {
   const id = idParam(req, res);
   if (!id) return;
-  const parsed = updateBodySchema.safeParse(req.body ?? {});
+  const parsed = updateProductParams.safeParse(req.body ?? {});
   if (!parsed.success) {
     sendValidationError(res, parsed.error);
     return;
@@ -174,7 +127,7 @@ async function list(
   merchant: MerchantRow,
   surface: QuerySurface,
 ): Promise<void> {
-  const query = parseQuery(req, res, listProductsQuery[surface]);
+  const query = parseQuery(req, res, listQuery[surface]);
   if (!query) return;
   const db = getDb();
   await answerList(req, res, {

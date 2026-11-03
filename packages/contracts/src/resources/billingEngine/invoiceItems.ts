@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { priceDataParams } from '../catalog/prices';
 import { deletedOf, listOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
 import {
@@ -79,30 +80,6 @@ declare module '../../common/objects' {
 }
 
 /**
- * Inline `price_data` (Stripe's): a one-off per-unit price of an existing
- * product, for an item that names no stored price. Never stored as a
- * `price_…` by itself. The shape is checked here; the catalog's rules (the
- * per-currency bound of `unit_amount`, the three-year interval) are applied
- * by the gateway when it prices the item.
- */
-export const invoiceItemPriceDataParams = z
-  .object({
-    product: z.string().min(1).max(255),
-    currency: currencyParam,
-    unit_amount: amountParam,
-    recurring: z
-      .object({
-        interval: z.enum(['day', 'week', 'month', 'year']),
-        interval_count: z.number().int().min(1).max(2_147_483_647).optional(),
-      })
-      .strict()
-      .optional(),
-    tax_behavior: z.enum(['inclusive', 'exclusive', 'unspecified']).optional(),
-  })
-  .strict();
-export type InvoiceItemPriceDataParams = z.input<typeof invoiceItemPriceDataParams>;
-
-/**
  * A price (`price` or `price_data`) times `quantity`, or a fixed `amount` +
  * `currency`. Never negative — a credit is a credit note or a customer balance
  * transaction.
@@ -113,7 +90,11 @@ export const createInvoiceItemParams = z
     invoice: idParam.optional().describe('A draft to put it on; absent, it is pending.'),
     subscription: idParam.optional(),
     price: idParam.optional(),
-    price_data: invoiceItemPriceDataParams.optional(),
+    price_data: priceDataParams
+      .optional()
+      .describe(
+        'A one-off per-unit price of an existing product, for an item that names no stored price.',
+      ),
     quantity: quantityParam.optional(),
     amount: amountParam.optional(),
     currency: currencyParam.optional(),

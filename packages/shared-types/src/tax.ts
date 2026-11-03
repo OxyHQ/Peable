@@ -61,22 +61,8 @@ export type {
   UpdateTaxSettingsParams,
 } from '@peable.to/contracts';
 
-/**
- * One tax line on a signed final invoice (`include: ['tax_lines']`). The
- * billing surface's (`/v1/billing/subscriptions/:id/paid_invoices/:invoiceId`),
- * not a Peable Tax route: its contract is the billing group's.
- */
-export interface BillingInvoiceTaxLine {
-  calculation_id: string;
-  country: string;
-  state: string | null;
-  tax_type: string | null;
-  rate_percentage: string | null;
-  taxable_minor_units: number;
-  tax_minor_units: number;
-  inclusive: boolean;
-  taxability_reason: string;
-}
+/** One tax line on a signed final invoice — the billing surface's contract. */
+export type { BillingInvoiceTaxLine } from '@peable.to/contracts';
 
 // Business compliance (ADR 0020) travels with the `/tax` subpath, so a browser
 // bundle reaches it without the root barrel's node:crypto signer.

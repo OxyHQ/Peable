@@ -24,7 +24,7 @@ import type { NewLineItem } from '../../db/payments/checkoutSessionRepository';
 import type { PaymentLinkLineItemRow } from '../../db/payments/paymentLinkRepository';
 import type { StoredLinePrice } from '../../db/schema/checkout';
 import { fromBaseUnits } from '../../lib/money';
-import { maxBaseUnits } from '../catalog/params';
+import { maxBaseUnits } from '@peable.to/contracts';
 import { invalid } from './errors';
 import { adjustableBoundsOf } from './params';
 import { lineSubtotals } from './totals';

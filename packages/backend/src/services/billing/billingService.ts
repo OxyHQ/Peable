@@ -1,4 +1,10 @@
 import {
+  billingCheckoutOperationParams,
+  createBillingCheckoutParams,
+  createBillingPortalParams,
+  ensureBillingCustomerParams,
+} from '@peable.to/contracts';
+import {
   prepareBillingTaxCheckout,
   verifyBillingInvoiceTaxCheckout,
   type BillingTaxCheckoutAdapter,
@@ -46,7 +52,6 @@ import {
 import {
   BillingError,
   billingCustomerSchema,
-  checkoutOperationRequestSchema,
   billingHostedSessionSchema,
   billingCheckoutSessionSchema,
   billingEmbeddedCheckoutSessionSchema,
@@ -55,9 +60,6 @@ import {
   billingSubscriptionSchema,
   billingOwnerSchema,
   billingDeploymentSchema,
-  ensureCustomerSchema,
-  checkoutSchema,
-  portalSchema,
   type BillingOwner,
   type BillingOperationKind,
   type BillingDeployment,
@@ -265,7 +267,7 @@ export function createBillingService(options: BillingServiceOptions) {
     embedded: boolean,
   ): Promise<BillingCheckoutSession | BillingEmbeddedCheckoutSession> {
     authorize(owner);
-    const input = checkoutSchema.parse(params);
+    const input = createBillingCheckoutParams.parse(params);
     if (embedded) {
       if (
         !input.tax_quote ||
@@ -400,7 +402,7 @@ export function createBillingService(options: BillingServiceOptions) {
       params: EnsureBillingCustomerParams,
       idempotencyKey: string,
     ): Promise<BillingCustomer> {
-      const input = ensureCustomerSchema.parse(params);
+      const input = ensureBillingCustomerParams.parse(params);
       return perform(
         owner,
         'ensure_customer',
@@ -555,7 +557,7 @@ export function createBillingService(options: BillingServiceOptions) {
       idempotencyKey = `portal:${randomUUID()}`,
     ): Promise<BillingHostedSession> {
       authorize(owner);
-      const input = portalSchema.parse(params);
+      const input = createBillingPortalParams.parse(params);
       await requireBillingBinding(db, deployment, owner, 'customer', input.provider_customer_id);
       // Replay also needs the current safe Portal configuration.
       await provider.verifyDeployment();
@@ -578,7 +580,7 @@ export function createBillingService(options: BillingServiceOptions) {
       params: RetrieveBillingCheckoutOperationParams,
     ): Promise<BillingCheckoutOperationRecovery> {
       authorize(owner);
-      const input = checkoutOperationRequestSchema.parse(params);
+      const input = billingCheckoutOperationParams.parse(params);
       const customer = await requireBillingBinding(
         db,
         deployment,
