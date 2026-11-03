@@ -51,19 +51,21 @@ internal message: the `request_id` is how support finds the cause.
 ## In the SDK
 
 Every error is a `PeableError` with `type`, `statusCode`, `code`, `param`,
-`docUrl` and `requestId`; a subclass per type lets you catch what you handle:
+`declineCode`, `docUrl`, `requestId` and `raw` (the answer's body). `code` is
+the gateway's code, or `undefined` when it sent none, so branch on `type`
+first. A subclass per type lets you catch what you handle:
 
 | Class | `type` |
 |---|---|
 | `PeableInvalidRequestError` | `invalid_request_error` |
 | `PeableAuthenticationError` | `authentication_error` |
 | `PeablePermissionError` | `permission_error` |
-| `PeableCardError` | `card_error` — adds `declineCode` and `paymentIntent` |
-| `PeableApiError` | `api_error` |
-| `PeableSignatureVerificationError` | A webhook signature that does not verify ([Webhooks](/webhooks#verify-the-signature)) |
-
-For any other class (`idempotency_error`, `rate_limit_error`), branch on
-`err.type`.
+| `PeableCardError` | `card_error` — adds `paymentIntent`, the payment as it now is |
+| `PeableIdempotencyError` | `idempotency_error` — the `409` (first attempt still running) is retried before it reaches you |
+| `PeableRateLimitError` | `rate_limit_error` — retried before it reaches you |
+| `PeableAPIError` | `api_error` |
+| `PeableConnectionError` | `api_connection_error` — no answer was read: the network failed, the attempt timed out (`code: 'timeout'`) or the body was cut off (`code: 'response_interrupted'`); retried first |
+| `PeableSignatureVerificationError` | `signature_verification_error` — a webhook signature that does not verify ([Webhooks](/webhooks#verify-the-signature)) |
 
 ```ts
 import { PeableCardError, PeableError } from '@peable.to/sdk';

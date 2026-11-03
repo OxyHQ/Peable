@@ -13,42 +13,32 @@ paid on the anonymous hosted checkout at `https://checkout.peable.to/l/<id>`.
 
 ## Who manages them
 
-Contributions are managed by a **person**, not by your server: the
-`@peable.to/sdk/contributions` entry runs over a human Oxy linked-client
-transport (the Peable app's Settings → Organization contributions screen uses
-it), never an application credential.
+Contributions are managed by a **person**, not by your server: every route
+takes an Oxy **user session** (the organization member), never an application
+credential, so they are not part of the server SDK. Orbit's Contributions
+screen is the one client: it calls them over its own authenticated transport
+and validates every request and answer against `@peable.to/contracts`. The
+routes and their schemas are in the reference's
+[Contributions](/reference/contributions).
 
-Its scope is `{ organizationId, applicationId, environment }`. Oxy must report
-the caller as an owner, admin or editor of that organization, and the
-application must belong to it; Peable keeps no copy of the membership. The
-application needs a registered watch-only FairCoin merchant first: the
-merchant fixes the network, and a contribution is always in FAIR.
+Oxy must report the caller as an owner, admin or editor of the organization,
+and the application must belong to it; Peable keeps no copy of the
+membership. The application needs a registered watch-only FairCoin merchant
+first: the merchant fixes the network, and a contribution is always in FAIR.
 
-```ts
-import { ContributionsResource } from '@peable.to/sdk/contributions';
+| Route | What it does |
+|---|---|
+| `POST /v1/organizations/{organizationId}/applications/{applicationId}/contributions?environment=…` | Create a link: `{ purpose, amount_mode: 'fixed' \| 'free', amount?, currency: 'FAIR', expires_at? }`. A UUID `Idempotency-Key` is required — the operation key, saved **before** the call and reused after a lost answer, so a retry returns the same link |
+| `GET …/contributions?environment=…` | The organization's links, newest first |
+| `POST …/contributions/{id}?environment=…` | `{ active: false }` withdraws a link; `{ active: true }` brings it back |
+| `GET …/contributions/{id}/collections?environment=…` | The payments made through a link |
 
-const contributions = new ContributionsResource(linkedClient);
-const scope = { organizationId, applicationId, environment: 'production' };
-
-// One FAIR, fixed. Amounts are positive integers of 10⁻⁸ FAIR.
-const link = await contributions.create(
-  scope,
-  { purpose: 'Community garden', amount_mode: 'fixed', amount: '100000000', currency: 'FAIR' },
-  operationUuid, // saved BEFORE the call, reused after a lost reply
-);
-
-// Whatever the contributor chooses: omit `amount`.
-await contributions.create(scope, { purpose: 'Open fund', amount_mode: 'free', currency: 'FAIR' }, otherUuid);
-
-await contributions.setActive(scope, link.id, false); // withdraw it
-for await (const item of contributions.list(scope)) { /* every page, newest first */ }
-for await (const collection of contributions.collections(scope)) { /* payments received */ }
-```
-
+- A fixed link names its `amount` in base units (`"100000000"` is one FAIR);
+  a free link omits it and the contributor chooses.
 - `purpose`, the amount policy and the organization are immutable; an
-  optional `expires_at` is Unix seconds. Withdraw a link with `setActive`.
-- `list` and `collections` answer only that organization's records, as the
-  usual list envelope with the [list parameters](/lists#lists) (`limit`,
+  optional `expires_at` is Unix seconds.
+- Both lists answer only that organization's records, as the usual list
+  envelope with the [list parameters](/lists#lists) (`limit`,
   `starting_after` / `ending_before`, `created`).
 
 ## Paying a contribution

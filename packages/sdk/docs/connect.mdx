@@ -109,7 +109,7 @@ and `/v1/reports/payout_reconciliation`. In the SDK it is the `peableAccount`
 request option:
 
 ```ts
-await peable.balance.retrieve({ peableAccount: 'ca_…' });
+await peable.balance.retrieve({}, { peableAccount: 'ca_…' });
 await peable.payouts.create({ amount: '5000', currency: 'EUR' }, { peableAccount: 'ca_…' });
 ```
 
@@ -128,8 +128,7 @@ const seller = await peable.connectedAccounts.create({
   country: 'ES',
   business_type: 'individual',
 });
-const onboarding = await peable.accountLinks.create({
-  account: seller.id,
+const onboarding = await peable.connectedAccounts.createAccountLink(seller.id, {
   return_url: 'https://market.example/sell/done',
   refresh_url: 'https://market.example/sell/refresh',
 });
@@ -156,8 +155,11 @@ await peable.transfers.list({ connected_account: seller.id });
   cannot exceed what it brought in.
 - **A transfer's `amount_reversed` is cumulative**, from the provider — not
   the sum of the reversals you made, which may not be all of them.
-- `peable.accounts` is `peable.connectedAccounts` under its Stripe name;
-  `connectedAccounts.retrieveByRef(external_ref)` reads a seller by your id.
+- `connectedAccounts.retrieveByRef(external_ref)` reads a seller by your id —
+  a create whose answer never arrived is recoverable without a list scan.
+- `accountLinks.create` onboards **your own** account (`POST /v1/account_links`),
+  or a seller's with `{ peableAccount }`; a seller's link from its `ca_…` is
+  `connectedAccounts.createAccountLink(id, { … })`.
 
 ### Learn when a seller is ready
 

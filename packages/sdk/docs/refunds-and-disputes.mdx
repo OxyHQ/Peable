@@ -81,8 +81,7 @@ await peable.disputes.retrieve('dp_…');
 // 1. Upload what you have (PDF, PNG or JPEG, at most 5 MB each).
 const receipt = await peable.files.create({
   purpose: 'dispute_evidence',
-  file: pdfBytes,
-  filename: 'receipt.pdf',
+  file: new File([pdfBytes], 'receipt.pdf'),
 });
 
 // 2. Stage a draft — as often as you like, until you submit.
@@ -120,8 +119,8 @@ await peable.disputes.close('dp_…');
 
 ## Files
 
-`peable.files.create({ purpose, file })` uploads bytes
-(`multipart/form-data`); `peable.files.create({ purpose: 'business_logo',
+`peable.files.create({ purpose, file: new File([bytes], name) })` uploads
+bytes (`multipart/form-data`); `peable.files.create({ purpose: 'business_logo',
 oxy_file })` makes an Oxy file you own your logo. The type is read from the
 bytes, not the name:
 
