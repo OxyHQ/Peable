@@ -116,6 +116,22 @@ export async function findEventById(
   return row ? toEventRow(row) : null;
 }
 
+/**
+ * One event by its PRIMARY key, scoped to the merchant and the retention
+ * horizon — the live tail's read of a row it was signalled about.
+ */
+export async function findEventByIdForMerchant(
+  db: DatabaseOrTransaction,
+  id: string,
+  merchantId: string,
+): Promise<EventRow | null> {
+  const [row] = await db
+    .select(EVENT_COLUMNS)
+    .from(events)
+    .where(and(eq(events.id, id), eq(events.merchantId, merchantId), retained()));
+  return row ? toEventRow(row) : null;
+}
+
 /** One event by its public `evt_…`, scoped to the merchant and the retention horizon. */
 export async function findEventForMerchant(
   db: DatabaseOrTransaction,

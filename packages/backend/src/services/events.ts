@@ -10,7 +10,8 @@
  * Every producer goes through `recordEvent`: intent transitions, disputes,
  * connected-account readiness, billing observations, and the synthetic test
  * event. A new producer that wrote a delivery directly would be an event the
- * events API never shows.
+ * events API never shows — and the live tail (`services/liveTail.ts`) never
+ * streams, since it is signalled from here too.
  */
 import {
   PEABLE_API_VERSION,
@@ -25,6 +26,7 @@ import type { WebhookEndpointRow } from '../db/webhooks/webhookEndpointRepositor
 import { TARGETED_WEBHOOK_EVENT_TYPES } from '../db/schema/valueSets';
 import { newId } from '../lib/ids';
 import { currentEventRequest } from '../lib/requestContext';
+import { LIVE_TAIL_CHANNELS, notifyLiveTail } from './liveTail';
 
 export interface RecordEventParams<K extends WebhookEventType> {
   readonly merchantId: string;
@@ -71,6 +73,12 @@ export async function recordEvent<K extends WebhookEventType>(
   });
   if (!(TARGETED_WEBHOOK_EVENT_TYPES as readonly string[]).includes(params.type)) {
     await enqueueEventDeliveries(tx, event);
+  }
+  // The live tail (`GET /v1/events/stream`, `peable listen`) is told on the SAME
+  // transaction, so it hears of this event at its commit and never of a
+  // rollback. Test mode only: see `services/liveTail.ts`.
+  if (!event.livemode) {
+    await notifyLiveTail(tx, LIVE_TAIL_CHANNELS.events, event.merchantId, event.id);
   }
   return event;
 }

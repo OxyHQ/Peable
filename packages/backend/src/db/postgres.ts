@@ -116,6 +116,36 @@ export async function isPostgresReady(): Promise<boolean> {
   }
 }
 
+/** What `listenPostgres` resolves to: stop listening on that channel. */
+export interface PostgresListener {
+  unlisten(): Promise<void>;
+}
+
+/**
+ * `LISTEN` on `channel` over the open pool's dedicated listener connection.
+ *
+ * `onNotify` receives each payload delivered to the channel; `onListen` runs
+ * every time the listen is (re-)established — postgres.js reconnects a dropped
+ * listener on its own, and a notification sent while it was down is lost, so a
+ * caller that must not miss one uses `onListen` to catch up from its table.
+ *
+ * A notification is delivered only when the transaction that sent it COMMITS
+ * (`NOTIFY` is transactional), which is the property `services/liveTail.ts`
+ * is built on.
+ */
+export async function listenPostgres(
+  channel: string,
+  onNotify: (payload: string) => void,
+  onListen?: () => void,
+): Promise<PostgresListener> {
+  const open = client;
+  if (!open) {
+    throw new PostgresNotConnectedError('connectPostgres() has not been called');
+  }
+  const { unlisten } = await open.listen(channel, onNotify, onListen);
+  return { unlisten };
+}
+
 /** Close the pool. Safe to call when it was never opened. */
 export async function disconnectPostgres(): Promise<void> {
   const open = client;

@@ -59,7 +59,13 @@
  */
 
 import { getDb } from '../db/postgres';
-import { expireDueIntents, findDueCardIntents } from '../db/payments/paymentIntentRepository';
+import {
+  expireDueIntents,
+  findDueCardIntents,
+  type PaymentIntentRow,
+} from '../db/payments/paymentIntentRepository';
+import { canExpire } from '@peable.to/shared-types';
+import { applyEvent } from './intentState';
 import { cancelCardPaymentAtProvider } from './cardCancellation';
 import { reconcileIntentWithProvider } from './intentReconciliation';
 import { announceIntentChange, recordIntentEvent, transitionIntent } from './intentTransition';
@@ -156,40 +162,99 @@ async function sweepDueCardIntents(
   let expired = 0;
 
   for (const intent of due) {
-    const cancellation = await cancelCardPaymentAtProvider(
-      intent,
-      // Derived from the intent's own id: a retry on the next tick, from this
-      // task or another, is the same operation rather than a second one.
-      `cancel:${intent.publicId}`,
-    );
-
-    if (cancellation.kind === 'settled') {
-      // The payer won. Record what is true; do not expire it.
-      await reconcileIntentWithProvider(intent);
-      continue;
-    }
-    if (cancellation.kind === 'unknown' || cancellation.kind === 'in_flight') {
-      // Unknown: the provider could not be reached, so the payment is still
-      // live and nothing may be announced about it. In flight: the provider
-      // still has it, and expiring locally is exactly the divergence this pass
-      // exists to prevent. Either way the next tick tries again — `expires_at`
-      // has passed and will keep having passed.
-      continue;
-    }
-
-    // `canceled`, or nothing at the provider to cancel (an unlinked create).
-    // Now the local transition can be announced truthfully.
-    const result = await transitionIntent(intent.id, {
-      from: intent.status,
-      status: 'canceled',
-      cancellationReason: 'abandoned',
-    });
-    if (result.kind !== 'updated') continue;
-    announceIntentChange(result.row);
-    expired += 1;
+    if ((await expireCardIntent(intent)).kind === 'expired') expired += 1;
   }
 
   return { examined: due.length, expired };
+}
+
+/** What expiring one intent did. */
+export type ExpireIntentResult =
+  | { readonly kind: 'expired'; readonly row: PaymentIntentRow }
+  /** A card payer completed it first; the row was reconciled to that truth. */
+  | { readonly kind: 'succeeded' }
+  /** The provider could not confirm the cancellation; nothing was changed. */
+  | { readonly kind: 'pending' }
+  /** Not in a status that can expire (the state machine's message). */
+  | { readonly kind: 'not_expirable'; readonly message: string }
+  /** It moved, or vanished, between the read and the write. */
+  | { readonly kind: 'stale' };
+
+/**
+ * Expire ONE card intent: cancelled at the provider first, then the local
+ * compare-and-swap — the sweep's per-row step, and the argument above.
+ */
+async function expireCardIntent(intent: PaymentIntentRow): Promise<ExpireIntentResult> {
+  const cancellation = await cancelCardPaymentAtProvider(
+    intent,
+    // Derived from the intent's own id: a retry on the next tick, from this
+    // task or another, is the same operation rather than a second one.
+    `cancel:${intent.publicId}`,
+  );
+
+  if (cancellation.kind === 'settled') {
+    // The payer won. Record what is true; do not expire it.
+    await reconcileIntentWithProvider(intent);
+    return { kind: 'succeeded' };
+  }
+  if (cancellation.kind === 'unknown' || cancellation.kind === 'in_flight') {
+    // Unknown: the provider could not be reached, so the payment is still
+    // live and nothing may be announced about it. In flight: the provider
+    // still has it, and expiring locally is exactly the divergence this pass
+    // exists to prevent. Either way the next tick tries again — `expires_at`
+    // has passed and will keep having passed.
+    return { kind: 'pending' };
+  }
+
+  // `canceled`, or nothing at the provider to cancel (an unlinked create).
+  // Now the local transition can be announced truthfully.
+  const result = await transitionIntent(intent.id, {
+    from: intent.status,
+    status: 'canceled',
+    cancellationReason: 'abandoned',
+  });
+  if (result.kind !== 'updated') return { kind: 'stale' };
+  announceIntentChange(result.row);
+  return { kind: 'expired', row: result.row };
+}
+
+/**
+ * Expire one intent NOW, whatever its `expires_at` says — exactly as the sweep
+ * would once it had passed: `canceled` with `cancellation_reason: abandoned`
+ * and `payment_intent.canceled`, a card one cancelled at the provider first.
+ *
+ * The test helper `POST /v1/test_helpers/checkout_sessions/:id/expire` is the
+ * caller, so a merchant can exercise their abandoned-checkout handling without
+ * waiting out the clock. The state machine decides whether the intent can
+ * expire (`applyEvent(…, 'expire')`), never this function.
+ */
+export async function expireIntentNow(intent: PaymentIntentRow): Promise<ExpireIntentResult> {
+  // Checked first: the state machine absorbs `canceled → canceled` as an
+  // idempotent re-observation, which for an explicit request would answer a
+  // payment that already ended as if this call had expired it.
+  if (!canExpire(intent.status)) {
+    return {
+      kind: 'not_expirable',
+      message: `a payment intent in '${intent.status}' can no longer expire`,
+    };
+  }
+  try {
+    applyEvent(intent.status, 'expire', intent.rail);
+  } catch (err) {
+    return {
+      kind: 'not_expirable',
+      message: err instanceof Error ? err.message : 'this payment can no longer expire',
+    };
+  }
+  if (intent.rail === 'card') return expireCardIntent(intent);
+  const result = await transitionIntent(intent.id, {
+    from: intent.status,
+    status: 'canceled',
+    cancellationReason: 'abandoned',
+  });
+  if (result.kind !== 'updated') return { kind: 'stale' };
+  announceIntentChange(result.row);
+  return { kind: 'expired', row: result.row };
 }
 
 let timer: ReturnType<typeof setInterval> | null = null;

@@ -3,7 +3,7 @@
 // injected fetch mock, so resource-level tests exercise the FULL path
 // (resource → RestClient → fetch) instead of stubbing `RestClient` itself.
 
-import { createRestClient, type RestClient } from '../../src/core/client';
+import { createRestClient, type GatewayClient } from '../../src/core/client';
 import { createServiceTokenProvider } from '../../src/core/serviceToken';
 import type { MockResponseSpec } from './mockFetch';
 
@@ -31,7 +31,7 @@ export function serviceTokenMintResponse(
 }
 
 /** Build a `RestClient` wired exactly like `Peable`'s constructor, against the given fetch. */
-export function buildTestClient(fetchImpl: typeof fetch): RestClient {
+export function buildTestClient(fetchImpl: typeof fetch): GatewayClient {
   const tokenProvider = createServiceTokenProvider(
     { publicKey: TEST_PUBLIC_KEY, secret: TEST_SECRET, oxyApiUrl: TEST_OXY_API_URL },
     { fetch: fetchImpl },

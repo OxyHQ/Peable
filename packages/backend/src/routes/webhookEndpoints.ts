@@ -339,8 +339,11 @@ export async function sendWebhookEndpointTest(
 }
 
 /** The service-authed `/v1/webhook_endpoints` router. */
-export function createWebhookEndpointsRouter(deps: { requireMerchant: RequestHandler }): Router {
-  const { requireMerchant } = deps;
+export function createWebhookEndpointsRouter(deps: {
+  requireMerchant: RequestHandler;
+  safeFetch?: SafeFetchFn | undefined;
+}): Router {
+  const { requireMerchant, safeFetch } = deps;
   const router = Router();
   const read = [
     requireMerchant,
@@ -377,6 +380,16 @@ export function createWebhookEndpointsRouter(deps: { requireMerchant: RequestHan
     ...write,
     idempotent,
     withMerchant(rollWebhookEndpointSecret),
+  );
+  // Orbit's "send test event", for an integration (and `peable trigger
+  // webhook_endpoint.test`): the same core the dashboard route runs.
+  router.post(
+    '/v1/webhook_endpoints/:id/test',
+    ...write,
+    idempotent,
+    withMerchant((req, res, merchant) =>
+      sendWebhookEndpointTest(req, res, merchant, { safeFetch }),
+    ),
   );
   return router;
 }

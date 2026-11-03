@@ -55,6 +55,7 @@ import {
 } from '../services/intentReconciliation';
 import { resolveClientAction } from '../services/clientAction';
 import { applyEvent } from '../services/intentState';
+import { reportFaircoinBroadcast } from '../services/faircoinBroadcast';
 import { announceIntentChange, transitionIntent } from '../services/intentTransition';
 import { toPaymentIntentDTO } from '../lib/serialize';
 import { emailSchema, shippingSchema, toShipping } from '../lib/addressSchema';
@@ -323,6 +324,8 @@ export async function resolveMerchant(req: Request, res: Response): Promise<Merc
     sendError(res, 403, 'permission_error', 'no merchant registered for this app');
     return null;
   }
+  // The request log (`lib/requestLog.ts`) records the request under it.
+  res.locals.merchant = merchant;
   return merchant;
 }
 
@@ -1278,28 +1281,13 @@ export function createPaymentIntentsRouter(deps: {
         return;
       }
 
-      let nextStatus: PaymentIntentStatus;
-      try {
-        nextStatus = applyEvent(intent.status, 'broadcast', 'faircoin');
-      } catch (err) {
-        sendError(
-          res,
-          409,
-          'invalid_request_error',
-          err instanceof Error ? err.message : 'illegal state transition',
-        );
+      // The merchant is told `payment_intent.processing`, and the announce puts
+      // the "payment sent, confirming" frame on the payer's own checkout page.
+      const broadcast = await reportFaircoinBroadcast(intent, parsed.data.txid);
+      if (broadcast.kind === 'illegal') {
+        sendError(res, 409, 'invalid_request_error', broadcast.message);
         return;
       }
-      // Status and txid move in ONE statement: `payment_intents_processing_requires_txid_check`
-      // refuses a FairCoin `processing` without the txid beside it, so two
-      // writes could not satisfy the constraint in either order. The merchant
-      // is told `payment_intent.processing`, and the announce puts the
-      // "payment sent, confirming" frame on the payer's own checkout page.
-      const broadcast = await transitionIntent(intent.id, {
-        from: intent.status,
-        status: nextStatus,
-        txid: parsed.data.txid,
-      });
       if (broadcast.kind !== 'updated') {
         sendStaleOrMissing(res, broadcast);
         return;

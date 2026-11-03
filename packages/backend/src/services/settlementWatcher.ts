@@ -57,6 +57,53 @@ const UNDERPAID_ERROR = {
   message: 'The transaction paid less than the amount due.',
 } as const;
 
+/** What the chain says about a watched intent's transaction. */
+export interface ChainObservation {
+  /** The transaction pays the intent's address at least its amount. */
+  readonly paid: boolean;
+  readonly confirmations: number;
+}
+
+/**
+ * Advance a `processing` FairCoin intent for one observation of its
+ * transaction — THE decision the watcher makes, and the only place it is made.
+ *
+ * Exported for the one other caller that has an observation without the
+ * Explorer: `POST /v1/test_helpers/payment_intents/:id/simulate_faircoin_payment`
+ * (`services/testHelpers.ts`), which hands it a synthetic one so a test-mode
+ * payment moves through exactly the transitions, events and billing side
+ * effects a real one does.
+ *
+ * @returns the row as persisted when something was written (a status change or
+ *   a new confirmation count), else `null` — nothing to announce.
+ */
+export async function applyChainObservation(
+  intent: PaymentIntentRow,
+  observation: ChainObservation,
+): Promise<PaymentIntentRow | null> {
+  if (intent.rail !== 'faircoin' || intent.status !== 'processing') return null;
+  const { paid, confirmations } = observation;
+  const next = nextStatusFor(paid, confirmations, intent.requiredConfirmations);
+  if (next === 'processing') {
+    // Still confirming. The payment is PROVEN, which accepts its billing
+    // invoice (idempotently), and a new confirmation count is written so the
+    // wire's `faircoin.confirmations` is live — no status change, no event.
+    await recordVerifiedChainPayment(intent);
+    if (confirmations === intent.confirmations) return null;
+  }
+
+  const result = await transitionIntent(intent.id, {
+    from: 'processing',
+    status: next,
+    confirmations,
+    ...(next === 'canceled'
+      ? { cancellationReason: 'underpaid' as const, lastPaymentError: UNDERPAID_ERROR }
+      : {}),
+    chainVerified: paid,
+  });
+  return result.kind === 'updated' ? result.row : null;
+}
+
 /**
  * Tip-driven, non-custodial settlement watcher. It only ever *reads* the chain
  * (via the injected `getTransaction`) and advances the `PaymentIntent` state
@@ -96,30 +143,11 @@ export class SettlementWatcher {
     const tx = await this.deps.getTransaction(txid, network);
     if (tx === null) return;
 
-    const requiredConfirmations = intent.requiredConfirmations;
     const { paid, confirmations } = verifyPayment(tx, address, toBaseUnits(intent.amount));
+    const row = await applyChainObservation(intent, { paid, confirmations });
+    if (row === null) return;
 
-    const next = nextStatusFor(paid, confirmations, requiredConfirmations);
-    if (next === 'processing') {
-      // Still confirming. The payment is PROVEN, which accepts its billing
-      // invoice (idempotently), and a new confirmation count is written so the
-      // wire's `faircoin.confirmations` is live — no status change, no event.
-      await recordVerifiedChainPayment(intent);
-      if (confirmations === intent.confirmations) return;
-    }
-
-    const result = await transitionIntent(intent.id, {
-      from: 'processing',
-      status: next,
-      confirmations,
-      ...(next === 'canceled'
-        ? { cancellationReason: 'underpaid' as const, lastPaymentError: UNDERPAID_ERROR }
-        : {}),
-      chainVerified: paid,
-    });
-    if (result.kind !== 'updated') return;
-
-    await this.deps.onChange(result.row);
+    await this.deps.onChange(row);
   }
 
   start(): void {

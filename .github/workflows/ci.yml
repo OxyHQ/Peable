@@ -206,6 +206,11 @@ jobs:
       - run: bun run build:pay
       - run: bun run --filter @peable.to/sdk build
 
+      # The published CLI: its `postbuild` proves the `bin` runs under Node
+      # from `dist/` and that every `files` entry ships. Its typecheck and tests
+      # run with every package below.
+      - run: bun run --filter @peable.to/cli build
+
       - name: Typecheck every package
         run: bun run --filter '*' typecheck
 
@@ -334,7 +339,7 @@ jobs:
               -o -path "*/node_modules/typescript" -o -path "*/node_modules/electron" -o -path "*/node_modules/react" \
               -o -path "*/node_modules/drizzle-kit" -o -path "*/node_modules/@biomejs" -o -path "*/node_modules/@expo" \) -print)
             if [ -n "$found" ]; then echo "::error::the runtime image ships packages the backend does not load:"; echo "$found"; exit 1; fi
-            for p in frontend checkout sdk pay orbit; do
+            for p in frontend checkout sdk pay orbit cli; do
               if [ -e "/app/packages/$p" ]; then echo "::error::packages/$p is in the runtime image"; exit 1; fi
             done
             for f in /app/bun.lock /app/bunfig.toml /app/package.json; do

@@ -615,3 +615,29 @@ body it answered. Decisions a reader would otherwise undo:
   `webhook_endpoints_enabled_events_check` widened for the ten catalog event
   types — re-added `NOT VALID` by hand in `0046` and validated in `0047`
   (`post`), so the ACCESS EXCLUSIVE lock on `events` never scans.
+
+## Request logs and the live tail
+
+`api_request_logs` (`schema/requestLogs.ts`) holds one row per answered,
+service-authenticated merchant `/v1` request (`lib/requestLog.ts`, the one
+writer). Decisions a reader would otherwise undo:
+
+- **What it holds is the whole list**: method, path without its query string,
+  status, duration, `Idempotency-Key`. Never a body, a header, a query string or
+  an address — the merchant reads this log back, so it must not hold what a
+  request carried. `api_request_logs_path_check` refuses a `?`.
+- **`request_id` is the public id** (the `Request-Id`, `req_…`), unique, and
+  in the id-column ledger as the row's own identifier.
+- **Written after the answer, outside any business transaction**: a failed
+  write never changes what the merchant was told.
+- **`cascade` from the merchant**, as `idempotency_keys`; `livemode` is not a
+  column (ADR 0017).
+- **Retention is `@oxy.so/db/expiry`** on the indexed `created_at`
+  (`services/requestLogSweeper.ts`, 30 days); every read filters on the same
+  horizon.
+- **The live tail is a `NOTIFY` on the writing transaction**
+  (`services/liveTail.ts`): `recordEvent` and the request-log writer signal
+  `peable_test_events` / `peable_test_request_logs` with `merchant_id:row_id`
+  for a TEST-MODE row only, so a stream hears of a row at its commit and never
+  of a rollback, and live commits never take the notify queue's lock. The
+  stream reads the row back through its repository; the payload is never a copy.

@@ -28,15 +28,16 @@ closed sheet or browser callback.
 
 ## Packages
 
-There are **eight**. Four are published to npm, so a change in
-`contracts`, `shared-types`, `sdk` or `pay` is an external API change, not an
-internal refactor.
+There are **nine**. Four are published to npm (and `cli` will be), so a change
+in `contracts`, `shared-types`, `sdk`, `pay` or `cli` is an external API change,
+not an internal refactor.
 
 | Path | Name | What it is |
 |---|---|---|
 | `packages/backend/` | `@peable.to/backend` | Express + Socket.IO gateway API. PostgreSQL-native — see below |
 | `packages/frontend/` | `@peable.to/frontend` | Expo / expo-router self-custodial FairCoin wallet, forked from FAIRWallet, with Oxy identity. Also packages as an Electron desktop app |
 | `packages/orbit/` | `@peable.to/orbit` | **Orbit by Peable**, the merchant dashboard at orbit.peable.to. Expo + expo-router + Bloom, web first. A SEPARATE app from the wallet: it signs in with Oxy and calls `/v1/dashboard/applications/:id/*` and the contribution routes as the signed-in USER, never with a merchant credential. See `packages/orbit/README.md` |
+| `packages/cli/` | **`@peable.to/cli`** | The `peable` command, to be published (`private` until the owner configures its npm trusted publisher) (ESM bin, `dist/bin.js`): `login` (Oxy application credential per profile and mode, 0600 config), `listen` (test-mode events from `GET /v1/events/stream`, signed with a per-session `whsec_` by the SDK's own `signWebhook`, forwarded to localhost), `trigger` (fixtures over the public API and `/v1/test_helpers/*`), `logs tail`, resource commands. Built on `@peable.to/sdk` and `shared-types`; see `packages/cli/README.md` |
 | `packages/checkout/` | `@peable.to/checkout` | Vite + React + react-router-dom SPA. The **anonymous** payer-facing hosted checkout at checkout.peable.to. Not Expo, not React Native |
 | `packages/sdk/` | **`@peable.to/sdk`** | Published client. Server entry uses `peableForOxyService({ oxy })` for own workloads; external customers use an `ApplicationCredential` or `tokenProvider`, and exposes `paymentIntents` / `paymentLinks` / `checkout.sessions` / `products` / `prices` / `coupons` / `promotionCodes` / `webhookEndpoints` / `events` / `webhooks`; the `@peable.to/sdk/checkout` browser entry is the payer-side core |
 | `packages/contracts/` | `@peable.to/contracts` | Zod 4 contribution contracts and generated OpenAPI; built before shared-types and SDK |
@@ -565,6 +566,18 @@ compile, and the result is three-way — `updated` / `stale` / `missing` — bec
 a route answers 409 for a row that moved and 404 for one that is not there.
 `expireDueIntents` needs none of this: its own statement carries the status
 predicate and `for update skip locked`.
+
+**The live tail is a `NOTIFY` inside the writing transaction, and test mode
+only.** `recordEvent` (and the request-log writer, `lib/requestLog.ts`) signal
+`services/liveTail.ts`'s channel for a TEST-MODE row on the same `tx`, so
+`GET /v1/events/stream` / `/v1/request_logs/stream` (SSE, `lib/liveStream.ts`)
+hear of a row at its commit and never of a rollback, on every ECS task. The
+payload is ids only; the stream reads the row back through its repository.
+Never emit to a stream from anywhere else, and never signal a live row (a
+NOTIFY commit takes a database-wide lock on the shared instance). Test helpers
+(`/v1/test_helpers/*`, `services/testHelpers.ts`) are fake INPUTS to the real
+code — `reportFaircoinBroadcast`, the watcher's `applyChainObservation`, the
+sweep's `expireIntentNow` — never a status write of their own.
 
 ## Auth
 

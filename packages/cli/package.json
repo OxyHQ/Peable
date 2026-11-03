@@ -1,0 +1,57 @@
+{
+  "name": "@peable.to/cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The Peable command line: log in with an Oxy application credential, forward test-mode events to a local webhook endpoint (`peable listen`), trigger them (`peable trigger`), tail your request log, and work with payment intents, checkout sessions and webhook endpoints.",
+  "type": "module",
+  "bin": {
+    "peable": "dist/bin.js"
+  },
+  "exports": {
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "keywords": [
+    "peable",
+    "oxy",
+    "payments",
+    "cli",
+    "webhooks",
+    "faircoin"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OxyHQ/Peable.git",
+    "directory": "packages/cli"
+  },
+  "author": "Peable",
+  "license": "MIT",
+  "homepage": "https://peable.to",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json",
+    "postbuild": "node scripts/verify-package.mjs",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@peable.to/sdk": "workspace:0.15.0",
+    "@peable.to/shared-types": "workspace:0.13.0"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/node": "^20.0.0",
+    "typescript": "~5.9.2"
+  }
+}

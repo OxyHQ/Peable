@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.15.0 — live tails, request logs and test helpers
+
+Additive. Requires `@peable.to/shared-types` 0.13.0.
+
+- New `peable.events.stream({ types, signal, onConnect, onDisconnect })` — an
+  async iterable of every event as it is recorded, rendered exactly as a
+  webhook delivery carries it (`GET /v1/events/stream`, Server-Sent Events).
+  **Test mode only** (a live credential throws `PeablePermissionError`, code
+  `test_mode_only`). Reconnects on its own and resumes after the last event it
+  yielded (`Last-Event-ID`); ends when `signal` aborts.
+- New `peable.requestLogs`: `list({ status, method, created, … })` (`status` is
+  a code or a class, `'4xx'`), `retrieve(requestId)` and `stream({ status,
+  method })` — your own API requests of the last 30 days, `id` being the
+  `Request-Id`. Method, path, status, duration and `Idempotency-Key` only.
+- New `peable.testHelpers` (test mode only):
+  `paymentIntents.simulateFaircoinPayment(id, { outcome })` drives a FairCoin
+  test payment through the real state machine (`processing → succeeded`, or
+  `canceled` when `outcome: 'underpaid'`) without touching the chain;
+  `checkoutSessions.expire(id)` cancels the session's payment as `abandoned`.
+- New `peable.webhookEndpoints.sendTestEvent(id)` — a `webhook_endpoint.test`
+  to one endpoint, as Orbit's "send test event".
+- `createRestClient` returns a `GatewayClient` (`RestClient` plus `stream`);
+  `RestClient`, the interface an integrator implements, is unchanged.
+
 ## 0.14.0 — catalog: products, prices, coupons, promotion codes (ADR 0018)
 
 Additive.

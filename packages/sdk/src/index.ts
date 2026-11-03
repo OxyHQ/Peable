@@ -92,6 +92,8 @@ import {
 import { AccountLinksResource, ConnectedAccountsResource } from './resources/connectedAccounts';
 import { DisputesResource, MerchantsResource } from './resources/merchants';
 import { RefundsResource } from './resources/refunds';
+import { RequestLogsResource } from './resources/requestLogs';
+import { TestHelpersResource } from './resources/testHelpers';
 import { ChargesResource } from './resources/charges';
 import { CustomersResource } from './resources/customers';
 import { PaymentMethodsResource } from './resources/paymentMethods';
@@ -135,6 +137,10 @@ export class Peable {
   readonly webhookEndpoints: WebhookEndpointsResource;
   /** Every event of the last 30 days (`evt_…`). */
   readonly events: EventsResource;
+  /** Your own API requests of the last 30 days, and their live tail (test mode). */
+  readonly requestLogs: RequestLogsResource;
+  /** Test mode only: drive a test object as a payer, the chain or the clock would. */
+  readonly testHelpers: TestHelpersResource;
   /** One row per event per endpoint, and redelivery. */
   readonly webhookDeliveries: WebhookDeliveriesResource;
   /** The merchant this credential speaks for. Resolved from the credential. */
@@ -201,6 +207,8 @@ export class Peable {
     this.webhooks = new WebhooksResource();
     this.webhookEndpoints = new WebhookEndpointsResource(client);
     this.events = new EventsResource(client);
+    this.requestLogs = new RequestLogsResource(client);
+    this.testHelpers = new TestHelpersResource(client);
     this.webhookDeliveries = new WebhookDeliveriesResource(client);
     this.merchants = new MerchantsResource(client);
     this.connectedAccounts = new ConnectedAccountsResource(client);
@@ -239,7 +247,24 @@ export {
 } from './core/errors';
 export type { PeableErrorType, PeableErrorDetails } from './core/errors';
 
-export type { RestClient, RestClientRequestOptions } from './core/client';
+export type {
+  GatewayClient,
+  RestClient,
+  RestClientRequestOptions,
+  RestClientStreamOptions,
+} from './core/client';
+export type { LiveStreamOptions } from './core/liveStream';
+export { RequestLogsResource } from './resources/requestLogs';
+export type { RequestLogStreamParams } from './resources/requestLogs';
+export { TestHelpersResource } from './resources/testHelpers';
+export type {
+  RequestLog,
+  RequestLogListParams,
+  RequestLogMethod,
+  RequestLogStatusFilter,
+  SimulatedFaircoinOutcome,
+  SimulateFaircoinPaymentParams,
+} from '@peable.to/shared-types';
 export type { ServiceTokenProvider } from './core/serviceToken';
 
 export type { CreateCheckoutSessionOptions } from './resources/checkoutSessions';
@@ -338,6 +363,7 @@ export {
 } from './resources/webhookEndpoints';
 export type {
   EventListParams,
+  EventStreamParams,
   WebhookDeliveryListParams,
 } from './resources/webhookEndpoints';
 export type {

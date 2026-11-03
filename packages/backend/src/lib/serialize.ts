@@ -15,6 +15,7 @@ import type {
   PaymentLink,
   PublicPaymentLink,
   Refund,
+  RequestLog,
   SocialPaymentSource,
   WebhookDelivery,
   WebhookEndpoint,
@@ -38,6 +39,7 @@ import type { StoredContribution } from '../db/schema/payments';
 import type { WebhookDeliveryRow } from '../db/webhooks/webhookDeliveryRepository';
 import type { WebhookEndpointRow } from '../db/webhooks/webhookEndpointRepository';
 import type { EventRow } from '../db/events/eventRepository';
+import type { RequestLogRow } from '../db/requestLogs/requestLogRepository';
 
 /**
  * A FAIR base-unit amount as the decimal a `faircoin:` URI carries — exact,
@@ -268,6 +270,21 @@ export function toEventDTO(row: EventRow): WebhookEvent {
     },
     request: { id: row.requestId, idempotency_key: row.idempotencyKey },
   } as unknown as WebhookEvent;
+}
+
+/** Serialize one request log. Its `id` is the request's `Request-Id`. */
+export function toRequestLogDTO(row: RequestLogRow): RequestLog {
+  return {
+    id: row.requestId,
+    object: 'request_log',
+    livemode: row.livemode,
+    method: row.method,
+    path: row.path,
+    status: row.status,
+    duration_ms: row.durationMs,
+    idempotency_key: row.idempotencyKey,
+    created: toUnix(row.createdAt),
+  };
 }
 
 /**

@@ -40,6 +40,9 @@ import { createWebhookDeliveriesRouter } from './routes/webhookDeliveries';
 import { createWebhookEndpointsRouter } from './routes/webhookEndpoints';
 import { createEventsRouter } from './routes/events';
 import { createCatalogRouter } from './routes/catalog';
+import { createRequestLogsRouter } from './routes/requestLogs';
+import { createTestHelpersRouter } from './routes/testHelpers';
+import { flushRequestLogs, requestLogMiddleware } from './lib/requestLog';
 import { createPaymentLinksRouter } from './routes/paymentLinks';
 import { createCheckoutSessionsRouter } from './routes/checkoutSessions';
 import { createSocialRouter } from './routes/social';
@@ -71,6 +74,7 @@ import { kickWebhookOutbox, startWebhookOutbox, stopWebhookOutbox } from './serv
 import { startExpirySweeper, stopExpirySweeper } from './services/expirySweeper';
 import { startIdempotencySweeper, stopIdempotencySweeper } from './services/idempotencySweeper';
 import { startEventSweeper, stopEventSweeper } from './services/eventSweeper';
+import { startRequestLogSweeper, stopRequestLogSweeper } from './services/requestLogSweeper';
 import { startProviderEventDrain, stopProviderEventDrain } from './services/providerEventDrain';
 import { startAccountSync, stopAccountSync } from './services/accountSync';
 import { initSocket, emitIntentUpdate, type SocketAuth } from './realtime/socket';
@@ -251,6 +255,9 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
 
   app.use(createOxyRateLimit(oxy, { auth: { expectedAudience: PEABLE_SERVICE_AUDIENCE } }));
   app.use(express.json());
+  // Before every router: it records each answered merchant `/v1` request on
+  // the response's `finish` (`lib/requestLog.ts`).
+  app.use(requestLogMiddleware);
   app.use(((_req, res, next) => {
     res.setHeader('Peable-Version', PEABLE_API_VERSION);
     next();
@@ -292,9 +299,11 @@ export function createGateway(deps: GatewayDeps = {}): Gateway {
   app.use(createSetupIntentsRouter({ requireMerchant, optionalServiceAuth }));
   app.use(createDisputesRouter({ requireMerchant }));
   app.use(createWebhookDeliveriesRouter({ requireMerchant, safeFetch: deps.safeFetch }));
-  app.use(createWebhookEndpointsRouter({ requireMerchant }));
+  app.use(createWebhookEndpointsRouter({ requireMerchant, safeFetch: deps.safeFetch }));
   app.use(createEventsRouter({ requireMerchant }));
   app.use(createCatalogRouter({ requireMerchant }));
+  app.use(createRequestLogsRouter({ requireMerchant }));
+  app.use(createTestHelpersRouter({ requireMerchant }));
   app.get('/openapi.json', (_req, res) => res.json(contributionOpenApi()));
   app.use(createContributionsRouter({ requireOxyUser: deps.requireOxyUser }));
   app.use(createPaymentLinksRouter({ requireMerchant, publicRateLimit }));
@@ -400,6 +409,7 @@ export async function start(
     stopExpirySweeper();
     stopIdempotencySweeper();
     stopEventSweeper();
+    stopRequestLogSweeper();
     stopProviderEventDrain();
     stopRecurringRelay?.();
     stopAccountSync();
@@ -407,7 +417,7 @@ export async function start(
     stopReferenceReconciliation();
     const renewalsStopped = stopFaircoinRenewals?.();
     gateway.io.close(() => {
-      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped])
+      void Promise.allSettled([stopEcosystemActivity(), renewalsStopped, flushRequestLogs()])
         .then(async (results) => {
           await disconnectPostgres();
           if (results.some((result) => result.status === 'rejected'))
@@ -426,6 +436,7 @@ export async function start(
   startExpirySweeper();
   startIdempotencySweeper();
   startEventSweeper();
+  startRequestLogSweeper();
   // Started unconditionally, including where the card rail is off: a deployment
   // that had Stripe configured and then had it removed still has stored events
   // that have to be finished, and a drain gated on a mode's card rail would

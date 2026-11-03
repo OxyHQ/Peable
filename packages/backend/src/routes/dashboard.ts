@@ -42,6 +42,7 @@ import {
 import { answerEventList, retrieveEvent } from './events';
 import { CATALOG_ROUTES } from './catalog';
 import { mountCatalogDashboardRoutes } from './catalogRoutes';
+import { answerRequestLogList, retrieveRequestLog } from './requestLogs';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
@@ -361,6 +362,18 @@ export function createDashboardRouter(deps?: {
     `${base}/events/:id`,
     requireOxyUser,
     asMember((req, res, merchant) => retrieveEvent(req, res, merchant, 'dashboard')),
+  );
+
+  // Orbit's Developers › Logs: the merchant's own API requests (`req_…`).
+  router.get(
+    `${base}/request_logs`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerRequestLogList(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/request_logs/:id`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveRequestLog(req, res, merchant, 'dashboard')),
   );
 
   router.get(
