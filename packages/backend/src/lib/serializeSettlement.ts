@@ -26,6 +26,7 @@ import type {
   ConnectedAccountFaircoin,
   ConnectedAccountRail,
   Transfer,
+  TransferReversal,
 } from '@peable.to/shared-types';
 import {
   faircoinStatusOf,
@@ -34,6 +35,7 @@ import {
   type ConnectedAccountRow,
 } from '../db/accounts/connectedAccountRepository';
 import type { TransferRow } from '../db/transfers/transferRepository';
+import type { TransferReversalRow } from '../db/transfers/transferReversalRepository';
 import { toUnix, toUnixOrNull } from './time';
 
 /** @deprecated Prefer `ConnectedAccount` from `@peable.to/shared-types`. */
@@ -177,5 +179,20 @@ export function toTransferDTO(
     failure_message: row.failureMessage,
     created: toUnix(row.createdAt),
     updated_at: toUnix(row.updatedAt),
+  };
+}
+
+/** Serialize one reversal of a settlement. The provider's own id for it stays here. */
+export function toTransferReversalDTO(row: TransferReversalRow): TransferReversal {
+  return {
+    id: row.publicId,
+    object: 'transfer_reversal',
+    livemode: row.livemode,
+    external_ref: row.externalRef,
+    amount: row.amount,
+    currency: row.currency,
+    status: row.status,
+    failure_message: row.failureMessage,
+    created: toUnix(row.createdAt),
   };
 }

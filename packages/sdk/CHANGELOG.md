@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.21.0 — Report downloads, more report types, transfer reversals, events of a payment
+
+Requires `@peable.to/shared-types` 0.19.0.
+
+- New `peable.reporting.reportTypes.download(id, parameters)`:
+  `GET /v1/reporting/report_types/:id/csv`, the same report a run stores, with
+  the same `parameters`, streamed at once. Answers the `Response`, whose body is
+  the file as the gateway writes it; a refusal is thrown as the typed error
+  before any byte. `ReportTypesResource` and `ReportingResource` now take a
+  `GatewayClient`.
+- Three more report types: `balance_transactions.itemized.1`,
+  `refunds.itemized.1`, `disputes.itemized.1`. The existing layouts gain
+  appended, non-default columns (`*_decimal` amounts in whole units,
+  `connected_account_id`, `balance_transaction_id`, `metadata`); their
+  `default_columns` are unchanged. The layouts are also importable from
+  `@peable.to/shared-types/reporting`, which loads in a browser.
+- New `peable.transfers.listReversals(transferId)`: every reversal of one
+  settlement (`GET /v1/transfers/:id/reversals`), a complete list.
+- `peable.events.list({ payment_intent })`: only the events about that payment.
 ## 0.20.0 — native billing engine: subscriptions, invoices, credit notes, entitlements (ADR 0018)
 
 Additive. Requires `@peable.to/shared-types` 0.18.0.

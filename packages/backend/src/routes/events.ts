@@ -11,6 +11,7 @@ import {
   type EventRow,
   type EventTypeFilter,
 } from '../db/events/eventRepository';
+import { findIntentForMerchant } from '../db/payments/paymentIntentRepository';
 import { serveLiveStream } from '../lib/liveStream';
 import { LIVE_TAIL_CHANNELS } from '../services/liveTail';
 import { expandObjects, parseExpand } from '../lib/expand';
@@ -18,6 +19,7 @@ import {
   answerList,
   parseQuery,
   type QuerySurface,
+  resolveListReference,
   surfaceListQuery,
   surfaceRetrieveQuery,
 } from '../lib/list';
@@ -93,12 +95,17 @@ function eventMatches(filters: readonly (EventTypeFilter | undefined)[] | null, 
 const eventListFilters = {
   type: typeFilter.optional(),
   delivery_success: z.enum(['true', 'false']).optional(),
+  /** `pi_…`: only the events about that payment — the timeline Orbit shows on a payment. */
+  payment_intent: z.string().min(1).max(255).optional(),
 } as const;
 
 const listEventsQuery = surfaceListQuery(eventListFilters);
 const retrieveEventQuery = surfaceRetrieveQuery();
 
-/** `GET /v1/events`, newest first, filtered by `type`, `created` and `delivery_success`. */
+/**
+ * `GET /v1/events`, newest first, filtered by `type`, `created`,
+ * `delivery_success` and `payment_intent`.
+ */
 export async function answerEventList(
   req: Request,
   res: Response,
@@ -109,6 +116,15 @@ export async function answerEventList(
   if (!query) return;
   const db = getDb();
   const deliverySuccess = query.delivery_success;
+  // Resolved inside the merchant's scope: another merchant's `pi_…` is the same
+  // 400 as an unknown one.
+  const intent = await resolveListReference(
+    res,
+    'payment_intent',
+    query.payment_intent,
+    async (publicId) => (await findIntentForMerchant(db, publicId, merchant.id))?.id ?? null,
+  );
+  if (!intent.ok) return;
   await answerList(req, res, {
     query,
     type: 'event',
@@ -120,6 +136,7 @@ export async function answerEventList(
         page,
         type: query.type,
         deliverySuccess: deliverySuccess === undefined ? undefined : deliverySuccess === 'true',
+        paymentIntentId: intent.id,
       }),
     serialize: toEventDTO,
   });

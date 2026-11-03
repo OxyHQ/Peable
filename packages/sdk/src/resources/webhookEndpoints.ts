@@ -102,6 +102,8 @@ export interface EventListParams extends ListParams {
    * with a delivery still pending or failed.
    */
   delivery_success?: boolean;
+  /** Only the events about this payment (`pi_…`). */
+  payment_intent?: string;
 }
 
 export interface EventStreamParams extends LiveStreamOptions {
@@ -150,6 +152,7 @@ export class EventsResource {
             type: page.type,
             delivery_success:
               page.delivery_success === undefined ? undefined : String(page.delivery_success),
+            payment_intent: page.payment_intent,
           }),
         }),
       params,

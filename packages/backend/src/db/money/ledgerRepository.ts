@@ -6,7 +6,7 @@
  * entries that does not sum to zero before anything is inserted: the zero sum
  * spans rows, so no CHECK can carry it, and this function is where it is true.
  */
-import { and, desc, eq, gte, isNull, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, gt, gte, isNull, lt, sql, type SQL } from 'drizzle-orm';
 import { uuidv7 } from '@oxy.so/db';
 import type { BalanceTransactionStatus, BalanceTransactionType } from '@peable.to/shared-types';
 import { balanceTransactions, connectedAccounts, ledgerEntries, payouts } from '../schema';
@@ -407,4 +407,41 @@ export async function listProviderTransactionsSince(
       ),
     );
   return rows.map(toRow);
+}
+
+/**
+ * Every balance transaction of the ledger scope that occurred (the wire `created`) in `[start, end)`, OLDEST first, a page at a time — what
+ * the `balance_transactions.itemized.1` report reads (`services/reporting/reports.ts`). A keyset
+ * walk on the primary key, so a busy interval never holds more than one page
+ * beside the CSV being written. Scoped in the predicate, like its list.
+ */
+export async function* balanceTransactionsForReport(
+  db: DatabaseOrTransaction,
+  scope: LedgerScope,
+  interval: { readonly start: Date; readonly end: Date; readonly currency: string | null },
+  pageSize = 1000,
+): AsyncGenerator<BalanceTransactionRow> {
+  let after: string | null = null;
+  for (;;) {
+    const rows = await db
+      .select(BT_COLUMNS)
+      .from(balanceTransactions)
+      .where(
+        and(
+          scopeOf(balanceTransactions, scope),
+          gte(balanceTransactions.occurredAt, interval.start),
+          lt(balanceTransactions.occurredAt, interval.end),
+          interval.currency === null
+            ? undefined
+            : sql`upper(${balanceTransactions.currency}) = ${interval.currency}`,
+          after === null ? undefined : gt(balanceTransactions.id, after),
+        ),
+      )
+      .orderBy(asc(balanceTransactions.id))
+      .limit(pageSize);
+    yield* rows.map(toRow);
+    const last = rows.at(-1);
+    if (!last || rows.length < pageSize) return;
+    after = last.id;
+  }
 }

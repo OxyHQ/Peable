@@ -19,6 +19,8 @@ import { requestIdMiddleware } from '../../lib/requestId';
 import type { AppMembershipResult } from '../../services/appMembership';
 import { type MerchantRow, syncMerchantFirstParty } from '../../db/merchants/merchantRepository';
 import { insertBalanceTransaction } from '../../db/money/ledgerRepository';
+import { insertRefund } from '../../db/refunds/refundRepository';
+import { upsertDispute } from '../../db/disputes/disputeRepository';
 import {
   claimReportRun,
   completeReportRun,
@@ -511,5 +513,228 @@ describe.skipIf(!POSTGRES_TESTS_ENABLED)('report runs', () => {
     ]);
     expect((await dashboard('/reporting/report_types')).status).toBe(200);
     expect((await dashboard('/reporting/report_runs', {}, 'user_stranger')).status).toBe(403);
+  });
+});
+
+/**
+ * The download (`GET /v1/reporting/report_types/:id/csv`): the SAME report as
+ * a run, streamed — one parameter check, one computation, one renderer.
+ */
+describe.skipIf(!POSTGRES_TESTS_ENABLED)('report downloads', () => {
+  beforeEach(async () => {
+    await resetGatewayTables();
+    environment = 'development';
+    appId = APP_ID;
+    firstParty = false;
+    files.options.failStore = false;
+    merchant = await seedMerchant({ oxyAppId: APP_ID, environment: 'development' });
+  });
+
+  const query = (params: Record<string, string | number | readonly string[]>) =>
+    Object.entries(params)
+      .flatMap(([key, value]) =>
+        Array.isArray(value)
+          ? value.map((item) => `${key}[]=${encodeURIComponent(item)}`)
+          : [`${key}=${encodeURIComponent(String(value))}`],
+      )
+      .join('&');
+
+  test('a download is byte for byte the run of the same parameters, every column included', async () => {
+    const intent = await seedIntent(merchant, { rail: 'card', amount: '1999', currency: 'EUR' });
+    await gatewayDb().execute(
+      sql`update payment_intents set description = '=evil', metadata = '{"order":"A,1"}'::jsonb where id = ${intent.id}`,
+    );
+    await seedIntent(merchant, { amount: '100000001' }); // FAIR
+    await Bun.sleep(1100);
+    const end = now();
+    const columns = [...REPORT_TYPE_LAYOUTS['payments.itemized.1'].columns];
+    const parameters = { interval_start: end - HOUR, interval_end: end, columns };
+
+    const download = await call(
+      'GET',
+      `/v1/reporting/report_types/payments.itemized.1/csv?${query(parameters)}`,
+    );
+    expect(download.status).toBe(200);
+    expect(download.headers.get('content-type')).toBe('text/csv; charset=utf-8');
+    expect(download.headers.get('content-disposition')).toMatch(
+      /^attachment; filename="payments\.itemized\.1_test_\d{4}-\d{2}-\d{2}_\d{4}-\d{2}-\d{2}\.csv"$/,
+    );
+
+    const created = await createRun({ report_type: 'payments.itemized.1', parameters });
+    expect(await drain()).toEqual(['succeeded']);
+    const run = await call('GET', `/v1/reporting/report_runs/${String(created.json.id)}`);
+    const stored = await call('GET', `/v1/files/${String((run.json.result as Json).id)}/contents`);
+    expect(download.text).toBe(stored.text);
+
+    const rows = parseCsv(download.text);
+    expect(rows[0]).toEqual(columns);
+    const at = (name: string) => columns.indexOf(name);
+    const card = must(rows.find((row) => row[0] === intent.publicId));
+    expect([card[at('amount_decimal')], card[at('description')]]).toEqual(['19.99', "'=evil"]);
+    // A JSON cell holds commas and quotes: quoted whole, its quotes doubled (RFC 4180).
+    expect(download.text).toContain('"{""order"":""A,1""}"');
+    expect(
+      rows.find((row) => row[0] !== intent.publicId && row[0] !== 'payment_intent_id')?.[
+        at('amount_decimal')
+      ],
+    ).toBe('1.00000001');
+  });
+
+  test('itemized balance transactions, refunds and disputes; an unreported fee is empty', async () => {
+    firstParty = true;
+    merchant = await syncMerchantFirstParty(gatewayDb(), merchant, true);
+    const end = now() - 5;
+    const base = {
+      merchantId: merchant.id,
+      connectedAccountId: null,
+      provider: 'stripe',
+      currency: 'EUR',
+      reportingCategory: 'charge',
+      status: 'available',
+      availableOn: null,
+      description: null,
+      exchangeRate: null,
+      feeDetails: [],
+      sourceType: null,
+      sourceId: null,
+      paymentIntentId: null,
+      payoutId: null,
+    } as const;
+    const charge = must(
+      await insertBalanceTransaction(gatewayDb(), {
+        ...base,
+        publicId: `txn_${uuidv7()}`,
+        ingestionKey: `test:${uuidv7()}`,
+        providerObjectId: `txn_p_${uuidv7()}`,
+        amount: '10000',
+        fee: null,
+        net: null,
+        type: 'charge',
+        occurredAt: new Date((end - 600) * 1000),
+      }),
+    );
+    const csv = await call(
+      'GET',
+      `/v1/reporting/report_types/balance_transactions.itemized.1/csv?${query({ interval_start: end - HOUR, interval_end: end })}`,
+    );
+    const rows = parseCsv(csv.text);
+    const header = must(rows[0]);
+    expect(header).toEqual([
+      ...REPORT_TYPE_LAYOUTS['balance_transactions.itemized.1'].default_columns,
+    ]);
+    const line = must(rows[1]);
+    expect([
+      line[header.indexOf('balance_transaction_id')],
+      line[header.indexOf('amount_decimal')],
+      line[header.indexOf('fee')],
+      line[header.indexOf('fee_decimal')],
+    ]).toEqual([charge.publicId, '100.00', '', '']);
+
+    const intent = await seedIntent(merchant, { rail: 'card', amount: '1999', currency: 'EUR' });
+    const refund = must(
+      await insertRefund(gatewayDb(), {
+        publicId: `re_${uuidv7()}`,
+        merchantId: merchant.id,
+        paymentIntentId: intent.id,
+        externalRef: '-ref',
+        amount: '999',
+        currency: 'EUR',
+        provider: 'stripe',
+      }),
+    );
+    const { dispute } = await upsertDispute(gatewayDb(), {
+      merchantId: merchant.id,
+      paymentIntentId: intent.id,
+      provider: 'stripe',
+      providerObjectId: `du_${uuidv7()}`,
+      amount: '1999',
+      currency: 'EUR',
+      status: 'needs_response',
+      reason: 'fraudulent',
+      evidenceDueAt: new Date((end + 7 * 24 * HOUR) * 1000),
+    });
+    await Bun.sleep(1100);
+    const later = now();
+    const range = { interval_start: later - HOUR, interval_end: later };
+    const refunds = parseCsv(
+      (
+        await call(
+          'GET',
+          `/v1/reporting/report_types/refunds.itemized.1/csv?${query({ ...range, columns: ['refund_id', 'payment_intent_id', 'external_ref', 'amount_decimal'] })}`,
+        )
+      ).text,
+    );
+    expect(refunds).toEqual([
+      ['refund_id', 'payment_intent_id', 'external_ref', 'amount_decimal'],
+      [refund.publicId, intent.publicId, "'-ref", '9.99'],
+    ]);
+    const disputes = parseCsv(
+      (await call('GET', `/v1/reporting/report_types/disputes.itemized.1/csv?${query(range)}`))
+        .text,
+    );
+    expect(disputes[0]).toEqual([...REPORT_TYPE_LAYOUTS['disputes.itemized.1'].default_columns]);
+    const disputeLine = must(disputes[1]);
+    expect([disputeLine[0], disputeLine[2], disputeLine[3], disputeLine[4]]).toEqual([
+      dispute.publicId,
+      intent.publicId,
+      'needs_response',
+      'fraudulent',
+    ]);
+  });
+
+  test('every refusal is the JSON error before any CSV byte', async () => {
+    const end = now();
+    const path = (id: string, params: Record<string, string | number | readonly string[]>) =>
+      `/v1/reporting/report_types/${id}/csv?${query(params)}`;
+    for (const [url, status, param] of [
+      [
+        path('payments.itemized.1', { interval_start: end, interval_end: end }),
+        400,
+        'interval_end',
+      ],
+      [
+        path('payments.itemized.1', { interval_start: 1, interval_end: end + HOUR }),
+        400,
+        'interval_end',
+      ],
+      [
+        path('payments.itemized.1', { interval_start: 1, interval_end: end, columns: ['colour'] }),
+        400,
+        'columns',
+      ],
+      [
+        path('payments.itemized.1', { interval_start: 1, interval_end: end, limit: 10 }),
+        400,
+        'limit',
+      ],
+      [path('nope.1', { interval_start: 1, interval_end: end }), 404, 'id'],
+    ] as const) {
+      const answer = await call('GET', url);
+      expect([url, answer.status, (answer.json.error as Json | undefined)?.param]).toEqual([
+        url,
+        status,
+        param,
+      ]);
+    }
+    const ledger = await call(
+      'GET',
+      path('payouts.itemized.1', { interval_start: 1, interval_end: end }),
+    );
+    expect([ledger.status, (ledger.json.error as Json).code]).toEqual([404, 'account_missing']);
+  });
+
+  test("Orbit's dashboard downloads behind the membership gate", async () => {
+    await seedIntent(merchant, { rail: 'card', amount: '500', currency: 'EUR' });
+    await Bun.sleep(1100);
+    const end = now();
+    const url = (user: string) =>
+      fetch(
+        `${dashboardUrl}/v1/dashboard/applications/${APP_ID}/reporting/report_types/payments.itemized.1/csv?environment=development&interval_start=${end - HOUR}&interval_end=${end}`,
+        { headers: { 'X-Test-User-Id': user } },
+      );
+    const member = await url(MEMBER);
+    expect(member.status).toBe(200);
+    expect(parseCsv(await member.text())).toHaveLength(2);
+    expect((await url('user_stranger')).status).toBe(403);
   });
 });

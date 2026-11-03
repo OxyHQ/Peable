@@ -79,6 +79,19 @@ import {
 } from './branding';
 import type { CheckoutDeps } from '../services/checkout/sessionService';
 import { BILLING_ENGINE_ROUTES, DASHBOARD_CUSTOMER_ROUTES } from './billingEngine';
+import {
+  answerConnectedAccountList,
+  createConnectedAccountCore,
+  createConnectedAccountLinkCore,
+  refreshConnectedAccountCore,
+  retrieveConnectedAccount,
+} from './connectedAccounts';
+import {
+  answerTransferList,
+  answerTransferReversalList,
+  retrieveTransferCore,
+  reverseTransferCore,
+} from './transfers';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import { requestContextMiddleware } from '../lib/requestContext';
 import { toMerchantDTO, toPaymentIntentDTO, toWebhookDeliveryDTO } from '../lib/serialize';
@@ -644,6 +657,68 @@ export function createDashboardRouter(deps?: {
     dashboard(answerPayoutReconciliation),
   );
   router.get(`${base}/reconciliation_mismatches`, requireOxyUser, dashboard(answerMismatchList));
+
+  /**
+   * Orbit's Connect screen: the marketplace's sellers (`role = 'seller'`; the
+   * merchant's own account is `…/account` above), their onboarding links, and
+   * the settlements paid to them — the SAME cores as `/v1/connected_accounts`
+   * and `/v1/transfers`. Writes run under the generic idempotency layer, so a
+   * retried reversal with the same `Idempotency-Key` is one reversal (its own
+   * `external_ref` already is).
+   */
+  const asMemberWrite = (core: MerchantCore) =>
+    asMember((req, res, merchant) =>
+      runIdempotent(req, res, merchant.id, () => core(req, res, merchant)),
+    );
+  router.get(
+    `${base}/connected_accounts`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerConnectedAccountList(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/connected_accounts`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMemberWrite(createConnectedAccountCore),
+  );
+  router.get(
+    `${base}/connected_accounts/:accountId`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveConnectedAccount(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/connected_accounts/:accountId/refresh`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMemberWrite(refreshConnectedAccountCore),
+  );
+  router.post(
+    `${base}/connected_accounts/:accountId/account_links`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMemberWrite(createConnectedAccountLinkCore),
+  );
+  router.get(
+    `${base}/transfers`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerTransferList(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/transfers/:transferId`,
+    requireOxyUser,
+    asMember((req, res, merchant) => retrieveTransferCore(req, res, merchant, 'dashboard')),
+  );
+  router.get(
+    `${base}/transfers/:transferId/reversals`,
+    requireOxyUser,
+    asMember((req, res, merchant) => answerTransferReversalList(req, res, merchant, 'dashboard')),
+  );
+  router.post(
+    `${base}/transfers/:transferId/reversals`,
+    requireOxyUser,
+    requestContextMiddleware,
+    asMemberWrite(reverseTransferCore),
+  );
 
   router.get(
     `${base}/webhook_deliveries`,

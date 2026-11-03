@@ -39,6 +39,9 @@ export interface PaymentReportRow {
   readonly receiptEmail: string | null;
   readonly cancellationReason: string | null;
   readonly canceledAt: Date | null;
+  /** The seller (`ca_…`) the payment was on behalf of. */
+  readonly connectedAccountPublicId: string | null;
+  readonly metadata: Record<string, string>;
 }
 
 /** Every payment intent CREATED in the interval, oldest first. */
@@ -73,6 +76,10 @@ export async function* paymentsForReport(
         receiptEmail: paymentIntents.receiptEmail,
         cancellationReason: paymentIntents.cancellationReason,
         canceledAt: paymentIntents.canceledAt,
+        connectedAccountPublicId: sql<string | null>`${sql.raw(
+          '(select a.public_id from connected_accounts a where a.id = "payment_intents"."connected_account_id")',
+        )}`,
+        metadata: paymentIntents.metadata,
       })
       .from(paymentIntents)
       .where(
@@ -107,6 +114,8 @@ export interface PayoutReportRow {
   readonly description: string | null;
   readonly statementDescriptor: string | null;
   readonly failureCode: string | null;
+  readonly balanceTransactionPublicId: string | null;
+  readonly metadata: Record<string, string>;
 }
 
 function accountOf(
@@ -141,6 +150,11 @@ export async function* payoutsForReport(
         description: payouts.description,
         statementDescriptor: payouts.statementDescriptor,
         failureCode: payouts.failureCode,
+        // The same lookup `payoutRepository` serves the wire's `balance_transaction` with.
+        balanceTransactionPublicId: sql<string | null>`${sql.raw(
+          `(select b.public_id from balance_transactions b where b.source_type = 'payout' and b.source_id = "payouts"."public_id" order by b.occurred_at limit 1)`,
+        )}`,
+        metadata: payouts.metadata,
       })
       .from(payouts)
       .where(
@@ -251,7 +265,13 @@ export async function balanceSummaryForReport(
 export async function earliestReportData(
   db: DatabaseOrTransaction,
   merchantId: string,
-): Promise<{ payments: Date | null; ledger: Date | null; payouts: Date | null }> {
+): Promise<{
+  payments: Date | null;
+  ledger: Date | null;
+  payouts: Date | null;
+  refunds: Date | null;
+  disputes: Date | null;
+}> {
   const [row] = await db
     .select({
       payments: sql<
@@ -263,9 +283,21 @@ export async function earliestReportData(
       payouts: sql<
         string | null
       >`(select min(o.created_at) from payouts o where o.merchant_id = ${merchantId}::text)`,
+      refunds: sql<
+        string | null
+      >`(select min(r.created_at) from refunds r where r.merchant_id = ${merchantId}::text)`,
+      disputes: sql<
+        string | null
+      >`(select min(d.created_at) from disputes d where d.merchant_id = ${merchantId}::text)`,
     })
     .from(sql`(select 1) as one`);
   const at = (value: string | null | undefined) =>
     value === null || value === undefined ? null : new Date(value);
-  return { payments: at(row?.payments), ledger: at(row?.ledger), payouts: at(row?.payouts) };
+  return {
+    payments: at(row?.payments),
+    ledger: at(row?.ledger),
+    payouts: at(row?.payouts),
+    refunds: at(row?.refunds),
+    disputes: at(row?.disputes),
+  };
 }

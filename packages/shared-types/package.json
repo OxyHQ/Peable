@@ -1,6 +1,6 @@
 {
   "name": "@peable.to/shared-types",
-  "version": "0.18.0",
+  "version": "0.19.0",
   "description": "Shared TypeScript types for the Peable Gateway — the wire contract shared by the backend, SDK, and frontend.",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -35,6 +35,18 @@
         "default": "./dist/cjs/tax.js"
       },
       "default": "./dist/esm/tax.js"
+    },
+    "./reporting": {
+      "react-native": "./dist/esm/reporting.js",
+      "import": {
+        "types": "./dist/types/reporting.d.ts",
+        "default": "./dist/esm/reporting.js"
+      },
+      "require": {
+        "types": "./dist/types/reporting.d.ts",
+        "default": "./dist/cjs/reporting.js"
+      },
+      "default": "./dist/esm/reporting.js"
     },
     "./package.json": "./package.json"
   },
