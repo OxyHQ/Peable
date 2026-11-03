@@ -49,7 +49,36 @@ export interface ProviderConfirmResult {
   paymentIntent?: { status?: string };
 }
 
+/** Minimal Checkout Elements contract; no provider UI or entitlement ownership. */
+export interface ProviderCheckoutSession {
+  id: string;
+  livemode: boolean;
+  currency: string;
+  minorUnitsAmountDivisor: number;
+  canConfirm: boolean;
+  total: { total: { minorUnitsAmount: number } };
+  status: { type: 'open' | 'expired' | 'complete'; paymentStatus?: string };
+}
+export interface ProviderCheckoutActions {
+  getSession(): ProviderCheckoutSession;
+  confirm(options: {
+    paymentMethod: string;
+    redirect: 'if_required';
+    returnUrl?: string;
+  }): Promise<
+    | { type: 'success'; session: ProviderCheckoutSession }
+    | { type: 'error'; error: { message?: string } }
+  >;
+}
+export interface ProviderCheckoutElements {
+  loadActions(): Promise<
+    | { type: 'success'; actions: ProviderCheckoutActions }
+    | { type: 'error'; error: { message?: string } }
+  >;
+}
+
 export interface ProviderSdk {
+  initCheckoutElementsSdk?(options: { clientSecret: string }): ProviderCheckoutElements;
   elements(options: Record<string, unknown>): ProviderElements;
   createPaymentMethod?(data: {
     type: 'card';
