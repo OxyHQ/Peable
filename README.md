@@ -69,9 +69,9 @@ production acceptance must be verified for the exact release.
 
 ### First integration: Mention Plus
 
-**Mention is the first target for the unified payment experience.** When a user
-opens Mention Plus and taps **Subscribe**, Mention opens **Pay with Peable in a
-Bloom detached bottom sheet**. The buyer reviews the offer and payment method,
+**Mention is the first target for the unified payment experience.** In the local
+integration, opening Mention Plus and tapping **Subscribe** opens **Pay with
+Peable in a Bloom detached bottom sheet**. The buyer reviews the offer and payment method,
 authorizes payment, and sees the resulting status.
 
 **Mention Plus can be purchased on its own. Oxy One also includes Mention Plus; it
