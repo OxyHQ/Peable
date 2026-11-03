@@ -1,3 +1,4 @@
+import { toRefundDTO } from '../lib/serializeRefund';
 /**
  * The refund surface: `/v1/refunds`.
  *
@@ -10,17 +11,13 @@ import { Router } from 'express';
 import type { RequestHandler } from 'express';
 import { z } from 'zod';
 import { oxy } from '../oxy';
-import { isBaseUnitString, type Refund, type Settlement } from '@peable.to/shared-types';
+import { isBaseUnitString, type Settlement } from '@peable.to/shared-types';
 import { getDb } from '../db/postgres';
 import {
   findIntentByPublicId,
   findIntentForMerchant,
 } from '../db/payments/paymentIntentRepository';
-import {
-  findRefundByExternalRef,
-  listRefundsForIntent,
-  type RefundRow,
-} from '../db/refunds/refundRepository';
+import { findRefundByExternalRef, listRefundsForIntent } from '../db/refunds/refundRepository';
 import {
   createRefund,
   PaymentNotRefundableError,
@@ -67,22 +64,6 @@ const createRefundBodySchema = z.object({
  * repositories is how a renamed field becomes a runtime failure somebody else
  * discovers.
  */
-function toRefundDTO(row: RefundRow, paymentIntentPublicId: string, paymentStatus: string): Refund {
-  return {
-    id: row.publicId,
-    object: 'refund',
-    externalRef: row.externalRef,
-    origin: row.origin,
-    paymentIntentId: paymentIntentPublicId,
-    amount: row.amount,
-    currency: row.currency,
-    status: row.status,
-    paymentStatus,
-    failureCode: row.failureCode,
-    createdAt: row.createdAt.toISOString(),
-    updatedAt: row.updatedAt.toISOString(),
-  };
-}
 
 export function createRefundsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const router = Router();

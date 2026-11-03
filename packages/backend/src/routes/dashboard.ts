@@ -1,3 +1,4 @@
+import { registerDashboardFinanceReads } from './dashboardFinance';
 import { Router } from 'express';
 import type { Request, RequestHandler, Response } from 'express';
 import { z } from 'zod';
@@ -382,5 +383,10 @@ export function createDashboardRouter(deps?: {
     }),
   );
 
+  registerDashboardFinanceReads(router, requireOxyUser, async (req, res) => {
+    const access = await resolveDashboardAccess(req, res, { assertAppMembership });
+    if (!access) return null;
+    return resolveMerchantByApp(access.applicationId, access.environment, res);
+  });
   return router;
 }
