@@ -337,6 +337,13 @@
       "when": 1793725246846,
       "tag": "0047_catalog_validate",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "7",
+      "when": 1793726578475,
+      "tag": "0048_api_request_logs",
+      "breakpoints": true
     }
   ]
 }

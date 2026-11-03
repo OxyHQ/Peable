@@ -38,7 +38,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Update verb | ✅ | `POST /v1/<objects>/:id` for PI, link, session, contribution, `merchants/me`; no `PATCH` on the merchant API | Dashboard owner routes (`…/merchant`, `…/tax/settings`) still `PATCH` |
 | Search API | ❌ | — | Phase 8 |
 | OpenAPI | 🟡 | Contributions only | Whole API from `packages/contracts` |
-| Request logs | ❌ | — | 30-day redacted log for Orbit and CLI |
+| Request logs | ✅ | `api_request_logs`: one row per service-authenticated merchant `/v1` request (method, path without query, status, duration, `Idempotency-Key`; never bodies, headers or query strings), 30-day retention (sweeper + read horizon); `GET /v1/request_logs` (`status` code or class, `method`, `created`) and `/:id` by `Request-Id`; `GET /v1/request_logs/stream` (test mode); dashboard `…/request_logs`; SDK `requestLogs` | Orbit Logs page |
 
 ## Phase 1 — Keys, modes, events, webhooks
 
@@ -48,7 +48,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Publishable key | ❌ | Provider key of the payment's own mode returned inside `client_action` | `pk_test_` / `pk_live_` |
 | Test + live in one deployment | ✅ | `STRIPE_*_TEST` / `STRIPE_*_LIVE` side by side; credential selects the mode, stored rows resolve by their own; webhooks verified per mode on the same paths (ADR 0017) | |
 | Events API | ✅ | `evt_` stored in the transaction of its change (ADR 0014 D4); `GET /v1/events` (`type` exact or `prefix.*`, `created`, `delivery_success`) and `/v1/events/:id`; 30-day retention (sweeper + read horizon); envelope carries `api_version`, `previous_attributes`, `request {id, idempotency_key}`; SDK `events` | `types[]` filter; `pending_webhooks` |
-| Webhook endpoints | ✅ | `we_` resource (create/list/retrieve/update/delete), ≤ 16 per merchant, `enabled_events` incl. `*`, generated `whsec_` shown once, `roll_secret` with ≤ 24h dual-signature overlap, per-endpoint `api_version`, URL checked by the dispatcher's SSRF rules; `merchants.webhook_*` removed; SDK `webhookEndpoints` | Endpoint pinned to an older `api_version` once dated versions exist |
+| Webhook endpoints | ✅ | `we_` resource (create/list/retrieve/update/delete), ≤ 16 per merchant, `enabled_events` incl. `*`, generated `whsec_` shown once, `roll_secret` with ≤ 24h dual-signature overlap, per-endpoint `api_version`, URL checked by the dispatcher's SSRF rules; `POST /v1/webhook_endpoints/:id/test` (Orbit's "send test event" for an integration, SDK `sendTestEvent`); `merchants.webhook_*` removed; SDK `webhookEndpoints` | Endpoint pinned to an older `api_version` once dated versions exist |
 | Event catalog | 🟡 | Stripe's names (ADR 0019): `payment_intent.created\|requires_action\|processing\|amount_capturable_updated\|succeeded\|payment_failed\|canceled`, `charge.refunded`, `charge.dispute.*`, `refund.*`, `customer.*`, `payment_method.*`, `setup_intent.*`, `connected_account.updated`, the catalog's `product.created\|updated\|deleted`, `price.created\|updated`, `coupon.created\|updated\|deleted`, `promotion_code.created\|updated` (ADR 0018) + `webhook_endpoint.test` | `charge.succeeded\|captured\|updated`, Billing, payouts as those resources land |
 | Retry schedule | ✅ | ~3 days exponential with ±20% jitter; an endpoint failing continuously for 3 days is disabled (`disabled_reason: delivery_failures`) | |
 | Delivery log + redeliver | ✅ | One delivery per (event, endpoint); `GET /v1/webhook_deliveries` (`event`, `webhook_endpoint`), redeliver; Orbit dashboard: endpoints CRUD + roll + "send test event", events, deliveries; SDK `webhookDeliveries` | Prefixed delivery ids |
@@ -135,7 +135,7 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Customers / catalog / subscriptions / invoices UI | 🟡 | Products: list (active/archived), create with a first price, edit, archive, delete, prices per product (add, archive, set default) over the dashboard catalog routes | Coupons and promotion codes, customers, subscriptions, invoices |
 | Payment Links builder | ❌ | — | Present |
 | Balances / payouts / reports | ❌ | — | Present |
-| Developers (keys, webhooks, events, logs) | 🟡 | Webhook delivery log (status, attempts, last error, next attempt) with Redeliver; merchant webhook URL/secret in Settings | Keys, endpoints, events, request logs |
+| Developers (keys, webhooks, events, logs) | 🟡 | Webhook delivery log (status, attempts, last error, next attempt) with Redeliver; merchant webhook URL/secret in Settings; backend routes for request logs (`/v1/dashboard/applications/:id/request_logs`) | Keys, endpoints, events, request logs UI |
 | Team and roles | 🟡 | Oxy membership checks on dashboard routes | Orbit settings over Oxy membership |
 | Test/live toggle | ✅ | Orbit's Test / Live toggle maps to `?environment=` (`development` / `production`) on every dashboard call | |
 
@@ -147,8 +147,8 @@ Baseline: `main` at `5e75bc5` (2026-11-03).
 | Auto-pagination | ✅ | `list()` is a page promise and an async iterable on every list; `autoPagingEach`, `autoPagingToArray({ limit })`; `expand` option | |
 | Auto idempotency keys / retries / default timeout | 🟡 | A uuid key on every POST (0.8.0); one 401 retry under the same key; no network retries; no default timeout | Retries with backoff; default timeout |
 | Version pinning in SDK | ❌ | — | `apiVersion` |
-| CLI (`listen`, `trigger`, `logs tail`) | ❌ | — | `@peable.to/cli` |
-| Test helpers / documented test data | ❌ | Internal scripts | `/v1/test_helpers/*`, documented cards and testnet |
+| CLI (`listen`, `trigger`, `logs tail`) | ✅ | `@peable.to/cli` 0.1.0 (`private` until its npm trusted publisher is configured): `login`/`logout`/`whoami` (0600 profiles, test/live), `listen --forward-to` (per-session `whsec_`, the gateway's own signing; fed by `GET /v1/events/stream`, SSE signalled by `NOTIFY` in the event's transaction, test mode), `trigger` (fixtures over the public API + test helpers), `logs tail`, `events`, `payment_intents`, `checkout_sessions create`, `webhook_endpoints` | `trigger` for card-only events (needs provider-confirmed test cards) |
+| Test helpers / documented test data | ✅ | `POST /v1/test_helpers/payment_intents/:id/simulate_faircoin_payment` (the watcher's own decision, synthetic txid, no chain) and `/v1/test_helpers/checkout_sessions/:id/expire` (the sweep's own step), test mode only; SDK `testHelpers`; `docs/integrating-peable.md` › Local development links the provider's test cards and documents testnet | Card test helpers (Stripe's `test_clocks`, refund/dispute simulation) |
 | Docs site + API reference | 🟡 | `docs/integrating-peable.md` | docs.peable.to |
 | Sample apps | ❌ | — | `examples/` |
 

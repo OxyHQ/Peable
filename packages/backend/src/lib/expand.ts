@@ -69,7 +69,8 @@ export type ExpandableType =
   | 'product'
   | 'price'
   | 'coupon'
-  | 'promotion_code';
+  | 'promotion_code'
+  | 'request_log';
 
 /** The types an expansion can PRODUCE — each needs a loader. */
 type TargetType =
@@ -105,6 +106,7 @@ const REGISTRY: Record<ExpandableType, Readonly<Record<string, TargetType>>> = {
   webhook_delivery: {},
   webhook_endpoint: {},
   event: {},
+  request_log: {},
   'tax.transaction': {},
   product: { default_price: 'price' },
   price: { product: 'product' },

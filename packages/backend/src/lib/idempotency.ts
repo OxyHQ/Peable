@@ -54,7 +54,7 @@ export const IDEMPOTENCY_KEY_HEADER = 'Idempotency-Key';
 export const IDEMPOTENT_REPLAYED_HEADER = 'Idempotent-Replayed';
 
 /** 1–255 printable ASCII characters (space through tilde), exactly as sent. */
-const KEY_PATTERN = /^[ -~]{1,255}$/;
+export const IDEMPOTENCY_KEY_PATTERN = /^[ -~]{1,255}$/;
 
 /** How many times a claim that lost to a just-released key is retried. */
 const CLAIM_ATTEMPTS = 3;
@@ -160,7 +160,7 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     next();
     return;
   }
-  if (!KEY_PATTERN.test(key)) {
+  if (!IDEMPOTENCY_KEY_PATTERN.test(key)) {
     sendError(
       res,
       400,
@@ -184,6 +184,8 @@ async function handle(req: Request, res: Response, next: NextFunction): Promise<
     next();
     return;
   }
+  // The request log reads it at the end instead of looking it up again.
+  res.locals.merchant = merchant;
 
   const request: IdempotentRequest = {
     merchantId: merchant.id,

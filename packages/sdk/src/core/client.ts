@@ -26,8 +26,32 @@ export interface RestClientRequestOptions {
   headers?: Record<string, string>;
 }
 
+export interface RestClientStreamOptions {
+  query?: Readonly<Record<string, QueryValue>>;
+  headers?: Record<string, string>;
+  /** Aborts the connection — the only way a long-lived stream ends early. */
+  signal?: AbortSignal;
+}
+
 export interface RestClient {
   request<T>(method: string, path: string, opts?: RestClientRequestOptions): Promise<T>;
+}
+
+/**
+ * The client `createRestClient` builds: `request`, and `stream` for the two
+ * live tails (`events.stream`, `requestLogs.stream`). A separate interface so
+ * the `RestClient` an integrator implements (Orbit's contributions client)
+ * does not have to grow a method it never needs.
+ */
+export interface GatewayClient extends RestClient {
+  /**
+   * Open a long-lived `GET` (Server-Sent Events) with the same authentication
+   * and the same single 401 retry as `request`, and hand back the response
+   * whose body is the stream. A non-2xx answer is read and thrown as the same
+   * typed error `request` would throw. No request timeout applies: a stream is
+   * meant to stay open, and `signal` is how the caller ends it.
+   */
+  stream(path: string, opts?: RestClientStreamOptions): Promise<Response>;
 }
 
 export interface RestClientConfig {
@@ -59,7 +83,7 @@ export function createRestClient(
   config: RestClientConfig,
   tokenProvider: ServiceTokenProvider | undefined,
   deps: { fetch?: typeof fetch } = {},
-): RestClient {
+): GatewayClient {
   const fetchImpl = deps.fetch ?? fetch;
   const timeout = resolveRequestTimeout(config.requestTimeoutMs);
 
@@ -139,7 +163,48 @@ export function createRestClient(
     return body as T;
   }
 
+  async function openStream(
+    path: string,
+    opts: RestClientStreamOptions,
+    allowRetryOn401: boolean,
+  ): Promise<Response> {
+    const token = await tokenProvider?.getToken();
+    const headers: Record<string, string> = {
+      Accept: 'text/event-stream',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opts.headers,
+    };
+    let response: Response;
+    try {
+      response = await fetchImpl(buildUrl(config.baseURL, path, opts.query), {
+        method: 'GET',
+        headers,
+        ...(opts.signal ? { signal: opts.signal } : {}),
+      });
+    } catch (cause) {
+      if (opts.signal?.aborted) throw cause;
+      throw new PeableApiError(
+        `Failed to reach the Peable Gateway at ${config.baseURL}: ${
+          cause instanceof Error ? cause.message : String(cause)
+        }`,
+      );
+    }
+    if (response.status === HTTP_UNAUTHORIZED && allowRetryOn401 && tokenProvider) {
+      await response.body?.cancel();
+      tokenProvider.invalidate();
+      return openStream(path, opts, false);
+    }
+    if (!response.ok) {
+      const body = await readJsonBody(response).catch(() => undefined);
+      throw errorFromResponse(response.status, body, response.headers.get('Request-Id'));
+    }
+    return response;
+  }
+
   return {
+    stream(path: string, opts: RestClientStreamOptions = {}): Promise<Response> {
+      return openStream(path, opts, true);
+    },
     request<T>(method: string, path: string, opts: RestClientRequestOptions = {}): Promise<T> {
       // Minted ONCE per call, above the attempts, so the 401 re-attempt below
       // presents the same key: a request the gateway already ran is answered

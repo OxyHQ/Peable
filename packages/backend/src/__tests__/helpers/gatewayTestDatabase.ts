@@ -42,6 +42,7 @@ import {
 import { findEventById, insertEvent, type EventRow } from '../../db/events/eventRepository';
 import { generateWebhookSecret } from '../../services/webhookEndpoints';
 import { newId } from '../../lib/ids';
+import { flushRequestLogs } from '../../lib/requestLog';
 import { toEventDTO, toPaymentIntentDTO } from '../../lib/serialize';
 import * as schema from '../../db/schema';
 import type { Database } from '../../db/postgres';
@@ -156,6 +157,7 @@ export function useGatewayDatabase(): void {
   });
 
   afterAll(async () => {
+    await flushRequestLogs();
     await dropSuiteDatabase(suite);
     suite = undefined;
   });
@@ -191,6 +193,9 @@ const OWNED_TABLES: readonly string[] = (Object.values(schema) as unknown[])
  * outside the set — is not used.
  */
 export async function resetGatewayTables(): Promise<void> {
+  // A request the previous case made may still be writing its log row; it
+  // would otherwise land after the truncate, against a merchant that is gone.
+  await flushRequestLogs();
   if (OWNED_TABLES.length === 0) {
     throw new Error(
       'resetGatewayTables: the schema barrel exported no tables, so a reset would silently empty nothing',

@@ -44,3 +44,8 @@ packages/pay/*
 # only its manifest, for the frozen workspace install.
 packages/orbit/*
 !packages/orbit/package.json
+
+# The CLI (`@peable.to/cli`) runs on a developer's machine, never in the
+# gateway: only its manifest, for the frozen workspace install.
+packages/cli/*
+!packages/cli/package.json

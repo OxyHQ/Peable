@@ -5,10 +5,14 @@ import { oxy } from '../oxy';
 import { getDb } from '../db/postgres';
 import type { MerchantRow } from '../db/merchants/merchantRepository';
 import {
+  findEventByIdForMerchant,
   findEventForMerchant,
   listEventsForMerchant,
+  type EventRow,
   type EventTypeFilter,
 } from '../db/events/eventRepository';
+import { serveLiveStream } from '../lib/liveStream';
+import { LIVE_TAIL_CHANNELS } from '../services/liveTail';
 import { expandObjects, parseExpand } from '../lib/expand';
 import {
   answerList,
@@ -32,18 +36,59 @@ import { resolveMerchant } from './paymentIntents';
  * prefix). `*` alone is no filter. Lowercase dotted names only, so the value is
  * never a LIKE pattern of the caller's choosing.
  */
+const TYPE_FILTER_PATTERN = /^(\*|[a-z_]+(\.[a-z_]+)*(\.\*)?)$/;
+
+function toTypeFilter(value: string): EventTypeFilter | undefined {
+  if (value === '*') return undefined;
+  if (value.endsWith('.*')) return { kind: 'prefix', prefix: value.slice(0, -1) };
+  return { kind: 'exact', type: value };
+}
+
 const typeFilter = z
   .string()
   .max(100)
-  .regex(
-    /^(\*|[a-z_]+(\.[a-z_]+)*(\.\*)?)$/,
-    'type is an event type, or a prefix ending in .* (payment_intent.*)',
-  )
-  .transform((value): EventTypeFilter | undefined => {
-    if (value === '*') return undefined;
-    if (value.endsWith('.*')) return { kind: 'prefix', prefix: value.slice(0, -1) };
-    return { kind: 'exact', type: value };
-  });
+  .regex(TYPE_FILTER_PATTERN, 'type is an event type, or a prefix ending in .* (payment_intent.*)')
+  .transform(toTypeFilter);
+
+/**
+ * The stream's `types`: a comma-separated list of the same filters
+ * (`payment_intent.settled,connected_account.*`). Absent, or any `*`, is every
+ * event.
+ */
+const streamQuery = z
+  .object({
+    types: z
+      .string()
+      .max(2_000)
+      .transform((value) => value.split(',').map((part) => part.trim()))
+      .pipe(
+        z
+          .array(
+            z
+              .string()
+              .max(100)
+              .regex(
+                TYPE_FILTER_PATTERN,
+                'types is a comma-separated list of event types, or prefixes ending in .*',
+              ),
+          )
+          .min(1)
+          .max(32),
+      )
+      .optional(),
+  })
+  .strict();
+
+function eventMatches(filters: readonly (EventTypeFilter | undefined)[] | null, row: EventRow) {
+  if (filters === null) return true;
+  return filters.some((filter) =>
+    filter === undefined
+      ? true
+      : filter.kind === 'exact'
+        ? row.type === filter.type
+        : row.type.startsWith(filter.prefix),
+  );
+}
 
 const eventListFilters = {
   type: typeFilter.optional(),
@@ -106,6 +151,41 @@ export async function retrieveEvent(
   res.status(200).json(dto);
 }
 
+/**
+ * `GET /v1/events/stream` — every event of the caller's merchant, as it
+ * commits, rendered exactly as `/v1/events` and a webhook delivery render it.
+ * Test mode only. `lib/liveStream.ts` has the wire and the bounds; the signal
+ * comes from `recordEvent`, inside the transaction that stores the event.
+ */
+export async function streamEvents(
+  req: Request,
+  res: Response,
+  merchant: MerchantRow,
+): Promise<void> {
+  const query = parseQuery(req, res, streamQuery);
+  if (!query) return;
+  const filters = query.types ? query.types.map(toTypeFilter) : null;
+  const db = getDb();
+  await serveLiveStream(req, res, merchant, {
+    channel: LIVE_TAIL_CHANNELS.events,
+    eventName: 'event',
+    load: (id) => findEventByIdForMerchant(db, id, merchant.id),
+    resolveCursor: async (publicId) =>
+      (await findEventForMerchant(db, publicId, merchant.id))?.id ?? null,
+    after: async (internalId, limit) =>
+      (
+        await listEventsForMerchant(db, {
+          merchantId: merchant.id,
+          page: { limit, before: internalId },
+        })
+      ).data.reverse(),
+    matches: (row) => eventMatches(filters, row),
+    internalId: (row) => row.id,
+    publicId: (row) => row.publicId,
+    render: toEventDTO,
+  });
+}
+
 /** The service-authed `/v1/events` router. */
 export function createEventsRouter(deps: { requireMerchant: RequestHandler }): Router {
   const { requireMerchant } = deps;
@@ -124,6 +204,8 @@ export function createEventsRouter(deps: { requireMerchant: RequestHandler }): R
       await handler(req, res, merchant);
     });
   router.get('/v1/events', ...read, withMerchant(answerEventList));
+  // Before `/:id`, which would otherwise read `stream` as an event id.
+  router.get('/v1/events/stream', ...read, withMerchant(streamEvents));
   router.get('/v1/events/:id', ...read, withMerchant(retrieveEvent));
   return router;
 }

@@ -26,6 +26,7 @@ export { refunds } from './refunds';
 export { disputes } from './disputes';
 export { idempotencyKeys } from './idempotency';
 export { couponProducts, coupons, prices, products, promotionCodes } from './catalog';
+export { apiRequestLogs } from './requestLogs';
 
 export { recurringMirrors, recurringObservationOutbox } from './recurring';
 export { billingObjectBindings, billingOperations, billingRenewalTaxes } from './billing';

@@ -554,6 +554,66 @@ answer `503` like any unavailable rail.
 
 ---
 
+## Local development
+
+Everything below is **test mode only**: a `production` (live) credential is
+refused with `403 permission_error`, code `test_mode_only`.
+
+### The CLI — `@peable.to/cli`
+
+```sh
+npm i -g @peable.to/cli        # or: bunx @peable.to/cli … (once published; see packages/cli/README.md)
+peable login                   # a test-environment application credential
+peable listen --forward-to http://localhost:3000/webhooks
+peable trigger payment_intent.succeeded
+peable logs tail
+```
+
+- **`peable listen`** streams every event your test merchant records, as it
+  commits, and POSTs each one to `--forward-to`, signed with a `whsec_…` it
+  prints for the session — the same `Peable-Signature` algorithm as a real
+  delivery, so `peable.webhooks.constructEvent(rawBody, header, secret)` works
+  unchanged. No public URL and no registered endpoint are needed (a webhook
+  endpoint must be reachable from the internet; `listen` is how localhost gets
+  events). It reads `GET /v1/events/stream`, a Server-Sent Events stream fed
+  from the same transaction that stores each event, never a rolled-back one;
+  the SDK exposes it as `peable.events.stream()`.
+- **`peable trigger <event>`** creates real test objects through the API that
+  cause the event (`peable trigger` lists them).
+- **`peable logs tail`** prints your requests as they are answered — method,
+  path, status, duration, `Idempotency-Key`, never a body or header. The same
+  log is `GET /v1/request_logs` (30 days, filters `status` = `404` or `4xx`,
+  `method`, `created`) and `peable.requestLogs`, and Orbit shows it.
+
+`packages/cli/README.md` has every command.
+
+### Test helpers — `/v1/test_helpers/*`
+
+They move a test object the way the outside world would, through the gateway's
+real state machine — the same transitions, events and webhooks as a real
+payment:
+
+| Route | SDK | What it does |
+|---|---|---|
+| `POST /v1/test_helpers/payment_intents/:id/simulate_faircoin_payment` `{ outcome?: 'settled' \| 'underpaid' }` | `testHelpers.paymentIntents.simulateFaircoinPayment` | A FairCoin payer broadcasts (`processing`, with a synthetic txid) and the chain confirms it (`succeeded`) — or underpays it (`canceled`, `cancellation_reason: 'underpaid'`, with `payment_intent.payment_failed` then `payment_intent.canceled`). **It does not touch the chain**: nothing is broadcast and the txid names no transaction. |
+| `POST /v1/test_helpers/checkout_sessions/:id/expire` | `testHelpers.checkoutSessions.expire` | The session's clock runs out now: its payment is `canceled` as `abandoned` (`payment_intent.canceled`), a card one cancelled at the provider first, exactly as the expiry sweep does. A payment already `processing` or finished cannot expire (409). |
+
+Both take `Idempotency-Key` like every merchant `POST`.
+
+### Test data
+
+- **FairCoin:** a test merchant is on **testnet** (a non-production merchant
+  cannot register a mainnet key). Pay a test intent from a testnet wallet to
+  its `faircoin.address`, or finish it with `simulate_faircoin_payment`.
+  Amounts are base units: 1 FAIR is `"100000000"`.
+- **Cards:** test-mode card payments run on the provider's test environment, so
+  its documented test card numbers apply — successful payments, declines and
+  3-D Secure challenges: <https://docs.stripe.com/testing>. Enter them in the
+  hosted checkout or your own provider fields; a live card is refused in test
+  mode by the provider.
+
+---
+
 ## Typed errors
 
 Every non-2xx maps to a typed error — catch what you need:

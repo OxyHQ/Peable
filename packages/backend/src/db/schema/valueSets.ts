@@ -513,3 +513,10 @@ export type OxyFileReconciliationStatus = (typeof OXY_FILE_RECONCILIATION_STATUS
  */
 export const IDEMPOTENCY_KEY_STATUSES = ['in_progress', 'completed'] as const;
 export type IdempotencyKeyStatus = (typeof IDEMPOTENCY_KEY_STATUSES)[number];
+
+/**
+ * The HTTP methods a request log records — `api_request_logs.method`.
+ * Re-exported from the wire contract so the CHECK reads from the tuple
+ * `RequestLog.method` is typed by.
+ */
+export { REQUEST_LOG_METHODS } from '@peable.to/shared-types';

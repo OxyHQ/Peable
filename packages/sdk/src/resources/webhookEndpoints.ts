@@ -11,8 +11,9 @@ import type {
   WebhookEvent,
   WebhookEventType,
 } from '@peable.to/shared-types';
-import type { RestClient } from '../core/client';
+import type { GatewayClient, RestClient } from '../core/client';
 import { type ApiListPromise, listPromise, listQuery } from '../core/list';
+import { liveStream, type LiveStreamOptions } from '../core/liveStream';
 
 /**
  * Webhook endpoints, events and deliveries (ADR 0014 D4).
@@ -82,6 +83,15 @@ export class WebhookEndpointsResource {
       body: params,
     });
   }
+
+  /**
+   * Send this endpoint a `webhook_endpoint.test` event — Orbit's "send test
+   * event". Answers the delivery after its first attempt. The endpoint must be
+   * enabled.
+   */
+  sendTestEvent(id: string): Promise<WebhookDelivery> {
+    return this.client.request<WebhookDelivery>('POST', `${path(id)}/test`);
+  }
 }
 
 export interface EventListParams extends ListParams {
@@ -94,9 +104,39 @@ export interface EventListParams extends ListParams {
   delivery_success?: boolean;
 }
 
+export interface EventStreamParams extends LiveStreamOptions {
+  /**
+   * Only these: exact types or `prefix.*` patterns
+   * (`['payment_intent.succeeded', 'charge.*']`). Absent: every event.
+   */
+  types?: readonly (WebhookEventType | `${string}.*`)[];
+}
+
 /** Every event of the last 30 days, exactly as its deliveries carried it. */
 export class EventsResource {
-  constructor(private readonly client: RestClient) {}
+  constructor(private readonly client: GatewayClient) {}
+
+  /**
+   * Every event of this merchant, as it is recorded — rendered exactly as a
+   * webhook delivery carries it. TEST MODE ONLY (a live credential is refused
+   * with `PeablePermissionError`, code `test_mode_only`): this is what
+   * `peable listen` forwards to a local server.
+   *
+   * Reconnects on its own and resumes after the last event it yielded; ends
+   * when `signal` aborts.
+   *
+   *   for await (const event of peable.events.stream({ types: ['payment_intent.*'] })) { … }
+   */
+  stream(params: EventStreamParams = {}): AsyncGenerator<WebhookEvent> {
+    const { types, ...options } = params;
+    return liveStream<WebhookEvent>(
+      this.client,
+      '/v1/events/stream',
+      'event',
+      { types: types && types.length > 0 ? types.join(',') : undefined },
+      options,
+    );
+  }
 
   retrieve(id: string): Promise<WebhookEvent> {
     return this.client.request<WebhookEvent>('GET', `/v1/events/${encodeURIComponent(id)}`);

@@ -154,6 +154,19 @@ export type {
   WebhookDelivery,
   WebhookDeliveryStatus,
 } from './webhookDelivery';
+export {
+  REQUEST_LOG_METHODS,
+  REQUEST_LOG_RETENTION_DAYS,
+  type RequestLog,
+  type RequestLogListParams,
+  type RequestLogMethod,
+  type RequestLogStatusFilter,
+} from './requestLog';
+export {
+  SIMULATED_FAIRCOIN_OUTCOMES,
+  type SimulatedFaircoinOutcome,
+  type SimulateFaircoinPaymentParams,
+} from './testHelpers';
 export { signWebhook, verifyWebhook } from './webhookSigner';
 export {
   type MerchantEnvironment,

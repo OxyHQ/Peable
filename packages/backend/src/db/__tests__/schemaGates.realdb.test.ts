@@ -38,6 +38,7 @@ import {
   coupons,
   couponProducts,
   promotionCodes,
+  apiRequestLogs,
 } from '../schema';
 import {
   POSTGRES_TESTS_ENABLED,
@@ -57,6 +58,7 @@ const BACKEND_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MIGRATIONS_DIR = join(BACKEND_ROOT, 'db', 'migrations');
 
 const ALL_TABLES = [
+  apiRequestLogs,
   billingObjectBindings,
   billingOperations,
   faircoinRenewalAuthorizations,
@@ -212,6 +214,11 @@ describe('id-column classification', () => {
         {
           column: 'events.request_id',
           reason: 'the Request-Id of the API call that caused the event — a log key, not a row',
+        },
+        {
+          column: 'api_request_logs.request_id',
+          reason:
+            "this row's own req_… identifier (the Request-Id it was answered with), not a reference",
         },
         {
           column: 'webhook_endpoints.public_id',

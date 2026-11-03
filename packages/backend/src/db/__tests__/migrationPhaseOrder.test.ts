@@ -58,6 +58,9 @@ const SHIPPED_BEFORE: Record<string, string> = {
   // ADR 0019's validate half ships in its own release (#195), deployed before
   // the catalog's `0046`–`0047` (ADR 0018) exist.
   '0045_orbit_payments_core_validate': 'released with #195 before 0046 (catalog) was authored',
+  // The catalog's validation half ships with #196; it must be DEPLOYED (its
+  // post phase applied) before the request-log migration merges.
+  '0047_catalog_validate': 'released with #196; deployed before 0048 (request logs) merges',
 };
 
 interface Migration {

@@ -67,6 +67,22 @@
         "vite": "^8.1.5",
       },
     },
+    "packages/cli": {
+      "name": "@peable.to/cli",
+      "version": "0.1.0",
+      "bin": {
+        "peable": "dist/bin.js",
+      },
+      "dependencies": {
+        "@peable.to/sdk": "workspace:0.14.0",
+        "@peable.to/shared-types": "workspace:0.12.0",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+        "@types/node": "^20.0.0",
+        "typescript": "~5.9.2",
+      },
+    },
     "packages/contracts": {
       "name": "@peable.to/contracts",
       "version": "0.4.0",
@@ -284,10 +300,10 @@
     },
     "packages/sdk": {
       "name": "@peable.to/sdk",
-      "version": "0.14.0",
+      "version": "0.15.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:0.4.0",
-        "@peable.to/shared-types": "workspace:0.9.0",
+        "@peable.to/shared-types": "workspace:0.12.0",
         "qrcode-generator": "^2.0.4",
         "socket.io-client": "^4.8.3",
       },
@@ -311,7 +327,7 @@
     },
     "packages/shared-types": {
       "name": "@peable.to/shared-types",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "dependencies": {
         "@peable.to/contracts": "workspace:0.4.0",
       },
@@ -782,6 +798,8 @@
     "@peable.to/backend": ["@peable.to/backend@workspace:packages/backend"],
 
     "@peable.to/checkout": ["@peable.to/checkout@workspace:packages/checkout"],
+
+    "@peable.to/cli": ["@peable.to/cli@workspace:packages/cli"],
 
     "@peable.to/contracts": ["@peable.to/contracts@workspace:packages/contracts"],
 
