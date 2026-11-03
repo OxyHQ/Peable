@@ -3,10 +3,12 @@
 // is built from. A bundle that must stay small imports this subpath, never the
 // package root, which constructs every schema at load.
 export * from './billingPortal';
+export * from './connect';
 export * from './errors';
 export * from './invoices';
 export * from './lists';
 export * from './money';
 export * from './tax';
 export * from './subscriptions';
+export * from './reporting';
 export * from './version';

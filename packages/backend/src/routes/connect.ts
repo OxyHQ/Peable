@@ -10,12 +10,15 @@
  *
  * The page that calls these is the Peable wallet (`app/connect/[token].tsx`),
  * which already holds both the key and the seller's Oxy session.
+ *
+ * Request schemas: the contract's (`@peable.to/contracts`
+ * `connectOnboardingRoutes`).
  */
 import { Router } from 'express';
 import type { RequestHandler, Response } from 'express';
-import { z } from 'zod';
 import { createOxyAuthMiddleware, getRequiredOxyUserId } from '@oxy.so/core/server';
-import type { ConnectOnboardingComplete } from '@peable.to/shared-types';
+import { type ConnectOnboardingComplete, registerFaircoinKeyParams } from '@peable.to/contracts';
+import { type ErrorCode, errorDocUrl } from '@peable.to/contracts/vocabulary';
 import { oxy } from '../oxy';
 import {
   describeOnboarding,
@@ -26,27 +29,18 @@ import { WatchOnlyViolationError } from '../services/watchOnly';
 import { requestIdOf } from '../lib/requestId';
 import { sendError, sendValidationError, wrap } from '../lib/http';
 
-/**
- * An extended public key is 111 characters in base58check; the bound is a
- * request-size guard with headroom, not a format check — the firewall is.
- */
-const XPUB_MAX_LENGTH = 200;
-
 /** 32 random bytes in base64url are 43 characters. A guard, not a format. */
 const TOKEN_MAX_LENGTH = 128;
 
-const registerBodySchema = z
-  .object({
-    xpub: z.string().trim().min(1).max(XPUB_MAX_LENGTH),
-  })
-  .strict();
-
 function sendRefusal(res: Response, error: OnboardingRefusedError): void {
+  // Every refusal code is a documented one: this does not compile otherwise.
+  const code: ErrorCode = error.code;
   res.status(error.status).json({
     error: {
       type: 'invalid_request_error',
-      code: error.code,
+      code,
       message: error.message,
+      doc_url: errorDocUrl(code),
       // Only on an expired link: where the seller goes to get a fresh one.
       ...(error.refreshUrl ? { refresh_url: error.refreshUrl } : {}),
       request_id: requestIdOf(res) ?? null,
@@ -109,7 +103,7 @@ export function createConnectRouter(deps?: { requireOxyUser?: RequestHandler }):
     wrap(async (req, res) => {
       const token = readToken(req.params.token, res);
       if (!token) return;
-      const parsed = registerBodySchema.safeParse(req.body);
+      const parsed = registerFaircoinKeyParams.safeParse(req.body);
       if (!parsed.success) {
         sendValidationError(res, parsed.error);
         return;
