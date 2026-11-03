@@ -1,12 +1,6 @@
 import { z } from 'zod';
 import { listOf } from '../../common/envelopes';
-import {
-  defineComponent,
-  defineObject,
-  type ObjectMap,
-  resolveObject,
-  type UnresolvedObject,
-} from '../../common/objects';
+import { defineComponent, defineObject, type ObjectMap, resolveObject } from '../../common/objects';
 import { idParam, listQuery, queryBoolean, retrieveQuery } from '../../common/params';
 import { livemode, unixSeconds } from '../../common/primitives';
 import { defineRoute } from '../../route';
@@ -205,7 +199,7 @@ export function eventSchemaOf<T extends WebhookEventType>(type: T) {
 }
 
 /** The object an event of an object type carries, as its module registered it. */
-type EventObject<K extends string> = K extends keyof ObjectMap ? ObjectMap[K] : UnresolvedObject<K>;
+type EventObject<K extends string> = K extends keyof ObjectMap ? ObjectMap[K] : never;
 
 /**
  * Which resource each event type carries under `data.object` — TOTAL over

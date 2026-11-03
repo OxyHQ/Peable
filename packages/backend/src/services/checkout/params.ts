@@ -16,7 +16,7 @@ import {
 import type { StoredCheckoutCollection, StoredCustomField } from '../../db/schema/payments';
 import { sendError } from '../../lib/http';
 import type { Response } from 'express';
-import { isKnownTaxCode } from '../tax/codes';
+import { isKnownTaxCode } from '@peable.to/contracts/vocabulary';
 
 export { adjustableBoundsOf } from '@peable.to/contracts';
 

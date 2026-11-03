@@ -1,13 +1,7 @@
 import { z } from 'zod';
+import { PAYMENT_INTENT_RAILS } from '../../vocabulary/payments';
 import { addressSchema } from '../../common/address';
-import {
-  defineComponent,
-  defineObject,
-  type Expand,
-  expandable,
-  type Ref,
-  resolveObject,
-} from '../../common/objects';
+import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
 import { amount, currency } from '../../common/primitives';
 import {
   CHECKOUT_BILLING_ADDRESS_COLLECTIONS,
@@ -34,16 +28,7 @@ import { BASE_UNIT_PATTERN } from '../../vocabulary/money';
 // ---------------------------------------------------------------------------
 
 /** The payment rail: FairCoin on chain, or a card (and the methods riding on it). */
-export const railSchema = z.enum(['faircoin', 'card']);
-
-/**
- * A field that always carries the FULL object `type` names (never an id) — a
- * payer view embedding the payment it confirmed. Typed through {@link Ref}, so
- * {@link Expand} resolves it to the registered object's wire type.
- */
-export function embedded<K extends string>(type: K): z.ZodType<Ref<K>, Ref<K>> {
-  return z.lazy(() => resolveObject(type)) as unknown as z.ZodType<Ref<K>, Ref<K>>;
-}
+export const railSchema = z.enum(PAYMENT_INTENT_RAILS);
 
 export const checkoutAdjustableQuantitySchema = defineComponent(
   'CheckoutAdjustableQuantity',

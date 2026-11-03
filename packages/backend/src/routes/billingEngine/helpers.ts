@@ -3,7 +3,6 @@ import { z } from 'zod';
 import type { MerchantRow } from '../../db/merchants/merchantRepository';
 import { type ExpandableType, expandObjects, parseExpand } from '../../lib/expand';
 import { sendError, sendValidationError } from '../../lib/http';
-import { dashboardQuery } from '../../lib/list';
 
 /** Shared request pieces of the billing engine's routes (ADR 0018). */
 
@@ -55,8 +54,3 @@ export function cleared<T>(value: T | '' | undefined): T | null | undefined {
  * A contract's query on both surfaces of a shared core: the contract's own
  * schema on the API, plus the Test/Live toggle on the dashboard.
  */
-export function bySurface<S extends z.ZodRawShape, C extends z.core.$ZodObjectConfig>(
-  apiQuery: z.ZodObject<S, C>,
-) {
-  return { api: apiQuery, dashboard: dashboardQuery(apiQuery) } as const;
-}

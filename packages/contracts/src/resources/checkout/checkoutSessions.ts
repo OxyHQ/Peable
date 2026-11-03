@@ -1,4 +1,8 @@
 import { z } from 'zod';
+import { CATALOG_LIMITS, PRICE_TAX_BEHAVIORS, RECURRING_INTERVALS } from '../../vocabulary/catalog';
+import { SETUP_INTENT_STATUSES } from '../../vocabulary/payments';
+import { billingFaircoinFxQuoteSchema } from '../catalog/billing';
+import { embedded } from '../../common/objects';
 import { listOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
 import {
@@ -44,7 +48,6 @@ import {
   collectionParams,
   collectionResponseFields,
   countryCodeParam,
-  embedded,
   checkoutEmailParam,
   localeParam,
   merchantDisplaySchema,
@@ -60,40 +63,6 @@ import {
  * PaymentIntent (or SetupIntent) is created when the payer confirms, with the
  * amount the session computed, and linked. Amounts are base-unit strings.
  */
-
-// The catalog's bounds an inline `price_data` / `product_data` is held to
-// (`CATALOG_LIMITS`, `RECURRING_INTERVALS` and `PRICE_TAX_BEHAVIORS` of the
-// catalog contracts).
-const PRODUCT_NAME_MAX = 250;
-const PRODUCT_DESCRIPTION_MAX = 40_000;
-const URL_MAX = 2048;
-const PROMOTION_CODE_MAX = 64;
-const RECURRING_INTERVALS = ['day', 'week', 'month', 'year'] as const;
-const PRICE_TAX_BEHAVIORS = ['inclusive', 'exclusive', 'unspecified'] as const;
-const SETUP_INTENT_STATUSES = [
-  'requires_payment_method',
-  'requires_confirmation',
-  'requires_action',
-  'processing',
-  'canceled',
-  'succeeded',
-] as const;
-
-/** The FairCoin billing invoice a session wraps: its frozen USD price and FAIR settlement quote. */
-const billingFaircoinFxQuoteSchema = z
-  .object({
-    id: z.string(),
-    currency: z.literal('USD'),
-    gross_minor_units: z.number().int(),
-    amount_base_units: z.string(),
-    usd_per_fair: z.string(),
-    source: z.string(),
-    observed_at: unixSeconds,
-    quoted_at: unixSeconds,
-    expires_at: unixSeconds,
-    rounding: z.literal('ceil_to_base_unit'),
-  })
-  .strict();
 
 const sessionFields = {
   id: z.string(),
@@ -308,13 +277,13 @@ export type CheckoutSessionPublic = Expand<z.output<typeof checkoutSessionPublic
 
 const productDataParams = z
   .object({
-    name: z.string().trim().min(1).max(PRODUCT_NAME_MAX),
-    description: z.string().min(1).max(PRODUCT_DESCRIPTION_MAX).optional(),
+    name: z.string().trim().min(1).max(CATALOG_LIMITS.productNameMax),
+    description: z.string().min(1).max(CATALOG_LIMITS.productDescriptionMax).optional(),
     images: z
       .array(
         z
           .string()
-          .max(URL_MAX)
+          .max(CATALOG_LIMITS.urlMax)
           .regex(/^https:\/\/\S+$/, 'must be an https URL'),
       )
       .max(8)
@@ -523,7 +492,7 @@ export const updateCheckoutSessionPublicParams = z
       .optional()
       .describe("Adjust a line's quantity, within its `adjustable_quantity` bounds."),
     promotion_code: z
-      .union([z.literal(''), z.string().trim().min(1).max(PROMOTION_CODE_MAX)])
+      .union([z.literal(''), z.string().trim().min(1).max(CATALOG_LIMITS.promotionCodeMax)])
       .optional()
       .describe('A code to redeem (`allow_promotion_codes`), or `""` to remove the one applied.'),
     customer_details: z

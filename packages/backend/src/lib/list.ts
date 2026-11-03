@@ -1,13 +1,6 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { OXY_SERVICE_ENVIRONMENTS } from '@oxy.so/core/server';
-import {
-  LIST_LIMIT_DEFAULT,
-  LIST_LIMIT_MAX,
-  expandParam,
-  listQuery,
-  retrieveQuery,
-} from '@peable.to/contracts';
 import type { CreatedRange, KeysetPage } from '../db/keyset';
 import { type ExpandableType, expandObjects, parseExpand } from './expand';
 import { sendError, sendValidationError } from './http';
@@ -27,13 +20,6 @@ import { sendError, sendValidationError } from './http';
  * `answerList`, so a list cannot exist that pages differently from its
  * siblings — the drift this replaced had three envelopes and four limits.
  */
-
-// TRANSITIONAL aliases of the contract builders, deleted once no route imports
-// them from here (routes import `listQuery` / `retrieveQuery` / `expandParam`
-// from `@peable.to/contracts`).
-export { LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, expandParam };
-export const listQuerySchema = listQuery;
-export const retrieveQuerySchema = retrieveQuery;
 
 /**
  * Which route family a shared handler core answers for. A dashboard request
@@ -63,22 +49,6 @@ export function surfaceQuery<S extends z.ZodRawShape, C extends z.core.$ZodObjec
   apiQuery: z.ZodObject<S, C>,
 ) {
   return { api: apiQuery, dashboard: dashboardQuery(apiQuery) } as const;
-}
-
-/** One list schema per surface, for a core shared by the API and the dashboard. */
-export function surfaceListQuery<S extends z.ZodRawShape>(filters: S) {
-  return {
-    api: listQuery(filters),
-    dashboard: listQuery({ ...filters, ...dashboardQueryScope }),
-  } as const;
-}
-
-/** One retrieve schema per surface. */
-export function surfaceRetrieveQuery() {
-  return {
-    api: retrieveQuery({}),
-    dashboard: retrieveQuery(dashboardQueryScope),
-  } as const;
 }
 
 export interface ListQuery {

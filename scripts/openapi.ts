@@ -2,16 +2,13 @@
 // API, generated from `packages/contracts` (ADR 0014 D5). With `--check` it
 // writes nothing and fails when the committed copy differs, which is the CI
 // drift gate (`bun run check:openapi`).
-import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { buildOpenApiDocument } from '../packages/contracts/src/openapi';
 
 const target = new URL('../docs/openapi.json', import.meta.url);
-const expected = execFileSync(
-  'bun',
-  ['x', 'biome', 'format', '--stdin-file-path=docs/openapi.json'],
-  { input: JSON.stringify(buildOpenApiDocument(), null, 2), encoding: 'utf8', maxBuffer: 64 << 20 },
-);
+// Plain two-space JSON: the document is a generated artefact (excluded from
+// Biome, which caps files at 1 MiB), and this gate is its only check.
+const expected = `${JSON.stringify(buildOpenApiDocument(), null, 2)}\n`;
 
 if (process.argv.includes('--check')) {
   let committed = '';

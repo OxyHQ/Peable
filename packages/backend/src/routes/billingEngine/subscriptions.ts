@@ -26,7 +26,13 @@ import {
 } from '../../db/billingEngine/subscriptionRepository';
 import { getDb } from '../../db/postgres';
 import { findPricesByRowIds } from '../../db/catalog/priceRepository';
-import { answerList, parseQuery, type QuerySurface, resolveListReference } from '../../lib/list';
+import {
+  answerList,
+  parseQuery,
+  type QuerySurface,
+  resolveListReference,
+  surfaceQuery,
+} from '../../lib/list';
 import {
   renderSubscription,
   renderSubscriptions,
@@ -41,14 +47,14 @@ import {
   updateSubscription,
 } from '../../services/billingEngine/subscriptions';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, bySurface, cleared, idParam, parseBody } from './helpers';
+import { answerObject, cleared, idParam, parseBody } from './helpers';
 
 /**
  * Every request schema is the contract's (`@peable.to/contracts`
  * `subscriptionRoutes`); the dashboard's reads add only its Test/Live toggle.
  */
-const listQuery = bySurface(listSubscriptionsQuery);
-const retrieveQuery = bySurface(expandOnlyQuery);
+const listQuery = surfaceQuery(listSubscriptionsQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 async function answer(
   res: Response,
@@ -239,7 +245,7 @@ async function list(req: Request, res: Response, merchant: MerchantRow, surface:
 
 // ---- Items ------------------------------------------------------------------------
 
-const listItemsQuery = bySurface(listSubscriptionItemsQuery);
+const listItemsQuery = surfaceQuery(listSubscriptionItemsQuery);
 
 async function itemDTO(merchant: MerchantRow, publicId: string) {
   const db = getDb();

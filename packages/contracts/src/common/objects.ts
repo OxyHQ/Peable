@@ -73,31 +73,12 @@ export type Expand<T> =
   T extends Ref<infer K>
     ? K extends keyof ObjectMap
       ? ObjectMap[K]
-      : UnresolvedObject<K>
+      : never
     : T extends readonly (infer U)[]
       ? Expand<U>[]
       : T extends object
         ? { [P in keyof T]: Expand<T[P]> }
         : T;
-
-/**
- * An expanded reference to a type no module has registered in {@link ObjectMap}.
- * Never the type of a finished contract: `contracts.test.ts` asserts every
- * reference resolves. It exists so a resource can reference an object another
- * module defines before that module is written.
- *
- * Its other fields are `any`, not `unknown`: an object EMBEDDED by another
- * resource (a subscription item's `price`) is always this type until its own
- * module registers it, and consumers that already read it as the shared-types
- * interface it will become (`item.price.currency`) must keep compiling, as an
- * interface is assignable to an `any` index signature and not an `unknown` one.
- */
-export interface UnresolvedObject<K extends string> {
-  readonly id: string;
-  readonly object: K;
-  // biome-ignore lint/suspicious/noExplicitAny: a placeholder until the module defining `K` registers it; see above
-  readonly [field: string]: any;
-}
 
 /** The wire type a schema describes (its output, references resolved). */
 export type Wire<S extends z.ZodType> = Expand<z.output<S>>;
@@ -141,18 +122,15 @@ export function objectSchema(type: string): z.ZodType | undefined {
   return objectSchemas.get(type);
 }
 
-/** Object types something referenced that no module registered (asserted empty by the contract tests). */
-export const unresolvedObjectReferences = new Set<string>();
-
 /**
- * The registered schema of `type`; when none is registered, a loose
- * `{ id, object }` stand-in, recorded in {@link unresolvedObjectReferences}.
+ * The registered schema of `type`. Resolved lazily (a reference is declared
+ * before the module defining its target has loaded), and loud when nothing
+ * registers it: a reference to an unknown object is a contract bug.
  */
 export function resolveObject(type: string): z.ZodType {
   const schema = objectSchemas.get(type);
-  if (schema) return schema;
-  unresolvedObjectReferences.add(type);
-  return z.object({ id: z.string(), object: z.literal(type) }).loose();
+  if (!schema) throw new Error(`no wire object is registered as '${type}'`);
+  return schema;
 }
 
 /** Every registered object type, in registration order. */
@@ -177,6 +155,22 @@ export function expandable<K extends string>(
     ...(description === undefined ? {} : { description }),
   });
   return union as unknown as z.ZodType<string | Ref<K>, string | Ref<K>>;
+}
+
+/**
+ * A field that always carries the FULL object `type` names (never an id): a
+ * subscription item's `price`, a payer view's `payment_intent`, a report run's
+ * result `file`. Validated against the registered schema and typed through
+ * {@link Ref}, so {@link Expand} resolves it to that object's wire type.
+ */
+export function embedded<K extends string>(
+  type: K,
+  description?: string,
+): z.ZodType<Ref<K>, Ref<K>> {
+  const schema = z.lazy(() => resolveObject(type));
+  return (description === undefined
+    ? schema
+    : schema.describe(description)) as unknown as z.ZodType<Ref<K>, Ref<K>>;
 }
 
 /** Attach OpenAPI metadata to a schema without changing its type. */

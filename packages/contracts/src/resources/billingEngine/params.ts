@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { idParam } from '../../common/params';
-import { resolveObject, type Ref } from '../../common/objects';
 import { CURRENCY_CODES, isBaseUnitString } from '../../vocabulary/money';
 
 /**
@@ -54,15 +53,3 @@ export const httpUrlParam = z
 
 /** A request with no parameters at all. */
 export const emptyBody = z.object({}).strict();
-
-/**
- * An object another resource defines, always EMBEDDED (never an id): a
- * subscription item's `price`. Validated against that resource's registered
- * schema, and typed as it once {@link Ref} resolves.
- */
-export function embedded<K extends string>(type: K, description?: string): z.ZodType<Ref<K>> {
-  const schema = z.lazy(() => resolveObject(type));
-  return (description === undefined
-    ? schema
-    : schema.describe(description)) as unknown as z.ZodType<Ref<K>>;
-}

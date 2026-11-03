@@ -4,15 +4,15 @@ import {
   listCustomersForMerchant,
 } from '../../db/customers/customerRepository';
 import { getDb } from '../../db/postgres';
-import { answerList, parseQuery } from '../../lib/list';
+import { answerList, parseQuery, surfaceQuery } from '../../lib/list';
 import { toCustomerDTO, toDeletedCustomerDTO } from '../../lib/serialize';
 import { missing } from '../../services/billingEngine/errors';
 import type { CatalogRoute } from '../catalogRoutes';
-import { answerObject, bySurface, idParam } from './helpers';
+import { answerObject, idParam } from './helpers';
 
 /** The contract's customer queries (`customerRoutes`), plus the dashboard's Test/Live toggle. */
-const listQuery = bySurface(listCustomersQuery);
-const retrieveQuery = bySurface(expandOnlyQuery);
+const listQuery = surfaceQuery(listCustomersQuery);
+const retrieveQuery = surfaceQuery(expandOnlyQuery);
 
 /**
  * `GET /customers` and `GET /customers/:id` for Orbit's dashboard (ADR 0016's

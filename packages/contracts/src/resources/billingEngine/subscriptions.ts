@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { embedded } from '../../common/objects';
 import { deletedOf, listOf, searchResultOf } from '../../common/envelopes';
 import { defineComponent, defineObject, type Expand, expandable } from '../../common/objects';
 import {
@@ -30,7 +31,6 @@ import {
   automaticTaxParam,
   daysUntilDueParam,
   discountsParam,
-  embedded,
   quantityParam,
   shortText,
 } from './params';
